@@ -13,7 +13,7 @@ CONTRACTS = {
     "AUDITED_BY": ({"company"}, {"company"}, None, "audit_firm"),
     "ISSUED_BY": ({"security"}, LEGAL, None, None),
     "EMPLOYED_BY": ({"person"}, {"company"}, None, None),
-    "INSIDER_OF": ({"person"}, {"company"}, None, None),
+    "CONTROLS": ({"person"}, {"company"}, None, None),
     "HOLDS": ({"person", "company", "fund_structure"}, {"security"}, None, None),
     "MANAGES_FUND": (
         {"company", "person"},
@@ -57,6 +57,13 @@ HIERARCHIES = {
     "IS_SUBFUND_OF",
     "IS_FEEDER_TO",
 }
+# A Person link names the capacity it is in (`docs/specs/person/consumer.md`,
+# "Relationships"): a 10% holder is not an employee. `IS_INSIDER` is no link of
+# its own but the `mdm.is_insider` view over both types (mastering to-do 14).
+CAPACITIES = {
+    "EMPLOYED_BY": {"director", "officer", "employee"},
+    "CONTROLS": {"ten_percent_owner", "owner", "control_person"},
+}
 MIN = datetime.min.replace(tzinfo=UTC)
 MAX = datetime.max.replace(tzinfo=UTC)
 
@@ -66,13 +73,17 @@ MAX = datetime.max.replace(tzinfo=UTC)
 WAITING = {"unresolved_endpoint", "unresolved_endpoint_identity"}
 
 # What makes two statements one relationship (operator, 2026-10-01, design 1):
-# its type, its two ends and its scope. Dates, status and other properties are
-# a period of that relationship, so a restatement keeps the relationship's id.
-IDENTITY = ("type", "source_id", "target_id", "scope")
+# its type, its two ends and its scope, and for a Person link its capacity
+# (mastering to-do 14). Dates, status, title and other properties are a period
+# of that relationship, so a restatement keeps the relationship's id.
+IDENTITY = ("type", "source_id", "target_id", "scope", "capacity")
+# What a dated sighting says: on which event date, on what basis, whether the
+# capacity was held, and the title then.
+SIGHTING = {"on", "basis", "held", "title"}
 # What a reported link names that is not a period: its identity, its ends as
 # records, and the keys a projected link adds. Everything else is the period.
 NOT_PERIOD = {*IDENTITY, "source_subject", "target_subject", "relationship_id", "derived",
-              "periods", "evidence", "last_seen"}
+              "periods", "evidence", "last_seen", *SIGHTING}
 
 
 def interval(edge):
@@ -85,6 +96,48 @@ def overlap(a, b):
     lo, hi = interval(a)
     left, right = interval(b)
     return max(lo, left) < min(hi, right)
+
+
+def fold_sightings(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
+    """A link's dated sightings, folded into its periods by event date.
+
+    A Forms 3/4/5 filing restates the owner's capacities on every filing, so
+    the first sighting opens a period with an observed start, and a later one
+    that drops the capacity ends it at its event date. A sighting after an
+    observed end opens a new period. Silence ends nothing. A sighting after a
+    stated end does not reopen the link: it is returned as a contradiction for
+    a steward, who rescinds the end or opens a new period. A sighting on the
+    day of a stated end is ordinary reporting lag (spec, "Conflict and review
+    states").
+    """
+    periods, contradictions = [], []
+    current = stated_end = None
+    # A drop on the same day as a sighting comes after it.
+    for s in sorted(sightings, key=lambda s: (instant(s["on"]), not s["held"], s["assertion_id"])):
+        if not s["held"]:
+            if current:
+                periods.append({**current, "valid_to": s["on"], "valid_to_basis": s["basis"]})
+                current = None
+                stated_end = s["on"] if s["basis"] == "stated" else None
+            continue
+        if not current:
+            if stated_end and s["basis"] == "observed":
+                if instant(s["on"]) > instant(stated_end):
+                    contradictions.append({"stated_end": stated_end, "on": s["on"],
+                                           "assertion_id": s["assertion_id"],
+                                           "subject": s["subject"]})
+                continue
+            current = {"valid_from": s["on"], "valid_from_basis": s["basis"], "valid_to": None,
+                       "valid_to_basis": None, "last_observed": None, "titles": []}
+            stated_end = None
+        if s["basis"] == "observed":
+            current["last_observed"] = s["on"]
+        titles = current["titles"]
+        if s.get("title") and (not titles or titles[-1]["title"] != s["title"]):
+            titles.append({"title": s["title"], "on": s["on"]})
+    if current:
+        periods.append(current)
+    return periods, contradictions
 
 
 def project(
@@ -116,6 +169,9 @@ def project(
             if not contract:
                 review("unsupported_relationship", **context)
                 continue
+            if kind in CAPACITIES and reported.get("capacity") not in CAPACITIES[kind]:
+                review("unsupported_capacity", **context)
+                continue
             if start not in state.bindings or target not in state.bindings:
                 review("unresolved_endpoint", **context,
                        missing=[end for end, key in (("source", start), ("target", target))
@@ -136,13 +192,19 @@ def project(
                        missing=[end for end, entity in (("source", source), ("target", dest))
                                 if entity.get("status") != "accepted"])
                 continue
-            if not reported.get("valid_from"):
-                review("unknown_relationship_start", **context)
-                continue
-            period = {k: v for k, v in reported.items() if k not in NOT_PERIOD}
-            if interval(period)[0] >= interval(period)[1]:
-                review("invalid_relationship_interval", **context)
-                continue
+            # A Person link is stated as dated sightings, folded below; an
+            # observed start is enough. Other links state their periods.
+            sighting = reported.get("on")
+            if sighting:
+                period = {"valid_from": sighting}
+            else:
+                if not reported.get("valid_from"):
+                    review("unknown_relationship_start", **context)
+                    continue
+                period = {k: v for k, v in reported.items() if k not in NOT_PERIOD}
+                if interval(period)[0] >= interval(period)[1]:
+                    review("invalid_relationship_interval", **context)
+                    continue
             required_profiles = [(source, contract[2]), (dest, contract[3])]
             eligible = True
             for entity, role in required_profiles:
@@ -162,6 +224,7 @@ def project(
                 "source_id": source_id,
                 "target_id": target_id,
                 "scope": reported.get("scope", ""),
+                "capacity": reported.get("capacity", ""),
             }
             key = digest([identity[k] for k in IDENTITY])
             value = edges.setdefault(
@@ -169,7 +232,12 @@ def project(
                 {**identity, "derived": False, "relationship_id": key, "periods": [],
                  "evidence": [], "last_seen": None},
             )
-            if period not in value["periods"]:
+            if sighting:
+                value.setdefault("sightings", []).append(
+                    {"on": sighting, "basis": reported.get("basis", "observed"),
+                     "held": reported.get("held", True), "title": reported.get("title"),
+                     "assertion_id": record["assertion_id"], "subject": subject})
+            elif period not in value["periods"]:
                 value["periods"].append(period)
             seen = record.get("source_meta", {}).get("effective_at")
             # Absence never closes a link (design 2): readers compare when it
@@ -183,6 +251,16 @@ def project(
                     "target_subject": target,
                 }
             )
+    for key, e in list(edges.items()):
+        if "sightings" not in e:
+            continue
+        e["periods"], contradictions = fold_sightings(e.pop("sightings"))
+        for c in contradictions:
+            review("contradicts_stated_end", relationship_id=key, **c,
+                   entities=sorted({e["source_id"], e["target_id"]}))
+        # Only drops, and nothing ever held: no link.
+        if not e["periods"]:
+            del edges[key]
     invalid = set()
     grouped = defaultdict(list)
     for key, e in edges.items():
