@@ -23,8 +23,8 @@ Decide:
 ## Answer
 
 The operator, 2026-10-02:
-- "build the engine first, custom parcers are allowed for complicated lookups and transfromations but they are the last resort" (12:30 ET);
-- "rust engine, for calls to edgartools keep python rust engine is under the cover always using python" (12:40 ET).
+- "build the engine first, custom parcers are allowed for complicated lookups and transfromations but they are the last resort" (by 11:24 ET);
+- "rust engine, for calls to edgartools keep python rust engine is under the cover always using python" (by 11:24 ET).
 
 1. **The configured engine is built before the Forms 3/4/5 feed.** Every source is then read through it: the rules files describe the reading, the checks and the mapping.
 2. **The engine is Rust, behind a Python interface.** It grows from Codex's prototype `crates/source-contract`. Python calls it: Bookkeeping, the rules commands and Clean MDM never call Rust directly. Calls to edgartools stay in Python.
