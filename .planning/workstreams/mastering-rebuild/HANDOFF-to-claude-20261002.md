@@ -94,6 +94,21 @@ environment in Claude's worktree; do not modify another runtime's venv.
 
 ## Pending work, in order
 
+### Rebase delta (2026-10-02 08:13 ET)
+
+Source branch now bases on GitHub main `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15`
+(#779), reverified through GitHub. Main's five newer commits changed documents
+only. A clean rebase retained all existing changes (verified by range-diff).
+Affected checks passed again: 13 in 9.10s. The earlier 1,132-case result is
+dated 2026-10-01; a new full PostgreSQL/local qualification gate remains pending.
+The original commit IDs above are preserved by local tag
+`archive/mastering-rebuild-pre-sync-20261002`; use the latest remote branch
+head for continuation. Person and relationship activation remains subject to
+the operator's paired switch-on and relationship-rule requirements in current
+main's platform-validation ticket 06. Synthetic acceptance is no rule approval.
+
+### Continuation checklist
+
 - [ ] Create the draft PR from the pushed source branch using PR-DRAFT.md,
   and record its URL and verified remote head in the continuation ticket.
 - [ ] Establish Docker access. At 2026-10-02 07:08 ET, `colima status` said

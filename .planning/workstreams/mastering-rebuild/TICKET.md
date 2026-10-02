@@ -2,12 +2,12 @@
 
 Status: incomplete — PostgreSQL/Docker and external memory access blocked
 Branch: `codex/mastering-rebuild-20261001`
-Base: `5b59f72ff85bfac2eda9be014cb15d7e2aa8af77` (current GitHub main, PR #774)
+Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-02 08:12 ET, PR #779)
 
 ## Checklist
 
-- [ ] Synchronize the mastering branch against current GitHub main and verify retained changes before publishing the draft.
-- [ ] Refresh the handoff and PR evidence after synchronization; retain explicit incomplete qualification gates.
+- [x] Synchronize the mastering branch against current GitHub main and verify retained changes before publishing the draft — clean rebase onto #779; range-diff confirms all six existing changes identical; original tip preserved by archive/mastering-rebuild-pre-sync-20261002; main refreshed through GitHub read connector using matching available local Git objects; 2026-10-02 08:13 ET.
+- [x] Refresh the handoff and PR evidence after synchronization; retain explicit incomplete qualification gates — affected tests 13 passed in 9.10s; handoff delta and PR body retain dated full-suite evidence and pending PostgreSQL/database/memory gates; 2026-10-02 08:13 ET.
 - [x] Write and verify Claude's continuation handoff with ownership, evidence and remaining gates — HANDOFF-to-claude-20261002.md checked against current main, branch, implementation, ticket and prerequisite failures; git diff --check; 2026-10-02 07:12 ET.
 - [x] Publish the owned branch — git push succeeded through b35f8da3; 2026-10-02 07:13 ET.
 - [ ] Create a draft PR and verify its metadata — connector requires approval unavailable under session policy; two gh attempts failed to connect to api.github.com; prepared body in PR-DRAFT.md.
@@ -53,6 +53,18 @@ Additional Person/role/entity source feeds are not fabricated from names.
 - Shared checkout retains `.planning/workstreams/fix-pipelines/STATE.md` and the predeploy application JSON backup unchanged by this task.
 
 ## Remaining blockers
+
+## Draft preparation refresh (2026-10-02)
+
+Operator agreed to publish only the mastering rebuild as a draft PR, preserving
+the historical research branches. Rebased on GitHub main #779. Its five newer
+commits changed research/ticket documents only; runtime code, tests and workflow
+were unchanged. Range-diff matched every existing branch commit after rebase.
+Affected checks passed again (13 in 9.10s); the previous full non-database
+results above remain dated 2026-10-01, not a new complete gate result. The old
+complete environment was removed by external workspace cleanup; this rerun
+used the primary Python environment and cached ijson read-only, without changes
+to another runtime's dependencies. PostgreSQL qualification remains incomplete.
 
 Colima is stopped and the session cannot access its Docker socket. Start Colima
 and provide Docker access to run fresh PostgreSQL qualification and inventory

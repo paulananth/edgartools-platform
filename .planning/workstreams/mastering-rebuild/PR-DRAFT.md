@@ -9,7 +9,9 @@ Fresh local Company, Person and Relationship mastering qualification and proved 
 - Include Claude's continuation handoff and prepared external memory corrections.
 
 ## Verification
-- 1,132 non-database cases passed in 107.90s.
+- Rebased on GitHub main #779 (`542a9fa0`); all existing changes retained by range-diff.
+- After rebase: 13 affected cases passed in 9.10s.
+- Prior full non-database run, 2026-10-01: 1,132 cases passed in 107.90s.
 - 25 shell scripts passed bash syntax checks.
 - 1,424 cases collected: 395 unit, 490 MDM, 247 architecture, 292 integration.
 - Five cases removed and five added: total case count unchanged. No measured CI speed improvement claimed.
