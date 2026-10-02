@@ -1,6 +1,6 @@
 # Custom parsing outside configuration
 
-Status: complete — configuration candidates tested and findings published; production unchanged
+Status: in progress — findings published; adding Claude handoff and opening review PR
 Branch: `codex/custom-parsing-research-20261002`
 Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (origin/main, fetched 2026-10-02 09:31 ET)
 
@@ -24,6 +24,8 @@ validation distinct so the findings identify actual source-specific logic.
 - [x] Test the Rust configuration prototype against native XML projection and rejection cases; record which runtime integration is missing — background researcher verified 13 passed, unchanged engine; README records standalone prototype and observed CDATA/header/namespace gaps; 2026-10-02 10:12 ET.
 - [x] Write recommendations based on measured equivalence and counterexamples, with runnable evidence and explicit limits — configuration-replacement-results-2026-10-02.md distinguishes partial projection, missing wiring and retained gates; 2026-10-02 10:14 ET.
 - [x] Verify and publish the experiment results and updated research report — 79 documentation links resolve, staged git diff --check passes; bfe8bd0a pushed and git ls-remote matches local HEAD; only owned research artifacts and new experiment tests changed; 2026-10-02 10:16 ET.
+- [x] Write and verify a Claude handoff note with tested findings, recommended next scope and preservation requirements — docs/research/HANDOFF-codex-to-claude-custom-parsing-2026-10-02.md points to executable evidence, preserves reader/classification gates and assigns implementation to a separate Claude branch; main 4e51a84f merged, Python 41/Rust 13 passed again; 2026-10-02 10:20 ET.
+- [ ] Check in and push the handoff; create the findings PR against current main and verify its published head and links.
 
 ## Scope
 

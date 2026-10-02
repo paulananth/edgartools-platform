@@ -87,6 +87,10 @@ Verified locally on 2026-10-02:
 - Total: **54 passing experiment cases**, including tests that deliberately
   prove incompatibility. This is not a count of equivalent replacements.
 
+PR preparation rerun after merging main `4e51a84f` at 10:20 ET: Python
+**41 passed** in 5.58 seconds; Rust **13 passed** in 0.02 seconds after 0.21
+seconds of incremental compilation. Results and recommendations are unchanged.
+
 Reproduce from the research worktree root with dependencies installed:
 
 ```bash

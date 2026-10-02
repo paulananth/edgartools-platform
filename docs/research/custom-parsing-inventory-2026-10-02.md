@@ -8,6 +8,11 @@ provide 41 Python comparisons and 13 Rust probes. They demonstrate partial scala
 projection opportunities and counterexamples to complete replacement; use those
 results when selecting a refactor.
 
+PR preparation update: merged current main `4e51a84f` on 2026-10-02.
+PR #781 already deleted the daily-index loader, seed-universe loader and
+Security title classifier listed below. Their links now pin the inspected
+baseline; they are historical findings, not remaining cleanup work.
+
 ## Answer
 
 **Yes. Source-specific parsing and preparation still exist in Python outside a declarative parsing contract.** Configured Bookkeeping operations select those implementations; selecting an operation by configuration does not make its field extraction, document grammar or classification logic declarative.
@@ -121,10 +126,10 @@ This is reachable source-specific validation, **not a ticker row parser or an ac
 
 | Helper | Custom interpretation | Caller evidence |
 | --- | --- | --- |
-| [`stage_daily_index_filing_loader`](../../edgar_warehouse/loaders/bronze_daily_index_extractors.py#L9) | SEC daily index regex, accession extraction, dates, URL and record hash | Exported in `loaders/__init__.py`; no production call found. |
-| [`seed_universe_loader`](../../edgar_warehouse/loaders/bronze_reference_extractors.py#L8) | Two SEC ticker JSON shapes to CIK/ticker/exchange rows | Exported in `loaders/__init__.py`; no production call found. |
+| [`stage_daily_index_filing_loader`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/loaders/bronze_daily_index_extractors.py#L9) | SEC daily index regex, accession extraction, dates, URL and record hash | Exported at baseline; no production call found. Subsequently deleted by #781. |
+| [`seed_universe_loader`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/loaders/bronze_reference_extractors.py#L8) | Two SEC ticker JSON shapes to CIK/ticker/exchange rows | Exported at baseline; no production call found. Subsequently deleted by #781. |
 | [`_parse_company_ticker_rows`](../../edgar_warehouse/silver_landing_store.py#L601) | Similar ticker shape decoder | Definition and historical completeness-check comment; no production call found. `replace_company_tickers` takes already parsed rows. |
-| [`securities.publish` / `_title`](../../edgar_warehouse/mdm/clean/securities.py#L11) | 13F CUSIP grouping and regex Class A/B/C or Option title inference | No production import/call found. This is a semantic classifier, not an XML parser. |
+| [`securities.publish` / `_title`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/mdm/clean/securities.py#L11) | 13F CUSIP grouping and regex Class A/B/C or Option title inference | No production import/call found at baseline. Subsequently deleted by #781. |
 
 These findings use source-wide symbol searches outside tests, then caller inspection. They are evidence for follow-up review, not authorization to delete shared contracts or source evidence.
 
