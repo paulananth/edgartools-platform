@@ -9,8 +9,12 @@ hosted deployment and merge are outside this handoff.
 
 The source branch is `codex/mastering-rebuild-20261001`, based on GitHub main
 `5b59f72ff85bfac2eda9be014cb15d7e2aa8af77` (PR #774), verified again at handoff.
-The draft PR targets main; locate it by this head branch. Read its latest
-checks and diff before continuing. Original implementation commits:
+The branch is pushed. PR creation is blocked in this session: the GitHub
+connector requires approval unavailable under the session policy, and two
+`gh pr create` attempts could not connect to api.github.com. The prepared
+draft PR body is PR-DRAFT.md beside this handoff. Create the draft against
+main from this branch, then read its checks and diff before continuing.
+Original implementation commits:
 
 - `c936bd60`: remove three unreachable modules and five obsolete cases.
 - `d0733de7`: bounded mastering acceptance and local qualification runner.
@@ -90,6 +94,8 @@ environment in Claude's worktree; do not modify another runtime's venv.
 
 ## Pending work, in order
 
+- [ ] Create the draft PR from the pushed source branch using PR-DRAFT.md,
+  and record its URL and verified remote head in the continuation ticket.
 - [ ] Establish Docker access. At 2026-10-02 07:08 ET, `colima status` said
   stopped and Docker socket access was denied. Start Colima in a session with
   access; provision `postgres:16-alpine`.

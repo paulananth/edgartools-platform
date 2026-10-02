@@ -7,7 +7,8 @@ Base: `5b59f72ff85bfac2eda9be014cb15d7e2aa8af77` (current GitHub main, PR #774)
 ## Checklist
 
 - [x] Write and verify Claude's continuation handoff with ownership, evidence and remaining gates — HANDOFF-to-claude-20261002.md checked against current main, branch, implementation, ticket and prerequisite failures; git diff --check; 2026-10-02 07:12 ET.
-- [ ] Publish the owned branch and create a draft PR; verify the remote head and PR metadata.
+- [x] Publish the owned branch — git push succeeded through b35f8da3; 2026-10-02 07:13 ET.
+- [ ] Create a draft PR and verify its metadata — connector requires approval unavailable under session policy; two gh attempts failed to connect to api.github.com; prepared body in PR-DRAFT.md.
 - [x] Create an isolated Codex branch and verify its base against current main — dedicated worktree; GitHub commit/blob/tree hashes verified; fast-forward to #774; 2026-10-01 22:52 ET.
 - [x] Inventory active acquisition, rules, mastering, publication and tests; review code and change history — AST import inventory plus executable/skill/script searches and GoF review recorded in INVENTORY.md; 2026-10-01 23:10 ET.
 - [x] Implement bounded integrated Company/Person/Relationship acceptance and fail-closed local runner — four normalized records pass; five new cases collect; missing image, timeout and skipped-PostgreSQL report checks pass; 2026-10-01 23:14 ET.
