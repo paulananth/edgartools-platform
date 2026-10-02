@@ -32,4 +32,4 @@ Operator, 2026-10-02 by 10:57 ET: "Keep `rules run` (Recommended)".
 - [x] Operator decision recorded. 2026-10-02 by 10:57 ET
 - [x] `skills/bookkeeping/SKILL.md` names the command and drops "not built yet". 2026-10-02 by 10:57 ET
 - [ ] ~~Prove `rules run --target mdm` end to end~~ deferred to ticket 06: it runs on the switch-on database
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #788, rebased on #785, merged 2026-10-02 12:36 ET (operator, 2026-10-02: "yes merge one by one and continue implementing ticket 14")
