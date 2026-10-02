@@ -1,6 +1,6 @@
 # Bookkeeping without loader dependencies
 
-Owner: Codex. Status: in progress — updating the Bookkeeping skill. Claude has no assignment.
+Owner: Codex. Status: complete (design and skill instructions only). Claude has no assignment.
 Branch: `codex/bookkeeping-loader-independent-design-20261002`.
 Base: `417147e8` (main, PR #784; fetched 2026-10-02 10:47 ET).
 
@@ -20,7 +20,7 @@ Codex owns this work; assign Claude work only on an explicit operator instructio
 - [x] Update Bookkeeping skill entry point, run/recovery references and interface metadata to enforce independence from loaders and domain callbacks — entry-point contract routes to INDEPENDENCE.md, run/recovery expose the current implementation gap, metadata selects control-only guidance; 2026-10-02 11:04 ET.
 - [x] Validate the skill and its references; verify its descriptor helper resolves a feed with domain imports blocked — Skill Creator validator passes, ten references resolve, metadata validates, actual Company descriptor helper succeeds with nine forbidden import families actively blocked, git diff --check passes; proves helper isolation only; 2026-10-02 11:04 ET.
 - [x] Repair the dangling skill discovery link and verify it resolves to the updated owned skill — prior shared target edgartools-platform-change-journal/skills/bookkeeping confirmed missing; atomically repointed only that dangling link to this branch's skills/bookkeeping; shared and Claude mirror paths resolve to updated files, no Claude work assigned; 2026-10-02 11:04 ET.
-- [ ] Commit and push the skill update to PR #785 and verify its published head.
+- [x] Commit and push the skill update to PR #785 and verify its published head — 832a7810 pushed; GitHub API confirms matching open PR head; title/body now include the skill enforcement and scoped helper validation; 2026-10-02 11:06 ET.
 
 PR: https://github.com/paulananth/edgartools-platform/pull/785
 
