@@ -120,6 +120,8 @@ Large files should be read in chunks before editing: `edgar_warehouse/runtime.py
 
 ## Tooling Rules
 
+- Use the GitHub CLI (`gh`) for GitHub pull requests, issues, reviews and CI operations.
+- Before GitHub work, check `command -v gh`, `gh --version` and `gh auth status --hostname github.com`. Diagnose and repair executable, PATH, authentication or network failures. Report the exact failing command and error if `gh` remains blocked before using a fallback; attribute a failure to the sandbox only when the error establishes that cause.
 - Use `uv` for Python dependency management and Python command execution.
 - Do not use bare `pip` for repo workflows. Use `uv sync`, `uv pip install` for deliberate one-off installs, or `uv run --with <package>` for transient tools.
 - Prefer `uv run --with dbt-snowflake dbt ...` over bare `dbt`.
