@@ -1,127 +1,476 @@
 # EdgarTools Platform Agent Guide
 
-## Current architecture
+## Scope
 
-The executable CLI offers Rules, Bookkeeping, Change Journal, Clean MDM, and
-Snowflake environment resolution. Inspect `edgar-warehouse --help` before
-using a command from an older runbook. Acquisition and mastering are
-configured in `rules/`; Bookkeeping owns work, leases, checkpoints and recovery;
-Rules owns mappings and approvals; Change Journal owns durable delivery history.
-Clean MDM owns identities, source readings, decisions and publication intents.
+This repository is an SEC EDGAR data platform built on the `edgartools` PyPI package. The active AWS path is:
 
-Keep hosted work AWS-focused: S3 bronze/warehouse storage, ECR images, and
-Snowflake Postgres for MDM. Existing Snowflake SQL, dbt and dashboard assets
-have their own callers and release checks. Verify live account and environment
-state before deployment; a historical note is not an inventory.
+```text
+SEC EDGAR API
+  -> edgar-warehouse Python CLI
+  -> S3 bronze and warehouse Parquet/object storage
+  -> Snowflake native S3 pull
+  -> dbt gold dynamic tables
+  -> Streamlit dashboard
+```
 
-For Company, Person, Relationship mastering, fresh local PostgreSQL 16
-qualification, and database cleanup, read
-[mastering operations](docs/agents/mastering-operations.md).
+Keep agent work AWS-focused. Do not add or revive non-AWS deployment paths, registry targets, storage targets, workflow engines, or secret-management steps unless the user explicitly asks for that architecture change.
 
-## Work ownership
+## Parallel Agent Workstreams
 
-- Never commit directly to `main`, including small fixes and documentation.
-  Create a dedicated `<runtime>/<topic>` branch before the first edit.
-- Use a dedicated git worktree for every active runtime session. Claude and
-  Codex must not commit to the same branch or switch the shared checkout.
-- Before editing or committing, inspect `git status --short`,
-  `git branch --show-current`, `git log -1`, and `.planning/active-workstream`
-  when present. Refresh the intended base against current upstream main.
-- Treat current Codex work and other runtimes' edits as protected. Never
-  overwrite, revert, stage or commit unrelated changes or rollback artifacts.
-- If ticket work is found on main, preserve it on an owned branch immediately;
-  restore main to origin/main only after protecting all shared work.
-- If a branch changes unexpectedly, inspect its reflog and verify your own
-  commits and stashes before recovery. If an unexpected other runtime commit
-  appears before committing, stop and ask for ownership.
-- Use `.planning/workstreams/<name>/` for your own workstream. Coordinate
-  overlapping source, Terraform, generated JSON and planning changes first.
+Claude and Codex may work on this repository independently, but they must not share an uncoordinated edit surface.
 
-## Task checklists (every ticket, every runtime)
+- **HARD RULE: never commit directly to `main`, for any reason, including a
+  quick fix or a single-file doc change.** The moment you pick up a ticket or
+  issue — before writing any code, before the first edit — create your own
+  `<runtime>/<topic>` branch (in your own worktree per the rule below) and
+  commit there. Confirmed live 2026-08-28: a Codex session started and
+  finished real implementation work for ecs-cost-sizing Ticket 08 (rollback
+  registry, CLI, deploy script, tests) as a local, unpushed commit sitting
+  directly on `main` in the shared working directory — no branch at all, not
+  even a wrongly-prefixed one. It was only caught because a Claude session
+  happened to notice local `main` was one commit ahead of `origin/main`
+  before pushing anything; had that push happened first, it would have put
+  unreviewed work straight on `main` with no branch, no PR, and no review
+  gate. Recovered by branching off that commit
+  (`codex/ecs-cost-sizing-revision-retirement-gates`), pushing it, then
+  hard-resetting local `main` back to `origin/main`. If you ever find
+  yourself with uncommitted or committed changes on `main` for ticket/issue
+  work, stop, branch off `HEAD` immediately, and reset `main` back to
+  `origin/main` before doing anything else.
+- **HARD RULE: no two runtimes may ever commit to the same branch.** Each
+  runtime works on its own dedicated branch. If you find yourself about to
+  commit and `git log -1` shows a commit authored by another runtime's
+  current work that you did not expect, STOP — do not commit — and ask the
+  user how to proceed (e.g. branch off, rebase onto a new branch, or hand
+  off).
+- **HARD RULE: use a dedicated git worktree per active runtime session, not
+  a bare checkout in one shared working directory, whenever more than one
+  runtime (or more than one session of the same runtime) may be active at
+  the same time.** A bare shared checkout only has *one* branch checked out
+  at once — a second session switching that checkout disrupts a first
+  session's in-progress work even when nothing is actually lost (git
+  preserves the underlying commits/stashes either way). Create your own
+  worktree (`git worktree add ../<repo>-<topic> <branch>`) and work there
+  instead. If you notice your working directory's checked-out branch changed
+  unexpectedly mid-session, do not assume anything was lost — check
+  `git branch --show-current`, `git reflog`, and that your own
+  commits/stash still resolve by name before taking any recovery action, and
+  push your own branch to `origin` as soon as it's in a good state so it no
+  longer depends on the shared working directory's state.
+- Branch naming convention: prefix branches with the owning runtime, e.g.
+  `claude/<topic>` or `codex/<topic>`. Before starting work or committing,
+  run `git branch --show-current` — if the current branch is prefixed for a
+  *different* runtime (or is a shared branch like `main`/`codex/main-sync`
+  that another runtime is actively using), create/check out your own branch
+  (in your own worktree) before making any commits.
+- Treat the current Codex work as protected unless the user explicitly hands it off.
+- Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
+- Before editing, run `git status --short` and `git log -1` and inspect `.planning/active-workstream` when present.
+- Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
+- If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
+- Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
 
-Every ticket file must keep all its parts as a Markdown checklist until it
-closes, including small tickets and last-step work.
+## Task checklists (MUST, every ticket, every runtime)
 
-- Enumerate every part before starting: `- [ ] <part>`. Add newly found parts.
-- Check a part only after completion and verification: `- [x] <part>`.
-  Name the verification and stamp local ET on that same line, for example
-  `2026-10-01 14:05 ET`.
-- Keep skipped or moved parts: `- [ ] ~~<part>~~ deferred to <ticket>: <why>`.
-  Never delete them from the checklist.
-- Re-read the checklist before reporting completion. Any unchecked part means
-  the task is incomplete; name what remains.
-- Announce long scans, suites and deployments up front. Report elapsed time
-  for any step exceeding ten minutes. Bound local test subprocesses to five
-  minutes; a timeout leaves verification incomplete.
+**HARD RULE: every ticket keeps its parts as a Markdown checklist in the
+ticket file itself, and keeps it current until the ticket closes, including
+while completing it.** No exception for small tickets or "last step" work.
+Operator rule, 2026-09-24.
 
-## Development and review
+- List every part before starting: `- [ ] <part>`. Add parts that surface
+  mid-work (a decision the user took, a finding, a follow-up) as they appear.
+- Tick a part only when it is done and verified: `- [x] <part>`, naming how it
+  was verified (test, PR, live check) on the same line.
+- A part that is skipped, deferred or moved to another ticket stays on the
+  list, marked `- [ ] ~~<part>~~ deferred to <ticket>: <why>`. Never delete it.
+- Before reporting a ticket complete, re-read its checklist. Any unchecked part
+  means the report says "incomplete" and names it.
 
-- Use `uv` for dependencies and Python execution. Use the extras the command
-  needs; local mastering uses `uv sync --extra s3 --extra mdm`.
-- Before changing code, use `gof-refactor-reviewer` on the relevant code and
-  git history. Use `gof-pattern-selector` for a genuinely new design.
-  Keep the existing design unless evidence justifies a refactor.
-- Review Standards, Spec and GoF. Explicitly check the GoF skill's
-  availability; if missing, state the limitation and review manually.
-- When editing AGENTS.md or CLAUDE.md, use `writing-for-agents`. AGENTS.md is
-  the shared instruction source; CLAUDE.md points here.
-- Read large files in chunks. Keep acquisition source rules, domain merge
-  rules and runtime capabilities separate.
-- Read YAML through `edgar_warehouse.rules.files`. Preserve comments when
-  editing an existing rule, then reload it to check values and digests.
-- Record actual operator approvals with their exact words and tested evidence.
-  Execution authorization is not a fabricated rule approval.
-- Backfills must expose a bounded sample/limit. Test small before full runs.
-- Use a file for multiline commit and PR messages (`git commit -F`,
-  `gh pr create --body-file`), especially when they contain code spans.
+**Time matters.** Stamp each checked part with its completion time in local
+ET (`2026-09-24 14:05 ET`), never UTC. Say up front when a part will take long
+(a full scan, a large test suite, a deploy), and report the elapsed time of any
+step over ten minutes, so the operator can see where the time went.
 
-## Verification
+## High-Value Files
 
-Run affected tests locally and preserve the full CI gate: unit, MDM,
-architecture, PostgreSQL integration, and shell syntax checks. Retain Company
-pagination, Rules authorization, Journal outage/recovery, lease fencing,
-identity, publication and release security contracts.
+| Need | Location |
+| --- | --- |
+| CLI entry point | `edgar_warehouse/cli.py` |
+| Runtime command shim | `edgar_warehouse/runtime.py` |
+| Command registry and workflows | `edgar_warehouse/application/` |
+| Runtime settings | `edgar_warehouse/infrastructure/warehouse_settings.py` |
+| Object storage adapter | `edgar_warehouse/infrastructure/object_storage.py` |
+| Bronze path catalog | `edgar_warehouse/infrastructure/dataset_path_catalog.py` |
+| Packaged path templates | `edgar_warehouse/config/warehouse_paths.properties` |
+| Silver transforms | `edgar_warehouse/silver.py` |
+| Gold export/aggregation | `edgar_warehouse/gold.py` |
+| Ownership parser | `edgar_warehouse/parsers/ownership.py` |
+| ADV parser | `edgar_warehouse/parsers/adv.py` |
+| AWS account Terraform | `infra/terraform/accounts/{dev,prod}/` |
+| AWS access Terraform | `infra/terraform/access/aws/accounts/{dev,prod}/` |
+| AWS Terraform modules | `infra/terraform/modules/` |
+| Snowflake AWS native-pull Terraform | `infra/terraform/snowflake/accounts/{dev,prod}/` |
+| Snowflake access Terraform | `infra/terraform/access/snowflake/accounts/{dev,prod}/` |
+| dbt gold models | `infra/snowflake/dbt/edgartools_gold/` |
+| AWS image publish script | `infra/scripts/publish-warehouse-image.sh` |
+| AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh` |
+| Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 
-PostgreSQL acceptance uses real PostgreSQL 16 migrations and restricted roles.
-Missing prerequisites fail; mocks or skipped tests do not qualify a database.
-Code, local qualification, hosted deployment and physical output verification
-are separate claims. Record each accurately.
+Large files should be read in chunks before editing: `edgar_warehouse/runtime.py`, `edgar_warehouse/silver.py`, and `edgar_warehouse/gold.py`.
 
-## Docker on macOS
+## Tooling Rules
 
-Use Colima for local Docker work. Linux/CI builds use docker buildx and registry
-cache. After local builds, inspect `docker system df -v` and clear unused build
-cache with `docker builder prune` while Colima is running. Reclaim guest free
-space with `colima ssh -- sudo fstrim -a`, comparing
-`du -h ~/.colima/_lima/_disks/colima/datadisk` and `df -h` before and after.
-`colima prune` clears downloaded assets. Preserve volumes and VM data unless
-their exact removal is authorized; routine cleanup must not use
-`docker system prune -a --volumes` or delete VM disk files. Report unavailable
-Colima or Docker access.
+- Use `uv` for Python dependency management and Python command execution.
+- Do not use bare `pip` for repo workflows. Use `uv sync`, `uv pip install` for deliberate one-off installs, or `uv run --with <package>` for transient tools.
+- Prefer `uv run --with dbt-snowflake dbt ...` over bare `dbt`.
+- Project dependency source is PyPI. `edgartools>=5.29.0` is not vendored here.
+- Docker images use AWS ECR for deployable artifacts.
+- On macOS, use Colima for local Docker fast feedback. On Linux/CI, `docker buildx` with registry cache is the default path.
+- After local Docker builds on macOS, inspect `docker system df -v` and clear unused build cache with `docker builder prune` while Colima is running. To reclaim host space afterward, run `colima ssh -- sudo fstrim -a` and compare `du -h ~/.colima/_lima/_disks/colima/datadisk` and `df -h` before and after. `colima prune` clears downloaded assets, not the VM disk. Preserve Docker volumes and the Colima VM unless the user authorizes their exact removal; do not use `docker system prune -a --volumes` or delete VM disk files for routine cleanup. If Colima or the Docker socket is unavailable, report that blocker.
 
-## Hosted operations and safety
+## GoF Design Review
 
-- Verify AWS account, profile, region, exact resource and current users before
-  mutations. Keep secret values, credentials, live tfvars/state and sensitive
-  generated application JSON out of commits and tool output.
-- Passive AWS Terraform creates infrastructure shells and empty secret
-  containers. It must not create runnable ECS task definitions, workflows,
-  schedules, workload commands, image rollouts or runtime secret values.
-- Use the admin profile for provisioning/access and `sec_platform_deployer`
-  for application rollout. Runtime roles are service-assumed; create no
-  runner access keys. Preserve scoped IAM and S3/versioning/encryption/public
-  access protections.
-- Publish images with `infra/scripts/publish-warehouse-image.sh`. The retired
-  `deploy-aws-application.sh` is not an executable deployment route.
-- Protect production bronze. A destructive database/storage cleanup requires
-  exact targets, current no-use evidence and a reviewed recovery plan.
-- Captured SEC artifacts remain immutable. Loaders skip captured/loaded files
-  by default; operator repair uses explicit force. Keep SEC identity/rate
-  controls. Data Onboarding uses captured artifacts, not new SEC requests.
-- For hosted MDM connection/cutover work, read
-  `docs/aws-mdm-snowflake-postgres-cutover.md`, verifying every command and
-  schema against current code before execution. Clean MDM uses schema `mdm`.
-- For Snowflake provisioning, read `infra/scripts/deploy-snowflake-stack.sh`
-  and the chosen Terraform root. Confirm the connection, privileges and live
-  target exist before using dev/prod examples. Use `uv run --with dbt-snowflake`
-  for dbt. Never infer deployed gold or dashboard state from files alone.
+- Before writing or modifying code, use the `gof-refactor-reviewer` skill to review the relevant existing code and its git history for evidence-backed Gang of Four refactoring opportunities. If the work is a new design with no existing code to review, use `gof-pattern-selector` instead.
+- During code review, explicitly check whether `gof-refactor-reviewer` is available. When available, invoke it as part of the review; when unavailable, state that limitation and perform a focused manual design-pattern review.
+- Do not force a design pattern into the code. Follow the skill's default of leaving the current design in place unless demonstrated change history and present-day costs justify the refactor.
+
+Common setup:
+
+```bash
+uv sync --extra s3 --extra snowflake
+
+# MDM runtime/dev work when needed:
+uv sync --extra s3 --extra mdm-runtime
+```
+
+## Runtime Settings
+
+Warehouse commands require:
+
+```bash
+export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"
+export WAREHOUSE_ENVIRONMENT="dev"
+export WAREHOUSE_RUNTIME_MODE="bronze_capture"
+export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
+export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse/warehouse"
+export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
+export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+Notes:
+
+- `EDGAR_IDENTITY` must include an email address or the runtime rejects the command.
+- `WAREHOUSE_RUNTIME_MODE` is `bronze_capture` or `infrastructure_validation`.
+- Gold-affecting commands require `SERVING_EXPORT_ROOT`; `SNOWFLAKE_EXPORT_ROOT` is accepted as a compatibility fallback.
+- For AWS work, prefer S3 roots. Do not introduce other storage roots into new AWS guidance.
+
+## Data And Parser Notes
+
+- Raw SEC download and bronze persistence are implemented by this repo, not by `edgartools`.
+- Forms 3, 4, and 5 are parsed locally in `edgar_warehouse/parsers/ownership.py` (direct `ownershipDocument` XML; zero SEC requests -- reporting owners are classified from bronze `submissions.json`). `edgartools` enters only for `reverse_name` and `_classify_is_individual`, which keep `owner_name` identical to its former `Ownership.from_xml` output.
+- ADV parsing is local in `edgar_warehouse/parsers/adv.py`.
+- SEC filing artifacts are additive and immutable after capture.
+- Loaders should skip already loaded SEC files by default. Use explicit `--force` only for operator repair.
+- When bumping `edgartools`, run the relevant scripts in `scripts/batch/` to smoke-test parser surfaces.
+
+## AWS Terraform Model
+
+AWS Terraform is split into passive infrastructure and access control.
+
+Passive infrastructure roots:
+
+```text
+infra/terraform/bootstrap-state/
+infra/terraform/accounts/dev/
+infra/terraform/accounts/prod/
+```
+
+Access-control roots:
+
+```text
+infra/terraform/access/aws/accounts/dev/
+infra/terraform/access/aws/accounts/prod/
+```
+
+Passive AWS Terraform creates infrastructure shells only:
+
+- VPC, public subnets, route table, internet gateway, and S3 VPC endpoint.
+- Outbound-only ECS task security group.
+- S3 bronze bucket, warehouse bucket, and Snowflake export bucket.
+- KMS key for Snowflake export artifacts.
+- ECR warehouse repository.
+- ECS cluster and CloudWatch log group.
+- SNS topic for Snowflake manifest events.
+- Empty Secrets Manager containers.
+- Empty MDM Secrets Manager containers for Snowflake Postgres, Neo4j, API keys, and Snowflake graph/export settings.
+
+AWS Terraform must not create runnable ECS task definitions, Step Functions state machines, schedules, workload commands, image rollouts, or runtime secret values. Those are explicit operator actions.
+
+Default S3 bucket names:
+
+S3 bucket names are globally unique, so data buckets include the 12-digit AWS account ID suffix. The non-S3 resource prefix remains `edgartools-<env>` unless a Terraform variable overrides it.
+
+| Env | Bronze bucket | Warehouse bucket | Snowflake export bucket | Prefix |
+| --- | --- | --- | --- | --- |
+| dev | `edgartools-dev-bronze-<aws_account_id>` | `edgartools-dev-warehouse-<aws_account_id>` | `edgartools-dev-snowflake-export-<aws_account_id>` | `edgartools-dev` |
+| prod | `edgartools-prod-bronze-<aws_account_id>` | `edgartools-prod-warehouse-<aws_account_id>` | `edgartools-prod-snowflake-export-<aws_account_id>` | `edgartools-prod` |
+
+Important differences:
+
+- `dev` uses destroyable bucket modules and ECR `force_delete = true`.
+- `prod` uses protected storage; the bronze bucket has `prevent_destroy = true`.
+- S3 backend state locking uses `use_lockfile = true`; no DynamoDB lock table is required.
+
+## AWS Principal Model
+
+- Use an AWS admin profile for `bootstrap-state`, AWS provisioning Terraform, and AWS access Terraform.
+- Use `sec_platform_deployer` for application rollout: image push, ECS task definitions, Step Functions state machines, and executions.
+- Runtime uses service-assumed roles, not a runner IAM user:
+  - `sec_platform_runner_execution`
+  - `sec_platform_runner_task`
+  - `sec_platform_runner_step_functions`
+- Do not create runner access keys. Runtime and deployment use IAM roles; the former
+  `edgartools-<env>-runner-credentials` empty container is retired.
+
+## AWS Infra Flow
+
+Bootstrap Terraform state:
+
+```bash
+export AWS_PROFILE=aws-admin-prod
+cd infra/terraform/bootstrap-state
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
+```
+
+Apply passive AWS infrastructure:
+
+```bash
+cd infra/terraform/accounts/prod
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+```
+
+Apply AWS access:
+
+```bash
+cd infra/terraform/access/aws/accounts/prod
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
+```
+
+Useful outputs:
+
+```bash
+terraform output ecr_repository_url
+terraform output cluster_arn
+terraform output public_subnet_ids
+terraform output public_ecs_security_group_id
+terraform output log_group_name
+terraform output edgar_identity_secret_arn
+terraform output snowflake_manifest_sns_topic_arn
+terraform output snowflake_export_root_url
+```
+
+Populate the EDGAR identity secret out of band:
+
+```bash
+aws secretsmanager put-secret-value \
+  --secret-id edgartools-prod-edgar-identity \
+  --secret-string "Your Name your@email.com"
+```
+
+## AWS Image Publish
+
+The AWS pipeline deploy script (`deploy-aws-application.sh`: ECS task
+definitions and Step Functions) was retired with the commands it ran
+(platform validation 2b, 2026-09-30). Terraform and the live AWS objects are
+untouched until a teardown the operator approves. Publish images with
+`infra/scripts/publish-warehouse-image.sh`.
+
+## AWS MDM
+
+MDM runtime writes use Snowflake Postgres through `MDM_DATABASE_URL`. AWS Terraform manages only empty Secrets Manager containers:
+
+- `edgartools-<env>/mdm/postgres_dsn`
+- `edgartools-<env>/mdm/snowflake`
+
+The unused, never-populated `mdm/neo4j` and `mdm/api_keys` containers are
+retired. Use `scripts/ops/delete_unused_aws_secrets.py` for reviewed cleanup;
+its apply mode requires reconciled Terraform state and live no-use evidence.
+
+Populate the MDM PostgreSQL DSN with the Snowflake Postgres `application` role DSN:
+
+```bash
+printf '%s' "$SNOWFLAKE_APPLICATION_MDM_DSN" | \
+  bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
+    --env dev \
+    --aws-profile aws-admin-dev \
+    --aws-region us-east-1 \
+    --dsn-stdin
+```
+
+Snowflake Postgres cutover and RDS removal runbook:
+
+```bash
+docs/aws-mdm-snowflake-postgres-cutover.md
+```
+
+MDM CLI commands (Clean MDM only; the legacy MDM commands are deleted,
+platform validation slice 2a):
+
+```bash
+edgar-warehouse mdm migrate --application-role <runtime-role>
+edgar-warehouse mdm check-connectivity
+edgar-warehouse mdm counts
+edgar-warehouse mdm name-census ...
+edgar-warehouse mdm prepare-clean-company ...
+```
+
+**One-time backfill CLIs must expose a `--limit`/bounded-sample mode, not just `--dry-run`.**
+A full unbounded `--dry-run` still walks the entire live candidate set — for
+`mdm collapse-attribute-stage-history` that was 139,349 entities at one
+Postgres round trip each (~57ms/entity, cross-region latency), projecting a
+multi-hour dry run just to confirm the logic works on real data. `--dry-run`
+proves nothing a bounded sample (tens of rows) wouldn't also prove, at a
+fraction of the cost — confirm on a small sample first, then either trust the
+existing test suite + code review for the full run or let the full run
+double as its own dry run (it's already the resumable, batched-commit path,
+so an interrupted full run costs nothing extra to retry). Build the `--limit`
+flag in from the start next time; retrofitting one after a slow prod dry run
+is already underway is the wrong order.
+
+## Snowflake Native S3 Pull
+
+Snowflake is the analytics target for the AWS path. Use the wrapper for normal AWS/Snowflake native-pull deployment:
+
+```bash
+bash infra/scripts/deploy-snowflake-stack.sh \
+  --env prod \
+  --snow-connection edgartools-prod
+```
+
+The wrapper coordinates:
+
+1. AWS access bootstrap apply with temporary Snowflake trust and deterministic external ID.
+2. Snowflake provisioning for storage integration, S3 stage, source mirror tables, pipe, stream, procedures, and task.
+3. AWS access reconcile apply narrowed to the Snowflake-managed AWS principal.
+4. Snowflake provisioning re-apply.
+5. Snowflake access Terraform apply.
+6. Optional native-pull validation, dbt run/test, and dashboard upload.
+
+Useful flags:
+
+```bash
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --run-validation
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --run-dbt
+bash infra/scripts/deploy-snowflake-stack.sh --env-name prod --snow-connection edgartools-prod --upload-dashboard
+```
+
+Native-pull gotchas:
+
+- `snowflake_export_root_url` must include the trailing slash on `snowflake_exports/`.
+- Capture `snowflake_manifest_sns_topic_arn` from AWS provisioning outputs.
+- The SnowCLI connection must exist before running the wrapper.
+- Snowflake Enterprise or higher is required for dynamic tables.
+
+### Dev Snowflake Connection
+
+For all local verification, DDL deployment, and `snow sql` commands targeting the dev Snowflake account, always use:
+
+```bash
+export SNOW_CONNECTION=snowconn
+```
+
+The `snowconn` connection uses ACCOUNTADMIN role, which is required for `CREATE STORAGE INTEGRATION` (needed by `01_source_stage.sql`) and all other DDL operations in the dev account. Do not use `YG91578` or `edgartools-dev` for verification scripts — those connections lack the required privileges.
+
+## dbt And Dashboard
+
+dbt project root:
+
+```bash
+cd infra/snowflake/dbt/edgartools_gold
+```
+
+Use environment-backed profiles:
+
+```bash
+cp profiles.yml.example profiles.yml
+export DBT_SNOWFLAKE_ACCOUNT="ORGNAME-ACCOUNTNAME"
+export DBT_SNOWFLAKE_USER="your_user"
+export DBT_SNOWFLAKE_PASSWORD="your_password"
+export DBT_SNOWFLAKE_ROLE="EDGARTOOLS_PROD_DEPLOYER"
+export DBT_SNOWFLAKE_DATABASE="EDGARTOOLS_PROD"
+export DBT_SNOWFLAKE_WAREHOUSE="EDGARTOOLS_PROD_REFRESH_WH"
+```
+
+Run with `uv`:
+
+```bash
+uv run --with dbt-snowflake dbt deps
+uv run --with dbt-snowflake dbt compile --target prod
+uv run --with dbt-snowflake dbt run --target prod
+uv run --with dbt-snowflake dbt test --target prod
+```
+
+Dashboard artifact upload:
+
+```bash
+SNOW_CONNECTION=edgartools-prod \
+DASHBOARD_DATABASE=EDGARTOOLS_PROD \
+bash infra/snowflake/streamlit/deploy.sh
+```
+
+## Tests And Verification
+
+Fast local tests:
+
+```bash
+uv run pytest tests/unit tests/architecture
+```
+
+MDM tests:
+
+```bash
+uv run pytest tests/mdm
+```
+
+Validation checks after deploy:
+
+```bash
+edgar-warehouse --help
+python -c "from edgar_warehouse.cli import main; print('OK')"
+uv run --with dbt-snowflake dbt test --target prod
+```
+
+Snowflake status query:
+
+```sql
+SELECT *
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS
+LIMIT 10;
+```
+
+## Safety Rules
+
+- Do not commit local secrets, `.tfvars` with live values, generated Terraform state, or application JSON containing sensitive values.
+- Do not put image digests, workflow rollout, schedules, or EDGAR identity values into AWS Terraform inputs.
+- Do not change the ownership parser's `edgartools` imports without checking the `edgartools` changelog:
+
+```python
+from edgar.display.formatting import reverse_name
+from edgar.entity.constants import _classify_is_individual
+```
+
+- Do not broaden IAM policies casually. Keep runner roles service-assumed and scoped.
+- Do not remove S3 object/versioning/encryption/public-access protections.
+- Do not destroy prod bronze storage without an explicit operator request and a reviewed migration plan.
+- Preserve loader idempotency: default behavior skips already captured SEC files; repair paths require `--force`.
