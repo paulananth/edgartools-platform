@@ -8,8 +8,11 @@ description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect 
 **Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
 owns work control and verified completion. External workers own feed execution
 into silver and MDM. Running mastering (the Merge
-Stage) is the `mdm` target of **run**. Its enabled command path is not built
-yet (database design review, finding 3), so say so if asked.
+Stage) is the `mdm` target of **run**. Its command is `edgar-warehouse rules
+run --target mdm`, which submits the approved versions to this Bookkeeping
+runner. There is no `bookkeeping run` command (operator, 2026-10-02: "Keep
+`rules run`"). Plan, validate and recover are steps you follow with the
+existing commands; they are not commands of their own.
 
 ## Required independence
 
