@@ -14,7 +14,7 @@ Decide:
 
 ## Answer
 
-Operator, 2026-10-02 12:52 ET: "Both before switch-on".
+Operator, 2026-10-02 by 11:49 ET: "Both before switch-on".
 
 Before Person feed 1 is switched on (ticket 12), both of these must show Person and the Forms 3/4/5 and GLEIF link types:
 - the Mapping Documents;
