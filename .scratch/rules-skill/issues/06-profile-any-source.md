@@ -1,7 +1,8 @@
 # Profile any source
 
 Type: task
-Status: open
+Status: moved to `mastering-to-done/issues/09-test-check-and-preview-for-onboarding.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 03
 
 ## Outcome

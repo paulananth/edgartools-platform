@@ -1,7 +1,8 @@
 # Re-baseline the MDM schema as `mdm`, with business names and comments
 
 Type: task
-Status: in progress (Claude, branch `claude/mdm-rebaseline-slice3`)
+Status: resolved: merged in #767. The old pg16 store was deleted on 2026-10-02 at the operator's word, with a backup (2026-10-02 audit, mastering to-do 01).
+Was: in progress (Claude, branch `claude/mdm-rebaseline-slice3`)
 
 ## Operator rulings (2026-09-30)
 

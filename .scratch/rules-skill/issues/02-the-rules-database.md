@@ -1,7 +1,8 @@
 # The Rules Database
 
 Type: task
-Status: open
+Status: resolved: the Rules Database and `rules init/save/approve/activate` exist on main (rules skill 14, #757; Fresh Rules authority, #738) (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 01
 
 ## Outcome

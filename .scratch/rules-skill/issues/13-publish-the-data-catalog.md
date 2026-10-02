@@ -1,7 +1,8 @@
 # Publish the Data Catalog to OpenMetadata
 
 Type: build
-Status: in progress
+Status: resolved: merged in #745; Person and links moved to `mastering-to-done/issues/11-data-catalog-for-person-and-links.md` (2026-10-02 audit, mastering to-do 01).
+Was: in progress
 
 ## Outcome
 

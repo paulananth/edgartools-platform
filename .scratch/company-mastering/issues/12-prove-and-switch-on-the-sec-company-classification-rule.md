@@ -1,7 +1,8 @@
 # Prove and switch on the SEC Company classification rule
 
 Type: task
-Status: activated on Codex branch; final digest review and merge pending
+Status: superseded: PR #710 closed; `sec-company-candidate` ships in the Company policy approved through tickets 25–27 (#758, #762) (2026-10-02 audit, mastering to-do 01).
+Was: activated on Codex branch; final digest review and merge pending
 Blocked by: operator review of the active digest and merge decision
 
 ## Question

@@ -1,7 +1,8 @@
 # Qualify Snowflake Postgres and rehearse cutover
 
 Type: task
-Status: open
+Status: open, later: the hosted Snowflake Postgres cut-over is under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Owner: Codex
 Blocked by: 06
 

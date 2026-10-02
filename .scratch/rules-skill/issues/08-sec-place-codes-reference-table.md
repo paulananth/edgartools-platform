@@ -1,7 +1,8 @@
 # SEC place codes: one reference table in rules/
 
 Type: task
-Status: claimed (Claude, branch `claude/rules-08-place-codes`, 2026-09-26 20:02 ET)
+Status: resolved: merged in #733 (2026-10-02 audit, mastering to-do 01).
+Was: claimed (Claude, branch `claude/rules-08-place-codes`, 2026-09-26 20:02 ET)
 Blocked by: none
 
 ## Outcome

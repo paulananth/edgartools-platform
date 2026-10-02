@@ -1,7 +1,8 @@
 # Check data quality in its own rule, before the merge
 
 Type: build
-Status: in progress
+Status: resolved: merged in #742 (2026-10-02 audit, mastering to-do 01).
+Was: in progress
 Blocks ticket 21 (the cascade merge). Codex PR #738 merged (ad43cfac,
 2026-09-28); nothing else blocks.
 

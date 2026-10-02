@@ -1,7 +1,8 @@
 # Silver outputs
 
 Type: task
-Status: open
+Status: open: listed under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 03
 
 ## Outcome

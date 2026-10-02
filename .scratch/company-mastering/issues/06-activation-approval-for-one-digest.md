@@ -1,7 +1,8 @@
 # Ask for the Rule Activation Approval of one exact digest
 
 Type: grilling
-Status: open
+Status: superseded: approvals now go through `rules approve` on test evidence (rules skill 14, #757); Company versions approved in #747, #758 and #762 (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 05 (Phase 1 done 2026-09-26; ready to ask)
 
 ## Question
