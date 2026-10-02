@@ -1,7 +1,7 @@
 # Switch on the GLEIF accounting parent (06a, part 2: configuration)
 
 Type: task (configuration, two small code changes)
-Status: in progress (Claude, branch `claude/gleif-parent-config`)
+Status: done except switch-on (merged as #773; both versions approved on the local Rules Database)
 Parent: `06-relationship-rules.md`; engine in #771 (06a)
 
 ## Operator rulings (2026-10-01)
@@ -82,5 +82,19 @@ after this.
   as the adapter and mapdoc do; a plainer test helper; ticket notes and times.
   Spec: no blocker; a mapdoc test for the start row. Fixed; affected files
   206 passed
-- [ ] PR; CI green; merge on the operator's word
-- [ ] Approvals: merge version, GLEIF source version (local Rules Database)
+- [x] PR #773; CI green (2026-10-01 22:18 ET); merged on the operator's "yes" (2026-10-01 22:19 ET)
+- [x] Approvals: merge version, GLEIF source version (local Rules Database
+  `rules-local-person-feed-1`; inputs `inputs-06a2.json`, 86 files, batch_hash
+  6724ca69…623b; proofs in the cm27 proving folder)
+  - Merge version `platform-2026-10-01.gleif-parents`, digest 4c9d1cee…26f8,
+    evidence_hash 8a8802b2…24eb. Without its one change it is the approved
+    Person feed 1 version (da4b5065…). Operator: "approve" (2026-10-01 22:21 ET).
+  - GLEIF source version `gleif-2026-10-01.parent-links`, digest
+    fecfcbf9…9347, evidence_hash f2aab418…f62b. Operator: "approve"
+    (2026-10-01 22:21 ET).
+- [ ] ~~Switch on (`rules activate`)~~ deferred to the switch-on step for
+  Person, Company and GLEIF links: it needs a Clean MDM database, and
+  recreating `edgartools-clean-mdm-pg16` is the operator's call
+- [ ] Open for slice 6 step 2 (relationship rules document): the 72 links
+  waiting for their other end are open reviews today; whether they belong in
+  a quieter waiting state, like records deferred for classification

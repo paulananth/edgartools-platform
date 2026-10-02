@@ -1,7 +1,7 @@
 # Onboard Person feed 1 (SEC individual filers) with Data Onboarding
 
 Type: task
-Status: in progress (Claude, branch `claude/person-feed-1`)
+Status: merged as #770; switch-on (`rules activate`) waits for a Clean MDM database
 
 ## Operator rulings
 
@@ -79,8 +79,8 @@ only configuring". Every step that needs code is a SKILL-GAP in the log.
 - [x] Operator checked the 8 uncertain hard cases the rule decides: 7 person,
   1 entity (a trust); still 0 entities called a person (`operator-checks.jsonl`)
   (2026-10-01 about 08:46 ET)
-- [ ] Operator ruling: "there has to be relationship along with mdm it can not
-  be separated". Feed 1 cannot build a link (one CIK per document); the
+- [ ] ~~Operator ruling: "there has to be relationship along with mdm it can not
+  be separated"~~ moved to slice 6 (`06-relationship-rules.md`). Feed 1 cannot build a link (one CIK per document); the
   relationship requirement goes to the next Person feed ticket, which must
   master people, entities and the person–role–entity links together
 - [ ] ~~Hard-case set, about 50 real filers (Q8 "yes"): agent drafts, the
@@ -153,7 +153,7 @@ only configuring". Every step that needs code is a SKILL-GAP in the log.
   the feed; Mapping Document words (05c item 10, part); the pinned document
   set. Reviewed on three axes. Unit 394, MDM 484, architecture 249 passed
   locally (2026-10-01 18:34 ET)
-- [ ] CI green; merge on the operator's word
+- [x] CI green; merged as #770 on the operator's "Merge" (2026-10-01 18:46 ET)
 
 ## Out of this PR
 

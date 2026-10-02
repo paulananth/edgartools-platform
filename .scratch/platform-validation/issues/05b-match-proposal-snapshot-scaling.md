@@ -1,7 +1,7 @@
 # The match proposal snapshot slows down as the store grows
 
 Type: bug (found by the Person feed 1 Proving Run, 2026-10-01)
-Status: part 1 merged (#772); part 2 in progress (Claude, branch `claude/mdm-lookup-indexes`).
+Status: parts 1 (#772) and 2 (#774) merged; the Person timing run and finding 5 remain, deferred.
 
 ## What was seen
 
@@ -159,4 +159,4 @@ a few GIN entries, not about 1,000.
   index use is proven possible, not chosen at default settings (Person run).
   Index file 4 passed, core MDM and schema comments 51, MDM+unit 884
   (22:39–22:43 ET)
-- [ ] PR; CI green; merge on the operator's word
+- [x] PR #774; CI green; merged on the operator's "yes" (2026-10-01 22:47 ET)
