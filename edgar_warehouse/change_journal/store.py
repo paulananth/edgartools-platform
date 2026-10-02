@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.bookkeeping.clean.config import canonical, reference
+from edgar_warehouse.control_contract import canonical, reference
 
 
 class JournalConflict(ValueError):

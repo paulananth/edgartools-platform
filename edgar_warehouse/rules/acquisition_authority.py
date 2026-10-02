@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import NAMESPACE_URL, uuid5
 
-from edgar_warehouse.bookkeeping.clean.config import Blocked, digest, reference
+from edgar_warehouse.control_contract import Blocked, digest, reference
 
 
 def acquisition(document: dict) -> dict:

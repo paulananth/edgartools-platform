@@ -1,4 +1,4 @@
 interface:
   display_name: "Change Journal"
-  short_description: "Initialize or migrate the journal, or manage feed evidence"
-  default_prompt: "Use $change-journal init or migrate for the fresh store, or plan, validate or deploy with --source and --feed."
+  short_description: "Manage an independent journal and verified event receipts"
+  default_prompt: "Use $change-journal for journal-only initialization, migrations, event validation, inspection and receipt verification. Keep loaders, execution and producer recovery outside the journal."

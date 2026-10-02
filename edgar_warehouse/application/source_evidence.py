@@ -15,7 +15,7 @@ from edgar_warehouse.bookkeeping.clean.config import (
     reference,
 )
 
-from .authority import frozen_authority
+from edgar_warehouse.rules.acquisition_authority import frozen_authority
 
 
 def scope_proof(book, spec, authority, evidence):
@@ -88,7 +88,7 @@ def scope_proof(book, spec, authority, evidence):
         if member["artifact"] not in spec["evidence"]:
             raise Blocked("Scope inventory uses undeclared member evidence")
         if member["format"] in {"bytes", "page-bytes"}:
-            from .capture import complete
+            from edgar_warehouse.acquisition.capture import complete
 
             policy = (authority["configuration"].get("page_completeness")
                       if member["format"] == "page-bytes" else authority["configuration"]["completeness"])

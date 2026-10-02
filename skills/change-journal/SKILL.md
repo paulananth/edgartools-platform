@@ -1,146 +1,147 @@
 ---
 name: change-journal
-description: Initialize or migrate the fresh Change Journal store, or plan, validate and deploy journal evidence for an explicit source and feed. Delivery recovery delegates to the owning Bookkeeping or MDM outbox.
+description: Initialize or migrate the independent Change Journal, plan or validate journal event delivery, inspect receipts and coordinate owner-controlled delivery recovery. Enforce a journal-only dependency boundary; loaders, source interpretation, Rules approval, work execution and producer outboxes remain outside the journal.
 ---
 
 # Change Journal
 
 **Modes:** init, migrate, plan, validate, deploy, status, recover-delivery.
+The journal records immutable events and verifies durable delivery. It owns no
+loader, acquisition policy, work scheduler, business verifier or producer outbox.
 
-**Use another skill when:**
-- running a feed or resuming a run: use **bookkeeping** (**run**,
-  **recover**);
-- a feed is new, or its rules change: use **data-onboarding** or
-  **refining-rules**.
+## Required independence
 
-Invoke `$change-journal init|migrate` for the whole fresh store, or
-`$change-journal plan|validate|deploy --source <source> --feed <feed>` for a
-specific feed. Only the feed-scoped modes require both identities. Preserve
-supplied values; resolve unknown or ambiguous feeds through the shared
-Bookkeeping descriptor resolver before dependent work. Read the
-[contract](../../docs/specs/change-journal.md). The old Change Ledger is a
-separate legacy archive; do not redirect its backlog to this store.
+The journal package and standalone CLI may depend only on their own code, pure
+shared envelope primitives, the standard library, SQLAlchemy and the PostgreSQL
+driver. They must start and operate without Bookkeeping, Rules, MDM, acquisition,
+Silver, source loaders or parser libraries. No producer registry, callback or
+source-specific branch belongs in the journal.
 
-`sec.submissions.company/submissions` is the sole active acquisition feed.
-The `company` target emits committed fetch authorization before each main or
-pagination provider request, then source revision, Silver producer and MDM
-receipts in one root run. GLEIF remains an MDM mapping source without an
-acquisition feed. Do not resolve or submit retired SEC/GLEIF acquisition feeds.
+Read [INDEPENDENCE.md](INDEPENDENCE.md) before implementation, architecture
+validation or selecting a delivery-recovery path. It describes module ownership,
+the isolated-package tests and exactly what journal verification proves.
+The [contract](../../docs/specs/change-journal.md) defines envelope and storage
+semantics. Resolve the skill's physical path when following relative references.
 
-Use `uv run --extra mdm --extra s3` from the intended repository worktree.
-Resolve the skill's physical path so relative links refer to that checkout.
-Feed-scoped modes use the same descriptor resolution as Bookkeeping:
+## Inputs and commands
+
+Init and migrate operate on the whole fresh store. Other modes use the provided
+producer/event key, receipt, run id or bounded metadata filters as appropriate.
+Source/feed are opaque event labels and optional inspection filters: the journal
+does not resolve an active feed through Bookkeeping or query a Rules document.
+A new producer/source/feed needs no journal code change when its envelope fits
+the versioned contract. Source authority and completeness remain producer duties.
+
+Use the independent wheel in a dedicated virtual environment as described in
+[INDEPENDENCE.md](INDEPENDENCE.md). For repository development, the same CLI is:
 
 ```bash
-uv run --extra mdm --extra s3 skills/bookkeeping/scripts/resolve_feed.py --source <source> --feed <feed>
+uv run python -m edgar_warehouse.change_journal.cli --help
 ```
+
+This CLI exposes only init, migrate, status, events and verify. Existing
+`edgar-warehouse change-journal` routes compose the same core operations with
+application-owned outbox recovery; the warehouse CLI itself imports other
+platform modules and is not the independence proof.
 
 ## Init and migrate
 
-Use `init` on an empty `change_journal_clean` PostgreSQL 16 database; use
-`migrate` only when its journal schema is already initialized and checksummed.
-Both apply pending numbered migrations and refresh restricted append/read
-function grants. `migrate` refuses to initialize a missing schema. A wrong
-database, legacy/business tables, untracked schema or checksum drift blocks
-the operation. These modes import no ledger history, create no event, and do
-not migrate Bookkeeping or Rules.
-
-Set `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` to a separate migration-owner
-login; ensure the named runtime role already exists and is restricted. Never
-use `CHANGE_LEDGER_DATABASE_URL`, `MDM_DATABASE_URL` or the runtime login as a
-migration fallback. Verify the target database, PostgreSQL version and role
-without printing connection secrets, then run the selected command and read
-back its checksums, sole `journal.event` table, function grants and event
-count:
+Use init for an empty `change_journal_clean` PostgreSQL 16 database; migrate
+only for its already initialized checksummed journal schema. Check the exact
+database, version and separate migration/runtime roles without printing secrets.
+Use `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` for the migration owner and
+`CHANGE_JOURNAL_DATABASE_URL` for restricted runtime append/read functions.
+Neither falls back to Bookkeeping, legacy ledger, Rules or MDM connections.
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse change-journal init --runtime-role <role>
-uv run --extra mdm --extra s3 edgar-warehouse change-journal migrate --runtime-role <role>
+uv run python -m edgar_warehouse.change_journal.cli init --runtime-role <role>
+uv run python -m edgar_warehouse.change_journal.cli migrate --runtime-role <role>
 ```
+
+Select the command matching store state. Read back migration checksums, the sole
+`journal.event` table, restricted function grants and event count. Untracked
+schemas, checksum drift, wrong databases or legacy/business tables must block.
+Import no legacy events, checkpoints or pending delivery; preserve old archives.
 
 ## Plan
 
-Read the selected source's Rules file and bounded source-owned manifests.
-Record exact feed/dataset members, target, Rules digest, input references,
-processing versions, producer counts and recovery scope. Planning reads
-artifacts and creates only a local plan bundle; it does not connect to a
-database, activate Rules or request a provider. Use the actual helper:
+Record the requested journal scope: event schema version, producer keys,
+metadata labels, exact envelope/evidence hashes, expected delivery count,
+restricted journal connection and the owner of each local delivery intent.
+Use bounded retained envelopes or fixtures. Plan mode performs no provider
+request, Rules approval, Bookkeeping execution or live event append.
 
-```bash
-uv run --extra mdm --extra s3 skills/change-journal/scripts/run_mode.py plan \
-  --source <source> --feed <feed> --target <target> \
-  --input-manifest <uri> --input-sha256 <hash> --output <plan.json>
-```
-
-Unsupported required stages remain explicit blockers. A fixture capture is
-not proof of a parser, downstream publication, or production feed parity.
+Producer workflow planning is outside the journal. The existing pipeline-evidence
+helper now belongs to `skills/bookkeeping/scripts/journal_evidence.py` and
+`edgar_warehouse.application.journal_evidence`; it is not a journal operation or
+proof that Bookkeeping itself is decoupled. Use it only for an explicitly
+requested producer workflow under that workflow's authorization and qualification.
 
 ## Validate
 
-Use isolated local PostgreSQL 16 Bookkeeping, Rules and journal stores with
-restricted runtime connections and separately applied migrations. The helper
-requires the exact planned Rules version already proven/approved/active in
-those isolated stores; it never creates a person's approval. MDM validation
-requires a separate loopback `change_journal_validation_*` database; unset
-`MDM_DATABASE_URL` when the target does not need MDM. Configure
-`BOOKKEEPING_CLEAN_DATABASE_URL`, `RULES_DATABASE_URL`,
-`CHANGE_JOURNAL_DATABASE_URL` and `BOOKKEEPING_MANIFEST_ROOT`.
+Use disposable PostgreSQL 16 and restricted append/read roles. Run the actual
+journal from the independent wheel in a clean environment with producer modules
+and domain libraries absent and domain imports blocked. Required tests are:
 
-Run `run_mode.py validate --source <source> --feed <feed> --plan <plan.json>
---output <validation.json> --limit <bound>`. Inspect actual producer counts,
-required checks, receipt hashes and zero pending intent. A partial result
-returns 3 and cannot qualify deployment. Exercise the affected scope's outage,
-lost acknowledgement, stale lease, duplicate/conflicting delivery, input drift,
-checkpoint contention/holes and completeness tests. Required acceptance is
-`tests/integration/test_change_journal_postgres.py`,
-`test_change_journal_acquisition_postgres.py` and
-`test_configured_bookkeeping_postgres.py`; missing prerequisites must fail.
-Include `test_change_journal_source_evidence_postgres.py` when the target uses
-source manifests. Require typed scope inventories with actual member counts
-and business key digests, including explicit empty inventories. A source record
-inventory alone does not prove destination effects; retain the owner's
-committed-effect verification. Re-plan when the capability version changes.
+```bash
+uv run --extra mdm pytest tests/architecture/test_change_journal_independence.py
+uv run --extra mdm pytest tests/integration/test_change_journal_independence_postgres.py tests/integration/test_change_journal_postgres.py
+```
+
+Missing prerequisites fail; no qualifying skips. Verify migration restrictions,
+append-only storage, unseen labels, canonical hashing, identical/conflicting
+keys, concurrent delivery, bounded inspection and exact receipt readback.
+
+When integration changes, also run the affected acquisition, source-evidence,
+MDM and Bookkeeping recovery suites. Those qualify owner behavior and delivery
+across the journal interface; they are not dependencies of journal execution.
+Record hashes, role/version evidence, expected/verified counts and failures.
+Distinguish isolated core qualification from owner integration and deployment.
 
 ## Deploy
 
-Use `run_mode.py deploy --source <source> --feed <feed> --plan <plan.json>
---validation <validation.json> --output <deployment.json> --limit <bound>`.
-The helper rejects changed scope, Rules, processing versions, inputs or
-incomplete validation. Target Rules must already have the exact approval and
-activation; deployment submits configured work through Bookkeeping. Apply
-journal migrations only through the separate owner connection using the
-`init` or `migrate` mode appropriate to the target store.
-
-Retain validation stores for durable read-back. When target stores differ,
-provide both `BOOKKEEPING_VALIDATION_DATABASE_URL` and
-`CHANGE_JOURNAL_VALIDATION_DATABASE_URL` as explicit read connections.
-The helper verifies the actual completed root, frozen submission, counts,
-checks, backlog and journal receipts; a local report alone is insufficient.
-
-There is no AWS rollout for the journal: the AWS pipeline deploy script was
-retired (platform validation 2b, 2026-09-30). Never import history or relabel
-an old event for the fresh journal. Physical retirement of the legacy archive
-is separate; preserve it indefinitely by default.
+Apply only journal-store provisioning/migrations included in the user's scope
+and qualified by the exact validation evidence. Use the existing separate-owner
+init/migrate path. There is no current journal AWS rollout command; report that
+gap if rollout is requested. This mode does not submit a feed, instantiate
+Bookkeeping or MDM, change Rules approval or drain another owner's outbox.
+An existing approval/authorization remains effective within its original scope.
 
 ## Status
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse change-journal status --source <source> --feed <feed>
-uv run --extra mdm --extra s3 edgar-warehouse change-journal events --source <source> --feed <feed> --limit 20
-uv run --extra mdm --extra s3 edgar-warehouse change-journal verify <receipt>
+uv run python -m edgar_warehouse.change_journal.cli status --source <source> --feed <feed>
+uv run python -m edgar_warehouse.change_journal.cli events --run-id <root> --limit 20
+uv run python -m edgar_warehouse.change_journal.cli verify <receipt.json>
 ```
+
+Source/feed filters are optional. Event-id inspection cursors are not completion
+watermarks; a sparse listing cannot prove producer scope completeness.
 
 ## Recover delivery
 
-Confirm commands through `edgar-warehouse change-journal --help`. Inspection is
-bounded. Receipt verification proves durable envelope delivery; the owning
-artifact or MDM verifier proves business effects. `change-journal recover
-bookkeeping <run-id> --limit <bound>` delivers committed intent only. MDM
-recovery uses `recover mdm <batch-id> --worker <worker>` and the owning fence.
-Neither silently executes new provider work or redirects historical backlog.
+Inspect the exact retained receipt and the owning producer's committed intent.
+The journal verifies its stored envelope; it cannot prove or repair source or
+business effects. The owner reconciles and retries the original key/envelope,
+acknowledges only durable readback and retains its own fence. Journal outage,
+conflicting content or corrupt evidence must leave intent pending.
+
+Existing application-composed delivery routes are:
+
+```bash
+uv run --extra mdm --extra s3 edgar-warehouse change-journal recover bookkeeping <run-id> --limit <bound>
+uv run --extra mdm --extra s3 edgar-warehouse change-journal recover mdm <batch-id> --worker <worker>
+```
+
+These execute owner recovery in `application.journal_recovery`, outside the
+journal core. They deliver committed intent only; never silently start provider
+work or redirect historical backlog. Preserve original roots and evidence.
+Do not add Bookkeeping/MDM imports back into the journal to enable recovery.
 
 ## Result
 
-Report mode, source/feed, exact members, retained bundles/root run, verified
-counts, receipts, backlog and remaining gaps. Keep planning, isolated
-qualification and live deployment distinct.
+Report scope, exact envelopes/receipts, journal checks, owner backlog and
+remaining gaps. Receipt delivery proves durable journal storage, not business
+completion. Keep skill validation, isolated journal qualification, owner
+integration and live deployment separate. Codex owns this work; no Claude
+assignment exists without an explicit operator instruction.

@@ -11,7 +11,7 @@ from edgar_warehouse.bookkeeping.clean.capabilities import standard_registry
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.runner import run
-from edgar_warehouse.change_journal.source_evidence import register_source_evidence
+from edgar_warehouse.application.source_evidence import register_source_evidence
 from tests.integration.test_change_journal_acquisition_postgres import definition
 from tests.integration.test_configured_bookkeeping_postgres import databases
 from tests.support.rules_approval import approve

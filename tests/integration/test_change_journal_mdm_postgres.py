@@ -14,7 +14,7 @@ from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
 from edgar_warehouse.bookkeeping.clean.runner import run
-from edgar_warehouse.change_journal.publication import JournalPublisher
+from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
 from edgar_warehouse.mdm.clean.adapters import normalize
 from edgar_warehouse.mdm.clean.store import Conflict, migrate, register_policy
 from tests.integration.test_change_journal_acquisition_postgres import definition
@@ -218,7 +218,7 @@ def test_fresh_rules_registration_ingest_and_lost_journal_ack(databases, tmp_pat
         rules_ref = databases.rules.resolve(
             "source", name, root=tmp_path.as_uri() + "/rules"
         )
-        from edgar_warehouse.change_journal.skill import plan
+        from edgar_warehouse.application.journal_evidence import plan
         from edgar_warehouse.rules.files import dumps
 
         authoring = tmp_path / "authoring"

@@ -10,12 +10,12 @@ def configured_bookkeeping():
     from .engine import Bookkeeping
     book = Bookkeeping(get_engine(), standard_registry())
     if os.environ.get("CHANGE_JOURNAL_DATABASE_URL"):
-        from edgar_warehouse.change_journal.capture import register_capture
+        from edgar_warehouse.acquisition.capture import register_capture
         from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
         journal = journal_engine()
         book.additional_engines.append(journal)
         register_capture(book.registry, ChangeJournal(journal))
-    from edgar_warehouse.change_journal.source_evidence import register_source_evidence
+    from edgar_warehouse.application.source_evidence import register_source_evidence
     register_source_evidence(book.registry)
     from .company import register_company_expansion, register_company_silver, register_company_mdm_preparation
     register_company_expansion(book.registry)
@@ -25,7 +25,7 @@ def configured_bookkeeping():
         from sqlalchemy import create_engine
         from urllib.parse import unquote, urlparse
         from edgar_warehouse.mdm.clean.publication import LocalContractSink
-        from edgar_warehouse.change_journal.publication import JournalPublisher
+        from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
         from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
         from .mdm_capabilities import register_mdm
         from .config import Blocked

@@ -101,7 +101,7 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_snowflake_env.set_defaults(handler=_handle_resolve_snowflake_env)
 
     from edgar_warehouse.bookkeeping.clean.cli import register as register_bookkeeping
-    from edgar_warehouse.change_journal.cli import register as register_journal
+    from edgar_warehouse.application.journal_recovery import register as register_journal
     from edgar_warehouse.mdm.cli import register_mdm_subparser
     from edgar_warehouse.rules.cli import register as register_rules
 

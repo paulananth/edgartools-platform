@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.26.3"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edgartools-change-journal"
+version = "0.1.0"
+description = "Independent PostgreSQL Change Journal and durable event receipts"
+requires-python = ">=3.12"
+# Preserve plain postgresql:// DSNs with psycopg2, as in the warehouse lock.
+# SQLAlchemy 2.1 changes the default driver to psycopg 3.
+dependencies = ["SQLAlchemy>=2.0.0,<2.1", "psycopg2-binary>=2.9.9"]
+
+[project.scripts]
+edgar-change-journal = "edgar_warehouse.change_journal.cli:main"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+# Package the canonical implementation; do not maintain a second source copy.
+[tool.hatch.build.targets.wheel.force-include]
+"../../edgar_warehouse/__init__.py" = "edgar_warehouse/__init__.py"
+"../../edgar_warehouse/control_contract.py" = "edgar_warehouse/control_contract.py"
+"../../edgar_warehouse/change_journal/__init__.py" = "edgar_warehouse/change_journal/__init__.py"
+"../../edgar_warehouse/change_journal/cli.py" = "edgar_warehouse/change_journal/cli.py"
+"../../edgar_warehouse/change_journal/database.py" = "edgar_warehouse/change_journal/database.py"
+"../../edgar_warehouse/change_journal/store.py" = "edgar_warehouse/change_journal/store.py"
+"../../edgar_warehouse/change_journal/migrations/001_event.sql" = "edgar_warehouse/change_journal/migrations/001_event.sql"

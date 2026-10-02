@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical
+from edgar_warehouse.control_contract import Blocked, canonical
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:

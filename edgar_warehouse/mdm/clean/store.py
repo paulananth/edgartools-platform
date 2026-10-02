@@ -261,7 +261,7 @@ def register_dataset(
             raise ValueError(f"List the quality exceptions as nonblocking_deferred_reasons: {sorted(missing)}")
     if rules_authority is None:
         raise Conflict("Dataset requires approved frozen Rules source authority")
-    from edgar_warehouse.change_journal.authority import registration_authority
+    from edgar_warehouse.rules.acquisition_authority import registration_authority
 
     evidence = registration_authority(rules_authority, code, body)
     authority_version = evidence["version_id"]

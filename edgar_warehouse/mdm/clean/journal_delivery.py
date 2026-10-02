@@ -6,7 +6,7 @@ from datetime import UTC
 
 from sqlalchemy import text
 
-from .store import ChangeJournal, JournalConflict, envelope
+from edgar_warehouse.change_journal.store import ChangeJournal, JournalConflict, envelope
 
 
 class JournalPublisher:

@@ -64,7 +64,7 @@ class Bookkeeping:
                     submission["kind"], submission["name"], submission["rule_version"]):
                 raise Blocked("Rules reference disagrees with submission")
             if "acquisition" in export["body"]:
-                from edgar_warehouse.change_journal.authority import frozen_authority
+                from edgar_warehouse.rules.acquisition_authority import frozen_authority
                 frozen_authority(export, submission["scope"].get("feed"), artifacts=self.artifacts)
             config = validate(export["body"], submission["target"], self.registry)
             versions = {step["operation"]: self.registry.operations[step["operation"]].version for step in config["steps"]}
@@ -119,7 +119,7 @@ class Bookkeeping:
         reference(inputs_ref)
         export = self.artifacts.json(rules_ref)
         proof = export.get("proof")
-        from edgar_warehouse.change_journal.authority import proof_holds
+        from edgar_warehouse.rules.acquisition_authority import proof_holds
 
         if (export.get("status") != "active" or not isinstance(proof, dict) or not proof_holds(export)
                 or digest(export["body"]) != export.get("digest")):
@@ -129,7 +129,7 @@ class Bookkeeping:
         if scope.get("feed") and "acquisition" not in export["body"]:
             raise Blocked("Retired acquisition feed cannot be submitted")
         if "acquisition" in export["body"]:
-            from edgar_warehouse.change_journal.authority import frozen_authority
+            from edgar_warehouse.rules.acquisition_authority import frozen_authority
             selected = frozen_authority(export, scope.get("feed"), artifacts=self.artifacts)
             if scope.get("source") != export["name"]:
                 raise Blocked("Acquisition run requires exact source/feed binding")
