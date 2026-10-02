@@ -90,7 +90,9 @@ def project(
     reviews = []
 
     def review(reason, **context):
-        # A link checked once per period can find one problem twice.
+        # A review names a `subject` or the `entities` it is about, so a later
+        # save finds it (`merge.review_scope`). A link checked once per period
+        # can find one problem twice.
         if {"reason": reason, **context} not in reviews:
             reviews.append({"reason": reason, **context})
 
@@ -198,6 +200,7 @@ def project(
                         review(
                             "conflicting_accounting_parents",
                             edges=sorted([key, other_key]),
+                            entities=sorted({e["source_id"], e["target_id"], other["target_id"]}),
                         )
         if kind not in HIERARCHIES | {"OWNERSHIP_PARENT"}:
             continue
@@ -216,7 +219,14 @@ def project(
                     continue
                 if e["target_id"] == start:
                     cycle = sorted(set(path + [key]))
-                    review("hierarchy_cycle", type=kind, scope=scope, edges=cycle)
+                    ends = {edges[k][end] for k in cycle for end in ("source_id", "target_id")}
+                    review(
+                        "hierarchy_cycle",
+                        type=kind,
+                        scope=scope,
+                        edges=cycle,
+                        entities=sorted(ends),
+                    )
                     if kind != "OWNERSHIP_PARENT":
                         invalid.update(cycle)
                 elif e["target_id"] not in seen:
