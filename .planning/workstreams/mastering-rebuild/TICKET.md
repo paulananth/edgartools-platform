@@ -12,7 +12,7 @@ Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (GitHub main verified 2026-10-0
 - [x] Write and verify Claude's continuation handoff with ownership, evidence and remaining gates — HANDOFF-to-claude-20261002.md checked against current main, branch, implementation, ticket and prerequisite failures; git diff --check; 2026-10-02 07:12 ET.
 - [x] Publish the owned branch — git push succeeded through b35f8da3; 2026-10-02 07:13 ET.
 - [x] Create a draft PR and verify its metadata — [PR #780](https://github.com/paulananth/edgartools-platform/pull/780), OPEN and draft, base main, head codex/mastering-rebuild-20261001 at 30c4f3c1; gh pr view verification; 2026-10-02 08:52 ET.
-- [ ] Refresh and publish the handoff with the verified PR URL and resolved sandbox prerequisites.
+- [x] Refresh and publish the handoff with the verified PR URL and resolved sandbox prerequisites — f06a0889 pushed; PR #780 head and updated body verified with gh pr view; git diff --check passes; 2026-10-02 08:55 ET.
 - [x] Create an isolated Codex branch and verify its base against current main — dedicated worktree; GitHub commit/blob/tree hashes verified; fast-forward to #774; 2026-10-01 22:52 ET.
 - [x] Inventory active acquisition, rules, mastering, publication and tests; review code and change history — AST import inventory plus executable/skill/script searches and GoF review recorded in INVENTORY.md; 2026-10-01 23:10 ET.
 - [x] Implement bounded integrated Company/Person/Relationship acceptance and fail-closed local runner — four normalized records pass; five new cases collect; missing image, timeout and skipped-PostgreSQL report checks pass; 2026-10-01 23:14 ET.
