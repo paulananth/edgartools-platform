@@ -1,6 +1,8 @@
 # Claude continuation: fresh mastering
 
 Prepared 2026-10-02 07:10 ET. Operator: "create pr and write handoff to claude".
+Updated for the operator's "update the handoff and instructions to hand over
+the draft pr to claude" (2026-10-02).
 Status: implementation committed; PostgreSQL qualification and cleanup incomplete.
 Scope: **local qualification only**. The operator selected this environment;
 hosted deployment and merge are outside this handoff.
@@ -8,12 +10,14 @@ hosted deployment and merge are outside this handoff.
 ## Start here
 
 The source branch is `codex/mastering-rebuild-20261001`, based on GitHub main
-`5b59f72ff85bfac2eda9be014cb15d7e2aa8af77` (PR #774), verified again at handoff.
-The branch is pushed. PR creation is blocked in this session: the GitHub
-connector requires approval unavailable under the session policy, and two
-`gh pr create` attempts could not connect to api.github.com. The prepared
-draft PR body is PR-DRAFT.md beside this handoff. Create the draft against
-main from this branch, then read its checks and diff before continuing.
+`542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (PR #779), reverified at rebase.
+The rebased branch is pushed. **No PR has been created as of the latest
+2026-10-02 check.** PR creation is blocked in this session: the GitHub connector
+requires approval unavailable under the session policy, and `gh pr create`
+could not connect to api.github.com. The prepared draft PR body is PR-DRAFT.md
+beside this handoff. Claude owns the publication and qualification continuation
+described below. Verify live state before acting; a later session may create
+the PR after this note.
 Original implementation commits:
 
 - `c936bd60`: remove three unreachable modules and five obsolete cases.
@@ -37,7 +41,58 @@ every pending part below; link this source ticket and keep ET verification
 timestamps. The copied `.planning/active-workstream` says `fix-pipelines`;
 it is historical shared state, not this task's ownership assignment.
 
-The primary checkout remains on main at `66ec4570` with unrelated changes:
+## Draft PR ownership and instructions
+
+Claude owns review, qualification fixes, evidence updates and follow-through.
+Codex's published branch remains the source snapshot. Claude's new commits
+belong on its `claude/` continuation branch; the shared main checkout and
+Codex's branch are protected.
+
+1. Check for an existing source PR:
+
+   ```bash
+   gh pr list --repo paulananth/edgartools-platform --state all \
+     --head codex/mastering-rebuild-20261001
+   ```
+
+   If it merged, refresh main and carry forward only still-missing work. If it
+   is closed unmerged, inspect why before replacing it. If it is open, record
+   its URL, head SHA, checks and review threads in the continuation ticket.
+
+2. If no source PR exists, create the prepared draft from the pushed Codex
+   head, from Claude's continuation worktree:
+
+   ```bash
+   gh pr create --repo paulananth/edgartools-platform \
+     --head codex/mastering-rebuild-20261001 --base main --draft \
+     --title 'Prepare fresh mastering qualification, remove unused callers, and hand off to Claude' \
+     --body-file .planning/workstreams/mastering-rebuild/PR-DRAFT.md
+   ```
+
+   Record the returned URL and verify the draft flag, base and head. Creating
+   a PR is already authorized by the operator. Authentication/connectivity
+   must work; any failed attempt remains an unchecked ticket part.
+
+3. Review Standards, Spec and GoF, then complete the pending local gates below
+   on Claude's branch. Maintain a checklist and evidence, including the
+   difference between fixture acceptance and actual source onboarding.
+
+4. Publish Claude's branch and create a continuation draft against main that
+   includes the source changes and Claude's fixes. Link both PRs and the
+   handoff in the PR bodies using a body file. Verify the replacement retains
+   the complete source diff before closing the Codex draft as superseded.
+   Describe closure as supersession, never as successful qualification.
+
+5. Mark the continuation ready only after all required local gates have real
+   evidence, relevant CI checks pass and review findings are resolved.
+   Any outstanding database or memory cleanup must remain explicitly
+   incomplete in the task checklist. Merge or hosted deployment requires a
+   separate operator instruction; neither is part of this handoff.
+
+## Protected local state
+
+At the original local check, the primary checkout was on main at `66ec4570`
+with unrelated changes:
 `.planning/workstreams/fix-pipelines/STATE.md` and
 `infra/aws-prod-application.json.bak-20260915-predeploy`. Preserve both.
 The current source worktree is `/private/tmp/edgartools-mastering-rebuild-20261001`;
@@ -109,8 +164,8 @@ main's platform-validation ticket 06. Synthetic acceptance is no rule approval.
 
 ### Continuation checklist
 
-- [ ] Create the draft PR from the pushed source branch using PR-DRAFT.md,
-  and record its URL and verified remote head in the continuation ticket.
+- [ ] Resolve source draft publication according to the ownership instructions
+  above, and record its URL and verified remote head in the continuation ticket.
 - [ ] Establish Docker access. At 2026-10-02 07:08 ET, `colima status` said
   stopped and Docker socket access was denied. Start Colima in a session with
   access; provision `postgres:16-alpine`.
