@@ -41,10 +41,11 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
 # The schema's first file, then each later file once, in order, by checksum.
 # A later change to the schema is a new file added to MIGRATIONS.
 BASELINE = "001_mdm.sql"
-MIGRATIONS: tuple[str, ...] = ("002_link_start.sql",)
+MIGRATIONS: tuple[str, ...] = ("002_link_start.sql", "003_lookup_indexes.sql")
 
 # The functions the application login may run. It has no table rights beyond
-# SELECT: every change to master data goes through these.
+# SELECT: every change to master data goes through these, and the closure reads
+# a reading's links through `reading_link_subjects`.
 RUNTIME_FUNCTIONS = (
     "save_batch(text,uuid)",
     "preview_batch(text,uuid)",
@@ -54,6 +55,7 @@ RUNTIME_FUNCTIONS = (
     "start_run(uuid,jsonb)",
     "finish_run(uuid,jsonb,boolean)",
     "match_proposal_snapshot(jsonb)",
+    "reading_link_subjects(jsonb)",
     "record_match_proposal(text,uuid)",
     "supersede_match_proposal(text,uuid)",
 )
