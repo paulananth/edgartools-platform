@@ -1,7 +1,8 @@
 # Version API export and graph contracts
 
 Type: task
-Status: open
+Status: partly built: `ContractReader` and the publication outbox are on main; the hosted consumer cut-over is under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Owner: Codex
 Blocked by: 05
 

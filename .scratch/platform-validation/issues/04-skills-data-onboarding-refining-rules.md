@@ -1,7 +1,8 @@
 # Split the rules skill into Data Onboarding and Refining Rules
 
 Type: task
-Status: in progress (Claude, branch `claude/skills-data-onboarding-refining-rules`)
+Status: resolved: merged in #765 (2026-10-02 audit, mastering to-do 01).
+Was: in progress (Claude, branch `claude/skills-data-onboarding-refining-rules`)
 
 ## Operator rulings (2026-09-30)
 

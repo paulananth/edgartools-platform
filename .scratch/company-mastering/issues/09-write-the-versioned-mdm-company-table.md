@@ -1,7 +1,8 @@
 # Write the versioned MDM Company table
 
 Type: task
-Status: claimed
+Status: resolved: `mdm.company` exists (migration `001_mdm.sql`; ticket 17, #751; re-baseline #767) (2026-10-02 audit, mastering to-do 01).
+Was: claimed
 Blocked by: 04
 
 The full Company milestone still needs ticket 04's approved binding.

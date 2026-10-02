@@ -1,7 +1,8 @@
 # Decommission the legacy Person code, its tests, and its dead columns
 
 Type: task
-Status: open
+Status: resolved: the legacy MDM code was deleted in platform validation 2a (#764) (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: none (06 resolved 2026-09-20)
 
 ## Question

@@ -1,7 +1,8 @@
 # Run a source into MDM
 
 Type: task
-Status: open
+Status: partly built: `rules run` submits configured runs. Preview, validate and `rules test` moved to `mastering-to-done/issues/09-test-check-and-preview-for-onboarding.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 02, 03
 
 ## Outcome

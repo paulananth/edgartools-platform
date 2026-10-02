@@ -58,5 +58,6 @@ Work in this order. A ticket starts when everything it is blocked by is resolved
 - Silver outputs from the rules (rules skill 05: Delta and/or Lakebase).
 - Hosted cut-over to Snowflake Postgres for MDM, once local switch-on holds.
 - A Security kind (tickers belong on Security, not Company).
+- Suspended identifiers: whether a suspended CIK or LEI defers a binding (company mastering 04, never decided).
 
 ## Out of scope

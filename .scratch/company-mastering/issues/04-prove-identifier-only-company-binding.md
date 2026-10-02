@@ -1,7 +1,8 @@
 # Prove identifier-only Company binding through a verified Identifier Contract
 
 Type: task
-Status: built; one item waits for the operator (PR #708 `e97b675b`, PR #721 `3ea3a6b1`, 2026-09-26). The suspended-identifier item waits on ticket 15's two questions
+Status: resolved: built in #708 and #721; the CIK rule was switched on in #747. The suspended-identifier point was never decided and is listed under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
+Was: built; one item waits for the operator (PR #708 `e97b675b`, PR #721 `3ea3a6b1`, 2026-09-26). The suspended-identifier item waits on ticket 15's two questions
 Blocked by: 03
 
 ## Question

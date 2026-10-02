@@ -1,7 +1,8 @@
 # Pin Company's part of the merge rules, and count CIK conflicts across kinds
 
 Type: task
-Status: in progress (Claude, branch `claude/company-pins-shared-cik`). A code session allowed by the operator: "1 no login needed 2 ok" (2026-10-01). An earlier attempt was deleted on "Test adjust and delete".
+Status: resolved: merged in #769 (2026-10-02 audit, mastering to-do 01).
+Was: in progress (Claude, branch `claude/company-pins-shared-cik`). A code session allowed by the operator: "1 no login needed 2 ok" (2026-10-01). An earlier attempt was deleted on "Test adjust and delete".
 Blocks: `05-onboard-person-feed-1.md` (merged before the Person PR)
 
 ## Operator rulings

@@ -1,7 +1,8 @@
 # Implement classification and the binding predicates in the Merge Stage
 
 Type: task
-Status: in progress — the versioning seam is built; the predicates are not
+Status: superseded: classification and binding run as approved rules in `rules/merge/kinds/company.yaml` (CIK rule #747, name rules #758, Proving Run #762) (2026-10-02 audit, mastering to-do 01).
+Was: in progress — the versioning seam is built; the predicates are not
 Blocked by: 02
 
 ## Question

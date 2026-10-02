@@ -1,7 +1,8 @@
 # Close the matching-rule gaps the Codex review found
 
 Type: task
-Status: in progress
+Status: resolved: gaps 1–2 merged earlier; the shared-namespace lookup noted here was fixed in platform validation 05a (#769) (2026-10-02 audit, mastering to-do 01).
+Was: in progress
 Blocked by: 04
 
 ## Question

@@ -1,7 +1,8 @@
 # The production engine
 
 Type: task
-Status: open
+Status: moved to `mastering-to-done/issues/08-configured-parsing-engine.md`; Codex's research (#784) recommends keeping per-source readers (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 01
 
 ## Outcome

@@ -1,7 +1,8 @@
 # The skill, then Company trials
 
 Type: task
-Status: claimed (Claude, branch `claude/rules-07-skill`, 2026-09-26 16:28 ET)
+Status: resolved: merged in #737; the skill was split in #765 (2026-10-02 audit, mastering to-do 01).
+Was: claimed (Claude, branch `claude/rules-07-skill`, 2026-09-26 16:28 ET)
 Blocked by: none (01 merged 2026-09-26 17:06 ET)
 
 ## Outcome

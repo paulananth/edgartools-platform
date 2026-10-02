@@ -1,7 +1,8 @@
 # Rewrite SEC-to-GLEIF matching as priority name-and-address passes
 
 Type: research, then build
-Status: in progress
+Status: resolved: the passes are built and switched off (#746); the remaining labelling and switch-on moved to `mastering-to-done/issues/07-cascade-passes-switch-on.md` (2026-10-02 audit, mastering to-do 01).
+Was: in progress
 Blocked by: nothing. Ticket 22 (data quality) merged 2026-09-28 09:50 ET (#742).
 
 Operator ruling, 2026-09-27, after the research and three measured designs:

@@ -1,7 +1,8 @@
 # Accept accents, curly apostrophes and degree suffixes in person names
 
 Type: task
-Status: open
+Status: moved to `mastering-to-done/issues/03-data-quality-for-person-and-links.md`; the proxy parser it fixed was deleted in #764 (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: none. It blocks DEF 14A's Tier B measurement (backfill wave 4),
 as ticket 26 did.
 

@@ -1,7 +1,8 @@
 # Implement Merge Stage and recovery
 
 Type: task
-Status: claimed
+Status: resolved: the Merge Stage and recovery are on main (`edgar_warehouse/mdm/clean/`) (2026-10-02 audit, mastering to-do 01).
+Was: claimed
 Owner: Codex
 Blocked by: 03
 

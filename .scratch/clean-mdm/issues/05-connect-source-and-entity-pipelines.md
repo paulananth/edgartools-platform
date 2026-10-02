@@ -1,7 +1,8 @@
 # Connect source and entity pipelines
 
 Type: task
-Status: open
+Status: superseded: runs go through configured Bookkeeping; the open question of the run command is `mastering-to-done/issues/04-the-command-that-runs-mastering.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Owner: Codex
 Blocked by: 04
 

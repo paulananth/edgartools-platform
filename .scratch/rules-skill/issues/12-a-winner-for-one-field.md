@@ -1,7 +1,8 @@
 # A winner for one field: the Mapping Document and the skill say it right
 
 Type: build
-Status: in progress
+Status: resolved: merged in #744 (2026-10-02 audit, mastering to-do 01).
+Was: in progress
 
 ## Outcome
 

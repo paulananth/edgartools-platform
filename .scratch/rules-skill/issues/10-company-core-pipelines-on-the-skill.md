@@ -1,7 +1,8 @@
 # Company core pipelines on the skill
 
 Type: task
-Status: open
+Status: moved to `mastering-to-done/issues/08-configured-parsing-engine.md` (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: 04 (a preview), for the approval step only
 
 ## Outcome

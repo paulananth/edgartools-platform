@@ -1,7 +1,8 @@
 # Write each SEC submissions document to bronze once
 
 Type: task
-Status: open
+Status: superseded: the bronze writer (`_write_bronze_object`) was deleted with the warehouse code (platform validation 2a/2b, #764) (2026-10-02 audit, mastering to-do 01).
+Was: open
 Blocked by: none
 Blocks: ticket 10, slice 4 (the bronze re-read is only as reliable as the object it names)
 

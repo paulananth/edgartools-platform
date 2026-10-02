@@ -1,7 +1,8 @@
 # Make the Clean MDM database tests fast
 
 Type: task
-Status: in progress (Claude, branch `claude/company-mastering-23-fast-database-tests`)
+Status: resolved: merged in #749 (2026-10-02 audit, mastering to-do 01).
+Was: in progress (Claude, branch `claude/company-mastering-23-fast-database-tests`)
 Blocked by: nothing
 Blocks: nothing; it shortens every later ticket's test run (ticket 17 first)
 

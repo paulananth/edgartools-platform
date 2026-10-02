@@ -1,7 +1,8 @@
 # Make the Stage latest-only, with bronze as the only history
 
 Type: task
-Status: claimed (Claude, branch `claude/company-mastering-10-latest-only-stage`, 2026-09-25 18:48 ET)
+Status: superseded: slice 1 merged (#715); slices 2a–2c replaced by ticket 17 "Keep each Company in one place" (#751) (2026-10-02 audit, mastering to-do 01).
+Was: claimed (Claude, branch `claude/company-mastering-10-latest-only-stage`, 2026-09-25 18:48 ET)
 Blocked by: none
 
 Build before the daily run feeds Clean MDM.

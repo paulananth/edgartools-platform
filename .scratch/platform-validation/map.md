@@ -31,17 +31,17 @@ design. That means:
 ## Tickets
 
 1. [Validate the core and review the database design](issues/01-validate-core-and-db-design.md): done
-2. Remove legacy tables and their code: 2a legacy MDM, 2b legacy
+2. Done (#764, #766): remove legacy tables and their code: 2a legacy MDM, 2b legacy
    Bookkeeping and the run coordinator, 2c migrations 001–022
-3. Re-baseline Clean MDM under schema `mdm`, commented, with the names the
+3. Done (#767): re-baseline Clean MDM under schema `mdm`, commented, with the names the
    operator rules on
-4. Split the rules skill into Data Onboarding and Refining Rules, written
+4. Done (#765): split the rules skill into Data Onboarding and Refining Rules, written
    for agents, with cold trials
-5. Onboard Person feed 1 (SEC individual filers) with Data Onboarding
+5. Done (#770, #769, #772, #774): onboard Person feed 1 (SEC individual filers) with Data Onboarding
 6. [Relationship rules for Companies and People](issues/06-relationship-rules.md):
    the operator ruled relationships are mastered with MDM (2026-10-01). 06a,
-   the GLEIF accounting parent, is merged and approved; next is the
-   relationship rules document, then 06b (Forms 3/4/5)
+   the GLEIF accounting parent, is merged and approved. The rest
+   continues in `.scratch/mastering-to-done/map.md`
 
 ## Not yet specified
 

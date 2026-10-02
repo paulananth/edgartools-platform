@@ -1,7 +1,8 @@
 # Source data findings from the rules skill trials
 
 Type: task
-Status: triaged (operator, 2026-09-29); GLEIF fixes (1, 3) and SEC fixes (5, 6) built
+Status: resolved: fixes merged in #753 and #754 (2026-10-02 audit, mastering to-do 01).
+Was: triaged (operator, 2026-09-29); GLEIF fixes (1, 3) and SEC fixes (5, 6) built
 Blocked by: none
 
 ## Why
