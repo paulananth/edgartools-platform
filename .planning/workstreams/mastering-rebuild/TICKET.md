@@ -6,6 +6,8 @@ Base: `5b59f72ff85bfac2eda9be014cb15d7e2aa8af77` (current GitHub main, PR #774)
 
 ## Checklist
 
+- [ ] Synchronize the mastering branch against current GitHub main and verify retained changes before publishing the draft.
+- [ ] Refresh the handoff and PR evidence after synchronization; retain explicit incomplete qualification gates.
 - [x] Write and verify Claude's continuation handoff with ownership, evidence and remaining gates — HANDOFF-to-claude-20261002.md checked against current main, branch, implementation, ticket and prerequisite failures; git diff --check; 2026-10-02 07:12 ET.
 - [x] Publish the owned branch — git push succeeded through b35f8da3; 2026-10-02 07:13 ET.
 - [ ] Create a draft PR and verify its metadata — connector requires approval unavailable under session policy; two gh attempts failed to connect to api.github.com; prepared body in PR-DRAFT.md.
