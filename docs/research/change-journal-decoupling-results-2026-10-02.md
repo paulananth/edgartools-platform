@@ -95,15 +95,28 @@ This was verified against [SQLAlchemy's migration documentation](https://docs.sq
 | Affected PostgreSQL suites | 113 passed, no skips | 625.21 s |
 | Unit + architecture + MDM | 1,127 passed; 9 failed due to missing local openpyxl | 458.92 s |
 | Mapping Document rerun with locked openpyxl 3.1.5 / et-xmlfile 2.0.0 in a temporary dependency directory | All 15 passed, resolving those 9 failures | 138.25 s |
-| Full integration suite | Pending completion | Pending |
+| Duplicate local integration suite, interrupted after GitHub full gate passed | 180 passed, 1 xfailed, earlier fixed wheel driver failure; not a complete local gate | 1,045.87 s |
 | Corrected independent wheel acceptance | 1 passed, no skips | 114.22 s |
 | Final architecture import/CLI checks | 4 passed | 10.70 s |
 
 The three broad suites contain 395 unit, 251 architecture and 490 MDM cases
 (1,136 distinct cases). Temporary dependencies avoided modifying the shared
 checkout's environment. Shell syntax checks passed for all current CI script
-roots. Local suite results are not a GitHub aggregate-gate result; CI status
-belongs to the published PR.
+roots. The [published PR](https://github.com/paulananth/edgartools-platform/pull/794)
+passed the [complete GitHub gate](https://github.com/paulananth/edgartools-platform/actions/runs/37034880553)
+on implementation commit `49bcf9b6`: 395 unit, 251 architecture, 491 MDM and
+295 integration cases passed, with one retained expected failure and no skips.
+The integration test command took 142.96 s; its entire job took 169 s. Run
+creation to gate completion took 178 s, including 2 s before the first job
+started. Main had advanced to `8aecca6d`; the merge was tested without any
+owned-file overlap. No CI layout/runtime improvement is claimed by this task.
+
+The duplicate local integration run was interrupted after this full gate passed
+and a separate storage check showed the Mac nearly full. Its only failure was
+the pre-repair wheel installed earlier in that process. The corrected wheel
+passed both the dedicated local run and the full GitHub integration suite.
+This final documentation update has its own automatic CI run; the successful
+implementation gate and tested commit are explicitly recorded above.
 
 ## Limits
 
