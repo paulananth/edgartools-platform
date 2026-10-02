@@ -589,11 +589,12 @@ def census_filers(
     _, company_raw, company = _read_member(
         root, landing, "sec_company", {"cik", "entity_name", "last_sync_run_id"}
     )
-    # The landing writer skips an empty table, so a capture where no filer
-    # has a former name has no former-name member: that is none, not an
-    # error (database review finding 6).
+    # Captures written before #764 by the old landing writer, which skipped
+    # an empty table, have no former-name member when no filer had a former
+    # name: that is none, not an error (mastering to-do 05). Today's writer
+    # (bookkeeping/clean/company.py) always writes the member.
     earlier: dict[int, list[str]] = {}
-    former_raw = None
+    former_sha256 = None
     if any(t["table_name"] == "sec_company_former_name" for t in landing["tables"]):
         _, former_raw, former = _read_member(
             root,
@@ -601,6 +602,7 @@ def census_filers(
             "sec_company_former_name",
             {"cik", "former_name", "last_sync_run_id"},
         )
+        former_sha256 = hashlib.sha256(former_raw).hexdigest()
         for batch in former.iter_batches(batch_size=10_000):
             for row in batch.to_pylist():
                 if row["last_sync_run_id"] != landing["run_id"]:
@@ -617,7 +619,7 @@ def census_filers(
     population = {
         "capture_run_id": landing["run_id"],
         "company_member_sha256": hashlib.sha256(company_raw).hexdigest(),
-        "former_name_member_sha256": hashlib.sha256(former_raw).hexdigest() if former_raw is not None else None,
+        "former_name_member_sha256": former_sha256,
         "filers": len(filers),
     }
     return filers, population

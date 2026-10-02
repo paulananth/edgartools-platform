@@ -720,9 +720,9 @@ class TestMatchingEvidenceIsPinned:
         assert cascade_filer({**row, "entity_name": None}, None) is None  # an exception never merges
 
     def test_a_capture_with_no_former_names_counts_as_none(self, tmp_path):
-        # Review finding 6 (2026-09-30): the landing writer skips an empty
-        # table, so a capture where no filer has a former name has no
-        # former-name member. The census reads that as none, not a refusal.
+        # Mastering to-do 05: a capture from the old landing writer, which
+        # skipped an empty table, has no former-name member when no filer had
+        # a former name. The census reads that as none, not a refusal.
         root = tmp_path / "bare"
         root.mkdir()
         manifest = write_run(root, "capture-3", {
