@@ -42,10 +42,12 @@ Status: in progress. 06a (GLEIF accounting parent) merged and approved; step 2
   `.scratch/platform-validation/research/06-relationship-inventory.md`
 - [x] 1. Inventory reviewed with the operator: the operator chose to start with
   the GLEIF accounting parent ("Yes", 2026-10-01 19:05 ET)
-- [ ] 2. Relationship rules design: the operator's answers to the inventory's
-  questions, then the design. Includes whether the 72 links waiting for
-  their other end are open reviews or wait quietly (06a2), and whether link
-  ends stop the closure at full GLEIF scale (05b)
+- [x] 2. Relationship rules design, decided in `.scratch/mastering-to-done/issues/02-relationship-rules-design.md`. 2026-10-02 by 10:53 ET
+  - Scope: GLEIF parents plus Forms 3/4/5 insider links.
+  - Waiting links wait quietly; the code change is ticket 13.
+  - One record per filing.
+  - The closure question is settled by measurement in ticket 06.
+  - The engine work for Person links is ticket 14.
 - [x] 06a: GLEIF accounting parent (direct, with the reported ultimate).
   Engine #771 (2026-10-01 20:32 ET); configuration #773 (22:19 ET); merge
   version "GLEIF parents" and GLEIF source version "parent links" approved on
