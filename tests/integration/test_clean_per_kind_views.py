@@ -103,10 +103,11 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     # restated, so it needs no copy of its own -- only its two extra verdicts.
     assert CLASSIFICATION_VERDICTS - KINDS == {"entity_undetermined", "deferred"}
     # Plus two views across every kind: the records still waiting, each with
-    # its Probable Kind (036), and the one read of a current entity (042).
+    # its Probable Kind (036), and the one read of a current entity (042);
+    # and the Section 16 insiders over the Person links (004).
     assert installed_views(database) == ({
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
-    } | {"stage_waiting", "current_entity"}) - {"company_master"}
+    } | {"stage_waiting", "current_entity", "is_insider"}) - {"company_master"}
     assert columns(database, "company")
     # Exact equality above already forbids it, but say it outright: 034 renamed
     # 033's source-side pair, so not one view still carries the old name.
