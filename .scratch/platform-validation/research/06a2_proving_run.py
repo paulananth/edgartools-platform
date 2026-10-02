@@ -307,6 +307,10 @@ def test_proving_run(database, tmp_path):
         second_links = links(conn)
         link_reviews = group(conn, "SELECT body->>'reason', count(*) FROM mdm.current_record WHERE object_type='review' "
                                    "AND body->'open'='true'::jsonb AND body ? 'relationship' GROUP BY 1")
+        # #793: a link whose other end is not an entity yet waits quietly.
+        waiting_links = group(conn, "SELECT body->>'reason', count(*) FROM mdm.current_record "
+                                    "WHERE object_type='review' AND body->>'waiting_for_end'='true' "
+                                    "AND body->>'retired' IS DISTINCT FROM 'true' GROUP BY 1")
         review_sample = [r[0] for r in conn.execute(text(
             "SELECT body FROM mdm.current_record WHERE object_type='review' "
             "AND body->'open'='true'::jsonb LIMIT 5"))]
@@ -331,6 +335,7 @@ def test_proving_run(database, tmp_path):
         "parent_links": {"by_type": dict(Counter(l["type"] for l in first_links.values())),
                          "examples": list(first_links.values())[:10]},
         "link_reviews_open": link_reviews,
+        "waiting_links": waiting_links,
         "companies_with_cik_and_lei": len(both),
         "cik_on_two_companies": sorted(c for c in by_cik
                                        if sum(c in m["ciks"] for m in first_masters.values()) > 1),
