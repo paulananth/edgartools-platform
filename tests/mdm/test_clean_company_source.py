@@ -18,6 +18,7 @@ from edgar_warehouse.mdm.clean.company_source import (
     SOURCE_CODE,
     bronze_receipts,
     business_address,
+    census_filers,
     prepare_company_bundle,
     write_bronze_receipts,
     write_name_census,
@@ -717,6 +718,22 @@ class TestMatchingEvidenceIsPinned:
         assert (found.cik, found.key, found.incorporated) == ("0000320193", "APPLE INC", "US-CA")
         assert found.place.country == "US" and found.place.street
         assert cascade_filer({**row, "entity_name": None}, None) is None  # an exception never merges
+
+    def test_a_capture_with_no_former_names_counts_as_none(self, tmp_path):
+        # Review finding 6 (2026-09-30): the landing writer skips an empty
+        # table, so a capture where no filer has a former name has no
+        # former-name member. The census reads that as none, not a refusal.
+        root = tmp_path / "bare"
+        root.mkdir()
+        manifest = write_run(root, "capture-3", {
+            "sec_company": [source_row(320193, entity_name="APPLE INC", last_sync_run_id="capture-3")],
+            "sec_company_filing": [filing_row(999, "10-K", last_sync_run_id="capture-3")],
+            "sec_company_address": [address_row(999, last_sync_run_id="capture-3")],
+        })
+        filers, population = census_filers(landing_root=str(root), landing_manifest=str(manifest))
+        assert filers == [("0000320193", "APPLE INC", [])]
+        assert population["former_name_member_sha256"] is None
+        assert population["filers"] == 1
 
     def test_a_census_counts_every_capture_and_each_capture_uses_it(self, tmp_path):
         # Ticket 26: the SEC population is captured in runs of at most 1,000
