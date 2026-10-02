@@ -69,5 +69,6 @@ Standing operator rules that override the handoff where they differ:
 - [ ] Remove the targets the operator names from the inventory (none named yet)
 - [x] Claude memory: `project_v2_clean_mdm_is_the_priority.md` now names schema `mdm` and the `data-onboarding` and `refining-rules` skills; the operator's rebuild decision is kept. 2026-10-02 09:35 ET
 - [ ] ~~Codex memory note~~ handed back to Codex: it is Codex's memory store, and Codex now has write access
-- [ ] Open a continuation draft PR linking #780. Close #780 as superseded only after its full diff is confirmed carried over
-- [ ] CI green on the continuation PR
+- [x] Open a continuation draft PR linking #780: #781, carrying every #780 commit; code outside the edited tests is identical to `744cba55` (git diff); #780 has a comment linking #781. 2026-10-02 10:00 ET
+- [ ] Close #780 as superseded, once #781 is reviewed
+- [x] CI green on the continuation PR #781: all 5 checks passed, and the integration job ran the fresh mastering acceptance (gh pr checks). 2026-10-02 10:12 ET
