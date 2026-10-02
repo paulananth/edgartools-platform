@@ -4,6 +4,11 @@ Status: complete — findings and Claude handoff checked in; PR #784 open for re
 Branch: `codex/custom-parsing-research-20261002`
 Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (origin/main, fetched 2026-10-02 09:31 ET)
 
+Ownership correction, 2026-10-02: the operator withdrew the Claude assignment.
+Codex owns continuation in `bookkeeping-loader-independent-design`; the former
+handoff is now `docs/research/custom-parsing-implementation-notes-2026-10-02.md`.
+The completed checklist below records the historical PR #784 work.
+
 ## Request
 
 Create a brand new branch and research whether custom parsing code exists
@@ -24,7 +29,7 @@ validation distinct so the findings identify actual source-specific logic.
 - [x] Test the Rust configuration prototype against native XML projection and rejection cases; record which runtime integration is missing — background researcher verified 13 passed, unchanged engine; README records standalone prototype and observed CDATA/header/namespace gaps; 2026-10-02 10:12 ET.
 - [x] Write recommendations based on measured equivalence and counterexamples, with runnable evidence and explicit limits — configuration-replacement-results-2026-10-02.md distinguishes partial projection, missing wiring and retained gates; 2026-10-02 10:14 ET.
 - [x] Verify and publish the experiment results and updated research report — 79 documentation links resolve, staged git diff --check passes; bfe8bd0a pushed and git ls-remote matches local HEAD; only owned research artifacts and new experiment tests changed; 2026-10-02 10:16 ET.
-- [x] Write and verify a Claude handoff note with tested findings, recommended next scope and preservation requirements — docs/research/HANDOFF-codex-to-claude-custom-parsing-2026-10-02.md points to executable evidence, preserves reader/classification gates and assigns implementation to a separate Claude branch; main 4e51a84f merged, Python 41/Rust 13 passed again; 2026-10-02 10:20 ET.
+- [x] Write and verify the then-requested Claude handoff note with tested findings, recommended next scope and preservation requirements — published in PR #784, now renamed to docs/research/custom-parsing-implementation-notes-2026-10-02.md following the ownership correction above; main 4e51a84f merged, Python 41/Rust 13 passed again; 2026-10-02 10:20 ET.
 - [x] Check in and push the handoff; create the findings PR against current main and verify its published head and links — ea676628 pushed; gh pr view confirms PR #784 open against main with matching head, body links to checked-in findings/handoff; 78 local documentation links verified; CI running, not claimed passed; 2026-10-02 10:22 ET.
 
 PR: https://github.com/paulananth/edgartools-platform/pull/784

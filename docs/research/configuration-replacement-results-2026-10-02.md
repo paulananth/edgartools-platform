@@ -10,9 +10,12 @@ primitives. No complete active custom reader or validator was proved removable
 through configuration alone.** The experiments compare current implementations
 against configuration candidates, including deliberately invalid inputs.
 
-Recommend a small SEC Company projection refactor first. Keep classification,
-address interpretation, array expansion, aggregation and GLEIF validation in
-code until an explicit replacement preserves their observed behavior.
+The operator's subsequent correction prioritizes the
+[loader-independent Bookkeeping design](bookkeeping-loader-independent-design-2026-10-02.md).
+Removing control coupling is independent of replacing parsing code. The SEC
+Company scalar projection remains a separate demonstrated parsing opportunity.
+Keep classification, address interpretation, array expansion, aggregation and
+GLEIF validation in code until a replacement preserves their observed behavior.
 
 ## What was tested
 
@@ -118,6 +121,10 @@ CI performance comparison was performed. Production code, approved rules and
 existing tests were unchanged.
 
 ## Proposed next change
+
+For control architecture, implement the task protocol in the linked Bookkeeping
+design first. The following list describes a separate parsing refactor; it is
+not a prerequisite for that decoupling. Codex owns follow-up work.
 
 1. Add a small generic Silver scalar projection consumer using the existing
    path traversal behavior. Put the ten SEC Company paths in a versioned,

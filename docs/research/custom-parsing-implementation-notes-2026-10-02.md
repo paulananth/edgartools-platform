@@ -1,12 +1,15 @@
-# Claude handoff: tested custom parsing findings
+# Implementation notes: tested custom parsing findings
+
+Owner: Codex. The operator withdrew the Claude assignment on 2026-10-02.
+Claude receives no work unless explicitly instructed by the operator.
 
 ## Start here
 
 Review [PR #784](https://github.com/paulananth/edgartools-platform/pull/784)
 and its research/experiments on `codex/custom-parsing-research-20261002`.
-Use your own `claude/<topic>` branch and dedicated worktree for implementation.
-Fetch current main and reconcile its source with the research baseline before
-selecting work. The Codex branch remains owned by Codex.
+Codex owns follow-up work in a dedicated Codex branch/worktree. Fetch current
+main and reconcile its source with the research baseline before implementation.
+Start with the [loader-independent Bookkeeping design](bookkeeping-loader-independent-design-2026-10-02.md).
 
 Read the [tested results](configuration-replacement-results-2026-10-02.md)
 first; use the [inventory](custom-parsing-inventory-2026-10-02.md) for caller
@@ -46,8 +49,9 @@ Its ordinary scalar projection match is not complete reader equivalence.
 
 ## Suggested implementation ticket
 
-If the operator selects implementation, start with the SEC Company scalar
-projection only:
+First remove Bookkeeping's workload dependency through the proposed generic
+task protocol. Then consider the SEC Company scalar projection as separate
+parsing work:
 
 1. Define versioned, validated paths for the ten fields and wire a generic
    Silver projection consumer using the existing traversal behavior.
@@ -67,5 +71,5 @@ hierarchy or design pattern is recommended.
 The result report contains commands to reproduce both research suites and the
 exact environment used. Review the counterexamples alongside the matches.
 Full CI, PostgreSQL qualification, real source sampling and deployment remain
-separate evidence requirements for any production refactor. This handoff
+separate evidence requirements for any production refactor. These notes
 records a recommendation; it does not claim that refactor is implemented.
