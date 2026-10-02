@@ -30,6 +30,16 @@ def anchors(decision: dict) -> set[str]:
     }
 
 
+def _disposition(reason: str) -> dict:
+    """How a review stands: open for a steward, or a link waiting for its
+    other end to become an accepted entity. A waiting link is no steward's
+    review, never blocks, and is re-checked when that end is saved (mastering
+    to-do 13; operator, 2026-10-02: "Wait quietly")."""
+    if reason in relationships.WAITING:
+        return {"open": False, "blocking": False, "waiting_for_end": True}
+    return {"open": True, "blocking": reason != "override_source_disagreement"}
+
+
 def review_scope(
     review: dict,
     members: dict,
@@ -682,14 +692,7 @@ class MergeStage:
                         "object_id": digest(r),
                         "body": {
                             **r,
-                            # A link whose other end is not an entity yet waits
-                            # quietly: no steward review, never blocking, and
-                            # re-checked when that end is saved (mastering
-                            # to-do 02, D2; ticket 13).
-                            **({"open": False, "blocking": False, "waiting": True}
-                               if r["reason"] in relationships.WAITING else
-                               {"open": True,
-                                "blocking": r["reason"] != "override_source_disagreement"}),
+                            **_disposition(r["reason"]),
                             "affected_subjects": subjects,
                             "affected_entities": entities,
                         },
@@ -743,7 +746,7 @@ class MergeStage:
             for p in old:
                 if (p["object_type"], p["object_id"]) not in live:
                     projections.append(
-                        {**p, "body": {**p["body"], "retired": True, "open": False}}
+                        {**p, "body": {**p["body"], "retired": True, "open": False, "waiting_for_end": False}}
                     )
             if len(projections) > self.closure_limit:
                 raise Conflict("Projection exceeds bounded budget")

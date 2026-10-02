@@ -101,8 +101,6 @@ def test_the_application_login_cannot_write_the_run_table(database):
             )
 
 
-
-
 def test_a_waiting_link_is_counted_and_does_not_hold_the_run_open(database):
     # Mastering to-do 13: a link waiting for its other end is reported, not
     # an unresolved review, so the run can complete.
@@ -125,3 +123,26 @@ def test_a_waiting_link_is_counted_and_does_not_hold_the_run_open(database):
     report = coordinator.reconcile(run_id)
     assert report["waiting_links"] == 1
     assert report["unresolved_reviews"] == 0
+    (listed,) = report["waiting_link_list"]
+    assert (listed["subject"], listed["target_subject"], listed["missing"]) == (
+        child["subject"], "not-a-company-yet", ["target"])
+
+
+def test_a_resolved_link_no_longer_counts_as_waiting(database):
+    store = Store(database.application)
+    coordinator = RunCoordinator(store)
+    run_id = str(uuid4())
+    coordinator.start(run_id, ["r1", "r2"], manifest_digest="r" * 64)
+    owner = core.source(key="owner-r")
+    child = core.source(key="r1", relationships=[{
+        "type": "IS_DIRECTLY_CONSOLIDATED_BY", "target_subject": owner["subject"],
+        "valid_from": core.AT, "valid_to": None, "scope": "consolidated"}])
+    stage = MergeStage(store)
+    pairs = [core.identity_and_binding(child), core.identity_and_binding(owner)]
+    common = dict(run_id=run_id, policy_digest=database.policy, consumer="load", as_of=core.AS_OF)
+    stage.apply(batch_id="r1", expected_checkpoint=0, checkpoint=1, assertions=[child, owner],
+                identities=[pairs[0][0]], decisions=[pairs[0][1]], **common)
+    stage.apply(batch_id="r2", expected_checkpoint=1, checkpoint=2,
+                identities=[pairs[1][0]], decisions=[pairs[1][1]], **common)
+    report = coordinator.reconcile(run_id)
+    assert (report["waiting_links"], report["waiting_link_list"]) == (0, [])
