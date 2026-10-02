@@ -14,8 +14,8 @@ merge".
 So the order is: a Data Quality rule decides which values are fit to use,
 then the cascade (ticket 21) merges on the fit values only.
 
-Research: [data-quality 01](../../data-quality/research/01-datakitchen-testgen-observability.md)
-(on branch `claude/research-dataops-testgen`): borrow TestGen's check ideas;
+Research: [data-quality 01](../../data-quality/research/01-datakitchen-testgen-observability.md):
+borrow TestGen's check ideas;
 do not adopt the tool.
 
 ## Design (grilling with the operator, 2026-09-27, Q1-Q13 agreed)
