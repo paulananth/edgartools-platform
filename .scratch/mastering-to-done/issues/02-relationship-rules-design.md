@@ -26,7 +26,7 @@ Status: claimed (Claude, branch `claude/mastering-02-relationship-rules`, 2026-1
 - [ ] ~~D5. Whether link ends stop the closure at full scale~~ deferred to ticket 06: an engine decision, settled by the full-scale measurement there, not asked
 - [x] Write the decisions into `.scratch/platform-validation/issues/06-relationship-rules.md` step 2 and the inventory's open questions
 - [x] Graduate the build work into tickets 13 (waiting links wait quietly) and 14 (the Person link engine). 2026-10-02 by 10:53 ET
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #786, merged 2026-10-02 12:18 ET (operator, 2026-10-02: "yes merge one by one and continue implementing ticket 14")
 
 ## Answer
 

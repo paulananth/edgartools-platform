@@ -1,7 +1,7 @@
 # Review findings 5 and 6: GLEIF batch size and missing former names
 
 Type: task (AFK)
-Status: in progress (Claude, branch `claude/mastering-05-review-fixes`)
+Status: resolved (#789)
 Blocked by: none
 
 ## Question
@@ -24,4 +24,4 @@ Both were planned as small code fixes. Finding 6 is fixed here; finding 5 has no
   - GoF: leave it.
   - Spec: finding 6 met and the finding 5 deferral accurate; the comment now says only old captures (before #764) lack the member.
   - Standards: no hard finding; the long line is split. The duplicated table lookup is left until a second member becomes optional.
-- [ ] PR, CI; merge on the operator's word
+- [x] PR, CI; merge on the operator's word: #789, merged 2026-10-02 12:20 ET (operator, 2026-10-02: "yes merge one by one and continue implementing ticket 14")
