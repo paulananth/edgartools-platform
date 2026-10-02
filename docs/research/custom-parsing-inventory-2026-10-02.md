@@ -3,6 +3,11 @@
 Date: 2026-10-02. Code baseline: `main` at `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15`.
 Research branch: `codex/custom-parsing-research-20261002`.
 
+Follow-up: [tested configuration replacement results](configuration-replacement-results-2026-10-02.md)
+provide 41 Python comparisons and 13 Rust probes. They demonstrate partial scalar
+projection opportunities and counterexamples to complete replacement; use those
+results when selecting a refactor.
+
 ## Answer
 
 **Yes. Source-specific parsing and preparation still exist in Python outside a declarative parsing contract.** Configured Bookkeeping operations select those implementations; selecting an operation by configuration does not make its field extraction, document grammar or classification logic declarative.
@@ -162,7 +167,7 @@ Snowflake load wrappers decode their export manifests, for example [`JSON.parse`
 ## Recommended follow-up scope
 
 1. Decide whether the goal is declarative **source reading** or only declarative **master projection and quality policy**. The current Python implementation supplies the latter with custom readers upstream.
-2. If source reading must be declarative, start with the six SEC submission loaders and the pre-MDM individual gate, preserving pagination, classification and missing-data behavior as separately reviewed contracts.
+2. Start with the ten SEC Company scalar field lookups, whose configuration candidate matched four bounded fixtures. The other loaders and individual gate need additional primitives or retain custom interpretation; tested overlap rules fail on an unknown form.
 3. Inventory Company table joins/pivots and GLEIF pre-normalization decisions before moving them. Those contain more than byte decoding: scope, identity admissibility and interval checks require explicit governance.
 4. Retain bounds, duplicate-key handling, hashes, parser security and immutable evidence even if the source grammar moves to configuration.
 5. Review uncalled helpers separately from active reader migration. Avoid counting generic validators, configured primitives or external parser smoke tools as unsupported bespoke filing parsers.

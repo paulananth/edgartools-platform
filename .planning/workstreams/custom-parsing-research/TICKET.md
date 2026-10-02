@@ -1,6 +1,6 @@
 # Custom parsing outside configuration
 
-Status: complete — source research and documentation; no runtime changes
+Status: in progress — testing configuration replacement candidates; production unchanged
 Branch: `codex/custom-parsing-research-20261002`
 Base: `542a9fa04f4359bed7e097b4cb1d5fa4b89ede15` (origin/main, fetched 2026-10-02 09:31 ET)
 
@@ -19,13 +19,20 @@ validation distinct so the findings identify actual source-specific logic.
 - [x] Record active, uncalled and historical parsing findings in a research report, with limits of the evidence — separates reachable Python source readers, config-selected primitives, retained helpers, external-library smoke tools, generic validation and configured Rust prototype; source baseline and absence of deployment proof explicit; 2026-10-02 09:39 ET.
 - [x] Verify report references and branch diff — 68 source links and line anchors resolve; staged git diff --check passes; only the research report and this ticket changed; 2026-10-02 09:41 ET.
 - [x] Commit and publish the research documents on the owned branch, then verify the remote head — 84a3cb6b pushed; git ls-remote confirms matching remote SHA; 2026-10-02 09:42 ET.
+- [x] Review candidate code and history using GoF guidance; select bounded experiments without adding new production parsing features — adapters/GLEIF/Company history includes #742, #754, #759, #771 and #773; existing function registries provide the test seam, no new GoF class hierarchy justified; 2026-10-02 10:01 ET.
+- [x] Test existing Python configuration against custom projections, classification and rejection behavior using pinned cases — 41 passed, zero failures/skips, JUnit counts verified; includes shared XML golden projection and independent rejection counterexamples; 2026-10-02 10:12 ET.
+- [x] Test the Rust configuration prototype against native XML projection and rejection cases; record which runtime integration is missing — background researcher verified 13 passed, unchanged engine; README records standalone prototype and observed CDATA/header/namespace gaps; 2026-10-02 10:12 ET.
+- [x] Write recommendations based on measured equivalence and counterexamples, with runnable evidence and explicit limits — configuration-replacement-results-2026-10-02.md distinguishes partial projection, missing wiring and retained gates; 2026-10-02 10:14 ET.
+- [ ] Verify and publish the experiment results and updated research report.
 
 ## Scope
 
-Research and documentation only. Existing Grok parsing worktrees and Claude's
-mastering continuation are separate workstreams. Runtime code, rules and tests
-are read-only for this task. The background researcher owns only the research
-report; Codex owns this ticket and final verification.
+Research, reproducible experiments and documentation only. Existing Grok parsing worktrees and Claude's
+mastering continuation are separate workstreams. Production code, approved
+rules and existing tests remain unchanged. Experimental configurations are
+not registered or approved runtime rules. Root Codex owns Python experiments,
+this ticket and the result report. The background researcher owns only its
+Rust experimental artifacts, with file ownership assigned in its task.
 
 ## Verification evidence
 
@@ -47,3 +54,10 @@ or evidence that a source runs in a hosted deployment.
 
 Research and document verification took approximately 11 minutes (09:31–09:42
 ET), including background source/caller inventory and the configuration probe.
+
+Follow-up experiment implementation and documentation took over ten minutes
+(10:01–10:14 ET for implementation and documentation), including the 41 Python comparisons and 13 Rust probes.
+These research tests characterize matches and incompatibilities; they are not
+full pipeline qualification or a CI speed benchmark. The result report records
+commands and dependency reuse. Production behavior and registered rules are
+unchanged.
