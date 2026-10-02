@@ -10,11 +10,11 @@ imported by those primitives.
 
 | Responsibility | Implementation outside the journal |
 | --- | --- |
-| Provider fetching and format completeness | `acquisition.capture` and `acquisition.decisions` |
+| Provider fetching and format completeness | an acquisition worker (mastering to-do 20c; the in-process `acquisition` callbacks were deleted in 20a) |
 | Frozen Rules acquisition/registration authority | `rules.acquisition_authority` |
-| Source revisions and producer inventories | `application.source_evidence` |
+| Source revisions and producer inventories | a source-evidence worker (mastering to-do 20c; deleted from `application` in 20a) |
 | MDM outbox delivery and committed-effect checks | `mdm.clean.journal_delivery` |
-| Producer workflow planning/validation/execution | `application.journal_evidence` |
+| Producer workflow planning (validation and execution return with the workers, 20c) | `application.journal_evidence` |
 | Composition of owner recovery commands | `application.journal_recovery` |
 
 These owners call append/get/verify. The journal never calls them back or

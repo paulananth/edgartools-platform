@@ -6,41 +6,17 @@ approved export; execution only reads its frozen content-addressed references.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from string import Formatter
-from typing import Callable
 
 
 from edgar_warehouse.control_contract import Blocked, canonical, digest, reference
 
 
-@dataclass(frozen=True)
-class Capability:
-    version: str
-    execute: Callable
-    reconcile: Callable
-    verify: Callable
-
-
-class Registry:
-    """Functions selected by capability name, never by source name.
-
-    Reconciliation and verification are mandatory: an executor's success or
-    exit code alone cannot become verified completion evidence.
-    """
-    def __init__(self):
-        self.operations: dict[str, Capability] = {}
-        self.checks: dict[str, Callable] = {}
-
-    def operation(self, name: str, capability: Capability):
-        if name in self.operations or not capability.version:
-            raise ValueError("Duplicate or unversioned capability")
-        self.operations[name] = capability
-
-    def check(self, name: str, function: Callable):
-        if name in self.checks:
-            raise ValueError("Duplicate check")
-        self.checks[name] = function
+# Checks control runs itself. Every other check a step names is a domain check:
+# the step's verifier must report it true (mastering to-do 20a).
+STEP_CHECKS = frozenset({"input.hash", "output.receipt"})
+RUN_CHECKS = frozenset({"manifest.hash", "work.accounting", "journal.delivered"})
+IDENTIFIER = r"[a-z][a-z0-9_.-]*"
 
 
 def _integer(value, low, high, name):
@@ -49,7 +25,7 @@ def _integer(value, low, high, name):
     return value
 
 
-def validate(document: dict, target: str, registry: Registry) -> dict:
+def validate(document: dict, target: str) -> dict:
     """Strict versioned contract; reject unknown keys rather than guessing."""
     try:
         body = document["bookkeeping"]
@@ -78,8 +54,9 @@ def validate(document: dict, target: str, registry: Registry) -> dict:
             name = step["name"]
             if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) or name in seen:
                 raise Blocked("Step names must be unique identifiers")
-            if step["operation"] not in registry.operations:
-                raise Blocked(f"Unsupported operation: {step['operation']}")
+            # The operation names the worker profile that pulls this step.
+            if not isinstance(step["operation"], str) or not re.fullmatch(IDENTIFIER, step["operation"]):
+                raise Blocked("A step's operation names a worker profile")
             if (not isinstance(step["requires"], list) or len(set(step["requires"])) != len(step["requires"])
                     or not set(step["requires"]) <= seen):
                 raise Blocked("Prerequisites must name preceding steps")
@@ -95,16 +72,16 @@ def validate(document: dict, target: str, registry: Registry) -> dict:
                     if field is not None and (not re.fullmatch(r"[a-z][a-z0-9_]*", field) or spec or conversion):
                         raise Blocked("Templates support simple identifier fields only")
             if not isinstance(step["checks"], list) or len(set(step["checks"])) != len(step["checks"]):
-                raise Blocked("Step checks must be a list of distinct capability names")
+                raise Blocked("Step checks must be a list of distinct check names")
             for check in step["checks"]:
-                if check not in registry.checks:
+                if not isinstance(check, str) or not re.fullmatch(IDENTIFIER, check) or check in RUN_CHECKS:
                     raise Blocked(f"Unsupported check: {check}")
             if not step["checks"]:
                 raise Blocked("Every step requires a check")
             seen.add(name)
         checks = selected.get("checks", [])
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
-                or any(c not in registry.checks for c in checks)):
+                or any(c not in RUN_CHECKS for c in checks)):
             raise Blocked("A target requires supported final checks")
         return {**selected, "lease_seconds": duration, "heartbeat_seconds": heartbeat,
                 "retry": {"attempts": attempts, "base_ms": base, "cap_ms": cap}}

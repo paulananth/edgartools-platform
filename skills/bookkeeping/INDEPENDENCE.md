@@ -22,19 +22,24 @@ defines the proposed protocol and transition rules. Follow its failure and
 recovery requirements; loader replacement is not a prerequisite for removing
 control coupling. Existing loaders may remain inside external worker processes.
 
-## Current gap
+## Status (mastering to-do 20a, 2026-10-02)
 
-At the inspected baseline, `configured_bookkeeping()` imports Company and MDM
-integrations. `runner.run()` invokes execute/reconcile callbacks with the whole
-Bookkeeping object; completion calls a registered verifier. Company capability
-code imports Silver, and Journal conversion branches on domain operations.
-This is coupled execution. The proposed fixed task path is not implemented.
+The callback registry, the Company, MDM and source-input modules, the
+acquisition and source-evidence callbacks and the Journal branches on operation
+names are deleted. Control now hands out task envelopes and admits verifier
+reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
+`fail`, `finalize`); workers run as their own processes
+(`python -m edgar_warehouse.workers`).
 
-Existing commands remain useful evidence about the old path. Do not present
-their success as independence, add another source callback, or silently fall
-back to that path when the request requires this contract. Report unsupported
-execution/recovery explicitly while continuing permissible read-only inspection,
-control-store work and planning. Preserve exact retained evidence for old runs.
+| Gate | State |
+| --- | --- |
+| 1. Control starts and builds every command with domain packages blocked | Passed: `tests/architecture/test_bookkeeping_control_only.py`, and the control processes of the two-worker test run under the same import guard |
+| 2. Two workers on one protocol, no Bookkeeping change between them | Passed: `artifact.copy` and `jsonl.count`, in their own processes (`test_two_workers_in_their_own_processes_complete_a_cli_submitted_run`) |
+| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, forged or missing checks, conflicting reports and stale fencing are refused (`test_admission_refuses_*`, `test_renewal_takeover_*`); per-profile issuer roles are mastering to-do 20b |
+| 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage and a changed runtime are covered; lease expiry during verification and destination re-verification on resume are 20b |
+
+Company, Person and MDM have no worker yet (to-do 20c, 20d and 20e). Report
+their execution as unsupported; never add a callback back into control.
 
 ## Audit and qualification
 

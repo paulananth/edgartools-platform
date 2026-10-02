@@ -4,13 +4,13 @@ from copy import deepcopy
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.capabilities import standard_registry
 from edgar_warehouse.bookkeeping.clean.config import Blocked, validate, worklist
 from edgar_warehouse.rules.files import source, pipeline
 
 
 @pytest.mark.parametrize("edit", ["unknown", "cycle", "bad_key", "empty_lease", "duration", "unknown_check", "unknown_op",
-                                 "checks_map", "duplicate_checks", "final_checks_map", "broken_template"])
+                                 "checks_map", "duplicate_checks", "final_checks_map", "broken_template",
+                                 "run_check_on_step", "unknown_final_check"])
 def test_invalid_configuration(edit):
     body = deepcopy(source("sec.submissions.company"))
     target = body["bookkeeping"]["targets"]["capture"]
@@ -27,7 +27,11 @@ def test_invalid_configuration(edit):
         target["lease_seconds"] = 30
         target["heartbeat_seconds"] = 30
     elif edit == "unknown_check":
-        step["checks"] = ["assume.success"]
+        step["checks"] = ["Assume Success"]
+    elif edit == "run_check_on_step":
+        step["checks"] = ["work.accounting"]
+    elif edit == "unknown_final_check":
+        target["checks"] = ["assume.success"]
     elif edit == "checks_map":
         step["checks"] = {"input.hash": False}
     elif edit == "duplicate_checks":
@@ -37,13 +41,13 @@ def test_invalid_configuration(edit):
     elif edit == "broken_template":
         step["key"] = "{unclosed"
     else:
-        step["operation"] = "unknown.stage"
+        step["operation"] = "Not A Profile"
     with pytest.raises(Blocked):
-        validate(body, "capture", standard_registry())
+        validate(body, "capture")
 
 
 def test_manifest_duplicates_missing_references_and_template_fields():
-    selected = validate(source("sec.submissions.company"), "capture", standard_registry())
+    selected = validate(source("sec.submissions.company"), "capture")
     unit = {"keys": {"artifact_id": "one", "destination": "s3://bucket/key"},
             "input": {"uri": "s3://bucket/source", "sha256": "a"*64}, "output": "s3://bucket/key", "cursor": 0}
     for units in ([unit, unit], [{**unit, "keys": {}}], [{**unit, "input": {"uri": "missing-hash"}}], [{**unit, "business_rows": []}]):
@@ -93,7 +97,7 @@ def test_cli_commands_remain_available_and_resume_is_bounded():
 
 
 def stage_manifest():
-    selected = validate(source("sec.submissions.company"), "capture", standard_registry())
+    selected = validate(source("sec.submissions.company"), "capture")
     selected["steps"] = [
         {**selected["steps"][0], "name": "capture", "requires": [], "key": "{artifact_id}"},
         {**selected["steps"][0], "name": "parse", "requires": ["capture"], "key": "{artifact_id}"},

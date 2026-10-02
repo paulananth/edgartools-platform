@@ -1,18 +1,19 @@
 ---
 name: bookkeeping
-description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect and recover work through loader-independent control. Enforce separation of worklists, leases, checkpoints and verified evidence from external workload execution and destination verification. Source interpretation belongs outside Bookkeeping.
+description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect and recover work through loader-independent control and its worker task protocol. Enforce separation of worklists, leases, checkpoints and verified evidence from external workload execution and destination verification. Source interpretation belongs outside Bookkeeping.
 ---
 
 # Bookkeeping
 
 **Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
-owns work control and verified completion. External workers own feed execution
-into silver and MDM. Running mastering (the Merge
-Stage) is the `mdm` target of **run**. Its command is `edgar-warehouse rules
-run --target mdm`, which submits the approved versions to this Bookkeeping
-runner. There is no `bookkeeping run` command (operator, 2026-10-02: "Keep
-`rules run`"). Plan, validate and recover are steps you follow with the
-existing commands; they are not commands of their own.
+owns work control and verified completion. Workers, each in its own process,
+own the work itself. `edgar-warehouse rules run` submits the approved versions;
+workers then pull the work (`python -m edgar_warehouse.workers work`), separate
+verifiers check it (`… verify`), and `edgar-warehouse bookkeeping finalize`
+delivers control's events and records the run's checks. There is no
+`bookkeeping run` command (operator, 2026-10-02: "Keep `rules run`"). Plan,
+validate and recover are steps you follow with the existing commands; they are
+not commands of their own.
 
 ## Required independence
 
@@ -31,8 +32,8 @@ metadata; source grammar and domain checks stay outside control.
 
 Read [INDEPENDENCE.md](INDEPENDENCE.md) before planning or changing an execution
 path, validating its architecture, or running/recovering it under this contract.
-It defines the evidence required to claim independence and the current runtime
-gap. Keep that gap explicit; do not route through Company callbacks as a fallback.
+It defines the evidence required to claim independence and what is built so
+far. The callbacks are gone (mastering to-do 20a); never add one back.
 
 **Use another skill when:**
 - a feed is new: use **data-onboarding**;
@@ -44,8 +45,8 @@ Use the shared engine in `edgar_warehouse/bookkeeping/clean/`. It retains
 control references and evidence; source records stay in their owning stores.
 The currently implemented protocol and supported boundaries are in
 [the specification](../../docs/specs/configured-bookkeeping.md).
-The required replacement design is linked from INDEPENDENCE.md; it is proposed,
-not implemented. Existing CLI syntax is not proof of loader independence.
+The design is linked from INDEPENDENCE.md; its status there says which gates
+have run. Existing CLI syntax is not proof of loader independence.
 Run commands from the repository root with `uv run --extra mdm --extra s3`.
 Resolve the skill's physical path for its relative references, and verify the
 execution checkout contains the fresh engine; another worktree may be older.
@@ -97,27 +98,28 @@ binding on Rules submission for acquisition documents.
 Recover a run only after its retained manifest proves the same source/feed.
 
 Confirm live commands with `edgar-warehouse bookkeeping --help` and
-`edgar-warehouse rules run --help` under the `uv run` prefix. Read
-`edgar_warehouse/bookkeeping/clean/cli.py` for runtime bindings. The current
-coupled runtime registers source/domain operations; these are gap evidence,
-not the required architecture. Current
-Company operations are `provider.capture`, `company.expand`, `source.evidence`,
-`company.silver`, `company.prepare`, `mdm.ingest`, `company.publish_expand`, and
-`mdm.publish`. The existing coupled path can prepare a bounded Company scope
-without requesting SEC or starting a run. Pin ticker, Name Census, reviewed bindings and a timezone-aware
-`as_of` in the support manifest:
+`edgar-warehouse rules run --help` under the `uv run` prefix.
 
-```bash
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping prepare \
-  --source sec.submissions.company --feed submissions \
-  --scope-manifest <URI> --scope-sha256 <SHA256> \
-  --support-manifest <URI> --support-sha256 <SHA256> --output-root <file-URI>
-```
+### The task protocol
 
-Its existing submission command is `rules run --source
-sec.submissions.company --feed submissions --target company`. Generated page,
-ingest, and publication work joins its parent completion in the same root run.
-Local file evidence qualifies the Company bundle; AWS feeds remain disabled.
+A step's `operation` names the **worker profile** that pulls it. Workers and
+verifiers reach Bookkeeping only through these commands, which print JSON:
+
+| Command | Who calls it | What it does |
+|---|---|---|
+| `bookkeeping claim <run> --profile P --limit N` | worker | Claims units and prints task envelopes |
+| `bookkeeping renew --envelope -` | worker, verifier | Renews the lease while the work runs |
+| `bookkeeping report --envelope - --candidate URI --sha256 H --runtime D` | worker | Reports the candidate; the first report pins the profile's runtime for the run |
+| `bookkeeping verifications <run> --profile P` | verifier | Lists reported candidates whose lease is live |
+| `bookkeeping admit --verification - --report URI --sha256 H` | verifier | Admits a report bound to that work, with every check the step names; completes the unit |
+| `bookkeeping fail --envelope - --message M` | worker, verifier | Gives the attempt up; the unit waits |
+| `bookkeeping finalize <run>` | operator | Delivers control's events and records the run's checks |
+
+`python -m edgar_warehouse.workers work|verify <profile> <run>` runs a worker
+or a verifier. The profiles built so far are `artifact.copy` and `jsonl.count`.
+Company, Person and MDM have no worker yet: SEC Company and acquisition arrive
+in mastering to-do 20c, Person in 20d, MDM in 20e. Until then, report their
+execution as unsupported; never route them through an in-process callback.
 
 ## Init and migrate modes
 
@@ -179,8 +181,8 @@ worklist scope and input hashes with the implementation validators. A later
 configuration, input or processing-version change invalidates this validation.
 
 Validate loader independence separately from source output correctness using
-INDEPENDENCE.md. A successful feed run through the current Company callbacks
-does not qualify a loader-independent controller.
+INDEPENDENCE.md. A worker's own success never qualifies the run: only its
+verifier's admitted report does.
 
 Use bounded captured inputs and isolated PostgreSQL 16 control/destination
 stores for actual execution. Verify the selected feed's stage outputs,
@@ -207,11 +209,10 @@ evaluator, and does not grant a person's MDM approval.
 (Named "deploy" before 2026-09-30.) Read [RUN.md](RUN.md). Apply the validated configuration and submit or
 resume its bounded run in the selected environment. Verify that the plan,
 validation evidence and frozen inputs still match the requested source/feed.
-Use the existing Rules lifecycle for approval and frozen configuration; execute
-through a qualified loader-independent task path. The current coupled runner
-does not meet that requirement. Until the replacement exists, report execution
-as unsupported under this contract and continue independent inspection or
-planning. Do not invent a command or silently use source callbacks.
+Use the existing Rules lifecycle for approval and frozen configuration. Submit
+with `rules run`, then run each step's worker and verifier and finish with
+`bookkeeping finalize` (see RUN.md). A step whose profile has no worker yet is
+unsupported: report it, and do not invent a command.
 Infrastructure rollout belongs here only when explicitly included in the user's
 run request and independently qualified.
 
@@ -229,13 +230,11 @@ Each needs `BOOKKEEPING_CLEAN_DATABASE_URL` (the runtime login). `status`,
 
 ## Recover mode
 
-Read [RECOVERY.md](RECOVERY.md). Resume a run with
-`edgar-warehouse bookkeeping resume <run-id>` (exit 3 means the run is not
-complete yet). Delivery to the Journal of a run's committed events is the
-Change Journal skill's **recover-delivery**.
-
-Those resume commands describe the current implementation. Establish its
-dependency boundary before claiming it meets this skill's independence contract.
+Read [RECOVERY.md](RECOVERY.md). `edgar-warehouse bookkeeping resume <run-id>`
+rechecks every completed unit's evidence and reopens the run (exit 3 means it
+is not complete yet); then run the workers and verifiers again. A worker
+reconciles an earlier attempt's effect before writing. Delivery to the Journal
+of a run's committed events is the Change Journal skill's **recover-delivery**.
 
 ## Result
 

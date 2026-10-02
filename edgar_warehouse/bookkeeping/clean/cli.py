@@ -1,75 +1,34 @@
-"""Fresh Bookkeeping operator inspection and bounded recovery commands."""
+"""Bookkeeping commands: control only, and the task protocol workers pull.
+
+Workers and verifiers are other processes. They call `claim`, `renew`,
+`report`, `fail`, `verifications` and `admit` and read the JSON these print;
+Bookkeeping never names, imports or starts a worker (mastering to-do 20a).
+"""
 from __future__ import annotations
 
 import json
 import os
+import sys
+
 
 def configured_bookkeeping():
-    from .capabilities import standard_registry
     from .database import get_engine
     from .engine import Bookkeeping
-    book = Bookkeeping(get_engine(), standard_registry())
-    if os.environ.get("CHANGE_JOURNAL_DATABASE_URL"):
-        from edgar_warehouse.acquisition.capture import register_capture
-        from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
-        journal = journal_engine()
-        book.additional_engines.append(journal)
-        register_capture(book.registry, ChangeJournal(journal))
-    from edgar_warehouse.application.source_evidence import register_source_evidence
-    register_source_evidence(book.registry)
-    from .company import register_company_expansion, register_company_silver, register_company_mdm_preparation
-    register_company_expansion(book.registry)
-    register_company_silver(book.registry)
-    register_company_mdm_preparation(book.registry)
-    if os.environ.get("MDM_DATABASE_URL"):
-        from sqlalchemy import create_engine
-        from urllib.parse import unquote, urlparse
-        from edgar_warehouse.mdm.clean.publication import LocalContractSink
-        from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
-        from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
-        from .mdm_capabilities import register_mdm
-        from .config import Blocked
+    return Bookkeeping(get_engine())
 
-        mdm = create_engine(os.environ["MDM_DATABASE_URL"], pool_pre_ping=True)
-        book.additional_engines.append(mdm)
-        publishers = {}
 
-        def publisher(spec):
-            key = (spec["consumer"], spec["destination"])
-            if key in publishers:
-                return publishers[key]
-            if spec["consumer"] == "journal" and spec["destination"] == "change-journal":
-                journal = journal_engine()
-                book.additional_engines.append(journal)
-                publishers[key] = JournalPublisher(ChangeJournal(journal), mdm, book)
-                return publishers[key]
-            parsed = urlparse(spec["destination"])
-            if spec["consumer"] in {"export", "graph"} and parsed.scheme == "file" and not parsed.netloc:
-                publishers[key] = LocalContractSink(unquote(parsed.path))
-                return publishers[key]
-            raise Blocked("No registered hosted adapter for this publication destination")
-
-        register_mdm(book.registry, mdm, publisher_factory=publisher)
-    return book
+def _document(path: str) -> dict:
+    """An envelope or verification document, from a file or `-` (stdin)."""
+    text = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+    return json.loads(text)
 
 
 def _handle(args):
     from sqlalchemy import create_engine
     from .database import migrate
     from .destinations import migrate_guard
-    from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
-    from .runner import run
     operation = args.bookkeeping_command
-    if operation == "prepare":
-        from .company import FEED, SOURCE, prepare_company
-        from .config import Blocked
-        if (args.source, args.feed) != (SOURCE, FEED):
-            raise Blocked("Only SEC Company submissions preparation is active")
-        result = prepare_company(
-            scope_ref={"uri": args.scope_manifest, "sha256": args.scope_sha256},
-            support_ref={"uri": args.support_manifest, "sha256": args.support_sha256},
-            output_root=args.output_root)
-    elif operation in {"init", "migrate"}:
+    if operation in {"init", "migrate"}:
         owner = create_engine(os.environ["BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(
@@ -94,17 +53,34 @@ def _handle(args):
                 result = book.check(args.run_id)
             elif operation == "leases":
                 result = book.status(args.run_id, limit=args.limit)["leases"]
-            else:
-                book.resume(args.run_id)
-                ledger_engine = journal_engine()
+            elif operation == "resume":
+                result = book.resume(args.run_id)
+            elif operation == "claim":
+                result = book.tasks(args.run_id, args.profile, limit=args.limit)
+            elif operation == "verifications":
+                result = book.verifications(args.run_id, args.profile, limit=args.limit)
+            elif operation == "renew":
+                result = book.renew(_document(args.envelope))
+            elif operation == "report":
+                result = book.report(_document(args.envelope), {"uri": args.candidate, "sha256": args.sha256},
+                                     args.runtime)
+            elif operation == "fail":
+                book.fail(_document(args.envelope), args.message)
+                result = {"failed": True}
+            elif operation == "admit":
+                result = book.admit(_document(args.verification), {"uri": args.report, "sha256": args.sha256})
+            else:  # finalize: deliver control's events, then record the run's checks
+                from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
+                ledger = journal_engine()
                 try:
-                    result = run(book, args.run_id, ChangeJournal(ledger_engine), limit=args.limit)
+                    book.deliver(ChangeJournal(ledger), args.run_id, limit=args.limit)
                 finally:
-                    ledger_engine.dispose()
+                    ledger.dispose()
+                result = book.finalize(args.run_id)
         finally:
             book.close()
     print(json.dumps(result, default=str, sort_keys=True, indent=2))
-    return 3 if operation == "resume" and result["run"]["state"] != "complete" else 0
+    return 3 if operation in ("resume", "finalize") and result["run"]["state"] != "complete" else 0
 
 
 def register(subparsers):
@@ -114,17 +90,37 @@ def register(subparsers):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)
-    prepare = commands.add_parser("prepare", help="Pin a bounded Company input without requesting SEC or starting a run")
-    for name in ("source", "feed", "scope-manifest", "scope-sha256", "support-manifest",
-                 "support-sha256", "output-root"):
-        prepare.add_argument("--" + name, required=True)
-    prepare.set_defaults(handler=_handle)
     listing = commands.add_parser("runs", help="Find runs after a lost submission acknowledgement")
     listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete"))
     listing.add_argument("--limit", type=int, default=100)
     listing.set_defaults(handler=_handle)
-    for name in ("status", "checks", "leases", "resume"):
+    for name in ("status", "checks", "leases", "resume", "finalize"):
         command = commands.add_parser(name)
         command.add_argument("run_id")
         command.add_argument("--limit", type=int, default=100)
         command.set_defaults(handler=_handle)
+    for name, help_text in (("claim", "Claim task envelopes for a worker profile"),
+                            ("verifications", "List reported candidates for a verifier")):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("run_id")
+        command.add_argument("--profile", required=True)
+        command.add_argument("--limit", type=int, default=10)
+        command.set_defaults(handler=_handle)
+    renew = commands.add_parser("renew", help="Renew a task envelope's lease")
+    renew.add_argument("--envelope", required=True, help="The envelope file, or - for stdin")
+    renew.set_defaults(handler=_handle)
+    report = commands.add_parser("report", help="Report a worker's candidate output")
+    report.add_argument("--envelope", required=True)
+    report.add_argument("--candidate", required=True, help="The candidate's URI")
+    report.add_argument("--sha256", required=True)
+    report.add_argument("--runtime", required=True, help="The worker runtime's digest")
+    report.set_defaults(handler=_handle)
+    fail = commands.add_parser("fail", help="Give up a task attempt")
+    fail.add_argument("--envelope", required=True)
+    fail.add_argument("--message", required=True)
+    fail.set_defaults(handler=_handle)
+    admit = commands.add_parser("admit", help="Admit a verifier's report and complete the unit")
+    admit.add_argument("--verification", required=True)
+    admit.add_argument("--report", required=True, help="The verification report's URI")
+    admit.add_argument("--sha256", required=True)
+    admit.set_defaults(handler=_handle)
