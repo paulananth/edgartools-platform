@@ -60,6 +60,13 @@ WITH_NAME_RULES_ON = {
     "policy": "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
 }
 
+# Platform validation 06a added GLEIF's relationship file to Company's
+# sources, for its accounting-parent links; without it the policy is the one
+# above.
+WITH_GLEIF_PARENT_LINKS = {
+    "policy": "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5",
+}
+
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -97,7 +104,7 @@ SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
@@ -130,6 +137,23 @@ WITH_INVALID_LEI = {
 }
 
 
+# Platform validation 06a: a GLEIF relationship record's link starts at the
+# child's Level 1 record (`source_key`); without it the contract is the one above.
+WITH_LINK_START = {
+    "relationships": "5e4a23fc22080b1c9c5f04fd66d38eb4ab19f1481c91da0c3a252efe5b361e1b",
+}
+
+
+def _without_link_start(contract: dict) -> dict:
+    adapter = dict(contract["adapter"])
+    if adapter.get("relationships"):
+        adapter["relationships"] = [
+            {k: v for k, v in r.items() if k not in {"source_key", "source_source"}}
+            for r in adapter["relationships"]
+        ]
+    return {**contract, "adapter": adapter}
+
+
 def _without_invalid_lei(contract: dict) -> dict:
     reasons = [r for r in contract["nonblocking_deferred_reasons"] if r not in {"invalid_lei", "invalid_lei_checksum"}]
     return {**contract, "nonblocking_deferred_reasons": reasons}
@@ -138,6 +162,8 @@ def _without_invalid_lei(contract: dict) -> dict:
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_source.dataset_contract(member)
+    assert digest(contract) == WITH_LINK_START.get(member, WITH_INVALID_LEI[member])
+    contract = _without_link_start(contract)
     assert digest(contract) == WITH_INVALID_LEI[member]
     earlier = _without_invalid_lei(contract)
     assert digest(earlier) == WITH_QUALITY.get(member, GLEIF_BEFORE[member])
@@ -147,8 +173,9 @@ def test_each_gleif_mapping_is_unchanged(member):
 def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
     contract = gleif_source.dataset_contract("relationships", level1_source="x.level1")
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
+    assert [r["source_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    assert digest(gleif_source.dataset_contract("relationships")) == WITH_INVALID_LEI["relationships"]
+    assert digest(gleif_source.dataset_contract("relationships")) == WITH_LINK_START["relationships"]
 
 
 def test_an_unknown_gleif_member_is_refused():

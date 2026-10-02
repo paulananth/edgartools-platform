@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import tempfile
 import zipfile
@@ -368,15 +369,18 @@ def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
 
     Each member's mapping is data in `rules/sources/gleif/source.yaml` (rules
     skill ticket 01). A relationship points at the Level 1 source the file
-    names; `level1_source` replaces it for a caller that registers Level 1
-    under another code.
+    names, at both ends; `level1_source` replaces it for a caller that
+    registers Level 1 under another code.
     """
     for entry in rules_files.source("gleif")["mdm"].values():
         contract = entry["contract"]
         if contract["adapter"]["native_member"] == member:
             if level1_source is not None:
+                contract = copy.deepcopy(contract)
                 for relationship in contract["adapter"].get("relationships", []):
                     relationship["target_source"] = level1_source
+                    if relationship.get("source_key"):  # a link starts at Level 1 too
+                        relationship["source_source"] = level1_source
             return contract
     raise ValueError("Unknown native GLEIF member")
 

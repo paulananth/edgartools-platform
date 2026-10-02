@@ -206,6 +206,10 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
                     fields.append([code, field, part, path, used_for, f"{at}.adapter.{section}.{field}"])
         for relationship in adapter.get("relationships") or []:
             kinds = relationship.get("type") or _text(list((relationship.get("type_values") or {}).values()))
+            if relationship.get("source_key"):  # the link starts at another record
+                fields.append([code, f"relationship {kinds}", "from", _text(relationship.get("source_key")),
+                               f"Link from {_text(relationship.get('source_source'))}",
+                               f"{at}.adapter.relationships"])
             fields.append([code, f"relationship {kinds}", "to", _text(relationship.get("target_key")),
                            f"Link to {_text(relationship.get('target_source'))}", f"{at}.adapter.relationships"])
         formats = adapter.get("identifier_formats") or {}

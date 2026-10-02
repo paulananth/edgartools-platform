@@ -424,6 +424,7 @@ class TestTheCompanyRule:
         assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
             "sec.submissions.company.v1",
             "gleif.level1.v1",
+            "gleif.relationships.v1",
         ]
 
 
