@@ -41,7 +41,7 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
 # The schema's first file, then each later file once, in order, by checksum.
 # A later change to the schema is a new file added to MIGRATIONS.
 BASELINE = "001_mdm.sql"
-MIGRATIONS: tuple[str, ...] = ()
+MIGRATIONS: tuple[str, ...] = ("002_link_start.sql",)
 
 # The functions the application login may run. It has no table rights beyond
 # SELECT: every change to master data goes through these.

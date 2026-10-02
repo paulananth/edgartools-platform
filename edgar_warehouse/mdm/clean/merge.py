@@ -49,6 +49,28 @@ def check_company_sources(policy: dict, assertions: list[dict]) -> None:
         )
 
 
+def linked_subjects(a: dict) -> set[str]:
+    """The other records a reading's links name: each link's end, and its
+    start when the link starts at another record (`source_subject`)."""
+    return {
+        s
+        for r in a["relationships"]
+        for s in (r.get("target_subject"), r.get("source_subject"))
+        if s
+    }
+
+
+def link_only(claim: dict) -> bool:
+    """A reading that only states links between other records (a GLEIF
+    relationship record): it has no identity of its own to bind."""
+    return (
+        bool(claim["relationships"])
+        and not claim["fields"]
+        and not claim["identifiers"]
+        and all(r.get("source_subject") for r in claim["relationships"])
+    )
+
+
 def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: int):
     """Conservative closure includes historical merges and incoming/outgoing edges.
 
@@ -59,9 +81,7 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
         k for d in decisions for k in anchors(d)
     }
     for a in assertions:
-        keys.update(
-            r["target_subject"] for r in a["relationships"] if r.get("target_subject")
-        )
+        keys.update(linked_subjects(a))
     stored_a = {}
     stored_d = {}
     retiring = [
@@ -73,7 +93,8 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
             conn,
             """SELECT body FROM mdm.source_reading
             WHERE source_code=ANY(:retiring) OR body->>'subject'=ANY(:keys) OR EXISTS(
-             SELECT 1 FROM jsonb_array_elements(body->'relationships') r WHERE r->>'target_subject'=ANY(:keys)) LIMIT :lim""",
+             SELECT 1 FROM jsonb_array_elements(body->'relationships') r
+             WHERE r->>'target_subject'=ANY(:keys) OR r->>'source_subject'=ANY(:keys)) LIMIT :lim""",
             keys=sorted(keys),
             retiring=retiring,
             lim=limit + 1,
@@ -90,11 +111,7 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
             a = r["body"]
             stored_a[a["assertion_id"]] = a
             keys.add(a["subject"])
-            keys.update(
-                e["target_subject"]
-                for e in a["relationships"]
-                if e.get("target_subject")
-            )
+            keys.update(linked_subjects(a))
         for r in decision_rows:
             d = r["body"]
             stored_d[d["decision_id"]] = d
@@ -445,12 +462,7 @@ class MergeStage:
                 keys = {a["subject"] for a in all_assertions}
                 keys.update(i["entity_id"] for i in [*stored_ids, *identities])
                 keys.update(k for d in [*stored_d, *decisions] for k in anchors(d))
-                keys.update(
-                    r["target_subject"]
-                    for a in all_assertions
-                    for r in a["relationships"]
-                    if r.get("target_subject")
-                )
+                keys.update(k for a in all_assertions for k in linked_subjects(a))
                 scope = {
                     "keys": sorted(keys),
                     "consumer": consumer,
@@ -587,7 +599,7 @@ class MergeStage:
                     {**r, "entity_id": entity_id} for r in conflicts + field_reviews
                 )
             for subject, claim in claims.items():
-                if subject not in state.bindings:
+                if subject not in state.bindings and not link_only(claim):
                     reviews.append(
                         {
                             "reason": "binding_required",

@@ -70,3 +70,31 @@ def test_migrating_a_store_that_holds_data_changes_nothing(database):
     assert after == before
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == before["policy"]
+
+
+def test_a_store_with_rows_at_001_takes_002_and_keeps_its_rows(database):
+    """Platform validation 06a: a store built before 002 (its snapshot reading
+    only a link's end) takes 002 on the next migrate, with its rows kept."""
+    from pathlib import Path
+
+    from edgar_warehouse.mdm.clean import store
+
+    sql = (Path(store.__file__).parents[1] / "migrations" / "001_mdm.sql").read_text()
+    old = sql[sql.index("CREATE FUNCTION mdm.match_proposal_snapshot"):]
+    old = old[: old.index("$$;") + 3].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+    snapshot = "SELECT pg_get_functiondef('mdm.match_proposal_snapshot(jsonb)'::regprocedure)"
+    with database.admin.begin() as conn:
+        conn.execute(text(old))
+        # The migration ledger is append-only; only this simulation of an older
+        # store goes around that, as the database owner.
+        conn.execute(text("SET LOCAL session_replication_role = replica"))
+        conn.execute(text("DELETE FROM mdm.migration WHERE name='002_link_start.sql'"))
+        conn.execute(text("SET LOCAL session_replication_role = origin"))
+        assert "source_subject" not in conn.scalar(text(snapshot))
+        before = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in ("policy", "dataset")}
+    assert before["policy"] and before["dataset"]
+    migrate(database.admin, application_role="clean_application")
+    with database.admin.connect() as conn:
+        assert "source_subject" in conn.scalar(text(snapshot))
+        assert conn.scalar(text("SELECT count(*) FROM mdm.migration WHERE name='002_link_start.sql'")) == 1
+        assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in before} == before
