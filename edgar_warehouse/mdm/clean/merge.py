@@ -133,9 +133,8 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
         evidence = rows(
             conn,
             """SELECT body FROM mdm.source_reading
-            WHERE source_code=ANY(:retiring) OR body->>'subject'=ANY(:keys) OR EXISTS(
-             SELECT 1 FROM jsonb_array_elements(body->'relationships') r
-             WHERE r->>'target_subject'=ANY(:keys) OR r->>'source_subject'=ANY(:keys)) LIMIT :lim""",
+            WHERE source_code=ANY(:retiring) OR body->>'subject'=ANY(:keys)
+             OR mdm.reading_link_subjects(body) && CAST(:keys AS text[]) LIMIT :lim""",
             keys=sorted(keys),
             retiring=retiring,
             lim=limit + 1,
@@ -720,9 +719,14 @@ class MergeStage:
             # Retire old projected edges/reviews in the affected component only.
             old = rows(
                 conn,
+                # Each lookup its own condition, with its type, so an index
+                # (migration 003) serves it.
                 """SELECT object_type,object_id,body FROM mdm.current_record WHERE
-             (object_type='relationship' AND (body->>'source_id'=ANY(:ids) OR body->>'target_id'=ANY(:ids))) OR
-             (object_type='review' AND (body->>'entity_id'=ANY(:ids) OR body->>'subject'=ANY(:subjects) OR body->'affected_subjects' ?| CAST(:subjects AS text[]))) LIMIT :lim""",
+             (object_type='relationship' AND body->>'source_id'=ANY(:ids)) OR
+             (object_type='relationship' AND body->>'target_id'=ANY(:ids)) OR
+             (object_type='review' AND body->>'entity_id'=ANY(:ids)) OR
+             (object_type='review' AND body->>'subject'=ANY(:subjects)) OR
+             (object_type='review' AND body->'affected_subjects' ?| CAST(:subjects AS text[])) LIMIT :lim""",
                 ids=sorted(all_ids),
                 subjects=sorted({a["subject"] for a in evidence.values()}),
                 lim=self.closure_limit + 1,
