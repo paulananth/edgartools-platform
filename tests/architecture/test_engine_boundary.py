@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2] / "edgar_warehouse"
-FACADE = ROOT / "rules" / "engine.py"
+FACADE = ROOT / "rules" / "source_engine.py"
 
 
 def test_only_the_facade_imports_the_engine() -> None:

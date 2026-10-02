@@ -4,7 +4,7 @@
 //! container, the document checks that fail it, the tables it yields, each
 //! table's columns, and the record checks that set a record aside. The grammar
 //! grew from `docs/specs/source-contract/spec.md` §8. Python calls this
-//! through `edgar_warehouse/rules/engine.py`; nothing else does.
+//! through `edgar_warehouse/rules/source_engine.py`; nothing else does.
 //!
 //! - A failed artifact is a `Rejected`, with a stable `code`.
 //! - A record a check refuses with `on_fail: defer` is `Deferred`, with the
@@ -121,7 +121,7 @@ impl Engine {
         let max_bytes = limit("max_bytes", 512 << 20);
         let limits = Limits {
             max_bytes,
-            max_member_bytes: limit("max_member_bytes", 1 << 30),
+            max_member_bytes: limit("max_member_bytes", max_bytes),
             max_records: limit("max_records", 10_000_000) as usize,
         };
         Ok(Self { read, steps, limits })
@@ -141,8 +141,10 @@ impl Engine {
         let document = self.document(bytes)?;
         for path in self.read.get("require").and_then(Value::as_sequence).into_iter().flatten() {
             let path = path.as_str().unwrap_or_default();
-            if let Found::Missing = lookup(&document, path)? {
-                return Err(Rejected::new("missing_required", format!("{path} is missing")));
+            match lookup(&document, path)? {
+                Found::Missing => return Err(Rejected::new("missing_required", format!("{path} is missing"))),
+                Found::List(_) => return Err(Rejected::new("repeated_path", format!("{path} is repeated"))),
+                Found::El(_) | Found::Text(_) => {}
             }
         }
         let mut reading = Reading::default();
@@ -234,8 +236,18 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
             return Err(format!("container {container:?} is not read"));
         }
     }
+    for path in read.get("require").and_then(Value::as_sequence).into_iter().flatten() {
+        check_path(path.as_str().ok_or("a required path is not a string")?)?;
+    }
+    if let Some(rule) = read.get("record_count") {
+        check_path(setting(rule, "path").ok_or("record_count names no path")?)?;
+        setting(rule, "table").ok_or("record_count names no table")?;
+    }
     let tables = read.get("tables").and_then(Value::as_mapping).ok_or("read.tables is missing")?;
     for (name, table) in tables {
+        if let Some(each) = setting(table, "each") {
+            check_path(each)?;
+        }
         let name = name.as_str().ok_or("a table name is not a string")?;
         let columns = table.get("columns").and_then(Value::as_mapping).ok_or(format!("{name}: columns are missing"))?;
         for (column, expr) in columns {
@@ -258,6 +270,9 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
                 if setting(when, "column").or(setting(when, "path")).is_none() || when.get("equals").is_none() {
                     return Err(format!("check {kind}: when names a column or path and equals"));
                 }
+            }
+            for path in [Some(check), check.get("when")].into_iter().flatten().filter_map(|c| setting(c, "path")) {
+                check_path(path)?;
             }
             let when_column = check.get("when").and_then(|w| setting(w, "column"));
             for column in [setting(check, "column"), setting(check, "until"), when_column].into_iter().flatten() {
@@ -307,9 +322,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
                 validate_expr(input, steps)?;
             }
         }
-        "text" | "number" | "date" if setting(args, "path").is_none() => {
-            return Err(format!("{name} names no path"));
-        }
+        "text" | "number" | "date" => check_path(setting(args, "path").ok_or(format!("{name} names no path"))?)?,
         _ => {}
     }
     Ok(())
@@ -351,11 +364,10 @@ impl Record<'_> {
     /// The reason the first failing check gives, if it defers; an error if
     /// it rejects the artifact.
     fn failed_check(&mut self, lookups: &Lookups) -> Result<Option<String>, Rejected> {
-        let checks = self.table.get("checks").and_then(Value::as_sequence).cloned().unwrap_or_default();
-        for check in &checks {
+        let table = self.table;
+        for check in table.get("checks").and_then(Value::as_sequence).into_iter().flatten() {
             if let Some(when) = check.get("when") {
-                let wanted = yaml_val(when.get("equals"));
-                if self.subject(when)? != wanted {
+                if as_text(&self.subject(when)?) != as_text(&yaml_val(when.get("equals"))) {
                     continue;
                 }
             }
@@ -386,28 +398,29 @@ impl Record<'_> {
                         _ => None,
                     }
                 }
-                _ => {
-                    let value = self.subject(check)?;
-                    let text = match &value {
-                        Val::Str(text) if !text.is_empty() => Some(text.as_str()),
-                        Val::Null | Val::Str(_) => None,
-                        Val::Int(_) | Val::Float(_) => Some(""),
-                    };
+                "required" | "in_set" | "in_lookup" => {
+                    let text = as_text(&self.subject(check)?);
                     let held = match kind {
                         "required" => text.is_some(),
                         "in_set" => text.is_some_and(|t| {
-                            check.get("values").and_then(Value::as_sequence).into_iter().flatten().any(|v| v.as_str() == Some(t))
+                            check
+                                .get("values")
+                                .and_then(Value::as_sequence)
+                                .into_iter()
+                                .flatten()
+                                .any(|v| as_text(&yaml_val(Some(v))).as_deref() == Some(t.as_str()))
                         }),
                         _ => {
                             let name = setting(check, "lookup").unwrap_or_default();
                             let set = lookups
                                 .get(name)
                                 .ok_or_else(|| Rejected::new("missing_lookup", format!("the caller gave no {name}")))?;
-                            text.is_some_and(|t| set.contains(t))
+                            text.is_some_and(|t| set.contains(&t))
                         }
                     };
                     (!held).then_some("")
                 }
+                other => return Err(contract_error(format!("check {other} is not known"))),
             };
             let Some(own) = failure else { continue };
             let reason = setting(check, "reason").unwrap_or(own).to_string();
@@ -443,16 +456,16 @@ fn instant(text: &str) -> Result<DateTime<Utc>, Rejected> {
         .map_err(|e| Rejected::new("invalid_value", format!("{text} is not a date with a time zone: {e}")))
 }
 
-/// `none` and `nan` are null, matching `parse_thirteenf`'s text blanking.
-pub fn blank_missing_token(value: &Val) -> Result<Val, String> {
-    let Val::Str(text) = value else {
-        return Ok(value.clone());
-    };
-    let text = text.trim();
-    if text.is_empty() || text.eq_ignore_ascii_case("none") || text.eq_ignore_ascii_case("nan") {
-        Ok(Val::Null)
-    } else {
-        Ok(Val::Str(text.to_string()))
+/// A value as text, for comparing it with the text a rules file lists: a
+/// whole number reads `1`, not `1.0`; null and an empty string are no value.
+fn as_text(value: &Val) -> Option<String> {
+    match value {
+        Val::Null => None,
+        Val::Str(text) if text.is_empty() => None,
+        Val::Str(text) => Some(text.clone()),
+        Val::Int(i) => Some(i.to_string()),
+        Val::Float(f) if f.fract() == 0.0 && f.abs() < 1e15 => Some(format!("{}", *f as i64)),
+        Val::Float(f) => Some(f.to_string()),
     }
 }
 
@@ -532,6 +545,25 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
     })
 }
 
+/// A path is dot-separated names; a name may carry one `[sub.path=VALUE]`
+/// filter. Anything else is refused when the contract loads.
+fn check_path(path: &str) -> Result<(), String> {
+    for segment in segments(path) {
+        let Some((name, rest)) = segment.split_once('[') else {
+            if segment.is_empty() || segment.contains(']') {
+                return Err(format!("path {path} has an empty or broken segment"));
+            }
+            continue;
+        };
+        let filter = rest.strip_suffix(']').and_then(|f| f.split_once('='));
+        match filter {
+            Some((sub, value)) if !name.is_empty() && !sub.is_empty() && !value.contains(['[', ']']) => check_path(sub)?,
+            _ => return Err(format!("path {path}: a filter is written name[sub.path=VALUE]")),
+        }
+    }
+    Ok(())
+}
+
 /// A path's segments, split on dots outside a `[filter]`.
 fn segments(path: &str) -> Vec<String> {
     let mut out = vec![String::new()];
@@ -569,7 +601,12 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
         }
         "date" => match text_at(scope(document, item, args), args)? {
             Some(text) if !text.trim().is_empty() => {
-                Ok(Val::Str(instant(&text)?.to_rfc3339_opts(SecondsFormat::AutoSi, false)))
+                {
+                // As Python's `isoformat`: seconds, or six fractional digits.
+                let at = instant(&text)?;
+                let digits = if at.timestamp_subsec_nanos() == 0 { SecondsFormat::Secs } else { SecondsFormat::Micros };
+                Ok(Val::Str(at.to_rfc3339_opts(digits, false)))
+            }
             }
             _ => Ok(yaml_val(args.get("default"))),
         },
@@ -580,7 +617,7 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
             }
             Ok(value)
         }
-        _ => {
+        "custom" => {
             let step = setting(args, "step").unwrap_or_default();
             let function = engine.steps.get(step).ok_or_else(|| contract_error(format!("no value step {step}")))?;
             let mut input = Val::Null;
@@ -589,6 +626,7 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
             }
             function(&input).map_err(|e| Rejected::new("step_failed", format!("step {step}: {e}")))
         }
+        other => Err(contract_error(format!("primitive {other} is not known"))),
     }
 }
 

@@ -1,5 +1,5 @@
 # The engine's Python binding (mastering to-do 15). The main project installs
-# it through its `engine` extra; nothing but `edgar_warehouse/rules/engine.py`
+# it through its `engine` extra; nothing but `edgar_warehouse/rules/source_engine.py`
 # imports it.
 [build-system]
 requires = ["maturin>=1.7,<2"]

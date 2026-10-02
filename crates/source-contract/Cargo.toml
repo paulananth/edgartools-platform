@@ -7,10 +7,6 @@ description = "The configured source engine: read one artifact by its rules-file
 [lib]
 crate-type = ["rlib", "cdylib"]
 
-[[bin]]
-name = "source-contract"
-path = "src/main.rs"
-
 [features]
 # Only maturin turns this on (pyproject.toml), so `cargo test` links no Python.
 python = ["dep:pyo3"]

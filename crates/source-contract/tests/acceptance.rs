@@ -338,3 +338,56 @@ fn a_path_selects_from_a_list_and_a_check_can_apply_only_when_a_value_holds() {
          (4, "ambiguous_relationship_period")]
     );
 }
+
+// Review findings (three-axis review, 2026-10-02).
+
+#[test]
+fn numbers_compare_as_the_text_a_rules_file_writes() {
+    let e = configured(
+        r#"read:
+  format: jsonl
+  tables:
+    rows:
+      each: record
+      columns:
+        v: { number: { path: v } }
+        n: { text: { path: n } }
+      checks:
+        - { check: in_set, column: v, values: [1, 2], on_fail: defer, reason: not_one_or_two }
+        - { check: required, column: n, when: { column: v, equals: 1 }, on_fail: defer, reason: one_needs_n }
+"#,
+        Steps::new(),
+    )
+    .unwrap();
+    let reading = e.read(b"{\"v\":1,\"n\":\"x\"}\n{\"v\":1}\n{\"v\":2}\n{\"v\":3}\n", &Lookups::new()).unwrap();
+    assert_eq!(
+        reading.deferred.iter().map(|d| (d.ordinal, d.reason.as_str())).collect::<Vec<_>>(),
+        [(2, "one_needs_n"), (4, "not_one_or_two")]
+    );
+}
+
+#[test]
+fn a_broken_path_is_refused_when_the_contract_loads() {
+    for path in ["b[@k].$", "x[k=v]y", "a..b", "a[=v]"] {
+        let yaml = format!("read:\n  format: json\n  tables:\n    t:\n      each: r\n      columns:\n        c: {{ text: {{ path: \"{path}\" }} }}\n");
+        assert_eq!(configured(&yaml, Steps::new()).err().unwrap().code, "contract", "{path}");
+    }
+}
+
+#[test]
+fn a_repeated_required_path_fails_closed() {
+    let xml = fixture().replace(
+        "<lei:ContentDate>2026-10-01T00:00:00Z</lei:ContentDate>",
+        "<lei:ContentDate>2026-10-01T00:00:00Z</lei:ContentDate><lei:ContentDate>2026-10-01T00:00:00Z</lei:ContentDate>",
+    );
+    assert_eq!(rejected(&xml), "repeated_path");
+}
+
+#[test]
+fn dates_read_as_python_writes_them() {
+    let e = configured("read:\n  format: jsonl\n  tables:\n    t:\n      each: record\n      columns:\n        d: { date: { path: d } }\n", Steps::new()).unwrap();
+    let rows = e.read(b"{\"d\":\"2024-01-02T03:04:05.5-05:00\"}\n{\"d\":\"2024-01-02T03:04:05Z\"}\n", &Lookups::new()).unwrap().tables["t"].clone();
+    // datetime.fromisoformat(...).astimezone(UTC).isoformat()
+    assert_eq!(rows[0]["d"], Val::Str("2024-01-02T08:04:05.500000+00:00".into()));
+    assert_eq!(rows[1]["d"], Val::Str("2024-01-02T03:04:05+00:00".into()));
+}

@@ -51,8 +51,15 @@ class SourceEngine:
             raise _rejected(error) from None
 
     def read(self, data: bytes, *, lookups: Mapping[str, Iterable[str]] | None = None) -> Reading:
+        """`lookups` names the sets an `in_lookup` check reads, such as an
+        approved scope; each is a collection of strings, never one string."""
+        sets = {}
+        for name, values in (lookups or {}).items():
+            if isinstance(values, str):
+                raise TypeError(f"lookup {name} is one string, not a collection of them")
+            sets[name] = list(values)
         try:
-            result = self._engine.read(data, {k: list(v) for k, v in (lookups or {}).items()})
+            result = self._engine.read(data, sets)
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
         return Reading(tables=result["tables"], deferred=result["deferred"])

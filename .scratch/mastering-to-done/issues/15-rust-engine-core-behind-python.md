@@ -25,7 +25,7 @@ GoF consult first, then the three-axis review.
 
 The operator asked for fewer questions, so I settled the three open points myself:
 
-1. **The facade's API.** `edgar_warehouse/rules/engine.py`: `SourceEngine(contract)` takes a rules-file contract (a dict). Its `.read(data, lookups=None)` returns `Reading(tables, deferred)`. Nothing else in Python imports the Rust module.
+1. **The facade's API.** `edgar_warehouse/rules/source_engine.py`: `SourceEngine(contract)` takes a rules-file contract (a dict). Its `.read(data, lookups=None)` returns `Reading(tables, deferred)`. Nothing else in Python imports the Rust module.
 2. **How a custom step is registered.** A rules file names a step with its version (`custom: {step: blank_missing_token@1, ...}`). The step is a Python function in one registry, `edgar_warehouse/rules/steps.py`. A step the contract names that has no function fails when the contract loads, never partway through a read.
 3. **A deferred record versus a failed one.**
    - **Deferred:** a record check written `on_fail: defer` sets that record aside, with the `reason` the rules file gives. Rules files reuse the reasons the readers already emit, such as `gleif_deletion_flag` and `ambiguous_relationship_period`. A deferred record carries its raw record, shaped as the Python readers shape it (`$` for text, `@x` for attributes).
@@ -50,8 +50,8 @@ The operator asked for fewer questions, so I settled the three open points mysel
 - [x] Readers for json, jsonl, csv and zip (exactly one unencrypted member), with declared limits on bytes, member bytes and records. 2026-10-02 15:32 ET
 - [x] Primitives: `date` (to UTC), `const`; record checks `required`, `in_set`, `in_lookup`, `absent`, `count`, `before`, `lei`, each deferring or rejecting, with an optional `when`; a path can select from a list (`Name[sub.path=VALUE]`). Checks run in the rules file's order, so the first reason wins, as in the Python readers. 2026-10-02 15:32 ET
 - [x] Custom steps: a Python callback by name, checked when the contract loads; a step that raises fails the artifact (`step_failed`). 2026-10-02 15:32 ET
-- [x] PyO3 binding (`--features python`, abi3), `edgar_warehouse/rules/engine.py` facade and `steps.py` registry; 7 tests in `tests/engine`, plus `tests/architecture/test_engine_boundary.py` (only the facade imports the engine). 2026-10-02 15:32 ET
-- [ ] Packaging: the `engine` extra, the CI job and the Docker Rust stage; the deps image built once locally
+- [x] PyO3 binding (`--features python`, abi3), `edgar_warehouse/rules/source_engine.py` facade and `steps.py` registry; 7 tests in `tests/engine`, plus `tests/architecture/test_engine_boundary.py` (only the facade imports the engine). 2026-10-02 15:32 ET
+- [x] Packaging: the `engine` extra, the CI job (`cargo test`, then `tests/engine`) and a Rust stage in both deps Dockerfiles. `Dockerfile.mdm-deps` was built locally in 567 s (1.15 GB), and the binding read a record inside it. The deps image tag now hashes the crate, so a crate-only change rebuilds it; CLAUDE.md's rebuild table says so. The warehouse deps Dockerfile has the same stage, unbuilt locally. 2026-10-02 15:43 ET
 - [x] Map Codex's 41 Python and 13 Rust research tests to 15, 16, 17 or "stays code". 2026-10-02 15:32 ET
 
   | Research tests | Count | Where |
@@ -61,7 +61,26 @@ The operator asked for fewer questions, so I settled the three open points mysel
   | Python: Level 1 mapping, scope and deletion gates, invalid category, shared LEI check | 6 | 16: the engine has the checks (`in_lookup`, `absent`, `in_set`, `lei`), and 16 writes them into the GLEIF rules file |
   | Python: relationship projection, its six gates, the singleton list and the offset date | 10 | 16: list selection (`[PeriodType.$=…]`), `count`, `before`, `required` with `when`, and `date` to UTC cover them |
   | Python: SEC Company scalar lookups, `mapped_field` versus a Silver projection | 5 | 17 |
-  | Python: SEC address, the individual overlap rule, parallel filing arrays, grouping | 11 | stays code (Company preparation and classification); a custom step if it moves |
+  | Python: SEC address, the individual overlap rule, parallel filing arrays, grouping | 11 | 17: custom steps, the last resort (ticket 08), since the configuration cannot state them |
 
-- [ ] Three-axis `/code-review` (Standards, Spec, GoF), findings fixed
+- [x] Three-axis `/code-review` (Standards, Spec, GoF), findings fixed. 2026-10-02 15:43 ET
+  - **GoF:** leave the structure. Each check and primitive is now named in its `match`, and an unknown one is an error rather than a fall-through.
+  - **Fixed, each with a test:**
+    - the deps image tag ignored the crate;
+    - numbers never matched in `when`, `in_set` or `in_lookup`;
+    - a broken path filter was dropped silently (paths are now checked when the contract loads);
+    - a repeated required path passed;
+    - dates differed from Python's `isoformat`;
+    - the member limit defaulted above the artifact limit;
+    - one string given as a lookup was split into characters;
+    - the binding held Python's lock through a read;
+    - a Python `True` from a step became `1`;
+    - the facade's name clashed with the Rules database engine (now `source_engine.py`);
+    - `blank_missing_token` was in Rust as well as Python (the CLI is gone, and the Rust copy is a test helper).
+  - **Answered:** ticket 14's status change on this branch ticks its own merge step, as the operator asked after #796.
+- [ ] ~~Stream records, so a multi-GB GLEIF Golden Copy fits in memory~~ deferred to ticket 16: the engine reads an artifact whole, within its limits. The GLEIF reader streams today (`ijson`), so 16 must add streaming to the XML and JSON readers before GLEIF moves.
+- [ ] ~~A step with several inputs or the whole record (SEC address place codes)~~ deferred to ticket 17: steps take one value today.
+- [ ] ~~Each custom step listed in its source's Mapping Document~~ deferred to tickets 16 and 17: no source is on the engine yet.
+- [ ] ~~Codex's 41 Python research tests as CI acceptance~~ not taken: they test the Python adapters, not the engine. The engine's acceptance is the Rust suite plus the mapping above. The research file stays research.
+- [ ] ~~A non-numeric value in a `number` column defers the record~~ not changed: it reads as the column's default, as `parse_thirteenf` does. A `required` check on that column catches it when a source needs that.
 - [ ] PR, CI green, merge on the operator's word

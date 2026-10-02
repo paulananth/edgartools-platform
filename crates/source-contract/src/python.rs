@@ -1,5 +1,5 @@
 //! The Python binding (`--features python`, built by maturin). Python reaches
-//! the engine only through `edgar_warehouse/rules/engine.py`.
+//! the engine only through `edgar_warehouse/rules/source_engine.py`.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
@@ -27,6 +27,8 @@ fn to_py(py: Python<'_>, value: &Val) -> PyResult<PyObject> {
 fn from_py(value: &Bound<'_, PyAny>) -> PyResult<Val> {
     if value.is_none() {
         Ok(Val::Null)
+    } else if let Ok(flag) = value.downcast::<pyo3::types::PyBool>() {
+        Ok(Val::Str(flag.is_true().to_string()))
     } else if let Ok(text) = value.extract::<String>() {
         Ok(Val::Str(text))
     } else if let Ok(int) = value.extract::<i64>() {
@@ -90,7 +92,9 @@ impl PyEngine {
             let values: Vec<String> = values.try_iter()?.map(|v| v?.extract()).collect::<PyResult<_>>()?;
             sets.insert(name.extract()?, values.into_iter().collect());
         }
-        let reading = self.inner.read(data, &sets).map_err(rejected)?;
+        // Other Python threads run while the engine reads; a step takes the
+        // interpreter back for its own call.
+        let reading = py.allow_threads(|| self.inner.read(data, &sets)).map_err(rejected)?;
         let tables = PyDict::new(py);
         for (name, rows) in &reading.tables {
             let list = PyList::empty(py);

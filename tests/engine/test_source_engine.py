@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from edgar_warehouse.rules import steps
-from edgar_warehouse.rules.engine import SourceEngine, SourceRejected
+from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
 CRATE = Path(__file__).resolve().parents[2] / "crates" / "source-contract"
 FIXTURES = CRATE / "tests" / "fixtures"
@@ -84,3 +84,8 @@ def test_a_step_that_fails_fails_the_artifact(monkeypatch):
 def test_the_python_and_rust_blank_steps_agree():
     assert [steps.blank_missing_token(v) for v in [" None ", "nan", "", " x ", None, 3]] == [
         None, None, None, "x", None, 3]
+
+
+def test_a_lookup_given_as_one_string_is_refused():
+    with pytest.raises(TypeError, match="one string"):
+        gleif().read(xml(), lookups={"eligible_leis": LEIS[0]})
