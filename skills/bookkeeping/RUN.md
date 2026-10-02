@@ -1,5 +1,12 @@
 # Run the validated source and feed
 
+First read [INDEPENDENCE.md](INDEPENDENCE.md) and qualify the controller's
+dependency boundary. The commands below document the existing coupled runtime;
+they are not a loader-independent task implementation. Until that implementation
+is qualified, report the execution gap and continue planning/inspection rather
+than using Company callbacks as a fallback. Keep Rules governance and evidence
+requirements when implementing the replacement path.
+
 Load the source/feed plan and validation evidence. Check their hashes against
 the intended Rules body, processing versions and frozen manifest; resolve every
 declared feed member. Confirm the requested environment, target and bound.

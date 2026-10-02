@@ -1,14 +1,35 @@
 ---
 name: bookkeeping
-description: Initialize or migrate the fresh Bookkeeping store, or plan, validate and run a specified source and feed (into silver and MDM), check its status and recover it. Worklists, leases, checkpoints and recovery belong here. What a feed means (its mapping, quality and matching rules) belongs to data-onboarding and refining-rules.
+description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect and recover work through loader-independent control. Enforce separation of worklists, leases, checkpoints and verified evidence from external workload execution and destination verification. Source interpretation belongs outside Bookkeeping.
 ---
 
 # Bookkeeping
 
 **Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
-owns running a feed into silver and into MDM. Running mastering (the Merge
+owns work control and verified completion. External workers own feed execution
+into silver and MDM. Running mastering (the Merge
 Stage) is the `mdm` target of **run**. Its enabled command path is not built
 yet (database design review, finding 3), so say so if asked.
+
+## Required independence
+
+Bookkeeping must operate without any loader or domain implementation installed.
+Its control process, CLI construction and helpers must not import, instantiate
+or call loaders, parsers, Silver/MDM implementations or source-specific
+execute/reconcile/verify callbacks. Passing the whole Bookkeeping object to an
+external operation also violates this requirement. Moving a callback to another
+file or selecting its name in YAML does not remove the dependency.
+
+Use a fixed task protocol with immutable specifications and references. External
+workers execute and reconcile effects; external verifiers check destinations.
+Bookkeeping owns dependencies, leases/fencing, retries, checkpoints, evidence
+admission and control outbox delivery. Source/feed names are opaque selection
+metadata; source grammar and domain checks stay outside control.
+
+Read [INDEPENDENCE.md](INDEPENDENCE.md) before planning or changing an execution
+path, validating its architecture, or running/recovering it under this contract.
+It defines the evidence required to claim independence and the current runtime
+gap. Keep that gap explicit; do not route through Company callbacks as a fallback.
 
 **Use another skill when:**
 - a feed is new: use **data-onboarding**;
@@ -18,8 +39,10 @@ yet (database design review, finding 3), so say so if asked.
 
 Use the shared engine in `edgar_warehouse/bookkeeping/clean/`. It retains
 control references and evidence; source records stay in their owning stores.
-The protocol and supported boundaries are in
+The currently implemented protocol and supported boundaries are in
 [the specification](../../docs/specs/configured-bookkeeping.md).
+The required replacement design is linked from INDEPENDENCE.md; it is proposed,
+not implemented. Existing CLI syntax is not proof of loader independence.
 Run commands from the repository root with `uv run --extra mdm --extra s3`.
 Resolve the skill's physical path for its relative references, and verify the
 execution checkout contains the fresh engine; another worktree may be older.
@@ -72,11 +95,13 @@ Recover a run only after its retained manifest proves the same source/feed.
 
 Confirm live commands with `edgar-warehouse bookkeeping --help` and
 `edgar-warehouse rules run --help` under the `uv run` prefix. Read
-`edgar_warehouse/bookkeeping/clean/cli.py` for runtime bindings. Current
+`edgar_warehouse/bookkeeping/clean/cli.py` for runtime bindings. The current
+coupled runtime registers source/domain operations; these are gap evidence,
+not the required architecture. Current
 Company operations are `provider.capture`, `company.expand`, `source.evidence`,
 `company.silver`, `company.prepare`, `mdm.ingest`, `company.publish_expand`, and
-`mdm.publish`. Prepare a bounded Company scope without requesting SEC or
-starting a run. Pin ticker, Name Census, reviewed bindings and a timezone-aware
+`mdm.publish`. The existing coupled path can prepare a bounded Company scope
+without requesting SEC or starting a run. Pin ticker, Name Census, reviewed bindings and a timezone-aware
 `as_of` in the support manifest:
 
 ```bash
@@ -86,7 +111,7 @@ uv run --extra mdm --extra s3 edgar-warehouse bookkeeping prepare \
   --support-manifest <URI> --support-sha256 <SHA256> --output-root <file-URI>
 ```
 
-Submit the returned manifest through `rules run --source
+Its existing submission command is `rules run --source
 sec.submissions.company --feed submissions --target company`. Generated page,
 ingest, and publication work joins its parent completion in the same root run.
 Local file evidence qualifies the Company bundle; AWS feeds remain disabled.
@@ -128,6 +153,11 @@ predecessor selectors naming declared prerequisite step/key identities.
 Source records stay in artifacts. Lease scopes name actual conflicting work
 or write resources; a feed label alone does not prove the right conflict scope.
 
+Audit the control dependency path first using INDEPENDENCE.md. Plan external
+worker/verifier profiles and frozen specification references; do not add a
+source-specific capability to the control registry to fill an execution gap.
+Record missing task-protocol support as required implementation work.
+
 Write a reviewable plan bundle in the current workstream: source/feed binding,
 resolved datasets, target, proposed Rules body/digest, manifest/reference and
 hash, expected counts per stage, processing versions, lease/check declarations,
@@ -144,6 +174,10 @@ Load the plan for the same source/feed. If missing, prepare it through plan
 mode first. Pin its hash and validate the exact proposed Rules/configuration,
 worklist scope and input hashes with the implementation validators. A later
 configuration, input or processing-version change invalidates this validation.
+
+Validate loader independence separately from source output correctness using
+INDEPENDENCE.md. A successful feed run through the current Company callbacks
+does not qualify a loader-independent controller.
 
 Use bounded captured inputs and isolated PostgreSQL 16 control/destination
 stores for actual execution. Verify the selected feed's stage outputs,
@@ -170,10 +204,13 @@ evaluator, and does not grant a person's MDM approval.
 (Named "deploy" before 2026-09-30.) Read [RUN.md](RUN.md). Apply the validated configuration and submit or
 resume its bounded run in the selected environment. Verify that the plan,
 validation evidence and frozen inputs still match the requested source/feed.
-Run mode uses the existing Rules lifecycle and Bookkeeping runner; it does
-not introduce a new command, store or source callback. Unsupported scope stays
-blocked. Infrastructure rollout belongs here only when explicitly included
-in the user's run request and independently qualified.
+Use the existing Rules lifecycle for approval and frozen configuration; execute
+through a qualified loader-independent task path. The current coupled runner
+does not meet that requirement. Until the replacement exists, report execution
+as unsupported under this contract and continue independent inspection or
+planning. Do not invent a command or silently use source callbacks.
+Infrastructure rollout belongs here only when explicitly included in the user's
+run request and independently qualified.
 
 ## Status mode
 
@@ -193,6 +230,9 @@ Read [RECOVERY.md](RECOVERY.md). Resume a run with
 `edgar-warehouse bookkeeping resume <run-id>` (exit 3 means the run is not
 complete yet). Delivery to the Journal of a run's committed events is the
 Change Journal skill's **recover-delivery**.
+
+Those resume commands describe the current implementation. Establish its
+dependency boundary before claiming it meets this skill's independence contract.
 
 ## Result
 

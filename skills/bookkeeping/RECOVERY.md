@@ -1,5 +1,11 @@
 # Recovery decisions
 
+Read [INDEPENDENCE.md](INDEPENDENCE.md) before selecting an execution recovery
+path. Current resume commands use the coupled callback runner. Preserve old-run
+evidence and inspect status; do not claim loader-independent recovery until the
+external reconcile/verify task protocol has been qualified. A dependency failure
+is implementation work, not a reason to reintroduce a loader into control.
+
 Read bounded status and leases first. See the
 [specification](../../docs/specs/configured-bookkeeping.md) for authority and
 storage semantics; use live CLI help when an option differs.
