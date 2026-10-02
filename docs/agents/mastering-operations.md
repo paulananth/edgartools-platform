@@ -38,15 +38,20 @@ uv run python scripts/ops/qualify_local_mastering.py \
 
 The output directory must be new. The command checks Docker and the image,
 then runs fresh mastering acceptance, all four pytest folders and shell syntax
-checks, retaining logs and JUnit results. Each suite has a five-minute budget. PostgreSQL skips,
+checks, retaining logs and JUnit results. It is the long, whole-suite run: for
+everyday work, run the affected tests locally and let CI run everything
+(operator, 2026-09-29); run this only when it is the evidence asked for. Each suite has a five-minute budget. PostgreSQL skips,
 missing test cases, a timeout or a missing prerequisite leave `qualified`
 false. Fixtures create disposable PostgreSQL 16 stores and restricted runtime
 roles and remove their own stores on completion. Hosted credentials are unused.
 
 The new bounded cohort uses the repository's unchanged Company and Person
-rules, then adds a synthetic employment statement to check both endpoint kinds
-in the same store. Physical local publication read-back verifies immutable
-envelopes. This synthetic statement establishes no real employment fact.
+rules. Two GLEIF Level 1 records and one synthetic accounting-parent record go
+through the real GLEIF reader; a steward binds each GLEIF record to its SEC
+Company, and the link must resolve to those canonical Company IDs. Physical
+local publication read-back verifies immutable envelopes. The parent record
+establishes no real GLEIF fact. No Person link type is approved yet (platform
+validation 06, step 2), so the cohort has no Person link.
 Separate existing tests cover GLEIF parent periods, real Journal delivery,
 Rules/Bookkeeping authority, acquisition pagination and failure recovery.
 
@@ -82,8 +87,9 @@ deletion as incomplete. Preserve existing evidence captures and rollback data.
 
 ## Agent memory
 
-AGENTS.md is the shared instruction source; CLAUDE.md is a pointer. Keep dated
-evidence in tickets instead of copying changing runtime state into both files.
+Keep dated evidence in tickets instead of copying changing runtime state into
+CLAUDE.md or AGENTS.md. Consolidating those two guides is its own ticket
+(operator, 2026-10-02).
 Verify memory claims about commands, migrations and deployments against current
 code. Preserve operator decisions and historical evidence when superseding
 stale implementation guidance.
