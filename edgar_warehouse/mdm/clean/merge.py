@@ -30,6 +30,47 @@ def anchors(decision: dict) -> set[str]:
     }
 
 
+def review_scope(
+    review: dict,
+    members: dict,
+    canonical: dict,
+    evidence: dict,
+    decisions: dict,
+) -> tuple[list[str], list[str]]:
+    """The records and Companies a review is about: its record, its Company's
+    records, the Companies a link review names, and for an override with no
+    record, its Company and its evidence (platform validation 05b).
+
+    `members` maps each current Company to its records. A closure is a
+    connected component, so a later save that touches any of its records
+    loads all of them and finds the review by these alone. A review that
+    names no record falls back to every record of its closure, as before,
+    rather than block the family's later saves.
+    """
+    entities = set(review.get("entities", []))
+    subjects = set()
+    if review.get("entity_id"):
+        entities.add(review["entity_id"])
+    if review.get("subject"):
+        subjects.add(review["subject"])
+    override = (
+        decisions.get(review["decision_id"], {})
+        if review["reason"] == "ambiguous_override_owner"
+        else {}
+    )
+    if override.get("entity_id"):
+        entities.add(override["entity_id"])
+    subjects.update(
+        evidence[k]["subject"] for k in override.get("evidence", []) if k in evidence
+    )
+    entities = {canonical.get(e, e) for e in entities}
+    for entity in entities:
+        subjects.update(members.get(entity, []))
+    if not subjects:
+        subjects = {a["subject"] for a in evidence.values()}
+    return sorted(subjects), sorted(entities)
+
+
 def check_company_sources(policy: dict, assertions: list[dict]) -> None:
     """A kind-level fill rule must name every Company source now in scope.
 
@@ -632,22 +673,23 @@ class MergeStage:
                 }
                 for e in edges
             )
-            projections.extend(
-                {
-                    "object_type": "review",
-                    "object_id": digest(r),
-                    "body": {
-                        **r,
-                        "open": True,
-                        "blocking": r["reason"] != "override_source_disagreement",
-                        "affected_subjects": sorted(
-                            {a["subject"] for a in evidence.values()}
-                        ),
-                        "affected_entities": sorted(all_ids),
-                    },
-                }
-                for r in reviews
-            )
+            for r in reviews:
+                subjects, entities = review_scope(
+                    r, groups, state.canonical, evidence, all_d
+                )
+                projections.append(
+                    {
+                        "object_type": "review",
+                        "object_id": digest(r),
+                        "body": {
+                            **r,
+                            "open": True,
+                            "blocking": r["reason"] != "override_source_disagreement",
+                            "affected_subjects": subjects,
+                            "affected_entities": entities,
+                        },
+                    }
+                )
             deferred_contracts = {
                 row["source_code"]: row["body"]
                 for row in rows(
