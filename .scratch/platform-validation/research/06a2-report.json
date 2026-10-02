@@ -1,0 +1,670 @@
+{
+ "after_first_pass": {
+  "companies_open": 6414,
+  "decisions": {
+   "bind": 9466
+  },
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "identities": {
+   "company": 6414
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312,
+   "unresolved_endpoint": 72
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "gleif.relationships.v1:company": 268,
+   "sec.submissions.company.v1:company": 6414
+  },
+  "waiting": {
+   "sec.submissions.company.v1:classification_deferred": 312
+  }
+ },
+ "after_second_pass": {
+  "companies_open": 6414,
+  "decisions": {
+   "bind": 9466
+  },
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "identities": {
+   "company": 6414
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312,
+   "unresolved_endpoint": 72
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "gleif.relationships.v1:company": 268,
+   "sec.submissions.company.v1:company": 6414
+  },
+  "waiting": {
+   "sec.submissions.company.v1:classification_deferred": 312
+  }
+ },
+ "cik_on_two_companies": [],
+ "cohort_leis_named_by_census": 3755,
+ "companies_with_cik_and_lei": 3052,
+ "company_with_two_ciks": 0,
+ "company_with_two_leis": 0,
+ "examples_joined": [
+  {
+   "ciks": [
+    "0001796209"
+   ],
+   "leis": [
+    "213800NZT1VX6PZ7BT53"
+   ]
+  },
+  {
+   "ciks": [
+    "0001104038"
+   ],
+   "leis": [
+    "549300PQWM4UB0090168"
+   ]
+  },
+  {
+   "ciks": [
+    "0001809987"
+   ],
+   "leis": [
+    "549300BNTOWVWFNVTJ65"
+   ]
+  },
+  {
+   "ciks": [
+    "0000706698"
+   ],
+   "leis": [
+    "5493002R27BBGV8DID60"
+   ]
+  },
+  {
+   "ciks": [
+    "0000784199"
+   ],
+   "leis": [
+    "549300YTKV8DMSMG6K81"
+   ]
+  },
+  {
+   "ciks": [
+    "0001481028"
+   ],
+   "leis": [
+    "894500RRA60T2H3O1G73"
+   ]
+  },
+  {
+   "ciks": [
+    "0000045919"
+   ],
+   "leis": [
+    "549300J5W5N8Q3OYMS84"
+   ]
+  },
+  {
+   "ciks": [
+    "0000913353"
+   ],
+   "leis": [
+    "D3O8K13PHLEXXD1DT480"
+   ]
+  },
+  {
+   "ciks": [
+    "0001729427"
+   ],
+   "leis": [
+    "529900FDJ7WGF2Q7UN44"
+   ]
+  },
+  {
+   "ciks": [
+    "0001781730"
+   ],
+   "leis": [
+    "254900LW0YOTBYSQCK19"
+   ]
+  }
+ ],
+ "gleif_assertions": 3716,
+ "gleif_link_assertions": 268,
+ "gleif_link_records_with_both_ends_named": 272,
+ "gleif_links_set_aside": {
+  "unsupported_relationship_type": 4
+ },
+ "gleif_records_read": 3755,
+ "gleif_set_aside": {
+  "unsupported_identity_kind": 39
+ },
+ "link_reviews_open": {
+  "unresolved_endpoint": 72
+ },
+ "named": {
+  "ASML": {
+   "ciks": [
+    "0000937966"
+   ],
+   "leis": [
+    "724500Y6DUVHQD6OXN27"
+   ]
+  },
+  "Apple": {
+   "ciks": [
+    "0000320193"
+   ],
+   "leis": [
+    "HWUPKR0MPOU8FGXBT394"
+   ]
+  },
+  "Microsoft": {
+   "ciks": [
+    "0000789019"
+   ],
+   "leis": [
+    "INR2EJN1ERAN0W5ZP974"
+   ]
+  },
+  "Shell": {
+   "ciks": [
+    "0001306965"
+   ],
+   "leis": [
+    "21380068P1DRHMJ8KU70"
+   ]
+  }
+ },
+ "parent_links": {
+  "by_type": {
+   "CALCULATED_ULTIMATE_PARENT": 86,
+   "IS_DIRECTLY_CONSOLIDATED_BY": 86,
+   "IS_ULTIMATELY_CONSOLIDATED_BY": 110
+  },
+  "examples": [
+   {
+    "derived": false,
+    "last_seen": "2025-10-09T20:40:52.300000+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "2019-02-08T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "a5122dec-0855-4b81-b2fc-dcdc48a34d5a",
+    "target_id": "cf175c5f-adea-4367-ba32-3b8a983d2774",
+    "type": "IS_ULTIMATELY_CONSOLIDATED_BY"
+   },
+   {
+    "derived": false,
+    "last_seen": "2025-12-02T20:53:23.184000+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "2018-04-26T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "6cb3b773-0586-437c-a0e0-a1f3b2875beb",
+    "target_id": "71295e7f-bcf1-4e78-a287-3358a84cd675",
+    "type": "IS_ULTIMATELY_CONSOLIDATED_BY"
+   },
+   {
+    "derived": false,
+    "last_seen": "2026-05-05T19:12:34.095000+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "2023-06-09T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "cbf5c0aa-448d-4bf9-91bd-894692c4f86c",
+    "target_id": "4d744adb-d845-4a59-a8c0-d0bac110847d",
+    "type": "IS_ULTIMATELY_CONSOLIDATED_BY"
+   },
+   {
+    "derived": false,
+    "last_seen": "2025-10-03T11:30:20.101000+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "2018-01-11T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "c6b9966c-9b8f-4e35-87bd-d780d8a33a74",
+    "target_id": "df33b598-c734-4d78-a724-031ea67b34e8",
+    "type": "IS_DIRECTLY_CONSOLIDATED_BY"
+   },
+   {
+    "derived": true,
+    "last_seen": null,
+    "periods": null,
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "6b565669-3211-4c8b-9963-f9d46e885236",
+    "target_id": "229649a1-c4a4-4108-ad91-35ed850b6d73",
+    "type": "CALCULATED_ULTIMATE_PARENT"
+   },
+   {
+    "derived": true,
+    "last_seen": null,
+    "periods": null,
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "cd357af4-6206-44ea-b184-bc6cefcac482",
+    "target_id": "5846e6d2-ca8e-4646-a380-224633cbec12",
+    "type": "CALCULATED_ULTIMATE_PARENT"
+   },
+   {
+    "derived": false,
+    "last_seen": "2026-07-31T07:27:32+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "1980-04-07T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "9e4eb448-e4a0-47d3-b878-d9415c23b477",
+    "target_id": "e54fb920-39d4-4f09-823e-151de3d85999",
+    "type": "IS_DIRECTLY_CONSOLIDATED_BY"
+   },
+   {
+    "derived": false,
+    "last_seen": "2025-10-17T07:51:22.115000+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "2018-09-18T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "6aa4413e-ce2d-4760-9316-e967ddb69161",
+    "target_id": "7a3121af-a721-48a3-8faf-41de2414a3a5",
+    "type": "IS_ULTIMATELY_CONSOLIDATED_BY"
+   },
+   {
+    "derived": true,
+    "last_seen": null,
+    "periods": null,
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "5f81ab96-0eca-4e0b-81ed-1208a96e0670",
+    "target_id": "e67bb834-5423-49a1-9349-c7942df04e33",
+    "type": "CALCULATED_ULTIMATE_PARENT"
+   },
+   {
+    "derived": false,
+    "last_seen": "2025-07-02T04:10:47.986000+00:00",
+    "periods": [
+     {
+      "properties": {
+       "source_registration_status": "PUBLISHED",
+       "source_relationship_status": "ACTIVE"
+      },
+      "valid_from": "2018-08-30T00:00:00+00:00",
+      "valid_to": null
+     }
+    ],
+    "scope": "GLEIF accounting consolidation",
+    "source_id": "a697a6d2-b10a-42ff-9430-68f94deee510",
+    "target_id": "48c164ff-3dd6-4eb8-a95e-3e3a1a81e56f",
+    "type": "IS_ULTIMATELY_CONSOLIDATED_BY"
+   }
+  ]
+ },
+ "policy": "4c9d1cee34053f3091cbd42bde45a33e271fdf5dcbea1bfb649c9ccd78e926f8",
+ "population": 43338,
+ "review_sample": [
+  {
+   "affected_entities": [],
+   "affected_subjects": [
+    "4f79e02324487fadd4386b3bf80774af0b1b4331d65831240f7482eaf9418a9a"
+   ],
+   "assertion_id": "318177659faeb5f57444fde908eb3afd9b27d377da77d9a4617a6dd35d52d40c",
+   "blocking": true,
+   "open": true,
+   "reason": "binding_required",
+   "subject": "4f79e02324487fadd4386b3bf80774af0b1b4331d65831240f7482eaf9418a9a"
+  },
+  {
+   "affected_entities": [],
+   "affected_subjects": [
+    "f2295319fd84fc7bb964b8962efacdee4a95e5414a09c72e497ff8507fb6d027"
+   ],
+   "assertion_id": "38b1dfd55f543dc081f00d119dc2bacda81c8ad12dd19050a87a6674af1850c2",
+   "blocking": true,
+   "open": true,
+   "reason": "binding_required",
+   "subject": "f2295319fd84fc7bb964b8962efacdee4a95e5414a09c72e497ff8507fb6d027"
+  },
+  {
+   "affected_entities": [],
+   "affected_subjects": [
+    "f794bfbfb658bc53a628a987862905b45a8b6151d4940020471f6a9813258a56"
+   ],
+   "assertion_id": "d502d8e29056c14678ce47e55a9f8f460435774ba1e54c76f2d3fdd8948ce6d1",
+   "blocking": true,
+   "open": true,
+   "reason": "binding_required",
+   "subject": "f794bfbfb658bc53a628a987862905b45a8b6151d4940020471f6a9813258a56"
+  },
+  {
+   "affected_entities": [],
+   "affected_subjects": [
+    "dd0325250b73ca09e7c398c92878b2b879513817c21b2070aeeb3c08ba164452"
+   ],
+   "assertion_id": "1d5ad297d05e52c090aed687878cec1cd0966cce6a16ca04f9691c6a4df9116a",
+   "blocking": true,
+   "open": true,
+   "reason": "binding_required",
+   "subject": "dd0325250b73ca09e7c398c92878b2b879513817c21b2070aeeb3c08ba164452"
+  },
+  {
+   "affected_entities": [],
+   "affected_subjects": [
+    "c796a9b757ea384e8756ae2e922ac92312cd6227057727d92b5fbb7947c0dd02"
+   ],
+   "assertion_id": "8fd2b1bccc2ba90f42c2f47605f2b6cd9c4fc66faed0ba3f8971174f76adc9b6",
+   "blocking": true,
+   "open": true,
+   "reason": "binding_required",
+   "subject": "c796a9b757ea384e8756ae2e922ac92312cd6227057727d92b5fbb7947c0dd02"
+  }
+ ],
+ "second_pass_changed_nothing": true,
+ "ticket": "platform validation 06a2: ticket 27's Proving Run with GLEIF parent links",
+ "timings": [
+  {
+   "records": 966,
+   "sec": "chunk1",
+   "seconds": 31.2
+  },
+  {
+   "records": 960,
+   "sec": "chunk2",
+   "seconds": 23.1
+  },
+  {
+   "records": 957,
+   "sec": "chunk3",
+   "seconds": 31.8
+  },
+  {
+   "records": 959,
+   "sec": "chunk4",
+   "seconds": 33.4
+  },
+  {
+   "records": 965,
+   "sec": "chunk5",
+   "seconds": 34.9
+  },
+  {
+   "records": 960,
+   "sec": "chunk6",
+   "seconds": 53.4
+  },
+  {
+   "records": 959,
+   "sec": "chunk7",
+   "seconds": 45.1
+  },
+  {
+   "gleif_read": 3755,
+   "seconds": 0.2
+  },
+  {
+   "gleif_links_read": 272,
+   "records_in_file": 487721,
+   "seconds": 41.2
+  },
+  {
+   "gleif": "first-1",
+   "seconds": 21.3
+  },
+  {
+   "gleif": "first-2",
+   "seconds": 24.7
+  },
+  {
+   "gleif": "first-3",
+   "seconds": 20.6
+  },
+  {
+   "gleif": "first-4",
+   "seconds": 23.8
+  },
+  {
+   "gleif": "first-5",
+   "seconds": 24.4
+  },
+  {
+   "gleif": "first-6",
+   "seconds": 24.7
+  },
+  {
+   "gleif": "first-7",
+   "seconds": 27.5
+  },
+  {
+   "gleif": "first-8",
+   "seconds": 27.1
+  },
+  {
+   "gleif": "first-9",
+   "seconds": 24.4
+  },
+  {
+   "gleif": "first-10",
+   "seconds": 26.0
+  },
+  {
+   "gleif": "first-11",
+   "seconds": 26.6
+  },
+  {
+   "gleif": "first-12",
+   "seconds": 24.8
+  },
+  {
+   "gleif": "first-13",
+   "seconds": 24.0
+  },
+  {
+   "gleif": "first-14",
+   "seconds": 34.7
+  },
+  {
+   "gleif": "first-15",
+   "seconds": 24.7
+  },
+  {
+   "gleif": "first-16",
+   "seconds": 26.8
+  },
+  {
+   "gleif": "first-17",
+   "seconds": 24.2
+  },
+  {
+   "gleif": "first-18",
+   "seconds": 26.0
+  },
+  {
+   "gleif": "first-19",
+   "seconds": 14.1
+  },
+  {
+   "links": "first-1",
+   "seconds": 5.6
+  },
+  {
+   "links": "first-2",
+   "seconds": 6.1
+  },
+  {
+   "records": 0,
+   "sec": "chunk1",
+   "seconds": 5.0
+  },
+  {
+   "records": 0,
+   "sec": "chunk2",
+   "seconds": 5.0
+  },
+  {
+   "records": 0,
+   "sec": "chunk3",
+   "seconds": 5.2
+  },
+  {
+   "records": 0,
+   "sec": "chunk4",
+   "seconds": 3.8
+  },
+  {
+   "records": 0,
+   "sec": "chunk5",
+   "seconds": 3.4
+  },
+  {
+   "records": 0,
+   "sec": "chunk6",
+   "seconds": 3.6
+  },
+  {
+   "records": 0,
+   "sec": "chunk7",
+   "seconds": 4.3
+  },
+  {
+   "gleif": "second-1",
+   "seconds": 8.3
+  },
+  {
+   "gleif": "second-2",
+   "seconds": 8.0
+  },
+  {
+   "gleif": "second-3",
+   "seconds": 8.0
+  },
+  {
+   "gleif": "second-4",
+   "seconds": 5.2
+  },
+  {
+   "gleif": "second-5",
+   "seconds": 6.6
+  },
+  {
+   "gleif": "second-6",
+   "seconds": 6.2
+  },
+  {
+   "gleif": "second-7",
+   "seconds": 7.8
+  },
+  {
+   "gleif": "second-8",
+   "seconds": 7.8
+  },
+  {
+   "gleif": "second-9",
+   "seconds": 7.6
+  },
+  {
+   "gleif": "second-10",
+   "seconds": 7.8
+  },
+  {
+   "gleif": "second-11",
+   "seconds": 7.7
+  },
+  {
+   "gleif": "second-12",
+   "seconds": 7.6
+  },
+  {
+   "gleif": "second-13",
+   "seconds": 8.3
+  },
+  {
+   "gleif": "second-14",
+   "seconds": 9.6
+  },
+  {
+   "gleif": "second-15",
+   "seconds": 7.8
+  },
+  {
+   "gleif": "second-16",
+   "seconds": 7.9
+  },
+  {
+   "gleif": "second-17",
+   "seconds": 8.0
+  },
+  {
+   "gleif": "second-18",
+   "seconds": 8.4
+  },
+  {
+   "gleif": "second-19",
+   "seconds": 7.0
+  },
+  {
+   "links": "second-1",
+   "seconds": 6.6
+  },
+  {
+   "links": "second-2",
+   "seconds": 6.4
+  }
+ ]
+}

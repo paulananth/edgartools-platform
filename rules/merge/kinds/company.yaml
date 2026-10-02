@@ -11,6 +11,9 @@ defaults:
   sources:
   - sec.submissions.company.v1
   - gleif.level1.v1
+  # GLEIF's accounting-parent links (platform validation 06a); it maps no
+  # fields, so it fills none.
+  - gleif.relationships.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate

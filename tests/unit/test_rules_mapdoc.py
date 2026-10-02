@@ -126,6 +126,10 @@ def test_the_sheets_say_what_the_rules_say():
     assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in kind["Who wins each field"]
     assert len(kind["Classification"]) == 15  # the 14 steps of sec-company-candidate
+    # Platform validation 06a: a GLEIF link starts at its child's Level 1 record.
+    links = [row[2:5] for row in found["gleif"]["Fields"] if row[0] == "gleif.relationships.v1"]
+    assert ["from", "start", "Link from gleif.level1.v1"] in links
+    assert ["to", "end", "Link to gleif.level1.v1"] in links
 
 
 def test_every_quality_test_and_fix_has_plain_words():

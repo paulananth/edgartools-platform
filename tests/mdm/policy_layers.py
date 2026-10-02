@@ -36,6 +36,15 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
+def without_gleif_parent_links(policy: dict) -> dict:
+    """Platform validation 06a: adds GLEIF's relationship file to Company's
+    sources, for its accounting-parent links (it fills no field)."""
+    body = _copy(policy)
+    defaults = body["kinds"]["company"]["defaults"]
+    defaults["sources"] = [s for s in defaults["sources"] if s != "gleif.relationships.v1"]
+    return body
+
+
 def without_name_rules_on(policy: dict) -> dict:
     """Company mastering ticket 25: the two name matching rules switched on,
     on the operator's approval ("yes", 2026-09-29 21:04 ET)."""
@@ -78,7 +87,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:

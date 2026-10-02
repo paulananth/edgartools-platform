@@ -151,6 +151,11 @@ mdm:
           type_values:
             IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
             IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
+          # The link starts at the child's Level 1 record, not at this
+          # relationship record (platform validation 06a).
+          source_key:
+          - start
+          source_source: gleif.level1.v1
           target_key:
           - end
           target_source: gleif.level1.v1
