@@ -1,6 +1,6 @@
 # Bookkeeping without loader dependencies
 
-Owner: Codex. Status: in progress. Claude has no assignment.
+Owner: Codex. Status: complete (design only). Claude has no assignment.
 Branch: `codex/bookkeeping-loader-independent-design-20261002`.
 Base: `417147e8` (main, PR #784; fetched 2026-10-02 10:47 ET).
 
@@ -16,7 +16,9 @@ Codex owns this work; assign Claude work only on an explicit operator instructio
 - [x] Record a loader-independent task protocol, authority ownership and failure/recovery behavior, grounded in the current implementation — design traces CLI/callback/runner/verification/Journal coupling and defines external execution and verification, immutable task bindings and fenced recovery; 2026-10-02 10:51 ET.
 - [x] Remove the active Claude implementation assignment and update research recommendations to prioritize control decoupling — former handoff renamed to Codex implementation notes, prior ticket marks assignment withdrawn, parsing report links the control design first; 2026-10-02 10:51 ET.
 - [x] Verify design references and acceptance criteria; distinguish design validation from runtime tests — 16 local links/anchors resolve; interface/recovery/acceptance/ownership sections checked; git diff --check passes, runtime qualification explicitly unperformed; 2026-10-02 10:51 ET.
-- [ ] Commit and push the design and ownership correction; open and verify a review PR.
+- [x] Commit and push the design and ownership correction; open and verify a review PR — d8497872 pushed; gh pr view confirms PR #785 open against main with matching head; 2026-10-02 10:52 ET.
+
+PR: https://github.com/paulananth/edgartools-platform/pull/785
 
 ## Scope
 
