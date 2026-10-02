@@ -84,6 +84,31 @@ jobs:
       - name: Run integration tests
         run: uv run pytest tests/integration/ -v --tb=short
 
+  # ── The configured source engine: Rust behind Python (mastering to-do 15) ──
+  # Only this job builds the binding (the `engine` extra), so the others do
+  # not compile Rust. The runner image ships cargo.
+  engine:
+    name: Engine (Rust behind Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Run Rust acceptance tests
+        run: cargo test --locked --manifest-path crates/source-contract/Cargo.toml
+
+      - name: Install dependencies with the engine
+        run: uv sync --frozen --extra mdm --extra engine
+
+      - name: Run engine tests
+        run: uv run --frozen --extra mdm --extra engine pytest tests/engine/ -v --tb=short
+
   # ── Infra script lint (bash -n syntax check) ──────────────────────────────
   shellcheck:
     name: Shell script lint
@@ -102,7 +127,7 @@ jobs:
   ci-gate:
     name: CI gate
     if: always()
-    needs: [unit, mdm, integration, shellcheck]
+    needs: [unit, mdm, integration, engine, shellcheck]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs passed
@@ -111,6 +136,7 @@ jobs:
             "${{ needs.unit.result }}" \
             "${{ needs.mdm.result }}" \
             "${{ needs.integration.result }}" \
+            "${{ needs.engine.result }}" \
             "${{ needs.shellcheck.result }}" \
           )
           for r in "${results[@]}"; do

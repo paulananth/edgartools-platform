@@ -8,7 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use source_contract::{blank_missing_token, Engine};
+use source_contract::{blank_missing_token, Engine, Lookups, Step, Steps};
 
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
@@ -20,8 +20,10 @@ fn main() -> ExitCode {
         eprintln!("usage: source-contract <contract.yaml> <artifact>");
         return ExitCode::from(2);
     };
-    let engine = match Engine::load(PathBuf::from(&contract).as_path()) {
-        Ok(engine) => engine.with_step("blank_missing_token@1", blank_missing_token),
+    let mut steps = Steps::new();
+    steps.insert("blank_missing_token@1".into(), Box::new(blank_missing_token) as Step);
+    let engine = match Engine::load(PathBuf::from(&contract).as_path(), steps) {
+        Ok(engine) => engine,
         Err(err) => {
             eprintln!("contract: {err}");
             return ExitCode::from(1);
@@ -34,11 +36,12 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    match engine.parse(&bytes) {
-        Ok(tables) => {
-            for (name, rows) in tables {
+    match engine.read(&bytes, &Lookups::new()) {
+        Ok(reading) => {
+            for (name, rows) in reading.tables {
                 println!("{name}\t{}", rows.len());
             }
+            println!("deferred\t{}", reading.deferred.len());
             ExitCode::SUCCESS
         }
         Err(err) => {

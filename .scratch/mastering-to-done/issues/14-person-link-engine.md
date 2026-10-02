@@ -1,7 +1,7 @@
 # The Person link engine
 
 Type: task (code)
-Status: in progress (Claude, branch `claude/mastering-14-person-link-engine`)
+Status: resolved (#796)
 Blocked by: 02
 
 ## Question
@@ -42,4 +42,4 @@ Build it on synthetic records first; the Forms 3/4/5 reader is ticket 10. GoF co
     - the reader sends event dates with a time zone, as GLEIF's does (ticket 10).
 - [ ] ~~The steward's answer to a contradiction: rescind the stated end, or open a new period~~ deferred to ticket 12: it is a new kind of steward decision, which needs the operator's ruling
 - [ ] ~~The omission closer runs only in the monthly reconciliation (spec, "Cadence")~~ deferred to ticket 12: cadence belongs to the switch-on run; the engine closes on every merge
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #796, merged 2026-10-02 13:08 ET (operator: "merge")

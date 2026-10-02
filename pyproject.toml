@@ -68,6 +68,11 @@ mdm-runtime = [
     "pydantic>=2.7.0",
     "boto3>=1.34.0",
 ]
+# The configured source engine: Rust behind Python (mastering to-do 15). A
+# separate extra, so only the jobs and images that read sources build Rust.
+engine = [
+    "source-contract",
+]
 market = [
     "yfinance>=0.2.40",
     "fredapi>=0.5.2",
@@ -115,6 +120,7 @@ filterwarnings = [
 ]
 
 [tool.uv.sources]
+source-contract = { path = "crates/source-contract" }
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [dependency-groups]

@@ -2,12 +2,24 @@
 name = "source-contract"
 version = "0.1.0"
 edition = "2021"
-description = "Read a Source Contract and parse one bronze artifact into rows."
+description = "The configured source engine: read one artifact by its rules-file contract."
+
+[lib]
+crate-type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "source-contract"
 path = "src/main.rs"
 
+[features]
+# Only maturin turns this on (pyproject.toml), so `cargo test` links no Python.
+python = ["dep:pyo3"]
+
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["alloc", "std"] }
+csv = "1"
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py312"], optional = true }
 quick-xml = "0.37"
+serde_json = "1"
 serde_yaml = "0.9"
+zip = { version = "2", default-features = false, features = ["deflate"] }
