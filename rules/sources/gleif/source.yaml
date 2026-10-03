@@ -12,17 +12,8 @@ bookkeeping:
           requires: []
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt]
-      checks: [manifest.hash, work.accounting, journal.delivered, mdm.publication]
-    ingest:
-      steps:
-        - name: merge
-          operation: mdm.ingest
-          requires: []
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt]
-      checks: [manifest.hash, work.accounting, journal.delivered, mdm.publication]
+          checks: [input.hash, output.receipt, mdm.committed]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 bronze:
   family: gleif
 mdm:

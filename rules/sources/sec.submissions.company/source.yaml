@@ -105,12 +105,12 @@ bookkeeping:
         - mdm:company-prepare:{cik}
         checks: [input.hash, output.receipt]
       - name: ingest
-        operation: mdm.ingest
+        operation: mdm.merge
         requires: [prepare_mdm]
         key: '{batch_id}'
         leases:
         - mdm:consumer:{consumer}
-        checks: [input.hash, output.receipt]
+        checks: [input.hash, output.receipt, mdm.committed]
       - name: expand_publish
         operation: company.publish_expand
         requires: [prepare_mdm, ingest]
@@ -124,13 +124,12 @@ bookkeeping:
         key: '{batch_id}:{consumer}'
         leases:
         - mdm:publication:{consumer}
-        checks: [input.hash, output.receipt]
+        checks: [input.hash, output.receipt, mdm.published]
       allow_zero_work: true
       checks:
       - manifest.hash
       - work.accounting
       - journal.delivered
-      - mdm.publication
     capture:
       steps:
         - name: capture
@@ -147,17 +146,8 @@ bookkeeping:
           requires: []
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt]
-      checks: [manifest.hash, work.accounting, journal.delivered, mdm.publication]
-    ingest:
-      steps:
-        - name: merge
-          operation: mdm.ingest
-          requires: []
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt]
-      checks: [manifest.hash, work.accounting, journal.delivered, mdm.publication]
+          checks: [input.hash, output.receipt, mdm.committed]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 bronze:
   family: submissions
 mdm:

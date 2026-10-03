@@ -38,7 +38,8 @@ reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
 | 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, a candidate outside its intended output, forged or missing checks, conflicting reports, stale or missing fencing and unreported completion are refused (`test_admission_refuses_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). A run freezes each step's profile; only that profile's worker role claims and reports its work, only its verifier role verifies and completes it, never the login that reported it, and the verifier's runtime is pinned with the completion (`test_only_a_profiles_roles_*`, `test_a_verifier_runtime_*`) |
 | 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage, a changed runtime, resource checkpoints across runs, and a report whose lease lapsed before verification (the verifier re-takes it; no worker repeats it) are covered. A lease lapsing while a verifier runs refuses the late admission and a fresh verification completes the unit (`test_a_lease_lapsing_*`). Destination re-verification on resume waits for the first mutable destination, MDM (20e) |
 
-Company, Person and MDM have no worker yet (to-do 20c, 20d and 20e). Report
+MDM has its workers (`mdm.merge`, `mdm.publish`, to-do 20e). Company and
+Person have none yet (to-do 20c and 20d, now to-do 21's read blocks). Report
 their execution as unsupported; never add a callback back into control.
 
 ## Audit and qualification

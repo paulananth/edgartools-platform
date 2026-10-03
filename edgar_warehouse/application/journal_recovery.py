@@ -6,77 +6,32 @@ import json
 
 
 def _handle(args):
+    """Deliver Bookkeeping's own pending control events for one run.
+
+    MDM's publications are not recovered here: rerunning the run's
+    `mdm.publish` worker delivers them under the run's lease (to-do 20e).
+    """
     from sqlalchemy.exc import DBAPIError
+    from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
     from edgar_warehouse.change_journal.store import ChangeJournal, get_engine
 
     engine = get_engine()
-    journal = ChangeJournal(engine)
+    book = configured_bookkeeping()
     try:
-        if args.owner == "bookkeeping":
-            from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
-
-            book = configured_bookkeeping()
-            try:
-                # Delivery only; recovery never silently executes provider work.
-                delivered = None
-                error = None
-                try:
-                    delivered = book.deliver(journal, args.run_id, limit=args.limit)
-                except (ConnectionError, DBAPIError, ValueError) as exc:
-                    error = type(exc).__name__
-                status = book.status(args.run_id, limit=args.limit)
-                result = {
-                    "delivered": delivered,
-                    "status": status,
-                    "delivery_error": error,
-                }
-                result["pending_deliveries"] = result["status"][
-                    "pending_deliveries"
-                ]
-            finally:
-                book.close()
-        else:
-            from edgar_warehouse.mdm.clean.cli import engine_from_env
-            from edgar_warehouse.mdm.clean.store import Store
-
-            from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
-
-            mdm = engine_from_env("MDM_DATABASE_URL")
-            from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
-
-            book = configured_bookkeeping()
-            try:
-                store = Store(mdm)
-                publisher = JournalPublisher(journal, mdm, book)
-                publisher.validate_batch(args.batch_id)
-                delivered = 0
-                # A specific batch retains the owning publication fence and
-                # original key. Never enumerate or redirect legacy backlog.
-                if store.deliver_one(
-                    "journal", args.worker, publisher, batch_id=args.batch_id
-                ):
-                    delivered = 1
-                with mdm.connect() as conn:
-                    from sqlalchemy import text
-
-                    pending = conn.scalar(
-                        text(
-                            "SELECT count(*) FROM mdm.outbox WHERE batch_id=:b AND consumer='journal' AND verified_at IS NULL"
-                        ),
-                        {"b": args.batch_id},
-                    )
-                result = {
-                    "delivered": delivered,
-                    "batch_id": args.batch_id,
-                    "pending_deliveries": pending,
-                }
-            finally:
-                book.close()
-                mdm.dispose()
+        # Delivery only; recovery never silently executes provider work.
+        delivered, error = None, None
+        try:
+            delivered = book.deliver(ChangeJournal(engine), args.run_id, limit=args.limit)
+        except (ConnectionError, DBAPIError, ValueError) as exc:
+            error = type(exc).__name__
+        status = book.status(args.run_id, limit=args.limit)
+        result = {"delivered": delivered, "status": status, "delivery_error": error,
+                  "pending_deliveries": status["pending_deliveries"]}
     finally:
+        book.close()
         engine.dispose()
     print(json.dumps(result, default=str, sort_keys=True, indent=2))
-    return 3 if result["pending_deliveries"] or result.get("delivery_error") else 0
+    return 3 if result["pending_deliveries"] or result["delivery_error"] else 0
 
 
 def register(subparsers):
@@ -89,7 +44,3 @@ def register(subparsers):
     book.add_argument("run_id")
     book.add_argument("--limit", type=int, default=100)
     book.set_defaults(handler=_handle)
-    mdm = owners.add_parser("mdm")
-    mdm.add_argument("batch_id")
-    mdm.add_argument("--worker", required=True)
-    mdm.set_defaults(handler=_handle)

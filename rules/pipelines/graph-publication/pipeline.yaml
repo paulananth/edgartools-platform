@@ -16,5 +16,5 @@ bookkeeping:
           requires: []
           key: "{batch_id}:{consumer}"
           leases: ["mdm:publication:{consumer}"]
-          checks: [input.hash, output.receipt]
+          checks: [input.hash, output.receipt, mdm.published]
       checks: [manifest.hash, work.accounting, journal.delivered]

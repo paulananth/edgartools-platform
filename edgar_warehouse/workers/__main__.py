@@ -27,10 +27,15 @@ def runtime(module) -> str:
 
 
 class Renewal:
-    """Keep the lease alive while the work runs; stop before reporting."""
+    """Keep the lease alive while the work runs; stop before reporting.
+
+    The renewed proof is also written into the envelope the work holds
+    (`claim.proof`), so a destination that fences its own transaction with it
+    (MDM, `bookkeeping_guard`) always checks the current lease.
+    """
 
     def __init__(self, envelope: dict):
-        self.envelope, self.error = envelope, None
+        self.envelope, self.error, self.live = envelope, None, envelope
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -38,6 +43,7 @@ class Renewal:
         while not self.stop.wait(self.envelope["heartbeat_seconds"]):
             try:
                 self.envelope = control.renew(self.envelope)
+                self.live["claim"] = {**self.live["claim"], "proof": self.envelope["claim"]["proof"]}
             except Exception as exc:  # the report then fails on the stale lease
                 self.error = exc
                 return
