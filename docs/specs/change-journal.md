@@ -164,7 +164,7 @@ Configured Rules submission supports an exact `--feed` binding. Install the
 shared source/feed skill with `bash skills/change-journal/link.sh` (or a
 temporary `--home` for installation tests). Both runtimes use one skill file.
 
-Producer workflow qualification in `skills/bookkeeping/scripts/journal_evidence.py`
+Producer workflow qualification in `edgar-warehouse plan workflow`
 reads back the actual completed validation root, exact frozen
 submission, verified work counts, checks, zero delivery backlog and journal
 receipts. An edited validation report cannot replace that authority. When

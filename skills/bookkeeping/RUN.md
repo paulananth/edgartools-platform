@@ -37,13 +37,13 @@ Submit the selected source/feed's manifest, then run each step's worker and
 verifier, in step order, and finish the run:
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse rules run \
+edgar-warehouse rules run \
   --source "$RULES_SOURCE_NAME" --feed "$SOURCE_FEED" --target "$BOOKKEEPING_TARGET" \
   --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256"
-uv run --extra mdm --extra s3 python -m edgar_warehouse.workers work <profile> "$RUN_ID" --limit 100
-uv run --extra mdm --extra s3 python -m edgar_warehouse.workers verify <profile> "$RUN_ID" \
+edgar-warehouse workers work <profile> "$RUN_ID" --limit 100
+edgar-warehouse workers verify <profile> "$RUN_ID" \
   --reports "$REPORT_ROOT_URI" --limit 100
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping finalize "$RUN_ID"
+edgar-warehouse bookkeeping finalize "$RUN_ID"
 ```
 
 Feed is bound by the validated frozen worklist, source-input dataset/

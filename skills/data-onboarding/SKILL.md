@@ -64,9 +64,8 @@ Every step says what differs for each target.
 
 ## How to run commands
 
-- From the repository root:
-  `uv run --extra mdm edgar-warehouse rules <command> …`. The CLI takes
-  from half a minute to three minutes to start; that is not a hang.
+- `edgar-warehouse rules <command> …`. `edgar-warehouse` is the installed data skill bundle (see the **data-platform** skill, Setup). In a checkout of the repository, put `uv run --extra mdm --extra s3` in front of it instead. Run `edgar-warehouse doctor`
+  first. The CLI takes from half a minute to three minutes to start; that is not a hang.
 - Never run `python -m edgar_warehouse.cli`. It prints nothing and exits 0,
   so a missing command looks like success.
 - Read rules files only through `edgar_warehouse.rules.files` (`load`,
@@ -114,7 +113,7 @@ approve → switch-on**. Set up the Rules Database first if it is not there
 ### init: create the Rules Database schema
 
 ```bash
-uv run --extra mdm edgar-warehouse rules init
+edgar-warehouse rules init
 ```
 
 - **Needs:** `RULES_MIGRATION_DATABASE_URL`, the owner's login.
@@ -128,7 +127,7 @@ uv run --extra mdm edgar-warehouse rules init
 ### migrate: upgrade the Rules Database schema
 
 ```bash
-uv run --extra mdm edgar-warehouse rules migrate
+edgar-warehouse rules migrate
 ```
 
 This is the same as **init**, run again after a new migration file lands.
@@ -154,7 +153,7 @@ never unload over the repo's `rules/`.
      rules) **but it has no rules file:** carry on here, and keep every name
      the repo uses.
 3. Check registration:
-   `uv run --extra mdm edgar-warehouse rules status --source <name>`.
+   `edgar-warehouse rules status --source <name>`.
    - An empty list `[]` means it is not registered.
    - `KeyError: 'RULES_DATABASE_URL'` means no database is configured. Log
      it and go on; registration is only needed at **test**.
@@ -369,7 +368,7 @@ fix for each from REFERENCE.md, "Data quality":
 
 1. Generate the Mapping Document:
    ```bash
-   uv run --extra mdm edgar-warehouse rules mapdoc write --only <source>
+   edgar-warehouse rules mapdoc write --only <source>
    ```
    For a new kind, run it again with `--only <kind>`. It writes
    `MAPPING.xlsx`, and its Notes sheet starts with your comments.
@@ -377,14 +376,14 @@ fix for each from REFERENCE.md, "Data quality":
    through **refining-rules** ("change-mapping"), and repeat until they
    agree it. Only an agreed mapping goes on to **test**.
 3. Check that it matches the rules:
-   `uv run --extra mdm edgar-warehouse rules mapdoc check`. It succeeds
+   `edgar-warehouse rules mapdoc check`. It succeeds
    silently, with exit 0. A difference fails it, and CI too. Commit the
    workbook with the rules.
 4. Before the PR, see what would be published:
-   `uv run --extra mdm edgar-warehouse rules catalog plan`. This runs
+   `edgar-warehouse rules catalog plan`. This runs
    offline.
 5. After the PR is merged, publish to the catalog:
-   `uv run --extra mdm edgar-warehouse rules catalog publish`. It needs
+   `edgar-warehouse rules catalog publish`. It needs
    `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`. Never print the token. If
    no catalog server is reachable, say so; do not skip it silently.
 
@@ -465,8 +464,8 @@ fix for each from REFERENCE.md, "Data quality":
      e.g. `sec.submissions.person-2026-09-30.first`.
 4. **Save and record the test run:**
    ```bash
-   uv run --extra mdm edgar-warehouse rules save --source <name> --version <v> rules/sources/<source>/source.yaml
-   uv run --extra mdm edgar-warehouse rules record-proof --source <name> --version <v> --proof-uri <uri> --proof-sha256 <sha256>
+   edgar-warehouse rules save --source <name> --version <v> rules/sources/<source>/source.yaml
+   edgar-warehouse rules record-proof --source <name> --version <v> --proof-uri <uri> --proof-sha256 <sha256>
    ```
    The proof names:
    - the version's `digest`;
@@ -479,8 +478,8 @@ fix for each from REFERENCE.md, "Data quality":
    The merge rules are one document, `platform`, saved whole from
    `rules/merge/policy.yaml` (the kind files beside it come too):
    ```bash
-   uv run --extra mdm edgar-warehouse rules save --merge platform --version <v> rules/merge/policy.yaml
-   uv run --extra mdm edgar-warehouse rules record-proof --merge platform --version <v> --proof-uri <uri> --proof-sha256 <sha256>
+   edgar-warehouse rules save --merge platform --version <v> rules/merge/policy.yaml
+   edgar-warehouse rules record-proof --merge platform --version <v> --proof-uri <uri> --proof-sha256 <sha256>
    ```
 
 **A new domain: the order of approvals.** Each step needs the one before it:

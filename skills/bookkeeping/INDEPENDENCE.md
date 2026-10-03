@@ -29,7 +29,7 @@ acquisition and source-evidence callbacks and the Journal branches on operation
 names are deleted. Control now hands out task envelopes and admits verifier
 reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
 `fail`, `finalize`); workers run as their own processes
-(`python -m edgar_warehouse.workers`).
+(`edgar-warehouse workers`).
 
 | Gate | State |
 | --- | --- |

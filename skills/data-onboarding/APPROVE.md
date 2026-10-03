@@ -15,7 +15,7 @@ one (operator, 2026-09-29).
 
 1. **List what waits.**
    ```bash
-   uv run --extra mdm edgar-warehouse rules pending
+   edgar-warehouse rules pending
    ```
    Needs `RULES_DATABASE_URL` (the `rules_agent` login). For each version
    that has a test run and no approval, it prints:
@@ -34,7 +34,7 @@ one (operator, 2026-09-29).
 3. **Wait for their words.** Record only an approval they gave, for that
    version:
    ```bash
-   uv run --extra mdm edgar-warehouse rules approve --source <name> \
+   edgar-warehouse rules approve --source <name> \
      --version <v> --evidence <evidence_hash> \
      --by "<their name>" --words "<their exact words>"
    ```
@@ -63,7 +63,7 @@ in `rules/merge/pending-proofs.yaml`:
    sample, how many were right, and the adversarial pairs.
 2. Wait for their words, then:
    ```bash
-   uv run --extra mdm edgar-warehouse rules approve --merge platform \
+   edgar-warehouse rules approve --merge platform \
      --rule <rule_id> --by "<their name>" --words "<their exact words>"
    ```
    It adds the rule to `rules/merge/policy.yaml` with its proof and the
@@ -77,7 +77,7 @@ in `rules/merge/pending-proofs.yaml`:
 ## Switch on (activate)
 
 ```bash
-uv run --extra mdm edgar-warehouse rules activate --source <name> --version <v>
+edgar-warehouse rules activate --source <name> --version <v>
 ```
 
 Use `--merge <name>` for merge rules. It needs `RULES_DATABASE_URL` and

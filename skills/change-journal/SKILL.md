@@ -36,7 +36,7 @@ Use the independent wheel in a dedicated virtual environment as described in
 [INDEPENDENCE.md](INDEPENDENCE.md). For repository development, the same CLI is:
 
 ```bash
-uv run python -m edgar_warehouse.change_journal.cli --help
+edgar-warehouse change-journal --help
 ```
 
 This CLI exposes only init, migrate, status, events and verify. Existing
@@ -54,8 +54,8 @@ Use `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` for the migration owner and
 Neither falls back to Bookkeeping, legacy ledger, Rules or MDM connections.
 
 ```bash
-uv run python -m edgar_warehouse.change_journal.cli init --runtime-role <role>
-uv run python -m edgar_warehouse.change_journal.cli migrate --runtime-role <role>
+edgar-warehouse change-journal init --runtime-role <role>
+edgar-warehouse change-journal migrate --runtime-role <role>
 ```
 
 Select the command matching store state. Read back migration checksums, the sole
@@ -72,8 +72,8 @@ Use bounded retained envelopes or fixtures. Plan mode performs no provider
 request, Rules approval, Bookkeeping execution or live event append.
 
 Producer workflow planning is outside the journal. The existing pipeline-evidence
-helper now belongs to `skills/bookkeeping/scripts/journal_evidence.py` and
-`edgar_warehouse.application.journal_evidence`; it is not a journal operation or
+helper is now `edgar-warehouse plan workflow` (in
+`edgar_warehouse.application.journal_evidence`); it is not a journal operation or
 proof that Bookkeeping itself is decoupled. Use it only for an explicitly
 requested producer workflow under that workflow's authorization and qualification.
 
@@ -110,9 +110,9 @@ An existing approval/authorization remains effective within its original scope.
 ## Status
 
 ```bash
-uv run python -m edgar_warehouse.change_journal.cli status --source <source> --feed <feed>
-uv run python -m edgar_warehouse.change_journal.cli events --run-id <root> --limit 20
-uv run python -m edgar_warehouse.change_journal.cli verify <receipt.json>
+edgar-warehouse change-journal status --source <source> --feed <feed>
+edgar-warehouse change-journal events --run-id <root> --limit 20
+edgar-warehouse change-journal verify <receipt.json>
 ```
 
 Source/feed filters are optional. Event-id inspection cursors are not completion
@@ -129,8 +129,8 @@ conflicting content or corrupt evidence must leave intent pending.
 Existing application-composed delivery routes are:
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse change-journal recover bookkeeping <run-id> --limit <bound>
-uv run --extra mdm --extra s3 edgar-warehouse change-journal recover mdm <batch-id> --worker <worker>
+edgar-warehouse change-journal recover bookkeeping <run-id> --limit <bound>
+edgar-warehouse change-journal recover mdm <batch-id> --worker <worker>
 ```
 
 These execute owner recovery in `application.journal_recovery`, outside the

@@ -65,7 +65,7 @@ PR.
 
 1. List the changes:
    ```bash
-   uv run --extra mdm edgar-warehouse rules mapdoc diff --only <source or kind>
+   edgar-warehouse rules mapdoc diff --only <source or kind>
    ```
    It prints each changed cell: the sheet, row and column, what the rules
    say, and what the workbook says. A spreadsheet does not show its changes

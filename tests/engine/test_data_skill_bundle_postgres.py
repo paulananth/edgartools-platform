@@ -18,9 +18,12 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from collections import Counter
+from uuid import uuid4
 
 import pytest
+
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.rules import files
@@ -120,11 +123,33 @@ print(json.dumps(bundle.unresolved(cli.build_parser(), root)))
     assert json.loads(probe.stdout) == ["data-onboarding/SKILL.md: edgar-warehouse rules invent"]
 
 
-def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(installed, databases, tmp_path):
+@pytest.fixture
+def empty_rules_database():
+    """A PG16 server of its own: the Rules Database must be named `rules`."""
+    name = f"bundle-rules-{uuid4().hex[:10]}"
+    subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "-p", "127.0.0.1::5432",
+                    "-e", "POSTGRES_PASSWORD=test", "postgres:16-alpine"], capture_output=True, check=True)
+    try:
+        for _ in range(300):
+            if subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-c", "SELECT 1"],
+                              capture_output=True).returncode == 0:
+                break
+            time.sleep(0.1)
+        sql = ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'; CREATE ROLE rules_approver NOLOGIN; "
+               "CREATE DATABASE rules;")
+        for statement in sql.split(";")[:-1]:
+            subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-c", statement],
+                           capture_output=True, check=True)
+        port = subprocess.run(["docker", "port", name, "5432/tcp"], capture_output=True, text=True,
+                              check=True).stdout.strip().rsplit(":", 1)[1]
+        yield f"postgresql://postgres:test@127.0.0.1:{port}/rules"
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+
+def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(installed, empty_rules_database, tmp_path):
     python, root = installed
-    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.exec_driver_sql("CREATE DATABASE rules_bundle")
-    url = databases.admin.url.set(database="rules_bundle").render_as_string(hide_password=False)
+    url = empty_rules_database
     env = {"RULES_MIGRATION_DATABASE_URL": url, "RULES_DATABASE_URL": url}
     cli = lambda *a: _run(python, "-m", "edgar_warehouse.cli", *a, env=env, cwd=root)
     folder = tmp_path / "rules"

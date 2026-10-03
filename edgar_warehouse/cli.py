@@ -110,6 +110,9 @@ def build_parser() -> argparse.ArgumentParser:
     register_bookkeeping(subparsers)
     register_rules(subparsers)
     register_journal(subparsers)
+    from edgar_warehouse.workers.__main__ import arguments as worker_arguments
+
+    worker_arguments(subparsers.add_parser("workers", help="Run a worker or a verifier for one profile and run"))
     from edgar_warehouse.bundle import register as register_bundle
 
     register_bundle(subparsers, parser)
