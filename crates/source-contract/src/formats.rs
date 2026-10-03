@@ -18,7 +18,7 @@ fn from_json(value: serde_json::Value) -> El {
         Value::Number(n) => El::scalar(Some(n.to_string())),
         Value::String(s) => El::scalar(Some(s)),
         Value::Array(items) => {
-            let mut el = El::default();
+            let mut el = El { array: true, ..El::default() };
             el.children.insert("item".into(), Child::Many(items.into_iter().map(from_json).collect()));
             el
         }

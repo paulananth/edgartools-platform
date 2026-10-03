@@ -11,6 +11,8 @@ pub struct El {
     pub children: BTreeMap<String, Child>,
     /// A JSON scalar or a CSV cell: a value, not an element holding one.
     pub scalar: bool,
+    /// A JSON array at this node, distinct from an object with an `item` key.
+    pub array: bool,
 }
 
 #[derive(Clone, Debug)]

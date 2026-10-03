@@ -17,6 +17,7 @@
 //! into memory up to those limits: records are not streamed.
 
 mod formats;
+mod parallel;
 #[cfg(feature = "python")]
 mod python;
 mod tree;
@@ -151,7 +152,13 @@ impl Engine {
         let tables = self.read.get("tables").and_then(Value::as_mapping).into_iter().flatten();
         for (name, table) in tables {
             let name = name.as_str().unwrap_or_default().to_string();
-            let items = items_of(&document, setting(table, "each").unwrap_or("."))?;
+            let expanded;
+            let items = if table.get("each").is_some_and(|each| each.is_mapping()) {
+                expanded = parallel::rows(&document, &table["each"], self.limits.max_records)?;
+                expanded.iter().collect::<Vec<_>>()
+            } else {
+                items_of(&document, setting(table, "each").unwrap_or("."))?
+            };
             if items.len() > self.limits.max_records {
                 return Err(Rejected::new("limit_exceeded", format!("{name} has more than {} records", self.limits.max_records)));
             }
@@ -273,8 +280,12 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
         }
     }
     for (name, table) in tables {
-        if table.get("each").is_some_and(|value| value.as_str().is_none()) {
-            return Err("table.each must be text".into());
+        if let Some(each) = table.get("each") {
+            if each.is_mapping() {
+                parallel::validate(each, format)?;
+            } else if each.as_str().is_none() {
+                return Err("table.each must be text or one parallel call".into());
+            }
         }
         if table.get("checks").is_some_and(|value| value.as_sequence().is_none()) {
             return Err("table.checks must be a list".into());
@@ -363,6 +374,9 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
                 if values.iter().any(|value| value.as_str().is_none()) {
                     return Err("text null_if entries must be strings".into());
                 }
+            }
+            if args.get("trim").is_some_and(|value| value.as_bool().is_none()) {
+                return Err("text trim must be a boolean".into());
             }
             if args.get("ignore_case").is_some_and(|value| value.as_bool().is_none()) {
                 return Err("text ignore_case must be a boolean".into());
@@ -638,16 +652,18 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
         "ordinal" => Ok(Val::Int(ordinal)),
         "const" => Ok(yaml_val(args.get("value"))),
         "text" => {
+            let trim = args.get("trim").and_then(Value::as_bool).unwrap_or(true);
             let value = match text_at(scope(document, item, args), args)? {
-                Some(text) => Val::Str(text.trim().to_string()),
+                Some(text) => Val::Str(if trim { text.trim().to_string() } else { text }),
                 None => yaml_val(args.get("default")),
             };
             let Val::Str(text) = &value else { return Ok(value) };
             let Some(null_if) = args.get("null_if").and_then(Value::as_sequence) else { return Ok(value) };
-            let text = text.trim();
+            let text = if trim { text.trim() } else { text.as_str() };
             let ignore_case = args.get("ignore_case").and_then(Value::as_bool).unwrap_or(false);
             let matches = null_if.iter().filter_map(Value::as_str).any(|token| {
-                if ignore_case { text.eq_ignore_ascii_case(token.trim()) } else { text == token.trim() }
+                let token = if trim { token.trim() } else { token };
+                if ignore_case { text.eq_ignore_ascii_case(token) } else { text == token }
             });
             Ok(if matches { Val::Null } else { Val::Str(text.to_string()) })
         }
