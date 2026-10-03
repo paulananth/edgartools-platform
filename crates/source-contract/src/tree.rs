@@ -4,6 +4,14 @@
 
 use std::collections::BTreeMap;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ScalarKind {
+    #[default]
+    Text,
+    Number,
+    Boolean,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct El {
     pub text: Option<String>,
@@ -11,6 +19,10 @@ pub struct El {
     pub children: BTreeMap<String, Child>,
     /// A JSON scalar or a CSV cell: a value, not an element holding one.
     pub scalar: bool,
+    /// Retain JSON numeric/boolean types for declared integer coercion.
+    pub kind: ScalarKind,
+    /// Original JSON numeric spelling, only for contracts using integer.
+    pub exact_number: Option<String>,
     /// A JSON array at this node, distinct from an object with an `item` key.
     pub array: bool,
 }

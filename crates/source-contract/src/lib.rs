@@ -17,6 +17,7 @@
 //! into memory up to those limits: records are not streamed.
 
 mod formats;
+mod integer;
 mod parallel;
 #[cfg(feature = "python")]
 mod python;
@@ -31,7 +32,7 @@ use std::path::Path;
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde_yaml::Value;
 
-use crate::tree::{Child, El};
+use crate::tree::{Child, El, ScalarKind};
 pub use crate::tree::Raw;
 use crate::xml::{parse_xml, strip_control_chars};
 
@@ -39,6 +40,7 @@ use crate::xml::{parse_xml, strip_control_chars};
 pub enum Val {
     Null,
     Int(i64),
+    Bool(bool),
     Float(f64),
     Str(String),
 }
@@ -86,7 +88,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 7] = ["ordinal", "text", "number", "date", "const", "steps", "custom"];
+const PRIMITIVES: [&str; 8] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -145,7 +147,7 @@ impl Engine {
             match lookup(&document, path)? {
                 Found::Missing => return Err(Rejected::new("missing_required", format!("{path} is missing"))),
                 Found::List(_) => return Err(Rejected::new("repeated_path", format!("{path} is repeated"))),
-                Found::El(_) | Found::Text(_) => {}
+                Found::El(_) | Found::Text(_, _, _) => {}
             }
         }
         let mut reading = Reading::default();
@@ -182,8 +184,8 @@ impl Engine {
     fn document(&self, bytes: &[u8]) -> Result<El, Rejected> {
         let max_records = self.limits.max_records;
         match setting(&self.read, "format").unwrap_or_default() {
-            "json" => formats::json(bytes),
-            "jsonl" => formats::jsonl(bytes, max_records),
+            "json" => formats::json(bytes, uses_integer(&self.read)),
+            "jsonl" => formats::jsonl(bytes, max_records, uses_integer(&self.read)),
             "csv" => formats::csv(bytes, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
@@ -218,7 +220,7 @@ impl Engine {
         }
         let path = setting(rule, "path").unwrap_or_default();
         let stated = match lookup(document, path)? {
-            Found::Text(text) => text.trim().parse::<usize>().ok(),
+            Found::Text(text, _, _) => text.trim().parse::<usize>().ok(),
             _ => None,
         };
         if stated != Some(count) {
@@ -226,6 +228,19 @@ impl Engine {
         }
         Ok(())
     }
+}
+
+/// The precise numeric path is used only by an opted-in integer expression.
+fn uses_integer(read: &Value) -> bool {
+    fn in_expression(expr: &Value) -> bool {
+        if expr.get("integer").is_some() { return true }
+        if expr.get("steps").and_then(Value::as_sequence).is_some_and(|steps| steps.iter().any(in_expression)) { return true }
+        expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping)
+            .is_some_and(|inputs| inputs.values().any(in_expression))
+    }
+    read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|tables| tables.values())
+        .filter_map(|table| table.get("columns").and_then(Value::as_mapping))
+        .any(|columns| columns.values().any(in_expression))
 }
 
 fn setting<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
@@ -385,6 +400,10 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
                 return Err("text ignore_case requires null_if".into());
             }
         }
+        "integer" => {
+            check_path(setting(args, "path").ok_or("integer names no path")?)?;
+            integer::validate(args)?;
+        }
         "number" => check_path(setting(args, "path").ok_or("number names no path")?)?,
         "date" => {
             check_path(setting(args, "path").ok_or("date names no path")?)?;
@@ -440,7 +459,7 @@ impl Record<'_> {
             return self.column(column);
         }
         Ok(match lookup(self.item, setting(check, "path").unwrap_or_default())? {
-            Found::Text(text) => Val::Str(text.trim().to_string()),
+            Found::Text(text, _, _) => Val::Str(text.trim().to_string()),
             Found::Missing => Val::Null,
             Found::El(_) | Found::List(_) => Val::Str(String::new()),
         })
@@ -464,7 +483,7 @@ impl Record<'_> {
                     let found = match lookup(self.item, path)? {
                         Found::Missing => 0,
                         Found::List(rows) => rows.len() as u64,
-                        Found::El(_) | Found::Text(_) => 1,
+                        Found::El(_) | Found::Text(_, _, _) => 1,
                     };
                     (Some(found) != check.get("equals").and_then(Value::as_u64)).then_some("")
                 }
@@ -596,6 +615,7 @@ fn as_text(value: &Val) -> Option<String> {
         Val::Str(text) if text.is_empty() => None,
         Val::Str(text) => Some(text.clone()),
         Val::Int(i) => Some(i.to_string()),
+        Val::Bool(b) => Some(b.to_string()),
         Val::Float(f) if f.fract() == 0.0 && f.abs() < 1e15 => Some(format!("{}", *f as i64)),
         Val::Float(f) => Some(f.to_string()),
     }
@@ -609,7 +629,7 @@ fn items_of<'a>(document: &'a El, each: &str) -> Result<Vec<&'a El>, Rejected> {
         Found::El(el) => Ok(vec![el]),
         Found::List(rows) => Ok(rows),
         Found::Missing => Ok(Vec::new()),
-        Found::Text(_) => Err(Rejected::new("invalid_path", format!("each {each} landed on text"))),
+        Found::Text(_, _, _) => Err(Rejected::new("invalid_path", format!("each {each} landed on text"))),
     }
 }
 
@@ -617,10 +637,16 @@ enum Found<'a> {
     Missing,
     El(&'a El),
     List(Vec<&'a El>),
-    Text(String),
+    Text(String, ScalarKind, Option<&'a str>),
 }
 
 fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
+    lookup_value(start, path, false)
+}
+
+/// Existing text readers treat an empty array as absent. Integer conversion
+/// retains it as a structured value so its explicit invalid policy applies.
+fn lookup_value<'a>(start: &'a El, path: &str, keep_empty_arrays: bool) -> Result<Found<'a>, Rejected> {
     if path == "." {
         return Ok(Found::El(start));
     }
@@ -638,10 +664,10 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
                 ));
             }
             Found::Missing => Found::Missing,
-            Found::Text(_) if key == "$" => current,
-            Found::Text(_) => Found::Missing,
-            Found::El(el) if key == "$" => el.text.clone().map_or(Found::Missing, Found::Text),
-            Found::El(el) if key.starts_with('@') => el.attrs.get(key).cloned().map_or(Found::Missing, Found::Text),
+            Found::Text(_, _, _) if key == "$" => current,
+            Found::Text(_, _, _) => Found::Missing,
+            Found::El(el) if key == "$" => el.text.clone().map_or(Found::Missing, |text| Found::Text(text, el.kind, el.exact_number.as_deref())),
+            Found::El(el) if key.starts_with('@') => el.attrs.get(key).cloned().map_or(Found::Missing, |text| Found::Text(text, ScalarKind::Text, None)),
             Found::El(el) => {
                 let rows: Vec<&El> = match el.children.get(key) {
                     None => Vec::new(),
@@ -653,7 +679,7 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
                     Some((sub, wanted)) => {
                         let mut kept = Vec::new();
                         for row in rows {
-                            if matches!(lookup(row, sub)?, Found::Text(text) if text.trim() == wanted) {
+                            if matches!(lookup(row, sub)?, Found::Text(text, _, _) if text.trim() == wanted) {
                                 kept.push(row);
                             }
                         }
@@ -662,6 +688,7 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
                     None => rows,
                 };
                 match (rows.len(), el.children.get(key), filter) {
+                    (0, Some(Child::Many(_)), None) if keep_empty_arrays => Found::List(rows),
                     (0, _, _) => Found::Missing,
                     (_, Some(Child::Many(_)), None) => Found::List(rows),
                     (1, _, _) => Found::El(rows[0]),
@@ -672,7 +699,7 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
     }
     // A JSON scalar or a CSV cell is its value.
     Ok(match current {
-        Found::El(el) if el.scalar => el.text.clone().map_or(Found::Missing, Found::Text),
+        Found::El(el) if el.scalar => el.text.clone().map_or(Found::Missing, |text| Found::Text(text, el.kind, el.exact_number.as_deref())),
         other => other,
     })
 }
@@ -737,6 +764,11 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
             });
             Ok(if matches { Val::Null } else { Val::Str(text.to_string()) })
         }
+        "integer" => match lookup_value(scope(document, item, args), setting(args, "path").unwrap_or_default(), true)? {
+            Found::Missing => Ok(integer::default(args)),
+            Found::Text(text, kind, exact) => integer::read(exact.unwrap_or(&text), kind, args),
+            _ => integer::invalid(args),
+        },
         "number" => {
             let default = yaml_val(args.get("default"));
             Ok(match text_at(scope(document, item, args), args)? {
@@ -787,7 +819,7 @@ fn text_at(start: &El, args: &Value) -> Result<Option<String>, Rejected> {
     let path = setting(args, "path").unwrap_or_default();
     match lookup(start, path)? {
         Found::Missing => Ok(None),
-        Found::Text(text) => Ok(Some(text)),
+        Found::Text(text, _, _) => Ok(Some(text)),
         Found::El(_) | Found::List(_) => Err(Rejected::new("invalid_path", format!("path {path} does not end at a value"))),
     }
 }

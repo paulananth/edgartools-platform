@@ -278,7 +278,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -326,6 +326,12 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
 """
         filer_bytes = b"".join(json.dumps({**json.loads(line), "released_at": "2026-10-03T08:30:00.123456-04:00"}).encode() + b"\n"
                                for line in FILERS.splitlines())
+    if trial_mode == "integer-records":
+        contract_bytes = contract_bytes.replace(b"cik: { text: { path: cik } }", b"cik: { integer: { path: cik } }")
+        contract_bytes += b"""        is_xbrl: { integer: { path: is_xbrl, as: boolean, default: false, on_invalid: default } }
+"""
+        filer_bytes = b"".join(json.dumps({**json.loads(line), "is_xbrl": flag}).encode() + b"\n"
+                               for line, flag in zip(FILERS.splitlines(), [0.9, True], strict=True))
     if trial_mode == "parallel-records":
         contract_bytes = b"""source: fixture.filers
 execution: { profile: source.read, workers: 1, max_artifacts: 1 }
@@ -384,6 +390,13 @@ read:
         reading = json.loads((out / "reading.json").read_bytes())
         assert [row["release_sequence"] for row in reading["artifacts"][0]["tables"]["filers"]] == [
             epoch_microseconds("2026-10-03T08:30:00.123456-04:00")] * 2
+    if trial_mode == "integer-records":
+        reading = json.loads((out / "reading.json").read_bytes())
+        rows = reading["artifacts"][0]["tables"]["filers"]
+        assert [row["cik"] for row in rows] == [320193, 789019]
+        assert all(type(row["cik"]) is int for row in rows)
+        assert [row["is_xbrl"] for row in rows] == [False, True]
+        assert all(type(row["is_xbrl"]) is bool for row in rows)
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:

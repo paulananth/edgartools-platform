@@ -3,7 +3,7 @@
 
 use std::io::{Cursor, Read};
 
-use crate::tree::{Child, El};
+use crate::tree::{Child, El, ScalarKind};
 use crate::Rejected;
 
 fn malformed(detail: impl ToString) -> Rejected {
@@ -14,8 +14,8 @@ fn from_json(value: serde_json::Value) -> El {
     use serde_json::Value;
     match value {
         Value::Null => El::scalar(None),
-        Value::Bool(b) => El::scalar(Some(b.to_string())),
-        Value::Number(n) => El::scalar(Some(n.to_string())),
+        Value::Bool(b) => El { kind: ScalarKind::Boolean, ..El::scalar(Some(b.to_string())) },
+        Value::Number(n) => El { kind: ScalarKind::Number, ..El::scalar(Some(n.to_string())) },
         Value::String(s) => El::scalar(Some(s)),
         Value::Array(items) => {
             let mut el = El { array: true, ..El::default() };
@@ -43,8 +43,52 @@ fn from_json(value: serde_json::Value) -> El {
     }
 }
 
-pub fn json(bytes: &[u8]) -> Result<El, Rejected> {
-    serde_json::from_slice(bytes).map(from_json).map_err(malformed)
+/// Borrow raw numeric lexemes through serde, without a source-specific parser.
+/// The ordinary Value parse first preserves its nesting/range checks. Raw
+/// child values borrow the bounded input; no nested subtree bytes are copied.
+fn from_raw(raw: &serde_json::value::RawValue) -> Result<El, Rejected> {
+    let text = raw.get();
+    match text.as_bytes()[0] {
+        b'{' => {
+            let map: std::collections::BTreeMap<String, &serde_json::value::RawValue> =
+                serde_json::from_str(text).map_err(malformed)?;
+            let mut el = El::default();
+            for (key, raw) in map {
+                if (key == "$" || key.starts_with('@')) && raw.get().starts_with('"') {
+                    let value = serde_json::from_str(raw.get()).map_err(malformed)?;
+                    if key == "$" { el.text = Some(value) } else { el.attrs.insert(key, value); }
+                } else if raw.get().starts_with('[') {
+                    let items: Vec<&serde_json::value::RawValue> = serde_json::from_str(raw.get()).map_err(malformed)?;
+                    let rows = items.into_iter().map(from_raw).collect::<Result<Vec<_>, _>>()?;
+                    el.children.insert(key, Child::Many(rows));
+                } else { el.add_child(key, from_raw(raw)?); }
+            }
+            Ok(el)
+        }
+        b'[' => {
+            let items: Vec<&serde_json::value::RawValue> = serde_json::from_str(text).map_err(malformed)?;
+            let mut el = El { array: true, ..El::default() };
+            el.children.insert("item".into(), Child::Many(items.into_iter().map(from_raw).collect::<Result<Vec<_>, _>>()?));
+            Ok(el)
+        }
+        _ => {
+            let mut el = from_json(serde_json::from_str(text).map_err(malformed)?);
+            if el.kind == ScalarKind::Number { el.exact_number = Some(text.to_string()); }
+            Ok(el)
+        }
+    }
+}
+
+pub fn json(bytes: &[u8], exact_numbers: bool) -> Result<El, Rejected> {
+    if exact_numbers {
+        // Validate with the existing parser before recursively borrowing raw
+        // values: finite-number and nesting constraints remain unchanged.
+        serde_json::from_slice::<serde_json::Value>(bytes).map_err(malformed)?;
+        let raw: &serde_json::value::RawValue = serde_json::from_slice(bytes).map_err(malformed)?;
+        from_raw(raw)
+    } else {
+        serde_json::from_slice(bytes).map(from_json).map_err(malformed)
+    }
 }
 
 fn records(rows: Vec<El>) -> El {
@@ -53,7 +97,7 @@ fn records(rows: Vec<El>) -> El {
     el
 }
 
-pub fn jsonl(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
+pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool) -> Result<El, Rejected> {
     let mut rows = Vec::new();
     for line in bytes.split(|b| *b == b'\n') {
         if line.iter().all(u8::is_ascii_whitespace) {
@@ -62,7 +106,7 @@ pub fn jsonl(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
         if rows.len() == max_records {
             return Err(Rejected::new("limit_exceeded", format!("more than {max_records} records")));
         }
-        rows.push(json(line)?);
+        rows.push(json(line, exact_numbers)?);
     }
     Ok(records(rows))
 }
