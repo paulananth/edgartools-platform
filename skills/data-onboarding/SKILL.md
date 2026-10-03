@@ -5,6 +5,10 @@ description: Bring a NEW data feed or a NEW domain (for example Person) into Cle
 
 # Data Onboarding
 
+> Part of the **data-platform** skill, installed as one package with its
+> commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
+> and for the whole flow; this skill holds one step's detail.
+
 Brings something **new** into Clean MDM (and silver): a feed with no rules
 file yet, or a domain (a kind such as Person) with no merge rules yet.
 

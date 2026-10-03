@@ -5,6 +5,10 @@ description: Initialize or migrate the independent Change Journal, plan or valid
 
 # Change Journal
 
+> Part of the **data-platform** skill, installed as one package with its
+> commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
+> and for the whole flow; this skill holds one step's detail.
+
 **Modes:** init, migrate, plan, validate, deploy, status, recover-delivery.
 The journal records immutable events and verifies durable delivery. It owns no
 loader, acquisition policy, work scheduler, business verifier or producer outbox.

@@ -1,8 +1,9 @@
 """The data skill installed whole, from a git ref, with no checkout (mastering to-do 21).
 
 The four wheels (the bundle, Bookkeeping, the Change Journal and the engine)
-are installed from this repository's committed HEAD by URL into a clean
-environment, the way an agent with no checkout installs them. Every command
+are installed from this repository's committed HEAD by URL with the
+`uv tool install` command the data-platform skill's Setup writes, the way an
+agent with no checkout installs them. Every command
 then runs from that installation, in isolated mode, from a folder outside
 the repository, so nothing here can stand in for a missing file.
 
@@ -41,15 +42,22 @@ DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-pyt
 
 @pytest.fixture(scope="module")
 def installed(tmp_path_factory):
+    """The install command data-platform's Setup writes, word for word, from this commit."""
     assert shutil.which("uv") and shutil.which("cargo"), "The bundle install needs uv and cargo"
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
                           check=True).stdout.strip()
     root = tmp_path_factory.mktemp("bundle")
-    subprocess.run(["uv", "venv", "--python", sys.executable, str(root / "venv")], capture_output=True, check=True)
-    python = root / "venv" / "bin" / "python"
-    refs = [f"{name} @ git+file://{ROOT}@{head}#subdirectory={folder}" for name, folder in WHEELS.items()]
-    done = subprocess.run(["uv", "pip", "install", "--python", str(python), *refs], capture_output=True, text=True)
+    repo = f"git+file://{ROOT}@{head}"
+    first, *others = [f"{name} @ {repo}#subdirectory={folder}" for name, folder in WHEELS.items()]
+    command = ["uv", "tool", "install", "--python", "3.12", first, *(a for o in others for a in ("--with", o))]
+    setup = (ROOT / "skills/data-platform/SKILL.md").read_text()
+    for name, folder in WHEELS.items():
+        assert f"{name} @ $REPO#subdirectory={folder}" in setup, f"Setup no longer installs {name}"
+    env = {**os.environ, "UV_TOOL_DIR": str(root / "tools"), "UV_TOOL_BIN_DIR": str(root / "bin")}
+    done = subprocess.run(command, capture_output=True, text=True, env=env)
     assert done.returncode == 0, done.stderr
+    python = root / "tools" / "edgartools-data" / "bin" / "python"
+    assert (root / "bin" / "edgar-warehouse").is_file() and python.is_file()
     return python, root
 
 

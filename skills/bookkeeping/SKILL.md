@@ -5,6 +5,10 @@ description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect 
 
 # Bookkeeping
 
+> Part of the **data-platform** skill, installed as one package with its
+> commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
+> and for the whole flow; this skill holds one step's detail.
+
 **Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
 owns work control and verified completion. Workers, each in its own process,
 own the work itself. `edgar-warehouse rules run` submits the approved versions;
