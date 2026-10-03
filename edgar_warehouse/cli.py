@@ -110,6 +110,9 @@ def build_parser() -> argparse.ArgumentParser:
     register_bookkeeping(subparsers)
     register_rules(subparsers)
     register_journal(subparsers)
+    from edgar_warehouse.bundle import register as register_bundle
+
+    register_bundle(subparsers, parser)
     return parser
 
 

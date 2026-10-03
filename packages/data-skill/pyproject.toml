@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.26.3"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edgartools-data"
+version = "0.1.0"
+description = "The data skill, installed whole: rules creator, configured engine, workers, Bookkeeping, Change Journal and Clean MDM, with the skills themselves"
+requires-python = ">=3.12"
+# Mastering to-do 21. Bookkeeping and the Change Journal ship as their own
+# wheels and are dependencies; no file belongs to two wheels
+# (tests/engine/test_data_skill_bundle_postgres.py checks it). The engine is
+# built from crates/source-contract, which needs Rust (cargo) and maturin.
+dependencies = [
+    "edgartools-bookkeeping",
+    "edgartools-change-journal",
+    "source-contract",
+    "SQLAlchemy>=2.0.0,<2.1",
+    "psycopg2-binary>=2.9.9",
+    "PyYAML>=6.0.2",
+    "openpyxl>=3.1",
+    "lxml>=5.3",
+    "ijson>=3.3,<4",
+    "fsspec>=2023.1.0",
+    # Only the Name Census reads the landing Parquet; it goes with
+    # company_source.py when Company is read by the engine (to-do 21).
+    "pyarrow>=17.0.0",
+]
+
+[project.optional-dependencies]
+s3 = ["boto3>=1.34", "s3fs>=2023.1.0"]
+
+[project.scripts]
+edgar-warehouse = "edgar_warehouse.cli:main"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+# Package the canonical implementation; do not keep a second source copy.
+# A folder that belongs wholly to this wheel is included whole.
+[tool.hatch.build.targets.wheel.force-include]
+"../../edgar_warehouse/cli.py" = "edgar_warehouse/cli.py"
+"../../edgar_warehouse/bundle.py" = "edgar_warehouse/bundle.py"
+"../../edgar_warehouse/snowflake_settings.py" = "edgar_warehouse/snowflake_settings.py"
+"../../edgar_warehouse/application" = "edgar_warehouse/application"
+"../../edgar_warehouse/mdm" = "edgar_warehouse/mdm"
+"../../edgar_warehouse/workers" = "edgar_warehouse/workers"
+"../../edgar_warehouse/rules/catalog.py" = "edgar_warehouse/rules/catalog.py"
+"../../edgar_warehouse/rules/cli.py" = "edgar_warehouse/rules/cli.py"
+"../../edgar_warehouse/rules/db.py" = "edgar_warehouse/rules/db.py"
+"../../edgar_warehouse/rules/mapdoc.py" = "edgar_warehouse/rules/mapdoc.py"
+"../../edgar_warehouse/rules/source_engine.py" = "edgar_warehouse/rules/source_engine.py"
+"../../edgar_warehouse/rules/steps.py" = "edgar_warehouse/rules/steps.py"
+"../../edgar_warehouse/rules/migrations" = "edgar_warehouse/rules/migrations"
+"../../skills" = "edgar_warehouse/bundle_data/skills"
+"../../rules" = "edgar_warehouse/bundle_data/rules"

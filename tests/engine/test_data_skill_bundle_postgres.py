@@ -1,0 +1,178 @@
+"""The data skill installed whole, from a git ref, with no checkout (mastering to-do 21).
+
+The four wheels (the bundle, Bookkeeping, the Change Journal and the engine)
+are installed from this repository's committed HEAD by URL into a clean
+environment, the way an agent with no checkout installs them. Every command
+then runs from that installation, in isolated mode, from a folder outside
+the repository, so nothing here can stand in for a missing file.
+
+- G1: no file ships in two wheels; every shipped module imports; no domain
+  library (edgartools, spaCy) is installed; `doctor` passes on PG16 stores.
+- G2: the rules creator runs from the bundle against an empty Rules Database.
+- G3 (parse): a Rules-submitted run is read by the configured engine and
+  verified by separate worker and verifier processes, all from the bundle.
+- G5: `doctor` names a command a skill writes that does not exist.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+from collections import Counter
+
+import pytest
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.bookkeeping.clean.database import grant_profile
+from edgar_warehouse.rules import files
+from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
+from tests.support.journal_isolation import ROOT
+
+WHEELS = {
+    "edgartools-data": "packages/data-skill",
+    "edgartools-bookkeeping": "packages/bookkeeping",
+    "edgartools-change-journal": "packages/change-journal",
+    "source-contract": "crates/source-contract",
+}
+DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
+
+
+@pytest.fixture(scope="module")
+def installed(tmp_path_factory):
+    assert shutil.which("uv") and shutil.which("cargo"), "The bundle install needs uv and cargo"
+    head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+    root = tmp_path_factory.mktemp("bundle")
+    subprocess.run(["uv", "venv", "--python", sys.executable, str(root / "venv")], capture_output=True, check=True)
+    python = root / "venv" / "bin" / "python"
+    refs = [f"{name} @ git+file://{ROOT}@{head}#subdirectory={folder}" for name, folder in WHEELS.items()]
+    done = subprocess.run(["uv", "pip", "install", "--python", str(python), *refs], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    return python, root
+
+
+def _run(python, *arguments, env=None, cwd=None, document=None):
+    if arguments[:2] == ("-m", "edgar_warehouse.cli"):  # the `edgar-warehouse` entry point
+        arguments = ("-c", "import sys; from edgar_warehouse.cli import main; sys.exit(main(sys.argv[1:]))",
+                     *arguments[2:])
+    return subprocess.run([str(python), "-I", *arguments], capture_output=True, text=True, cwd=cwd,
+                          env={**os.environ, **(env or {})},
+                          input=None if document is None else json.dumps(document))
+
+
+def test_the_bundle_installs_whole_with_no_file_in_two_wheels(installed):
+    python, root = installed
+    result = _run(python, "-c", f'''
+import importlib, importlib.metadata as m, json, pkgutil, edgar_warehouse
+names = {{d.metadata["Name"].lower() for d in m.distributions()}}
+assert not names & set({DOMAIN!r}), names & set({DOMAIN!r})
+shipped = [str(p) for dist in {list(WHEELS)!r} for p in m.files(dist)
+           if str(p).startswith("edgar_warehouse/") and not str(p).endswith(".pyc")]
+modules = [info.name for info in pkgutil.walk_packages(edgar_warehouse.__path__, "edgar_warehouse.")]
+for name in modules:
+    importlib.import_module(name)
+print(json.dumps({{"shipped": shipped, "modules": modules}}))
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    found = json.loads(result.stdout)
+    twice = [path for path, count in Counter(found["shipped"]).items() if count > 1]
+    assert twice == []
+    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.clean.merge",
+            "edgar_warehouse.rules.cli"} <= set(found["modules"])
+    assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
+
+
+def _stores(databases):
+    url = lambda engine: engine.url.render_as_string(hide_password=False)
+    return {"RULES_DATABASE_URL": url(databases.rules.engine),
+            "BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.runtime),
+            "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
+
+
+def test_doctor_passes_from_the_installed_bundle(installed, databases):
+    python, root = installed
+    result = _run(python, "-m", "edgar_warehouse.cli", "doctor", env=_stores(databases), cwd=root)
+    report = json.loads(result.stdout)
+    assert result.returncode == 0, report
+    assert report["unresolved"] == [] and report["commands_named"] > 20 and report["engine"] == "loads"
+    assert "bundle_data" in report["skills"]
+    assert set(report["stores"].values()) == {"answers", "not set"}
+
+
+def test_doctor_names_a_command_no_skill_may_write(installed, tmp_path):
+    python, root = installed
+    skills = tmp_path / "home"
+    assert _run(python, "-m", "edgar_warehouse.cli", "skill", "install", "--home", str(skills),
+                cwd=root).returncode == 0
+    page = skills / ".agents/skills/data-onboarding/SKILL.md"
+    assert page.is_file() and (skills / ".claude/skills/data-onboarding/SKILL.md").is_file()
+    # The installed copy is refused next time only if someone else made it.
+    assert _run(python, "-m", "edgar_warehouse.cli", "skill", "install", "--home", str(skills),
+                cwd=root).returncode == 0
+    probe = _run(python, "-c", f'''
+import json, pathlib
+from edgar_warehouse import bundle, cli
+root = pathlib.Path({str(skills / ".agents/skills")!r})
+(root / "data-onboarding" / "SKILL.md").write_text("Run `edgar-warehouse rules invent --root x`.")
+print(json.dumps(bundle.unresolved(cli.build_parser(), root)))
+''', cwd=root)
+    assert probe.returncode == 0, probe.stderr
+    assert json.loads(probe.stdout) == ["data-onboarding/SKILL.md: edgar-warehouse rules invent"]
+
+
+def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(installed, databases, tmp_path):
+    python, root = installed
+    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql("CREATE DATABASE rules_bundle")
+    url = databases.admin.url.set(database="rules_bundle").render_as_string(hide_password=False)
+    env = {"RULES_MIGRATION_DATABASE_URL": url, "RULES_DATABASE_URL": url}
+    cli = lambda *a: _run(python, "-m", "edgar_warehouse.cli", *a, env=env, cwd=root)
+    folder = tmp_path / "rules"
+    assert cli("skill", "install", "--home", str(tmp_path / "home"), "--rules", str(folder)).returncode == 0
+    for command in (("rules", "init"), ("rules", "migrate")):
+        done = cli(*command)
+        assert done.returncode == 0, done.stderr
+    loaded = cli("rules", "load", "--root", str(folder), "--version", "bundle-1")
+    assert loaded.returncode == 0, loaded.stderr
+    status = cli("rules", "status", "--source", "gleif", "--version", "bundle-1")
+    assert status.returncode == 0, status.stderr
+    rows = [row for row in json.loads(status.stdout) if row["version"] == "bundle-1"]
+    gleif = [d for d in json.loads(loaded.stdout) if (d["kind"], d["name"]) == ("source", "gleif")]
+    assert len(rows) == 1 and [rows[0]["digest"]] == [d["digest"] for d in gleif], (rows, gleif)
+
+
+def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_path):
+    python, root = installed
+    store = Artifacts()
+    grant_profile(databases.admin, profile="source.read", worker="bk_runtime", verifier="bk_verifier")
+    body = files.pipeline("sec-13f-reading")
+    saved = databases.rules.save("pipeline", "sec-13f-reading", "1", body)
+    contract_path = ROOT / "crates/source-contract/contracts/thirteenf/contract.yaml"
+    contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_path.read_bytes())
+    xml = store.put_bytes((tmp_path / "filing.xml").as_uri(),
+                          (contract_path.parent / "fixtures/one-row.xml").read_bytes())
+    input_ref = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [xml]})
+    output = (tmp_path / "holdings.json").as_uri()
+    manifest = store.put(tmp_path.as_uri(), {"version": 1, "units": [{
+        "keys": {"batch_id": "sample"}, "input": input_ref, "output": output, "cursor": {"offset": 0}}]})
+    databases.rules.prove("pipeline", "sec-13f-reading", "1",
+                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
+    databases.rules.activate("pipeline", "sec-13f-reading", "1")
+    env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
+
+    def command(*args, **extra):
+        done = _run(python, "-m", *args, env={**env, **extra}, cwd=root)
+        assert done.returncode == 0, done.stderr
+        return done.stdout
+
+    submitted = command("edgar_warehouse.cli", "rules", "run", "--pipeline", "sec-13f-reading", "--target", "read",
+                        "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"],
+                        EDGAR_RULES_ROOT=str(ROOT / "rules"))
+    run_id = json.loads(submitted)["run"]["run_id"]
+    command("edgar_warehouse.workers", "work", "source.read", run_id)
+    verifier = databases.verifier.url.render_as_string(hide_password=False)
+    command("edgar_warehouse.workers", "verify", "source.read", run_id, "--reports", (tmp_path / "reports").as_uri(),
+            BOOKKEEPING_CLEAN_DATABASE_URL=verifier)
+    state = json.loads(command("edgar_warehouse.bookkeeping", "finalize", run_id))
+    assert state["counts"] == {"verified": 1} and state["run"]["state"] == "complete"
+    assert json.loads((tmp_path / "holdings.json").read_bytes())["artifacts"][0]["tables"][
+        "sec_thirteenf_holding"][0]["share_type"] == "SH"

@@ -14,13 +14,16 @@ The writer quotes any string the loader would not read back as that string.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[2] / "rules"
+# The rules folder: `EDGAR_RULES_ROOT` when set (an installed bundle has no
+# checkout around it), else this repository's `rules/`.
+ROOT = Path(os.environ.get("EDGAR_RULES_ROOT") or Path(__file__).resolve().parents[2] / "rules")
 
 _JSON_INT = re.compile(r"-?(?:0|[1-9][0-9]*)")
 _JSON_FLOAT = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
