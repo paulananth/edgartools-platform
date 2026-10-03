@@ -2,32 +2,34 @@
 # name. Security identity, Security Title, and ISSUED_BY are decided later,
 # per docs/specs/clean-mdm/security-identity.md. This file does not create them.
 source: sec.thirteenf.information_table
-version: "prototype-1"
+version: "prototype-2"
 bronze: { family: sec.thirteenf_infotable }
+execution: { profile: source.read, workers: 2, max_artifacts: 2 }
 
 read:
   format: xml
   root: informationTable
   on_parse_error: retry_without_control_chars
+  limits: { max_bytes: 33554432, max_records: 100000 }
   tables:
     sec_thirteenf_holding:
       each: infoTable
       columns:
         holding_index: { ordinal: {} }
         cusip:
-          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: cusip.$, default: "" } } } }
+          text: { path: cusip.$, default: "", null_if: ["", "none", "nan"], ignore_case: true }
         issuer_name:
-          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: nameOfIssuer.$, default: "" } } } }
+          text: { path: nameOfIssuer.$, default: "", null_if: ["", "none", "nan"], ignore_case: true }
         security_title:
-          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: titleOfClass.$, default: "" } } } }
+          text: { path: titleOfClass.$, default: "", null_if: ["", "none", "nan"], ignore_case: true }
         shares_held: { number: { path: shrsOrPrnAmt.sshPrnamt.$, default: null } }
         share_type:
-          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: shrsOrPrnAmt.sshPrnamtType.$, default: "" } } } }
+          text: { path: shrsOrPrnAmt.sshPrnamtType.$, default: "", null_if: ["", "none", "nan"], ignore_case: true }
         market_value: { number: { path: value.$, default: null } }
         put_call:
-          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: putCall.$, default: "" } } } }
+          text: { path: putCall.$, default: "", null_if: ["", "none", "nan"], ignore_case: true }
         discretion_type:
-          custom: { step: blank_missing_token@1, inputs: { value: { text: { path: investmentDiscretion.$, default: "" } } } }
+          text: { path: investmentDiscretion.$, default: "", null_if: ["", "none", "nan"], ignore_case: true }
         voting_auth_sole: { number: { path: votingAuthority.Sole.$, default: null } }
         voting_auth_shared: { number: { path: votingAuthority.Shared.$, default: null } }
         voting_auth_none: { number: { path: votingAuthority.None.$, default: null } }

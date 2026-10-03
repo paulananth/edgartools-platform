@@ -20,7 +20,8 @@ from . import control, profile as load_profile
 def runtime(module) -> str:
     """The digest a run pins for this profile: its code and the protocol client."""
     here = Path(__file__).parent
-    files = sorted({Path(module.__file__), here / "control.py", here / "__main__.py"})
+    extra = module.runtime_files() if hasattr(module, "runtime_files") else []
+    files = sorted({Path(module.__file__), here / "control.py", here / "__main__.py", *extra})
     return hashlib.sha256(b"".join(path.read_bytes() for path in files)).hexdigest()
 
 

@@ -317,7 +317,7 @@ require `default` on `value_with_footnotes` or `join`.
 
 | Primitive | Required | Optional | Returns |
 |---|---|---|---|
-| `text` | `path`, `default` | `from` | the text at a `$` or `@attr` path, stripped |
+| `text` | `path`, `default` | `from`, `null_if`, `ignore_case` | the stripped text at a `$` or `@attr` path, or `null` when it matches an item in `null_if` |
 | `text_all` | `path`, `default` | `from` | all text under an element, in order, stripped. Use it where an element mixes text and children |
 | `int` | `path`, `default` | `from` | an integer, or `default` if the text is not a whole number |
 | `number` | `path`, `default` | `from` | a double, or `default` |
@@ -346,6 +346,11 @@ require `default` on `value_with_footnotes` or `join`.
 | `get` | `path`, `default` | — | the value at a path in the previous value (a lookup record) |
 | `len` | `path`, `default` | — | the length of a list at a path in the previous value |
 | `to_text` | — | `default` | the previous value as text; `null` gives `default` |
+
+For `text`, `null_if` is a list of literal strings. Compare the stripped text
+after stripping each token. `ignore_case: true` compares ASCII letters without
+case and is only valid when `null_if` is present. A missing path first uses
+`default`, then applies `null_if`.
 
 **Rules for adding a primitive** (ticket 04 Q2):
 - By default, add a small primitive.

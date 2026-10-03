@@ -1,0 +1,9 @@
+{
+  "commit": "62974cf5f95b42bb036307cb7fdfc4825948991b",
+  "contract_sha256": "710d928ed769c73f9f66831043e5fbdc7b18c4a3ee7610ddcbd493cdaed9fa7b",
+  "native_binary_sha256": "1e9c78a7a70e366615050b527793bbd54bff5f110b3cefdd35d6f82bb678b7da",
+  "native_source_sha256": "f07fb81b0f33a0a8086d6610c1950fb17ed4e3203e54a3fcf1297fe5d28e345f",
+  "binding": "/private/tmp/codex-rust-parser-current-site",
+  "host_load_observation": "VM ~132% CPU; Ghostty ~39%; WindowServer ~30% during second trial",
+  "invalid_run": "Interrupted when prior-output hash comparison revealed share_type path typo; excluded from results."
+}

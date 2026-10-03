@@ -12,15 +12,4 @@ from collections.abc import Callable
 
 Value = str | int | float | None
 
-
-def blank_missing_token(value: Value) -> Value:
-    """`none` and `nan` are null, matching `parse_thirteenf`'s text blanking."""
-    if not isinstance(value, str):
-        return value
-    text = value.strip()
-    return None if text.lower() in {"", "none", "nan"} else text
-
-
-STEPS: dict[str, Callable[[Value], Value]] = {
-    "blank_missing_token@1": blank_missing_token,
-}
+STEPS: dict[str, Callable[[Value], Value]] = {}
