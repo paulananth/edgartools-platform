@@ -290,7 +290,7 @@ class Bookkeeping:
                 "rules": rules, "input": item["unit"]["input"], "output": item["unit"]["output"],
                 "keys": row["unit"]["keys"], "cursor": row["unit"]["cursor"],
                 "checks": [name for name in step["checks"] if name not in STEP_CHECKS],
-                "heartbeat_seconds": config["heartbeat_seconds"],
+                "heartbeat_seconds": config["heartbeat_seconds"], "retry": config["retry"],
                 "deadline": min(str(p["expires_at"]) for p in claim.proof)}
 
     @staticmethod
@@ -408,7 +408,7 @@ class Bookkeeping:
         report = self.artifacts.json(report_ref)
         binding = {"run_id": claim.run_id, "step": claim.step, "key": claim.key, "attempt": claim.attempt,
                    "effect_key": verification["effect_key"], "candidate": candidate}
-        if set(report) != {"protocol", "binding", "checks", "proofs"} or report["protocol"] != PROTOCOL:
+        if set(report) != {"protocol", "binding", "checks", "proofs", "runtime"} or report["protocol"] != PROTOCOL:
             raise Blocked("Malformed verification report")
         if report["binding"] != binding:
             raise Blocked("Verification report names other work")
@@ -420,6 +420,8 @@ class Bookkeeping:
             raise Blocked("Malformed verification report")
         for proof in report["proofs"]:
             self.artifacts.verified(reference(proof))
+        self._call("SELECT bookkeeping.pin_verifier(CAST(:r AS uuid),:f,:t)",
+                   r=claim.run_id, f=step["operation"], t=report["runtime"])
         receipt = {"uri": candidate["uri"], "sha256": candidate["sha256"], "evidence": report_ref}
         checks = dict(reported)
         if "input.hash" in step["checks"]:

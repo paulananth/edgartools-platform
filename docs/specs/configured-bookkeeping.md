@@ -48,6 +48,13 @@ verifier or check callback, and no branch on a source or operation name.
   (the bytes it can read) and the run checks `manifest.hash`, `work.accounting`
   and `journal.delivered`. A database trigger refuses any completion that is
   not the reported candidate, whichever finish function commits it.
+- **Issuers (20b):** each profile has a worker role (`bk_worker_<profile>`) and a
+  verifier role (`bk_verifier_<profile>`), granted with `bookkeeping
+  grant-profile`. Only the worker role reports; only the verifier role verifies
+  and completes, and never the login that reported. The verifier names its
+  runtime in its report, pinned for the run like the worker's.
+- **Package:** `packages/bookkeeping` builds the control alone
+  (`edgartools-bookkeeping`, with the `edgartools-change-journal` wheel).
 - **Events:** control emits only `work.verified`. Domain events go through the
   worker's own Journal intent.
 

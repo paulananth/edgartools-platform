@@ -114,6 +114,11 @@ verifiers reach Bookkeeping only through these commands, which print JSON:
 | `bookkeeping admit --verification - --report URI --sha256 H` | verifier | Admits a report bound to that work, with every check the step names; completes the unit |
 | `bookkeeping fail --envelope - --message M` | worker, verifier | Gives the attempt up; the unit waits |
 | `bookkeeping finalize <run>` | operator | Delivers control's events and records the run's checks |
+| `bookkeeping grant-profile --profile P --worker W --verifier V` | operator (migration owner) | Lets login W report profile P's work and a different login V verify it |
+
+Workers and verifiers connect as their own logins, each a member of the
+runtime role. A profile no login was granted cannot report or verify anything.
+Control is also packaged alone: `packages/bookkeeping` (`edgar-bookkeeping`).
 
 `python -m edgar_warehouse.workers work|verify <profile> <run>` runs a worker
 or a verifier. The profiles built so far are `artifact.copy` and `jsonl.count`.

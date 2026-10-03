@@ -38,6 +38,13 @@ def _handle(args):
             )
         finally:
             owner.dispose()
+    elif operation == "grant-profile":
+        from .database import grant_profile
+        owner = create_engine(os.environ["BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL"])
+        try:
+            result = grant_profile(owner, profile=args.profile, worker=args.worker, verifier=args.verifier)
+        finally:
+            owner.dispose()
     elif operation == "init-guard":
         owner = create_engine(os.environ["DESTINATION_MIGRATION_DATABASE_URL"])
         result = migrate_guard(owner, runtime_role=args.runtime_role)
@@ -90,6 +97,11 @@ def register(subparsers):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)
+    grant = commands.add_parser("grant-profile", help="Let one login report a profile's work and another verify it")
+    grant.add_argument("--profile", required=True)
+    grant.add_argument("--worker", required=True, help="The worker's database login")
+    grant.add_argument("--verifier", required=True, help="The verifier's database login (not the worker's)")
+    grant.set_defaults(handler=_handle)
     listing = commands.add_parser("runs", help="Find runs after a lost submission acknowledgement")
     listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete"))
     listing.add_argument("--limit", type=int, default=100)
@@ -124,3 +136,14 @@ def register(subparsers):
     admit.add_argument("--report", required=True, help="The verification report's URI")
     admit.add_argument("--sha256", required=True)
     admit.set_defaults(handler=_handle)
+
+
+def main(argv=None) -> int:
+    """`edgar-bookkeeping`: the control commands alone, for the control-only
+    package; `edgar-warehouse bookkeeping` reaches the same commands."""
+    import argparse
+    parser = argparse.ArgumentParser(prog="edgar-bookkeeping")
+    commands = parser.add_subparsers(dest="command", required=True)
+    register(commands)
+    args = parser.parse_args(["bookkeeping", *(sys.argv[1:] if argv is None else argv)])
+    return args.handler(args)

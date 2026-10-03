@@ -20,7 +20,7 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
-from edgar_warehouse.bookkeeping.clean.database import migrate
+from edgar_warehouse.bookkeeping.clean.database import grant_profile, migrate
 from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
 from edgar_warehouse.change_journal import ChangeJournal, JournalConflict
 from edgar_warehouse.change_journal.database import migrate as migrate_journal
@@ -31,10 +31,14 @@ from tests.support.bookkeeping_protocol import RUNTIME, complete, drive, verific
 from tests.support.rules_approval import approve
 
 
+PROFILES = ("artifact.copy", "jsonl.count", "fixture.transform")
+
+
 @dataclass
 class Databases:
     admin: object
     runtime: object
+    verifier: object
     rules: Rules
     approver: Rules
     ledger: ChangeJournal
@@ -79,8 +83,12 @@ def databases():
         else:
             pytest.fail("PostgreSQL host connection did not become ready")
         with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            for role in ("bk_runtime", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
+            for role in ("bk_runtime", "bk_verifier", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
                 conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
+            # Control's grants go to one group; the worker (bk_runtime) and the
+            # verifier (bk_verifier) log in separately (mastering to-do 20b).
+            conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
+            conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
             conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
             conn.exec_driver_sql("GRANT rules_approver TO operator")
             for db in ("bookkeeping_clean", "rules", "change_journal_clean", "destination"):
@@ -91,10 +99,12 @@ def databases():
         ledger_admin = engine("change_journal_clean")
         destination_admin = engine("destination")
         with pytest.raises(Blocked, match="not initialized"):
-            migrate(admin, runtime_role="bk_runtime", existing_only=True)
+            migrate(admin, runtime_role="bk_control", existing_only=True)
         with pytest.raises(Blocked, match="not initialized"):
             migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True)
-        migrate(admin, runtime_role="bk_runtime")
+        migrate(admin, runtime_role="bk_control")
+        for profile in PROFILES:
+            grant_profile(admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
         migrate_rules(rules_admin)
         migrate_journal(ledger_admin, runtime_role="ledger_runtime")
         migrate_guard(destination_admin, runtime_role="destination_runtime")
@@ -102,7 +112,7 @@ def databases():
             conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
             conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
         migrate_guard(destination_admin, runtime_role="clean_application")
-        yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
+        yield Databases(admin, runtime, engine("bookkeeping_clean", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
                         ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
                         engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
     finally:
@@ -135,6 +145,8 @@ def approved_acquisition(body, name, contracts, manifest):
 
 def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None, cursor=None):
     book = book or Bookkeeping(databases.runtime)
+    if not hasattr(book, "verifier"):
+        book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = body or config()
     name = f"fixture-{uuid4().hex}"
     saved = databases.rules.save("source", name, "1", body)
@@ -165,7 +177,7 @@ def test_exact_five_tables_restricted_runtime_and_migrations(databases):
         tables = set(conn.scalars(text("SELECT tablename FROM pg_tables WHERE schemaname='bookkeeping'")))
         assert tables == {"pipeline_run", "work_item", "lease", "checkpoint", "journal_outbox"}
         assert str(conn.scalar(text("SHOW server_version"))).startswith("16.")
-    migrate(databases.admin, runtime_role="bk_runtime")
+    migrate(databases.admin, runtime_role="bk_control")
     for sql in ("UPDATE bookkeeping.lease SET token=0", "DELETE FROM bookkeeping.pipeline_run",
                 "CREATE TABLE bookkeeping.bad(x text)", "SELECT bookkeeping.compact(30)"):
         with pytest.raises(DBAPIError), databases.runtime.begin() as conn:
@@ -179,9 +191,9 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(d
         "BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL",
         databases.admin.url.render_as_string(hide_password=False),
     )
-    assert main(["bookkeeping", "init", "--runtime-role", "bk_runtime"]) == 0
+    assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
     assert "001_control.sql" in capsys.readouterr().out
-    assert main(["bookkeeping", "migrate", "--runtime-role", "bk_runtime"]) == 0
+    assert main(["bookkeeping", "migrate", "--runtime-role", "bk_control"]) == 0
     assert "001_control.sql" in capsys.readouterr().out
     with databases.admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM bookkeeping.pipeline_run")) == 0
@@ -332,6 +344,7 @@ def staged_submission(databases, tmp_path):
             return {name: True for name in envelope["checks"]}, []
 
     book = Bookkeeping(databases.runtime)
+    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = config(3)
     steps = body["bookkeeping"]["targets"]["silver"]["steps"]
     for step, name, requires in zip(steps, ("z_capture", "a_transform", "b_finish"),
@@ -503,12 +516,12 @@ def test_renewal_takeover_and_stale_completion(databases, tmp_path):
     book.report(envelope, candidate, RUNTIME)  # lost acknowledgement
     verification = verification_for(book, rid, "s0", "0")
     report = verification_report(book, verification, copy)
-    book.admit(verification, report)
-    book.admit(verification, report)  # lost acknowledgement
+    book.verifier.admit(verification, report)
+    book.verifier.admit(verification, report)  # lost acknowledgement
     assert book.status(rid)["counts"] == {"verified": 1}
     other = book.artifacts.put(tmp_path.as_uri() + "/other-reports", {"other": True})
     with pytest.raises(Blocked, match="changed"):
-        book.admit(verification, other)
+        book.verifier.admit(verification, other)
 
 
 def test_worker_renews_during_execution(databases, tmp_path, monkeypatch):
@@ -523,7 +536,7 @@ def test_worker_renews_during_execution(databases, tmp_path, monkeypatch):
     assert renewal.error is None and renewal.envelope["claim"]["proof"][0]["expires_at"] > initial
     book.report(renewal.envelope, copy.execute(renewal.envelope, book.artifacts), RUNTIME)
     verification = verification_for(book, rid, "s0", "0")
-    book.admit(verification, verification_report(book, verification, copy))
+    book.verifier.admit(verification, verification_report(book, verification, copy))
     assert book.status(rid)["counts"] == {"verified": 1}
 
 
@@ -606,9 +619,10 @@ def test_admission_refuses_reports_that_name_other_work_or_skip_checks(databases
                "effect_key": verification["effect_key"], "candidate": verification["candidate"]}
 
     def admit(**changes):
-        report = {"protocol": 1, "binding": binding, "checks": {"fixture.readback": True}, "proofs": []}
+        report = {"protocol": 1, "binding": binding, "checks": {"fixture.readback": True}, "proofs": [],
+                  "runtime": RUNTIME}
         report.update(changes)
-        return book.admit(verification, book.artifacts.put(tmp_path.as_uri() + "/forged", report))
+        return book.verifier.admit(verification, book.artifacts.put(tmp_path.as_uri() + "/forged", report))
 
     for forged in ({"binding": {**binding, "key": "1"}}, {"binding": {**binding, "attempt": str(uuid4())}},
                    {"binding": {**binding, "candidate": {"uri": "file:///other", "sha256": "0" * 64}}},
@@ -617,7 +631,7 @@ def test_admission_refuses_reports_that_name_other_work_or_skip_checks(databases
         with pytest.raises(Blocked):
             admit(**forged)
     with pytest.raises(Blocked, match="frozen work"):
-        book.admit({**verification, "input": {"uri": "file:///elsewhere", "sha256": "0" * 64}},
+        book.verifier.admit({**verification, "input": {"uri": "file:///elsewhere", "sha256": "0" * 64}},
                    book.artifacts.put(tmp_path.as_uri() + "/forged", {"protocol": 1}))
     assert book.status(rid)["counts"] == {"verified": 1, "reported": 1}
     admit()
@@ -644,10 +658,10 @@ def test_a_lapsed_report_is_verified_not_worked_again(databases, tmp_path):
         book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
         expire(databases, book._claim_of(envelope))
     assert book.tasks(rid, "artifact.copy", limit=20) == []
-    found = book.verifications(rid, "artifact.copy", limit=12)
+    found = book.verifier.verifications(rid, "artifact.copy", limit=12)
     assert len(found) == 12 and all(v["claim"]["proof"][0]["token"] >= 2 for v in found)
     for verification in found:
-        book.admit(verification, verification_report(book, verification, copy))
+        book.verifier.admit(verification, verification_report(book, verification, copy))
     assert book.status(rid)["counts"] == {"verified": 12}
 
 
@@ -699,6 +713,69 @@ def test_restricted_functions_refuse_missing_fencing_or_unreported_completion(da
     with databases.runtime.connect() as conn:
         assert not conn.scalar(text("SELECT has_function_privilege('bk_runtime','bookkeeping.verify_claim(uuid,text,text,uuid,integer)','EXECUTE') IS FALSE"))
         assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname='authorize_request')"))
+
+
+def test_only_a_profiles_roles_report_and_verify_and_never_the_same_login(databases, tmp_path):
+    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql("CREATE ROLE bk_stranger LOGIN PASSWORD 'test'")
+        conn.exec_driver_sql("GRANT bk_control TO bk_stranger")
+    with pytest.raises(Blocked, match="two different logins"):
+        grant_profile(databases.admin, profile="self.check", worker="bk_runtime", verifier="bk_runtime")
+    stranger = Bookkeeping(create_engine(databases.runtime.url.set(username="bk_stranger")))
+    book, rid, _, _ = submit(databases, tmp_path, count=2)
+    envelope = book.envelope(book.claim(rid, "s0", "0"))
+    candidate = copy.execute(envelope, book.artifacts)
+    for wrong in (stranger, book.verifier):
+        with pytest.raises(DBAPIError, match="may not report"):
+            wrong.report(envelope, candidate, RUNTIME)
+    book.report(envelope, candidate, RUNTIME)
+    for wrong in (stranger, book):
+        with pytest.raises(DBAPIError, match="may not verify"):
+            wrong.verifications(rid, "artifact.copy")
+    # A login granted both duties still cannot verify what it reported.
+    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql("GRANT bk_verifier_artifact_copy TO bk_runtime")
+    try:
+        with pytest.raises(DBAPIError, match="may not verify"):
+            book.verifications(rid, "artifact.copy")
+    finally:
+        with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.exec_driver_sql("REVOKE bk_verifier_artifact_copy FROM bk_runtime")
+    verification = verification_for(book, rid, "s0", "0")
+    book.verifier.admit(verification, verification_report(book, verification, copy))
+    assert book.status(rid)["counts"] == {"verified": 1, "pending": 1}
+    stranger.close()
+
+
+def test_a_lease_lapsing_while_the_verifier_runs_refuses_the_late_admission(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    envelope = book.envelope(book.claim(rid, "s0", "0"))
+    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+    late = verification_for(book, rid, "s0", "0")
+    report = verification_report(book, late, copy)
+    expire(databases, book._claim_of(late))
+    with pytest.raises(DBAPIError, match="Stale lease"):
+        book.verifier.admit(late, report)
+    fresh = verification_for(book, rid, "s0", "0")
+    assert fresh["claim"]["proof"][0]["token"] > late["claim"]["proof"][0]["token"]
+    with pytest.raises(DBAPIError, match="Stale lease"):  # the old lease's token stays dead
+        book.verifier.admit(late, report)
+    book.verifier.admit(fresh, verification_report(book, fresh, copy))
+    assert book.status(rid)["counts"] == {"verified": 1}
+
+
+def test_a_verifier_runtime_is_pinned_for_the_run(databases, tmp_path):
+    from edgar_warehouse.workers.control import report_document
+    book, rid, _, _ = submit(databases, tmp_path, count=2)
+    complete(book, rid, "0")
+    envelope = book.envelope(book.claim(rid, "s0", "1"))
+    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+    verification = verification_for(book, rid, "s0", "1")
+    checks, proofs = copy.verify(verification, book.artifacts)
+    other = book.artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, "c" * 64))
+    with pytest.raises(DBAPIError, match="Pinned verifier runtime changed"):
+        book.verifier.admit(verification, other)
+    assert book.status(rid)["run"]["runtimes"]["verify:artifact.copy"] == RUNTIME
 
 
 def test_zero_work_explicit_configuration_and_manifest_evidence(databases, tmp_path):
@@ -819,15 +896,18 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
         return done.stdout
 
     reports = (tmp_path / "reports").as_uri()
+    verifier_url = databases.verifier.url.render_as_string(hide_password=False)
     for profile in ("artifact.copy", "jsonl.count"):
         process("-m", "edgar_warehouse.workers", "work", profile, rid)
+        env["BOOKKEEPING_CLEAN_DATABASE_URL"], worker_url = verifier_url, env["BOOKKEEPING_CLEAN_DATABASE_URL"]
         process("-m", "edgar_warehouse.workers", "verify", profile, rid, "--reports", reports)
+        env["BOOKKEEPING_CLEAN_DATABASE_URL"] = worker_url
     finished = json.loads(process("-m", "edgar_warehouse.bookkeeping", "finalize", rid))
     assert finished["run"]["state"] == "complete" and finished["counts"] == {"verified": 4}
     assert json.loads(Path(tmp_path / "count-1").read_text()) == {"lines": 1}
     runtimes = {p: json.loads(process("-m", "edgar_warehouse.workers", "describe", p))["runtime"]
                 for p in ("artifact.copy", "jsonl.count")}
-    assert book.status(rid)["run"]["runtimes"] == runtimes
+    assert book.status(rid)["run"]["runtimes"] == {**runtimes, **{f"verify:{p}": d for p, d in runtimes.items()}}
 
     # The guard is live: control refuses to start once a domain import creeps in.
     refused = subprocess.run([sys.executable, "-c", GUARD + "\nsys.argv=['edgar_warehouse/bookkeeping/__main__.py']\nimport edgar_warehouse.mdm"],

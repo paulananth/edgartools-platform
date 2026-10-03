@@ -23,6 +23,7 @@ def _reported(book, rid):
 
 def _fixture(databases, tmp_path):
     book = Bookkeeping(databases.runtime)
+    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = {"source": "generated-fixture", "bookkeeping": {"version": 1, "targets": {
         "generated": {"allow_zero_work": True,
             "steps": [
@@ -57,13 +58,13 @@ def test_generated_children_and_parent_intent_commit_together(databases, tmp_pat
     claim, candidate = _reported(book, rid)
     verification = verification_for(book, rid, "parent", "p1")
     report = verification_report(book, verification, copy)
-    book.admit(verification, report)
+    book.verifier.admit(verification, report)
     receipt = {**candidate, "evidence": report}
     state = book.status(rid)
     assert state["run"]["expected_count"] == 2
     assert state["counts"] == {"verified": 1, "pending": 1}
     assert len(state["deliveries"]) == 1
-    book.admit(verification, report)  # lost acknowledgement
+    book.verifier.admit(verification, report)  # lost acknowledgement
     assert book.status(rid)["run"]["expected_count"] == 2
     changed = deepcopy(book._frozen(rid)[3][1])
     changed["unit"]["output"] += ".changed"
@@ -91,7 +92,7 @@ def test_stale_expansion_cannot_insert_children(databases, tmp_path):
     report = verification_report(book, verification, copy)
     expire(databases, claim)
     with pytest.raises(DBAPIError):
-        book.admit(verification, report)
+        book.verifier.admit(verification, report)
     assert book.status(rid)["run"]["expected_count"] == 1
     assert book.status(rid)["counts"] == {"reported": 1}
 
@@ -100,7 +101,7 @@ def test_unsealed_expansion_blocks_root(databases, tmp_path):
     book, rid, _ = _fixture(databases, tmp_path)
     claim, candidate = _reported(book, rid)
     receipt = {**candidate, "evidence": book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unsealed": True})}
-    book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+    book.verifier._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
                r=rid, s="parent", k="p1", a=claim.attempt, p=canonical(claim.proof),
                v=canonical(receipt), c=canonical({"input.hash": True, "output.receipt": True}),
                e=str(uuid5(UUID(rid), "parent:p1")))

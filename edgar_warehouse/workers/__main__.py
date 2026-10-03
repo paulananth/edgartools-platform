@@ -71,6 +71,7 @@ def work(name: str, run_id: str, limit: int) -> int:
 
 def verify(name: str, run_id: str, reports: str, limit: int) -> int:
     module, artifacts, failed = load_profile(name), Artifacts(), 0
+    digest = runtime(module)
     for verification in control.verifications(run_id, name, limit):
         claim = verification["claim"]
         try:
@@ -81,7 +82,7 @@ def verify(name: str, run_id: str, reports: str, limit: int) -> int:
             if any(value is not True for value in checks.values()):
                 raise ValueError("A check failed")
             control.admit({**renewal.envelope, "candidate": verification["candidate"]},
-                          artifacts.put(reports, control.report_document(verification, checks, proofs)))
+                          artifacts.put(reports, control.report_document(verification, checks, proofs, digest)))
         except Exception as exc:
             failed += 1
             print(f"{claim['step']}/{claim['key']}: {exc}", file=sys.stderr)

@@ -87,8 +87,14 @@ Each test file 20a deletes holds assertions a later slice must prove again on th
   - **Spec, fixed:** a candidate could be reported anywhere (it must be the intended output); the envelope had no deadline; resource checkpoints and the restricted functions were not proved again (two tests); gate 1 claimed more than the tests show (now "Partly"); the protocol section used the design's command names; a deleted test had no row.
   - **Spec, moved to 20b:** a control-only wheel; a verifier profile and runtime of its own; retry limits in the envelope.
   - Local after the fixes: Bookkeeping, generated-work and Journal Postgres tests 59 passed; architecture and contract tests 46 passed.
-- [ ] 20a: PR; CI green; merge on the operator's word
-- [ ] 20b: the PostgreSQL 16 gates, plus: a control-only wheel installed without the domain packages; a verifier profile and runtime digest of its own in each report; retry limits in the envelope; per-profile issuer roles; lease expiry during verification; destination re-verification on resume (today resume rechecks the candidate bytes and the report's binding only)
+- [x] 20a: PR #801, CI green (6 checks); merged on the operator's "agreed". 2026-10-02 22:20 ET
+- [x] 20b: a control-only wheel (`packages/bookkeeping`, `edgar-bookkeeping`), installed in a clean environment with the Journal wheel and no domain distribution, runs migrate, grant-profile and a whole run through its own CLI in isolated mode on PostgreSQL 16 (`test_bookkeeping_wheel_postgres.py`, 2 passed). 2026-10-02 22:30 ET
+- [x] 20b: issuer roles, migration `006_issuer_roles.sql`: `bk_worker_<profile>` and `bk_verifier_<profile>`, granted with `bookkeeping grant-profile`; `report` needs the worker role, `verify_claim`, `pin_verifier` and the completion trigger need the verifier role and a login other than the reporter's (`test_only_a_profiles_roles_*`). Control's grants now go to one runtime group; the worker and the verifier log in separately. 2026-10-02 22:30 ET
+- [x] 20b: the verifier's runtime in its report, pinned as `verify:<profile>` (`test_a_verifier_runtime_is_pinned_for_the_run`). 2026-10-02 22:30 ET
+- [x] 20b: retry limits in the envelope (`retry`). 2026-10-02 22:30 ET
+- [x] 20b: a lease that lapses while a verifier runs: the late admission is refused (stale lease), a fresh verification re-takes it with a new token and completes the unit (`test_a_lease_lapsing_*`). 2026-10-02 22:30 ET
+- [ ] ~~20b: destination re-verification on resume~~ moved to 20e: today's outputs are immutable files whose bytes control rechecks on resume; MDM is the first destination that can change after it is written
+- [ ] 20b: three-axis `/code-review`; PR; CI green; merge on the operator's word
 - [ ] 20c: SEC Company through the engine
 - [ ] 20d: Person through the engine
 - [ ] 20e: MDM behind the protocol; ticket 04's proof; `mdm/clean/journal_delivery.py` still reads Bookkeeping's private `_frozen` and `_resolve_item`, which 20e removes

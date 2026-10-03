@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.26.3"]
+build-backend = "hatchling.build"
+
+[project]
+name = "edgartools-bookkeeping"
+version = "0.1.0"
+description = "Bookkeeping control alone: frozen runs, leases, task envelopes and verified completion"
+requires-python = ">=3.12"
+# Control only (mastering to-do 20b): no loader, parser, Silver, MDM or SEC
+# library. The Change Journal ships as its own wheel.
+dependencies = ["edgartools-change-journal", "SQLAlchemy>=2.0.0,<2.1", "psycopg2-binary>=2.9.9", "PyYAML>=6.0.2"]
+
+[project.scripts]
+edgar-bookkeeping = "edgar_warehouse.bookkeeping.clean.cli:main"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+# Package the canonical implementation; do not keep a second source copy.
+[tool.hatch.build.targets.wheel.force-include]
+"../../edgar_warehouse/__init__.py" = "edgar_warehouse/__init__.py"
+"../../edgar_warehouse/control_contract.py" = "edgar_warehouse/control_contract.py"
+"../../edgar_warehouse/bookkeeping/__init__.py" = "edgar_warehouse/bookkeeping/__init__.py"
+"../../edgar_warehouse/bookkeeping/__main__.py" = "edgar_warehouse/bookkeeping/__main__.py"
+"../../edgar_warehouse/bookkeeping/clean/__init__.py" = "edgar_warehouse/bookkeeping/clean/__init__.py"
+"../../edgar_warehouse/bookkeeping/clean/artifacts.py" = "edgar_warehouse/bookkeeping/clean/artifacts.py"
+"../../edgar_warehouse/bookkeeping/clean/cli.py" = "edgar_warehouse/bookkeeping/clean/cli.py"
+"../../edgar_warehouse/bookkeeping/clean/config.py" = "edgar_warehouse/bookkeeping/clean/config.py"
+"../../edgar_warehouse/bookkeeping/clean/database.py" = "edgar_warehouse/bookkeeping/clean/database.py"
+"../../edgar_warehouse/bookkeeping/clean/destinations.py" = "edgar_warehouse/bookkeeping/clean/destinations.py"
+"../../edgar_warehouse/bookkeeping/clean/engine.py" = "edgar_warehouse/bookkeeping/clean/engine.py"
+"../../edgar_warehouse/bookkeeping/clean/feeds.py" = "edgar_warehouse/bookkeeping/clean/feeds.py"
+"../../edgar_warehouse/bookkeeping/clean/migrations/001_control.sql" = "edgar_warehouse/bookkeeping/clean/migrations/001_control.sql"
+"../../edgar_warehouse/bookkeeping/clean/migrations/002_resource_checkpoint.sql" = "edgar_warehouse/bookkeeping/clean/migrations/002_resource_checkpoint.sql"
+"../../edgar_warehouse/bookkeeping/clean/migrations/003_request_authorization.sql" = "edgar_warehouse/bookkeeping/clean/migrations/003_request_authorization.sql"
+"../../edgar_warehouse/bookkeeping/clean/migrations/004_generated_work.sql" = "edgar_warehouse/bookkeeping/clean/migrations/004_generated_work.sql"
+"../../edgar_warehouse/bookkeeping/clean/migrations/005_task_protocol.sql" = "edgar_warehouse/bookkeeping/clean/migrations/005_task_protocol.sql"
+"../../edgar_warehouse/bookkeeping/clean/migrations/006_issuer_roles.sql" = "edgar_warehouse/bookkeeping/clean/migrations/006_issuer_roles.sql"
+"../../edgar_warehouse/bookkeeping/clean/migrations/destination_guard.sql" = "edgar_warehouse/bookkeeping/clean/migrations/destination_guard.sql"
+"../../edgar_warehouse/rules/__init__.py" = "edgar_warehouse/rules/__init__.py"
+"../../edgar_warehouse/rules/files.py" = "edgar_warehouse/rules/files.py"
+"../../edgar_warehouse/rules/acquisition_authority.py" = "edgar_warehouse/rules/acquisition_authority.py"
