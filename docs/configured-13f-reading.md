@@ -76,3 +76,5 @@ Rust/Python facade had a 14.02-second two-worker median. The host was busy, so
 these parser measurements do not establish production pipeline speed or a
 native Rust advantage. This worker also reads/writes and verifies durable output;
 that work was outside the timing boundary.
+
+The final release worker was also [qualified through execute and verify](../.planning/workstreams/13f-configured-worker/corpus-qualification.json) on all 100 filings: 331,039 rows, identical prior hashes, in 70.2 seconds. That duration includes immutable writes and a second parse for verification and is not comparable to the parser-only timing table.

@@ -22,7 +22,7 @@ The machine was busy: a process snapshot during trial two showed the VM using ab
 
 ## Regression caught and corrected
 
-Comparing native and facade results alone missed a shared YAML typo: `share_type` used `shrsOrPrnamt` instead of `shrsOrPrnAmt`. Comparing against prior output hashes exposed the lost field. The path is corrected and the existing native fixture test now asserts `share_type == "SH"`; all five 13F Rust tests pass. The corrected corpus has identical prior outputs on every filing. The interrupted run is preserved under `invalid-path-run/` and excluded from the table.
+Comparing native and facade results alone missed a shared YAML typo: `share_type` used `shrsOrPrnamt` instead of `shrsOrPrnAmt`. Comparing against prior output hashes exposed the lost field. The path is corrected and the existing native fixture test now asserts `share_type == "SH"`; all five 13F Rust tests pass. The corrected corpus has identical prior outputs on every filing. The interrupted run is preserved under `invalid-path-run/` in the original benchmark worktree and excluded from the table.
 
 The corrected full run took 564.3 seconds (9 minutes 24 seconds). The additional interrupted run and investigation lengthened the overall task. No network, database or object-storage requests were performed by the corpus runner.
 
