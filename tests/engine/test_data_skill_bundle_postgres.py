@@ -67,7 +67,8 @@ names = {{d.metadata["Name"].lower() for d in m.distributions()}}
 assert not names & set({DOMAIN!r}), names & set({DOMAIN!r})
 shipped = [str(p) for dist in {list(WHEELS)!r} for p in m.files(dist)
            if str(p).startswith("edgar_warehouse/") and not str(p).endswith(".pyc")]
-modules = [info.name for info in pkgutil.walk_packages(edgar_warehouse.__path__, "edgar_warehouse.")]
+modules = [info.name for info in pkgutil.walk_packages(edgar_warehouse.__path__, "edgar_warehouse.")
+           if not info.name.endswith(".__main__")]  # a __main__ runs its command line on import
 for name in modules:
     importlib.import_module(name)
 print(json.dumps({{"shipped": shipped, "modules": modules}}))
