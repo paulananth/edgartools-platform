@@ -2,8 +2,8 @@
 
 Continue ticket 21 after configured content fields (#810). This is design and inventory work until the implementation and tests below pass. Do not retire readers or activate source Rules.
 
-- [x] Inspect retained loader, configured worker, engine facade/native dispatch and git history. Verified caller-supplied CIK/provenance and existing immutable worker receipts; 2026-10-03 18:38 ET.
-- [x] GoF review: keep functions and existing worker/engine boundaries. History shows additive language changes; no demonstrated benefit from a new class hierarchy. Verified code/history and reviewer guidance; 2026-10-03 18:38 ET.
+- [x] Inspect retained loader, configured worker, engine facade/native dispatch and git history. Verified caller-supplied CIK/provenance and existing immutable worker receipts; 2026-10-03 18:33 ET.
+- [x] GoF review: keep functions and existing worker/engine boundaries. History shows additive language changes; no demonstrated benefit from a new class hierarchy. Verified code/history and reviewer guidance; 2026-10-03 18:33 ET.
 - [ ] Declare generic typed artifact context in YAML; add a bounded receipt-bound input to the worker while retaining version-1 manifests.
 - [ ] Add context expressions without source-specific loader imports, implicit pathname parsing or replacement of original document data.
 - [ ] Add configured first-N record bounds; compare zero, positive, negative and unlimited retained-loader behavior before selecting the grammar.
