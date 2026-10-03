@@ -1,7 +1,12 @@
 # Implementation notes: tested custom parsing findings
 
-Owner: Codex. The operator withdrew the Claude assignment on 2026-10-02.
-Claude receives no work unless explicitly instructed by the operator.
+Owner: Claude, from 2026-10-03. The operator's words, after Codex's #804 merged:
+"codex finished and pr created and merges now claude take over and finishes".
+The follow-up (SEC Company and GLEIF on the engine, and the bundled skill) is
+`.scratch/mastering-to-done/issues/21-self-sustaining-data-skill.md`. Codex: do
+not start this work; ask the operator first.
+
+Earlier: Owner: Codex. The operator withdrew the Claude assignment on 2026-10-02.
 
 ## Start here
 
