@@ -312,7 +312,9 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
-    saved = databases.rules.save("pipeline", "parse-and-master-fixture", "1", MASTER)
+    pipeline_name = "parse-and-master-custom-trial" if custom_trial else "parse-and-master-fixture"
+    pipeline = {**MASTER, "pipeline": pipeline_name}
+    saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
     if custom_trial:
         contract_bytes += b"""        release_sequence:
@@ -336,10 +338,10 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                      "output": (out / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
         "merge": [{"keys": keys, "input": {"from": {"step": "prepare", "key": "filers"}},
                    "output": (out / "merged.json").as_uri(), "cursor": {}}]}})
-    databases.rules.prove("pipeline", "parse-and-master-fixture", "1",
+    databases.rules.prove("pipeline", pipeline_name, "1",
                           {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
-    approve(databases.approver, "pipeline", "parse-and-master-fixture", "1")
-    databases.rules.activate("pipeline", "parse-and-master-fixture", "1")
+    approve(databases.approver, "pipeline", pipeline_name, "1")
+    databases.rules.activate("pipeline", pipeline_name, "1")
 
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
@@ -351,7 +353,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         assert done.returncode == 0, done.stderr
         return done.stdout
 
-    run_id = json.loads(cli("rules", "run", "--pipeline", "parse-and-master-fixture", "--target", "master",
+    run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
     for profile in ("source.read", "mdm.prepare", "mdm.merge"):
         cli("workers", "work", profile, run_id, **worker)
