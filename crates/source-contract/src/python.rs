@@ -19,6 +19,7 @@ fn to_py(py: Python<'_>, value: &Val) -> PyResult<PyObject> {
     match value {
         Val::Null => Ok(py.None()),
         Val::Int(i) => i.into_py_any(py),
+        Val::Bool(b) => b.into_py_any(py),
         Val::Float(f) => f.into_py_any(py),
         Val::Str(s) => s.into_py_any(py),
     }

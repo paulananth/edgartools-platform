@@ -16,6 +16,9 @@ chrono = { version = "0.4", default-features = false, features = ["alloc", "std"
 csv = "1"
 pyo3 = { version = "0.25", features = ["extension-module", "abi3-py312"], optional = true }
 quick-xml = "0.37"
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 serde_yaml = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# Python 3.12 integer lexical compatibility uses Unicode 15.0 decimal digits.
+unicode-general-category = "=0.6.0"

@@ -102,3 +102,38 @@ reproduces the Python 3.12 loader exception: after prefix truncation, a
 ten-character ASCII value whose first eight characters form a valid basic calendar
 or week date ignores its final two characters (for example `20240229T0`).
 Declare this compatibility behavior only when replacing a reader that used it.
+
+## Exact integers and integer-derived booleans
+
+```yaml
+size:
+  integer: {path: size, on_invalid: null}
+is_xbrl:
+  integer: {path: isXBRL, as: boolean, default: false, on_invalid: default}
+```
+
+`integer` defaults to signed 64-bit integer output. Integer text supports a
+leading ASCII sign, surrounding Unicode whitespace, Unicode 15.0 decimal
+digits and underscores between digits. Decimal/scientific text is invalid.
+Native JSON booleans become 0/1; native finite JSON floating values truncate
+toward zero. Original JSON numeric spellings are retained for this expression,
+so an integer never passes through floating point first. Existing text/number
+calls keep their original representation and behavior.
+
+`as: boolean` returns a native boolean after integer conversion: 0.9 is false,
+1.9 is true. Arbitrary-size integer text (up to 4,300 digits) and finite JSON
+floats can be tested for zero without a signed 64-bit output boundary.
+
+Missing/null values use `default` (otherwise null). Present invalid values
+follow `on_invalid`: `error` (default), `null`, or `default`. Integer overflow
+follows the independently declared `on_overflow` with the same three choices;
+its default error code is `integer_overflow`. Conversion never saturates.
+Boolean output has no integer output to overflow, so it refuses `on_overflow`.
+Defaults must match the declared output type. Structured values are invalid;
+repeating intermediate paths still fail closed. JSON syntax, nesting and
+finite-number checks remain the existing parser's checks, and the artifact
+retains its byte/record limits.
+
+This syntax qualifies filing content fields only. Artifact metadata, complete
+classification and source/mastering equivalence remain required before reader
+or loader retirement.
