@@ -119,8 +119,8 @@ Reading: every source is read from its rules file by the configured engine, and 
 | `mdm/clean/adapters.py` record mapping | Replaced by the engine's reading once every source has a `read:` block |
 | `silver_landing_store.py`, `silver_schema.py`, `serving/` | Out of this ticket: the dashboard imports `serving/`, and configured silver outputs are rules-skill ticket 05 |
 
-- [ ] L1: delete the dead SEC gateway modules and their tests
-- [ ] L2: GoF consult on `crates/source-contract/src/lib.rs` and `rules/steps.py` before any primitive
+- [x] L1: deleted `infrastructure/edgartools_sec_gateway.py` and `filing_content_gateway.py` (no importer outside one test), their two boundary tests, two boundary tests whose subject files were already gone (`object_storage.py`, `dataset_path_catalog.py`) and an empty Snowflake-publisher test, and `docs/capture-modes.md` (its `capture_mode` module was gone); `test_boundaries.py` and `test_sec_client.py` 11 passed. 2026-10-02 22:46 ET
+- [x] L2: GoF consult: leave the structure. Each primitive is validated in `validate_expr` and evaluated in the value match, both in `lib.rs`, which has one commit. Parallel-array rows belong in a table's `each` (`items_of`), and grouping is a table option, not a column primitive; a lookup and a case are column primitives; `steps.py` is unchanged. 2026-10-02 22:46 ET
 - [ ] L3: engine primitives, each tested alone: parallel-array rows (SEC `filings.recent`), a reference-table lookup (`rules/reference/sec-place-codes.yaml`), classification as configuration, grouping by key
 - [ ] L4: Company `read:` block; equivalence on the pinned ticket 27 capture; delete `company_source.py` and `loaders/`; source version to the operator
 - [ ] L5: Person `read:` block on the engine; equivalence; delete the fixture conversion (20d)
