@@ -54,6 +54,7 @@ def mdm(databases):
         conn.exec_driver_sql(f"CREATE DATABASE {name}")
     admin = create_engine(databases.admin.url.set(database=name))
     app = create_engine(admin.url.set(username="clean_application", password="test"))
+    reader = create_engine(admin.url.set(username="bk_verifier", password="test"))
     try:
         built = core.initialize_database(admin, app)
         # Every MDM commit is fenced by the worker's live Bookkeeping lease.
@@ -62,10 +63,14 @@ def mdm(databases):
             policy = register_policy(conn, {"version": 1, "required_consumers": list(CONSUMERS),
                                             "automatic_rules": [], "fields": {"company": {
                                                 "name": {"sources": ["fixture.primary", "fixture.secondary"]}}}})
-        yield SimpleNamespace(admin=admin, application=app, policy=policy)
+        with admin.begin() as conn:
+            conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
+            conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
+        yield SimpleNamespace(admin=admin, application=app, reader=reader, policy=policy)
     finally:
         admin.dispose()
         app.dispose()
+        reader.dispose()
 
 
 def _manifest(policy, tmp_path, store):
@@ -118,7 +123,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
         return done.stdout
 
     worker = {"MDM_DATABASE_URL": url(mdm.application), "MDM_APPLICATION_ROLE": "clean_application"}
-    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm.admin)}
+    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm.reader)}
     reports = ("--reports", (tmp_path / "reports").as_uri())
     command("workers", "work", "mdm.merge", run_id, **worker)
     with mdm.admin.connect() as conn:
@@ -171,11 +176,19 @@ def test_a_lost_acknowledgement_resumes_the_same_mdm_run_and_merges_once(mdm, tm
         assert conn.scalar(text("SELECT count(*) FROM mdm.run")) == 1
     # A receipt that is not what MDM holds is refused by the verifier.
     forged = store.put_bytes((tmp_path / "forged.json").as_uri(), b'{"version":1}')
-    monkeypatch.setenv("MDM_DATABASE_URL", mdm.admin.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("MDM_DATABASE_URL", mdm.reader.url.render_as_string(hide_password=False))
     with pytest.raises(ValueError, match="differs from what MDM holds"):
         mdm_merge.verify({**envelope, "output": forged["uri"], "candidate": forged}, store)
     checks, _ = mdm_merge.verify({**envelope, "candidate": first}, store)
     assert checks == {"mdm.committed": True}
+    changed = store.json(manifest_ref)
+    changed["as_of"] = "2026-01-01T00:00:00Z"
+    changed_ref = store.put(tmp_path.as_uri() + "/changed", changed)
+    with pytest.raises(ValueError, match="scope differs"):
+        mdm_merge.verify({**envelope, "input": changed_ref, "candidate": first}, store)
+    with mdm.reader.begin() as conn:
+        with pytest.raises(DBAPIError, match="permission denied"):
+            conn.exec_driver_sql("DELETE FROM mdm.batch")
 
 
 def test_mdm_refuses_a_merge_whose_lease_has_lapsed(mdm, tmp_path, monkeypatch):

@@ -75,7 +75,7 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
         if spec is None:
             continue
         name = Path(spec["path"])
-        if name.is_absolute() or ".." in name.parts:
+        if name.is_absolute() or ".." in name.parts or name == Path("manifest.json"):
             raise ValueError("A manifest input must be a file beside the manifest")
         target = folder / name
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -84,10 +84,15 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
     return path, manifest
 
 
-def receipt(store, manifest: dict, run_id: str) -> bytes:
+def receipt(store, manifest: dict, run_id: str, manifest_digest: str) -> bytes:
     """What MDM holds for the manifest's batches under this run, read back."""
     ids = [b["batch_id"] for b in manifest["batches"]]
     with store.engine.connect() as conn:
+        scope = conn.scalar(text("SELECT scope FROM mdm.run WHERE run_id=CAST(:r AS uuid)"),
+                            {"r": run_id})
+        if (scope is None or scope.get("manifest_digest") != manifest_digest
+                or scope.get("expected_batches") != sorted(ids)):
+            raise ValueError("MDM run scope differs from the input manifest")
         observed = set(conn.scalars(text("SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:r AS uuid)"),
                                     {"r": run_id}))
         rows = {r["batch_id"]: dict(r) for r in conn.execute(text(
@@ -123,7 +128,7 @@ def execute(envelope: dict, artifacts) -> dict:
                     break
                 if not result["commits"]:
                     raise ValueError(f"MDM made no progress on {result['missing_batches']}")
-            return artifacts.put_bytes(envelope["output"], receipt(store, manifest, run_id))
+            return artifacts.put_bytes(envelope["output"], receipt(store, manifest, run_id, envelope["input"]["sha256"]))
     finally:
         store.engine.dispose()
 
@@ -134,7 +139,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     store = _store(restricted=False)
     try:
         manifest = artifacts.json(envelope["input"])
-        expected = receipt(store, manifest, mdm_run(envelope))
+        expected = receipt(store, manifest, mdm_run(envelope), envelope["input"]["sha256"])
     finally:
         store.engine.dispose()
     if artifacts.verified(envelope["candidate"], max_bytes=32 * 1024**2) != expected:

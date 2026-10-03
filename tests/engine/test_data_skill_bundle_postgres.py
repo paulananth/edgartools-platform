@@ -306,6 +306,10 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             "version": "v1", "kind": "company", "record_key": ["cik"], "identifiers": {"cik": "cik"},
             "fields": {"name": "name"}}))
 
+    with mdm_admin.begin() as conn:
+        conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
+        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
+    mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
     saved = databases.rules.save("pipeline", "parse-and-master-fixture", "1", MASTER)
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), READ_CONTRACT)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), FILERS)
@@ -328,7 +332,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
     worker = {"MDM_DATABASE_URL": url(mdm_app), "MDM_APPLICATION_ROLE": "clean_application"}
-    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_admin)}
+    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_reader)}
 
     def cli(*args, **extra):
         done = _run(python, "-m", "edgar_warehouse.cli", *args, env={**env, **extra}, cwd=root)
@@ -348,4 +352,5 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         records = conn.scalar(text("SELECT count(*) FROM mdm.stage_record"))
     mdm_admin.dispose()
     mdm_app.dispose()
+    mdm_reader.dispose()
     assert records == 2, names
