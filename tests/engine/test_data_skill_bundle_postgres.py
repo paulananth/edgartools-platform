@@ -162,16 +162,23 @@ def empty_rules_database():
     subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "-p", "127.0.0.1::5432",
                     "-e", "POSTGRES_PASSWORD=test", "postgres:16-alpine"], capture_output=True, check=True)
     try:
-        for _ in range(300):
-            if subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-c", "SELECT 1"],
-                              capture_output=True).returncode == 0:
-                break
-            time.sleep(0.1)
-        sql = ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'; CREATE ROLE rules_approver NOLOGIN; "
-               "CREATE DATABASE rules;")
-        for statement in sql.split(";")[:-1]:
-            subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-c", statement],
-                           capture_output=True, check=True)
+        # The image runs a temporary server while it initializes, then
+        # restarts: wait for its own "init process complete", then readiness.
+        deadline = time.monotonic() + 60
+        def ready():
+            logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stdout
+            return "init process complete" in logs and subprocess.run(
+                ["docker", "exec", name, "pg_isready", "-U", "postgres", "-h", "127.0.0.1"],
+                capture_output=True).returncode == 0
+
+        while not ready():
+            if time.monotonic() > deadline:
+                pytest.fail("PostgreSQL 16 did not finish initializing")
+            time.sleep(0.2)
+        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'", "CREATE ROLE rules_approver NOLOGIN",
+                          "CREATE DATABASE rules"):
+            subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
+                            "-c", statement], capture_output=True, check=True)
         port = subprocess.run(["docker", "port", name, "5432/tcp"], capture_output=True, text=True,
                               check=True).stdout.strip().rsplit(":", 1)[1]
         yield f"postgresql://postgres:test@127.0.0.1:{port}/rules"
