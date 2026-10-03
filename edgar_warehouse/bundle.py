@@ -32,9 +32,10 @@ STORES = (
     "MDM_DATABASE_URL",
 )
 MARKER = ".installed-by-edgar-warehouse"
-# A fenced line or a code span may wrap onto the next line. A pipe ends the
-# command: what follows is another program's.
-_COMMAND = re.compile(r"edgar-warehouse ([a-z][a-z-]*)([^`\n|]*)")
+# A fenced line or a code span may wrap onto the next line. A shell pipe
+# (` | `) ends the command: what follows is another program's. `a|b`, with no
+# spaces, is a skill's way to write two choices.
+_COMMAND = re.compile(r"edgar-warehouse ([a-z][a-z-]*)((?:(?! \| )[^`\n])*)")
 # Only an installed command is portable; these work in a checkout alone.
 _CHECKOUT_ONLY = re.compile(r"python -m edgar_warehouse|skills/[a-z-]+/scripts/")
 _LINK = re.compile(r"\]\(([^)#\s]+)")
