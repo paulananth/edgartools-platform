@@ -100,7 +100,32 @@ Each test file 20a deletes holds assertions a later slice must prove again on th
   - **Standards, fixed:** a refused admission could still pin its verifier's runtime (now pinned in the completion's own transaction); long or look-alike profile names collided or exceeded 63 bytes (role names now carry a hash); no populated-table test for 006 (added, with a reported row); both wheels shipped `edgar_warehouse/__init__.py` and `control_contract.py` (now only the Journal wheel); S3 is the wheel's `s3` extra.
   - **Noted, not done:** `retry` in the envelope is the claim's contention backoff; capping a unit's work attempts is open (20c, where the first retried work arrives).
   - Local after the fixes: 107 passed (Bookkeeping, generated work, Journal, the wheel, architecture and contract tests).
-- [ ] 20b: PR; CI green; merge on the operator's word
-- [ ] 20c: SEC Company through the engine
+- [x] 20b: PR #802; CI green (all six checks); merged on the operator's word "merge", 2026-10-02 22:42 ET
+- [ ] 20c: SEC Company through the engine (expanded below by the operator's next request)
+
+### Delete all legacy code and rewire using configuration
+
+Operator, 2026-10-02 22:45 ET: "delete all legacy code and rewire using configuration".
+
+Reading: every source is read from its rules file by the configured engine, and the hand-written readers behind it go. Order per source: a generic engine primitive, then the source's `read:` block, then equivalence on the pinned capture (same assertions, IDs, deferrals and refusals), then the delete, in the same PR. A difference from today's outputs is shown to the operator, never accepted silently. Each changed source version needs a test run and the operator's approval of its digest.
+
+| Module | Fate |
+|---|---|
+| `infrastructure/edgartools_sec_gateway.py`, `filing_content_gateway.py` | Dead now (only tests import them): delete with their tests |
+| `infrastructure/sec_client.py` | Kept until the configured capture worker (20c) replaces it; then deleted |
+| `mdm/clean/company_source.py`, `loaders/`, the landing-parquet Company path | Replaced: Company read from the raw submissions JSON by its rules file, like Person |
+| Worker profiles `company.expand`, `company.silver`, `company.prepare`, `company.publish_expand` | Renamed to generic profiles; no Company-named step |
+| `mdm/clean/gleif_source.py` | Replaced: GLEIF on the engine (ticket 16), a later slice |
+| `mdm/clean/adapters.py` record mapping | Replaced by the engine's reading once every source has a `read:` block |
+| `silver_landing_store.py`, `silver_schema.py`, `serving/` | Out of this ticket: the dashboard imports `serving/`, and configured silver outputs are rules-skill ticket 05 |
+
+- [ ] L1: delete the dead SEC gateway modules and their tests
+- [ ] L2: GoF consult on `crates/source-contract/src/lib.rs` and `rules/steps.py` before any primitive
+- [ ] L3: engine primitives, each tested alone: parallel-array rows (SEC `filings.recent`), a reference-table lookup (`rules/reference/sec-place-codes.yaml`), classification as configuration, grouping by key
+- [ ] L4: Company `read:` block; equivalence on the pinned ticket 27 capture; delete `company_source.py` and `loaders/`; source version to the operator
+- [ ] L5: Person `read:` block on the engine; equivalence; delete the fixture conversion (20d)
+- [ ] L6: GLEIF `read:` block; equivalence; delete `gleif_source.py` (ticket 16)
+- [ ] L7: delete `adapters.py` record mapping once no source needs it
+- [ ] L8: configured capture worker for `provider.capture`; delete `sec_client.py`. The live SEC proof stays blocked on the operator's permission
 - [ ] 20d: Person through the engine
 - [ ] 20e: MDM behind the protocol; ticket 04's proof; `mdm/clean/journal_delivery.py` still reads Bookkeeping's private `_frozen` and `_resolve_item`, which 20e removes
