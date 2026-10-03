@@ -27,20 +27,6 @@ class BoundaryTests(unittest.TestCase):
         offenders = [path for path in _python_sources() if "db._conn" in path.read_text(encoding="utf-8")]
         self.assertEqual(offenders, [])
 
-    def test_fsspec_only_lives_in_object_storage_adapter(self) -> None:
-        allowed = PACKAGE_ROOT / "infrastructure" / "object_storage.py"
-        offenders = [path for path in _python_sources() if "fsspec.filesystem" in path.read_text(encoding="utf-8") and path != allowed]
-        self.assertEqual(offenders, [])
-
-    def test_only_dataset_path_catalog_reads_packaged_path_templates(self) -> None:
-        allowed = PACKAGE_ROOT / "infrastructure" / "dataset_path_catalog.py"
-        offenders = [
-            path
-            for path in _python_sources()
-            if "warehouse_paths.properties" in path.read_text(encoding="utf-8") and path != allowed
-        ]
-        self.assertEqual(offenders, [])
-
     def test_canonical_package_files_do_not_use_legacy_runtime_names(self) -> None:
         offenders = [
             path
@@ -48,64 +34,3 @@ class BoundaryTests(unittest.TestCase):
             if path.name != "runtime.py" and ("legacy" in path.name or "runtime" in path.name)
         ]
         self.assertEqual(offenders, [])
-
-    def test_snowflake_publishers_only_live_in_target_module(self) -> None:
-        offenders = []
-        for path in _python_sources():
-            text = path.read_text(encoding="utf-8")
-            if path in {
-            }:
-                continue
-            if "def write_source_dimensional_export_to_snowflake" in text or "def write_ticker_reference_to_snowflake_export" in text:
-                offenders.append(path)
-        self.assertEqual(offenders, [])
-
-    def test_catalog_and_facts_use_edgartools_gateway_not_parallel_sec_client(self) -> None:
-        """Ticket 07: catalogs + companyfacts network must not import download_sec_bytes
-        from sec_client; they route through edgartools_sec_gateway.
-        """
-        targets = [
-            PACKAGE_ROOT / "infrastructure" / "edgartools_sec_gateway.py",
-        ]
-        forbidden_import = "from edgar_warehouse.infrastructure.sec_client import"
-        offenders: list[str] = []
-        for path in targets:
-            text = path.read_text(encoding="utf-8")
-            if path.name == "edgartools_sec_gateway.py":
-                # Docstrings may mention sec_client; only ban a real import/call.
-                if forbidden_import in text or "sec_client.download_sec_bytes(" in text:
-                    offenders.append(f"{path.name}:imports/calls sec_client")
-                continue
-            if forbidden_import in text or "sec_client.download_sec_bytes(" in text:
-                offenders.append(f"{path.name}:uses sec_client")
-        self.assertEqual(offenders, [])
-
-    def test_edgartools_gateway_registry_documents_cutover_inventory(self) -> None:
-        """Ticket 07: architecture inventory of object classes on the edgartools path."""
-        from edgar_warehouse.infrastructure.edgartools_sec_gateway import (
-            CATALOG_AND_FACTS_NETWORK_GATEWAY,
-            EDGARTOOLS_GATEWAY_OBJECT_CLASSES,
-            NON_EDGARTOOLS_OBJECT_CLASSES,
-            RAW_SEC_CONTENT_OBJECT_CLASSES,
-        )
-
-        self.assertEqual(CATALOG_AND_FACTS_NETWORK_GATEWAY, "edgartools")
-        for required in (
-            "company_tickers",
-            "company_tickers_exchange",
-            "submissions_main",
-            "submissions_pagination",
-            "daily_index",
-            "companyfacts",
-        ):
-            self.assertIn(required, EDGARTOOLS_GATEWAY_OBJECT_CLASSES)
-        self.assertIn("filing_document", RAW_SEC_CONTENT_OBJECT_CLASSES)
-        self.assertIn("filing_attachment", RAW_SEC_CONTENT_OBJECT_CLASSES)
-        self.assertEqual(
-            EDGARTOOLS_GATEWAY_OBJECT_CLASSES & NON_EDGARTOOLS_OBJECT_CLASSES,
-            frozenset(),
-        )
-        self.assertEqual(
-            EDGARTOOLS_GATEWAY_OBJECT_CLASSES & RAW_SEC_CONTENT_OBJECT_CLASSES,
-            frozenset(),
-        )

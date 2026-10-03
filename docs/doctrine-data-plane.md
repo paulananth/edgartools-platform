@@ -73,10 +73,6 @@ See the “Needs clarity” list from the doctrine review session (cutover phasi
 
 ---
 
-## Capture modes
-
-See [capture-modes.md](capture-modes.md) for the legacy `normal` versus `strict_release` runtime flags that remain until this target is implemented.
-
 ## Next engineering step
 
 Implement tickets under `.scratch/agent-decision-data-plane/issues/` (frontier: 01–02, 08, 14 completed in phase 0).
