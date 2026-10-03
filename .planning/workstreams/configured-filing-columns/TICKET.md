@@ -8,7 +8,7 @@ Continue ticket 21: full configured Company and Person reading before loader ret
 - [x] Verify calendar prefixes, valid ISO forms, invalid/default values and malformed contracts against the loader — six native calendar tests and 26 focused Python cases passed (including 646 adversarial mutations), with compact-date compatibility regressions; 2026-10-03 17:41 ET.
 - [x] Extend captured filing projection to all text/calendar fields and compare pinned receipt bytes — receipt-hash-verified 1,000 filings / 107,197 rows, all 11 columns matched; text-calendar-qualification.json; 2026-10-03 17:41 ET.
 - [x] Document implemented behavior in the installed skill — READING.md describes calendar mode, strict default and explicit compact suffix compatibility; initial 62 engine tests include installed bundle/link checks; 2026-10-03 17:41 ET.
-- [ ] Review the diff, open a dependent PR, run all CI suites and aggregate gate.
+- [x] Review the diff, open a follow-up PR, run all CI suites and aggregate gate — PR #809, run 37156035417: 1,487 Python and 42 Rust tests passed, no skips, one existing xfail; independent reviews verified the fixture correction; 2026-10-03 17:46 ET.
 - [ ] Complete numeric, flag, artifact-context and bounded-history column equivalence.
 - [ ] Company/Person classification, address/reference/grouping equivalence and configured read blocks.
 - [ ] GLEIF complete positive/failure equivalence and source-reader retirement.
@@ -24,4 +24,4 @@ A 646-case mutation comparison exposed four compact-date suffix differences abse
 
 ## Qualification status
 
-PR #809; initial local engine run: 62 passed in 288.05s before the compact-suffix follow-up. Fresh final binding: 26 focused cases passed (including 646 adversarial mutations); complete final-head CI remains required. Independent reviews found one invalid fixture indentation introduced with the compatibility option; fixed, YAML loaded, and fixture-dependent tests plus corpus comparison passed. No source activation or legacy retirement.
+PR #809; initial local engine run: 62 passed in 288.05s before the compact-suffix follow-up. Fresh final binding: 26 focused cases passed (including 646 adversarial mutations); implementation CI run 37156035417 passed all suites and aggregate gate; the checklist-only push is also checked before readiness. Independent reviews found one invalid fixture indentation introduced with the compatibility option; fixed, YAML loaded, and fixture-dependent tests plus corpus comparison passed. No source activation or legacy retirement.
