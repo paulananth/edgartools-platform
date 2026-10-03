@@ -45,14 +45,14 @@ read:
           date:
             path: filing_date
             kind: calendar
-          basic_suffix: ignore
+            basic_suffix: ignore
             prefix_length: 10
             on_invalid: null
         report_date:
           date:
             path: report_date
             kind: calendar
-          basic_suffix: ignore
+            basic_suffix: ignore
             prefix_length: 10
             on_invalid: null
         acceptance_datetime:

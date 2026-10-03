@@ -54,3 +54,24 @@ def test_calendar_reading_survives_immutable_worker_and_independent_reparse(tmp_
     rows = store.json(candidate)['artifacts'][0]['tables']['filings']
     assert [(row['filing_date'], row['report_date']) for row in rows] == [
         ('2024-02-29', '2019-12-30'), (None, None)]
+
+
+def test_adversarial_calendar_mutations_match_python_loader():
+    seeds = ['2024-02-29', '2023-02-29', '20240229', '2020-W01-1',
+             '2020W011', '2020-W01', '2020W01', '9999-12-31', '0001-01-01']
+    values = set(seeds)
+    for seed in seeds:
+        for index in range(len(seed)):
+            for char in ' 019-Wa🦀':
+                values.add(seed[:index] + char + seed[index + 1:])
+        values.update(prefix + seed for prefix in (' ', '0', '🦀'))
+        values.update(seed + suffix for suffix in ('T00:00:00Z', ' suffix', ' '))
+    values = sorted(values)
+    contract = {'read': {'format': 'json', 'tables': {'rows': {'each': 'rows',
+        'columns': {'date': {'date': {'path': 'value', 'kind': 'calendar',
+            'prefix_length': 10, 'on_invalid': None, 'basic_suffix': 'ignore'}}}}}}}
+    rows = SourceEngine(contract).read(json.dumps({'rows': [{'value': v} for v in values]}).encode()).tables['rows']
+    assert len(values) == 646
+    for value, row in zip(values, rows, strict=True):
+        old = parse_date(value)
+        assert row['date'] == (old.isoformat() if old else None), value
