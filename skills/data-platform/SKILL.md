@@ -95,21 +95,31 @@ says whether a profile exists.
 
 ## 3. Master
 
-Two worker profiles take parsed records into Clean MDM; a feed's rules file
-names them in its `mdm` target (or a pipeline's).
+Three worker profiles take parsed records into Clean MDM; a feed's rules
+file names them in its `mdm` target (or a pipeline's), after its `source.read`
+step:
 
+- `mdm.prepare`: a `source.read` reading into a Clean MDM input manifest. Its
+  unit's keys say which `table` of the reading, which MDM `dataset` (source
+  code) reads the rows, the `policy` digest the batches pin, the `consumer`
+  they advance (its own, from checkpoint 0), a `batch_id` prefix and the
+  `as_of` instant. Records files of at most 1,000 rows sit beside the
+  manifest. Its verifier rebuilds them and reports `mdm.prepared`.
 - `mdm.merge`: one Clean MDM input manifest (contract version 2) through the
-  Merge Stage. Its unit's input is that manifest; a batch's records file sits
-  beside it. Its verifier reports `mdm.committed` after reading the batches
-  back from MDM.
+  Merge Stage; its verifier reads the batches back from MDM and reports
+  `mdm.committed`.
 - `mdm.publish`: one committed batch to one consumer (`journal`, `export`,
   `graph`), in the consumer's generation order. Its unit's keys name the
   batch and the consumer. Its verifier reports `mdm.published`.
 
+A unit's input names the step before it (`{"from": {"step": "read", "key": ...}}`
+in a version-2 input manifest), so one run goes read → prepare → merge →
+publish.
+
 Before the first run, once per MDM database: `edgar-warehouse mdm migrate`,
 then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application role>`
 with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
-since every MDM commit is checked against the worker's live lease. Then, for each profile, as in Parse:
+since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
 
 1. Submit: `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
    An MDM target needs the operator's approval of that rules version first (Mode 4).
@@ -126,9 +136,8 @@ A lost acknowledgement is harmless: the worker resumes the same MDM run, and
 MDM never merges or publishes a batch twice. After a stop, use
 `edgar-warehouse bookkeeping resume <run_id>` and run the workers again.
 
-**Not built yet:** a configured step that turns a `source.read` reading into
-an MDM input manifest (to-do 21, with the Company and GLEIF read blocks).
-Until then the manifest comes from a feed's existing preparation.
+**Not built yet:** the SEC Company, Person and GLEIF read blocks (to-do 21);
+until they land, those feeds have no `source.read` contract to start from.
 
 ## 6. Custom parsing
 
