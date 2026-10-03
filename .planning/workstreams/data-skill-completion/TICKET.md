@@ -2,9 +2,9 @@
 
 User goal: one installable skill bundle containing the Rules creator and orchestration for parsing, MDM and custom parsing when configuration cannot express the operation. Continue the unfinished checklist from ticket 21; preserve the complete scope.
 
-- [ ] Audit all five gates and outstanding Company, Person, GLEIF and empty-store requirements.
-- [ ] Demonstrate a real custom parsing gap against the existing engine primitives.
-- [ ] Draft one generic versioned function, tests and Mapping Document support; retain the code/rules approval boundary.
+- [x] Audit all five gates and outstanding Company, Person, GLEIF and empty-store requirements — live files and PRs #805/#806; remaining items below; 2026-10-03 16:52 ET.
+- [x] Demonstrate a real custom parsing gap against the existing engine primitives — date returns text and number returns null for an ISO instant; 21 focused tests passed; 2026-10-03 16:52 ET.
+- [x] Draft one generic versioned function, tests and Mapping Document support; retain the code/rules approval boundary — no source rule references epoch_microseconds; PR #807; 2026-10-03 16:52 ET.
 - [ ] Prove custom parsing through an installed worker and independent verifier.
 - [ ] Open a dependent PR and verify CI; custom code remains inactive pending operator review.
 - [ ] Company read block and complete positive/failure equivalence before retiring its reader/loaders.
