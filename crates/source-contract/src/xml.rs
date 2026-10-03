@@ -97,13 +97,22 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Document, Rejected> {
             }
             Event::Text(text) => {
                 let text = text.unescape().map_err(malformed)?;
+                if stack.len() == 1 && !text.chars().all(|ch| matches!(ch, ' ' | '\t' | '\r' | '\n')) {
+                    return Err(malformed("text outside the root element"));
+                }
                 stack.last_mut().unwrap().el.push_text(&text);
             }
             Event::CData(data) => {
                 let text = String::from_utf8(data.into_inner().into_owned()).map_err(malformed)?;
+                if stack.len() == 1 {
+                    return Err(malformed("CDATA outside the root element"));
+                }
                 stack.last_mut().unwrap().el.push_text(&text);
             }
             Event::End(_) => {
+                if stack.len() == 1 {
+                    return Err(malformed("unbalanced end tag"));
+                }
                 let frame = stack.pop().unwrap();
                 let parent = stack.last_mut().ok_or_else(|| malformed("unbalanced end tag"))?;
                 parent.el.add_child(frame.name, frame.el);

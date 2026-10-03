@@ -1,0 +1,610 @@
+{
+  "contract_sha256": "b776d3825ec76d50fa02b871118f607f1e2b7f943a0be44d14eb158a13fb96a2",
+  "files": 100,
+  "rows": 331039,
+  "full_output_parity": true,
+  "verification_passed": true,
+  "elapsed_seconds": 70.23000022093765,
+  "artifacts": [
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1423442/accession=0001423442-25-000009/attachments/infotable.xml",
+      "input_sha256": "6fb8c08f7148d982682cd43bdce7141aa23ccf6959a204d02d24b01bdf13eb3e",
+      "output_sha256": "f072aefdc6407662a73ce2af0f95a97bbbc2ad182dca5e04b76618538648aada",
+      "rows": 2658
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=932540/accession=0000932540-26-000002/attachments/infotable.xml",
+      "input_sha256": "0f48a1724595fcf9f6fb3dd5572f5aa658b58a9b743319b589405379a7b6a726",
+      "output_sha256": "a7f765b771c5e445e2181dd9acfa8890567004f20f884cd4483ba72a31e6c23c",
+      "rows": 8559
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1068855/accession=0001193125-25-245770/attachments/form13fInfoTable.xml",
+      "input_sha256": "7f327a6e53cb58b138609b85f2b945d55c1d8a0f837033423fac5910320d0147",
+      "output_sha256": "69b5d051702318e36dd68525430fccf9016fe0425184d3b13ec387bec70eab02",
+      "rows": 946
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=947263/accession=0002052595-26-000073/attachments/infotable.xml",
+      "input_sha256": "7e2da762b25cca04ca972980fb54c660e93a318b21450f9a412ad910851e1fc8",
+      "output_sha256": "98bf45d0aa76a8d71c81251de39ac0b373539132ec9d9d501a252f764ebdaa7a",
+      "rows": 3578
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1368163/accession=0000947871-25-001007/attachments/infotable.xml",
+      "input_sha256": "0298045b29a3a6e9459227db979765539e826dcb553c950cf51de2c6aea8a2e0",
+      "output_sha256": "676a9f1286f3fca01a9c4ba01d671a1a68b99471790c15e9018026a41b99692d",
+      "rows": 2553
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1050743/accession=0001050743-25-000008/attachments/infotable.xml",
+      "input_sha256": "a78ff84895aac623213e0ac1e1b4b2a732dec6bff9d771d51e41d343d97dfadf",
+      "output_sha256": "a8b8a8fe23825caa232e445eff3109c0297133aee532a74208280e3d9b4da6b0",
+      "rows": 1181
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1464811/accession=0001464811-26-000009/attachments/infotable.xml",
+      "input_sha256": "74b6bad7b3eb640d85d73ce19ae220fdc8496dc1689a45ae4e6280397384cb89",
+      "output_sha256": "970f6c061c85dbde10ba439b087ebf5d2baa4dadc61e3d5277f7d8280754ea59",
+      "rows": 1321
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-25-002999/attachments/infotable.xml",
+      "input_sha256": "5ff0f158a71dee57b72c7598bcda68f130087cddcb33439ec1ab1c4de4738b9e",
+      "output_sha256": "391b413518c871306b2e3c4231a4bc1d70a75da9e00a175dbc456ddeb6ebe16c",
+      "rows": 3723
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009016/attachments/infotable.xml",
+      "input_sha256": "db6bc4a19f70e7c291a22d86582c6bb985e2c182cd9bd64a997527c20e05b3de",
+      "output_sha256": "402135b05afe2829f6af02372fe03e874cfa64c86a2f2477c9246913c503283b",
+      "rows": 1137
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1344551/accession=0001344551-25-000003/attachments/infotable.xml",
+      "input_sha256": "edbbea83c31fe40b287463ff3244c7ed868140652f211ae084b33a87cef6e384",
+      "output_sha256": "c65f7166540a13a7bf8fbf1aaab55afea033a977497f9497ab3256ac77727dd6",
+      "rows": 2590
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1344551/accession=0001344551-26-000005/attachments/infotable.xml",
+      "input_sha256": "927c86bb5d1973b07a117aac738b558b07f41bddcc616a1503afa4ceff6b3a7d",
+      "output_sha256": "071cc9a7773d52db7cfc4278480bec4d8b4800b4f41179143ed522b27343ef77",
+      "rows": 3443
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=743127/accession=0001085146-24-005170/attachments/infotable.xml",
+      "input_sha256": "10da178e1201efb77cdc9e570af18c74464bee1d6f25c94628c2405afb016b2b",
+      "output_sha256": "fe146ee6f642f3b09a645d761b0dc71f3db8131621451bec0c5ff9bb7aa67b18",
+      "rows": 836
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-16-003828/attachments/form13fInfoTable.xml",
+      "input_sha256": "948a1c7da521cbdf8a1751b79de7acc6ffb60af15f7c918c06cd46f852baf337",
+      "output_sha256": "a8a1bb970796058c89099c1378942d42c4abea0db35a52fd0bb161207e06a40c",
+      "rows": 2059
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0001999371-26-018670/attachments/infotable.xml",
+      "input_sha256": "e2e9990f940fb45a96de9ffbbd517b86b82d93589e8ead8b6e929112dd6d9d76",
+      "output_sha256": "eb204c0b33b1496f6fe481779dcccef68d2caad2379c141786c4375ad410cabc",
+      "rows": 1477
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1404763/accession=0001404763-25-000002/attachments/infotable.xml",
+      "input_sha256": "04b4bed5c40c703af1e733c7048afaf463d3ee25bf1542e664583aa346917c2a",
+      "output_sha256": "3d1ba94698200be618abe8c4756fa605cc940b3849923dddd4de7dd5ec8ee861",
+      "rows": 1544
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=18349/accession=0001172661-25-001905/attachments/infotable.xml",
+      "input_sha256": "9b43f9a4df30f1199842bff6656877303cea3de58b35544a0547d4815e4cccad",
+      "output_sha256": "cdbc484cc99e594e9173c5eda0d98223d98af2c72ccd469e53b8e59a7e7e736c",
+      "rows": 1484
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1603466/accession=0000902664-25-003670/attachments/infotable.xml",
+      "input_sha256": "fffa4a63822b797811af0aa93eefe35c9c18fbb6f652ddb5a9abac2883e9c61c",
+      "output_sha256": "c8270fa4f2aa0212ea0aa9032888f09b181a36d9917f8c40bfbc8f4a53144ede",
+      "rows": 2123
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1141802/accession=0001141802-25-000013/attachments/infotable.xml",
+      "input_sha256": "5642ae2760c242e91d2b46731393c1877e30b8c475d3c22b2a9a67355bdc51e6",
+      "output_sha256": "000e22c3d86487903689964c8ed9512587cd6437a6ba30ee019fb7db8da59140",
+      "rows": 3789
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002038/attachments/informationtable.xml",
+      "input_sha256": "3b7375d8a7b872413d2d5dbddb96832ccdb82b8d22963d79759e595860b3ebfb",
+      "output_sha256": "3179ecdeed7b3007d51fe8fea1adce5484d816455a856eabc2c4f9de3f2eb4fa",
+      "rows": 2042
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1107314/accession=0001213900-25-067775/attachments/infotable.xml",
+      "input_sha256": "d0b79b687df46c8ab1a35a4b83e5e057748c48b613bb98680c22a68ef4ead62f",
+      "output_sha256": "b046c12b34c07fd4151b69d730d71bb8b1c373d0566a95b27137b615c58db349",
+      "rows": 1509
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1071061/accession=0001071061-26-000002/attachments/form13fInfoTable.xml",
+      "input_sha256": "a407975e8857c4b4c048f216005d5e6effcc3cc8c9702cc4d82437f0566d5362",
+      "output_sha256": "add29b6687fd91803155c9e4a0d70c35d4a6f2fc8a004e981c2eeefdf1de49bc",
+      "rows": 2511
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1650717/accession=0001085146-25-004949/attachments/infotable.xml",
+      "input_sha256": "09465612157fe77d7bbf3ae09ca06bb62b74e2817ec47139d65f364bc97bf1d0",
+      "output_sha256": "d38ae9cae0ecee42250fd936ea82264bb21addd549820a3ffab9df0eb97b3d3f",
+      "rows": 1335
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=14661/accession=0001104659-24-014582/attachments/infotable.xml",
+      "input_sha256": "6e5259e1da520726235b2f9d230688db209fcf28b40907f3550e1e082dea6870",
+      "output_sha256": "e65a74fa67e78f9255a14b7f0e5de8fa511cec34a6f57ee623e3f1a8ec59c884",
+      "rows": 1148
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=713676/accession=0000950123-24-002962/attachments/form13fInfoTable.xml",
+      "input_sha256": "71317f51daf5287cbf349c153b66ee7711137f209800e97dabe0f7b57ea6539a",
+      "output_sha256": "08de781c51d67fff28ad2c47f830f2d6cea94eb3c53f4abb5b3534d592d53509",
+      "rows": 16015
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1050743/accession=0001050743-26-000004/attachments/infotable.xml",
+      "input_sha256": "c2b0cd11e5f5addbe3b34dcbb1b7e914ead15dc9ed93d5b01e4a271e7b43bb02",
+      "output_sha256": "b2edc4c53d31756e1c95ca8a7fe7f41d9a8dee9a69195aac27e9a96f42b6a26e",
+      "rows": 1352
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1360533/accession=0001580642-26-001034/attachments/infotable.xml",
+      "input_sha256": "21e84e7bc227eb1e60d81558dfbab329ed403cfe71fc08d594fbffdd1b382470",
+      "output_sha256": "716a575ea53768298a5859b94bbfc3e41caddf287f679ddbc07694132b8b52e4",
+      "rows": 2092
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1393825/accession=0001393825-25-000062/attachments/infotable.xml",
+      "input_sha256": "26b88d3eacaa142218a37455b81f8581c395abb76fe089eab4d10c490b6205b0",
+      "output_sha256": "c2cd148441674e9492e9d8de1dbf8bc99fc70982f4725d4427cc14ed2b764e06",
+      "rows": 1444
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1418773/accession=0001085146-25-003972/attachments/infotable.xml",
+      "input_sha256": "a1ba82353ef9539026ba5d9fd89a4acf4ec5eedd215061fd9d99437bd89d9168",
+      "output_sha256": "7fa0c622943b4cfad9ed8e7820b18368f027a5d9eb17db47f3eb19aeb6005c8d",
+      "rows": 860
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=757657/accession=0000757657-24-000003/attachments/infotable.xml",
+      "input_sha256": "7b736bd24472d362e7d7eb41088c593ce8ac085cafc27ec51d4b3bfb569aa027",
+      "output_sha256": "c5ca15dd1638f22dbd5a24a831bcfc6312e913f1fecf725cb501163a4cca5b66",
+      "rows": 1248
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=9631/accession=0001085146-24-005610/attachments/infotable.xml",
+      "input_sha256": "8e6512202de41c324bda576a29f8a684a361b307168894f31e6973c36e1e948f",
+      "output_sha256": "7ac43b7057f10a852b4a0a2c2e7ca91d500725d1b05a196a4b2fd28089bd5541",
+      "rows": 1340
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1035350/accession=0001104659-25-071974/attachments/infotable.xml",
+      "input_sha256": "e03fbe6ab68025ef7fce538de1c9af0084d06916872b94963802fad675f1eb9f",
+      "output_sha256": "54d7314b91733b3e6035bf8fd1cbda247b622fc751282d28fbf435e6d81d3a45",
+      "rows": 929
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1125816/accession=0001445546-26-001219/attachments/infotable.xml",
+      "input_sha256": "668ca836f65e20da6d247b56369c1b3e30e83bc39929c46f59e068e7676787d8",
+      "output_sha256": "9fa98169745075f25d95478fd4f8825fedd1fb79231316b8b1ccf9cdc9e1987e",
+      "rows": 2910
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=18349/accession=0001172661-25-004639/attachments/infotable.xml",
+      "input_sha256": "6d2fc1988698752d099ebdb619e5a5fa9ec368aeef25690a146e1bc2ed4d7b6e",
+      "output_sha256": "418103499aa118f411fbf6d5d4d81ab234c2a0220ca53396d9d022dc1b7c5f8c",
+      "rows": 1549
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=863748/accession=0001085146-25-005109/attachments/infotable.xml",
+      "input_sha256": "77f18cb137edf1f8ef57f7b77a5cf65edf52602a2ddb550aa0e368696a7477aa",
+      "output_sha256": "9785c48f1e1a1cd6c4b82d5bb0535e8ff7b66d276cc86eab538e54fbf5eae244",
+      "rows": 829
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1362033/accession=0001362033-25-000007/attachments/form13fInfoTable.xml",
+      "input_sha256": "2d7f32662d9b995fc2a5cf8ea000d4cafa398ad9f24267d73cfe0f7a9be3a6dd",
+      "output_sha256": "4bcf19fae01c51650e4b3f692f1d1a6297dbd64dc82d343977e05da29281efd4",
+      "rows": 1695
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1475365/accession=0001214659-26-009184/attachments/infotable.xml",
+      "input_sha256": "d6b027898629a428457e8b6b69a6260f8259e2b33e5b5e4bfbc2d2941efaa76f",
+      "output_sha256": "96102cb5c15224ee175d2fc94d3b279fee8c508456bfa11c843470b1196445ef",
+      "rows": 1080
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1049854/accession=0001049854-25-000012/attachments/infotable.xml",
+      "input_sha256": "3f6934cd6c2904b72b107c7a90df882f84553bbcd77297ddd24cb255684dc97f",
+      "output_sha256": "4985f73076d9db425c70c57761adee3cf79a9d87ce1a6aeb13533d81c35081ad",
+      "rows": 836
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1423053/accession=0001104659-26-062477/attachments/infotable.xml",
+      "input_sha256": "0475f1dab2556cca7cecece66acaf4a09af12f0d93ee382157e9363a6a3a0a70",
+      "output_sha256": "04def174071b1318dc3c7477e835182270b80b4657fd9bd6eadc042eadd10df9",
+      "rows": 15589
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1003518/accession=0000945621-26-000646/attachments/informationtable.xml",
+      "input_sha256": "b418eadfa37b297aafa9e64fc1791f2d4b7e432429e127079f3738cdcded8bda",
+      "output_sha256": "ee6f98931ca265286112dad799753f1a0246ba7a5e1bc73f59b4a5bb84355246",
+      "rows": 1025
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-17-001845/attachments/form13fInfoTable.xml",
+      "input_sha256": "d6e3352ca6ccf1038d5c10fccd5b0db5dd2e9bc48d011db223999ef9cf070398",
+      "output_sha256": "24382cd70398f850c1c3a0759141f95b0d678e832e9c82f896d223c4b2d4999b",
+      "rows": 2249
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1056288/accession=0001623632-26-000246/attachments/infotable.xml",
+      "input_sha256": "604aa3edf8a53b48f79aed2880dbd3756475996afc35d268e0b0606da2fdef58",
+      "output_sha256": "8876415fc847a3af9dd68928195f6ef6230edfb89569407375961e0d068f4d7c",
+      "rows": 3963
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=947263/accession=0002052595-25-000057/attachments/infotable.xml",
+      "input_sha256": "3f82e46bddd1b2c23eeaf0e40f7e4408cac0ea6cb151382b253d111ec4a492f1",
+      "output_sha256": "c269b8d55b8111ffc1df1f6a5660ffed1b5342facdacb847928604320810dc7c",
+      "rows": 3011
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1086619/accession=0001140361-25-030720/attachments/informationtable.xml",
+      "input_sha256": "67f52d292bfb9257e1504b772b985edd46f351cecfe768d3d12ed3063c85b104",
+      "output_sha256": "7bb469505575e13c0501a9d0963a6bbb79fbe3d5e6581fda2d7756b28d479727",
+      "rows": 3070
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1679031/accession=0001214659-26-006019/attachments/infotable.xml",
+      "input_sha256": "1153b3dfd4eb04e86718e11c3312d7ab000e15bfa098a32123010d9d71d9b950",
+      "output_sha256": "23847b1b59e1fdb9df46b23edc843b213d26605f228e134bd7ff906624162332",
+      "rows": 1613
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1831577/accession=0000905148-26-002271/attachments/informationtable.xml",
+      "input_sha256": "9ba1382853f5801e902d0c5d6ed33d7a1895fec2b598ed25523254e20cdf2e29",
+      "output_sha256": "9a98aa75acd2bccc2626d568630eb615c4c8718fde8304fe09c1b6b43cd17841",
+      "rows": 3625
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1126328/accession=0001126328-25-000057/attachments/infotable.xml",
+      "input_sha256": "afc8908b6f2e21cc5d035b111864ac7871a7ef1c878b1257c0f27f080e8ed7b6",
+      "output_sha256": "5537557561ce239434bc8e2a6906ad57ab7ea09f614da1380b2d2f1a5abee128",
+      "rows": 4552
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1081407/accession=0001140361-25-030816/attachments/informationtable.xml",
+      "input_sha256": "2197ee7e59c900daa109b392b00be699e5247191bbb458c0077af59997d5030c",
+      "output_sha256": "a1876acb82e6b172ee00c255294b784e25bfdf47ff8a1a08770bdcfd57eda705",
+      "rows": 1222
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002319/attachments/informationtable.xml",
+      "input_sha256": "9215d94d34610a34cacee29d8c6f3685cc03255ff47f45d609a0ee537c70ebfa",
+      "output_sha256": "f233d662d304f9b92dcbae8da41d4361bec378a32b7131cf642fbb3b1a25a4e5",
+      "rows": 2354
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009014/attachments/infotable.xml",
+      "input_sha256": "84c2c512357a978eebe244e7efcfce2e2e0de9f59d542b2a3789e6c49ad7eda3",
+      "output_sha256": "2679754de539e3248c81980049ecb7301c7bddd3b188473dcf58902ab60a1850",
+      "rows": 1113
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1021926/accession=0001172661-26-001682/attachments/infotable.xml",
+      "input_sha256": "ac97bda6de76e0b972300205fe4f364e5aeecaeff82010866964ebe540fec736",
+      "output_sha256": "3e847132ac3b95ac38c5deef52115f1f22eb63fd59b9986709ed9511a37b62bc",
+      "rows": 1372
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=275484/accession=0000275484-26-000007/attachments/infotable.xml",
+      "input_sha256": "34accc1bc276ee94f96243d49cc5a8818080fd28d089af4eaec6dc8502f0c7ec",
+      "output_sha256": "655d6b8e21ea7b4bda222b8ba117ec0c71f78bde6dbf1bc458128bde567983c3",
+      "rows": 1174
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=14661/accession=0001104659-24-117355/attachments/infotable.xml",
+      "input_sha256": "7496614b83afcab88f5a9902e9266dded813fe0d03dcbba81554cde51d88a59d",
+      "output_sha256": "756a5bd6ada1c6c5115ecb6cbd7bf1ac281be131936422569a6d7e7517d6a1d9",
+      "rows": 1420
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-19-002247/attachments/form13fInfoTable.xml",
+      "input_sha256": "586ada22e362d63ca050afdce7a14b3dfc173a0fed900962534c68564b614bad",
+      "output_sha256": "cf2bb5649f27b0b874e21452c0f1ed9f540956ca06e31929e1c864fe21b9559b",
+      "rows": 2395
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=14661/accession=0001104659-25-076057/attachments/infotable.xml",
+      "input_sha256": "1c95cfc3173de6aff1e88e0dc756e716149e20bb7c67ac8ae8b0ded286a8f02c",
+      "output_sha256": "5605a3a01e0e8038b85ee56ef22f741b2477388e3fd30476b95fc0f5c624009d",
+      "rows": 1547
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0001387131-22-011196/attachments/infotable.xml",
+      "input_sha256": "e3f12f94031435800a3852d4136656be69190a2fbdb8ad0ef0070eba2e68653e",
+      "output_sha256": "c136a5786c050d32f2b053102ccc8d632905743089ae8d29978907601e024b38",
+      "rows": 1460
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1040188/accession=0001040188-25-000032/attachments/infotable.xml",
+      "input_sha256": "986de46c8f15fb634931142d47de5039af7bd7f47815b992da28e7bd0dd092f9",
+      "output_sha256": "b482cfc93ed6af3d08e47b52a15e8254b4dea7cc9927ef0c07d13c3a0ff675ea",
+      "rows": 2748
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0001999371-26-018386/attachments/infotable.xml",
+      "input_sha256": "098c1eb5eb36316afa1041bfd8f5ea6508c99f0a24f0bd0c0431366adde50084",
+      "output_sha256": "52c4858e81051995b15f332f0aa45a19807724295c1e4fa4b9cefdd8e4a15e94",
+      "rows": 1525
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1779789/accession=0001779789-26-000002/attachments/infotable.xml",
+      "input_sha256": "a2306b8cd0eaba896e391ab79bb1d1745189afac34f5e3575e23413e95d19794",
+      "output_sha256": "4e488e89c2904d14e1616d2e0b91ea7334773eda2f89aa15a0f3edc4300e9a73",
+      "rows": 2269
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002048/attachments/informationtable.xml",
+      "input_sha256": "04e6e59ebc7f35a81c7af0966a348e231f897c7b413b8deaa1619225da116a60",
+      "output_sha256": "6a7994e4d6f052c2beee143b6913a4197a2b24e1e08924e4758e6b4ccbc4f202",
+      "rows": 2127
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002033/attachments/informationtable.xml",
+      "input_sha256": "5e17bf726714e74d70118741d8cded1f345e244d7c84a2fbc73b61d48a1439f2",
+      "output_sha256": "3154ff099147751edeaa30bf958b6613eb11a2b616b46bb31860be96b070e389",
+      "rows": 1905
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=2012383/accession=0002012383-26-001841/attachments/form13fInfoTable.xml",
+      "input_sha256": "65d6ad16aa009950552e81f495ca65a227158a501a409238ee733362146042d6",
+      "output_sha256": "d1620603a804e9ffb63794e38387fe6eb9e071ddbc5e2697b71534ef8b77169b",
+      "rows": 50651
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1345929/accession=0001085146-25-005034/attachments/infotable.xml",
+      "input_sha256": "8ce89c736e7c387c163b065e4818dc15d5cb89433e333494a2fac82b44c555b6",
+      "output_sha256": "0b7a7cbe48def4b7a90e2ef1cd0a0f22266e12f70570ba34230ffa610df4af4b",
+      "rows": 3063
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1566475/accession=0001172661-26-002233/attachments/infotable.xml",
+      "input_sha256": "617459bb4995dbe607860f895d9154a640d95cf6eb9163b0b46ce6934021549f",
+      "output_sha256": "52002d48ca65d65de6789d698b71d4c6e4eb3e3ba74b811846c001e01d83eafc",
+      "rows": 7531
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0000891092-20-012140/attachments/infotable.xml",
+      "input_sha256": "63246e50e4160583d1cde7dfb57fd928e22c4107d8312afa5d0aa4c861a4b359",
+      "output_sha256": "5b55bf599938e96c30ab3dc35d8eb31511c3883ba4f1f6115a034df1d84a5b41",
+      "rows": 1520
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=80255/accession=0000080255-25-000216/attachments/infotable.xml",
+      "input_sha256": "8f334932630e8b1bc680acc0e7e2aa1bab44bf2b89cc3850be0557f9f9e8759d",
+      "output_sha256": "04c49cdde52f0cb12ac0cb2dd2f9b9d7e559d052bf99853d4a9a89da1a850392",
+      "rows": 4519
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=35442/accession=0001140361-24-046718/attachments/informationtable.xml",
+      "input_sha256": "652b062db13ed5b08d6f794957962a4af425c7580651c928ef341fc039ef4651",
+      "output_sha256": "debf009dd59715a8e56dfd84da9cbdb042e8477531258e84c60f72929f67458c",
+      "rows": 1173
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1053321/accession=0001062993-26-000904/attachments/form13fInfoTable.xml",
+      "input_sha256": "0e3d802df85ea6943ee201ac88285409381add7cc47d1b8cc7740737b47c6e8b",
+      "output_sha256": "709f14de94cb04d64b06227feb20ea4b7b8a34089ca95edea599a03ce9454350",
+      "rows": 1030
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-23-003359/attachments/infotable.xml",
+      "input_sha256": "da59dc80066eadfab77bd9ead4278225ebfc89d79c6602be5bd82c9c95c5f04f",
+      "output_sha256": "51b3a3fb7ebf94c9f05920b7cde50cb48591b76c6ca3c328295e0496f4c10bcf",
+      "rows": 3457
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1263548/accession=0001999371-26-016069/attachments/infotable.xml",
+      "input_sha256": "4c37a5bb083ff4241b6dbb1f6dab59cb847954122e59bdafc1f292cf43cd5735",
+      "output_sha256": "e683835e20516a4d0f4738578b9daf695a90920f01a6d9185c165861087c3c66",
+      "rows": 1727
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1573876/accession=0001573876-26-000004/attachments/infotable.xml",
+      "input_sha256": "afdf6284d890d92d247467544afb7ec883a1d3b147b05a6f5c2fcf4c0c36d1e2",
+      "output_sha256": "ec4efe3fc31e6c34d6d9eb98bddac007f97ea9acc739fd0393cea618a62f9c91",
+      "rows": 13039
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1603466/accession=0000902664-24-005526/attachments/infotable.xml",
+      "input_sha256": "096bebd645ff302c5e72de8024cef7e10dcf9b529d66d222d227509e8152d519",
+      "output_sha256": "5b3e3352d03e9e838787c03ef4b18b3fe8830a022ac361cee5bf0b6cc0369e2e",
+      "rows": 1790
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1535847/accession=0001580642-26-003177/attachments/infotable.xml",
+      "input_sha256": "62272acf4d8742b662edca2fd2476a1c495c3886766e914dd3b7666c61063186",
+      "output_sha256": "98ed64d06a5d3d4fc1a62cb7ae4c0d366a5ccaa3432eb36b7b9ce6d550c323bf",
+      "rows": 5738
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009015/attachments/infotable.xml",
+      "input_sha256": "9acfed9a0e0f1e13ad867d77fc85b7f03753ccb63ee356eca0b769c2b30233d8",
+      "output_sha256": "6de74702b1660a4c13c9ff3e6f322e3761469911567ad87762d753a0b1029b0d",
+      "rows": 1127
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1350694/accession=0001172661-25-004777/attachments/infotable.xml",
+      "input_sha256": "a0d3e1aab7f786053d9cee86403fe39d9b96f8c6ec8ae02ce601aa39397c0080",
+      "output_sha256": "6a34a72015ed6c270d66160a96854d7e6eee107866ac1dc79e54214e938e73b5",
+      "rows": 1014
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=35442/accession=0001140361-26-021427/attachments/informationtable.xml",
+      "input_sha256": "c49e5e9772fd15dde203f7d539d223d8660a75d9eb29ec9a7fe58bf01d74dd76",
+      "output_sha256": "82302a60e90b1e828f110257fb080ca885a2b868f7f32f799f7e9e6b0df72483",
+      "rows": 1564
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=914208/accession=0000914208-26-000193/attachments/form13fInfoTable.xml",
+      "input_sha256": "5ff70613efeb5a32c03ddf35adc5665a1af60e27d6ac2139d0fe4b35b382c91e",
+      "output_sha256": "7c8ebbbb8113cf7071853f0337976d1063a05eaea5f804101973c1e26039856f",
+      "rows": 23552
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=38777/accession=0000038777-25-000090/attachments/infotable.xml",
+      "input_sha256": "256682135935867bd2fbdaf0705aa206bafebb6eaf93a8d9421de7ffc8656821",
+      "output_sha256": "e496bbefff58a80bd197010c5def09e9121dbdabf8796f6526ffe1909fe96f2e",
+      "rows": 13788
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1274173/accession=0001085146-24-005765/attachments/infotable.xml",
+      "input_sha256": "89fc50bdb70124aa98ccc323647d78ed5cd446129a5163c077f364bdfcf11b23",
+      "output_sha256": "e6f8d55268a06bc881f2a11c4f1c88d8dff17bfc184496ecf0d379a0b710607d",
+      "rows": 4587
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=883948/accession=0001104659-25-074455/attachments/infotable.xml",
+      "input_sha256": "1d5f48abdda94f535bc607c8401e99824523a923db390e54315efd5b46ae986d",
+      "output_sha256": "124e949fcaa9ad7dc2b4e92b1dd4f7a6b60deb3ec74912213ae4f7ad9e21b2fc",
+      "rows": 2520
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1259969/accession=0001140361-26-003508/attachments/informationtable.xml",
+      "input_sha256": "8372597df8204ee110d785dc5cddf080d7a84dc92c0d498109c448f1f5361810",
+      "output_sha256": "8d6622963c7c27e59fd1a06c190e91d7b52993758f03b2d9728f12e703a98d38",
+      "rows": 1721
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=923093/accession=0000902664-25-003613/attachments/infotable.xml",
+      "input_sha256": "af030c4296805865e1beadbdc2221cd812cc02c7240a8126757f1775dfd85a9d",
+      "output_sha256": "5e05b09bca4391d5e23d7417b2304f710bdd5a51f03bb89f85dadd87564e345f",
+      "rows": 3177
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009027/attachments/infotable.xml",
+      "input_sha256": "3409e4234919d1aabec5eee9cc58880e49524bf968e21161cd6fdada000639fb",
+      "output_sha256": "4e160cc1d29f8d9293c151c3e3aac96ccdce4656f0bb14b61978365d880e342a",
+      "rows": 1079
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=701059/accession=0000701059-25-000001/attachments/InfoTable.xml",
+      "input_sha256": "05beace440cbc499e8a0e4e77e961cd28d20621ab6596637ad342366146b3a5b",
+      "output_sha256": "8556387aa1567e28d5892276b14caf122cb25c6a44bfdda52df72bbd52977f89",
+      "rows": 2658
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002034/attachments/informationtable.xml",
+      "input_sha256": "2fbd8e8b30f5693f046a840710281ba4202444c8e046982351737eb168adea36",
+      "output_sha256": "a7e01afa5a7ab6c8d937c6273df9874dd8dec5e8c1d1a36ff7bc9c5f82fddd8b",
+      "rows": 1995
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1649647/accession=0000947871-24-000880/attachments/infotable.xml",
+      "input_sha256": "8c19aeef4cc9b41deda8c324923049d89ac5390ee7799edf1dda1de041043699",
+      "output_sha256": "240a61175e3a6b521959678b6d22e0a196ab1c99dd0df8efe986fb28781529f7",
+      "rows": 1126
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1360533/accession=0001580642-25-004675/attachments/infotable.xml",
+      "input_sha256": "54c5cfc59c90aa34171863050b2277a292ad58a30f55bb848022ed1dd648976d",
+      "output_sha256": "c64bec697b313d0aa8da68a815c17372b28488a1ea269ba8be471d43a6db6373",
+      "rows": 1776
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=96223/accession=0001085146-25-002834/attachments/infotable.xml",
+      "input_sha256": "34390ec998399e41eca4215347f98e3e2999a5a631a7e8f72900f0045aef7519",
+      "output_sha256": "d3925be3c8ed469b089b376565c1be72da78ad4b11564418e787c4eef09c90e9",
+      "rows": 1561
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0000891092-19-005843/attachments/infotable.xml",
+      "input_sha256": "d7af205261537c5253db9ade04ff1bb67ba6f2ab51dd1f1e045593af0392f30a",
+      "output_sha256": "a2519690b9b6e6b0f1b63ede98d5b5b6508b795ff432224b4c3c0d059877e13f",
+      "rows": 1816
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=764038/accession=0001104659-24-057319/attachments/infotable.xml",
+      "input_sha256": "c61e89bef38a2975d511cbd39f9abd1429c7f81dd8e21ba78df538b2bad7fd91",
+      "output_sha256": "5b1cbe8f4280a5a2be64d9cad083053ef71b33f48dcc84a3c78f8ff2df24b130",
+      "rows": 964
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=863748/accession=0000863748-25-000004/attachments/infotable.xml",
+      "input_sha256": "a26272dc97d735b9d056d22d1f051f4797c43770ffd22a597ad2c08815409dd1",
+      "output_sha256": "4e54024e63f2480c13b654a0e84c40fa9d97fcb74184a757b2995c552957f325",
+      "rows": 688
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1387508/accession=0000945621-25-001135/attachments/informationtable.xml",
+      "input_sha256": "e3ebd570b07b4a6b2a123cd42ef45622ef6957359c00423fe265546017c116e2",
+      "output_sha256": "d65d6a5937477a28df74ac1a2b6b098a5561b5c9a8b5f444c5ebe9efb4e71a38",
+      "rows": 1119
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=275484/accession=0000275484-26-000018/attachments/infotable.xml",
+      "input_sha256": "187bb7d7c41d277868293f04ab81aa9e9ce3135d2640450d2dcd92ebd79b8d89",
+      "output_sha256": "4491550a8ab06972d3fc2f69fd4ffe68928510e117d92d744e1c101e69a56c74",
+      "rows": 744
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=275484/accession=0000275484-26-000006/attachments/infotable.xml",
+      "input_sha256": "db0568f2f182a5f6f283d0a45e88ecf376b4672472bb7e20150843ef9020985a",
+      "output_sha256": "07c6597a283ba804e8ef609cf075cadae695c53e6ce680022a9363fdb3784fa2",
+      "rows": 1447
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1316507/accession=0001316507-26-000001/attachments/infotable.xml",
+      "input_sha256": "6f921f71e88357bd19ceb7f50dddf9d1f9147b98475ede8254bfa4f68907cacd",
+      "output_sha256": "750cc8cb1daf19b91fcddfbf9a618e03953e8ce1f68375a45bebfd0fa94fae49",
+      "rows": 997
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1407543/accession=0001214659-25-006567/attachments/infotable.xml",
+      "input_sha256": "188142f79b3b220b6a40d01762917db80f1d29efa8bd6b1166baffffa6b0cd21",
+      "output_sha256": "98eb9085a504828d787493a01e8408b1ff9f3b3929b2fd05f989fb024324c18c",
+      "rows": 4343
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1505817/accession=0001505817-26-000007/attachments/infotable.xml",
+      "input_sha256": "cd98e9857a630f81197dbddea6f668b7fbcef7e5572aaebb800f45df8cc529c9",
+      "output_sha256": "26b4dac652d5b2b6ad19174a96d8eeb4bcc13fb57a8c926df96990a0f06035ba",
+      "rows": 684
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=854157/accession=0001062993-26-002676/attachments/form13fInfoTable.xml",
+      "input_sha256": "e03a9d7bb5d4e93d8dc3f730e2cbd320e8ff28f9f07accf52fef1a5c5171cd2c",
+      "output_sha256": "36fb1cfab1b79065428b7c51be1cd6d5f7a1eaa53c2087aece6bf2699a42d286",
+      "rows": 2491
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1795552/accession=0001795552-26-000005/attachments/infotable.xml",
+      "input_sha256": "d91343a700346db29ee9b53d29993c0f2afa13a28816144d716ded6ef2984b0f",
+      "output_sha256": "9fb179e69bb826f8b5df9436e9875e399061214b82037d78527f1fd5d8b329b8",
+      "rows": 1423
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=883948/accession=0001104659-26-059434/attachments/infotable.xml",
+      "input_sha256": "e026ce44fe80ee2534e092c22be97987385f8c19ace3284934cddf40d75c8619",
+      "output_sha256": "976a88248817e2569a5291a048b7c886e438e1fd55184e7ed4980faadc2ae40d",
+      "rows": 3631
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1401561/accession=0001140361-25-039935/attachments/informationtable.xml",
+      "input_sha256": "ea66b87adb265ce68d4449d7008c0c914d2e7a00c322ccd73e075690bf4ec9b3",
+      "output_sha256": "40f7f7e2af208f8a93424515c1e975a6c2d8ebcd65f15555ae45ca3c4d780829",
+      "rows": 1156
+    }
+  ]
+}

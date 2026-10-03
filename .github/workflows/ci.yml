@@ -107,7 +107,11 @@ jobs:
         run: uv sync --frozen --extra mdm --extra engine
 
       - name: Run engine tests
-        run: uv run --frozen --extra mdm --extra engine pytest tests/engine/ -v --tb=short
+        # Worker qualification uses the real restricted-role PG16 task protocol.
+        # Provision explicitly; a missing prerequisite must fail, never skip.
+        run: |
+          docker pull postgres:16-alpine
+          uv run --frozen --extra mdm --extra engine pytest tests/engine/ -v --tb=short
 
   # ── Infra script lint (bash -n syntax check) ──────────────────────────────
   shellcheck:

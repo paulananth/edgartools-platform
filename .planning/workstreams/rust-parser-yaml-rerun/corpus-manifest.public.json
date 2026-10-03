@@ -1,0 +1,909 @@
+{
+  "review_commit": "125432d78a3fcf49608e49eda2112f169a1556ab",
+  "pin_sha256": "a6befc4525371f0dcf2be20e364945d143fdb7fd668163fff7c81a5268dacbe4",
+  "contract_sha256": "710d928ed769c73f9f66831043e5fbdc7b18c4a3ee7610ddcbd493cdaed9fa7b",
+  "selection": "100 evenly spaced size ranks across distinct pinned accessions, endpoints included; deterministic shuffle seed 799",
+  "distinct_accessions_available": 1000,
+  "files": [
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1423442/accession=0001423442-25-000009/attachments/infotable.xml",
+      "size": 1305001,
+      "etag": "f7e2b1bcb0a65878ce98141a0bc2bed3",
+      "last_modified": "2026-07-23T10:25:04+00:00",
+      "family": "13f_provisional",
+      "index": 70,
+      "sha256": "6fb8c08f7148d982682cd43bdce7141aa23ccf6959a204d02d24b01bdf13eb3e"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=932540/accession=0000932540-26-000002/attachments/infotable.xml",
+      "size": 4360482,
+      "etag": "f0dd557babe0547fdaaec578f7f3518b",
+      "last_modified": "2026-07-22T22:06:01+00:00",
+      "family": "13f_provisional",
+      "index": 93,
+      "sha256": "0f48a1724595fcf9f6fb3dd5572f5aa658b58a9b743319b589405379a7b6a726"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1068855/accession=0001193125-25-245770/attachments/form13fInfoTable.xml",
+      "size": 486653,
+      "etag": "936c979e74b224bed0a4d8def98dfeb5",
+      "last_modified": "2026-07-23T02:50:30+00:00",
+      "family": "13f_provisional",
+      "index": 7,
+      "sha256": "7f327a6e53cb58b138609b85f2b945d55c1d8a0f837033423fac5910320d0147"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=947263/accession=0002052595-26-000073/attachments/infotable.xml",
+      "size": 1764740,
+      "etag": "5185191aed34d37854d2a5308ba2a953",
+      "last_modified": "2026-07-22T23:47:08+00:00",
+      "family": "13f_provisional",
+      "index": 81,
+      "sha256": "7e2da762b25cca04ca972980fb54c660e93a318b21450f9a412ad910851e1fc8"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1368163/accession=0000947871-25-001007/attachments/infotable.xml",
+      "size": 1174568,
+      "etag": "16fb9e91752fe5ff961e218fae902cd7",
+      "last_modified": "2026-07-23T08:36:30+00:00",
+      "family": "13f_provisional",
+      "index": 65,
+      "sha256": "0298045b29a3a6e9459227db979765539e826dcb553c950cf51de2c6aea8a2e0"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1050743/accession=0001050743-25-000008/attachments/infotable.xml",
+      "size": 541388,
+      "etag": "3441535e1cc93754838f9a325fc55eff",
+      "last_modified": "2026-07-23T01:55:33+00:00",
+      "family": "13f_provisional",
+      "index": 16,
+      "sha256": "a78ff84895aac623213e0ac1e1b4b2a732dec6bff9d771d51e41d343d97dfadf"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1464811/accession=0001464811-26-000009/attachments/infotable.xml",
+      "size": 751938,
+      "etag": "d19333d390e4fcdbb205a4d63ede8935",
+      "last_modified": "2026-08-29T15:15:05+00:00",
+      "family": "13f_provisional",
+      "index": 40,
+      "sha256": "74b6bad7b3eb640d85d73ce19ae220fdc8496dc1689a45ae4e6280397384cb89"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-25-002999/attachments/infotable.xml",
+      "size": 1843985,
+      "etag": "9bf50ea3ef624aedeaa3af30b3c32b03",
+      "last_modified": "2026-08-27T17:26:02+00:00",
+      "family": "13f_provisional",
+      "index": 83,
+      "sha256": "5ff0f158a71dee57b72c7598bcda68f130087cddcb33439ec1ab1c4de4738b9e"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009016/attachments/infotable.xml",
+      "size": 519741,
+      "etag": "ca79b9a7f76a0e5fcb8075292fdd778a",
+      "last_modified": "2026-08-01T04:01:10+00:00",
+      "family": "13f_provisional",
+      "index": 13,
+      "sha256": "db6bc4a19f70e7c291a22d86582c6bb985e2c182cd9bd64a997527c20e05b3de"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1344551/accession=0001344551-25-000003/attachments/infotable.xml",
+      "size": 1188869,
+      "etag": "541c62a48467e35c99843006c22b314f",
+      "last_modified": "2026-08-11T00:18:46+00:00",
+      "family": "13f_provisional",
+      "index": 66,
+      "sha256": "edbbea83c31fe40b287463ff3244c7ed868140652f211ae084b33a87cef6e384"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1344551/accession=0001344551-26-000005/attachments/infotable.xml",
+      "size": 1584012,
+      "etag": "8a06b8eb6db268b72b4bb5576daab42c",
+      "last_modified": "2026-07-23T07:42:01+00:00",
+      "family": "13f_provisional",
+      "index": 77,
+      "sha256": "927c86bb5d1973b07a117aac738b558b07f41bddcc616a1503afa4ceff6b3a7d"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=743127/accession=0001085146-24-005170/attachments/infotable.xml",
+      "size": 504458,
+      "etag": "fabd9bc58a7b3aeb0bde8bf833f69365",
+      "last_modified": "2026-07-20T03:05:51+00:00",
+      "family": "13f_provisional",
+      "index": 10,
+      "sha256": "10da178e1201efb77cdc9e570af18c74464bee1d6f25c94628c2405afb016b2b"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-16-003828/attachments/form13fInfoTable.xml",
+      "size": 947071,
+      "etag": "25171d44599b36b75697622c1f89f9ff",
+      "last_modified": "2026-08-27T17:27:08+00:00",
+      "family": "13f_provisional",
+      "index": 55,
+      "sha256": "948a1c7da521cbdf8a1751b79de7acc6ffb60af15f7c918c06cd46f852baf337"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0001999371-26-018670/attachments/infotable.xml",
+      "size": 679208,
+      "etag": "4ae70e1dff965e6595ac7a9c2d2a8229",
+      "last_modified": "2026-08-28T04:05:08+00:00",
+      "family": "13f_provisional",
+      "index": 31,
+      "sha256": "e2e9990f940fb45a96de9ffbbd517b86b82d93589e8ead8b6e929112dd6d9d76"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1404763/accession=0001404763-25-000002/attachments/infotable.xml",
+      "size": 935310,
+      "etag": "f614d1bd9b0deed5fab0ee5fc5e73ab0",
+      "last_modified": "2026-07-23T09:43:42+00:00",
+      "family": "13f_provisional",
+      "index": 54,
+      "sha256": "04b4bed5c40c703af1e733c7048afaf463d3ee25bf1542e664583aa346917c2a"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=18349/accession=0001172661-25-001905/attachments/infotable.xml",
+      "size": 735222,
+      "etag": "40603652a31d126cf72bbc97c02a3bd8",
+      "last_modified": "2026-07-20T02:38:35+00:00",
+      "family": "13f_provisional",
+      "index": 38,
+      "sha256": "9b43f9a4df30f1199842bff6656877303cea3de58b35544a0547d4815e4cccad"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1603466/accession=0000902664-25-003670/attachments/infotable.xml",
+      "size": 1002513,
+      "etag": "62def70b3f447378fbe7113c80977458",
+      "last_modified": "2026-08-11T02:22:55+00:00",
+      "family": "13f_provisional",
+      "index": 57,
+      "sha256": "fffa4a63822b797811af0aa93eefe35c9c18fbb6f652ddb5a9abac2883e9c61c"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1141802/accession=0001141802-25-000013/attachments/infotable.xml",
+      "size": 2282472,
+      "etag": "d7c466415aa1870e9147b0f7ec392368",
+      "last_modified": "2026-07-23T04:20:19+00:00",
+      "family": "13f_provisional",
+      "index": 88,
+      "sha256": "5642ae2760c242e91d2b46731393c1877e30b8c475d3c22b2a9a67355bdc51e6"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002038/attachments/informationtable.xml",
+      "size": 1161883,
+      "etag": "b1bc83edd79af5217fd8d950f969e030",
+      "last_modified": "2026-07-24T08:04:18+00:00",
+      "family": "13f_provisional",
+      "index": 64,
+      "sha256": "3b7375d8a7b872413d2d5dbddb96832ccdb82b8d22963d79759e595860b3ebfb"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1107314/accession=0001213900-25-067775/attachments/infotable.xml",
+      "size": 692131,
+      "etag": "d23a1baeb8c04ea97879e9eaac11fb37",
+      "last_modified": "2026-07-23T03:54:27+00:00",
+      "family": "13f_provisional",
+      "index": 33,
+      "sha256": "d0b79b687df46c8ab1a35a4b83e5e057748c48b613bb98680c22a68ef4ead62f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1071061/accession=0001071061-26-000002/attachments/form13fInfoTable.xml",
+      "size": 913272,
+      "etag": "08e465cdace57304bdcb0ef63cce8562",
+      "last_modified": "2026-07-23T03:05:13+00:00",
+      "family": "13f_provisional",
+      "index": 53,
+      "sha256": "a407975e8857c4b4c048f216005d5e6effcc3cc8c9702cc4d82437f0566d5362"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1650717/accession=0001085146-25-004949/attachments/infotable.xml",
+      "size": 801213,
+      "etag": "f85daf05616e5dd297da6f091cabb57d",
+      "last_modified": "2026-08-11T03:13:37+00:00",
+      "family": "13f_provisional",
+      "index": 44,
+      "sha256": "09465612157fe77d7bbf3ae09ca06bb62b74e2817ec47139d65f364bc97bf1d0"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=14661/accession=0001104659-24-014582/attachments/infotable.xml",
+      "size": 535684,
+      "etag": "765cbc5dc20369ae5cdf5a13e0d10cb5",
+      "last_modified": "2026-07-21T11:34:10+00:00",
+      "family": "13f_provisional",
+      "index": 15,
+      "sha256": "6e5259e1da520726235b2f9d230688db209fcf28b40907f3550e1e082dea6870"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=713676/accession=0000950123-24-002962/attachments/form13fInfoTable.xml",
+      "size": 8779320,
+      "etag": "045212842373dafdf9d9acbbf8da3fad",
+      "last_modified": "2026-07-20T02:38:29+00:00",
+      "family": "13f_provisional",
+      "index": 97,
+      "sha256": "71317f51daf5287cbf349c153b66ee7711137f209800e97dabe0f7b57ea6539a"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1050743/accession=0001050743-26-000004/attachments/infotable.xml",
+      "size": 618785,
+      "etag": "b22208f98922f18347fe38b77f3507aa",
+      "last_modified": "2026-07-23T01:55:32+00:00",
+      "family": "13f_provisional",
+      "index": 25,
+      "sha256": "c2b0cd11e5f5addbe3b34dcbb1b7e914ead15dc9ed93d5b01e4a271e7b43bb02"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1360533/accession=0001580642-26-001034/attachments/infotable.xml",
+      "size": 975883,
+      "etag": "2dcdfd185a1d5fc171dc782cbf22d341",
+      "last_modified": "2026-07-23T08:32:40+00:00",
+      "family": "13f_provisional",
+      "index": 56,
+      "sha256": "21e84e7bc227eb1e60d81558dfbab329ed403cfe71fc08d594fbffdd1b382470"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1393825/accession=0001393825-25-000062/attachments/infotable.xml",
+      "size": 683247,
+      "etag": "c91dcb615a0d129a41c17dad9ea981ed",
+      "last_modified": "2026-07-23T08:56:04+00:00",
+      "family": "13f_provisional",
+      "index": 32,
+      "sha256": "26b88d3eacaa142218a37455b81f8581c395abb76fe089eab4d10c490b6205b0"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1418773/accession=0001085146-25-003972/attachments/infotable.xml",
+      "size": 559852,
+      "etag": "3c58033b19c82fc44d9d9f293aee597e",
+      "last_modified": "2026-07-23T10:04:16+00:00",
+      "family": "13f_provisional",
+      "index": 18,
+      "sha256": "a1ba82353ef9539026ba5d9fd89a4acf4ec5eedd215061fd9d99437bd89d9168"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=757657/accession=0000757657-24-000003/attachments/infotable.xml",
+      "size": 576770,
+      "etag": "25142b86b10365e2c687e218739535eb",
+      "last_modified": "2026-07-20T03:14:53+00:00",
+      "family": "13f_provisional",
+      "index": 20,
+      "sha256": "7b736bd24472d362e7d7eb41088c593ce8ac085cafc27ec51d4b3bfb569aa027"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=9631/accession=0001085146-24-005610/attachments/infotable.xml",
+      "size": 774218,
+      "etag": "11e18a313b8f7297e5231e7b30fb06f1",
+      "last_modified": "2026-07-20T03:43:09+00:00",
+      "family": "13f_provisional",
+      "index": 42,
+      "sha256": "8e6512202de41c324bda576a29f8a684a361b307168894f31e6973c36e1e948f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1035350/accession=0001104659-25-071974/attachments/infotable.xml",
+      "size": 449193,
+      "etag": "851477b2663d547cb116005397677409",
+      "last_modified": "2026-07-23T01:35:44+00:00",
+      "family": "13f_provisional",
+      "index": 4,
+      "sha256": "e03fbe6ab68025ef7fce538de1c9af0084d06916872b94963802fad675f1eb9f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1125816/accession=0001445546-26-001219/attachments/infotable.xml",
+      "size": 1442127,
+      "etag": "09a417812234f4f6c824cf13042fe5e4",
+      "last_modified": "2026-07-23T04:17:03+00:00",
+      "family": "13f_provisional",
+      "index": 74,
+      "sha256": "668ca836f65e20da6d247b56369c1b3e30e83bc39929c46f59e068e7676787d8"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=18349/accession=0001172661-25-004639/attachments/infotable.xml",
+      "size": 767995,
+      "etag": "f2e7fd18501b63eff99a04616def2a43",
+      "last_modified": "2026-07-22T02:06:36+00:00",
+      "family": "13f_provisional",
+      "index": 41,
+      "sha256": "6d2fc1988698752d099ebdb619e5a5fa9ec368aeef25690a146e1bc2ed4d7b6e"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=863748/accession=0001085146-25-005109/attachments/infotable.xml",
+      "size": 498715,
+      "etag": "0ff47d8578bc4b394aab5ca5a78f1d15",
+      "last_modified": "2026-07-22T20:11:24+00:00",
+      "family": "13f_provisional",
+      "index": 9,
+      "sha256": "77f18cb137edf1f8ef57f7b77a5cf65edf52602a2ddb550aa0e368696a7477aa"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1362033/accession=0001362033-25-000007/attachments/form13fInfoTable.xml",
+      "size": 891273,
+      "etag": "99f502bc33cfd611d3179ff34ea90890",
+      "last_modified": "2026-07-23T08:36:02+00:00",
+      "family": "13f_provisional",
+      "index": 51,
+      "sha256": "2d7f32662d9b995fc2a5cf8ea000d4cafa398ad9f24267d73cfe0f7a9be3a6dd"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1475365/accession=0001214659-26-009184/attachments/infotable.xml",
+      "size": 572276,
+      "etag": "2924d1f73c79f05e9604b219a2813247",
+      "last_modified": "2026-08-01T05:38:06+00:00",
+      "family": "13f_provisional",
+      "index": 19,
+      "sha256": "d6b027898629a428457e8b6b69a6260f8259e2b33e5b5e4bfbc2d2941efaa76f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1049854/accession=0001049854-25-000012/attachments/infotable.xml",
+      "size": 527414,
+      "etag": "cd5b052ee0c30dc6c87ac05076f73269",
+      "last_modified": "2026-07-23T01:55:19+00:00",
+      "family": "13f_provisional",
+      "index": 14,
+      "sha256": "3f6934cd6c2904b72b107c7a90df882f84553bbcd77297ddd24cb255684dc97f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1423053/accession=0001104659-26-062477/attachments/infotable.xml",
+      "size": 7845033,
+      "etag": "87f3c3b5de1584241ba3596ec773c5a3",
+      "last_modified": "2026-07-24T04:42:40+00:00",
+      "family": "13f_provisional",
+      "index": 96,
+      "sha256": "0475f1dab2556cca7cecece66acaf4a09af12f0d93ee382157e9363a6a3a0a70"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1003518/accession=0000945621-26-000646/attachments/informationtable.xml",
+      "size": 584697,
+      "etag": "fb5785a086ea7042801cb480fc8797ff",
+      "last_modified": "2026-07-22T23:47:47+00:00",
+      "family": "13f_provisional",
+      "index": 21,
+      "sha256": "b418eadfa37b297aafa9e64fc1791f2d4b7e432429e127079f3738cdcded8bda"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-17-001845/attachments/form13fInfoTable.xml",
+      "size": 1037102,
+      "etag": "a9a82210d1803aa8187a511c1a774f63",
+      "last_modified": "2026-08-27T17:27:04+00:00",
+      "family": "13f_provisional",
+      "index": 59,
+      "sha256": "d6e3352ca6ccf1038d5c10fccd5b0db5dd2e9bc48d011db223999ef9cf070398"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1056288/accession=0001623632-26-000246/attachments/infotable.xml",
+      "size": 1954129,
+      "etag": "514b58067d52bdfa4f7117a476d263ab",
+      "last_modified": "2026-07-23T01:56:23+00:00",
+      "family": "13f_provisional",
+      "index": 84,
+      "sha256": "604aa3edf8a53b48f79aed2880dbd3756475996afc35d268e0b0606da2fdef58"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=947263/accession=0002052595-25-000057/attachments/infotable.xml",
+      "size": 1481701,
+      "etag": "365a143825631ace2f0bc4fe16b1db5e",
+      "last_modified": "2026-07-22T23:47:10+00:00",
+      "family": "13f_provisional",
+      "index": 75,
+      "sha256": "3f82e46bddd1b2c23eeaf0e40f7e4408cac0ea6cb151382b253d111ec4a492f1"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1086619/accession=0001140361-25-030720/attachments/informationtable.xml",
+      "size": 1738488,
+      "etag": "00a671b92aa513114fed8b40f5d19c7c",
+      "last_modified": "2026-07-23T03:28:09+00:00",
+      "family": "13f_provisional",
+      "index": 80,
+      "sha256": "67f52d292bfb9257e1504b772b985edd46f351cecfe768d3d12ed3063c85b104"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1679031/accession=0001214659-26-006019/attachments/infotable.xml",
+      "size": 744020,
+      "etag": "f7827d9012cfaa2634695b6f4026a1df",
+      "last_modified": "2026-07-24T07:48:53+00:00",
+      "family": "13f_provisional",
+      "index": 39,
+      "sha256": "1153b3dfd4eb04e86718e11c3312d7ab000e15bfa098a32123010d9d71d9b950"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1831577/accession=0000905148-26-002271/attachments/informationtable.xml",
+      "size": 2088359,
+      "etag": "f3ea0ed745eadab342e5cea91673a7d4",
+      "last_modified": "2026-07-24T11:03:31+00:00",
+      "family": "13f_provisional",
+      "index": 86,
+      "sha256": "9ba1382853f5801e902d0c5d6ed33d7a1895fec2b598ed25523254e20cdf2e29"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1126328/accession=0001126328-25-000057/attachments/infotable.xml",
+      "size": 2765361,
+      "etag": "5b2ec46e10e26d1d1e157ba2ccbd6b60",
+      "last_modified": "2026-07-23T04:17:08+00:00",
+      "family": "13f_provisional",
+      "index": 91,
+      "sha256": "afc8908b6f2e21cc5d035b111864ac7871a7ef1c878b1257c0f27f080e8ed7b6"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1081407/accession=0001140361-25-030816/attachments/informationtable.xml",
+      "size": 653810,
+      "etag": "111a7b895da820eb3e16b15eee21c3be",
+      "last_modified": "2026-07-23T03:06:34+00:00",
+      "family": "13f_provisional",
+      "index": 28,
+      "sha256": "2197ee7e59c900daa109b392b00be699e5247191bbb458c0077af59997d5030c"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002319/attachments/informationtable.xml",
+      "size": 1332427,
+      "etag": "b8adf6e03ef1139bb74ba4cda492d0de",
+      "last_modified": "2026-07-24T08:04:09+00:00",
+      "family": "13f_provisional",
+      "index": 71,
+      "sha256": "9215d94d34610a34cacee29d8c6f3685cc03255ff47f45d609a0ee537c70ebfa"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009014/attachments/infotable.xml",
+      "size": 508496,
+      "etag": "bbba1d442cf242f040873b54d101895a",
+      "last_modified": "2026-08-01T04:01:11+00:00",
+      "family": "13f_provisional",
+      "index": 11,
+      "sha256": "84c2c512357a978eebe244e7efcfce2e2e0de9f59d542b2a3789e6c49ad7eda3"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1021926/accession=0001172661-26-001682/attachments/infotable.xml",
+      "size": 629975,
+      "etag": "53ac5ab0fce37752550ccf8e68c84402",
+      "last_modified": "2026-07-23T01:15:18+00:00",
+      "family": "13f_provisional",
+      "index": 26,
+      "sha256": "ac97bda6de76e0b972300205fe4f364e5aeecaeff82010866964ebe540fec736"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=275484/accession=0000275484-26-000007/attachments/infotable.xml",
+      "size": 711719,
+      "etag": "d9b421a7f83b424c1f689e54611422df",
+      "last_modified": "2026-07-24T01:14:04+00:00",
+      "family": "13f_provisional",
+      "index": 36,
+      "sha256": "34accc1bc276ee94f96243d49cc5a8818080fd28d089af4eaec6dc8502f0c7ec"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=14661/accession=0001104659-24-117355/attachments/infotable.xml",
+      "size": 661650,
+      "etag": "01e31e88ba7c12559a9f1f7f7b59b4ec",
+      "last_modified": "2026-07-21T11:34:08+00:00",
+      "family": "13f_provisional",
+      "index": 29,
+      "sha256": "7496614b83afcab88f5a9902e9266dded813fe0d03dcbba81554cde51d88a59d"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-19-002247/attachments/form13fInfoTable.xml",
+      "size": 1103743,
+      "etag": "709f33a5b6e89ac2b981a4e4bf91836e",
+      "last_modified": "2026-08-27T17:26:29+00:00",
+      "family": "13f_provisional",
+      "index": 62,
+      "sha256": "586ada22e362d63ca050afdce7a14b3dfc173a0fed900962534c68564b614bad"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=14661/accession=0001104659-25-076057/attachments/infotable.xml",
+      "size": 721969,
+      "etag": "58d5c21603a668d236f86f9d35e48001",
+      "last_modified": "2026-07-22T01:45:54+00:00",
+      "family": "13f_provisional",
+      "index": 37,
+      "sha256": "1c95cfc3173de6aff1e88e0dc756e716149e20bb7c67ac8ae8b0ded286a8f02c"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0001387131-22-011196/attachments/infotable.xml",
+      "size": 669970,
+      "etag": "afe6f0584fd04aaf662919e0967f9992",
+      "last_modified": "2026-08-27T17:09:07+00:00",
+      "family": "13f_provisional",
+      "index": 30,
+      "sha256": "e3f12f94031435800a3852d4136656be69190a2fbdb8ad0ef0070eba2e68653e"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1040188/accession=0001040188-25-000032/attachments/infotable.xml",
+      "size": 1275425,
+      "etag": "5c46e70f81dc0d55dc5a7d0cdc5226d8",
+      "last_modified": "2026-08-10T21:32:33+00:00",
+      "family": "13f_provisional",
+      "index": 69,
+      "sha256": "986de46c8f15fb634931142d47de5039af7bd7f47815b992da28e7bd0dd092f9"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0001999371-26-018386/attachments/infotable.xml",
+      "size": 701510,
+      "etag": "1b3ec10b260a688f4d8e73897ea79028",
+      "last_modified": "2026-08-28T15:40:59+00:00",
+      "family": "13f_provisional",
+      "index": 35,
+      "sha256": "098c1eb5eb36316afa1041bfd8f5ea6508c99f0a24f0bd0c0431366adde50084"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1779789/accession=0001779789-26-000002/attachments/infotable.xml",
+      "size": 1370096,
+      "etag": "6f0618814cba182e7266629087510b57",
+      "last_modified": "2026-07-24T10:00:17+00:00",
+      "family": "13f_provisional",
+      "index": 72,
+      "sha256": "a2306b8cd0eaba896e391ab79bb1d1745189afac34f5e3575e23413e95d19794"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002048/attachments/informationtable.xml",
+      "size": 1207774,
+      "etag": "fc77372234eba535bb5e1a5c6ebce98f",
+      "last_modified": "2026-07-24T08:04:13+00:00",
+      "family": "13f_provisional",
+      "index": 67,
+      "sha256": "04e6e59ebc7f35a81c7af0966a348e231f897c7b413b8deaa1619225da116a60"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002033/attachments/informationtable.xml",
+      "size": 1084196,
+      "etag": "2f472c0b0ebca2f212f3155abe45055d",
+      "last_modified": "2026-07-24T08:04:20+00:00",
+      "family": "13f_provisional",
+      "index": 61,
+      "sha256": "5e17bf726714e74d70118741d8cded1f345e244d7c84a2fbc73b61d48a1439f2"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=2012383/accession=0002012383-26-001841/attachments/form13fInfoTable.xml",
+      "size": 23314132,
+      "etag": "22376cdd35caffc97eda76b775de611e",
+      "last_modified": "2026-07-24T14:18:50+00:00",
+      "family": "13f_provisional",
+      "index": 99,
+      "sha256": "65d6ad16aa009950552e81f495ca65a227158a501a409238ee733362146042d6"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1345929/accession=0001085146-25-005034/attachments/infotable.xml",
+      "size": 1517281,
+      "etag": "1dd5c2237f0b49c2dc8762639c45a960",
+      "last_modified": "2026-07-23T07:43:30+00:00",
+      "family": "13f_provisional",
+      "index": 76,
+      "sha256": "8ce89c736e7c387c163b065e4818dc15d5cb89433e333494a2fac82b44c555b6"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1566475/accession=0001172661-26-002233/attachments/infotable.xml",
+      "size": 3480638,
+      "etag": "21bbdf044f47427a9c31a1024b80a509",
+      "last_modified": "2026-07-24T06:16:14+00:00",
+      "family": "13f_provisional",
+      "index": 92,
+      "sha256": "617459bb4995dbe607860f895d9154a640d95cf6eb9163b0b46ce6934021549f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0000891092-20-012140/attachments/infotable.xml",
+      "size": 695021,
+      "etag": "d2e972420fb3e88958406b133c2813fa",
+      "last_modified": "2026-08-27T17:09:37+00:00",
+      "family": "13f_provisional",
+      "index": 34,
+      "sha256": "63246e50e4160583d1cde7dfb57fd928e22c4107d8312afa5d0aa4c861a4b359"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=80255/accession=0000080255-25-000216/attachments/infotable.xml",
+      "size": 2196393,
+      "etag": "76471b575f9d7a17cb216a03ebe8447b",
+      "last_modified": "2026-07-20T02:51:16+00:00",
+      "family": "13f_provisional",
+      "index": 87,
+      "sha256": "8f334932630e8b1bc680acc0e7e2aa1bab44bf2b89cc3850be0557f9f9e8759d"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=35442/accession=0001140361-24-046718/attachments/informationtable.xml",
+      "size": 642397,
+      "etag": "530020e80631d5e4279a324ab72ae6ac",
+      "last_modified": "2026-07-20T03:38:27+00:00",
+      "family": "13f_provisional",
+      "index": 27,
+      "sha256": "652b062db13ed5b08d6f794957962a4af425c7580651c928ef341fc039ef4651"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1053321/accession=0001062993-26-000904/attachments/form13fInfoTable.xml",
+      "size": 438207,
+      "etag": "38505d90bcd8fc3109a1cb7ec204a5a0",
+      "last_modified": "2026-07-23T01:55:42+00:00",
+      "family": "13f_provisional",
+      "index": 3,
+      "sha256": "0e3d802df85ea6943ee201ac88285409381add7cc47d1b8cc7740737b47c6e8b"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1462245/accession=0001085146-23-003359/attachments/infotable.xml",
+      "size": 1707582,
+      "etag": "e6223e6e5d035b8672fcc91263b5d3ad",
+      "last_modified": "2026-08-27T17:26:07+00:00",
+      "family": "13f_provisional",
+      "index": 79,
+      "sha256": "da59dc80066eadfab77bd9ead4278225ebfc89d79c6602be5bd82c9c95c5f04f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1263548/accession=0001999371-26-016069/attachments/infotable.xml",
+      "size": 786856,
+      "etag": "5ac6bac3c4d15c740f7fc8b2aa0dd28d",
+      "last_modified": "2026-08-01T06:35:49+00:00",
+      "family": "13f_provisional",
+      "index": 43,
+      "sha256": "4c37a5bb083ff4241b6dbb1f6dab59cb847954122e59bdafc1f292cf43cd5735"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1573876/accession=0001573876-26-000004/attachments/infotable.xml",
+      "size": 6309783,
+      "etag": "253e8c8a6404c61490de68e21951ee93",
+      "last_modified": "2026-07-24T06:19:19+00:00",
+      "family": "13f_provisional",
+      "index": 94,
+      "sha256": "afdf6284d890d92d247467544afb7ec883a1d3b147b05a6f5c2fcf4c0c36d1e2"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1603466/accession=0000902664-24-005526/attachments/infotable.xml",
+      "size": 842779,
+      "etag": "b41cd89b66139f1b4daf7dcb909f8c70",
+      "last_modified": "2026-08-11T02:22:58+00:00",
+      "family": "13f_provisional",
+      "index": 47,
+      "sha256": "096bebd645ff302c5e72de8024cef7e10dcf9b529d66d222d227509e8152d519"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1535847/accession=0001580642-26-003177/attachments/infotable.xml",
+      "size": 2655960,
+      "etag": "91de357ab538eba7cf187b89c8909b9e",
+      "last_modified": "2026-07-24T05:44:06+00:00",
+      "family": "13f_provisional",
+      "index": 90,
+      "sha256": "62272acf4d8742b662edca2fd2476a1c495c3886766e914dd3b7666c61063186"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009015/attachments/infotable.xml",
+      "size": 515310,
+      "etag": "9a3cef3f611422d71dea889d2e13b80c",
+      "last_modified": "2026-08-01T04:01:10+00:00",
+      "family": "13f_provisional",
+      "index": 12,
+      "sha256": "9acfed9a0e0f1e13ad867d77fc85b7f03753ccb63ee356eca0b769c2b30233d8"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1350694/accession=0001172661-25-004777/attachments/infotable.xml",
+      "size": 465809,
+      "etag": "bb17f70b56b14b65b9f2da9d194361bc",
+      "last_modified": "2026-07-23T07:43:56+00:00",
+      "family": "13f_provisional",
+      "index": 5,
+      "sha256": "a0d3e1aab7f786053d9cee86403fe39d9b96f8c6ec8ae02ce601aa39397c0080"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=35442/accession=0001140361-26-021427/attachments/informationtable.xml",
+      "size": 860020,
+      "etag": "a7ce6385d0dac82b48c09a221e5e4aab",
+      "last_modified": "2026-07-22T03:04:51+00:00",
+      "family": "13f_provisional",
+      "index": 49,
+      "sha256": "c49e5e9772fd15dde203f7d539d223d8660a75d9eb29ec9a7fe58bf01d74dd76"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=914208/accession=0000914208-26-000193/attachments/form13fInfoTable.xml",
+      "size": 12373600,
+      "etag": "66f6c8f2b5f9abbd510fd8418d39f215",
+      "last_modified": "2026-07-22T20:41:27+00:00",
+      "family": "13f_provisional",
+      "index": 98,
+      "sha256": "5ff70613efeb5a32c03ddf35adc5665a1af60e27d6ac2139d0fe4b35b382c91e"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=38777/accession=0000038777-25-000090/attachments/infotable.xml",
+      "size": 7198580,
+      "etag": "d54533daceb73a270d0c9a9af4ff1703",
+      "last_modified": "2026-07-21T11:27:35+00:00",
+      "family": "13f_provisional",
+      "index": 95,
+      "sha256": "256682135935867bd2fbdaf0705aa206bafebb6eaf93a8d9421de7ffc8656821"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1274173/accession=0001085146-24-005765/attachments/infotable.xml",
+      "size": 2412700,
+      "etag": "eb2080c23e3a2bcd3e797962d79be329",
+      "last_modified": "2026-08-10T23:31:54+00:00",
+      "family": "13f_provisional",
+      "index": 89,
+      "sha256": "89fc50bdb70124aa98ccc323647d78ed5cd446129a5163c077f364bdfcf11b23"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=883948/accession=0001104659-25-074455/attachments/infotable.xml",
+      "size": 1247437,
+      "etag": "f8dd19c1385c7269c76ef33c0abc0c79",
+      "last_modified": "2026-07-22T20:41:49+00:00",
+      "family": "13f_provisional",
+      "index": 68,
+      "sha256": "1d5f48abdda94f535bc607c8401e99824523a923db390e54315efd5b46ae986d"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1259969/accession=0001140361-26-003508/attachments/informationtable.xml",
+      "size": 906659,
+      "etag": "af453f78e1e9a99ce519849929954226",
+      "last_modified": "2026-07-23T05:27:04+00:00",
+      "family": "13f_provisional",
+      "index": 52,
+      "sha256": "8372597df8204ee110d785dc5cddf080d7a84dc92c0d498109c448f1f5361810"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=923093/accession=0000902664-25-003613/attachments/infotable.xml",
+      "size": 1655763,
+      "etag": "6394f622971726bb55f26668ced4e7f3",
+      "last_modified": "2026-07-22T21:51:47+00:00",
+      "family": "13f_provisional",
+      "index": 78,
+      "sha256": "af030c4296805865e1beadbdc2221cd812cc02c7240a8126757f1775dfd85a9d"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1631073/accession=0001214659-26-009027/attachments/infotable.xml",
+      "size": 494441,
+      "etag": "b96bbb6a93c13af68de0a2fc470f4d27",
+      "last_modified": "2026-08-01T04:01:01+00:00",
+      "family": "13f_provisional",
+      "index": 8,
+      "sha256": "3409e4234919d1aabec5eee9cc58880e49524bf968e21161cd6fdada000639fb"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=701059/accession=0000701059-25-000001/attachments/InfoTable.xml",
+      "size": 1410225,
+      "etag": "582f4c4cee0e9700b3e83db48d2e1cc7",
+      "last_modified": "2026-07-20T02:26:49+00:00",
+      "family": "13f_provisional",
+      "index": 73,
+      "sha256": "05beace440cbc499e8a0e4e77e961cd28d20621ab6596637ad342366146b3a5b"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1694217/accession=0000905148-26-002034/attachments/informationtable.xml",
+      "size": 1135389,
+      "etag": "df998f0c86d415625a6a0faa6f307c44",
+      "last_modified": "2026-07-24T08:04:20+00:00",
+      "family": "13f_provisional",
+      "index": 63,
+      "sha256": "2fbd8e8b30f5693f046a840710281ba4202444c8e046982351737eb168adea36"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1649647/accession=0000947871-24-000880/attachments/infotable.xml",
+      "size": 548041,
+      "etag": "536fa43cb41d37d1e0d9e11f14e51dfc",
+      "last_modified": "2026-08-11T02:48:11+00:00",
+      "family": "13f_provisional",
+      "index": 17,
+      "sha256": "8c19aeef4cc9b41deda8c324923049d89ac5390ee7799edf1dda1de041043699"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1360533/accession=0001580642-25-004675/attachments/infotable.xml",
+      "size": 814782,
+      "etag": "838484d66c45e08ebb069b0f9d5dd82e",
+      "last_modified": "2026-07-23T08:32:53+00:00",
+      "family": "13f_provisional",
+      "index": 45,
+      "sha256": "54c5cfc59c90aa34171863050b2277a292ad58a30f55bb848022ed1dd648976d"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=96223/accession=0001085146-25-002834/attachments/infotable.xml",
+      "size": 1012437,
+      "etag": "b1da72d9f5377419de3aa41f057c601d",
+      "last_modified": "2026-07-20T03:22:29+00:00",
+      "family": "13f_provisional",
+      "index": 58,
+      "sha256": "34390ec998399e41eca4215347f98e3e2999a5a631a7e8f72900f0045aef7519"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1297376/accession=0000891092-19-005843/attachments/infotable.xml",
+      "size": 832910,
+      "etag": "2bc7f3f322c9101dbb0e3f996376837d",
+      "last_modified": "2026-08-27T17:10:03+00:00",
+      "family": "13f_provisional",
+      "index": 46,
+      "sha256": "d7af205261537c5253db9ade04ff1bb67ba6f2ab51dd1f1e045593af0392f30a"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=764038/accession=0001104659-24-057319/attachments/infotable.xml",
+      "size": 474369,
+      "etag": "583a7e14e29ec5c8f74e6958b7ccd3d5",
+      "last_modified": "2026-07-20T03:19:55+00:00",
+      "family": "13f_provisional",
+      "index": 6,
+      "sha256": "c61e89bef38a2975d511cbd39f9abd1429c7f81dd8e21ba78df538b2bad7fd91"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=863748/accession=0000863748-25-000004/attachments/infotable.xml",
+      "size": 414642,
+      "etag": "a299f21da84ca6ca6a8377eb21108284",
+      "last_modified": "2026-07-22T20:11:23+00:00",
+      "family": "13f_provisional",
+      "index": 1,
+      "sha256": "a26272dc97d735b9d056d22d1f051f4797c43770ffd22a597ad2c08815409dd1"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1387508/accession=0000945621-25-001135/attachments/informationtable.xml",
+      "size": 591025,
+      "etag": "cdd6f50b7defc295f213f078355eccde",
+      "last_modified": "2026-07-23T08:54:18+00:00",
+      "family": "13f_provisional",
+      "index": 22,
+      "sha256": "e3ebd570b07b4a6b2a123cd42ef45622ef6957359c00423fe265546017c116e2"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=275484/accession=0000275484-26-000018/attachments/infotable.xml",
+      "size": 421912,
+      "etag": "200edc806552cd726e9bb1879a207ba7",
+      "last_modified": "2026-07-24T01:14:00+00:00",
+      "family": "13f_provisional",
+      "index": 2,
+      "sha256": "187bb7d7c41d277868293f04ab81aa9e9ce3135d2640450d2dcd92ebd79b8d89"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=275484/accession=0000275484-26-000006/attachments/infotable.xml",
+      "size": 878268,
+      "etag": "7ac312852c9d69f091fbaa5503a55f44",
+      "last_modified": "2026-07-24T01:14:05+00:00",
+      "family": "13f_provisional",
+      "index": 50,
+      "sha256": "db0568f2f182a5f6f283d0a45e88ecf376b4672472bb7e20150843ef9020985a"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1316507/accession=0001316507-26-000001/attachments/infotable.xml",
+      "size": 599722,
+      "etag": "a58173503bdb4240d06da33be03ec9e9",
+      "last_modified": "2026-07-23T07:04:39+00:00",
+      "family": "13f_provisional",
+      "index": 23,
+      "sha256": "6f921f71e88357bd19ceb7f50dddf9d1f9147b98475ede8254bfa4f68907cacd"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1407543/accession=0001214659-25-006567/attachments/infotable.xml",
+      "size": 2025755,
+      "etag": "2479a7b0ef35d94ebf6d9a341875ad79",
+      "last_modified": "2026-08-11T00:32:03+00:00",
+      "family": "13f_provisional",
+      "index": 85,
+      "sha256": "188142f79b3b220b6a40d01762917db80f1d29efa8bd6b1166baffffa6b0cd21"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1505817/accession=0001505817-26-000007/attachments/infotable.xml",
+      "size": 405152,
+      "etag": "a48cfdacb6c94496df5de63d639689be",
+      "last_modified": "2026-07-24T05:23:12+00:00",
+      "family": "13f_provisional",
+      "index": 0,
+      "sha256": "cd98e9857a630f81197dbddea6f668b7fbcef7e5572aaebb800f45df8cc529c9"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=854157/accession=0001062993-26-002676/attachments/form13fInfoTable.xml",
+      "size": 1060868,
+      "etag": "0c10320f12c74a94573d819f59d64c04",
+      "last_modified": "2026-07-24T02:27:37+00:00",
+      "family": "13f_provisional",
+      "index": 60,
+      "sha256": "e03a9d7bb5d4e93d8dc3f730e2cbd320e8ff28f9f07accf52fef1a5c5171cd2c"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1795552/accession=0001795552-26-000005/attachments/infotable.xml",
+      "size": 852910,
+      "etag": "555435e372387d916fc259a75c66cd18",
+      "last_modified": "2026-08-01T06:27:14+00:00",
+      "family": "13f_provisional",
+      "index": 48,
+      "sha256": "d91343a700346db29ee9b53d29993c0f2afa13a28816144d716ded6ef2984b0f"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=883948/accession=0001104659-26-059434/attachments/infotable.xml",
+      "size": 1789583,
+      "etag": "8cdd8dc41d0e1f846e554d4923ae997a",
+      "last_modified": "2026-07-22T20:41:48+00:00",
+      "family": "13f_provisional",
+      "index": 82,
+      "sha256": "e026ce44fe80ee2534e092c22be97987385f8c19ace3284934cddf40d75c8619"
+    },
+    {
+      "key": "warehouse/bronze/filings/sec/cik=1401561/accession=0001140361-25-039935/attachments/informationtable.xml",
+      "size": 609200,
+      "etag": "2cd481b157b3147a6bdcc69fdb6c2d10",
+      "last_modified": "2026-07-23T09:43:33+00:00",
+      "family": "13f_provisional",
+      "index": 24,
+      "sha256": "ea66b87adb265ce68d4449d7008c0c914d2e7a00c322ccd73e075690bf4ec9b3"
+    }
+  ]
+}

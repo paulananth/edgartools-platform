@@ -231,6 +231,28 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     if !FORMATS.contains(&format) {
         return Err(format!("format {format} is not read"));
     }
+    for name in ["root", "namespace"] {
+        if read.get(name).is_some_and(|value| value.as_str().is_none()) {
+            return Err(format!("read.{name} must be text"));
+        }
+    }
+    if let Some(retry) = read.get("on_parse_error") {
+        if retry.as_str() != Some("retry_without_control_chars") || format != "xml" {
+            return Err("on_parse_error is retry_without_control_chars for XML only".into());
+        }
+    }
+    if let Some(limits) = read.get("limits") {
+        let limits = limits.as_mapping().ok_or("read.limits must be a mapping")?;
+        for (name, value) in limits {
+            if !matches!(name.as_str(), Some("max_bytes" | "max_member_bytes" | "max_records"))
+                || !value.as_u64().is_some_and(|n| n > 0 && n <= usize::MAX as u64) {
+                return Err("limits name positive integer max_bytes, max_member_bytes or max_records".into());
+            }
+        }
+    }
+    if read.get("require").is_some_and(|value| value.as_sequence().is_none()) {
+        return Err("read.require must be a list".into());
+    }
     if let Some(container) = read.get("container") {
         if container.as_str() != Some("zip") {
             return Err(format!("container {container:?} is not read"));
@@ -244,7 +266,19 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
         setting(rule, "table").ok_or("record_count names no table")?;
     }
     let tables = read.get("tables").and_then(Value::as_mapping).ok_or("read.tables is missing")?;
+    if let Some(rule) = read.get("record_count") {
+        let name = setting(rule, "table").ok_or("record_count names no table")?;
+        if !tables.contains_key(Value::String(name.into())) {
+            return Err(format!("record_count names unknown table {name}"));
+        }
+    }
     for (name, table) in tables {
+        if table.get("each").is_some_and(|value| value.as_str().is_none()) {
+            return Err("table.each must be text".into());
+        }
+        if table.get("checks").is_some_and(|value| value.as_sequence().is_none()) {
+            return Err("table.checks must be a list".into());
+        }
         if let Some(each) = setting(table, "each") {
             check_path(each)?;
         }
@@ -322,7 +356,22 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
                 validate_expr(input, steps)?;
             }
         }
-        "text" | "number" | "date" => check_path(setting(args, "path").ok_or(format!("{name} names no path"))?)?,
+        "text" => {
+            check_path(setting(args, "path").ok_or("text names no path")?)?;
+            if let Some(values) = args.get("null_if") {
+                let values = values.as_sequence().ok_or("text null_if must be a list")?;
+                if values.iter().any(|value| value.as_str().is_none()) {
+                    return Err("text null_if entries must be strings".into());
+                }
+            }
+            if args.get("ignore_case").is_some_and(|value| value.as_bool().is_none()) {
+                return Err("text ignore_case must be a boolean".into());
+            }
+            if args.get("ignore_case").is_some() && args.get("null_if").is_none() {
+                return Err("text ignore_case requires null_if".into());
+            }
+        }
+        "number" | "date" => check_path(setting(args, "path").ok_or(format!("{name} names no path"))?)?,
         _ => {}
     }
     Ok(())
@@ -588,10 +637,20 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
     match name.as_str().unwrap_or_default() {
         "ordinal" => Ok(Val::Int(ordinal)),
         "const" => Ok(yaml_val(args.get("value"))),
-        "text" => Ok(match text_at(scope(document, item, args), args)? {
-            Some(text) => Val::Str(text.trim().to_string()),
-            None => yaml_val(args.get("default")),
-        }),
+        "text" => {
+            let value = match text_at(scope(document, item, args), args)? {
+                Some(text) => Val::Str(text.trim().to_string()),
+                None => yaml_val(args.get("default")),
+            };
+            let Val::Str(text) = &value else { return Ok(value) };
+            let Some(null_if) = args.get("null_if").and_then(Value::as_sequence) else { return Ok(value) };
+            let text = text.trim();
+            let ignore_case = args.get("ignore_case").and_then(Value::as_bool).unwrap_or(false);
+            let matches = null_if.iter().filter_map(Value::as_str).any(|token| {
+                if ignore_case { text.eq_ignore_ascii_case(token.trim()) } else { text == token.trim() }
+            });
+            Ok(if matches { Val::Null } else { Val::Str(text.to_string()) })
+        }
         "number" => {
             let default = yaml_val(args.get("default"));
             Ok(match text_at(scope(document, item, args), args)? {

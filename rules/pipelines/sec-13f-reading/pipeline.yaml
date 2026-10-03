@@ -1,0 +1,17 @@
+pipeline: sec-13f-reading
+bookkeeping:
+  version: 1
+  targets:
+    read:
+      lease_seconds: 120
+      heartbeat_seconds: 30
+      retry: { attempts: 5, base_ms: 100, cap_ms: 5000 }
+      allow_zero_work: false
+      steps:
+        - name: read-information-tables
+          operation: source.read
+          requires: []
+          key: "{batch_id}"
+          leases: ["source-output:{batch_id}"]
+          checks: [input.hash, output.receipt, source.output]
+      checks: [manifest.hash, work.accounting, journal.delivered]

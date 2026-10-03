@@ -54,7 +54,7 @@ def test_a_failed_artifact_raises_with_its_code():
         gleif().read(xml())
 
 
-def test_a_python_step_runs_inside_the_read():
+def test_13f_text_nullification_is_expressed_in_yaml_and_runs_through_the_facade():
     contract = yaml.safe_load((CRATE / "contracts" / "thirteenf" / "contract.yaml").read_text())
     data = (CRATE / "contracts" / "thirteenf" / "fixtures" / "one-row.xml").read_bytes()
     (row,) = SourceEngine(contract).read(data).tables["sec_thirteenf_holding"]
@@ -79,11 +79,6 @@ def test_a_step_that_fails_fails_the_artifact(monkeypatch):
     with pytest.raises(SourceRejected) as error:
         SourceEngine(contract).read(b'{"a": "x"}\n')
     assert error.value.code == "step_failed" and "no" in error.value.detail
-
-
-def test_the_python_and_rust_blank_steps_agree():
-    assert [steps.blank_missing_token(v) for v in [" None ", "nan", "", " x ", None, 3]] == [
-        None, None, None, "x", None, 3]
 
 
 def test_a_lookup_given_as_one_string_is_refused():

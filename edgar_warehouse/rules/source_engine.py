@@ -16,12 +16,20 @@ commands, Bookkeeping and MDM never import Rust.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import source_contract
 
 from .steps import STEPS
+
+
+def runtime_files() -> list[Path]:
+    """Code and native binary a configured reader's execution digest covers."""
+    from . import steps
+
+    return [Path(__file__), Path(steps.__file__), Path(source_contract.source_contract.__file__)]
 
 
 class SourceRejected(Exception):

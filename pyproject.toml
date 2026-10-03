@@ -97,6 +97,9 @@ include = [
   "rules/**/*.yaml",
 ]
 
+[tool.hatch.build.targets.wheel.force-include]
+"crates/source-contract/contracts/thirteenf/contract.yaml" = "edgar_warehouse/config/source_contracts/thirteenf.yaml"
+
 [tool.pytest.ini_options]
 markers = []
 filterwarnings = [
