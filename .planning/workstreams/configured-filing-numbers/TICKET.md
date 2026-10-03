@@ -24,4 +24,4 @@ Python 3.12's integer lexical behavior includes Unicode 15.0 decimal digits. A p
 
 ## Independent review
 
-Standards and Spec reviewers found no scoped blockers. Separate raw/ordinary JSON tree translation is a nonblocking maintenance concern; retaining it preserves existing behavior during qualification. Final PR CI remains pending.
+Standards and Spec reviewers found no scoped blockers. Separate raw/ordinary JSON tree translation is a nonblocking maintenance concern; retaining it preserves existing behavior during qualification. PR #810 is open against main so the unchanged five-suite CI and aggregate gate execute. Final CI remains pending; #809 is its calendar dependency.
