@@ -23,6 +23,7 @@ def _reported(book, rid):
 
 def _fixture(databases, tmp_path):
     book = Bookkeeping(databases.runtime)
+    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = {"source": "generated-fixture", "bookkeeping": {"version": 1, "targets": {
         "generated": {"allow_zero_work": True,
             "steps": [
@@ -57,13 +58,13 @@ def test_generated_children_and_parent_intent_commit_together(databases, tmp_pat
     claim, candidate = _reported(book, rid)
     verification = verification_for(book, rid, "parent", "p1")
     report = verification_report(book, verification, copy)
-    book.admit(verification, report)
+    book.verifier.admit(verification, report)
     receipt = {**candidate, "evidence": report}
     state = book.status(rid)
     assert state["run"]["expected_count"] == 2
     assert state["counts"] == {"verified": 1, "pending": 1}
     assert len(state["deliveries"]) == 1
-    book.admit(verification, report)  # lost acknowledgement
+    book.verifier.admit(verification, report)  # lost acknowledgement
     assert book.status(rid)["run"]["expected_count"] == 2
     changed = deepcopy(book._frozen(rid)[3][1])
     changed["unit"]["output"] += ".changed"
@@ -91,7 +92,7 @@ def test_stale_expansion_cannot_insert_children(databases, tmp_path):
     report = verification_report(book, verification, copy)
     expire(databases, claim)
     with pytest.raises(DBAPIError):
-        book.admit(verification, report)
+        book.verifier.admit(verification, report)
     assert book.status(rid)["run"]["expected_count"] == 1
     assert book.status(rid)["counts"] == {"reported": 1}
 
@@ -100,7 +101,7 @@ def test_unsealed_expansion_blocks_root(databases, tmp_path):
     book, rid, _ = _fixture(databases, tmp_path)
     claim, candidate = _reported(book, rid)
     receipt = {**candidate, "evidence": book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unsealed": True})}
-    book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+    book.verifier._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
                r=rid, s="parent", k="p1", a=claim.attempt, p=canonical(claim.proof),
                v=canonical(receipt), c=canonical({"input.hash": True, "output.receipt": True}),
                e=str(uuid5(UUID(rid), "parent:p1")))
@@ -143,5 +144,45 @@ def test_task_protocol_migration_keeps_populated_control_rows(databases):
             conn.execute(text("UPDATE bookkeeping.work_item SET state='done' WHERE unit_key='0'"))
         with pytest.raises(DBAPIError, match="reported candidate"), engine.begin() as conn:
             conn.execute(text("UPDATE bookkeeping.work_item SET state='verified' WHERE unit_key='0'"))
+    finally:
+        engine.dispose()
+
+
+def test_issuer_migration_keeps_populated_runs_and_refuses_unfrozen_profiles(databases):
+    """006 over 001-005 with a run in every state; a run frozen before 006
+    names no profiles, so no login may work it."""
+    from pathlib import Path
+    from sqlalchemy import create_engine, text
+
+    folder = Path(__file__).resolve().parents[2] / "edgar_warehouse/bookkeeping/clean/migrations"
+    name = "bk_issuers_" + uuid4().hex[:8]
+    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql(f"CREATE DATABASE {name}")
+    engine = create_engine(databases.admin.url.set(database=name))
+    try:
+        with engine.begin() as conn:
+            for path in sorted(folder.glob("00[1-5]_*.sql")):
+                conn.exec_driver_sql(path.read_text().replace("%", "%%"))
+            rid = str(uuid4())
+            conn.execute(text("INSERT INTO bookkeeping.pipeline_run(run_id,submission,submission_hash,expected_count) "
+                              "VALUES(CAST(:r AS uuid),'{}',:h,4)"), {"r": rid, "h": "0" * 64})
+            for n, state in enumerate(("pending", "running", "reported", "waiting")):
+                conn.execute(text("INSERT INTO bookkeeping.work_item(run_id,step,unit_key,ordinal,resources,unit,state,candidate) "
+                                  "VALUES(CAST(:r AS uuid),'s0',:k,:o,'[\"a\"]','{}',:s,CAST(:c AS jsonb))"),
+                             {"r": rid, "k": str(n), "o": n, "s": state,
+                              "c": '{"uri":"file:///x","sha256":"%s"}' % ("0" * 64) if state == "reported" else None})
+        with engine.begin() as conn:
+            conn.exec_driver_sql((folder / "006_issuer_roles.sql").read_text().replace("%", "%%"))
+        with engine.begin() as conn:
+            rows = conn.execute(text("SELECT unit_key,state,candidate,reporter FROM bookkeeping.work_item ORDER BY ordinal")).all()
+            assert [(r.unit_key, r.state, r.reporter) for r in rows] == [
+                ("0", "pending", None), ("1", "running", None), ("2", "reported", None), ("3", "waiting", None)]
+            assert rows[2].candidate == {"uri": "file:///x", "sha256": "0" * 64}
+            assert conn.scalar(text("SELECT bookkeeping.frozen_profile(CAST(:r AS uuid),'s0')"), {"r": rid}) is None
+            names = {conn.scalar(text("SELECT bookkeeping.profile_role(:p,'worker')"), {"p": p}) for p in ("a.b", "a_b", "a-b")}
+            assert len(names) == 3 and all(len(n) <= 63 for n in names)
+        with pytest.raises(DBAPIError, match="no worker role for profile \\(none\\)"), engine.begin() as conn:
+            conn.execute(text("SELECT bookkeeping.claim(CAST(:r AS uuid),'s0','0',CAST(:a AS uuid),60,'[]')"),
+                         {"r": rid, "a": str(uuid4())})
     finally:
         engine.dispose()

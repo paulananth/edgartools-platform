@@ -118,10 +118,8 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["bookkeeping"]:
         # Control starts alone: building the full parser would import MDM and
         # the other domains, which Bookkeeping must never load (to-do 20a).
-        from edgar_warehouse.bookkeeping.clean.cli import register as register_bookkeeping
-        parser = argparse.ArgumentParser(prog="edgar-warehouse")
-        register_bookkeeping(parser.add_subparsers(dest="command", required=True))
-        args = parser.parse_args(argv)
+        from edgar_warehouse.bookkeeping.clean.cli import main as bookkeeping
+        return bookkeeping(argv[1:])
     else:
         args = build_parser().parse_args(argv)
     return args.handler(args)

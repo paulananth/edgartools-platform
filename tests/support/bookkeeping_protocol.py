@@ -13,13 +13,18 @@ RUNTIME = "a" * 64
 WORKERS = {"artifact.copy": copy}
 
 
+def verifier_of(book):
+    """The verifier's own login: never the one that reported (to-do 20b)."""
+    return getattr(book, "verifier", book)
+
+
 def reports_root(envelope: dict) -> str:
     return envelope["output"].rsplit("/", 1)[0] + "/reports"
 
 
 def verification_report(book, verification: dict, worker) -> dict:
     checks, proofs = worker.verify(verification, book.artifacts)
-    return book.artifacts.put(reports_root(verification), report_document(verification, checks, proofs))
+    return book.artifacts.put(reports_root(verification), report_document(verification, checks, proofs, RUNTIME))
 
 
 def envelope_for(book, claim) -> dict:
@@ -27,7 +32,7 @@ def envelope_for(book, claim) -> dict:
 
 
 def verification_for(book, rid: str, step: str, key: str, profile: str = "artifact.copy") -> dict:
-    return next(v for v in book.verifications(rid, profile, limit=1000)
+    return next(v for v in verifier_of(book).verifications(rid, profile, limit=1000)
                 if (v["claim"]["step"], v["claim"]["key"]) == (step, key))
 
 
@@ -40,7 +45,7 @@ def complete(book, rid, key="0", step="s0", worker=copy, profile="artifact.copy"
     book.report(envelope, candidate, RUNTIME)
     verification = verification_for(book, rid, step, key, profile)
     report = verification_report(book, verification, worker)
-    book.admit(verification, report)
+    verifier_of(book).admit(verification, report)
     receipt = {"uri": candidate["uri"], "sha256": candidate["sha256"], "evidence": report}
     return claim, receipt
 
@@ -59,8 +64,8 @@ def drive(book, rid, ledger, *, workers=None, limit=1000) -> dict:
             envelopes = book.tasks(rid, profile, limit=limit - done)
             for envelope in envelopes:
                 book.report(envelope, worker.execute(envelope, book.artifacts), RUNTIME)
-            for verification in book.verifications(rid, profile, limit=1000):
-                book.admit(verification, verification_report(book, verification, worker))
+            for verification in verifier_of(book).verifications(rid, profile, limit=1000):
+                verifier_of(book).admit(verification, verification_report(book, verification, worker))
                 done += 1
             if not envelopes:
                 break

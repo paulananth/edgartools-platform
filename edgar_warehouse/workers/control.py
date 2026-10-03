@@ -21,10 +21,11 @@ def call(*arguments: str, document: dict | None = None):
     return json.loads(done.stdout)
 
 
-def report_document(verification: dict, checks: dict, proofs: list) -> dict:
-    """A verifier's report: its checks, bound to exactly this work and candidate."""
+def report_document(verification: dict, checks: dict, proofs: list, runtime: str) -> dict:
+    """A verifier's report: its checks and its own runtime, bound to exactly
+    this work and candidate."""
     claim = verification["claim"]
-    return {"protocol": verification["protocol"], "checks": checks, "proofs": proofs,
+    return {"protocol": verification["protocol"], "checks": checks, "proofs": proofs, "runtime": runtime,
             "binding": {"run_id": claim["run_id"], "step": claim["step"], "key": claim["key"],
                         "attempt": claim["attempt"], "effect_key": verification["effect_key"],
                         "candidate": verification["candidate"]}}

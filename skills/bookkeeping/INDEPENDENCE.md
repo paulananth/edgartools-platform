@@ -22,7 +22,7 @@ defines the proposed protocol and transition rules. Follow its failure and
 recovery requirements; loader replacement is not a prerequisite for removing
 control coupling. Existing loaders may remain inside external worker processes.
 
-## Status (mastering to-do 20a, 2026-10-02)
+## Status (mastering to-do 20a and 20b, 2026-10-02)
 
 The callback registry, the Company, MDM and source-input modules, the
 acquisition and source-evidence callbacks and the Journal branches on operation
@@ -33,10 +33,10 @@ reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
 
 | Gate | State |
 | --- | --- |
-| 1. Control starts and builds every command with domain packages blocked | Partly: an import guard in a child process blocks every domain package while control starts and builds each command (`tests/architecture/test_bookkeeping_control_only.py`), and the two-worker test's control processes run under it. A control-only wheel installed without those packages is not built yet (20b) |
+| 1. Control starts and builds every command with domain packages blocked | Passed: the control-only wheel (`packages/bookkeeping`) installs with the Journal wheel and no domain distribution, and its own CLI, in isolated mode, makes every control call of a run (migrate, grant-profile, claim, report, verifications, admit, finalize) on PostgreSQL 16; submission is Rules' job (`tests/integration/test_bookkeeping_wheel_postgres.py`); an import guard also covers the repository's control (`tests/architecture/test_bookkeeping_control_only.py`) |
 | 2. Two workers on one protocol, no Bookkeeping change between them | Passed: `artifact.copy` and `jsonl.count`, in their own processes (`test_two_workers_in_their_own_processes_complete_a_cli_submitted_run`) |
-| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, a candidate outside its intended output, forged or missing checks, conflicting reports, stale or missing fencing and unreported completion are refused (`test_admission_refuses_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). Per-profile issuer roles and a verifier's own runtime in its report are 20b |
-| 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage, a changed runtime, resource checkpoints across runs, and a report whose lease lapsed before verification (the verifier re-takes it; no worker repeats it) are covered. Lease expiry while a verifier runs and destination re-verification on resume are 20b |
+| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, a candidate outside its intended output, forged or missing checks, conflicting reports, stale or missing fencing and unreported completion are refused (`test_admission_refuses_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). A run freezes each step's profile; only that profile's worker role claims and reports its work, only its verifier role verifies and completes it, never the login that reported it, and the verifier's runtime is pinned with the completion (`test_only_a_profiles_roles_*`, `test_a_verifier_runtime_*`) |
+| 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage, a changed runtime, resource checkpoints across runs, and a report whose lease lapsed before verification (the verifier re-takes it; no worker repeats it) are covered. A lease lapsing while a verifier runs refuses the late admission and a fresh verification completes the unit (`test_a_lease_lapsing_*`). Destination re-verification on resume waits for the first mutable destination, MDM (20e) |
 
 Company, Person and MDM have no worker yet (to-do 20c, 20d and 20e). Report
 their execution as unsupported; never add a callback back into control.
