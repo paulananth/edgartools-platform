@@ -55,7 +55,7 @@ Set `CHANGE_JOURNAL_DATABASE_URL` and
 ledger or MDM connection. Apply with:
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse change-journal init --runtime-role <role>
+edgar-warehouse change-journal init --runtime-role <role>
 ```
 
 For an already initialized, checksummed schema, use `change-journal migrate
@@ -150,14 +150,14 @@ and qualify the exact source/feed plan before deployment.
 ## Commands and shared skill
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse change-journal status --source <source> --feed <feed>
-uv run --extra mdm --extra s3 edgar-warehouse change-journal events --run-id <root> --limit 100
-uv run --extra mdm --extra s3 edgar-warehouse change-journal verify <receipt.json>
-uv run --extra mdm --extra s3 edgar-warehouse change-journal recover bookkeeping <root> --limit 100
-uv run --extra mdm --extra s3 edgar-warehouse change-journal recover mdm <batch> --worker <worker>
+edgar-warehouse change-journal status --source <source> --feed <feed>
+edgar-warehouse change-journal events --run-id <root> --limit 100
+edgar-warehouse change-journal verify <receipt.json>
+edgar-warehouse change-journal recover bookkeeping <root> --limit 100
 ```
 
-Recovery delegates to the owning Bookkeeping/outbox interface. Journal recovery
+Recovery delegates to the owning Bookkeeping/outbox interface; MDM's events
+are delivered by the run's `mdm.publish` worker, rerun after a resume. Journal recovery
 delivers committed intent; it does not silently request new source data.
 Recovery returns 3 when deliveries remain pending or authority/evidence fails.
 Configured Rules submission supports an exact `--feed` binding. Install the

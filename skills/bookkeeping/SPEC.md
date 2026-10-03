@@ -59,10 +59,10 @@ verifier or check callback, and no branch on a source or operation name.
   worker's own Journal intent.
 
 Workers built so far (`edgar_warehouse/workers`): `artifact.copy` and
-`jsonl.count`. The MDM, acquisition, source-evidence and Company capabilities
-this section used to list were in-process callbacks and are deleted; they
-return as workers in mastering to-do 20c (SEC Company and acquisition), 20d
-(Person) and 20e (MDM). Journal delivery uses the shared Change Journal adapter.
+`jsonl.count`, `source.read`, `mdm.merge` and `mdm.publish`. The
+acquisition, source-evidence and Company capabilities this section used to
+list were in-process callbacks and are deleted; they return as workers in
+mastering to-do 20c (SEC Company and acquisition) and 20d (Person). Journal delivery uses the shared Change Journal adapter.
 
 ## Rules ownership and lifecycle
 
@@ -184,16 +184,16 @@ intent worklists can follow a merged batch without treating its commit receipt
 as a publication command. Final MDM verification checks the MDM worklists
 and exact required consumer set.
 
-The `ingest` target accepts a `mdm.ingest` artifact containing `version: 1`,
-the same `command` without inline assertions, deferred records or occurrences,
-and a `source_input` object with `source_code`, an `artifact` URI/hash,
-`publication` (`publication_key`, nonnegative `revision`, optional
-`effective_at`) and exact `record_count`. Members must be NDJSON, at most
-16 MiB and 1,000 records. The existing adapter creates assertions and retained
-deferred evidence from those bytes. It reads the mapping version pinned in
-the source Rules registration, never the latest registered mapping. An unseen
-Company fixture exercises this entire path without new registry entries or
-source callbacks, including a later mapping correction and lost acknowledgement.
+MDM work is done by two worker profiles (mastering to-do 20e), never by
+control. `mdm.merge` takes one Clean MDM input manifest (contract version 2;
+a batch's records file sits beside it) through the Merge Stage under an MDM
+run fixed by the envelope's effect key, and reports a receipt read back from
+MDM; its verifier reports `mdm.committed`. `mdm.publish` delivers one
+committed batch to one consumer in that consumer's generation order (the
+`journal` consumer becomes a Change Journal event under the envelope's run);
+its verifier reports `mdm.published`. Both fence every MDM transaction with
+the envelope's live lease through the MDM database's `bookkeeping_guard`.
+The former `mdm.ingest` operation is `mdm.merge` with a file batch.
 
 MDM steps must lease `mdm:consumer:<command consumer>`; publication steps
 must lease `mdm:publication:<consumer>`. Configured batch/consumer keys must

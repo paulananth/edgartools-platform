@@ -123,10 +123,11 @@ runtime role. A profile no login was granted cannot report or verify anything.
 Control is also packaged alone: `packages/bookkeeping` (`edgar-bookkeeping`).
 
 `edgar-warehouse workers work|verify <profile> <run>` runs a worker
-or a verifier. The profiles built so far are `artifact.copy` and `jsonl.count`.
-Company, Person and MDM have no worker yet: SEC Company and acquisition arrive
-in mastering to-do 20c, Person in 20d, MDM in 20e. Until then, report their
-execution as unsupported; never route them through an in-process callback.
+or a verifier. The profiles built so far are `artifact.copy`, `jsonl.count`,
+`source.read`, `mdm.merge` and `mdm.publish` (`edgar-warehouse workers describe <profile>`).
+Company and Person have no worker yet: SEC Company and acquisition arrive in
+mastering to-do 20c, Person in 20d. Until then, report their execution as
+unsupported; never route them through an in-process callback.
 
 ## Init and migrate modes
 

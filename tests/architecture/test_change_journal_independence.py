@@ -75,10 +75,11 @@ def test_application_owns_recovery_routes_and_core_excludes_them():
     from edgar_warehouse.cli import build_parser
     from edgar_warehouse.change_journal.cli import build_parser as core_parser
 
-    for command in (["recover", "bookkeeping", "run", "--limit", "1"],
-                    ["recover", "mdm", "batch", "--worker", "worker"]):
-        args = build_parser().parse_args(["change-journal", *command])
-        assert args.handler.__module__ == "edgar_warehouse.application.journal_recovery"
+    args = build_parser().parse_args(["change-journal", "recover", "bookkeeping", "run", "--limit", "1"])
+    assert args.handler.__module__ == "edgar_warehouse.application.journal_recovery"
+    # MDM's events are delivered by the run's mdm.publish worker (to-do 20e).
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["change-journal", "recover", "mdm", "batch", "--worker", "worker"])
     args = build_parser().parse_args(["change-journal", "events", "--limit", "1"])
     assert args.handler.__module__ == "edgar_warehouse.change_journal.cli"
     with pytest.raises(SystemExit) as found:

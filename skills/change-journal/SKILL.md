@@ -130,15 +130,18 @@ business effects. The owner reconciles and retries the original key/envelope,
 acknowledges only durable readback and retains its own fence. Journal outage,
 conflicting content or corrupt evidence must leave intent pending.
 
-Existing application-composed delivery routes are:
+Bookkeeping's own control events are delivered by:
 
 ```bash
 edgar-warehouse change-journal recover bookkeeping <run-id> --limit <bound>
-edgar-warehouse change-journal recover mdm <batch-id> --worker <worker>
 ```
 
-These execute owner recovery in `application.journal_recovery`, outside the
-journal core. They deliver committed intent only; never silently start provider
+MDM's events are delivered by the run's `mdm.publish` step: after
+`edgar-warehouse bookkeeping resume <run-id>`, run that step's worker and
+verifier again (data-platform, Master). There is no separate MDM recovery
+command; the worker holds the run's lease and MDM's own publication fence.
+
+Recovery executes in `application.journal_recovery`, outside the journal core. They deliver committed intent only; never silently start provider
 work or redirect historical backlog. Preserve original roots and evidence.
 Do not add Bookkeeping/MDM imports back into the journal to enable recovery.
 
