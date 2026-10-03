@@ -19,15 +19,15 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.capabilities import receipt_for, standard_registry
-from edgar_warehouse.bookkeeping.clean.config import Blocked, Capability, canonical, digest
+from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
 from edgar_warehouse.bookkeeping.clean.database import migrate
 from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
 from edgar_warehouse.change_journal import ChangeJournal, JournalConflict
 from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.bookkeeping.clean.runner import Authority, run
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
+from edgar_warehouse.workers import copy
+from tests.support.bookkeeping_protocol import RUNTIME, complete, drive, verification_for, verification_report
 from tests.support.rules_approval import approve
 
 
@@ -133,8 +133,8 @@ def approved_acquisition(body, name, contracts, manifest):
                         "checks": {"fixture": True}}}
 
 
-def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None):
-    book = book or Bookkeeping(databases.runtime, standard_registry())
+def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None, cursor=None):
+    book = book or Bookkeeping(databases.runtime)
     body = body or config()
     name = f"fixture-{uuid4().hex}"
     saved = databases.rules.save("source", name, "1", body)
@@ -143,7 +143,8 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
     for n in range(count):
         source = artifacts.put(tmp_path.as_uri() + "/inputs", {"row": n})
         output = (output_root or tmp_path) / f"output-{n}"
-        units.append({"keys": {"id": str(n), "destination": output.as_uri()}, "input": source, "output": output.as_uri(), "cursor": {"offset": n}})
+        units.append({"keys": {"id": str(n), "destination": output.as_uri()}, "input": source, "output": output.as_uri(),
+                      "cursor": cursor(n) if cursor else {"offset": n}})
     inputs = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": units})
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
     if body.get("mdm"):
@@ -152,15 +153,6 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
     return book, rid, inputs, name
-
-
-def complete(book, rid, key="0", step="s0"):
-    claim = book.claim(rid, step, key, sleep=lambda _: None)
-    assert claim
-    cap = book.registry.operations["artifact.copy"]
-    receipt = cap.execute(book, book.item(claim), Authority(claim))
-    book.record_verified_completion(claim, receipt)
-    return claim, receipt
 
 
 def expire(databases, claim):
@@ -242,9 +234,9 @@ def test_submission_rejects_invalid_proof_or_unapproved_mastering(databases, tmp
         # kind is pipeline and its target has a different name.
         invalid["kind"] = "pipeline"
         invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mdm.merge"
+        invalid["body"]["mdm"] = {"fixture": {"contract": {}}}
         invalid["digest"] = digest(invalid["body"])
         invalid["proof"]["digest"] = invalid["digest"]
-        book.registry.operation("mdm.merge", book.registry.operations["artifact.copy"])
     ref = book.artifacts.put(tmp_path.as_uri() + "/invalid", invalid)
     proposed = str(uuid4())
     with pytest.raises(Blocked):
@@ -282,7 +274,7 @@ def test_invalid_proof_and_unsafe_document_names_refused(databases):
 
 def test_full_completion_and_duplicate_delivery(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path)
-    state = run(book, rid, databases.ledger)
+    state = drive(book, rid, databases.ledger)
     assert state["run"]["state"] == "complete"
     assert state["counts"] == {"verified": 3}
     with databases.admin.connect() as conn:
@@ -294,7 +286,7 @@ def test_full_completion_and_duplicate_delivery(databases, tmp_path):
     with databases.ledger_admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM journal.event WHERE run_id=CAST(:r AS uuid)"), {"r": rid}) == 3
     book.resume(rid)
-    assert run(book, rid, databases.ledger)["counts"] == {"verified": 3}
+    assert drive(book, rid, databases.ledger)["counts"] == {"verified": 3}
 
 
 def test_out_of_order_and_stage_prerequisites(databases, tmp_path):
@@ -307,40 +299,39 @@ def test_out_of_order_and_stage_prerequisites(databases, tmp_path):
     assert book.claim(rid, "s1", "0", sleep=lambda _: None) is None
     complete(book, rid, "1")
     assert next(c for c in book.status(rid)["checkpoints"] if c["scope"] == "s0")["ordinal"] == 2
-    state = run(book, rid, databases.ledger)
+    state = drive(book, rid, databases.ledger)
     assert state["run"]["state"] == "complete"
 
 
 def staged_submission(databases, tmp_path):
     """Different stage cardinalities and transformed output; no source callback."""
     executions = []
-    registry = standard_registry()
 
-    def expected(book, item):
-        return book.artifacts.verified(item["unit"]["input"]).upper() + b"|transformed"
+    class Transform:
+        """A worker the control code has never seen; adding it changes
+        nothing in Bookkeeping."""
+        @staticmethod
+        def expected(envelope, artifacts):
+            return artifacts.verified(envelope["input"]).upper() + b"|transformed"
 
-    def transform(book, item, authority):
-        executions.append(item["unit_key"])
-        output = book.artifacts.put_bytes(item["unit"]["output"], expected(book, item))
-        return receipt_for(book, item, output)
+        @classmethod
+        def execute(cls, envelope, artifacts):
+            data = cls.expected(envelope, artifacts)
+            try:  # reconcile an earlier attempt's effect before writing again
+                if artifacts.read(envelope["output"]) == data:
+                    return artifacts.put_bytes(envelope["output"], data)
+            except Blocked:
+                pass
+            executions.append(envelope["claim"]["key"])
+            return artifacts.put_bytes(envelope["output"], data)
 
-    def reconcile(book, item, authority):
-        try:
-            data = book.artifacts.read(item["unit"]["output"])
-        except Blocked:
-            return None
-        if data != expected(book, item):
-            raise Blocked("Transformed output differs from verified input")
-        return receipt_for(book, item, book.artifacts.put_bytes(item["unit"]["output"], data))
+        @classmethod
+        def verify(cls, envelope, artifacts):
+            if artifacts.verified(envelope["candidate"]) != cls.expected(envelope, artifacts):
+                raise ValueError("Transformed output differs from verified input")
+            return {name: True for name in envelope["checks"]}, []
 
-    def verify(book, item, receipt):
-        evidence = book.artifacts.json(receipt["evidence"])
-        return (book.artifacts.verified({"uri": receipt["uri"], "sha256": receipt["sha256"]}) == expected(book, item)
-                and evidence["input"] == item["unit"]["input"]
-                and evidence["output"] == {"uri": receipt["uri"], "sha256": receipt["sha256"]})
-
-    registry.operation("fixture.transform", Capability("1", transform, reconcile, verify))
-    book = Bookkeeping(databases.runtime, registry)
+    book = Bookkeeping(databases.runtime)
     body = config(3)
     steps = body["bookkeeping"]["targets"]["silver"]["steps"]
     for step, name, requires in zip(steps, ("z_capture", "a_transform", "b_finish"),
@@ -366,52 +357,54 @@ def staged_submission(databases, tmp_path):
     databases.rules.activate("pipeline", name, "1")
     rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
+    book.workers = {"artifact.copy": copy, "fixture.transform": Transform}
     return book, rid, manifest, executions
 
 
 def test_stage_inputs_follow_verified_outputs_with_distinct_work_accounting(databases, tmp_path):
     book, rid, manifest, executions = staged_submission(databases, tmp_path)
     assert book.claim(rid, "a_transform", "parsed0", sleep=lambda _: None) is None
-    state = run(book, rid, databases.ledger, limit=3)
+    state = drive(book, rid, databases.ledger, workers=book.workers, limit=3)
     assert state["run"]["expected_count"] == 6
     assert state["counts"]["verified"] == 3
     assert state["run"]["state"] == "waiting"
     assert executions == ["parsed0"]
     assert book.claim(rid, "b_finish", "final", sleep=lambda _: None) is None
     book.resume(rid)
-    state = run(book, rid, databases.ledger)
+    state = drive(book, rid, databases.ledger, workers=book.workers)
     assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
     assert executions == ["parsed0", "parsed1", "parsed2"]
     assert book.artifacts.read(manifest["steps"]["b_finish"][0]["output"]) == b"INPUT-0|transformed"
     assert {c["scope"]: c["ordinal"] for c in state["checkpoints"]} == {"z_capture": 1, "a_transform": 2, "b_finish": 0}
     receipt = next(i["receipt"] for i in state["items"] if i["step"] == "b_finish")
-    assert book.artifacts.json(receipt["evidence"])["input"]["uri"] == manifest["steps"]["a_transform"][2]["output"]
+    assert book.artifacts.verified({"uri": receipt["uri"], "sha256": receipt["sha256"]}) == b"INPUT-0|transformed"
+    assert book.artifacts.json(receipt["evidence"])["binding"]["step"] == "b_finish"
     with databases.runtime.connect() as conn:
         frozen = conn.scalar(text("SELECT unit->'input' FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND step='b_finish'"), {"r": rid})
         assert frozen == {"from": {"step": "a_transform", "key": "parsed2"}}
     book.resume(rid)
-    run(book, rid, databases.ledger)
+    drive(book, rid, databases.ledger, workers=book.workers)
     assert executions == ["parsed0", "parsed1", "parsed2"]
 
 
 def test_chained_transform_reconciles_lost_ack_before_reexecution(databases, tmp_path):
     book, rid, manifest, executions = staged_submission(databases, tmp_path)
-    run(book, rid, databases.ledger, limit=2)
+    drive(book, rid, databases.ledger, workers=book.workers, limit=2)
     claim = book.claim(rid, "a_transform", "parsed0")
-    capability = book.registry.operations["fixture.transform"]
-    retained = capability.execute(book, book.item(claim), Authority(claim))
+    retained = book.workers["fixture.transform"].execute(book.envelope(claim), book.artifacts)
     expire(databases, claim)
     book.resume(rid)
-    state = run(book, rid, databases.ledger)
+    state = drive(book, rid, databases.ledger, workers=book.workers)
     assert state["run"]["state"] == "complete"
     assert executions == ["parsed0", "parsed1", "parsed2"]
-    assert next(i["receipt"] for i in state["items"] if i["unit_key"] == "parsed0") == retained
+    receipt = next(i["receipt"] for i in state["items"] if i["unit_key"] == "parsed0")
+    assert {"uri": receipt["uri"], "sha256": receipt["sha256"]} == retained
 
 
 @pytest.mark.parametrize("corruption", ["output", "evidence", "missing_receipt"])
 def test_dependency_corruption_blocks_downstream_without_execution(databases, tmp_path, corruption):
     book, rid, manifest, executions = staged_submission(databases, tmp_path)
-    state = run(book, rid, databases.ledger, limit=2)
+    state = drive(book, rid, databases.ledger, workers=book.workers, limit=2)
     upstream = next(i for i in state["items"] if i["step"] == "z_capture" and i["unit_key"] == "raw0")
     if corruption == "missing_receipt":
         with databases.admin.begin() as conn:
@@ -420,13 +413,13 @@ def test_dependency_corruption_blocks_downstream_without_execution(databases, tm
         uri = upstream["receipt"]["uri"] if corruption == "output" else upstream["receipt"]["evidence"]["uri"]
         Path(uri.removeprefix("file://")).write_bytes(b"corrupt")
     with pytest.raises(Blocked):
-        run(book, rid, databases.ledger)
+        drive(book, rid, databases.ledger, workers=book.workers)
     assert book.status(rid)["run"]["state"] == "blocked" and executions == []
 
 
 def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(databases, tmp_path):
     book, rid, manifest, executions = staged_submission(databases, tmp_path)
-    state = run(book, rid, databases.ledger)
+    state = drive(book, rid, databases.ledger, workers=book.workers)
     Path(manifest["steps"]["a_transform"][2]["output"].removeprefix("file://")).unlink()
     with pytest.raises(Blocked):
         book.resume(rid)
@@ -473,18 +466,21 @@ def test_multiple_resource_contention_rolls_back_acquired_prefix(databases, tmp_
 def test_control_commit_expiry_rolls_back_progress_and_outbox(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1, body=config(seconds=2, resource="control:expiry"))
     claim = book.claim(rid, "s0", "0")
-    cap = book.registry.operations["artifact.copy"]
-    receipt = cap.execute(book, book.item(claim), Authority(claim))
-    checks = book.check(rid, claim=claim, receipt=receipt)
+    envelope = book.envelope(claim)
+    candidate = copy.execute(envelope, book.artifacts)
+    book.report(envelope, candidate, RUNTIME)
+    report = verification_report(book, verification_for(book, rid, "s0", "0"), copy)
+    receipt = {**candidate, "evidence": report}
+    checks = {"input.hash": True, "output.receipt": True}
     with pytest.raises(DBAPIError), databases.runtime.begin() as conn:
         conn.execute(text("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))"),
                      {"r": rid, "s": claim.step, "k": claim.key, "a": claim.attempt, "p": canonical(claim.proof),
                       "v": canonical(receipt), "c": canonical(checks), "e": str(uuid4())})
         time.sleep(2.1)
     state = book.status(rid)
-    assert state["counts"] == {"running": 1} and state["pending_deliveries"] == 0
+    assert state["counts"] == {"reported": 1} and state["pending_deliveries"] == 0
     book.resume(rid)
-    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
+    assert drive(book, rid, databases.ledger)["run"]["state"] == "complete"
 
 
 def test_renewal_takeover_and_stale_completion(databases, tmp_path):
@@ -493,51 +489,57 @@ def test_renewal_takeover_and_stale_completion(databases, tmp_path):
     renewed = book.heartbeat(old)
     assert renewed.proof[0]["token"] == old.proof[0]["token"]
     assert renewed.proof[0]["expires_at"] >= old.proof[0]["expires_at"]
-    receipt = book.registry.operations["artifact.copy"].execute(book, book.item(old), Authority(old))
+    stale = book.envelope(old)
+    candidate = copy.execute(stale, book.artifacts)
     expire(databases, old)
     new = book.claim(rid, "s0", "0")
     assert new.attempt != old.attempt
     with pytest.raises(DBAPIError):
-        book.record_verified_completion(old, receipt)
+        book.report(stale, candidate, RUNTIME)
     with pytest.raises(DBAPIError):
         book.wait(old, "stale")
-    book.record_verified_completion(new, receipt)
-    book.record_verified_completion(new, receipt)  # lost acknowledgement
+    envelope = book.envelope(new)
+    book.report(envelope, candidate, RUNTIME)
+    book.report(envelope, candidate, RUNTIME)  # lost acknowledgement
+    verification = verification_for(book, rid, "s0", "0")
+    report = verification_report(book, verification, copy)
+    book.admit(verification, report)
+    book.admit(verification, report)  # lost acknowledgement
     assert book.status(rid)["counts"] == {"verified": 1}
+    other = book.artifacts.put(tmp_path.as_uri() + "/other-reports", {"other": True})
+    with pytest.raises(Blocked, match="changed"):
+        book.admit(verification, other)
 
 
-def test_worker_automatically_renews_during_execution(databases, tmp_path):
-    registry = standard_registry()
-    original = registry.operations["artifact.copy"]
-    observed = []
-
-    def slow_execute(book, item, authority):
-        initial = authority.current().proof[0]["expires_at"]
+def test_worker_renews_during_execution(databases, tmp_path, monkeypatch):
+    """The worker runner keeps its lease alive while slow work runs."""
+    from edgar_warehouse.workers import __main__ as runner, control
+    book, rid, _, _ = submit(databases, tmp_path, count=1, body=config(seconds=2, resource="automatic:renewal"))
+    monkeypatch.setattr(control, "renew", book.renew)
+    envelope = book.envelope(book.claim(rid, "s0", "0"))
+    initial = envelope["claim"]["proof"][0]["expires_at"]
+    with runner.Renewal(envelope) as renewal:
         time.sleep(3.2)
-        observed.append(authority.current().proof[0]["expires_at"] > initial)
-        return original.execute(book, item, authority)
-
-    registry.operations["artifact.copy"] = Capability(original.version, slow_execute, original.reconcile, original.verify)
-    book = Bookkeeping(databases.runtime, registry)
-    book, rid, _, _ = submit(databases, tmp_path, count=1, book=book, body=config(seconds=2, resource="automatic:renewal"))
-    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
-    assert observed == [True]
+    assert renewal.error is None and renewal.envelope["claim"]["proof"][0]["expires_at"] > initial
+    book.report(renewal.envelope, copy.execute(renewal.envelope, book.artifacts), RUNTIME)
+    verification = verification_for(book, rid, "s0", "0")
+    book.admit(verification, verification_report(book, verification, copy))
+    assert book.status(rid)["counts"] == {"verified": 1}
 
 
 def test_crash_after_destination_before_control_and_reconcile(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     old = book.claim(rid, "s0", "0")
-    cap = book.registry.operations["artifact.copy"]
-    receipt = cap.execute(book, book.item(old), Authority(old))
+    written = copy.execute(book.envelope(old), book.artifacts)
+    output = Path(written["uri"].removeprefix("file://"))
+    before = output.stat().st_mtime_ns
     expire(databases, old)
     book.resume(rid)
-    original = book.registry.operations["artifact.copy"]
-    def must_not_execute(*args):
-        raise AssertionError("Committed output must reconcile, not execute twice")
-    book.registry.operations["artifact.copy"] = Capability(original.version, must_not_execute, original.reconcile, original.verify)
-    state = run(book, rid, databases.ledger)
+    state = drive(book, rid, databases.ledger)
     assert state["run"]["state"] == "complete"
-    assert state["items"][0]["receipt"] == receipt
+    receipt = state["items"][0]["receipt"]
+    assert {"uri": receipt["uri"], "sha256": receipt["sha256"]} == written
+    assert output.stat().st_mtime_ns == before  # reconciled, not written twice
 
 
 def test_outbox_atomic_with_progress_and_lost_delivery_ack(databases, tmp_path):
@@ -565,13 +567,10 @@ def test_journal_failure_and_recovery(databases, tmp_path):
     assert book.finalize(rid)["run"]["state"] == "complete"
 
 
-@pytest.mark.parametrize("damage", ["missing", "corrupt", "version", "receipt"])
+@pytest.mark.parametrize("damage", ["missing", "corrupt", "receipt"])
 def test_resume_blocks_drift_and_bad_evidence(databases, tmp_path, damage):
     book, rid, inputs, _ = submit(databases, tmp_path, count=1)
-    if damage == "version":
-        cap = book.registry.operations["artifact.copy"]
-        book.registry.operations["artifact.copy"] = Capability("2", cap.execute, cap.reconcile, cap.verify)
-    elif damage == "receipt":
+    if damage == "receipt":
         _, receipt = complete(book, rid)
         Path(receipt["evidence"]["uri"].removeprefix("file://")).write_text("{}")
     else:
@@ -585,11 +584,128 @@ def test_resume_blocks_drift_and_bad_evidence(databases, tmp_path, damage):
     assert book.status(rid)["run"]["state"] == "blocked"
 
 
+def test_a_worker_runtime_is_pinned_for_the_run(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=2)
+    complete(book, rid, "0")
+    envelope = book.envelope(book.claim(rid, "s0", "1"))
+    with pytest.raises(DBAPIError, match="Pinned worker runtime changed"):
+        book.report(envelope, copy.execute(envelope, book.artifacts), "b" * 64)
+    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+
+
+def test_admission_refuses_reports_that_name_other_work_or_skip_checks(databases, tmp_path):
+    body = config(2)
+    body["bookkeeping"]["targets"]["silver"]["steps"][1]["checks"].append("fixture.readback")
+    book, rid, _, _ = submit(databases, tmp_path, count=1, body=body)
+    complete(book, rid, "0")
+    envelope = book.envelope(book.claim(rid, "s1", "0"))
+    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+    verification = verification_for(book, rid, "s1", "0")
+    assert verification["checks"] == ["fixture.readback"]
+    binding = {"run_id": rid, "step": "s1", "key": "0", "attempt": envelope["claim"]["attempt"],
+               "effect_key": verification["effect_key"], "candidate": verification["candidate"]}
+
+    def admit(**changes):
+        report = {"protocol": 1, "binding": binding, "checks": {"fixture.readback": True}, "proofs": []}
+        report.update(changes)
+        return book.admit(verification, book.artifacts.put(tmp_path.as_uri() + "/forged", report))
+
+    for forged in ({"binding": {**binding, "key": "1"}}, {"binding": {**binding, "attempt": str(uuid4())}},
+                   {"binding": {**binding, "candidate": {"uri": "file:///other", "sha256": "0" * 64}}},
+                   {"checks": {}}, {"checks": {"fixture.readback": False}},
+                   {"checks": {"fixture.readback": True, "extra": True}}):
+        with pytest.raises(Blocked):
+            admit(**forged)
+    with pytest.raises(Blocked, match="frozen work"):
+        book.admit({**verification, "input": {"uri": "file:///elsewhere", "sha256": "0" * 64}},
+                   book.artifacts.put(tmp_path.as_uri() + "/forged", {"protocol": 1}))
+    assert book.status(rid)["counts"] == {"verified": 1, "reported": 1}
+    admit()
+    assert book.status(rid)["counts"] == {"verified": 2}
+
+
+def test_completion_must_be_the_reported_candidate(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    claim = book.claim(rid, "s0", "0")
+    candidate = copy.execute(book.envelope(claim), book.artifacts)
+    evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unreported": True})
+    with pytest.raises(DBAPIError, match="reported candidate"):
+        book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+                   r=rid, s="s0", k="0", a=claim.attempt, p=canonical(claim.proof),
+                   v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}), e=str(uuid4()))
+
+
+def test_a_lapsed_report_is_verified_not_worked_again(databases, tmp_path):
+    """A reported unit belongs to verifiers: once its lease lapses, the
+    verifier re-takes it for the same attempt; no worker claims it again."""
+    book, rid, _, _ = submit(databases, tmp_path, count=12)
+    for key in map(str, range(12)):
+        envelope = book.envelope(book.claim(rid, "s0", key))
+        book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+        expire(databases, book._claim_of(envelope))
+    assert book.tasks(rid, "artifact.copy", limit=20) == []
+    found = book.verifications(rid, "artifact.copy", limit=12)
+    assert len(found) == 12 and all(v["claim"]["proof"][0]["token"] >= 2 for v in found)
+    for verification in found:
+        book.admit(verification, verification_report(book, verification, copy))
+    assert book.status(rid)["counts"] == {"verified": 12}
+
+
+def test_a_candidate_must_be_the_intended_output(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    envelope = book.envelope(book.claim(rid, "s0", "0"))
+    elsewhere = book.artifacts.put_bytes((tmp_path / "elsewhere").as_uri(), b"x")
+    with pytest.raises(Blocked, match="intended output"):
+        book.report(envelope, elsewhere, RUNTIME)
+
+
+def test_resource_checkpoints_span_runs_and_refuse_a_stale_comparison(databases, tmp_path):
+    shared = tmp_path / "checkpointed"
+
+    def run_at(folder, revision, position):
+        return submit(databases, tmp_path / folder, count=1, output_root=shared / folder,
+                      body=config(resource="feed:checkpointed"),
+                      cursor=lambda n: {"resource_checkpoint": {"resource": "feed:checkpointed",
+                                                                "revision": revision, "position": position}})
+
+    first, r1, _, _ = run_at("a", 0, -1)
+    complete(first, r1)
+    assert first.resource_checkpoint("feed:checkpointed")["revision"] == 1
+    stale, r2, _, _ = run_at("b", 0, -1)
+    with pytest.raises(DBAPIError, match="comparison failed"):
+        complete(stale, r2)
+    with databases.admin.begin() as conn:  # the refused run gives its lease up
+        conn.execute(text("UPDATE bookkeeping.lease SET expires_at=clock_timestamp() WHERE run_id=CAST(:r AS uuid)"), {"r": r2})
+    current, r3, _, _ = run_at("c", 1, 0)
+    complete(current, r3)
+    assert current.resource_checkpoint("feed:checkpointed")["revision"] == 2
+
+
+def test_restricted_functions_refuse_missing_fencing_or_unreported_completion(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    claim = book.claim(rid, "s0", "0")
+    candidate = copy.execute(book.envelope(claim), book.artifacts)
+    for proof in ([], [{**claim.proof[0], "token": claim.proof[0]["token"] + 1}], None):
+        with pytest.raises(DBAPIError):
+            book._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
+                       r=rid, s="s0", k="0", a=claim.attempt, p=None if proof is None else canonical(proof),
+                       c=canonical(candidate), f="artifact.copy", t=RUNTIME)
+    evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unreported": True})
+    with pytest.raises(DBAPIError, match="reported candidate"):
+        book._call("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:x,0,-1)",
+                   r=rid, s="s0", k="0", a=claim.attempt, p=canonical(claim.proof),
+                   v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}),
+                   e=str(uuid4()), x=claim.proof[0]["resource"])
+    with databases.runtime.connect() as conn:
+        assert not conn.scalar(text("SELECT has_function_privilege('bk_runtime','bookkeeping.verify_claim(uuid,text,text,uuid,integer)','EXECUTE') IS FALSE"))
+        assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname='authorize_request')"))
+
+
 def test_zero_work_explicit_configuration_and_manifest_evidence(databases, tmp_path):
     with pytest.raises(Blocked):
         submit(databases, tmp_path / "no", count=0)
     book, rid, _, _ = submit(databases, tmp_path / "yes", count=0, body=config(zero=True))
-    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
+    assert drive(book, rid, databases.ledger)["run"]["state"] == "complete"
 
 
 def test_destination_transaction_fence_and_expiry_at_commit(databases, tmp_path):
@@ -618,7 +734,7 @@ def test_destination_transaction_fence_and_expiry_at_commit(databases, tmp_path)
 
 def test_compaction_retains_receipts_checkpoints_and_tokens(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1, body=config(resource="retention:resource"))
-    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
+    assert drive(book, rid, databases.ledger)["run"]["state"] == "complete"
     with databases.admin.begin() as conn:
         conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '31 days' WHERE run_id=CAST(:r AS uuid)"), {"r": rid})
         assert conn.scalar(text("SELECT bookkeeping.compact(30)")) == 1
@@ -631,334 +747,106 @@ def test_compaction_retains_receipts_checkpoints_and_tokens(databases, tmp_path)
         book.resume(rid)
 
 
-def mdm_submission(databases, tmp_path):
-    from tests.integration.test_clean_mdm_postgres import initialize_database, source, identity_and_binding, AS_OF
-    from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
-
-    db = initialize_database(databases.destination_admin, databases.mdm)
-    assertion = source("configured-control")
-    identity, decision = identity_and_binding(assertion)
-    registry = standard_registry()
-    register_mdm(registry, databases.mdm, publisher_factory=lambda spec: LocalContractSink(spec["destination"]))
-    book = Bookkeeping(databases.runtime, registry)
-    body = config(resource="mdm:consumer:{consumer}")
-    target = body["bookkeeping"]["targets"].pop("silver")
-    body["bookkeeping"]["targets"]["mdm"] = target
-    target["steps"][0]["operation"] = "mdm.merge"
-    target["checks"].append("mdm.publication")
-    with databases.mdm.connect() as conn:
-        contract = conn.scalar(text("SELECT body FROM mdm.dataset_mapping WHERE source_code='fixture.primary' ORDER BY mapping_version DESC LIMIT 1"))
-    body["mdm"] = {"fixture.primary": {"contract": {k: v for k, v in contract.items() if k != "registry_evidence"}}}
-    name = "mdm-" + uuid4().hex
-    payload = {"version": 1, "command": {"batch_id": "mdm-" + uuid4().hex,
-        "consumer": "fixture", "expected_checkpoint": 0, "checkpoint": 1,
-        "policy_digest": db.policy, "as_of": AS_OF,
-        "assertions": [assertion], "identities": [identity], "decisions": [decision]}}
-    unit = {"keys": {"id": "0", "consumer": "fixture"},
-            "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", payload),
-            "output": (tmp_path / "mdm-receipt.json").as_uri(), "cursor": {"offset": 0}}
-    inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": [unit]})
-    acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
-    saved = databases.rules.save("source", name, "1", body)
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
-    approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
-    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture", "prepared_batch": payload["command"]["batch_id"]})
-    return book, rid, payload
-
-
-def test_actual_mdm_commit_keeps_hash_and_reconciles_lost_ack(databases, tmp_path):
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
-    from edgar_warehouse.mdm.clean.store import Store
-    book, rid, payload = mdm_submission(databases, tmp_path)
-    claim = book.claim(rid, "s0", "0")
-    capability = book.registry.operations["mdm.merge"]
-    receipt = capability.execute(book, book.item(claim), Authority(claim))
-    with databases.mdm.connect() as conn:
-        retained = conn.execute(text("SELECT request_hash,effects FROM mdm.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}).one()
-        assert "lease_proof" not in canonical(retained.effects)
-        assert str(conn.scalar(text("SELECT run_id FROM mdm.run_batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]})) == rid
-    expire(databases, claim)
-    book.resume(rid)
-    state = run(book, rid, databases.ledger)
-    assert state["counts"] == {"verified": 1} and state["run"]["state"] == "waiting"
-    assert state["items"][0]["receipt"] == receipt
-    # Existing consumer fences can deliver the exact committed intent. Root
-    # completion stays incomplete until both consumers verify their outputs.
-    store = Store(databases.mdm)
-    for consumer in ("export", "graph"):
-        assert store.deliver_one(consumer, "offline-acceptance", LocalContractSink(tmp_path / consumer),
-                                 batch_id=payload["command"]["batch_id"])
-    assert book.finalize(rid)["run"]["state"] == "complete"
-    with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT request_hash FROM mdm.batch WHERE batch_id=:b"), {"b": payload["command"]["batch_id"]}) == retained.request_hash
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
-
-
-def test_stage_manifest_chains_prepared_mdm_and_separate_publication_intents(databases, tmp_path):
-    book, original, payload = mdm_submission(databases, tmp_path)
-    body = book.artifacts.json(book._run(original)["submission"]["rules"])["body"]
-    target = body["bookkeeping"]["targets"]["mdm"]
-    merge = target["steps"][0]
-    target["steps"] = [
-        {**merge, "name": "archive", "operation": "artifact.copy", "requires": [],
-         "leases": ["artifact:{destination}"]},
-        {**merge, "name": "merge", "requires": ["archive"]},
-        {**merge, "name": "publish", "operation": "mdm.publish", "requires": ["merge"],
-         "leases": ["mdm:publication:{consumer}"]},
-    ]
-    archived = (tmp_path / "archived-command.json").as_uri()
-    inputs = book.artifacts.put(tmp_path.as_uri() + "/stage-manifests", {"version": 2, "steps": {
-        "archive": [{"keys": {"id": "prepared", "destination": archived},
-            "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", payload), "output": archived, "cursor": 0}],
-        "merge": [{"keys": {"id": "company", "consumer": "fixture"},
-            "input": {"from": {"step": "archive", "key": "prepared"}},
-            "output": (tmp_path / "merged.json").as_uri(), "cursor": 0}],
-        "publish": [{"keys": {"id": consumer, "consumer": consumer}, "cursor": n,
-            "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1,
-                "batch_id": payload["command"]["batch_id"], "consumer": consumer, "destination": str(tmp_path / consumer)}),
-            "output": (tmp_path / f"{consumer}-receipt.json").as_uri()}
-            for n, consumer in enumerate(("export", "graph"))],
-    }})
-    name = "staged-mdm-" + uuid4().hex
-    # The source document owns dataset registration; this is a source pipeline
-    # with multiple stages, not a platform job without a dataset contract.
-    acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
-    saved = databases.rules.save("source", name, "1", body)
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
-    approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
-    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture"})
-    state = run(book, rid, databases.ledger, limit=2)
-    assert state["counts"]["verified"] == 2 and state["run"]["state"] == "waiting"
-    assert not state["run"]["checks"]["mdm.publication"]
-    book.resume(rid)
-    state = run(book, rid, databases.ledger)
-    assert state["counts"] == {"verified": 4} and state["run"]["state"] == "complete"
-    assert state["run"]["checks"]["mdm.publication"]
-    book.resume(rid)
-    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
-
-
-def test_retired_rules_resume_original_export_and_reading(databases, tmp_path):
-    book, rid, _ = mdm_submission(databases, tmp_path)
-    assert run(book, rid, databases.ledger)["counts"] == {"verified": 1}
-    original = book._run(rid)["submission"]
-    row = databases.rules.version("source", original["name"], "1")
-    body = json.loads(row["body"])
-    body["bookkeeping"]["targets"]["mdm"]["lease_seconds"] = 180
-    saved = databases.rules.save("source", original["name"], "2", body)
-    databases.rules.prove("source", original["name"], "2", {"digest": saved["digest"], "batch_hash": original["inputs"]["sha256"], "passed": True, "acquisition": approved_acquisition(body, original["name"], body["mdm"], original["inputs"])})
-    approve(databases.approver, "source", original["name"], "2")
-    databases.rules.activate("source", original["name"], "2", mdm_engine=databases.destination_admin)
-    assert databases.rules.version("source", original["name"], "1")["status"] == "retired"
-    assert book._frozen(rid)[1]["lease_seconds"] == 120
-    book.resume(rid)
-    assert book._run(rid)["submission"] == original
-    with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT max(mapping_version) FROM mdm.dataset_mapping WHERE source_code='fixture.primary'")) == 1
-
-
-def test_assessment_writes_reject_expired_authority(databases, tmp_path):
-    from edgar_warehouse.mdm.clean import assessment
-    from edgar_warehouse.mdm.clean.store import Store
-    book, rid, _ = mdm_submission(databases, tmp_path)
-    claim = book.claim(rid, "s0", "0")
-    store = Store(databases.mdm, lease_authority=Authority(claim))
-    expire(databases, claim)
-    # Expire destination proof too: a control-only forced expiry cannot be
-    # read atomically from an independent business database.
-    claim.proof[0]["expires_at"] = "2000-01-01T00:00:00+00:00"
-    with pytest.raises(DBAPIError, match="Expired destination authority"):
-        assessment.record(store, {"version": 1}, rid)
-    with pytest.raises(DBAPIError, match="Expired destination authority"):
-        assessment.supersede(store, "missing-assessment", rid)
-    with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 0
-
-
-def test_configured_source_ingest_pins_mapping_and_reconciles_lost_ack(databases, tmp_path):
-    from copy import deepcopy
-    from tests.integration.test_clean_mdm_postgres import initialize_database, identity_and_binding, AS_OF
-    from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
-    from edgar_warehouse.mdm.clean.adapters import normalize
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
-    from edgar_warehouse.mdm.clean.store import register_policy, Store
-    from tests.support.rules_authority import register_dataset
-    db = initialize_database(databases.destination_admin, databases.mdm)
-    code = "unseen.company.v1"
-    contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
-                "record_key": "key", "publication_key": "release", "effective_time": "unknown",
-                "semantics": "patch", "adapter": {"version": "unseen-1", "kind": "company",
-                "record_key": ["key"], "retain_deferred": True, "fields": {"name": "name"}}}
-    with databases.destination_admin.begin() as conn:
-        policy = register_policy(conn, {"version": 1, "required_consumers": ["export", "graph"],
-                                       "automatic_rules": [], "fields": {"company": {"name": {
-                                           "sources": [code], "allow_unknown_effective": True}}}})
-    registry = standard_registry()
-    register_mdm(registry, databases.mdm, publisher_factory=lambda spec: LocalContractSink(spec["destination"]))
-    before = set(registry.operations)
-    book = Bookkeeping(databases.runtime, registry)
-    body = config(resource="mdm:consumer:{consumer}")
-    target = body["bookkeeping"]["targets"].pop("silver")
-    body["bookkeeping"]["targets"]["mdm"] = target
-    target["steps"][0]["operation"] = "mdm.ingest"
-    target["checks"].append("mdm.publication")
-    body["mdm"] = {code: {"contract": contract}}
-    publication = {"publication_key": "release-1", "revision": 1}
-    record = {"key": "one", "name": "Configured Company"}
-    source = book.artifacts.put_bytes((tmp_path / "source.ndjson").as_uri(), canonical(record).encode() + b"\n")
-    prepared = normalize(record, source_code=code, contract=contract, publication={**publication,
-        "artifact_sha256": source["sha256"], "member": source["uri"], "record_locator": f"{source['sha256']}:line:1"})
-    identity, decision = identity_and_binding(prepared)
-    payload = {"version": 1, "source_input": {"source_code": code, "artifact": source,
-        "publication": publication, "record_count": 1}, "command": {"batch_id": "ingest-" + uuid4().hex,
-        "consumer": "unseen-company", "expected_checkpoint": 0, "checkpoint": 1,
-        "policy_digest": policy, "as_of": AS_OF, "identities": [identity], "decisions": [decision]}}
-    unit = {"keys": {"id": "0", "consumer": "unseen-company"}, "input": book.artifacts.put(tmp_path.as_uri(), payload),
-            "output": (tmp_path / "receipt.json").as_uri(), "cursor": 0}
-    inputs = book.artifacts.put(tmp_path.as_uri(), {"version": 1, "units": [unit]})
-    name = "unseen-" + uuid4().hex
-    acquisition_proof = approved_acquisition(body, name, body["mdm"], inputs)
-    saved = databases.rules.save("source", name, "1", body)
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True, "acquisition": acquisition_proof})
-    approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1", mdm_engine=databases.destination_admin)
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri())
-    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="mdm", scope={"source": name, "feed": "fixture"})
-    claim = book.claim(rid, "s0", "0")
-    capability = registry.operations["mdm.ingest"]
-    receipt = capability.execute(book, book.item(claim), Authority(claim))
-    # A later correction cannot change the mapping used to reconcile this run.
-    corrected = deepcopy(contract)
-    corrected["adapter"]["version"] = "unseen-2"
-    corrected["adapter"]["fields"]["name"] = "different_name"
-    with databases.destination_admin.begin() as conn:
-        register_dataset(conn, code, db.registry, corrected)
-    expire(databases, claim)
-    book.resume(rid)
-    state = run(book, rid, databases.ledger)
-    assert state["counts"] == {"verified": 1} and state["items"][0]["receipt"] == receipt
-    assert set(registry.operations) == before
-    with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
-        assert conn.scalar(text("SELECT mapping_version FROM mdm.source_reading WHERE source_code=:c"), {"c": code}) == 1
-        assert conn.scalar(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_entity")) == record["name"]
-    for consumer in ("export", "graph"):
-        assert Store(databases.mdm).deliver_one(consumer, "offline", LocalContractSink(tmp_path / consumer))
-    assert book.finalize(rid)["run"]["state"] == "complete"
-    # Nested source bytes and accounting remain authoritative on fresh runs,
-    # even though the enclosing input command has a valid content hash.
-    for problem in ("count", "hash", "missing", "consumer"):
-        bad = deepcopy(payload)
-        bad["command"]["batch_id"] += "-" + problem
-        if problem == "count":
-            bad["source_input"]["record_count"] = 2
-        elif problem == "hash":
-            bad["source_input"]["artifact"]["sha256"] = "0" * 64
-        elif problem == "missing":
-            bad["source_input"]["artifact"]["uri"] = (tmp_path / "missing.ndjson").as_uri()
-        else:
-            bad["command"]["consumer"] = "unowned-consumer"
-        bad_unit = {**unit, "input": book.artifacts.put(tmp_path.as_uri(), bad),
-                    "output": (tmp_path / f"{problem}-receipt.json").as_uri()}
-        bad_inputs = book.artifacts.put(tmp_path.as_uri(), {"version": 1, "units": [bad_unit]})
-        bad_run = book.start(rules_ref=rules, inputs_ref=bad_inputs, target="mdm", scope={"source": name, "feed": "fixture"})
-        with pytest.raises(Blocked):
-            run(book, bad_run, databases.ledger)
-        assert book.status(bad_run)["run"]["state"] == "blocked"
-    with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
-
-
-def test_configured_platform_publication_failure_and_recovery(databases, tmp_path):
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
-    from edgar_warehouse.bookkeeping.clean.mdm_capabilities import register_mdm
-    book, source_run, payload = mdm_submission(databases, tmp_path / "source")
-    state = run(book, source_run, databases.ledger)
-    assert state["run"]["state"] == "waiting"
-    failing = [True]
-
-    class Sink(LocalContractSink):
-        def verify(self, *args):
-            if failing[0]:
-                raise ConnectionError("publication verification outage")
-            return super().verify(*args)
-
-    registry = standard_registry()
-    register_mdm(registry, databases.mdm, publisher_factory=lambda spec: Sink(spec["destination"]))
-    publisher = Bookkeeping(databases.runtime, registry)
-    from edgar_warehouse.rules.files import pipeline
-    body = pipeline("graph-publication")
-    name = "graph-" + uuid4().hex
-    saved = databases.rules.save("pipeline", name, "1", body)
-    publication = {"version": 1, "batch_id": payload["command"]["batch_id"], "consumer": "graph", "destination": str(tmp_path / "graph")}
-    unit = {"keys": {"batch_id": publication["batch_id"], "consumer": "graph"},
-            "input": publisher.artifacts.put(tmp_path.as_uri() + "/inputs", publication),
-            "output": (tmp_path / "graph-receipt.json").as_uri(), "cursor": 0}
-    inputs = publisher.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": [unit]})
-    databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    databases.rules.activate("pipeline", name, "1")
-    rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
-    rid = publisher.start(rules_ref=rules, inputs_ref=inputs, target="publish", scope={})
-    with pytest.raises(ConnectionError):
-        run(publisher, rid, databases.ledger)
-    assert publisher.status(rid)["counts"] == {"waiting": 1}
-    failing[0] = False
-    publisher.resume(rid)
-    assert run(publisher, rid, databases.ledger)["run"]["state"] == "complete"
-    with databases.mdm.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.outbox_event WHERE batch_id=:b AND consumer='graph' AND event='verified'"), {"b": publication["batch_id"]}) == 1
-    assert book.finalize(source_run)["run"]["state"] == "waiting"  # export still absent
-
-
 def test_unseen_source_configuration_only(databases, tmp_path):
     from edgar_warehouse.rules.files import loads
     body = loads('''source: unseen.calendar\nbookkeeping:\n  version: 1\n  targets:\n    silver:\n      steps:\n        - name: archive\n          operation: artifact.copy\n          requires: []\n          key: "{id}"\n          leases: ["calendar:{destination}"]\n          checks: [input.hash, output.receipt]\n      checks: [manifest.hash, work.accounting, journal.delivered]\n''')
     book, rid, _, _ = submit(databases, tmp_path, body=body)
-    before = set(book.registry.operations)
-    assert run(book, rid, databases.ledger)["run"]["state"] == "complete"
-    assert before == set(book.registry.operations)
+    assert drive(book, rid, databases.ledger)["run"]["state"] == "complete"
 
 
-def test_operator_cli_submits_and_resumes_frozen_work(databases, tmp_path, monkeypatch, capsys):
+GUARD = """
+import importlib.abc, sys
+BLOCKED = ("edgar", "pyarrow", "lxml", "bs4", "source_contract", "edgar_warehouse.mdm", "edgar_warehouse.loaders",
+           "edgar_warehouse.parsers", "edgar_warehouse.serving", "edgar_warehouse.application",
+           "edgar_warehouse.acquisition", "edgar_warehouse.workers")
+
+class Guard(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path=None, target=None):
+        control = bool(sys.argv) and sys.argv[0].endswith("edgar_warehouse/bookkeeping/__main__.py")
+        if control and any(name == b or name.startswith(b + ".") for b in BLOCKED):
+            raise ImportError("Bookkeeping control loaded a domain package: " + name)
+        return None
+
+sys.meta_path.insert(0, Guard())
+"""
+
+
+def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databases, tmp_path, monkeypatch, capsys):
+    """Gates 1 and 2: control runs with every domain package blocked, and two
+    different workers finish the run through the commands alone."""
+    import os
+    import sys
     from edgar_warehouse.cli import main
-    _, _, inputs, name = submit(databases, tmp_path)
-    monkeypatch.setenv("BOOKKEEPING_CLEAN_DATABASE_URL", databases.runtime.url.render_as_string(hide_password=False))
-    monkeypatch.setenv("RULES_DATABASE_URL", databases.rules.engine.url.render_as_string(hide_password=False))
-    monkeypatch.setenv("CHANGE_JOURNAL_DATABASE_URL", databases.ledger.engine.url.render_as_string(hide_password=False))
-    monkeypatch.setenv("BOOKKEEPING_MANIFEST_ROOT", (tmp_path / "cli-manifests").as_uri())
+    body = config(2)
+    second = body["bookkeeping"]["targets"]["silver"]["steps"][1]
+    second.update(operation="jsonl.count", checks=["input.hash", "output.receipt", "count.readback"])
+    book = Bookkeeping(databases.runtime)
+    name = f"workers-{uuid4().hex}"
+    saved = databases.rules.save("source", name, "1", body)
+    copies = []
+    for n in range(2):
+        source = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": n})
+        copies.append({"keys": {"id": str(n), "destination": (tmp_path / f"copy-{n}").as_uri()}, "input": source,
+                       "output": (tmp_path / f"copy-{n}").as_uri(), "cursor": {"offset": n}})
+    counts = [{"keys": {"id": f"count-{n}", "destination": (tmp_path / f"count-{n}").as_uri()},
+               "input": {"from": {"step": "s0", "key": str(n)}}, "output": (tmp_path / f"count-{n}").as_uri(),
+               "cursor": {"offset": n}} for n in range(2)]
+    inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 2, "steps": {"s0": copies, "s1": counts}})
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    databases.rules.activate("source", name, "1")
+    environment = {"BOOKKEEPING_CLEAN_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
+                   "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
+                   "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
+                   "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     assert main(["rules", "run", "--source", name, "--target", "silver",
-                 "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"], "--limit", "1"]) == 3
-    first = json.loads(capsys.readouterr().out)
-    rid = first["run"]["run_id"]
-    frozen = first["run"]["submission"]
-    assert first["counts"] == {"pending": 2, "verified": 1}
-    assert main(["rules", "run", "--source", name, "--target", "silver", "--resume-run-id", rid, "--limit", "100"]) == 0
-    completed = json.loads(capsys.readouterr().out)
-    assert completed["run"]["submission"] == frozen and completed["counts"] == {"verified": 3}
-    assert main(["bookkeeping", "status", rid]) == 0
-    assert json.loads(capsys.readouterr().out)["pending_deliveries"] == 0
-    assert main(["bookkeeping", "checks", rid]) == 0
-    assert all(json.loads(capsys.readouterr().out).values())
+                 "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
+    submitted = json.loads(capsys.readouterr().out)
+    rid = submitted["run"]["run_id"]
+    assert submitted["counts"] == {"pending": 4}
+
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "sitecustomize.py").write_text(GUARD)
+    root = Path(__file__).resolve().parents[2]
+    env = {**os.environ, **environment, "PYTHONPATH": os.pathsep.join([str(site), str(root)])}
+
+    def process(*arguments):
+        done = subprocess.run([sys.executable, *arguments], env=env, cwd=root, capture_output=True, text=True)
+        assert done.returncode == 0, done.stderr
+        return done.stdout
+
+    reports = (tmp_path / "reports").as_uri()
+    for profile in ("artifact.copy", "jsonl.count"):
+        process("-m", "edgar_warehouse.workers", "work", profile, rid)
+        process("-m", "edgar_warehouse.workers", "verify", profile, rid, "--reports", reports)
+    finished = json.loads(process("-m", "edgar_warehouse.bookkeeping", "finalize", rid))
+    assert finished["run"]["state"] == "complete" and finished["counts"] == {"verified": 4}
+    assert json.loads(Path(tmp_path / "count-1").read_text()) == {"lines": 1}
+    runtimes = {p: json.loads(process("-m", "edgar_warehouse.workers", "describe", p))["runtime"]
+                for p in ("artifact.copy", "jsonl.count")}
+    assert book.status(rid)["run"]["runtimes"] == runtimes
+
+    # The guard is live: control refuses to start once a domain import creeps in.
+    refused = subprocess.run([sys.executable, "-c", GUARD + "\nsys.argv=['edgar_warehouse/bookkeeping/__main__.py']\nimport edgar_warehouse.mdm"],
+                             env=env, cwd=root, capture_output=True, text=True)
+    assert "Bookkeeping control loaded a domain package" in refused.stderr
+
+    assert main(["rules", "run", "--source", name, "--target", "silver", "--resume-run-id", rid]) == 0
+    assert json.loads(capsys.readouterr().out)["counts"] == {"verified": 4}
+    assert main(["bookkeeping", "finalize", rid]) == 0  # resume reopens; nothing is left to work
+    capsys.readouterr()
     assert main(["bookkeeping", "runs", "--state", "complete", "--limit", "100"]) == 0
-    listed = json.loads(capsys.readouterr().out)
-    assert any(row["run_id"] == rid for row in listed)
-    assert len(listed) <= 100 and all(row["state"] == "complete" for row in listed)
+    assert any(row["run_id"] == rid for row in json.loads(capsys.readouterr().out))
 
 
 def test_source_configs_use_same_control_contract():
     from edgar_warehouse.rules.files import source
     from edgar_warehouse.bookkeeping.clean.config import validate
-    registry = standard_registry()
-    from edgar_warehouse.acquisition.capture import register_capture
-    register_capture(registry, None)
     for name in ("sec.submissions.company",):
-        selected = validate(source(name), "capture", registry)
+        selected = validate(source(name), "capture")
         assert selected["lease_seconds"] == 120 and selected["heartbeat_seconds"] == 30
 
 

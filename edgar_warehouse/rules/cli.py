@@ -100,23 +100,22 @@ def _handle(args):
                         mdm_owner.dispose()
                 result = {"active": name, "version": args.version}
             else:
+                # Submit only. Workers in their own processes do the work
+                # (`python -m edgar_warehouse.workers`); Bookkeeping runs no
+                # worker code (mastering to-do 20a).
                 from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
-                from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
-                from edgar_warehouse.bookkeeping.clean.runner import run
                 from edgar_warehouse.bookkeeping.clean.config import Blocked
 
                 book = configured_bookkeeping()
-                ledger_engine = journal_engine()
                 try:
                     if args.resume_run_id:
-                        existing = book._run(args.resume_run_id)["submission"]
+                        existing = book.status(args.resume_run_id, limit=1)["run"]["submission"]
                         if ((existing["kind"], existing["name"], existing["target"]) != (kind, name, args.target)
                                 or args.feed is not None and args.feed != existing["scope"].get("feed")):
                             raise Blocked("Resume selection differs from the original run")
                         if args.input_manifest or args.input_sha256:
                             raise Blocked("Resume uses its frozen input reference; do not supply new inputs")
-                        book.resume(args.resume_run_id)
-                        run_id = args.resume_run_id
+                        result = book.resume(args.resume_run_id)
                     else:
                         if not args.input_manifest or not args.input_sha256:
                             raise Blocked("Submission requires an exact input manifest URI and hash")
@@ -125,12 +124,9 @@ def _handle(args):
                                             target=args.target, scope={"kind": kind, "name": name, "source": name,
                                                                      "feed": args.feed, "target": args.target} if args.feed else
                                                                     {"kind": kind, "name": name, "target": args.target})
-                    # Preserve machine-readable result stdout, and make the
-                    # durable root recoverable if execution/acknowledgement fails.
-                    print(f"Bookkeeping run: {run_id}", file=sys.stderr, flush=True)
-                    result = run(book, run_id, ChangeJournal(ledger_engine), limit=args.limit)
+                        print(f"Bookkeeping run: {run_id}", file=sys.stderr, flush=True)
+                        result = book.status(run_id)
                 finally:
-                    ledger_engine.dispose()
                     book.close()
         finally:
             rules_engine.dispose()

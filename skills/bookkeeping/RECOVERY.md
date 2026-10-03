@@ -1,10 +1,11 @@
 # Recovery decisions
 
 Read [INDEPENDENCE.md](INDEPENDENCE.md) before selecting an execution recovery
-path. Current resume commands use the coupled callback runner. Preserve old-run
-evidence and inspect status; do not claim loader-independent recovery until the
-external reconcile/verify task protocol has been qualified. A dependency failure
-is implementation work, not a reason to reintroduce a loader into control.
+path. `bookkeeping resume` rechecks retained evidence and reopens the run; the
+workers and verifiers then continue it. The restricted-role and recovery gates
+(mastering to-do 20b) have not run yet, so do not claim qualified recovery. A
+dependency failure is implementation work, not a reason to reintroduce a loader
+into control.
 
 Read bounded status and leases first. See the
 [specification](../../docs/specs/configured-bookkeeping.md) for authority and
@@ -23,7 +24,8 @@ today's authoring document may have changed.
 | All work verified, deliveries pending | Restore ledger availability and resume. Delivery retries the exact event id/envelope. Completion waits for acknowledgement. |
 | Publication verification failed | Correct availability/read-back failures, then resume. Exact required consumers must verify. Hosted export/graph adapters are currently unsupported. |
 | Missing/corrupt manifest, receipt or output | Preserve failure evidence. When repair is authorized, recover exact original bytes from trusted retained evidence. A replacement scope/hash requires a new run. |
-| Processing version changed | Use the compatible original version for that run, or submit new work. Resume cannot replace processing versions. |
+| Worker runtime changed | A run pins each profile's runtime at its first admitted report; a different runtime is refused. Run the pinned runtime, or submit new work. |
+| Candidate reported, verifier never admitted it | While the lease is live, run the verifier again. Once it expires, the worker reclaims the unit and reconciles its earlier effect before writing. |
 | Rules retired or authoring YAML changed | Resume from the frozen export. Recover its exact bytes if missing; the live active version cannot replace it. |
 | Unknown/legacy run id | Use bounded fresh run discovery. Legacy history is not imported; submit new work when no fresh run exists. |
 | Compacted run | Retain its summary, references and checkpoints as audit evidence. Compacted runs cannot resume. |

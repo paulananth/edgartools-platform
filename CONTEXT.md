@@ -4,6 +4,26 @@ The shared language for the AWS-first SEC EDGAR data platform: production operat
 
 ## Language
 
+### Bookkeeping work control
+
+Bookkeeping controls work; it does none of it. Workers and verifiers do the work, each in its own process.
+
+**Worker Profile**:
+The name a step's `operation` gives the kind of worker that pulls it, such as `artifact.copy`; a run pins each profile's runtime at its first admitted report.
+_Avoid_: Capability, callback, operation handler
+
+**Task Envelope**:
+What a worker receives for one unit of work: the frozen work, its live lease, its effect key and the checks its verifier must report. Never an engine, a database or a control method.
+_Avoid_: Work item (the control row), job
+
+**Reported Output**:
+The output a worker reports for a unit (its *candidate* in the protocol); the unit is not complete until a verifier's report on it is admitted. Not a source candidate.
+_Avoid_: Result, completion
+
+**Verification Report**:
+A verifier's read-back of a reported output, bound to exactly that run, step, unit, attempt, effect key and output, with every check the step names.
+_Avoid_: Worker success, exit code
+
 ### Clean MDM identities and mastering
 
 MDM is the first scope. It masters identities and the relationships between them. A filing or a GLEIF file is evidence for that mastering. It is not itself a master record. Silver, gold, and the parser are outside this scope.

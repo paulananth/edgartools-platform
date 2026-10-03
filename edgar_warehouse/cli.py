@@ -8,6 +8,7 @@ work through Bookkeeping.
 from __future__ import annotations
 
 import argparse
+import sys
 
 
 def _handle_resolve_snowflake_env(args: argparse.Namespace) -> int:
@@ -113,5 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["bookkeeping"]:
+        # Control starts alone: building the full parser would import MDM and
+        # the other domains, which Bookkeeping must never load (to-do 20a).
+        from edgar_warehouse.bookkeeping.clean.cli import register as register_bookkeeping
+        parser = argparse.ArgumentParser(prog="edgar-warehouse")
+        register_bookkeeping(parser.add_subparsers(dest="command", required=True))
+        args = parser.parse_args(argv)
+    else:
+        args = build_parser().parse_args(argv)
     return args.handler(args)

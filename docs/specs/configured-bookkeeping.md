@@ -27,27 +27,35 @@ independent destination has `bookkeeping_guard.resource`, and the shared
 Change Journal has an append-only `journal.event`; neither is another
 Bookkeeping root run.
 
-The shared interface is `Bookkeeping.start`, `claim`, `heartbeat`, `check`,
-`record_verified_completion`, `resume`, and `status`. The bounded worker
-runner also exposes `deliver` and `finalize`. Operations have a version,
-executor, reconciler, and verifier. Checks and operations are registered by
-capability name. There is no branch or callback selected by source name.
+The interface is the task protocol (mastering to-do 20a). `Bookkeeping.start`
+freezes a run; workers in their own processes `claim` task envelopes for a
+worker profile, `renew` them while they work, and `report` a candidate; a
+separate verifier lists `verifications` and has its report admitted with
+`admit`. `resume`, `status`, `deliver` and `finalize` complete the set. A step's
+`operation` names its worker profile. Control holds no executor, reconciler,
+verifier or check callback, and no branch on a source or operation name.
 
-Implemented capabilities:
+- **Envelope:** run, step, key, attempt and lease proof; the frozen Rules
+  reference; the resolved input; the intended output; the step's domain checks;
+  and an **effect key**, the digest of the Rules reference, step, key and frozen
+  unit, which stays the same across retries of the same work.
+- **Report:** a worker's candidate (URI and hash) moves the unit to `reported`.
+  The first report of a profile in a run pins that profile's runtime digest
+  (`pipeline_run.runtimes`); a different runtime later is refused.
+- **Admission:** the verifier's report must name exactly this run, step, key,
+  attempt, effect key and candidate, and report every domain check the step
+  names, all true. Control itself checks `input.hash` and `output.receipt`
+  (the bytes it can read) and the run checks `manifest.hash`, `work.accounting`
+  and `journal.delivered`. A database trigger refuses any completion that is
+  not the reported candidate, whichever finish function commits it.
+- **Events:** control emits only `work.verified`. Domain events go through the
+  worker's own Journal intent.
 
-| Capability | Effects and verification |
-| --- | --- |
-| `artifact.copy` | Immutable file/S3 conditional persistence of already available bytes; exact input/output hashes and durable receipt. This does not fetch from a provider API. |
-| `mdm.merge` | Existing bounded Merge Stage command; destination guard in the actual commit transaction; committed observation, request hash and generation reconcile lost acknowledgements. |
-| `mdm.ingest` | Bounded NDJSON input normalized by the existing common adapter under the exact source reading frozen in Rules; exact record accounting, retained deferred evidence, guarded Merge Stage and committed receipt. |
-| `mdm.publish` | Existing MDM consumer fences, narrowed to the configured batch while preserving generation order; consumer read-back before receipt. |
-| `provider.capture` | Configured source-owned capture manifest; committed authorization and verified journal acknowledgement before provider requests; conditional unchanged outcomes and exact outcome reconciliation. |
-| `source.evidence` | Verified source-owned revision, conflict, import, exclusion and producer manifests; original producer keys and no source-record control tables. |
-
-The default CLI registers MDM capabilities when `MDM_DATABASE_URL` exists.
-Journal delivery uses the shared Change Journal adapter. Export and graph
-currently use the existing **offline contract sink** for local acceptance.
-Unsupported hosted destinations block; no new deployment path is introduced.
+Workers built so far (`edgar_warehouse/workers`): `artifact.copy` and
+`jsonl.count`. The MDM, acquisition, source-evidence and Company capabilities
+this section used to list were in-process callbacks and are deleted; they
+return as workers in mastering to-do 20c (SEC Company and acquisition), 20d
+(Person) and 20e (MDM). Journal delivery uses the shared Change Journal adapter.
 
 ## Rules ownership and lifecycle
 

@@ -1,11 +1,10 @@
 # Run the validated source and feed
 
-First read [INDEPENDENCE.md](INDEPENDENCE.md) and qualify the controller's
-dependency boundary. The commands below document the existing coupled runtime;
-they are not a loader-independent task implementation. Until that implementation
-is qualified, report the execution gap and continue planning/inspection rather
-than using Company callbacks as a fallback. Keep Rules governance and evidence
-requirements when implementing the replacement path.
+First read [INDEPENDENCE.md](INDEPENDENCE.md). `rules run` only submits; the
+work is done by workers in their own processes, checked by separate verifiers,
+and finished by `bookkeeping finalize`. A step whose worker profile has no
+worker yet (Company, Person and MDM until mastering to-do 20c–20e) is a
+blocker to report, never a reason to run it some other way.
 
 Load the source/feed plan and validation evidence. Check their hashes against
 the intended Rules body, processing versions and frozen manifest; resolve every
@@ -34,13 +33,17 @@ Source documents own MDM dataset registration; platform-owned MDM contracts
 still lack handoff support. An existing approved active version can be reused
 when its exact content matches the validated plan.
 
-Submit the selected source/feed's manifest with a bounded invocation:
+Submit the selected source/feed's manifest, then run each step's worker and
+verifier, in step order, and finish the run:
 
 ```bash
 uv run --extra mdm --extra s3 edgar-warehouse rules run \
   --source "$RULES_SOURCE_NAME" --feed "$SOURCE_FEED" --target "$BOOKKEEPING_TARGET" \
-  --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256" \
-  --limit 100
+  --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256"
+uv run --extra mdm --extra s3 python -m edgar_warehouse.workers work <profile> "$RUN_ID" --limit 100
+uv run --extra mdm --extra s3 python -m edgar_warehouse.workers verify <profile> "$RUN_ID" \
+  --reports "$REPORT_ROOT_URI" --limit 100
+uv run --extra mdm --extra s3 edgar-warehouse bookkeeping finalize "$RUN_ID"
 ```
 
 Feed is bound by the validated frozen worklist, source-input dataset/
@@ -48,7 +51,7 @@ publication identities and the explicit Rules runner `--feed` option. Keep the d
 id printed on stderr. For explicit platform jobs use their existing
 `--pipeline` selection while retaining the source/feed binding in the plan
 and inputs; never silently replace a source-owned mapping with a platform job.
-Changed configuration, inputs or processing versions require a new run.
+Changed configuration, inputs or a worker's runtime require a new run.
 Empty success needs explicit configuration and verified manifest evidence.
 
 ## Verify or continue
@@ -61,9 +64,10 @@ manifest belongs to the same source/feed before selecting a run. Use
 it mark the run blocked. Listings are bounded; state counts cover all work.
 
 Read [RECOVERY.md](RECOVERY.md) for incomplete runs. Authorized continuation uses
-`bookkeeping resume <run-id> --limit 100`, or the original Rules selection with
-`--resume-run-id <run-id>` and no replacement input options. Keep the run id,
-original Rules reading, processing versions and business idempotency keys.
+`bookkeeping resume <run-id>`, or the original Rules selection with
+`--resume-run-id <run-id>` and no replacement input options, then the workers
+and verifiers again. Keep the run id, original Rules reading, pinned worker
+runtimes and business idempotency keys.
 Verified effects reconcile before execution. A fresh Rules version or a changed
 authoring file is not a substitute for missing original evidence.
 

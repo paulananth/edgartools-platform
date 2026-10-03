@@ -292,7 +292,6 @@ def test_bookkeeping_producer_timezone_retains_identical_retry_receipt(
     databases, tmp_path
 ):
     from sqlalchemy import create_engine
-    from edgar_warehouse.bookkeeping.clean.capabilities import standard_registry
     from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
     from tests.integration.test_configured_bookkeeping_postgres import complete, submit
 
@@ -300,7 +299,7 @@ def test_bookkeeping_producer_timezone_retains_identical_retry_receipt(
         databases.runtime.url, connect_args={"options": "-c timezone=America/New_York"}
     )
     try:
-        book = Bookkeeping(timezone_engine, standard_registry())
+        book = Bookkeeping(timezone_engine)
         book, rid, _, _ = submit(databases, tmp_path, count=1, book=book)
         complete(book, rid)
         assert book.deliver(databases.ledger, rid) == 1
@@ -317,7 +316,7 @@ def test_bookkeeping_producer_timezone_retains_identical_retry_receipt(
             )
         receipt = databases.ledger.get("bookkeeping", str(event["event_id"]))
         assert receipt["event"]["occurred_at"].endswith("+00:00")
-        other_timezone = Bookkeeping(databases.runtime, standard_registry())
+        other_timezone = Bookkeeping(databases.runtime)
         with databases.runtime.connect() as conn:
             same = (
                 conn.execute(
