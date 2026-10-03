@@ -14,7 +14,8 @@ from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 @pytest.mark.parametrize('value', [None, '', '2024-02-29', '2023-02-29', '20240229',
     '2020-W01-1', '2020W011', '2020-W01', '2020W01', '0001-01-01', '9999-12-31',
     '0000-01-01', ' 2024-02-29', '2024-02-29 ', '2024-02-29T12:00:00Z',
-    '2024-02-29suffix', '🦀2024-02-29', '2024-W54-1', 'garbage', 20240229])
+    '2024-02-29suffix', '🦀2024-02-29', '2024-W54-1', 'garbage', 20240229, '20240229T00:00:00Z',
+    '2020W011 suffix', '20240229🦀🦀'])
 def test_configured_calendar_dates_match_old_loader(value):
     # The old filing loader calls safe_str before parse_date; numeric inputs
     # therefore become strings. Input scalar conversion remains the engine's.

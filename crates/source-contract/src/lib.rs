@@ -392,6 +392,11 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             if !matches!(kind, "instant" | "calendar") || args.get("kind").is_some_and(|v| v.as_str().is_none()) {
                 return Err("date kind must be instant or calendar".into());
             }
+            if let Some(suffix) = args.get("basic_suffix") {
+                if kind != "calendar" || !matches!(suffix.as_str(), Some("reject" | "ignore")) {
+                    return Err("date basic_suffix requires calendar and reject or ignore".into());
+                }
+            }
             if let Some(prefix) = args.get("prefix_length") {
                 if kind != "calendar" || !prefix.as_u64().is_some_and(|n| (1..=32).contains(&n)) {
                     return Err("date prefix_length requires calendar and an integer 1..32".into());
@@ -544,6 +549,17 @@ fn calendar_date(text: &str, args: &Value) -> Result<Val, Rejected> {
         Some(count) => text.chars().take(count as usize).collect(),
         None => text.to_string(),
     };
+    // Python 3.12 accepts a ten-character input with an eight-character
+    // basic calendar/week date followed by two ignored characters. This
+    // compatibility exception must be declared; strict ISO is the default.
+    let text = if setting(args, "basic_suffix") == Some("ignore") && text.is_ascii() && text.len() == 10 {
+        let basic: String = text.chars().take(8).collect();
+        let bytes = basic.as_bytes();
+        if bytes.len() == 8 && (bytes.iter().all(u8::is_ascii_digit)
+            || (bytes[4] == b'W' && bytes.iter().enumerate().all(|(i, b)| i == 4 || b.is_ascii_digit()))) {
+            basic
+        } else { text }
+    } else { text };
     let shaped = match text.as_bytes() {
         bytes if bytes.len() == 10 && bytes[4] == b'-' && bytes[7] == b'-'
             && bytes.iter().enumerate().all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit()) => Some("%Y-%m-%d"),

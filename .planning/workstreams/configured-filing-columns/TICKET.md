@@ -17,3 +17,7 @@ Continue ticket 21: full configured Company and Person reading before loader ret
 ## Design review
 
 Engine dispatch has a stable scalar expression interface; recent loader history changes concern source classification and address evidence. Calendar parsing belongs in the existing date expression, as one plain helper. A Strategy hierarchy would add indirection without reducing a demonstrated maintenance cost. Preserve default instant parsing and make calendar/invalid policy explicit.
+
+## Adversarial qualification
+
+A 646-case mutation comparison exposed four compact-date suffix differences absent from the 1,000-file corpus. Add explicit `basic_suffix: ignore` compatibility and retained strict rejection tests before claiming the calendar projection equivalent.

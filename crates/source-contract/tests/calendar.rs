@@ -50,3 +50,16 @@ fn calendar_options_are_validated_and_do_not_change_instant_dates() {
         assert_eq!(Engine::from_yaml(&contract, Steps::new()).err().unwrap().code, "contract");
     }
 }
+
+#[test]
+fn compact_suffix_compatibility_is_explicit_and_unicode_safe() {
+    for input in ["20240229T0", "20240229XX", "2020W011 X"] {
+        let data = format!(r#"{{"value":"{input}"}}"#);
+        assert_eq!(read(&data, "").unwrap_err().code, "invalid_value");
+        let expected = if input.starts_with("2024") { "2024-02-29" } else { "2019-12-30" };
+        assert_eq!(read(&data, ", basic_suffix: ignore").unwrap(), Val::Str(expected.into()));
+    }
+    assert_eq!(read(r#"{"value":"20240229🦀🦀"}"#, ", basic_suffix: ignore, on_invalid: null").unwrap(), Val::Null);
+    assert_eq!(read(r#"{"value":"20230229T0"}"#, ", basic_suffix: ignore, on_invalid: null").unwrap(), Val::Null);
+    assert_eq!(read(r#"{}"#, ", basic_suffix: true").unwrap_err().code, "contract");
+}

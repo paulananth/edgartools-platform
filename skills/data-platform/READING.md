@@ -77,6 +77,7 @@ filing_date:
     path: filingDate
     kind: calendar
     prefix_length: 10
+    basic_suffix: ignore
     on_invalid: null
 ```
 
@@ -95,3 +96,9 @@ unchanged. Root document iteration is written `each: .`.
 SEC filing text/calendar qualification does not cover numeric flags,
 classification, Company or Person mastering, reference joins or complete
 assertion/failure equivalence. The old loaders remain until those are proved.
+
+`basic_suffix` defaults to `reject`. Calendar-only `basic_suffix: ignore`
+reproduces the Python 3.12 loader exception: after prefix truncation, a
+ten-character ASCII value whose first eight characters form a valid basic calendar
+or week date ignores its final two characters (for example `20240229T0`).
+Declare this compatibility behavior only when replacing a reader that used it.
