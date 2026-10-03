@@ -34,19 +34,20 @@ Answers, 2026-10-03:
 ## Checklist
 
 - [x] Questions asked and answered (three above). 2026-10-03 07:22 ET
-- [ ] Ownership change written where Codex reads it (the implementation notes and the 13F workstream ticket)
-- [ ] Packaging facts: the engine wheel needs Rust and maturin to build from a git ref; does `../../` force-include survive a `git+…#subdirectory=` install
-- [ ] GoF consult on the entry point and the package layout
-- [ ] Bundle skeleton: `packages/data-skill` (`edgartools-data`, command `edgar-data`): one entry point registering the existing `rules`, `bookkeeping`, `change-journal`, `mdm` and worker commands, plus `doctor`
-- [ ] G1 test: install from a git ref in a clean environment; `doctor` passes
-- [ ] G2 test: rules init, migrate, load, save and status from the installed bundle
-- [ ] G5 test: every command a skill names resolves
-- [ ] The skill: `skills/data-platform/SKILL.md` orchestrates (setup, onboard, refine, parse, master, custom step, recover, self-check); the four old skills become thin entries
+- [x] Ownership change written where Codex reads it: `docs/research/custom-parsing-implementation-notes-2026-10-02.md` (the 13F ticket is complete, so it is unchanged). 2026-10-03 07:22 ET
+- [x] Packaging facts, by running them: the Bookkeeping and Journal wheels install from a `git+file://…@<sha>#subdirectory=` ref (11 s), so `../../` force-include survives; the engine installs the same way when `cargo` is present (1 min 43 s; maturin comes from its build requirements). 2026-10-03 07:40 ET
+- [x] GoF consult: leave the structure; include folders a wheel owns whole and guard the three-wheel partition with a test (20b shipped files in two wheels twice); `orchestrate` later as a plain function in `workers/`. 2026-10-03 07:45 ET
+- [x] Bundle: `packages/data-skill` (`edgartools-data`), command `edgar-warehouse` (one entry point, not a new name): `rules`, `bookkeeping`, `change-journal`, `mdm`, `workers` (was `python -m edgar_warehouse.workers`), `plan resolve-feed|workflow` (were repo-only scripts under `skills/bookkeeping/scripts/`), `doctor`, `skill install [--rules DIR]`. The rules folder is `EDGAR_RULES_ROOT`, else the checkout's, else the bundled copy. 2026-10-03 07:47 ET
+- [x] G1: `tests/engine/test_data_skill_bundle_postgres.py` installs with the Setup's `uv tool install` command word for word from a git ref; no file in two wheels; every shipped module imports; no edgartools, spaCy, pandas, Streamlit or Snowflake connector; `doctor` ok on PG16 stores. Found and fixed: Clean MDM could not import without a rules folder. 2026-10-03 07:47 ET
+- [x] G2: on an empty PG16 Rules Database, from the bundle: `skill install --rules`, `rules init`, `rules migrate`, `rules load`, `rules status`; the saved digest equals the loaded one. 2026-10-03 07:47 ET
+- [x] G5: `doctor` follows subcommands at any depth and checks every flag; 63 command lines across the skills resolve; a skill naming `rules invent` is reported. First run found the walk too shallow (`change-journal recover bookkeeping --limit`), fixed. 2026-10-03 07:47 ET
+- [x] The skill: `skills/data-platform/SKILL.md` (setup, the flow, parse, master marked not built until 20e, custom parsing, self-check), with `link.sh` and `agents/openai.yaml`; the four skills keep their detail and point to it; their commands are written as the installed `edgar-warehouse`. 2026-10-03 07:47 ET
 - [ ] 20e: the MDM worker and verifier behind the protocol
 - [ ] Company read block, equivalence on the pinned capture, delete `company_source.py` and `loaders/`
 - [ ] GLEIF read block, equivalence, delete `gleif_source.py`
 - [ ] Person read block on the engine
 - [ ] G4: custom-step mode, trialled on one real gap
+- [ ] G3 parse half: a Rules-submitted `source.read` run, worker and verifier as separate logins, all from the installed bundle (in the bundle test, passing); MDM half waits for 20e
 - [ ] G3 and the operator's "test it again from the beginning": the whole proof through the installed bundle on empty stores, compared with ticket 27 (6,414 Companies, 3,052 with CIK and LEI, second pass unchanged)
 - [ ] Three-axis `/code-review` per PR; CI green; merge on the operator's word
 - [ ] Memory `project_rules_skill.md` updated
