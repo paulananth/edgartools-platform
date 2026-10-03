@@ -8,7 +8,7 @@ Continue ticket 21 and the filing column checklist. Complete source outputs and 
 - [x] Compare Python scalar behavior including booleans, native float truncation, integer precision, signed bounds, decimal text/Unicode/underscores, missing and invalid values. Verified 43 focused Python tests passed, including Unicode decimal and adjacent-character oracle; 2026-10-03 18:29 ET.
 - [x] Add full 14 content-column filing contract; compare pinned captured receipts. Verified 1,000 distinct captured filings / 107,197 rows matched; committed content-qualification.json; 2026-10-03 18:29 ET.
 - [x] Verify immutable worker output and independent reparse, plus installed native binding. Verified 110 engine tests passed in 327.30s, including installed integer-records PostgreSQL 16 trial; 2026-10-03 18:29 ET.
-- [ ] Bundle implemented syntax in the skill, independent code review, PR and all CI suites/gate.
+- [x] Bundle implemented syntax in the skill, independent code review, PR and all CI suites/gate. Verified bundled READING.md, Standards/Spec reviews, PR #810 and all five suites plus gate in CI run 37158786231; 2026-10-03 18:36 ET.
 - [ ] Artifact context, CIK and bounded-history equivalence; complete all 18 filing columns.
 - [ ] Company/Person classification, reference addresses, grouping and source read blocks.
 - [ ] GLEIF full positive/failure equivalence and reader retirement.
@@ -24,4 +24,4 @@ Python 3.12's integer lexical behavior includes Unicode 15.0 decimal digits. A p
 
 ## Independent review
 
-Standards and Spec reviewers found no scoped blockers. Separate raw/ordinary JSON tree translation is a nonblocking maintenance concern; retaining it preserves existing behavior during qualification. PR #810 is open against main so the unchanged five-suite CI and aggregate gate execute. Final CI remains pending; #809 is its calendar dependency.
+Standards and Spec reviewers found no scoped blockers. Separate raw/ordinary JSON tree translation is a nonblocking maintenance concern; retaining it preserves existing behavior during qualification. PR #810 is open against main so the unchanged five-suite CI and aggregate gate execute. CI run 37158786231 passed all five suites and the aggregate gate on 3a91d9df; #809 is its calendar dependency. This checklist update triggers verification of the final head as well.
