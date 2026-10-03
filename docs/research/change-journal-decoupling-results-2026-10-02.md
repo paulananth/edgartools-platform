@@ -31,7 +31,7 @@ supported correcting ownership and composition without a new class hierarchy.
 
 All executable imports and test patch targets were updated. The old module
 paths and journal skill orchestration script have no compatibility wrappers.
-The workflow helper is now `skills/bookkeeping/scripts/journal_evidence.py`.
+The workflow helper is now `edgar-warehouse plan workflow`.
 It remains application composition, not proof of Bookkeeping independence.
 
 Canonical JSON, hashing, reference validation and `Blocked` were extracted

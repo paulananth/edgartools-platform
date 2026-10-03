@@ -21,12 +21,23 @@ from typing import Any
 
 import yaml
 
-# The rules folder: `EDGAR_RULES_ROOT` when set; else this repository's
-# `rules/`; else, in an installed data skill bundle with no checkout around
-# it, the rules the bundle was built with (mastering to-do 21).
-_CHECKOUT = Path(__file__).resolve().parents[2] / "rules"
-_BUNDLED = Path(__file__).resolve().parents[1] / "bundle_data" / "rules"
-ROOT = Path(os.environ.get("EDGAR_RULES_ROOT") or (_CHECKOUT if _CHECKOUT.is_dir() or not _BUNDLED.is_dir() else _BUNDLED))
+# The rules folder: `EDGAR_RULES_ROOT` when set. Else, in an installed data
+# skill bundle (mastering to-do 21), the rules it was built with, read only:
+# `BUNDLED` exists only beside an installed copy of this file. Else this
+# repository's `rules/`.
+BUNDLE_DATA = Path(__file__).resolve().parents[1] / "bundle_data"
+BUNDLED = BUNDLE_DATA / "rules"
+ROOT = Path(os.environ.get("EDGAR_RULES_ROOT")
+            or (BUNDLED if BUNDLED.is_dir() else Path(__file__).resolve().parents[2] / "rules"))
+
+
+def writable(root: Path) -> Path:
+    """`root`, unless it is the bundled copy, which a reinstall replaces."""
+    if Path(root).resolve().is_relative_to(BUNDLE_DATA):
+        raise ValueError("The bundled rules are read only: copy them with "
+                         "`edgar-warehouse skill install --rules <folder>` and set EDGAR_RULES_ROOT")
+    return Path(root)
+
 
 _JSON_INT = re.compile(r"-?(?:0|[1-9][0-9]*)")
 _JSON_FLOAT = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")

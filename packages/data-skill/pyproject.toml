@@ -54,3 +54,8 @@ bypass-selection = true
 "../../edgar_warehouse/rules/migrations" = "edgar_warehouse/rules/migrations"
 "../../skills" = "edgar_warehouse/bundle_data/skills"
 "../../rules" = "edgar_warehouse/bundle_data/rules"
+# The documents the skills link to, at the same relative place (`doctor`
+# checks every relative link a skill writes).
+"../../docs/specs/configured-bookkeeping.md" = "edgar_warehouse/bundle_data/docs/specs/configured-bookkeeping.md"
+"../../docs/specs/change-journal.md" = "edgar_warehouse/bundle_data/docs/specs/change-journal.md"
+"../../docs/research/bookkeeping-loader-independent-design-2026-10-02.md" = "edgar_warehouse/bundle_data/docs/research/bookkeeping-loader-independent-design-2026-10-02.md"
