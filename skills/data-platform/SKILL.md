@@ -151,18 +151,28 @@ is code reviewed in a PR.
 
 1. Write one plain function of one value in `edgar_warehouse/rules/steps.py`,
    registered in `STEPS` as `<name>@<version>`. It names no source or kind
-   (`blank_missing_token@1` is the pattern).
+   (`epoch_microseconds@1` is the reviewed-trial pattern).
 2. Test it alone in `tests/engine/test_source_engine.py`: every value shape it
    accepts, and each one it refuses.
 3. Call it from the feed's contract:
    `custom: {step: <name>@<version>, inputs: {value: <expression>}}`. The
    engine refuses a contract that names a step not in `STEPS`.
-4. List the step in the feed's Mapping Document:
+4. List the step in the feed's Mapping Document (the generated **Custom Parsing**
+   sheet lists every custom expression and its rules path):
    `edgar-warehouse rules mapdoc write --only <source>`.
 5. Run the feed's test run (Mode 4's evidence) with the step.
 6. Open a PR with the step, its tests and the evidence. **Stop.** The operator
    reviews and approves the code and the rules version; never switch it on
    yourself.
+
+### Trial evidence
+
+`tests/engine/test_custom_parsing_trial.py` compares the generic timestamp-to-integer
+step with GLEIF's existing release-sequence calculation, including negative
+epochs, offsets and microseconds. It first demonstrates that the configured
+`date` returns text and `number` cannot convert a timestamp. The installed-bundle
+test repeats parse → prepare → merge with the custom expression and a separate
+verifier. This is a review trial; no active source version names the step.
 
 ## 7. Self-check
 
