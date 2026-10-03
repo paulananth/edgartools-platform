@@ -65,3 +65,33 @@ form fields only. Company/Person classification, address interpretation,
 reference lookups, aggregation, full assertion IDs and source refusals need
 complete equivalence proof before retiring a source reader. See the current
 source-completion checklist; a passing primitive test is not that proof.
+
+## Calendar dates
+
+The existing `date` call defaults to a timezone-bearing instant normalized to
+UTC. To read a calendar date without interpreting a time or zone, declare:
+
+```yaml
+filing_date:
+  date:
+    path: filingDate
+    kind: calendar
+    prefix_length: 10
+    on_invalid: null
+```
+
+Calendar mode accepts ISO calendar dates (`YYYY-MM-DD` or `YYYYMMDD`) and ISO
+week dates (`YYYY-Www-D`, `YYYYWwwD`, or the corresponding week without a day,
+which means Monday). Years are 1–9999. It returns `YYYY-MM-DD` text. Missing,
+null or empty values return the declared `default`, otherwise null.
+
+`prefix_length` is optional and must be an integer 1–32; it counts Unicode
+characters before parsing. No whitespace is trimmed. Invalid dates fail the
+artifact with `invalid_value` by default. Explicit `on_invalid: null` (or the
+quoted string `"null"`) returns null instead; `on_invalid: error` keeps the
+failure. These two options require `kind: calendar`; instant behavior stays
+unchanged. Root document iteration is written `each: .`.
+
+SEC filing text/calendar qualification does not cover numeric flags,
+classification, Company or Person mastering, reference joins or complete
+assertion/failure equivalence. The old loaders remain until those are proved.

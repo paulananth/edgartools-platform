@@ -1,4 +1,4 @@
-"""Compare two configured filing fields on pinned captured submissions, offline.
+"""Compare selected configured filing fields on pinned captured submissions, offline.
 
 Every selected byte hash must match its existing receipt. This is partial
 projection evidence only: not Company/Person classification or MDM equivalence.
@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from datetime import date, datetime
 
 from edgar_warehouse.loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
@@ -20,6 +21,7 @@ def main():
     parser.add_argument("--capture", type=Path, required=True)
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--columns", nargs="+", default=["accession_number", "form"])
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not 1 <= args.limit <= 1000:
@@ -44,7 +46,8 @@ def main():
             raise ValueError("Capture bytes differ from their bounded receipt")
         payload = json.loads(raw)
         old = stage_recent_filing_loader(payload, int(payload["cik"]), "qualification", "captured", "default")
-        expected = [{key: row[key] for key in ("accession_number", "form")} for row in old]
+        expected = [{key: row[key].isoformat() if isinstance(row[key], (date, datetime)) else row[key]
+                     for key in args.columns} for row in old]
         reading = engine.read(raw)
         actual = reading.tables["filings"]
         if actual != expected or reading.deferred:
@@ -53,7 +56,7 @@ def main():
         rows += len(actual)
         evidence.append({"key": ref["key"], "input_sha256": ref["sha256"], "rows": len(actual),
                          "projection_sha256": hashlib.sha256(canonical).hexdigest()})
-    result = {"scope": ["accession_number", "form"], "filings": len(selected), "rows": rows,
+    result = {"scope": args.columns, "filings": len(selected), "rows": rows,
               "contract_sha256": hashlib.sha256(args.contract.read_bytes()).hexdigest(),
               "receipts_sha256": hashlib.sha256(receipt_bytes).hexdigest(), "evidence": evidence}
     args.output.parent.mkdir(parents=True, exist_ok=True)

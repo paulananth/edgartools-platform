@@ -28,7 +28,7 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde_yaml::Value;
 
 use crate::tree::{Child, El};
@@ -385,7 +385,24 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
                 return Err("text ignore_case requires null_if".into());
             }
         }
-        "number" | "date" => check_path(setting(args, "path").ok_or(format!("{name} names no path"))?)?,
+        "number" => check_path(setting(args, "path").ok_or("number names no path")?)?,
+        "date" => {
+            check_path(setting(args, "path").ok_or("date names no path")?)?;
+            let kind = setting(args, "kind").unwrap_or("instant");
+            if !matches!(kind, "instant" | "calendar") || args.get("kind").is_some_and(|v| v.as_str().is_none()) {
+                return Err("date kind must be instant or calendar".into());
+            }
+            if let Some(prefix) = args.get("prefix_length") {
+                if kind != "calendar" || !prefix.as_u64().is_some_and(|n| (1..=32).contains(&n)) {
+                    return Err("date prefix_length requires calendar and an integer 1..32".into());
+                }
+            }
+            if let Some(policy) = args.get("on_invalid") {
+                if kind != "calendar" || !(policy.is_null() || matches!(policy.as_str(), Some("error" | "null"))) {
+                    return Err("date on_invalid requires calendar and error or null".into());
+                }
+            }
+        }
         _ => {}
     }
     Ok(())
@@ -519,6 +536,42 @@ fn instant(text: &str) -> Result<DateTime<Utc>, Rejected> {
         .map_err(|e| Rejected::new("invalid_value", format!("{text} is not a date with a time zone: {e}")))
 }
 
+/// ISO calendar dates accepted by Python date.fromisoformat, including
+/// basic and week dates. No whitespace trimming or timezone interpretation.
+fn calendar_date(text: &str, args: &Value) -> Result<Val, Rejected> {
+    let prefix = args.get("prefix_length").and_then(Value::as_u64);
+    let text: String = match prefix {
+        Some(count) => text.chars().take(count as usize).collect(),
+        None => text.to_string(),
+    };
+    let shaped = match text.as_bytes() {
+        bytes if bytes.len() == 10 && bytes[4] == b'-' && bytes[7] == b'-'
+            && bytes.iter().enumerate().all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit()) => Some("%Y-%m-%d"),
+        bytes if bytes.len() == 8 && bytes.iter().all(u8::is_ascii_digit) => Some("%Y%m%d"),
+        bytes if bytes.len() == 10 && bytes[4..6] == *b"-W" && bytes[8] == b'-'
+            && bytes.iter().enumerate().all(|(i, b)| (4..=5).contains(&i) || i == 8 || b.is_ascii_digit()) => Some("%G-W%V-%u"),
+        bytes if bytes.len() == 8 && bytes[4] == b'W'
+            && bytes.iter().enumerate().all(|(i, b)| i == 4 || b.is_ascii_digit()) => Some("%GW%V%u"),
+        _ => None,
+    };
+    let parsed = if let Some(format) = shaped {
+        NaiveDate::parse_from_str(&text, format).ok()
+    } else if text.len() == 8 && text.as_bytes()[4..6] == *b"-W"
+        && text.bytes().enumerate().all(|(i, b)| (4..=5).contains(&i) || b.is_ascii_digit()) {
+        NaiveDate::parse_from_str(&format!("{text}-1"), "%G-W%V-%u").ok()
+    } else if text.len() == 7 && text.as_bytes()[4] == b'W'
+        && text.bytes().enumerate().all(|(i, b)| i == 4 || b.is_ascii_digit()) {
+        NaiveDate::parse_from_str(&format!("{text}1"), "%GW%V%u").ok()
+    } else {
+        None
+    };
+    match parsed.filter(|date| chrono::Datelike::year(date) >= 1 && chrono::Datelike::year(date) <= 9999) {
+        Some(date) => Ok(Val::Str(date.format("%Y-%m-%d").to_string())),
+        None if args.get("on_invalid").is_some_and(|v| v.is_null() || v.as_str() == Some("null")) => Ok(Val::Null),
+        None => Err(Rejected::new("invalid_value", "not an ISO calendar date")),
+    }
+}
+
 /// A value as text, for comparing it with the text a rules file lists: a
 /// whole number reads `1`, not `1.0`; null and an empty string are no value.
 fn as_text(value: &Val) -> Option<String> {
@@ -611,6 +664,7 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
 /// A path is dot-separated names; a name may carry one `[sub.path=VALUE]`
 /// filter. Anything else is refused when the contract loads.
 fn check_path(path: &str) -> Result<(), String> {
+    if path == "." { return Ok(()) }
     for segment in segments(path) {
         let Some((name, rest)) = segment.split_once('[') else {
             if segment.is_empty() || segment.contains(']') {
@@ -674,6 +728,10 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
                 _ => default,
             })
         }
+        "date" if setting(args, "kind") == Some("calendar") => match text_at(scope(document, item, args), args)? {
+            Some(text) if !text.is_empty() => calendar_date(&text, args),
+            _ => Ok(yaml_val(args.get("default"))),
+        },
         "date" => match text_at(scope(document, item, args), args)? {
             Some(text) if !text.trim().is_empty() => {
                 {
