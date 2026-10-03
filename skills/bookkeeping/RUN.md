@@ -18,7 +18,7 @@ Supply connection URLs through the environment without printing credentials:
 `BOOKKEEPING_CLEAN_DATABASE_URL`, `RULES_DATABASE_URL`,
 `BOOKKEEPING_MANIFEST_ROOT` and `CHANGE_JOURNAL_DATABASE_URL`; MDM work also needs
 `MDM_DATABASE_URL`. Activation/registration connections and provisioning are
-described in [the specification](../../docs/specs/configured-bookkeeping.md).
+described in [the specification](SPEC.md).
 Legacy `BOOKKEEPING_DATABASE_URL` and old run ids are not fallbacks.
 
 For a new or changed Rules body, write only the planned configuration through
@@ -37,13 +37,13 @@ Submit the selected source/feed's manifest, then run each step's worker and
 verifier, in step order, and finish the run:
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse rules run \
+edgar-warehouse rules run \
   --source "$RULES_SOURCE_NAME" --feed "$SOURCE_FEED" --target "$BOOKKEEPING_TARGET" \
   --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256"
-uv run --extra mdm --extra s3 python -m edgar_warehouse.workers work <profile> "$RUN_ID" --limit 100
-uv run --extra mdm --extra s3 python -m edgar_warehouse.workers verify <profile> "$RUN_ID" \
+edgar-warehouse workers work <profile> "$RUN_ID" --limit 100
+edgar-warehouse workers verify <profile> "$RUN_ID" \
   --reports "$REPORT_ROOT_URI" --limit 100
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping finalize "$RUN_ID"
+edgar-warehouse bookkeeping finalize "$RUN_ID"
 ```
 
 Feed is bound by the validated frozen worklist, source-input dataset/

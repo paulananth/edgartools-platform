@@ -1,4 +1,4 @@
-"""Producer workflow planning; planning never opens a database connection.
+"""Producer workflow planning (`edgar-warehouse plan workflow`); planning never opens a database connection.
 
 Validation and deployment ran the work in this process, through Bookkeeping's
 callbacks. They return in mastering to-do 20c, with the work done by workers
@@ -7,11 +7,10 @@ in their own processes (to-do 20a removed the callbacks).
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest, validate, worklist
+from edgar_warehouse.bookkeeping.clean.config import Blocked, digest, validate, worklist
 from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
 from edgar_warehouse.rules.files import load
 
@@ -56,30 +55,3 @@ def plan(
     }
     return {**value, "plan_hash": digest(value)}
 
-
-def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("plan",))
-    parser.add_argument("--source", required=True)
-    parser.add_argument("--feed", required=True)
-    parser.add_argument(
-        "--rules-root", type=Path, default=Path(__file__).resolve().parents[2] / "rules"
-    )
-    parser.add_argument("--target", required=True)
-    parser.add_argument("--input-manifest", required=True)
-    parser.add_argument("--input-sha256", required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    value = plan(
-        source=args.source,
-        feed=args.feed,
-        target=args.target,
-        inputs={"uri": args.input_manifest, "sha256": args.input_sha256},
-        rules_root=args.rules_root,
-    )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(canonical(value) + "\n")
-    print(json.dumps(value, indent=2, sort_keys=True))
-    return 0

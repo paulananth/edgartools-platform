@@ -3,7 +3,7 @@
 Current acquisition status (2026-09-29): only
 `sec.submissions.company/submissions` is active. The local Company caller and
 bounded generated-work migration are described in
-[the Company route](../company-only-acquisition.md). Branch names, feed suites,
+the Company route (`docs/company-only-acquisition.md`). Branch names, feed suites,
 and test counts below record the earlier implementation state.
 
 Core branch: `codex/configured-bookkeeping` (PR #732). Stage work continues on
@@ -245,7 +245,7 @@ Use `bookkeeping init` only to initialize the fresh control schema;
 `change-journal migrate` and `bookkeeping init-guard` use their separate
 migration URLs. They do not populate business or source data. Resource checkpoint and
 request authorization migrations retain the five-table control boundary;
-see [Change Journal](change-journal.md) for their transaction/recovery contract.
+see [Change Journal](../change-journal/SPEC.md) for their transaction/recovery contract.
 
 ```bash
 edgar-warehouse rules save --source gleif --version <new-version> rules/sources/gleif/source.yaml

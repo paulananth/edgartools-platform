@@ -16,7 +16,7 @@ through configuration alone.** The experiments compare current implementations
 against configuration candidates, including deliberately invalid inputs.
 
 The operator's subsequent correction prioritizes the
-[loader-independent Bookkeeping design](bookkeeping-loader-independent-design-2026-10-02.md).
+[loader-independent Bookkeeping design](../../skills/bookkeeping/DESIGN.md).
 Removing control coupling is independent of replacing parsing code. The SEC
 Company scalar projection remains a separate demonstrated parsing opportunity.
 Keep classification, address interpretation, array expansion, aggregation and

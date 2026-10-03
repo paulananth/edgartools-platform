@@ -5,6 +5,10 @@ description: Improve a feed or domain that is ALREADY LIVE in Clean MDM and silv
 
 # Refining Rules
 
+> Part of the **data-platform** skill, installed as one package with its
+> commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
+> and for the whole flow; this skill holds one step's detail.
+
 Changes something **already live**: a feed with a rules file, or a domain
 with merge rules.
 
@@ -65,7 +69,7 @@ PR.
 
 1. List the changes:
    ```bash
-   uv run --extra mdm edgar-warehouse rules mapdoc diff --only <source or kind>
+   edgar-warehouse rules mapdoc diff --only <source or kind>
    ```
    It prints each changed cell: the sheet, row and column, what the rules
    say, and what the workbook says. A spreadsheet does not show its changes

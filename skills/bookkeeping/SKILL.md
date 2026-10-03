@@ -5,10 +5,14 @@ description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect 
 
 # Bookkeeping
 
+> Part of the **data-platform** skill, installed as one package with its
+> commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
+> and for the whole flow; this skill holds one step's detail.
+
 **Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
 owns work control and verified completion. Workers, each in its own process,
 own the work itself. `edgar-warehouse rules run` submits the approved versions;
-workers then pull the work (`python -m edgar_warehouse.workers work`), separate
+workers then pull the work (`edgar-warehouse workers work`), separate
 verifiers check it (`… verify`), and `edgar-warehouse bookkeeping finalize`
 delivers control's events and records the run's checks. There is no
 `bookkeeping run` command (operator, 2026-10-02: "Keep `rules run`"). Plan,
@@ -44,12 +48,11 @@ far. The callbacks are gone (mastering to-do 20a); never add one back.
 Use the shared engine in `edgar_warehouse/bookkeeping/clean/`. It retains
 control references and evidence; source records stay in their owning stores.
 The currently implemented protocol and supported boundaries are in
-[the specification](../../docs/specs/configured-bookkeeping.md).
+[the specification](SPEC.md).
 The design is linked from INDEPENDENCE.md; its status there says which gates
 have run. Existing CLI syntax is not proof of loader independence.
-Run commands from the repository root with `uv run --extra mdm --extra s3`.
-Resolve the skill's physical path for its relative references, and verify the
-execution checkout contains the fresh engine; another worktree may be older.
+`edgar-warehouse` is the installed data skill bundle (see the **data-platform** skill, Setup). In a checkout of the repository, put `uv run --extra mdm --extra s3` in front of it instead.
+Run `edgar-warehouse doctor` first; it checks that every command here exists.
 
 ## Invocation and required inputs
 
@@ -82,8 +85,7 @@ through `edgar_warehouse.rules.files`.
 Resolve the binding deterministically before every feed-scoped mode:
 
 ```bash
-uv run --extra mdm --extra s3 skills/bookkeeping/scripts/resolve_feed.py \
-  --source <source> --feed <feed>
+edgar-warehouse plan resolve-feed --source <source> --feed <feed>
 ```
 
 This read-only helper returns the Rules digest, exact dataset/member set and
@@ -98,7 +100,7 @@ binding on Rules submission for acquisition documents.
 Recover a run only after its retained manifest proves the same source/feed.
 
 Confirm live commands with `edgar-warehouse bookkeeping --help` and
-`edgar-warehouse rules run --help` under the `uv run` prefix.
+`edgar-warehouse rules run --help`.
 
 ### The task protocol
 
@@ -120,7 +122,7 @@ Workers and verifiers connect as their own logins, each a member of the
 runtime role. A profile no login was granted cannot report or verify anything.
 Control is also packaged alone: `packages/bookkeeping` (`edgar-bookkeeping`).
 
-`python -m edgar_warehouse.workers work|verify <profile> <run>` runs a worker
+`edgar-warehouse workers work|verify <profile> <run>` runs a worker
 or a verifier. The profiles built so far are `artifact.copy` and `jsonl.count`.
 Company, Person and MDM have no worker yet: SEC Company and acquisition arrive
 in mastering to-do 20c, Person in 20d, MDM in 20e. Until then, report their
@@ -144,8 +146,8 @@ migration checksums, five control tables, runtime privileges and zero imported
 run/work rows:
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping init --runtime-role <role>
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping migrate --runtime-role <role>
+edgar-warehouse bookkeeping init --runtime-role <role>
+edgar-warehouse bookkeeping migrate --runtime-role <role>
 ```
 
 Select one command for the requested state. If destination transaction guards
@@ -224,10 +226,10 @@ run request and independently qualified.
 ## Status mode
 
 ```bash
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping runs --limit 20
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping status <run-id> --limit 100
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping checks <run-id>
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping leases <run-id> --limit 100
+edgar-warehouse bookkeeping runs --limit 20
+edgar-warehouse bookkeeping status <run-id> --limit 100
+edgar-warehouse bookkeeping checks <run-id>
+edgar-warehouse bookkeeping leases <run-id> --limit 100
 ```
 
 Each needs `BOOKKEEPING_CLEAN_DATABASE_URL` (the runtime login). `status`,

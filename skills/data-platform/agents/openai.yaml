@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Platform"
+  short_description: "Install the data skill, then onboard, parse and master a feed"
+  default_prompt: "Use $data-platform to take the feed whose captured files are in <folder> through onboarding, parsing and mastering."

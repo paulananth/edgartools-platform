@@ -17,7 +17,7 @@ The controller has no domain callbacks or domain-operation name branches.
 Approved profiles pin worker/verifier runtime and contract digests; authoring
 YAML cannot supply an arbitrary import path or shell command.
 
-The [replacement design](../../docs/research/bookkeeping-loader-independent-design-2026-10-02.md)
+The [replacement design](DESIGN.md)
 defines the proposed protocol and transition rules. Follow its failure and
 recovery requirements; loader replacement is not a prerequisite for removing
 control coupling. Existing loaders may remain inside external worker processes.
@@ -29,7 +29,7 @@ acquisition and source-evidence callbacks and the Journal branches on operation
 names are deleted. Control now hands out task envelopes and admits verifier
 reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
 `fail`, `finalize`); workers run as their own processes
-(`python -m edgar_warehouse.workers`).
+(`edgar-warehouse workers`).
 
 | Gate | State |
 | --- | --- |

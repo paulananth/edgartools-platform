@@ -1,6 +1,5 @@
 """Skill selections use source descriptors, never a source-specific alias map."""
 from pathlib import Path
-from runpy import run_path
 import subprocess
 import sys
 
@@ -8,9 +7,9 @@ import pytest
 
 from edgar_warehouse.rules.files import dumps, load
 from edgar_warehouse.bookkeeping.clean.config import digest
+from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
 
 ROOT = Path(__file__).resolve().parents[2] / "rules"
-resolve_feed = run_path(str(ROOT.parent / "skills/bookkeeping/scripts/resolve_feed.py"))["resolve_feed"]
 PAIRS = [
     ("sec.submissions.company", "submissions", "sec.submissions.company.v1"),
 ]
@@ -55,9 +54,9 @@ def test_unseen_mdm_source_is_not_an_acquisition_feed(tmp_path):
 
 @pytest.mark.parametrize("arguments", [[], ["--source", "gleif"], ["--feed", "level1"],
                                        ["--source", "gleif", "--feed", "submissions"]])
-def test_helper_cli_rejects_missing_or_incompatible_pair_from_any_checkout(tmp_path, arguments):
-    script = ROOT.parent / "skills/bookkeeping/scripts/resolve_feed.py"
-    result = subprocess.run([sys.executable, str(script), *arguments], cwd=tmp_path,
+def test_plan_resolve_feed_rejects_missing_or_incompatible_pair_from_any_folder(tmp_path, arguments):
+    command = "import sys; from edgar_warehouse.cli import main; sys.exit(main(sys.argv[1:]))"
+    result = subprocess.run([sys.executable, "-c", command, "plan", "resolve-feed", *arguments], cwd=tmp_path,
                             text=True, capture_output=True, check=False)
     assert result.returncode == 2
     assert not result.stdout

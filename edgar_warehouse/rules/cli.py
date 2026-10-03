@@ -28,7 +28,7 @@ def _approve_rule(args):
         return 2
     at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        entry = files.approve_rule(args.rule, by=args.by, words=args.words, at=at, root=Path(args.root))
+        entry = files.approve_rule(args.rule, by=args.by, words=args.words, at=at, root=files.writable(args.root))
     except ValueError as error:  # the refusal and its reason, not a traceback
         print(f"Not approved: {error}", file=sys.stderr)
         return 1
@@ -55,7 +55,8 @@ def _handle(args):
         try:
             if args.rules_command in ("load", "unload"):
                 method = rules.from_files if args.rules_command == "load" else rules.to_files
-                result = method(Path(args.root), args.version)
+                root = Path(args.root) if args.rules_command == "load" else files.writable(args.root)
+                result = method(root, args.version)
                 print(json.dumps(result, default=str, indent=2, sort_keys=True))
                 return 0
             if args.rules_command == "pending":
@@ -146,6 +147,11 @@ def _mapdoc(args):
             print(f"No source or kind named {args.only} has a Mapping Document", file=sys.stderr)
             return 2
     if args.action == "write":
+        try:
+            files.writable(args.root)
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            return 2
         for path, (_, sheets, sources) in found.items():
             mapdoc.write(path, sheets, sources)
             print(path)
