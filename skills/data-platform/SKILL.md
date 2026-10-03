@@ -78,7 +78,9 @@ question at a time, with your recommendation.
 
 A feed is parsed by the `source.read` worker: the configured engine reads
 each captured file by the feed's contract (its `read:` block) and writes the
-tables and the records set aside. Nothing feed-specific runs.
+tables and the records set aside. Nothing feed-specific runs. For captured
+JSON column arrays and exact source text, read [Configured reading](READING.md)
+before writing the contract.
 
 1. The feed's pipeline is saved, tested, approved and switched on (Mode 4).
 2. Submit: `edgar-warehouse rules run --pipeline <name> --target <target> --input-manifest <uri> --input-sha256 <sha256>`.

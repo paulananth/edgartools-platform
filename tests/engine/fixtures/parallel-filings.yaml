@@ -1,0 +1,17 @@
+source: qualification.parallel
+version: review-1
+execution: { profile: source.read, workers: 2, max_artifacts: 2 }
+read:
+  format: json
+  limits: { max_bytes: 33554432, max_records: 100000 }
+  tables:
+    filings:
+      each:
+        parallel:
+          path: filings.recent
+          anchor: accessionNumber
+          fields: { accession: accessionNumber, form: form }
+          lengths: anchor
+      columns:
+        accession_number: { text: { path: accession, trim: false, null_if: [""] } }
+        form: { text: { path: form, trim: false, null_if: [""] } }

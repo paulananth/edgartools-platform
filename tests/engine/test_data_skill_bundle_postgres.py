@@ -278,8 +278,8 @@ read:
 """
 
 
-@pytest.mark.parametrize("custom_trial", [False, True], ids=["configured", "custom-step-review-trial"])
-def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, custom_trial):
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records"])
+def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
     the installed bundle."""
@@ -290,6 +290,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     from tests.support.rules_approval import approve
     from tests.support.rules_authority import register_dataset
 
+    custom_trial = trial_mode == "custom-step"
     python, root = installed
     store = Artifacts()
     for profile in ("source.read", "mdm.prepare", "mdm.merge"):
@@ -312,7 +313,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
-    pipeline_name = "parse-and-master-custom-trial" if custom_trial else "parse-and-master-fixture"
+    pipeline_name = f"parse-and-master-{trial_mode}"
     pipeline = {**MASTER, "pipeline": pipeline_name}
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
@@ -325,6 +326,26 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
 """
         filer_bytes = b"".join(json.dumps({**json.loads(line), "released_at": "2026-10-03T08:30:00.123456-04:00"}).encode() + b"\n"
                                for line in FILERS.splitlines())
+    if trial_mode == "parallel-records":
+        contract_bytes = b"""source: fixture.filers
+execution: { profile: source.read, workers: 1, max_artifacts: 1 }
+read:
+  format: json
+  limits: { max_bytes: 1048576, max_records: 1000 }
+  tables:
+    filers:
+      each:
+        parallel:
+          path: "."
+          anchor: cik
+          fields: { cik: cik, name: name }
+          lengths: equal
+      columns:
+        cik: { text: { path: cik } }
+        name: { text: { path: name } }
+"""
+        rows = [json.loads(line) for line in FILERS.splitlines()]
+        filer_bytes = json.dumps({key: [row[key] for row in rows] for key in ("cik", "name")}).encode()
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
     read_input = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [filers]})
