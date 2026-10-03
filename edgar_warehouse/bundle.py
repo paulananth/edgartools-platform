@@ -20,8 +20,8 @@ from pathlib import Path
 
 from edgar_warehouse.rules import files
 
-# Installed: the skills and the documents they link to sit in `bundle_data`.
-# In the repository: `skills/` and `docs/`.
+# Installed: the skills (each carries the documents it links to) sit in `bundle_data`.
+# In the repository: `skills/`.
 SKILLS = files.BUNDLE_DATA / "skills" if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "skills"
 # The approved rules the bundle was built with: a folder to start from.
 RULES = files.BUNDLED if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "rules"

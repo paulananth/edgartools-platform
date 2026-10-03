@@ -48,7 +48,7 @@ far. The callbacks are gone (mastering to-do 20a); never add one back.
 Use the shared engine in `edgar_warehouse/bookkeeping/clean/`. It retains
 control references and evidence; source records stay in their owning stores.
 The currently implemented protocol and supported boundaries are in
-[the specification](../../docs/specs/configured-bookkeeping.md).
+[the specification](SPEC.md).
 The design is linked from INDEPENDENCE.md; its status there says which gates
 have run. Existing CLI syntax is not proof of loader independence.
 `edgar-warehouse` is the installed data skill bundle (see the **data-platform** skill, Setup). In a checkout of the repository, put `uv run --extra mdm --extra s3` in front of it instead.

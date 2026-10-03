@@ -2,7 +2,7 @@
 
 Current acquisition status (2026-09-29):
 `sec.submissions.company/submissions` is the sole active feed. Its locally
-qualified caller is described in [the Company route](../company-only-acquisition.md).
+qualified caller is described in the Company route (`docs/company-only-acquisition.md`).
 Other SEC and GLEIF acquisition callers are retired; their historical audit
 stores remain separate.
 
@@ -24,7 +24,7 @@ The journal core contains only `store.py`, `database.py`, `cli.py`, exports and
 checksummed SQL migrations. Its warehouse dependency is the pure
 `control_contract.py` module. It imports no Bookkeeping, Rules, MDM, acquisition,
 Silver, loader or parser implementation. Standalone operations are available as
-`uv run python -m edgar_warehouse.change_journal.cli` with init/migrate/status/
+`edgar-warehouse change-journal` (or the journal wheel's own `edgar-change-journal`) with init/migrate/status/
 events/verify; no domain registry or callback is constructed there.
 
 Provider capture belongs to `acquisition.capture`; policy/registration authority
@@ -40,7 +40,7 @@ boundary. `packages/change-journal` builds the independent journal wheel with
 SQLAlchemy and the PostgreSQL driver as its only direct dependencies. Install
 it in a dedicated virtual environment; its `edgar_warehouse` namespace overlaps
 the full warehouse distribution. See the
-[installation and verification boundary](../../skills/change-journal/INDEPENDENCE.md).
+[installation and verification boundary](INDEPENDENCE.md).
 The full warehouse distribution still carries its other commands' dependencies.
 No container rollout or package publication is included in this refactor.
 
@@ -109,7 +109,7 @@ acknowledgement. No storage listing establishes success.
 ## Rules and source-owned evidence
 
 The acquisition section and integration boundary are described in
-[the Rules contract](../../.planning/archive/codex/2026-10-02/change-journal/RULES-INTEGRATION.md).
+the Rules contract (`.planning/archive/codex/2026-10-02/change-journal/RULES-INTEGRATION.md`).
 Source files and `rules.rule_version` are the only configuration owners.
 Proof baseline manifest bytes are read back by hash before proving/activating
 a version and during fresh submission/recovery.
@@ -182,7 +182,7 @@ resource CAS/holes and bounded capture fixtures across the acquisition
 families. Fixture capture alone does not qualify family parsers, Snowflake
 producer barriers, every legacy acquisition caller or AWS cutover.
 
-[The inventory](../../.planning/archive/codex/2026-10-02/change-journal/LEGACY-INVENTORY.md)
+The inventory (`.planning/archive/codex/2026-10-02/change-journal/LEGACY-INVENTORY.md`)
 tracks remaining active uses and replacement tests. Keep old stacks available
 for their runs/backlog; fresh roots are marked `change-journal-v1` and reject
 historical roots. Do not import historical decisions, checkpoints or pending

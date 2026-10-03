@@ -14,7 +14,7 @@ Review [PR #784](https://github.com/paulananth/edgartools-platform/pull/784)
 and its research/experiments on `codex/custom-parsing-research-20261002`.
 Codex owns follow-up work in a dedicated Codex branch/worktree. Fetch current
 main and reconcile its source with the research baseline before implementation.
-Start with the [loader-independent Bookkeeping design](bookkeeping-loader-independent-design-2026-10-02.md).
+Start with the [loader-independent Bookkeeping design](../../skills/bookkeeping/DESIGN.md).
 
 Read the [tested results](configuration-replacement-results-2026-10-02.md)
 first; use the [inventory](custom-parsing-inventory-2026-10-02.md) for caller

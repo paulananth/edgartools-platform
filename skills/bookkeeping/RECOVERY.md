@@ -8,7 +8,7 @@ dependency failure is implementation work, not a reason to reintroduce a loader
 into control.
 
 Read bounded status and leases first. See the
-[specification](../../docs/specs/configured-bookkeeping.md) for authority and
+[specification](SPEC.md) for authority and
 storage semantics; use live CLI help when an option differs.
 
 Resolve the requested source/feed again and compare its dataset/member set

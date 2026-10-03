@@ -18,11 +18,11 @@ not be a prerequisite for removing control coupling.
 
 | Current code | Coupling introduced by the integration | Proposed replacement |
 | --- | --- | --- |
-| [CLI construction](../../edgar_warehouse/bookkeeping/clean/cli.py#L20) | Imports Company implementations and constructs MDM/Journal integrations inside Bookkeeping configuration. | Compose the control process using control storage and transport only; workload processes own their destination clients. |
-| [Capability interface](../../edgar_warehouse/bookkeeping/clean/config.py#L37) and [runner](../../edgar_warehouse/bookkeeping/clean/runner.py#L57) | Execute/reconcile/verify callbacks receive the entire Bookkeeping object, allowing SQL and artifact access through private internals. | Give external workers a frozen task envelope and narrowly scoped control client. |
-| [Company capability](../../edgar_warehouse/bookkeeping/clean/company.py#L227) | Source pagination, Company tables and Silver dependencies live in the control package. | Move behavior into a workload package/process with no access to Bookkeeping internals. |
-| [Completion](../../edgar_warehouse/bookkeeping/clean/engine.py#L253) | Control re-enters destination-specific verifier callbacks. | Consume authenticated verification reports through a generic envelope validator. |
-| [Journal conversion](../../edgar_warehouse/bookkeeping/clean/engine.py#L358) | Branches on acquisition and source-evidence operation names. | Emit generic control events. Domain workers emit domain events through their own durable delivery intents. |
+| CLI construction (`edgar_warehouse/bookkeeping/clean/cli.py`) | Imports Company implementations and constructs MDM/Journal integrations inside Bookkeeping configuration. | Compose the control process using control storage and transport only; workload processes own their destination clients. |
+| Capability interface (`edgar_warehouse/bookkeeping/clean/config.py`) and runner (`edgar_warehouse/bookkeeping/clean/runner.py`) | Execute/reconcile/verify callbacks receive the entire Bookkeeping object, allowing SQL and artifact access through private internals. | Give external workers a frozen task envelope and narrowly scoped control client. |
+| Company capability (`edgar_warehouse/bookkeeping/clean/company.py`) | Source pagination, Company tables and Silver dependencies live in the control package. | Move behavior into a workload package/process with no access to Bookkeeping internals. |
+| Completion (`edgar_warehouse/bookkeeping/clean/engine.py`) | Control re-enters destination-specific verifier callbacks. | Consume authenticated verification reports through a generic envelope validator. |
+| Journal conversion (`edgar_warehouse/bookkeeping/clean/engine.py`) | Branches on acquisition and source-evidence operation names. | Emit generic control events. Domain workers emit domain events through their own durable delivery intents. |
 
 Renaming an operation or relocating its Python file while retaining these
 callbacks would leave the dependency in place. Remove the callback interface

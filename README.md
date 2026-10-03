@@ -4,7 +4,7 @@ Data platform for SEC EDGAR built on [edgartools](https://github.com/dgunning/ed
 
 Extracts SEC EDGAR filing data from source through bronze object storage to a gold analytics layer. Terraform now separates passive AWS/Snowflake provisioning from access-control roots; workload jobs, image rollout, secret values, schema migrations, and analytics refreshes run through explicit operator actions.
 
-Fresh [Change Propagation control](docs/specs/change-journal.md) separates
+Fresh [Change Propagation control](skills/change-journal/SPEC.md) separates
 Bookkeeping work/recovery, Rules policy authority and Change Journal evidence.
 The new PostgreSQL 16 path is locally qualified in bounded fixtures;
 legacy caller migration and production cutover remain incomplete.

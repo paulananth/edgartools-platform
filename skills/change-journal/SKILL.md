@@ -24,7 +24,7 @@ source-specific branch belongs in the journal.
 Read [INDEPENDENCE.md](INDEPENDENCE.md) before implementation, architecture
 validation or selecting a delivery-recovery path. It describes module ownership,
 the isolated-package tests and exactly what journal verification proves.
-The [contract](../../docs/specs/change-journal.md) defines envelope and storage
+The [contract](SPEC.md) defines envelope and storage
 semantics. Resolve the skill's physical path when following relative references.
 
 ## Inputs and commands

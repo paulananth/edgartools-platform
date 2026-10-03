@@ -9,7 +9,7 @@ Blocks: 04 (the end-to-end `rules run` proof), 06 (the source switch-ons), 12, 1
 
 Operator, 2026-10-02 17:51 ET: "fix bookkeeping no legacy or custom code for company and person".
 
-This is the explicit instruction that Codex's design ticket (`.planning/workstreams/bookkeeping-loader-independent-design/TICKET.md`) waits for before Claude implements. The design is `docs/research/bookkeeping-loader-independent-design-2026-10-02.md`, and the acceptance gates are in `skills/bookkeeping/INDEPENDENCE.md`.
+This is the explicit instruction that Codex's design ticket (`.planning/workstreams/bookkeeping-loader-independent-design/TICKET.md`) waits for before Claude implements. The design is `skills/bookkeeping/DESIGN.md`, and the acceptance gates are in `skills/bookkeeping/INDEPENDENCE.md`.
 
 ## What the words decide
 

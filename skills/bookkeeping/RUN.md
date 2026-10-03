@@ -18,7 +18,7 @@ Supply connection URLs through the environment without printing credentials:
 `BOOKKEEPING_CLEAN_DATABASE_URL`, `RULES_DATABASE_URL`,
 `BOOKKEEPING_MANIFEST_ROOT` and `CHANGE_JOURNAL_DATABASE_URL`; MDM work also needs
 `MDM_DATABASE_URL`. Activation/registration connections and provisioning are
-described in [the specification](../../docs/specs/configured-bookkeeping.md).
+described in [the specification](SPEC.md).
 Legacy `BOOKKEEPING_DATABASE_URL` and old run ids are not fallbacks.
 
 For a new or changed Rules body, write only the planned configuration through
