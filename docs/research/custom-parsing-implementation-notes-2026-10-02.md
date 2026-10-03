@@ -1,12 +1,13 @@
 # Implementation notes: tested custom parsing findings
 
-Owner: Claude, from 2026-10-03. The operator's words, after Codex's #804 merged:
-"codex finished and pr created and merges now claude take over and finishes".
-The follow-up (SEC Company and GLEIF on the engine, and the bundled skill) is
-`.scratch/mastering-to-done/issues/21-self-sustaining-data-skill.md`. Codex: do
-not start this work; ask the operator first.
+Owner: Codex, following the operator's 2026-10-03 request: "can you take over clauds work test and create pr". The full skills completion goal remains active.
 
-Earlier: Owner: Codex. The operator withdrew the Claude assignment on 2026-10-02.
+- MDM worker qualification: PR #806, `codex/mdm-workers-takeover-20261003`.
+- Custom-step trial and full completion audit: PR #807, `codex/self-sustaining-custom-step-20261003`.
+- Current checklist: `.planning/workstreams/data-skill-completion/TICKET.md`.
+- Source specification: `.scratch/mastering-to-done/issues/21-self-sustaining-data-skill.md`.
+
+The installable bundle is merged (#805). Source-specific engine conversions and the complete pinned-corpus proof remain unfinished; green worker tests do not establish those results.
 
 ## Start here
 

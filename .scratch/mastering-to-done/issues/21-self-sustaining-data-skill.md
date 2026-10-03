@@ -1,8 +1,8 @@
 # One self-sustaining data skill
 
 Type: task (code and skill), several PRs
-Status: in progress (Claude, branch `claude/data-skill-bundle`)
-Blocked by: none for the bundle (G1, G2, G5); G3 needs 20e and the Company and GLEIF read blocks (20 L3–L6)
+Status: in progress (Codex takeover, PRs #806 and #807; `.planning/workstreams/data-skill-completion/TICKET.md`)
+Blocked by: none; basic installed parse/master G3 is verified, complete corpus equivalence still needs Company/Person/GLEIF read blocks (20 L3–L6)
 Absorbs: 20 L3–L8 (Codex's list: SEC Company and GLEIF on the engine), 16, 17
 
 ## Request
@@ -47,7 +47,7 @@ Answers, 2026-10-03:
 - [ ] Company read block, equivalence on the pinned capture, delete `company_source.py` and `loaders/`
 - [ ] GLEIF read block, equivalence, delete `gleif_source.py`
 - [ ] Person read block on the engine
-- [ ] G4: custom-step mode, trialled on one real gap
+- [x] G4: custom-step mode, trialled on one real gap — exact timestamp-to-integer sequence; configured alternatives demonstrated, Mapping Document generated, installed worker/verifier + MDM flow passed; PR #807 stops before code/rules approval, CI run 37153276661 green; 2026-10-03 16:59 ET
 - [x] G3: from the installed bundle, one Rules run reads captured records with the engine (`source.read`), prepares (`mdm.prepare`) and merges them into a real Clean MDM (`mdm.merge`), each step by a worker and a separate verifier (`test_parse_then_master_runs_through_the_installed_bundle`). 2026-10-03 08:30 ET
 - [ ] G3 and the operator's "test it again from the beginning": the whole proof through the installed bundle on empty stores, compared with ticket 27 (6,414 Companies, 3,052 with CIK and LEI, second pass unchanged)
 - [x] Decisions taken while building (no new question needed; each follows from the answers):
