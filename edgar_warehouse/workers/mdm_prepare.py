@@ -22,6 +22,8 @@ from __future__ import annotations
 import hashlib
 import json
 
+from edgar_warehouse.control_contract import reference
+
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
 BATCH = 1000
@@ -46,6 +48,11 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
         if rows is None:
             raise ValueError(f"The reading has no table {keys['table']}")
         source = artifact["input"]["sha256"]
+        if "context" in artifact:
+            reference(artifact["context"])
+            # One captured document may be read under distinct approved caller
+            # facts. Keep their records, batches and publications independent.
+            source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
         for start in range(0, len(rows), BATCH):
             chunk = rows[start:start + BATCH]
             data = _lines(chunk)

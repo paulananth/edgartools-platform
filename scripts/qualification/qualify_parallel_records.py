@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 from datetime import date, datetime
 
@@ -22,6 +23,8 @@ def main():
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--columns", nargs="+", default=["accession_number", "form"])
+    parser.add_argument("--complete", action="store_true", help="Compare all 18 filing columns with explicit receipt-derived caller context")
+    parser.add_argument("--recent-limit", type=int, help="First-N history bound for --complete; omitted means all")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not 1 <= args.limit <= 1000:
@@ -34,6 +37,8 @@ def main():
     selected = receipts[:args.limit]
     if len(selected) != args.limit or len({r["key"] for r in selected}) != args.limit:
         raise ValueError("Need the requested number of distinct captured submissions")
+    if args.recent_limit is not None and not args.complete:
+        parser.error("--recent-limit requires --complete")
     engine = SourceEngine(files.load(args.contract))
     rows, evidence = 0, []
     for ref in selected:
@@ -45,10 +50,23 @@ def main():
         if len(raw) > 32 * 1024**2 or hashlib.sha256(raw).hexdigest() != ref["sha256"]:
             raise ValueError("Capture bytes differ from their bounded receipt")
         payload = json.loads(raw)
-        old = stage_recent_filing_loader(payload, int(payload["cik"]), "qualification", "captured", "default")
+        context = None
+        if args.complete:
+            match = re.search(r"/submissions/sec/cik=([0-9]+)/main/", ref["key"])
+            if not match:
+                raise ValueError("Captured selector does not name the caller CIK")
+            context = {"cik": int(match[1]), "sync_run_id": "qualification", "raw_object_id": ref["sha256"],
+                       "load_mode": "default", "recent_limit": args.recent_limit}
+            columns = list(files.load(args.contract)["read"]["tables"]["filings"]["columns"])
+            if len(columns) != 18:
+                raise ValueError("Complete filing contract must name all 18 columns")
+            old = stage_recent_filing_loader(payload, context["cik"], context["sync_run_id"], context["raw_object_id"], context["load_mode"], args.recent_limit)
+        else:
+            columns = args.columns
+            old = stage_recent_filing_loader(payload, int(payload["cik"]), "qualification", "captured", "default")
         expected = [{key: row[key].isoformat() if isinstance(row[key], (date, datetime)) else row[key]
-                     for key in args.columns} for row in old]
-        reading = engine.read(raw)
+                     for key in columns} for row in old]
+        reading = engine.read(raw, context=context)
         actual = reading.tables["filings"]
         if actual != expected or reading.deferred:
             raise ValueError(f"Configured filing projection differs for {ref['key']}")
@@ -56,7 +74,7 @@ def main():
         rows += len(actual)
         evidence.append({"key": ref["key"], "input_sha256": ref["sha256"], "rows": len(actual),
                          "projection_sha256": hashlib.sha256(canonical).hexdigest()})
-    result = {"scope": args.columns, "filings": len(selected), "rows": rows,
+    result = {"scope": columns, "complete_filing_columns": args.complete, "recent_limit": args.recent_limit, "filings": len(selected), "rows": rows,
               "contract_sha256": hashlib.sha256(args.contract.read_bytes()).hexdigest(),
               "receipts_sha256": hashlib.sha256(receipt_bytes).hexdigest(), "evidence": evidence}
     args.output.parent.mkdir(parents=True, exist_ok=True)

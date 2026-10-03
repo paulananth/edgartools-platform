@@ -137,3 +137,70 @@ retains its byte/record limits.
 This syntax qualifies filing content fields only. Artifact metadata, complete
 classification and source/mastering equivalence remain required before reader
 or loader retirement.
+
+## Artifact context and first-N rows
+
+When output fields come from caller facts, declare their types separately from
+captured document paths:
+
+```yaml
+read:
+  format: json
+  context:
+    caller_id: {type: integer}
+    capture_label: {type: text, max_bytes: 128}
+    first_n: {type: integer, nullable: true}
+  tables:
+    rows:
+      each: records
+      take: {context: {name: first_n}}
+      columns:
+        id: {context: {name: caller_id}}
+        capture: {context: {name: capture_label}}
+        name: {text: {path: name}}
+```
+
+Provide every declared context key exactly once. Types are `text`, signed
+64-bit `integer`, and native `boolean`; there is no coercion. Null requires
+`nullable: true`. Text defaults to at most 4,096 UTF-8 bytes; `max_bytes` may
+lower that limit. Declare at most 32 keys, each at most 64 ASCII letters,
+digits or underscores. Unknown fields, missing fields, wrong types and bounds
+fail with `invalid_context`. A context expression names a declared field;
+that field also works as a custom step's input. Document paths keep reading
+the original captured bytes.
+
+`take` accepts a context field declared as integer (optionally nullable), or
+`{const: {value: N}}`. Null selects all rows; positive N selects the first N;
+zero and negative N select none. Byte, shape, full source record-count and
+safety-limit checks still run. Selected rows retain their original ordinals,
+and their record checks run normally. `take` is selection, not a larger
+safety allowance.
+
+For `source.read`, use input version 2 when context is required:
+
+```json
+{"version":2,"contract":{"uri":"s3://bucket/contract.yaml","sha256":"<hash>"},
+ "artifacts":[{"input":{"uri":"s3://bucket/captured.json","sha256":"<hash>"},
+               "context":{"uri":"s3://bucket/context.json","sha256":"<hash>"}}]}
+```
+
+The context receipt names immutable JSON, at most 32 KiB:
+
+```json
+{"version":1,"input":{"uri":"s3://bucket/captured.json","sha256":"<hash>"},
+ "values":{"caller_id":320193,"capture_label":"approved capture","first_n":null}}
+```
+
+Its `input` must equal the artifact's exact URI and hash. Build the context
+from approved caller facts and pin it in the execution worklist. A hash proves
+bytes and binding; Rules approval supplies authority for those facts. The
+worker and independent verifier reread both receipts. Reading output retains
+version 1 and adds the context receipt to each artifact. MDM preparation uses
+both input and context hashes for record, batch and publication identity, so
+different context for the same captured bytes remains separate. Version-1
+source inputs remain valid for contracts without required context.
+
+The 18-column filing fixture and pinned comparison cover caller provenance
+and selected recent filing content. They do not complete Company/Person
+classification, paginated history, reference joins, GLEIF or complete malformed
+source equivalence. Keep the full retirement gates open until those pass.

@@ -87,15 +87,17 @@ impl PyEngine {
         Engine::from_yaml(contract, registered).map(|inner| Self { inner }).map_err(rejected)
     }
 
-    fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>) -> PyResult<PyObject> {
+    #[pyo3(signature = (data, lookups, context="{}"))]
+    fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>, context: &str) -> PyResult<PyObject> {
         let mut sets = Lookups::new();
         for (name, values) in lookups.iter() {
             let values: Vec<String> = values.try_iter()?.map(|v| v?.extract()).collect::<PyResult<_>>()?;
             sets.insert(name.extract()?, values.into_iter().collect());
         }
+        let context = crate::context::from_json(context).map_err(rejected)?;
         // Other Python threads run while the engine reads; a step takes the
         // interpreter back for its own call.
-        let reading = py.allow_threads(|| self.inner.read(data, &sets)).map_err(rejected)?;
+        let reading = py.allow_threads(|| self.inner.read_with_context(data, &sets, &context)).map_err(rejected)?;
         let tables = PyDict::new(py);
         for (name, rows) in &reading.tables {
             let list = PyList::empty(py);

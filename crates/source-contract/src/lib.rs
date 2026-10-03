@@ -18,6 +18,7 @@
 
 mod formats;
 mod integer;
+mod context;
 mod parallel;
 #[cfg(feature = "python")]
 mod python;
@@ -88,7 +89,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 8] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom"];
+const PRIMITIVES: [&str; 9] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -131,6 +132,12 @@ impl Engine {
     }
 
     pub fn read(&self, bytes: &[u8], lookups: &Lookups) -> Result<Reading, Rejected> {
+        self.read_with_context(bytes, lookups, &Row::new())
+    }
+
+    /// Caller facts never replace document fields or parsing configuration.
+    pub fn read_with_context(&self, bytes: &[u8], lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
+        context::check(&self.read, context)?;
         if bytes.len() as u64 > self.limits.max_bytes {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
@@ -166,8 +173,8 @@ impl Engine {
             }
             self.check_count(&document, &name, items.len())?;
             let rows = reading.tables.entry(name.clone()).or_default();
-            for (index, item) in items.into_iter().enumerate() {
-                let mut record = Record { engine: self, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
+            for (index, item) in items.into_iter().take(context::take(table, context)).enumerate() {
+                let mut record = Record { engine: self, context, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
                 if let Some(reason) = record.failed_check(lookups)? {
                     reading.deferred.push(Deferred { table: name.clone(), ordinal: record.ordinal, reason, raw: item.raw() });
                     continue;
@@ -249,6 +256,7 @@ fn setting<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
 
 /// Everything a contract names must exist now, not partway through a read.
 fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
+    context::validate(read)?;
     let format = setting(read, "format").ok_or("read.format is missing")?;
     if !FORMATS.contains(&format) {
         return Err(format!("format {format} is not read"));
@@ -436,6 +444,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
 /// the row first needs them, so checks run in the order the rules file gives.
 struct Record<'a> {
     engine: &'a Engine,
+    context: &'a Row,
     document: &'a El,
     item: &'a El,
     ordinal: i64,
@@ -449,7 +458,7 @@ impl Record<'_> {
             return Ok(value.clone());
         }
         let expr = self.table.get("columns").and_then(|c| c.get(name)).ok_or_else(|| contract_error(name))?;
-        let value = eval(self.engine, self.document, self.item, self.ordinal, expr)?;
+        let value = eval(self.engine, self.context, self.document, self.item, self.ordinal, expr)?;
         self.values.insert(name.to_string(), value.clone());
         Ok(value)
     }
@@ -743,10 +752,11 @@ fn segments(path: &str) -> Vec<String> {
     out
 }
 
-fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
+fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
         "ordinal" => Ok(Val::Int(ordinal)),
+        "context" => Ok(context.get(setting(args, "name").unwrap()).unwrap().clone()),
         "const" => Ok(yaml_val(args.get("value"))),
         "text" => {
             let trim = args.get("trim").and_then(Value::as_bool).unwrap_or(true);
@@ -794,7 +804,7 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
         "steps" => {
             let mut value = Val::Null;
             for step in args.as_sequence().into_iter().flatten() {
-                value = eval(engine, document, item, ordinal, step)?;
+                value = eval(engine, context, document, item, ordinal, step)?;
             }
             Ok(value)
         }
@@ -803,7 +813,7 @@ fn eval(engine: &Engine, document: &El, item: &El, ordinal: i64, expr: &Value) -
             let function = engine.steps.get(step).ok_or_else(|| contract_error(format!("no value step {step}")))?;
             let mut input = Val::Null;
             for (_, expr) in args.get("inputs").and_then(Value::as_mapping).into_iter().flatten() {
-                input = eval(engine, document, item, ordinal, expr)?;
+                input = eval(engine, context, document, item, ordinal, expr)?;
             }
             function(&input).map_err(|e| Rejected::new("step_failed", format!("step {step}: {e}")))
         }
