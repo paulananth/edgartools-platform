@@ -246,3 +246,106 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     assert state["counts"] == {"verified": 1} and state["run"]["state"] == "complete"
     assert json.loads((tmp_path / "holdings.json").read_bytes())["artifacts"][0]["tables"][
         "sec_thirteenf_holding"][0]["share_type"] == "SH"
+
+
+MASTER = {
+    "pipeline": "parse-and-master-fixture",
+    "bookkeeping": {"version": 1, "targets": {"master": {
+        "lease_seconds": 120, "heartbeat_seconds": 30,
+        "retry": {"attempts": 5, "base_ms": 100, "cap_ms": 5000},
+        "allow_zero_work": False,
+        "steps": [
+            {"name": "read", "operation": "source.read", "requires": [], "key": "{batch_id}",
+             "leases": ["source-output:{batch_id}"], "checks": ["input.hash", "output.receipt", "source.output"]},
+            {"name": "prepare", "operation": "mdm.prepare", "requires": ["read"], "key": "{batch_id}",
+             "leases": ["mdm-prepare:{batch_id}"], "checks": ["input.hash", "output.receipt", "mdm.prepared"]},
+            {"name": "merge", "operation": "mdm.merge", "requires": ["prepare"], "key": "{batch_id}",
+             "leases": ["mdm:consumer:{consumer}"], "checks": ["input.hash", "output.receipt", "mdm.committed"]}],
+        "checks": ["manifest.hash", "work.accounting", "journal.delivered"]}}},
+}
+FILERS = b'{"cik": "320193", "name": "Apple Inc."}\n{"cik": "789019", "name": "Microsoft Corp"}\n'
+READ_CONTRACT = b"""source: fixture.filers
+execution: { profile: source.read, workers: 1, max_artifacts: 1 }
+read:
+  format: jsonl
+  limits: { max_bytes: 1048576, max_records: 1000 }
+  tables:
+    filers:
+      each: record
+      columns:
+        cik: { text: { path: cik } }
+        name: { text: { path: name } }
+"""
+
+
+def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path):
+    """G3: captured records, read by the engine, prepared and merged into Clean
+    MDM in one Rules run, every step by a worker and a separate verifier from
+    the installed bundle."""
+    from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
+    from edgar_warehouse.mdm.clean.store import migrate, register_policy
+    from sqlalchemy import create_engine, text
+    from tests.integration import test_clean_mdm_postgres as core
+    from tests.support.rules_approval import approve
+    from tests.support.rules_authority import register_dataset
+
+    python, root = installed
+    store = Artifacts()
+    for profile in ("source.read", "mdm.prepare", "mdm.merge"):
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql("CREATE DATABASE mdm_bundle")
+    mdm_admin = create_engine(databases.admin.url.set(database="mdm_bundle"))
+    mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
+    migrate(mdm_admin, application_role="clean_application")
+    migrate_guard(mdm_admin, runtime_role="clean_application")
+    with mdm_admin.begin() as conn:
+        policy = register_policy(conn, {"version": 1, "required_consumers": [], "automatic_rules": [],
+                                        "fields": {"company": {"name": {"sources": ["fixture.filers"]}}}})
+        register_dataset(conn, "fixture.filers", "1", core.contract_body(adapter={
+            "version": "v1", "kind": "company", "record_key": ["cik"], "identifiers": {"cik": "cik"},
+            "fields": {"name": "name"}}))
+
+    saved = databases.rules.save("pipeline", "parse-and-master-fixture", "1", MASTER)
+    contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), READ_CONTRACT)
+    filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), FILERS)
+    read_input = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [filers]})
+    out = tmp_path / "out"
+    keys = {"batch_id": "filers", "consumer": "fixture/filers"}
+    units = store.put(tmp_path.as_uri(), {"version": 2, "steps": {
+        "read": [{"keys": keys, "input": read_input, "output": (out / "reading.json").as_uri(), "cursor": {}}],
+        "prepare": [{"keys": {**keys, "table": "filers", "dataset": "fixture.filers", "policy": policy,
+                              "as_of": core.AS_OF},
+                     "input": {"from": {"step": "read", "key": "filers"}},
+                     "output": (out / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
+        "merge": [{"keys": keys, "input": {"from": {"step": "prepare", "key": "filers"}},
+                   "output": (out / "merged.json").as_uri(), "cursor": {}}]}})
+    databases.rules.prove("pipeline", "parse-and-master-fixture", "1",
+                          {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
+    approve(databases.approver, "pipeline", "parse-and-master-fixture", "1")
+    databases.rules.activate("pipeline", "parse-and-master-fixture", "1")
+
+    url = lambda engine: engine.url.render_as_string(hide_password=False)
+    env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
+    worker = {"MDM_DATABASE_URL": url(mdm_app), "MDM_APPLICATION_ROLE": "clean_application"}
+    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_admin)}
+
+    def cli(*args, **extra):
+        done = _run(python, "-m", "edgar_warehouse.cli", *args, env={**env, **extra}, cwd=root)
+        assert done.returncode == 0, done.stderr
+        return done.stdout
+
+    run_id = json.loads(cli("rules", "run", "--pipeline", "parse-and-master-fixture", "--target", "master",
+                            "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
+    for profile in ("source.read", "mdm.prepare", "mdm.merge"):
+        cli("workers", "work", profile, run_id, **worker)
+        cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
+    state = json.loads(cli("bookkeeping", "finalize", run_id))
+    assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
+    with mdm_admin.connect() as conn:
+        names = conn.execute(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_record "
+                                  "WHERE object_type='stage_record' OR object_type='entity'")).scalars().all()
+        records = conn.scalar(text("SELECT count(*) FROM mdm.stage_record"))
+    mdm_admin.dispose()
+    mdm_app.dispose()
+    assert records == 2, names

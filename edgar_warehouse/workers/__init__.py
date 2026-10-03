@@ -13,7 +13,7 @@ from __future__ import annotations
 from importlib import import_module
 
 PROFILES = {"artifact.copy": "copy", "jsonl.count": "count", "source.read": "source_read",
-            "mdm.merge": "mdm_merge", "mdm.publish": "mdm_publish"}
+            "mdm.prepare": "mdm_prepare", "mdm.merge": "mdm_merge", "mdm.publish": "mdm_publish"}
 
 
 def profile(name: str):
