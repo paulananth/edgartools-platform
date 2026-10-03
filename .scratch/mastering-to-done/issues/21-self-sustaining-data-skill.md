@@ -49,5 +49,15 @@ Answers, 2026-10-03:
 - [ ] G4: custom-step mode, trialled on one real gap
 - [ ] G3 parse half: a Rules-submitted `source.read` run, worker and verifier as separate logins, all from the installed bundle (in the bundle test, passing); MDM half waits for 20e
 - [ ] G3 and the operator's "test it again from the beginning": the whole proof through the installed bundle on empty stores, compared with ticket 27 (6,414 Companies, 3,052 with CIK and LEI, second pass unchanged)
-- [ ] Three-axis `/code-review` per PR; CI green; merge on the operator's word
+- [x] Decisions taken while building (no new question needed; each follows from the answers):
+  - one command, `edgar-warehouse`, not a new `edgar-data`: every skill, test and habit already names it;
+  - the four skills keep their detail and point to data-platform, rather than becoming one-line entries: data-platform is the one entry point, and each step's detail stays in one place (moving it would copy it);
+  - the Bookkeeping specification and design and the Change Journal specification move into their skills (`SPEC.md`, `DESIGN.md`), so an installed copy has every document it links to. 2026-10-03 07:55 ET
+- [x] Bundle PR, three-axis `/code-review`, findings fixed:
+  - **GoF:** leave the structure; lift two mid-function imports (done); the plan commands and the worker arguments into their own modules (done, also a Standards point).
+  - **Standards, fixed:** `skill install` stopped half-way on a refusal and could overwrite a changed copy (now checks all targets first, and keeps a digest of what it installed); the rules fallback could pick a stray `site-packages/rules` and let `mapdoc write`, `unload` and `approve --rule` write into the installed package (now the bundled copy wins and refuses writes, naming `EDGAR_RULES_ROOT`); `doctor` crashed on a malformed address and had no timeout; a pipe ends a command; one doc pointed at a deleted script.
+  - **Spec, fixed:** `doctor` now checks written choices (`workers work|verify`), nested flags, checkout-only spellings and every relative link; G2 saves through the bundle; the parse run reads the copied rules folder; the installed console script itself runs `doctor`.
+  - **Noted, not done:** `doctor` reads argparse internals (`_actions`); `NOT_BUILT` lists the two unbuilt rules commands in code.
+- [ ] Bundle PR: CI green; merge on the operator's word
+- [ ] Three-axis `/code-review` for each later PR; CI green; merge on the operator's word
 - [ ] Memory `project_rules_skill.md` updated
