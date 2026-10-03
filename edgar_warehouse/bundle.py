@@ -105,7 +105,7 @@ def doctor(parser: argparse.ArgumentParser) -> dict:
     from edgar_warehouse.rules import files
 
     try:
-        import source_contract  # noqa: F401
+        from edgar_warehouse.rules import source_engine  # noqa: F401  (the engine's one facade)
 
         engine = "loads"
     except ImportError as exc:

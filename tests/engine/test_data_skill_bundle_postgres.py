@@ -159,7 +159,7 @@ def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(insta
         assert done.returncode == 0, done.stderr
     loaded = cli("rules", "load", "--root", str(folder), "--version", "bundle-1")
     assert loaded.returncode == 0, loaded.stderr
-    status = cli("rules", "status", "--source", "gleif", "--version", "bundle-1")
+    status = cli("rules", "status", "--source", "gleif")
     assert status.returncode == 0, status.stderr
     rows = [row for row in json.loads(status.stdout) if row["version"] == "bundle-1"]
     gleif = [d for d in json.loads(loaded.stdout) if (d["kind"], d["name"]) == ("source", "gleif")]
