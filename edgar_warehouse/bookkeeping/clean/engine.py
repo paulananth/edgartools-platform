@@ -76,6 +76,8 @@ class Bookkeeping:
                 from edgar_warehouse.rules.acquisition_authority import frozen_authority
                 frozen_authority(export, submission["scope"].get("feed"), artifacts=self.artifacts)
             config = validate(export["body"], submission["target"])
+            if submission.get("profiles") != {step["name"]: step["operation"] for step in config["steps"]}:
+                raise Blocked("Frozen worker profiles differ from the Rules export")
             manifest = self.artifacts.json(submission["inputs"])
             items = worklist(manifest, config)
             if digest(items) != submission["worklist_hash"]:
@@ -154,7 +156,10 @@ class Bookkeeping:
         submission = {"version": 1, "kind": export["kind"], "name": export["name"],
                       "journal": "change-journal-v1", "protocol": PROTOCOL,
                       "rule_version": export["version"], "rules": rules_ref, "inputs": inputs_ref,
-                      "target": target, "scope": scope, "worklist_hash": digest(items)}
+                      "target": target, "scope": scope, "worklist_hash": digest(items),
+                      # Each step's worker profile, frozen: the database admits
+                      # only that profile's roles to the step's work (to-do 20b).
+                      "profiles": {step["name"]: step["operation"] for step in config["steps"]}}
         run_id = run_id or str(uuid4())
         self._call("SELECT bookkeeping.start_run(CAST(:r AS uuid),CAST(:s AS jsonb),:h,CAST(:i AS jsonb))",
                    r=run_id, s=canonical(submission), h=digest(submission), i=canonical(items))
@@ -420,8 +425,6 @@ class Bookkeeping:
             raise Blocked("Malformed verification report")
         for proof in report["proofs"]:
             self.artifacts.verified(reference(proof))
-        self._call("SELECT bookkeeping.pin_verifier(CAST(:r AS uuid),:f,:t)",
-                   r=claim.run_id, f=step["operation"], t=report["runtime"])
         receipt = {"uri": candidate["uri"], "sha256": candidate["sha256"], "evidence": report_ref}
         checks = dict(reported)
         if "input.hash" in step["checks"]:
@@ -430,10 +433,11 @@ class Bookkeeping:
         if "output.receipt" in step["checks"]:
             self.artifacts.verified(candidate)
             checks["output.receipt"] = True
-        self._complete(claim, config, row, receipt, checks)
+        self._complete(claim, config, row, receipt, checks, verifier_runtime=report["runtime"])
         return {"verified": candidate, "step": claim.step, "key": claim.key}
 
-    def _complete(self, claim: Claim, config: dict, row: dict, receipt: dict, checks: dict) -> None:
+    def _complete(self, claim: Claim, config: dict, row: dict, receipt: dict, checks: dict, *,
+                  verifier_runtime: str) -> None:
         event_id = str(uuid5(UUID(claim.run_id), f"{claim.step}:{claim.key}"))
         parameters = dict(r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt,
                           p=canonical(claim.proof), v=canonical(receipt), c=canonical(checks), e=event_id)
@@ -445,13 +449,19 @@ class Bookkeeping:
             children = generated_worklist(expansion, config, {"step": claim.step, "key": claim.key,
                                                               "generated_step": generated_step,
                                                               "ordinal_base": cursor.get("ordinal_base")})
-            self._call("SELECT bookkeeping.finish_expand(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),CAST(:children AS jsonb),:child_step)",
-                       **parameters, children=canonical(children), child_step=generated_step)
+            finish = ("SELECT bookkeeping.finish_expand(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),CAST(:children AS jsonb),:child_step)",
+                      {**parameters, "children": canonical(children), "child_step": generated_step})
         elif checkpoint is not None:
-            self._call("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:resource,:revision,:position)",
-                       **parameters, **checkpoint)
+            finish = ("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:resource,:revision,:position)",
+                      {**parameters, **checkpoint})
         else:
-            self._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))", **parameters)
+            finish = ("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+                      parameters)
+        # The verifier's runtime is pinned only with the completion it vouches for.
+        with self.engine.begin() as conn:
+            conn.execute(text("SELECT bookkeeping.pin_verifier(CAST(:r AS uuid),:s,:t)"),
+                         {"r": claim.run_id, "s": claim.step, "t": verifier_runtime})
+            conn.execute(text(finish[0]), finish[1])
 
     def resource_checkpoint(self, resource: str) -> dict | None:
         with self.engine.connect() as conn:

@@ -77,7 +77,7 @@ def grant_profile(engine, *, profile: str, worker: str, verifier: str) -> dict:
     profile's two group roles are created on first use; grants are added,
     never removed, and the two logins must differ."""
     import re
-    if not re.fullmatch(r"[a-z][a-z0-9_.-]*", profile) or worker == verifier:
+    if not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", profile) or worker == verifier:
         raise Blocked("A profile needs a name and two different logins")
     quote = engine.dialect.identifier_preparer.quote
     granted = {}

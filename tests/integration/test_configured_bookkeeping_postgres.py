@@ -723,24 +723,37 @@ def test_only_a_profiles_roles_report_and_verify_and_never_the_same_login(databa
         grant_profile(databases.admin, profile="self.check", worker="bk_runtime", verifier="bk_runtime")
     stranger = Bookkeeping(create_engine(databases.runtime.url.set(username="bk_stranger")))
     book, rid, _, _ = submit(databases, tmp_path, count=2)
+    for wrong in (stranger, book.verifier):  # only the worker role claims
+        with pytest.raises(DBAPIError, match="no worker role"):
+            wrong.claim(rid, "s0", "1", sleep=lambda _: None)
     envelope = book.envelope(book.claim(rid, "s0", "0"))
     candidate = copy.execute(envelope, book.artifacts)
     for wrong in (stranger, book.verifier):
-        with pytest.raises(DBAPIError, match="may not report"):
+        with pytest.raises(DBAPIError, match="no worker role"):
             wrong.report(envelope, candidate, RUNTIME)
+    with pytest.raises(DBAPIError, match="profile the run froze"):  # a worker of another profile's name
+        book._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
+                   r=rid, s="s0", k="0", a=envelope["claim"]["attempt"], p=canonical(envelope["claim"]["proof"]),
+                   c=canonical(candidate), f="jsonl.count", t=RUNTIME)
     book.report(envelope, candidate, RUNTIME)
     for wrong in (stranger, book):
-        with pytest.raises(DBAPIError, match="may not verify"):
+        with pytest.raises(DBAPIError, match="no verifier role"):
             wrong.verifications(rid, "artifact.copy")
-    # A login granted both duties still cannot verify what it reported.
+    # A login granted both duties still cannot verify, or complete, what it reported.
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.exec_driver_sql("GRANT bk_verifier_artifact_copy TO bk_runtime")
+        role = conn.scalar(text("SELECT bookkeeping.profile_role('artifact.copy','verifier')"))
+        conn.exec_driver_sql(f'GRANT "{role}" TO bk_runtime')
     try:
-        with pytest.raises(DBAPIError, match="may not verify"):
+        with pytest.raises(DBAPIError, match="its own report"):
             book.verifications(rid, "artifact.copy")
+        evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"self": True})
+        with pytest.raises(DBAPIError, match="other than its reporter"):
+            book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+                       r=rid, s="s0", k="0", a=envelope["claim"]["attempt"], p=canonical(envelope["claim"]["proof"]),
+                       v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}), e=str(uuid4()))
     finally:
         with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.exec_driver_sql("REVOKE bk_verifier_artifact_copy FROM bk_runtime")
+            conn.exec_driver_sql(f'REVOKE "{role}" FROM bk_runtime')
     verification = verification_for(book, rid, "s0", "0")
     book.verifier.admit(verification, verification_report(book, verification, copy))
     assert book.status(rid)["counts"] == {"verified": 1, "pending": 1}
@@ -775,7 +788,11 @@ def test_a_verifier_runtime_is_pinned_for_the_run(databases, tmp_path):
     other = book.artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, "c" * 64))
     with pytest.raises(DBAPIError, match="Pinned verifier runtime changed"):
         book.verifier.admit(verification, other)
+    malformed = book.artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, "unnamed"))
+    with pytest.raises(DBAPIError, match="names its runtime"):
+        book.verifier.admit(verification, malformed)
     assert book.status(rid)["run"]["runtimes"]["verify:artifact.copy"] == RUNTIME
+    assert book.status(rid)["counts"] == {"verified": 1, "reported": 1}  # a refused admission pins nothing new
 
 
 def test_zero_work_explicit_configuration_and_manifest_evidence(databases, tmp_path):

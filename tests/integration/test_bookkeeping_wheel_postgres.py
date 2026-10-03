@@ -44,11 +44,13 @@ assert not names & set({DOMAIN!r}), names & set({DOMAIN!r})
 files = {{str(p) for p in importlib.metadata.files("edgartools-bookkeeping") if str(p).startswith("edgar_warehouse/")}}
 assert not any(f.startswith(("edgar_warehouse/mdm", "edgar_warehouse/workers", "edgar_warehouse/loaders",
                               "edgar_warehouse/parsers", "edgar_warehouse/application")) for f in files), files
-assert "edgar_warehouse/bookkeeping/clean/migrations/006_issuer_roles.sql" in files
-print("control only")
+print(json.dumps(sorted(f for f in files if "/migrations/" in f)))
 '''], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "control only"
+    shipped = json.loads(result.stdout)
+    expected = sorted(p.relative_to(ROOT).as_posix()
+                      for p in (ROOT / "edgar_warehouse/bookkeeping/clean/migrations").glob("*.sql"))
+    assert shipped == expected  # every migration ships; none is listed by hand
 
 
 def test_installed_control_runs_a_whole_run(control_python, databases, tmp_path):
