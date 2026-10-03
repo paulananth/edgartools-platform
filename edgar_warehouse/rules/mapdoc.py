@@ -176,6 +176,26 @@ def winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], li
 
 # --- a source's workbook ----------------------------------------------------------
 
+def custom_parsing(read: dict) -> list[list[str]]:
+    """Each declared custom expression, including nested inputs, at its rules path."""
+    rows = [["Step", "Rules path", "Input expression"]]
+
+    def walk(value, path):
+        if isinstance(value, dict):
+            custom = value.get("custom")
+            if isinstance(custom, dict):
+                rows.append([str(custom.get("step", "")), f"{path}.custom",
+                             json.dumps(custom.get("inputs", {}), sort_keys=True)])
+            for key, child in value.items():
+                walk(child, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f"{path}[{index}]")
+
+    walk(read, "read")
+    return rows
+
+
 def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str, list[list[str]]]:
     about = [["What", "Value"], ["How to change this", HOW_TO_CHANGE], ["Source", name],
              ["Captured files (bronze family)", _text((body.get("bronze") or {}).get("family"))]]
@@ -233,7 +253,9 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
             for field, (sources, row) in by_field.items():
                 if code in sources:
                     wins.append([kind, field, *row])
-    return {"Source": about, "Fields": fields, "Identifiers": identifiers,
+    declared_steps = custom_parsing(body.get("read") or {})
+    extra = {"Custom Parsing": declared_steps} if len(declared_steps) > 1 else {}
+    return {**extra, "Source": about, "Fields": fields, "Identifiers": identifiers,
             "Critical data elements": critical, "Data quality": quality, "Who wins": wins}
 
 

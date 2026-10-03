@@ -1,0 +1,36 @@
+# Self-sustaining skills completion
+
+User goal: one installable skill bundle containing the Rules creator and orchestration for parsing, MDM and custom parsing when configuration cannot express the operation. Continue the unfinished checklist from ticket 21; preserve the complete scope.
+
+- [x] Audit all five gates and outstanding Company, Person, GLEIF and empty-store requirements — live files and PRs #805/#806; remaining items below; 2026-10-03 16:52 ET.
+- [x] Demonstrate a real custom parsing gap against the existing engine primitives — date returns text and number returns null for an ISO instant; 21 focused tests passed; 2026-10-03 16:52 ET.
+- [x] Draft one generic versioned function, tests and Mapping Document support; retain the code/rules approval boundary — no source rule references epoch_microseconds; PR #807; 2026-10-03 16:52 ET.
+- [x] Prove custom parsing through an installed worker and independent verifier — both variants passed locally (165.57s); Engine CI: 32 Python and 25 Rust tests, zero skips; 2026-10-03 16:59 ET.
+- [x] Open a dependent PR and verify CI; custom code remains inactive pending operator review — PR #807; run 37153276661 all six jobs passed; independent Standards and Spec reviews found zero defects; 2026-10-03 16:59 ET.
+- [ ] Company read block and complete positive/failure equivalence before retiring its reader/loaders.
+- [ ] Person read block and equivalence.
+- [ ] GLEIF read block and complete equivalence before retiring its reader.
+- [ ] Full installed-bundle empty-store proof: 6,414 Companies, 3,052 CIK+LEI, unchanged second pass.
+
+## Audit
+
+PR #805 merged: installed bundle, Rules creator and command/link drift checks. PR #806: verified worker parse → prepare → merge and independent publication. The source-specific read blocks and full-corpus proof remain absent. G4 has only callback rejection/failure tests before this follow-up.
+
+## GoF review
+
+Leave the function registry and worker adapter interfaces. A single versioned scalar conversion belongs in the existing registry. Mapping Document generation needs a small recursive traversal of its declared custom expressions, with no new class hierarchy.
+
+## Remaining proof inputs located
+
+- Frozen SEC population: `~/.local/share/edgartools/clean-mdm/captures/sec.submissions.company/all-76230/` (manifest and receipts present).
+- Golden Copy: `~/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip` (885 MiB).
+- Existing census: `~/.local/share/edgartools/clean-mdm/proving/cm27/census.json` (5.5 MiB).
+- Prior baseline: `.scratch/company-mastering/research/27/report.json`; harness `.scratch/company-mastering/research/27_proving_run.py`.
+
+Availability was checked; these files still need hash validation before reuse. The prior harness uses the old readers directly and is not proof of installed configured-worker orchestration.
+
+## Review and failure evidence
+
+Standards and Spec reviewers found no defects in the initial custom-trial code. CI and the first local installed run exposed shared Rules version identity between trial variants; the activated version correctly refused replacement evidence. Fixed with separate pipeline names and separate MDM databases. Repeat qualification is required.
+
+Implementation CI: https://github.com/paulananth/edgartools-platform/actions/runs/37153276661. Final documentation push triggers another CI run. Overall goal remains incomplete because the four source/corpus requirements above are unchecked.

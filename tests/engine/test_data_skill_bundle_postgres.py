@@ -278,7 +278,8 @@ read:
 """
 
 
-def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path):
+@pytest.mark.parametrize("custom_trial", [False, True], ids=["configured", "custom-step-review-trial"])
+def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, custom_trial):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
     the installed bundle."""
@@ -293,9 +294,10 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     store = Artifacts()
     for profile in ("source.read", "mdm.prepare", "mdm.merge"):
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+    mdm_name = f"mdm_bundle_{uuid4().hex[:8]}"
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.exec_driver_sql("CREATE DATABASE mdm_bundle")
-    mdm_admin = create_engine(databases.admin.url.set(database="mdm_bundle"))
+        conn.exec_driver_sql(f"CREATE DATABASE {mdm_name}")
+    mdm_admin = create_engine(databases.admin.url.set(database=mdm_name))
     mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
     migrate(mdm_admin, application_role="clean_application")
     migrate_guard(mdm_admin, runtime_role="clean_application")
@@ -310,9 +312,21 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
-    saved = databases.rules.save("pipeline", "parse-and-master-fixture", "1", MASTER)
-    contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), READ_CONTRACT)
-    filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), FILERS)
+    pipeline_name = "parse-and-master-custom-trial" if custom_trial else "parse-and-master-fixture"
+    pipeline = {**MASTER, "pipeline": pipeline_name}
+    saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
+    contract_bytes, filer_bytes = READ_CONTRACT, FILERS
+    if custom_trial:
+        contract_bytes += b"""        release_sequence:
+          custom:
+            step: epoch_microseconds@1
+            inputs:
+              value: { date: { path: released_at } }
+"""
+        filer_bytes = b"".join(json.dumps({**json.loads(line), "released_at": "2026-10-03T08:30:00.123456-04:00"}).encode() + b"\n"
+                               for line in FILERS.splitlines())
+    contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
+    filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
     read_input = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [filers]})
     out = tmp_path / "out"
     keys = {"batch_id": "filers", "consumer": "fixture/filers"}
@@ -324,10 +338,10 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                      "output": (out / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
         "merge": [{"keys": keys, "input": {"from": {"step": "prepare", "key": "filers"}},
                    "output": (out / "merged.json").as_uri(), "cursor": {}}]}})
-    databases.rules.prove("pipeline", "parse-and-master-fixture", "1",
+    databases.rules.prove("pipeline", pipeline_name, "1",
                           {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
-    approve(databases.approver, "pipeline", "parse-and-master-fixture", "1")
-    databases.rules.activate("pipeline", "parse-and-master-fixture", "1")
+    approve(databases.approver, "pipeline", pipeline_name, "1")
+    databases.rules.activate("pipeline", pipeline_name, "1")
 
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
@@ -339,11 +353,16 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         assert done.returncode == 0, done.stderr
         return done.stdout
 
-    run_id = json.loads(cli("rules", "run", "--pipeline", "parse-and-master-fixture", "--target", "master",
+    run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
     for profile in ("source.read", "mdm.prepare", "mdm.merge"):
         cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
+    if custom_trial:
+        from edgar_warehouse.rules.steps import epoch_microseconds
+        reading = json.loads((out / "reading.json").read_bytes())
+        assert [row["release_sequence"] for row in reading["artifacts"][0]["tables"]["filers"]] == [
+            epoch_microseconds("2026-10-03T08:30:00.123456-04:00")] * 2
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:
