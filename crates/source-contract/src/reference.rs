@@ -79,7 +79,7 @@ pub(crate) fn read(read: &Value, args: &Value, key: &Val) -> Result<Val, Rejecte
     let value = match key {
         Val::Null => None,
         Val::Str(key) => {
-            let key = if args.get("trim").and_then(Value::as_bool).unwrap_or(false) { key.trim() } else { key.as_str() };
+            let key = if args.get("trim").and_then(Value::as_bool).unwrap_or(false) { key.trim_matches(|c: char| c.is_whitespace() || matches!(c, '\u{1c}'..='\u{1f}')) } else { key.as_str() };
             let key = match setting(args, "case").unwrap_or("preserve") {
                 "upper" => key.to_uppercase(), "lower" => key.to_lowercase(), _ => key.to_string(),
             };

@@ -405,7 +405,8 @@ All calls in every branch still validate at contract load, including nested
 context/reference names, custom implementations and feature restrictions.
 Lazy evaluation skips runtime field access; it does not approve invalid calls.
 
-A `lookup` may declare `trim: true` and `case: upper`/`lower`/`preserve` on its
+A `lookup` may declare `trim: true` (Python Unicode whitespace, including
+U+001C–U+001F) and `case: upper`/`lower`/`preserve` on its
 text key. These run **after** the key expression, including fallback. Defaults
 remain exact matching (`trim: false`, `case: preserve`). Null keys follow the
 existing missing policy, and other types refuse. This order matters when a

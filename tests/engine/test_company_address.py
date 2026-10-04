@@ -29,6 +29,7 @@ def configured(engine, payload):
     {}, {'stateOrCountry': 'DE'}, {'stateOrCountry': ' de '},
     {'stateOrCountry': '', 'countryCode': 'X0'}, {'stateOrCountry': None, 'countryCode': ' x0 '},
     {'stateOrCountry': ' ', 'countryCode': 'X0'}, {'stateOrCountry': 'unknown', 'countryCode': 'X0'},
+    *[{'stateOrCountry': f'{c}DE{c}'} for c in '\x1c\x1d\x1e\x1f'],
     {'stateOrCountry': 'P7', 'street1': '  raw  ', 'zipCode': '5504'},
     {'stateOrCountry': 'E9', 'street1': '', 'street2': None, 'city': '0'},
     {'street1': 0, 'street2': False, 'city': [], 'zipCode': {}},

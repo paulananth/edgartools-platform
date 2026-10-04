@@ -86,6 +86,10 @@ fn lookup_normalizes_after_fallback_with_default_exact_matching_preserved() {
                           (r#"{"state":"","country":" x0 "}"#, Val::Str("GB".into()))] {
         assert_eq!(engine.read(raw.as_bytes(), &Lookups::new()).unwrap().tables["rows"][0]["v"], result);
     }
+    for c in ['\u{1c}', '\u{1d}', '\u{1e}', '\u{1f}'] {
+        let raw = format!(r#"{{"state":"\u{:04x}de\u{:04x}"}}"#, c as u32, c as u32);
+        assert_eq!(engine.read(raw.as_bytes(), &Lookups::new()).unwrap().tables["rows"][0]["v"], Val::Str("US".into()));
+    }
     let exact = Engine::from_yaml(&contract.replace("trim: true", "trim: false").replace("case: upper", "case: preserve"), Steps::new()).unwrap();
     assert_eq!(exact.read(br#"{"state":" de "}"#, &Lookups::new()).unwrap().tables["rows"][0]["v"], Val::Null);
     for (old, new) in [("trim: true", "trim: 1"), ("case: upper", "case: title")] {
