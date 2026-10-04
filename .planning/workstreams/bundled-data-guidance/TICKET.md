@@ -8,7 +8,7 @@ Scope: correct installed orchestration instructions as part of the full self-sus
 - [x] Validate shipped skill documents and installed command discovery — all three metadata validators, current command/link discovery, 14 installed PostgreSQL 16 tests passed in 311.79 seconds; no skips, 2026-10-04 16:43 ET.
 - [x] Obtain independent Standards and Spec reviews and resolve findings — required execution and combined-run identity findings fixed; final reviews 0 scoped blockers; reference pointer polish applied, 2026-10-04 16:43 ET.
 - [x] Commit and open a reviewable PR with verification evidence — PR #817; full CI run 37232982803 passed at c05b1fcf, 2026-10-04 16:43 ET.
-- [ ] Verify full CI gate on the final reference-link/evidence commit.
+- [x] Verify full CI gate on the final reference-link/evidence commit — 8a85cb58, run 37233213177 all suites and aggregate passed, 2026-10-04 16:47 ET.
 - [ ] Full Company joins/grouping, GLEIF streaming, acquisition, mapping replacement and installed population/replay remain in the parent goal; this ticket does not retire their retained readers.
 
 Design review: documentation change only. Reviewed worker trial and skill history; no class or GoF abstraction is warranted. Keep existing function/profile interfaces.
@@ -19,4 +19,4 @@ Local installed test command: `uv run --no-project <shared Python> -m pytest tes
 
 Independent Spec review found two real gaps: missing mandatory execution configuration and premature finalization/resubmission for a combined run. Both corrected; final review passed. Independent Standards review found no scoped blocker; its relative reference link improvement is applied.
 
-This ticket remains incomplete until final-head CI passes, and the full parent parser-retirement objective remains incomplete afterwards. Retained Company/GLEIF preparation is still required pending full replacement qualification; no Rules version was activated and no environment deployed.
+Scoped guidance qualification passed; the parent parser-retirement checklist item remains incomplete. Retained Company/GLEIF preparation is still required pending full replacement qualification; no Rules version was activated and no environment deployed.
