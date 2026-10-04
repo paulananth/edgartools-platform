@@ -49,6 +49,8 @@ read:
           on_invalid_object: empty
           strings: characters
           on_empty_anchor: ignore_fields
+          objects: indexed
+          validation: selected
       columns:
         accession_number:
           text:

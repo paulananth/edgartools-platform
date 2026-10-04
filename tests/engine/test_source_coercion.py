@@ -45,7 +45,7 @@ def test_invalid_non_sequence_anchor_remains_an_artifact_failure(value):
     payload = {'filings': {'recent': {'accessionNumber': value}}}
     with pytest.raises((TypeError, KeyError)):
         retained(payload)
-    with pytest.raises(SourceRejected, match='parallel_shape'):
+    with pytest.raises(SourceRejected, match='parallel_index' if isinstance(value, dict) else 'parallel_shape'):
         SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode(), context=CONTEXT)
 
 

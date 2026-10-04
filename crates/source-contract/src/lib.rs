@@ -163,16 +163,18 @@ impl Engine {
         for (name, table) in tables {
             let name = name.as_str().unwrap_or_default().to_string();
             let expanded;
-            let items = if table.get("each").is_some_and(|each| each.is_mapping()) {
-                expanded = parallel::rows(&document, &table["each"], self.limits.max_records)?;
-                expanded.iter().collect::<Vec<_>>()
+            let (items, count) = if table.get("each").is_some_and(|each| each.is_mapping()) {
+                expanded = parallel::rows(&document, &table["each"], self.limits.max_records, context::take(table, context))?;
+                (expanded.rows.iter().collect::<Vec<_>>(), expanded.count)
             } else {
-                items_of(&document, setting(table, "each").unwrap_or("."))?
+                let items = items_of(&document, setting(table, "each").unwrap_or("."))?;
+                let count = items.len();
+                (items, count)
             };
-            if items.len() > self.limits.max_records {
+            if count > self.limits.max_records {
                 return Err(Rejected::new("limit_exceeded", format!("{name} has more than {} records", self.limits.max_records)));
             }
-            self.check_count(&document, &name, items.len())?;
+            self.check_count(&document, &name, count)?;
             let rows = reading.tables.entry(name.clone()).or_default();
             for (index, item) in items.into_iter().take(context::take(table, context)).enumerate() {
                 let mut record = Record { engine: self, context, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
