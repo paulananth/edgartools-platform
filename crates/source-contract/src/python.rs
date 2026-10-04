@@ -19,6 +19,17 @@ fn to_py(py: Python<'_>, value: &Val) -> PyResult<PyObject> {
     match value {
         Val::Null => Ok(py.None()),
         Val::Int(i) => i.into_py_any(py),
+        Val::UInt(i) => i.into_py_any(py),
+        Val::List(items) => {
+            let list = PyList::empty(py);
+            for item in items { list.append(to_py(py, item)?)?; }
+            list.into_py_any(py)
+        }
+        Val::Map(values) => {
+            let dict = PyDict::new(py);
+            for (key, value) in values { dict.set_item(key, to_py(py, value)?)?; }
+            dict.into_py_any(py)
+        }
         Val::Bool(b) => b.into_py_any(py),
         Val::Float(f) => f.into_py_any(py),
         Val::Str(s) => s.into_py_any(py),

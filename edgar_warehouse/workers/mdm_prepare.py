@@ -4,6 +4,7 @@ The unit's input is a `source.read` output (normally `from` the run's read
 step); its keys say what to take from it, so nothing feed-specific runs:
 
 - `table`: the reading's table whose rows become MDM records;
+- optional `record_column`: an object-valued column holding the complete source record;
 - `dataset`: the MDM source code whose registered contract reads them;
 - `policy`: the Mastering Policy digest the batches pin;
 - `consumer`: the MDM consumer the batches advance, from checkpoint 0, so a
@@ -39,6 +40,9 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     keys = envelope["keys"]
     if not KEYS <= set(keys):
         raise ValueError(f"mdm.prepare needs the unit keys {sorted(KEYS)}")
+    record_column = keys.get("record_column")
+    if "record_column" in keys and (not isinstance(record_column, str) or not record_column):
+        raise ValueError("mdm.prepare record_column must be nonempty text")
     reading = artifacts.json(envelope["input"])
     if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
         raise ValueError("mdm.prepare reads a source.read output (version 1)")
@@ -47,6 +51,12 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
         rows = artifact["tables"].get(keys["table"])
         if rows is None:
             raise ValueError(f"The reading has no table {keys['table']}")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError("mdm.prepare table rows must be objects")
+        if record_column is not None:
+            if any(not isinstance(row.get(record_column), dict) for row in rows):
+                raise ValueError("mdm.prepare record_column must hold an object in every row")
+            rows = [row[record_column] for row in rows]
         source = artifact["input"]["sha256"]
         if "context" in artifact:
             reference(artifact["context"])

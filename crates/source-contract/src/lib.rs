@@ -19,6 +19,7 @@
 mod formats;
 mod integer;
 mod reference;
+mod value;
 mod context;
 mod parallel;
 mod json_text;
@@ -43,6 +44,9 @@ use crate::xml::{parse_xml, strip_control_chars};
 pub enum Val {
     Null,
     Int(i64),
+    UInt(u64),
+    List(Vec<Val>),
+    Map(BTreeMap<String, Val>),
     Bool(bool),
     Float(f64),
     Str(String),
@@ -91,7 +95,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 10] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup"];
+const PRIMITIVES: [&str; 11] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -257,7 +261,7 @@ fn uses_feature(read: &Value, predicate: fn(&Value) -> bool) -> bool {
 
 /// The precise numeric path is used only by an opted-in integer expression.
 fn uses_integer(read: &Value) -> bool {
-    uses_feature(read, |expr| expr.get("integer").is_some())
+    uses_feature(read, |expr| expr.get("integer").is_some() || expr.get("value").is_some())
 }
 
 fn setting<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
@@ -282,6 +286,9 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     let format = setting(read, "format").ok_or("read.format is missing")?;
     if !FORMATS.contains(&format) {
         return Err(format!("format {format} is not read"));
+    }
+    if uses_feature(read, |expr| expr.get("value").is_some()) && !matches!(format, "json" | "jsonl") {
+        return Err("value requires JSON or JSON Lines".into());
     }
     if uses_python_text(read) && !matches!(format, "json" | "jsonl") {
         return Err("Python text coercion requires JSON or JSON Lines".into());
@@ -437,6 +444,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
                 return Err("text ignore_case requires null_if".into());
             }
         }
+        "value" => value::validate(args)?,
         "lookup" => {
             reference::validate_call(args)?;
             validate_expr(&args["key"], steps)?;
@@ -658,6 +666,8 @@ fn as_text(value: &Val) -> Option<String> {
         Val::Str(text) if text.is_empty() => None,
         Val::Str(text) => Some(text.clone()),
         Val::Int(i) => Some(i.to_string()),
+        Val::UInt(i) => Some(i.to_string()),
+        Val::List(_) | Val::Map(_) => None,
         Val::Bool(b) => Some(b.to_string()),
         Val::Float(f) if f.fract() == 0.0 && f.abs() < 1e15 => Some(format!("{}", *f as i64)),
         Val::Float(f) => Some(f.to_string()),
@@ -814,6 +824,7 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
             });
             Ok(if matches { Val::Null } else { Val::Str(text.to_string()) })
         }
+        "value" => value::read(scope(document, item, args), args),
         "lookup" => {
             let key = eval(engine, context, document, item, ordinal, &args["key"])?;
             reference::read(&engine.read, args, &key)
