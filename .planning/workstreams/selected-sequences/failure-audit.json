@@ -1,0 +1,8 @@
+{
+  "scope": "Finite JSON anchor/field/first-N acceptance matrix; both refusals are counted separately from exact exception identity. Not complete source equivalence.",
+  "cases": 450,
+  "matched": 450,
+  "differences": [],
+  "contract_sha256": "2672f950291c8d8be2b6862be74dad8dfc59d1b9063b5e0c05c7e4165e71c4e3",
+  "matrix_sha256": "73de1afe8c12768ed0231be97a932c95f9cc88d5aab4e1ff433abedee9fe4f9e"
+}

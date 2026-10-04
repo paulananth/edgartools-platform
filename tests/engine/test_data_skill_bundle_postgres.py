@@ -278,7 +278,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -379,6 +379,31 @@ read:
         name: {context: {name: name}}
 """
         filer_bytes = b'{"cik":0,"name":"document facts remain separate"}'
+    if trial_mode == "selected-sequences":
+        contract_bytes = b"""source: fixture.filers
+execution: {profile: source.read, workers: 2, max_artifacts: 2}
+read:
+  format: json
+  context:
+    first_n: {type: integer}
+  record_count: {path: count, table: filers}
+  limits: {max_bytes: 1048576, max_records: 1000}
+  tables:
+    filers:
+      take: {context: {name: first_n}}
+      each:
+        parallel:
+          path: .
+          anchor: cik
+          fields: {cik: cik, name: name}
+          lengths: anchor
+          objects: indexed
+          validation: selected
+      columns:
+        cik: {integer: {path: cik}}
+        name: {text: {path: name}}
+"""
+        filer_bytes = b'{"count":2,"cik":[320193,789019],"name":["Apple Inc.","Microsoft Corp"]}'
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
     read_manifest = {"version": 1, "contract": contract, "artifacts": [filers]}
@@ -387,6 +412,13 @@ read:
         for values in ({"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}):
             bound = store.put(tmp_path.as_uri(), {"version": 1, "input": filers, "values": values})
             entries.append({"input": filers, "context": bound})
+        read_manifest = {"version": 2, "contract": contract, "artifacts": entries}
+    if trial_mode == "selected-sequences":
+        unselected = store.put_bytes((tmp_path / "unselected.json").as_uri(), b'{"count":1,"cik":{"0":"invalid indexed value"},"name":null}')
+        entries = []
+        for input_ref, first_n in [(filers, 2), (unselected, 0)]:
+            bound = store.put(tmp_path.as_uri(), {"version": 1, "input": input_ref, "values": {"first_n": first_n}})
+            entries.append({"input": input_ref, "context": bound})
         read_manifest = {"version": 2, "contract": contract, "artifacts": entries}
     read_input = store.put(tmp_path.as_uri(), read_manifest)
     out = tmp_path / "out"
@@ -446,6 +478,15 @@ read:
         assert [row["flag"] for row in rows] == ['True', 'False']
         assert [row["evidence"] for row in rows] == ["{'z': 1, 'a': []}", '[None, True]']
         assert [row["character"] for row in rows] == ['é', '🦀']
+    if trial_mode == "selected-sequences":
+        reading = json.loads((out / "reading.json").read_bytes())
+        assert reading["artifacts"][0]["tables"]["filers"] == [
+            {"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}]
+        assert reading["artifacts"][1]["input"] == unselected
+        assert reading["artifacts"][1]["tables"]["filers"] == []
+        prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
+        assert len(prepared["batches"]) == 1
+        assert prepared["batches"][0]["input"]["record_count"] == 2
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:

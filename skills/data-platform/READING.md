@@ -53,6 +53,19 @@ original document, so envelope facts need not be duplicated into every row.
   without inspecting fields when the anchor is empty. The default,
   `validate_fields`, preserves shape checks even for an empty anchor.
   `ignore_fields` is invalid with `lengths: equal`.
+- `objects: indexed` explicitly permits object sequences: the number of
+  keys supplies their length, but integer indexing cannot address JSON's
+  string keys. An empty object pads as a zero-length field; a selected index
+  below a nonempty object's length fails with `parallel_index`, including
+  an object with a string key `"0"`. The default is `reject`.
+- `validation: selected` with `lengths: anchor` expands and accesses only
+  the first `take` rows. When no row is selected it skips field access,
+  including invalid unused fields. The **full anchor** still supplies the
+  record safety limit and the declared document record-count check. Null,
+  boolean and numeric anchors remain invalid even with `take: 0`.
+  The default, `all`, preserves validation of all declared fields and
+  expansion of the full anchor before first-N selection. `selected` is
+  invalid with `lengths: equal`.
 - The record limit is checked before expanding rows. Existing record
   checks can defer rows; their raw evidence is the aligned record with
   exactly the declared fields, not the complete original document.
@@ -83,8 +96,10 @@ UTF-8, nesting or byte safety limits.
 
 Declare these policies only after comparing both outputs and failures with
 the source contract. They do not authorize a source version or retire its
-reader. The six earlier filing coercion/shape differences have dedicated
-oracle coverage; full malformed-source equivalence remains a separate gate.
+reader. The original seven cases and the 450-case anchor/field/first-N
+matrix match retained acceptance and output rows with these explicit
+policies. Matching refusal decisions does not assert identical exception
+classes. Complete malformed-source equivalence remains a separate gate.
 
 ## Qualification boundary
 
