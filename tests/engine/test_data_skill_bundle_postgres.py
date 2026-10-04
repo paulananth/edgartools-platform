@@ -279,7 +279,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -331,6 +331,16 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
+    if trial_mode == "choice-records":
+        spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
+            "format": "jsonl", "limits": {"max_bytes": 1048576, "max_records": 10}, "tables": {
+                "filers": {"each": "record", "columns": {"cik": {"text": {"path": "cik"}}, "name": {
+                    "choose": {"condition": {"value": {"path": "active"}},
+                               "then": {"coalesce": {"values": [{"value": {"path": "name"}}, {"value": {"path": "alternate"}}], "skip": "falsey"}},
+                               "else": {"value": {"path": "alternate"}}}}}}}}}
+        contract_bytes = json.dumps(spec).encode()
+        filer_bytes = b"".join(json.dumps({**json.loads(line), "name": None, "alternate": json.loads(line)["name"], "active": n == 0}).encode() + b"\n"
+                               for n, line in enumerate(FILERS.splitlines()))
     if combined_trial:
         spec = {"execution": {"profile": "source.read", "workers": 2, "max_artifacts": 2}, "read": {
             "format": "json", "limits": {"max_bytes": 1048576, "max_records": 10}, "tables": {
@@ -514,6 +524,9 @@ read:
     for profile in profiles:
         cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
+    if trial_mode == "choice-records":
+        reading = json.loads((out / "reading.json").read_bytes())
+        assert reading["artifacts"][0]["tables"]["filers"] == [json.loads(line) for line in FILERS.splitlines()]
     if combined_trial:
         combined = json.loads((out / "combined.json").read_bytes())
         rows = combined["artifacts"][0]["tables"]["filers"]

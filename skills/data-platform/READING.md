@@ -379,3 +379,42 @@ The 18-column filing fixture and pinned comparison cover caller provenance
 and selected recent filing content. They do not complete Company/Person
 classification, paginated history, reference joins, GLEIF or complete malformed
 source equivalence. Keep the full retirement gates open until those pass.
+
+## Fallback and conditional values
+
+`coalesce` selects a typed value without a custom step:
+
+```yaml
+coalesce:
+  values: [{value: {path: stateOrCountry}}, {value: {path: countryCode}}]
+  skip: falsey
+```
+
+Both keys are required; `values` has 1–16 expressions. `skip: "null"`
+skips null only; `skip: falsey` also skips false, numerical zero and empty
+text, lists and objects. Whitespace text remains a value. Return the first
+retained value, or null when all are skipped. Evaluation stops at that value.
+
+`choose` names `condition`, `then` and `else`, each an expression. The condition
+must return boolean or null: true selects `then`; false/null selects `else`;
+other types refuse with `choose_condition`. Only the selected branch executes.
+Use boolean values from `value`, context or a reference lookup. Existing
+`const` boolean conversion remains unchanged and produces text.
+
+All calls in every branch still validate at contract load, including nested
+context/reference names, custom implementations and feature restrictions.
+Lazy evaluation skips runtime field access; it does not approve invalid calls.
+
+A `lookup` may declare `trim: true` (Python Unicode whitespace, including
+U+001C–U+001F) and `case: upper`/`lower`/`preserve` on its
+text key. These run **after** the key expression, including fallback. Defaults
+remain exact matching (`trim: false`, `case: preserve`). Null keys follow the
+existing missing policy, and other types refuse. This order matters when a
+whitespace-only preferred value should resolve as unknown rather than select
+a fallback.
+
+The configured Company address comparison freezes SEC place rows into the
+contract. It preserves raw street/region text, derives country from the
+approved ISO reference, and keeps region only for subdivisions. This proves
+raw address derivation separately from census, complete provenance, pagination
+and full Company mastering; those remain required before parser retirement.

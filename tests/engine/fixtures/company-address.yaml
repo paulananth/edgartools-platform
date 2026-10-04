@@ -1,0 +1,1011 @@
+source: qualification.sec.company.address
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 2
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 1
+  references:
+    places:
+      AL:
+        country: US
+        subdivision: true
+      AK:
+        country: US
+        subdivision: true
+      AZ:
+        country: US
+        subdivision: true
+      AR:
+        country: US
+        subdivision: true
+      CA:
+        country: US
+        subdivision: true
+      CO:
+        country: US
+        subdivision: true
+      CT:
+        country: US
+        subdivision: true
+      DE:
+        country: US
+        subdivision: true
+      DC:
+        country: US
+        subdivision: true
+      FL:
+        country: US
+        subdivision: true
+      GA:
+        country: US
+        subdivision: true
+      HI:
+        country: US
+        subdivision: true
+      ID:
+        country: US
+        subdivision: true
+      IL:
+        country: US
+        subdivision: true
+      IN:
+        country: US
+        subdivision: true
+      IA:
+        country: US
+        subdivision: true
+      KS:
+        country: US
+        subdivision: true
+      KY:
+        country: US
+        subdivision: true
+      LA:
+        country: US
+        subdivision: true
+      ME:
+        country: US
+        subdivision: true
+      MD:
+        country: US
+        subdivision: true
+      MA:
+        country: US
+        subdivision: true
+      MI:
+        country: US
+        subdivision: true
+      MN:
+        country: US
+        subdivision: true
+      MS:
+        country: US
+        subdivision: true
+      MO:
+        country: US
+        subdivision: true
+      MT:
+        country: US
+        subdivision: true
+      NE:
+        country: US
+        subdivision: true
+      NV:
+        country: US
+        subdivision: true
+      NH:
+        country: US
+        subdivision: true
+      NJ:
+        country: US
+        subdivision: true
+      NM:
+        country: US
+        subdivision: true
+      NY:
+        country: US
+        subdivision: true
+      NC:
+        country: US
+        subdivision: true
+      ND:
+        country: US
+        subdivision: true
+      OH:
+        country: US
+        subdivision: true
+      OK:
+        country: US
+        subdivision: true
+      OR:
+        country: US
+        subdivision: true
+      PA:
+        country: US
+        subdivision: true
+      RI:
+        country: US
+        subdivision: true
+      SC:
+        country: US
+        subdivision: true
+      SD:
+        country: US
+        subdivision: true
+      TN:
+        country: US
+        subdivision: true
+      TX:
+        country: US
+        subdivision: true
+      UT:
+        country: US
+        subdivision: true
+      VT:
+        country: US
+        subdivision: true
+      VA:
+        country: US
+        subdivision: true
+      WA:
+        country: US
+        subdivision: true
+      WV:
+        country: US
+        subdivision: true
+      WI:
+        country: US
+        subdivision: true
+      WY:
+        country: US
+        subdivision: true
+      GU:
+        country: US
+        subdivision: true
+      PR:
+        country: US
+        subdivision: true
+      VI:
+        country: US
+        subdivision: true
+      X1:
+        country: US
+        subdivision: false
+      A0:
+        country: CA
+        subdivision: true
+      A1:
+        country: CA
+        subdivision: true
+      A2:
+        country: CA
+        subdivision: true
+      A3:
+        country: CA
+        subdivision: true
+      A4:
+        country: CA
+        subdivision: true
+      A5:
+        country: CA
+        subdivision: true
+      A6:
+        country: CA
+        subdivision: true
+      A7:
+        country: CA
+        subdivision: true
+      A8:
+        country: CA
+        subdivision: true
+      A9:
+        country: CA
+        subdivision: true
+      B0:
+        country: CA
+        subdivision: true
+      Z4:
+        country: CA
+        subdivision: false
+      B2:
+        country: AF
+        subdivision: false
+      Y6:
+        country: AX
+        subdivision: false
+      B3:
+        country: AL
+        subdivision: false
+      B4:
+        country: DZ
+        subdivision: false
+      B5:
+        country: US
+        subdivision: true
+      B6:
+        country: AD
+        subdivision: false
+      B7:
+        country: AO
+        subdivision: false
+      1A:
+        country: AI
+        subdivision: false
+      B8:
+        country: AQ
+        subdivision: false
+      B9:
+        country: AG
+        subdivision: false
+      C1:
+        country: AR
+        subdivision: false
+      1B:
+        country: AM
+        subdivision: false
+      1C:
+        country: AW
+        subdivision: false
+      C3:
+        country: AU
+        subdivision: false
+      C4:
+        country: AT
+        subdivision: false
+      1D:
+        country: AZ
+        subdivision: false
+      C5:
+        country: BS
+        subdivision: false
+      C6:
+        country: BH
+        subdivision: false
+      C7:
+        country: BD
+        subdivision: false
+      C8:
+        country: BB
+        subdivision: false
+      1F:
+        country: BY
+        subdivision: false
+      C9:
+        country: BE
+        subdivision: false
+      D1:
+        country: BZ
+        subdivision: false
+      G6:
+        country: BJ
+        subdivision: false
+      D0:
+        country: BM
+        subdivision: false
+      D2:
+        country: BT
+        subdivision: false
+      D3:
+        country: BO
+        subdivision: false
+      1E:
+        country: BA
+        subdivision: false
+      B1:
+        country: BW
+        subdivision: false
+      D4:
+        country: BV
+        subdivision: false
+      D5:
+        country: BR
+        subdivision: false
+      D6:
+        country: IO
+        subdivision: false
+      D9:
+        country: BN
+        subdivision: false
+      E0:
+        country: BG
+        subdivision: false
+      X2:
+        country: BF
+        subdivision: false
+      E2:
+        country: BI
+        subdivision: false
+      E3:
+        country: KH
+        subdivision: false
+      E4:
+        country: CM
+        subdivision: false
+      E8:
+        country: CV
+        subdivision: false
+      E9:
+        country: KY
+        subdivision: false
+      F0:
+        country: CF
+        subdivision: false
+      F2:
+        country: TD
+        subdivision: false
+      F3:
+        country: CL
+        subdivision: false
+      F4:
+        country: CN
+        subdivision: false
+      F6:
+        country: CX
+        subdivision: false
+      F7:
+        country: CC
+        subdivision: false
+      F8:
+        country: CO
+        subdivision: false
+      F9:
+        country: KM
+        subdivision: false
+      G0:
+        country: CG
+        subdivision: false
+      Y3:
+        country: CD
+        subdivision: false
+      G1:
+        country: CK
+        subdivision: false
+      G2:
+        country: CR
+        subdivision: false
+      L7:
+        country: CI
+        subdivision: false
+      1M:
+        country: HR
+        subdivision: false
+      G3:
+        country: CU
+        subdivision: false
+      G4:
+        country: CY
+        subdivision: false
+      2N:
+        country: CZ
+        subdivision: false
+      G7:
+        country: DK
+        subdivision: false
+      1G:
+        country: DJ
+        subdivision: false
+      G9:
+        country: DM
+        subdivision: false
+      G8:
+        country: DO
+        subdivision: false
+      H1:
+        country: EC
+        subdivision: false
+      H2:
+        country: EG
+        subdivision: false
+      H3:
+        country: SV
+        subdivision: false
+      H4:
+        country: GQ
+        subdivision: false
+      1J:
+        country: ER
+        subdivision: false
+      1H:
+        country: EE
+        subdivision: false
+      H5:
+        country: ET
+        subdivision: false
+      H7:
+        country: FK
+        subdivision: false
+      H6:
+        country: FO
+        subdivision: false
+      H8:
+        country: FJ
+        subdivision: false
+      H9:
+        country: FI
+        subdivision: false
+      I0:
+        country: FR
+        subdivision: false
+      I3:
+        country: GF
+        subdivision: false
+      I4:
+        country: PF
+        subdivision: false
+      2C:
+        country: TF
+        subdivision: false
+      I5:
+        country: GA
+        subdivision: false
+      I6:
+        country: GM
+        subdivision: false
+      2Q:
+        country: GE
+        subdivision: false
+      2M:
+        country: DE
+        subdivision: false
+      J0:
+        country: GH
+        subdivision: false
+      J1:
+        country: GI
+        subdivision: false
+      J3:
+        country: GR
+        subdivision: false
+      J4:
+        country: GL
+        subdivision: false
+      J5:
+        country: GD
+        subdivision: false
+      J6:
+        country: GP
+        subdivision: false
+      J8:
+        country: GT
+        subdivision: false
+      Y7:
+        country: GG
+        subdivision: false
+      J9:
+        country: GN
+        subdivision: false
+      S0:
+        country: GW
+        subdivision: false
+      K0:
+        country: GY
+        subdivision: false
+      K1:
+        country: HT
+        subdivision: false
+      K4:
+        country: HM
+        subdivision: false
+      X4:
+        country: VA
+        subdivision: false
+      K2:
+        country: HN
+        subdivision: false
+      K3:
+        country: HK
+        subdivision: false
+      K5:
+        country: HU
+        subdivision: false
+      K6:
+        country: IS
+        subdivision: false
+      K7:
+        country: IN
+        subdivision: false
+      K8:
+        country: ID
+        subdivision: false
+      K9:
+        country: IR
+        subdivision: false
+      L0:
+        country: IQ
+        subdivision: false
+      L2:
+        country: IE
+        subdivision: false
+      Y8:
+        country: IM
+        subdivision: false
+      L3:
+        country: IL
+        subdivision: false
+      L6:
+        country: IT
+        subdivision: false
+      L8:
+        country: JM
+        subdivision: false
+      M0:
+        country: JP
+        subdivision: false
+      Y9:
+        country: JE
+        subdivision: false
+      M2:
+        country: JO
+        subdivision: false
+      1P:
+        country: KZ
+        subdivision: false
+      M3:
+        country: KE
+        subdivision: false
+      J2:
+        country: KI
+        subdivision: false
+      M4:
+        country: KP
+        subdivision: false
+      M5:
+        country: KR
+        subdivision: false
+      M6:
+        country: KW
+        subdivision: false
+      1N:
+        country: KG
+        subdivision: false
+      M7:
+        country: LA
+        subdivision: false
+      1R:
+        country: LV
+        subdivision: false
+      M8:
+        country: LB
+        subdivision: false
+      M9:
+        country: LS
+        subdivision: false
+      N0:
+        country: LR
+        subdivision: false
+      N1:
+        country: LY
+        subdivision: false
+      N2:
+        country: LI
+        subdivision: false
+      1Q:
+        country: LT
+        subdivision: false
+      N4:
+        country: LU
+        subdivision: false
+      N5:
+        country: MO
+        subdivision: false
+      1U:
+        country: MK
+        subdivision: false
+      N6:
+        country: MG
+        subdivision: false
+      N7:
+        country: MW
+        subdivision: false
+      N8:
+        country: MY
+        subdivision: false
+      N9:
+        country: MV
+        subdivision: false
+      O0:
+        country: ML
+        subdivision: false
+      O1:
+        country: MT
+        subdivision: false
+      1T:
+        country: MH
+        subdivision: false
+      O2:
+        country: MQ
+        subdivision: false
+      O3:
+        country: MR
+        subdivision: false
+      O4:
+        country: MU
+        subdivision: false
+      2P:
+        country: YT
+        subdivision: false
+      O5:
+        country: MX
+        subdivision: false
+      1K:
+        country: FM
+        subdivision: false
+      1S:
+        country: MD
+        subdivision: false
+      O9:
+        country: MC
+        subdivision: false
+      P0:
+        country: MN
+        subdivision: false
+      Z5:
+        country: ME
+        subdivision: false
+      P1:
+        country: MS
+        subdivision: false
+      P2:
+        country: MA
+        subdivision: false
+      P3:
+        country: MZ
+        subdivision: false
+      E1:
+        country: MM
+        subdivision: false
+      T6:
+        country: NA
+        subdivision: false
+      P5:
+        country: NR
+        subdivision: false
+      P6:
+        country: NP
+        subdivision: false
+      P7:
+        country: NL
+        subdivision: false
+      P8:
+        country: CW
+        subdivision: false
+      1W:
+        country: NC
+        subdivision: false
+      Q2:
+        country: NZ
+        subdivision: false
+      Q3:
+        country: NI
+        subdivision: false
+      Q4:
+        country: NE
+        subdivision: false
+      Q5:
+        country: NG
+        subdivision: false
+      Q6:
+        country: NU
+        subdivision: false
+      Q7:
+        country: NF
+        subdivision: false
+      1V:
+        country: US
+        subdivision: true
+      Q8:
+        country: 'NO'
+        subdivision: false
+      P4:
+        country: OM
+        subdivision: false
+      R0:
+        country: PK
+        subdivision: false
+      1Y:
+        country: PW
+        subdivision: false
+      1X:
+        country: PS
+        subdivision: false
+      R1:
+        country: PA
+        subdivision: false
+      R2:
+        country: PG
+        subdivision: false
+      R4:
+        country: PY
+        subdivision: false
+      R5:
+        country: PE
+        subdivision: false
+      R6:
+        country: PH
+        subdivision: false
+      R8:
+        country: PN
+        subdivision: false
+      R9:
+        country: PL
+        subdivision: false
+      S1:
+        country: PT
+        subdivision: false
+      S3:
+        country: QA
+        subdivision: false
+      S4:
+        country: RE
+        subdivision: false
+      S5:
+        country: RO
+        subdivision: false
+      1Z:
+        country: RU
+        subdivision: false
+      S6:
+        country: RW
+        subdivision: false
+      Z0:
+        country: BL
+        subdivision: false
+      U8:
+        country: SH
+        subdivision: false
+      U7:
+        country: KN
+        subdivision: false
+      U9:
+        country: LC
+        subdivision: false
+      Z1:
+        country: MF
+        subdivision: false
+      V0:
+        country: PM
+        subdivision: false
+      V1:
+        country: VC
+        subdivision: false
+      Y0:
+        country: WS
+        subdivision: false
+      S8:
+        country: SM
+        subdivision: false
+      S9:
+        country: ST
+        subdivision: false
+      T0:
+        country: SA
+        subdivision: false
+      T1:
+        country: SN
+        subdivision: false
+      Z2:
+        country: RS
+        subdivision: false
+      T2:
+        country: SC
+        subdivision: false
+      T8:
+        country: SL
+        subdivision: false
+      U0:
+        country: SG
+        subdivision: false
+      2B:
+        country: SK
+        subdivision: false
+      2A:
+        country: SI
+        subdivision: false
+      D7:
+        country: SB
+        subdivision: false
+      U1:
+        country: SO
+        subdivision: false
+      T3:
+        country: ZA
+        subdivision: false
+      1L:
+        country: GS
+        subdivision: false
+      U3:
+        country: ES
+        subdivision: false
+      F1:
+        country: LK
+        subdivision: false
+      V2:
+        country: SD
+        subdivision: false
+      V3:
+        country: SR
+        subdivision: false
+      L9:
+        country: SJ
+        subdivision: false
+      V6:
+        country: SZ
+        subdivision: false
+      V7:
+        country: SE
+        subdivision: false
+      V8:
+        country: CH
+        subdivision: false
+      V9:
+        country: SY
+        subdivision: false
+      F5:
+        country: TW
+        subdivision: false
+      2D:
+        country: TJ
+        subdivision: false
+      W0:
+        country: TZ
+        subdivision: false
+      W1:
+        country: TH
+        subdivision: false
+      Z3:
+        country: TL
+        subdivision: false
+      W2:
+        country: TG
+        subdivision: false
+      W3:
+        country: TK
+        subdivision: false
+      W4:
+        country: TO
+        subdivision: false
+      W5:
+        country: TT
+        subdivision: false
+      W6:
+        country: TN
+        subdivision: false
+      W8:
+        country: TR
+        subdivision: false
+      2E:
+        country: TM
+        subdivision: false
+      W7:
+        country: TC
+        subdivision: false
+      2G:
+        country: TV
+        subdivision: false
+      W9:
+        country: UG
+        subdivision: false
+      2H:
+        country: UA
+        subdivision: false
+      C0:
+        country: AE
+        subdivision: false
+      X0:
+        country: GB
+        subdivision: false
+      2J:
+        country: UM
+        subdivision: false
+      X3:
+        country: UY
+        subdivision: false
+      2K:
+        country: UZ
+        subdivision: false
+      2L:
+        country: VU
+        subdivision: false
+      X5:
+        country: VE
+        subdivision: false
+      Q1:
+        country: VN
+        subdivision: false
+      D8:
+        country: VG
+        subdivision: false
+      X8:
+        country: WF
+        subdivision: false
+      U5:
+        country: EH
+        subdivision: false
+      T7:
+        country: YE
+        subdivision: false
+      Y4:
+        country: ZM
+        subdivision: false
+      Y5:
+        country: ZW
+        subdivision: false
+      XX:
+        country: null
+        subdivision: false
+  tables:
+    addresses:
+      each: addresses.business
+      columns:
+        business_address:
+          object:
+            fields:
+              street:
+                coalesce:
+                  values:
+                  - value:
+                      path: street1
+                  skip: falsey
+              street2:
+                coalesce:
+                  values:
+                  - value:
+                      path: street2
+                  skip: falsey
+              city:
+                coalesce:
+                  values:
+                  - value:
+                      path: city
+                  skip: falsey
+              postal_code:
+                coalesce:
+                  values:
+                  - value:
+                      path: zipCode
+                  skip: falsey
+              country:
+                lookup:
+                  reference: places
+                  column: country
+                  trim: true
+                  case: upper
+                  on_missing: 'null'
+                  key:
+                    coalesce:
+                      values:
+                      - value:
+                          path: stateOrCountry
+                      - value:
+                          path: countryCode
+                      skip: falsey
+              region:
+                choose:
+                  condition:
+                    lookup:
+                      reference: places
+                      column: subdivision
+                      trim: true
+                      case: upper
+                      on_missing: 'null'
+                      key:
+                        coalesce:
+                          values:
+                          - value:
+                              path: stateOrCountry
+                          - value:
+                              path: countryCode
+                          skip: falsey
+                  then:
+                    coalesce:
+                      values:
+                      - value:
+                          path: stateOrCountry
+                      skip: falsey
+                  else:
+                    const:
+                      value: null
