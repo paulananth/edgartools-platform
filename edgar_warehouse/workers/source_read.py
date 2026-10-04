@@ -9,7 +9,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from edgar_warehouse.bookkeeping.clean import artifacts as artifact_store
+import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
 
 

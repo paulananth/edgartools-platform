@@ -86,4 +86,9 @@ def test_workers_never_reach_into_control_internals():
                     offenders.append((path.name, node.module))
             if isinstance(node, ast.Import) and any(a.name.startswith("sqlalchemy") for a in node.names):
                 offenders.append((path.name, "sqlalchemy"))
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if (alias.name.startswith("edgar_warehouse.bookkeeping")
+                            and alias.name != "edgar_warehouse.bookkeeping.clean.artifacts"):
+                        offenders.append((path.name, alias.name))
     assert not offenders

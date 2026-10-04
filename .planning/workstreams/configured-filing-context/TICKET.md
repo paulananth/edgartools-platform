@@ -9,7 +9,7 @@ Continue ticket 21 after configured content fields (#810). The context interface
 - [x] Add configured first-N record bounds; compare zero, positive, negative and unlimited retained-loader behavior before selecting the grammar. Verified Rust boundary tests and eight 18-column Python oracle cases passed; 2026-10-04 07:04 ET.
 - [x] Complete the 18-column recent filing contract, including caller CIK, sync_run_id, raw_object_id and load_mode. Verified complete-qualification.json: 1,000 distinct filings / 107,197 rows; 2026-10-04 07:04 ET.
 - [x] Test mismatched context/input receipts, types, missing/extra keys, size bounds, tampering, retries and separate verifier reparse. Verified focused worker/context tests passed; decoder runtime mutation changes digest; 2026-10-04 07:04 ET.
-- [ ] Compare all output columns on pinned receipts and deliberate source/context mutations; record positive and failure differences explicitly.
+- [x] Compare all output columns on pinned receipts and deliberate source/context mutations; record positive and failure differences explicitly. Verified corpus artifacts, worker mutation tests and source-shape-audit.json (six unresolved malformed/coercion differences); 2026-10-04 07:08 ET.
 - [x] Prove installed worker and PostgreSQL 16 restricted-role execution; document implemented syntax in the bundled skill. Verified 141 engine tests passed in 297.11s including installed fifth context trial; bundled READING.md syntax; 2026-10-04 07:04 ET.
 - [ ] Independent Standards/Spec/GoF reviews, PR and unchanged full CI gate.
 - [ ] Complete Company/Person classification, reference joins, grouping and source read blocks.
@@ -32,3 +32,9 @@ Keep the existing `Engine.read` path. Add an explicit typed scalar context and e
 - Complete 18-column comparison: 1,000 inputs / 107,197 rows. Bounded first-N=1: 100 inputs / 100 rows. Both artifacts pin contract and captured receipt hashes. Caller provenance is explicit qualification context, not a claim to reproduce historic production caller metadata.
 - Independent Standards/Spec reviewers: no scoped blockers. JSON context decoding is now included in worker runtime evidence; mutation coverage checks the dependency. Final CI and the full source-failure audit remain pending.
 - Full malformed source equivalence remains incomplete: existing text conversion and shape refusal behavior must be assessed before retirement, beyond actual-corpus positive parity.
+
+## Source refusal and coercion audit
+
+Seven deliberate cases were compared with the retained loader. Native float text matched. Six differ: boolean text capitalization, object/list text coercion, null filings/recent groups, and scalar parallel fields. `source-shape-audit.json` records exact inputs and outputs. These remain required follow-ups before loader retirement; the 18-column actual-corpus proof does not cover them.
+
+Initial CI run 37197487468 passed Engine/MDM/Integration/shell and exposed the decoder module import through the parent Bookkeeping namespace. Fixed the import to the explicitly allowed artifact interface, and strengthened the architecture gate to cover both Python import syntaxes. No isolation gate is weakened or skipped.
