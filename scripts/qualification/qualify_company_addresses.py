@@ -38,28 +38,35 @@ def main():
     with tempfile.TemporaryDirectory(prefix='codex-company-address-') as folder:
         scratch = Path(folder)
         contract = store.put(scratch.as_uri(), contract_body)
-        for n, ref in enumerate(selected):
-            path = (root / 'bronze' / ref['key'].removeprefix('warehouse/bronze/')).resolve()
-            if not path.is_relative_to(root / 'bronze'):
-                raise ValueError('Receipt key escapes capture root')
-            raw = {'uri': path.as_uri(), 'sha256': ref['sha256']}
-            payload = json.loads(store.verified(raw, max_bytes=32 * 1024**2))
-            old_rows = stage_address_loader(payload, int(payload['cik']), 'qualification', ref['sha256'], 'default')
-            old = [business_address(row) for row in old_rows if row['address_type'] == 'business']
-            expected = old[-1] if old else None
-            manifest = store.put(scratch.as_uri(), {'version': 1, 'contract': contract, 'artifacts': [raw]})
-            work = {'input': manifest, 'output': (scratch / f'reading-{n}.json').as_uri(), 'checks': ['source.output']}
+        for n in range(0, len(selected), 2):
+            inputs, expected_rows = [], []
+            for ref in selected[n:n + 2]:
+                path = (root / 'bronze' / ref['key'].removeprefix('warehouse/bronze/')).resolve()
+                if not path.is_relative_to(root / 'bronze'):
+                    raise ValueError('Receipt key escapes capture root')
+                raw = {'uri': path.as_uri(), 'sha256': ref['sha256']}
+                payload = json.loads(store.verified(raw, max_bytes=32 * 1024**2))
+                old_rows = stage_address_loader(payload, int(payload['cik']), 'qualification', ref['sha256'], 'default')
+                old = [business_address(row) for row in old_rows if row['address_type'] == 'business']
+                inputs.append(raw)
+                expected_rows.append((ref, old))
+            manifest = store.put(scratch.as_uri(), {'version': 1, 'contract': contract, 'artifacts': inputs})
+            work = {'input': manifest, 'output': (scratch / f'reading-{n // 2}.json').as_uri(), 'checks': ['source.output']}
             result = source_read.execute(work, store)
             if source_read.verify({**work, 'candidate': result}, store) != ({'source.output': True}, []):
                 raise ValueError('Source worker verification failed')
             read = store.json(result)
-            rows = read['artifacts'][0]['tables']['addresses']
-            actual = rows[0]['business_address'] if rows else None
-            if len(rows) != len(old) or actual != expected or read['artifacts'][0]['deferred']:
-                raise ValueError(f"Raw Company address differs: {ref['key']}")
-            present += int(bool(old))
-            evidence.append({'key': ref['key'], 'input_sha256': ref['sha256'], 'address_sha256': digest(actual), 'present': bool(old)})
-    result = {'captures': len(selected), 'business_addresses': present, 'raw_address_derivation_matches': True,
+            if len(read['artifacts']) != len(inputs):
+                raise ValueError('Reading artifact count differs from frozen scope')
+            for artifact, raw, (ref, old) in zip(read['artifacts'], inputs, expected_rows):
+                rows = artifact['tables']['addresses']
+                actual = rows[0]['business_address'] if rows else None
+                expected = old[-1] if old else None
+                if artifact['input'] != raw or len(rows) != len(old) or actual != expected or artifact['deferred']:
+                    raise ValueError(f"Raw Company address differs: {ref['key']}")
+                present += int(bool(old))
+                evidence.append({'key': ref['key'], 'input_sha256': ref['sha256'], 'address_sha256': digest(actual), 'present': bool(old)})
+    result = {'captures': len(selected), 'business_addresses': present, 'source_read_units': (len(selected) + 1) // 2, 'raw_address_derivation_matches': True,
               'full_company_mastering': False, 'census_provenance_qualified': False,
               'receipts_sha256': hashlib.sha256(receipts).hexdigest(), 'contract_sha256': digest(contract_body),
               'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_engine.runtime_files()]},

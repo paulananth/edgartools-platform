@@ -2,7 +2,7 @@ source: qualification.sec.company.address
 execution:
   profile: source.read
   workers: 1
-  max_artifacts: 1
+  max_artifacts: 2
 read:
   format: json
   limits:
