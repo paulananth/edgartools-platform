@@ -1,0 +1,2427 @@
+{
+  "scope": "Finite JSON anchor/field/first-N acceptance matrix; both refusals are counted separately from exact exception identity. Not complete source equivalence.",
+  "cases": 450,
+  "matched": 341,
+  "differences": [
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": null
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": true
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": null
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": true
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          },
+          {
+            "accession_number": "b",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          },
+          {
+            "accession_number": "b",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a",
+              "b"
+            ],
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": null
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": true
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          },
+          {
+            "accession_number": "b",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          },
+          {
+            "accession_number": "b",
+            "cik": 320193,
+            "form": null,
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": "ab",
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": []
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": []
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": []
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": []
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": []
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": null
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": null
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": true
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": true
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": 1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {},
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": 2,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": []
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": []
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": [
+              "4"
+            ]
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": null
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": null
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": true
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": true
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": 1
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": {}
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": {
+              "x": 1
+            }
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": -1,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    },
+    {
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": {
+              "x": "a"
+            },
+            "form": "é🦀"
+          }
+        }
+      },
+      "recent_limit": 0,
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "error": "parallel_shape"
+      },
+      "same_acceptance_and_rows": false
+    }
+  ],
+  "contract_sha256": "1d3fe2f75a349321a7016fedb86b39b5828c5d1ef47d0c3529461e605acb29ca",
+  "matrix_sha256": "77c2813495ba93b355e3f87ae67d80999bd7f7b3038b63ba5e335393accfa92b"
+}

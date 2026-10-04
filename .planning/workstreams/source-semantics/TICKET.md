@@ -23,3 +23,9 @@ Resolving the original six differences does not prove all malformed source behav
 ## Independent review
 
 Spec: no scoped implementation findings. Standards/GoF: no documented violations or structural refactor recommendation; one correctness blocker found. The initial empty-anchor shortcut changed existing `lengths: anchor` behavior without opt-in. Added explicit `on_empty_anchor: ignore_fields` (only with anchor lengths) and a regression proving the default still rejects a null field. The first full local run was deliberately interrupted after 570 passes (112.62s) because its loaded binary and committed installation snapshot predated this correction. It is not final verification.
+
+## Corpus and extended refusal evidence
+
+`complete-qualification.json` compares all 18 columns on 1,000 distinct receipt-pinned captures / 107,197 rows with the corrected contract. `source-shape-audit.json` resolves the original seven cases. `remaining-failure-audit.json` expands the finite JSON anchor/field/first-N matrix to 450 cases: 341 match acceptance and rows, 109 differ. Both rejected inputs count as the same refusal decision, not identical exception classes. The retained reader permits empty object sequences and skips invalid fields when no rows are selected; the configured reader is still stricter. These differences are not source completion. Next work must explicitly support those semantics or obtain a reviewed source-contract change before retirement.
+
+Corrected Standards follow-up: no remaining scoped blocker. Spec review: zero scoped findings. Rust gate: 54 tests passed. Full local five-suite run and installed sixth trial remain pending.
