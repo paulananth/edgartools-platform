@@ -37,9 +37,16 @@ def _mapping(value, maximum, label):
     return value
 
 
+def _sources(spec):
+    return [spec["source"]] if isinstance(spec["source"], str) else spec["source"]
+
+
 def _selection(spec, inputs):
-    if not _name(spec["source"]) or spec["source"] not in inputs or not _name(spec["table"]):
-        raise ValueError("Combination selects a declared reading and a named table")
+    names = _sources(spec)
+    if (not isinstance(names, list) or not 1 <= len(names) <= 8
+            or not all(_name(name) and name in inputs for name in names)
+            or len(set(names)) != len(names) or not _name(spec["table"])):
+        raise ValueError("Combination selects distinct declared readings and a named table")
     _mapping(spec["checks"], 32, "Row checks")
     _mapping(spec["where"], 32, "Row filter")
 
@@ -95,16 +102,19 @@ def _key(value):
 
 
 def _rows(spec, inputs):
-    for artifact in inputs[spec["source"]]["artifacts"]:
-        rows = artifact["tables"].get(spec["table"])
-        if rows is None:
-            raise ValueError(f"Combination reading has no table {spec['table']}")
-        for row in rows:
-            for column, expected in spec["checks"].items():
-                if canonical(_column(row, column)) != canonical(expected):
-                    raise ValueError(f"Combination row check failed: {column}")
-            if all(canonical(_column(row, column)) == canonical(expected) for column, expected in spec["where"].items()):
-                yield row
+    for source in _sources(spec):
+        for artifact in inputs[source]["artifacts"]:
+            rows = artifact["tables"].get(spec["table"])
+            if rows is None:
+                raise ValueError(f"Combination reading has no table {spec['table']}")
+            for row in rows:
+                for column, expected in spec["checks"].items():
+                    if canonical(_column(row, column)) != canonical(expected):
+                        raise ValueError(f"Combination row check failed: {column}")
+                selected = [canonical(_column(row, column)) == canonical(expected)
+                            for column, expected in spec["where"].items()]
+                if all(selected):
+                    yield row
 
 
 def _group(spec, inputs):
@@ -173,13 +183,21 @@ def _documents(envelope, artifacts):
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError("source.combine verifies source.combined only")
     keys = envelope.get("keys", {})
-    if {"combine_contract", "reading_name", "readings"} & set(keys):
-        if not {"combine_contract", "reading_name", "readings"} <= set(keys) or not _name(keys["reading_name"]):
-            raise ValueError("Predecessor combination requires combine_contract, reading_name and readings")
-        refs = _mapping(keys["readings"], 7, "Additional reading receipts")
+    predecessor_keys = {"combine_contract_uri", "combine_contract_sha256", "reading_name"}
+    extra_keys = {"readings_uri", "readings_sha256"}
+    if (predecessor_keys | extra_keys) & set(keys):
+        if (not predecessor_keys <= set(keys) or not _name(keys["reading_name"])
+                or not all(isinstance(keys[key], str) and keys[key] for key in (predecessor_keys | extra_keys) & set(keys))):
+            raise ValueError("Predecessor combination requires text contract URI/hash and reading_name")
+        refs = {}
+        if extra_keys & set(keys):
+            if not extra_keys <= set(keys):
+                raise ValueError("Additional readings require both readings_uri and readings_sha256")
+            refs = _mapping(artifacts.json({"uri": keys["readings_uri"], "sha256": keys["readings_sha256"]}),
+                            7, "Additional reading receipts")
         if keys["reading_name"] in refs:
             raise ValueError("Predecessor reading name collides with an additional reading")
-        manifest = {"version": 1, "contract": keys["combine_contract"],
+        manifest = {"version": 1, "contract": {"uri": keys["combine_contract_uri"], "sha256": keys["combine_contract_sha256"]},
                     "readings": {**refs, keys["reading_name"]: envelope["input"]}}
     else:
         manifest = artifacts.json(envelope["input"])

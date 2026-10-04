@@ -489,7 +489,7 @@ read:
         from tests.engine.test_source_combine import group, join, plan, table
         combine_contract = store.put(tmp_path.as_uri(), plan({"names": group("input", "aliases", "cik", "name", order_by=("rank", "name"), distinct=True)},
                                       {"filers": table("input", "filers", {"aliases": join("names")})}))
-        unit_body["steps"]["combine"] = [{"keys": {**keys, "combine_contract": combine_contract, "reading_name": "input", "readings": {}},
+        unit_body["steps"]["combine"] = [{"keys": {**keys, "combine_contract_uri": combine_contract["uri"], "combine_contract_sha256": combine_contract["sha256"], "reading_name": "input"},
                                          "input": {"from": {"step": "read", "key": "filers"}},
                                          "output": (out / "combined.json").as_uri(), "cursor": {}}]
         unit_body["steps"]["prepare"][0]["input"] = {"from": {"step": "combine", "key": "filers"}}

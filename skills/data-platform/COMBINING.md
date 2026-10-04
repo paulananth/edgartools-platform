@@ -47,6 +47,9 @@ artifact; this profile does not accept a YAML artifact. Its schema is separate
 from the `source.read` contract. A Rules-approved pipeline pins both via its
 frozen units.
 
+- `source` is one declared reading name or an ordered list of 1–8 distinct
+  declared names. Rows are traversed in that name order, then artifact and
+  row order. Use a list to collect across separately verified readings.
 - Logical names, tables, columns, groups and output fields use letters,
   digits and underscores, start with a letter or underscore, and have at
   most 64 characters.
@@ -83,10 +86,14 @@ frozen units.
 For a predecessor reading, the combination unit's input is
 `{"from": {"step": "read", "key": "<unit key>"}}`. Its frozen keys contain:
 
-- `combine_contract`: the combination contract receipt;
+- `combine_contract_uri` and `combine_contract_sha256`: the contract receipt
+  fields as nonempty text;
 - `reading_name`: the name assigned to the resolved predecessor reading;
-- `readings`: any additional pinned reading receipts, or `{}`. The predecessor
-  name must not collide with an additional name.
+- Optional `readings_uri` and `readings_sha256` together: a pinned JSON mapping
+  of up to seven additional names to reading receipts. Omit both when there
+  are no additional readings. The predecessor name must not collide with an
+  additional name. Every unit key value is nonempty text; receipts belong in
+  pinned artifacts, rather than structured unit keys.
 
 The combination worker materializes a content-addressed scope document under
 `combine-inputs/` beside its output. This binds the contract and **all** reading

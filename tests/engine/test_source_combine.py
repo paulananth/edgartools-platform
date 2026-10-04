@@ -116,13 +116,14 @@ def test_predecessor_reading_and_changed_contract_have_distinct_mdm_scope(tmp_pa
                 {"companies": table("main", "companies", {"names": join("names")})})
     contract = store.put(tmp_path.as_uri(), body)
     work = {"input": primary, "output": (tmp_path / "one/combined.json").as_uri(), "checks": [source_combine.CHECK],
-            "keys": {"combine_contract": contract, "reading_name": "main", "readings": {}}}
+            "keys": {"combine_contract_uri": contract["uri"], "combine_contract_sha256": contract["sha256"], "reading_name": "main"}}
     result = source_combine.execute(work, store)
     assert source_combine.verify({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
     original = store.json(result)["artifacts"][0]["input"]
     body["combine"]["groups"]["names"]["distinct"] = True
+    changed_contract = store.put(tmp_path.as_uri(), body)
     changed = {**work, "output": (tmp_path / "two/combined.json").as_uri(),
-               "keys": {**work["keys"], "combine_contract": store.put(tmp_path.as_uri(), body)}}
+               "keys": {**work["keys"], "combine_contract_uri": changed_contract["uri"], "combine_contract_sha256": changed_contract["sha256"]}}
     second = source_combine.execute(changed, store)
     assert store.json(second)["artifacts"][0]["input"]["sha256"] != original["sha256"]
 
@@ -143,4 +144,82 @@ def test_invalid_configuration_fails_before_reading_or_writing(tmp_path, mutatio
     work = envelope(store, tmp_path, body, refs)
     if mutation == "partial_predecessor": work["keys"] = {"reading_name": "main"}
     with pytest.raises(ValueError): source_combine.execute(work, store)
+    assert not (tmp_path / "output").exists()
+
+
+@pytest.mark.parametrize("mode,expected", [("first", "early"), ("last", "late")])
+def test_whole_row_selection_and_authorized_replacement_follow_declared_order(tmp_path, mode, expected):
+    store = Artifacts()
+    refs = {"main": reading(store, tmp_path, {"companies": [{"cik": 1, "selected": "old"}, {"cik": 2}]}),
+            "aux": reading(store, tmp_path, {"events": [{"cik": 1, "rank": 2, "name": "late"}, {"cik": 1, "rank": 1, "name": "early"}]})}
+    body = plan({"events": group("aux", "events", "cik", ".", mode=mode, order_by=("rank",))},
+                {"companies": table("main", "companies", {"selected": join("events", replace=True)})})
+    result = source_combine.execute(envelope(store, tmp_path, body, refs), store)
+    rows = store.json(result)["artifacts"][0]["tables"]["companies"]
+    assert rows[0]["selected"]["name"] == expected
+    assert rows[0]["selected"]["cik"] == 1
+    assert rows[1]["selected"] is None
+
+
+def test_distinct_structured_values_preserve_json_scalar_types(tmp_path):
+    store = Artifacts()
+    values = [False, 0, 0.0, {"a": 1, "b": 2}, {"b": 2, "a": 1}]
+    refs = {"main": reading(store, tmp_path, {"companies": [{"cik": 1}]}),
+            "aux": reading(store, tmp_path, {"values": [{"cik": 1, "value": value} for value in values]})}
+    body = plan({"values": group("aux", "values", "cik", "value", distinct=True)},
+                {"companies": table("main", "companies", {"values": join("values")})})
+    result = source_combine.execute(envelope(store, tmp_path, body, refs), store)
+    actual = store.json(result)["artifacts"][0]["tables"]["companies"][0]["values"]
+    assert [type(v) for v in actual] == [bool, int, float, dict]
+    assert actual == [False, 0, 0.0, {"a": 1, "b": 2}]
+
+
+def test_filter_validates_later_columns_even_after_an_earlier_nonmatch(tmp_path):
+    store = Artifacts()
+    refs = {"main": reading(store, tmp_path, {"companies": [{"cik": 1, "a": 0}]})}
+    selected = table("main", "companies", {})
+    selected["where"] = {"a": 1, "missing": 1}
+    work = envelope(store, tmp_path, plan({}, {"companies": selected}), refs)
+    with pytest.raises(ValueError, match="no column missing"):
+        source_combine.execute(work, store)
+    assert not (tmp_path / "output").exists()
+
+
+def test_multiple_pinned_readings_preserve_declared_order_and_auxiliary_identity(tmp_path):
+    store = Artifacts()
+    primary = reading(store, tmp_path, {"companies": [{"cik": 1}]})
+    first = reading(store, tmp_path, {"filings": [{"cik": 1, "form": "10-K"}]})
+    second = reading(store, tmp_path, {"filings": [{"cik": 1, "form": "10-Q"}]})
+    body = plan({"forms": group(["second", "first"], "filings", "cik", "form")},
+                {"companies": table("main", "companies", {"forms": join("forms")})})
+    contract = store.put(tmp_path.as_uri(), body)
+    aux = store.put(tmp_path.as_uri(), {"first": first, "second": second})
+    work = {"input": primary, "output": (tmp_path / "one/combined.json").as_uri(), "checks": [source_combine.CHECK],
+            "keys": {"reading_name": "main", "combine_contract_uri": contract["uri"], "combine_contract_sha256": contract["sha256"],
+                     "readings_uri": aux["uri"], "readings_sha256": aux["sha256"]}}
+    result = source_combine.execute(work, store)
+    assert source_combine.verify({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
+    data = store.json(result)
+    assert data["artifacts"][0]["tables"]["companies"] == [{"cik": 1, "forms": ["10-Q", "10-K"]}]
+    changed = reading(store, tmp_path, {"filings": [{"cik": 1, "form": "8-K"}]})
+    aux2 = store.put(tmp_path.as_uri(), {"first": first, "second": changed})
+    next_work = {**work, "output": (tmp_path / "two/combined.json").as_uri(),
+                 "keys": {**work["keys"], "readings_uri": aux2["uri"], "readings_sha256": aux2["sha256"]}}
+    next_result = store.json(source_combine.execute(next_work, store))
+    assert next_result["artifacts"][0]["input"]["sha256"] != data["artifacts"][0]["input"]["sha256"]
+    assert next_result["artifacts"][0]["tables"]["companies"][0]["forms"] == ["8-K", "10-K"]
+    from urllib.parse import urlparse
+    from pathlib import Path
+    Path(urlparse(aux["uri"]).path).write_bytes(b'{}')
+    with pytest.raises(ValueError):
+        source_combine.verify({**work, "candidate": result}, store)
+
+
+@pytest.mark.parametrize("names", [[], ["main", "main"], ["main", "missing"], ["main", 1], None])
+def test_invalid_multiple_reading_selections_refuse_before_output(tmp_path, names):
+    store = Artifacts()
+    refs = {"main": reading(store, tmp_path, {"companies": []})}
+    work = envelope(store, tmp_path, plan({}, {"companies": table(names, "companies", {})}), refs)
+    with pytest.raises(ValueError):
+        source_combine.execute(work, store)
     assert not (tmp_path / "output").exists()
