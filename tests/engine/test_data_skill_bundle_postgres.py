@@ -278,7 +278,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -326,6 +326,17 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
 """
         filer_bytes = b"".join(json.dumps({**json.loads(line), "released_at": "2026-10-03T08:30:00.123456-04:00"}).encode() + b"\n"
                                for line in FILERS.splitlines())
+    if trial_mode == "reference-lookup":
+        spec = {"source": "fixture.filers", "execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1},
+                "read": {"format": "jsonl", "limits": {"max_bytes": 1048576, "max_records": 1000},
+                         "references": {"places": {"DE": {"iso": "US-DE"}, "WA": {"iso": "US-WA"}}},
+                         "tables": {"filers": {"each": "record", "columns": {
+                             "cik": {"text": {"path": "cik"}}, "name": {"text": {"path": "name"}},
+                             "jurisdiction": {"lookup": {"reference": "places", "column": "iso",
+                                                         "on_missing": "error", "key": {"text": {"path": "state", "case": "upper"}}}}}}}}}
+        contract_bytes = json.dumps(spec).encode()
+        filer_bytes = b"".join(json.dumps({**json.loads(line), "state": state}).encode() + b"\n"
+                               for line, state in zip(FILERS.splitlines(), [" de ", "wa"], strict=True))
     if trial_mode == "integer-records":
         contract_bytes = contract_bytes.replace(b"cik: { text: { path: cik } }", b"cik: { integer: { path: cik } }")
         contract_bytes += b"""        is_xbrl: { integer: { path: is_xbrl, as: boolean, default: false, on_invalid: default } }
@@ -472,6 +483,10 @@ read:
         prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
         assert len({b["input"]["path"] for b in prepared["batches"]}) == 2
         assert len({b["batch_id"] for b in prepared["batches"]}) == 2
+    if trial_mode == "reference-lookup":
+        reading = json.loads((out / "reading.json").read_bytes())
+        rows = reading["artifacts"][0]["tables"]["filers"]
+        assert [row["jurisdiction"] for row in rows] == ["US-DE", "US-WA"]
     if trial_mode == "source-coercion":
         reading = json.loads((out / "reading.json").read_bytes())
         rows = reading["artifacts"][0]["tables"]["filers"]
