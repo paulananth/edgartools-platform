@@ -208,23 +208,35 @@ def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(insta
     assert [rows["bundle-1"]] == gleif and rows["bundle-2"] == json.loads(saved.stdout)["digest"] == gleif[0]
 
 
-def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_path):
+@pytest.mark.parametrize('reading_mode', ['13f', 'company-main'])
+def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_path, reading_mode):
     python, root = installed
     store = Artifacts()
     grant_profile(databases.admin, profile="source.read", worker="bk_runtime", verifier="bk_verifier")
     body = files.pipeline("sec-13f-reading")
-    saved = databases.rules.save("pipeline", "sec-13f-reading", "1", body)
+    pipeline_name = 'sec-13f-reading' if reading_mode == '13f' else 'company-main-reading'
+    body['pipeline'] = pipeline_name
+    saved = databases.rules.save("pipeline", pipeline_name, "1", body)
     contract_path = ROOT / "crates/source-contract/contracts/thirteenf/contract.yaml"
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_path.read_bytes())
     xml = store.put_bytes((tmp_path / "filing.xml").as_uri(),
                           (contract_path.parent / "fixtures/one-row.xml").read_bytes())
     input_ref = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [xml]})
+    if reading_mode == 'company-main':
+        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.source("sec.submissions.company")))', cwd=root)
+        assert probe.returncode == 0, probe.stderr
+        contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
+        raw = store.put_bytes((tmp_path / 'company.json').as_uri(), b'{"name":"Example","addresses":{"business":{"stateOrCountry":"DE"}}}')
+        context = store.put(tmp_path.as_uri(), {'version': 1, 'input': raw, 'values': {
+            'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': raw['sha256'], 'load_mode': 'default',
+            'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'}})
+        input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
     output = (tmp_path / "holdings.json").as_uri()
     manifest = store.put(tmp_path.as_uri(), {"version": 1, "units": [{
         "keys": {"batch_id": "sample"}, "input": input_ref, "output": output, "cursor": {"offset": 0}}]})
-    databases.rules.prove("pipeline", "sec-13f-reading", "1",
+    databases.rules.prove("pipeline", pipeline_name, "1",
                           {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("pipeline", "sec-13f-reading", "1")
+    databases.rules.activate("pipeline", pipeline_name, "1")
     folder = tmp_path / "rules"
     assert _run(python, "-m", "edgar_warehouse.cli", "skill", "install", "--home", str(tmp_path / "home"),
                 "--rules", str(folder), cwd=root).returncode == 0
@@ -236,7 +248,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
         assert done.returncode == 0, done.stderr
         return done.stdout
 
-    submitted = command("edgar_warehouse.cli", "rules", "run", "--pipeline", "sec-13f-reading", "--target", "read",
+    submitted = command("edgar_warehouse.cli", "rules", "run", "--pipeline", pipeline_name, "--target", "read",
                         "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"])
     run_id = json.loads(submitted)["run"]["run_id"]
     command("edgar_warehouse.cli", "workers", "work", "source.read", run_id)
@@ -245,8 +257,14 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
             BOOKKEEPING_CLEAN_DATABASE_URL=verifier)
     state = json.loads(command("edgar_warehouse.cli", "bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 1} and state["run"]["state"] == "complete"
-    assert json.loads((tmp_path / "holdings.json").read_bytes())["artifacts"][0]["tables"][
-        "sec_thirteenf_holding"][0]["share_type"] == "SH"
+    tables = json.loads((tmp_path / "holdings.json").read_bytes())["artifacts"][0]["tables"]
+    if reading_mode == '13f':
+        assert tables['sec_thirteenf_holding'][0]['share_type'] == 'SH'
+    else:
+        assert tables['company'][0]['entity_name'] == 'Example'
+        assert tables['company'][0]['raw_object_id'] == raw['sha256']
+        assert tables['addresses'][0]['business_address']['country'] == 'US'
+        assert tables['filings'] == []
 
 
 MASTER = {
