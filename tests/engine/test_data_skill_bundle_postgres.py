@@ -278,7 +278,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -309,7 +309,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             "version": "v1", "kind": "company", "record_key": ["cik"], "identifiers": {"cik": "cik"},
             "fields": {"name": "name"}}))
 
-    if trial_mode == "raw-person":
+    if trial_mode in ("raw-person", "object-records"):
         with mdm_admin.begin() as conn:
             policy = register_policy(conn, files.policy())
             register_dataset(conn, "sec.submissions.person.v1", "1",
@@ -323,12 +323,17 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     pipeline = {**MASTER, "pipeline": pipeline_name}
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
-    if trial_mode == "raw-person":
+    if trial_mode in ("raw-person", "object-records"):
         spec = files.source("sec.submissions.person")
         spec["execution"]["max_artifacts"] = 2
         contract_bytes = json.dumps(spec).encode()
         raw_persons = [json.loads(line) for line in (ROOT / "tests/fixtures/clean_mdm/four_companies_v1/person_raw.jsonl").read_text().splitlines()]
         filer_bytes = json.dumps(raw_persons[0]).encode()
+        if trial_mode == "object-records":
+            fields = {name: {"value": {"path": name}} for name in raw_persons[0]}
+            assert all(set(row) == set(fields) for row in raw_persons)
+            spec["read"]["tables"]["submissions"]["columns"]["record"] = {"object": {"fields": fields}}
+            contract_bytes = json.dumps(spec).encode()
     if custom_trial:
         contract_bytes += b"""        release_sequence:
           custom:
@@ -443,7 +448,7 @@ read:
             bound = store.put(tmp_path.as_uri(), {"version": 1, "input": input_ref, "values": {"first_n": first_n}})
             entries.append({"input": input_ref, "context": bound})
         read_manifest = {"version": 2, "contract": contract, "artifacts": entries}
-    if trial_mode == "raw-person":
+    if trial_mode in ("raw-person", "object-records"):
         second = store.put_bytes((tmp_path / "person2.json").as_uri(), json.dumps(raw_persons[1]).encode())
         read_manifest["artifacts"] = [filers, second]
     read_input = store.put(tmp_path.as_uri(), read_manifest)
@@ -451,9 +456,9 @@ read:
     keys = {"batch_id": "filers", "consumer": "fixture/filers"}
     units = store.put(tmp_path.as_uri(), {"version": 2, "steps": {
         "read": [{"keys": keys, "input": read_input, "output": (out / "reading.json").as_uri(), "cursor": {}}],
-        "prepare": [{"keys": {**keys, "table": "submissions" if trial_mode == "raw-person" else "filers",
-                              "dataset": "sec.submissions.person.v1" if trial_mode == "raw-person" else "fixture.filers",
-                              **({"record_column": "record"} if trial_mode == "raw-person" else {}), "policy": policy,
+        "prepare": [{"keys": {**keys, "table": "submissions" if trial_mode in ("raw-person", "object-records") else "filers",
+                              "dataset": "sec.submissions.person.v1" if trial_mode in ("raw-person", "object-records") else "fixture.filers",
+                              **({"record_column": "record"} if trial_mode in ("raw-person", "object-records") else {}), "policy": policy,
                               "as_of": core.AS_OF},
                      "input": {"from": {"step": "read", "key": "filers"}},
                      "output": (out / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
@@ -500,7 +505,7 @@ read:
         prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
         assert len({b["input"]["path"] for b in prepared["batches"]}) == 2
         assert len({b["batch_id"] for b in prepared["batches"]}) == 2
-    if trial_mode == "raw-person":
+    if trial_mode in ("raw-person", "object-records"):
         reading = json.loads((out / "reading.json").read_bytes())
         assert [artifact["tables"]["submissions"][0]["record"] for artifact in reading["artifacts"]] == raw_persons
         prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
@@ -530,7 +535,7 @@ read:
         names = conn.execute(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_record "
                                   "WHERE object_type='stage_record' OR object_type='entity'")).scalars().all()
         records = conn.scalar(text("SELECT count(*) FROM mdm.stage_record"))
-        if trial_mode == "raw-person":
+        if trial_mode in ("raw-person", "object-records"):
             assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='person'")) == 2
             assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='company'")) == 0
 

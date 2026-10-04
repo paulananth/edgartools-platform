@@ -64,12 +64,8 @@ fn references(expr: &Value, read: &Value) -> Result<(), String> {
         if rows.values().any(|row| row.get(column).is_none()) {
             return Err(format!("lookup column {column} is missing from reference {table}"));
         }
-        references(&args["key"], read)?;
     }
-    for call in expr.get("steps").and_then(Value::as_sequence).into_iter().flatten() { references(call, read)?; }
-    for (_, call) in expr.get("custom").and_then(|v| v.get("inputs")).and_then(Value::as_mapping).into_iter().flatten() {
-        references(call, read)?;
-    }
+    for child in crate::expression_children(expr) { references(child, read)?; }
     Ok(())
 }
 

@@ -62,13 +62,7 @@ pub(crate) fn reference(args: &Value, read: &Value) -> Result<(), String> {
 
 fn references(expr: &Value, read: &Value) -> Result<(), String> {
     if let Some(args) = expr.get("context") { reference(args, read)?; }
-    if let Some(key) = expr.get("lookup").and_then(|v| v.get("key")) { references(key, read)?; }
-    if let Some(calls) = expr.get("steps").and_then(Value::as_sequence) {
-        for call in calls { references(call, read)?; }
-    }
-    if let Some(inputs) = expr.get("custom").and_then(|v| v.get("inputs")).and_then(Value::as_mapping) {
-        for (_, call) in inputs { references(call, read)?; }
-    }
+    for child in crate::expression_children(expr) { references(child, read)?; }
     Ok(())
 }
 
