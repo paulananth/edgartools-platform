@@ -85,7 +85,7 @@ pub(crate) fn check(read: &Value, values: &Row) -> Result<(), Rejected> {
             Val::Int(_) => setting(spec, "type") == Some("integer"),
             Val::Bool(_) => setting(spec, "type") == Some("boolean"),
             Val::Str(text) => setting(spec, "type") == Some("text") && text.len() as u64 <= spec.get("max_bytes").and_then(Value::as_u64).unwrap_or(4096),
-            Val::Float(_) => false,
+            Val::Float(_) | Val::UInt(_) | Val::List(_) | Val::Map(_) => false,
         };
         if !valid { return Err(Rejected::new("invalid_context", format!("context {name} has the wrong type or size"))); }
     }

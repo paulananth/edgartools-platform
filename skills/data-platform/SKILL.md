@@ -105,7 +105,9 @@ step:
   unit's keys say which `table` of the reading, which MDM `dataset` (source
   code) reads the rows, the `policy` digest the batches pin, the `consumer`
   they advance (its own, from checkpoint 0), a `batch_id` prefix and the
-  `as_of` instant. Records files of at most 1,000 rows sit beside the
+  `as_of` instant. Optional `record_column` selects an object-valued column
+  containing the complete source record; omitted, the table row is the record.
+  See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
   manifest. Its verifier rebuilds them and reports `mdm.prepared`.
 - `mdm.merge`: one Clean MDM input manifest (contract version 2) through the
   Merge Stage; its verifier reads the batches back from MDM and reports

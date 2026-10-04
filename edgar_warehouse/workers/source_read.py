@@ -12,6 +12,8 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
 
+OUTPUT_BYTES = 128 * 1024**2
+
 
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
@@ -63,8 +65,11 @@ def _output(envelope: dict, artifacts) -> bytes:
 
     with ThreadPoolExecutor(max_workers=execution["workers"]) as pool:
         readings = list(pool.map(read, inputs))
-    return json.dumps({"version": 1, "contract": manifest["contract"], "artifacts": readings},
+    output = json.dumps({"version": 1, "contract": manifest["contract"], "artifacts": readings},
                       sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    if len(output) > OUTPUT_BYTES:
+        raise ValueError("source.read output exceeds the verifier byte budget; partition the inputs")
+    return output
 
 
 def execute(envelope: dict, artifacts) -> dict:
@@ -75,7 +80,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     expected = _output(envelope, artifacts)
-    found = artifacts.verified(envelope["candidate"], max_bytes=128 * 1024**2)
+    found = artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES)
     if found != expected:
         raise ValueError("Written source output differs from the configured reading")
     return {name: True for name in envelope["checks"]}, []

@@ -1,8 +1,8 @@
 """Small offline cohort under the repository's unchanged mastering rules.
 
-Company rows come from the pinned four-company fixture. Its two individual
-controls are converted back to the raw field names consumed by the Person
-adapter; this conversion is fixture setup, not a new acquisition reader.
+Company rows come from the pinned four-company fixture. Person controls
+are separate raw JSON documents with their original field names; no runtime
+field-name conversion is used.
 
 GLEIF readings go through the real GLEIF reader (`record_evidence`): two
 Level 1 records from the same fixture, and one accounting-parent record
@@ -33,22 +33,17 @@ def cohort():
     }
     fixture = json.loads(FIXTURE.read_text())
     readings = []
-    for original in fixture["sec"]:
-        if original["entity_type"] == "operating":
-            code, row = "sec.submissions.company.v1", original
-        elif not original["sic"]:
-            code = "sec.submissions.person.v1"
-            row = {"cik": original["cik"], "name": original["entity_name"],
-                   "entityType": original["entity_type"], "sic": original["sic"],
-                   "ein": original["ein"], "fiscalYearEnd": original["fiscal_year_end"],
-                   "stateOfIncorporation": original["state_of_incorporation"]}
-        else:
-            continue
+    company = [("sec.submissions.company.v1", row) for row in fixture["sec"]
+               if row["entity_type"] == "operating"]
+    person_file = FIXTURE.with_name("person_raw.jsonl")
+    person = [("sec.submissions.person.v1", json.loads(line))
+              for line in person_file.read_text().splitlines() if line.strip()]
+    for code, row in [*company, *person]:
         readings.append(normalize(
             row, source_code=code, contract=contracts[code], policy=policy,
-            publication={"publication_key": f"offline-cohort/{original['cik']}@{digest(row)}",
+            publication={"publication_key": f"offline-cohort/{row['cik']}@{digest(row)}",
                          "revision": 1, "artifact_sha256": digest(row),
-                         "member": "four_companies_v1.json", "record_locator": str(original["cik"])},
+                         "member": "four_companies_v1.json", "record_locator": str(row["cik"])},
         ))
     return policy, contracts, readings
 
