@@ -83,3 +83,17 @@ def test_python_backend_fallback_preserves_rules_round_trips(monkeypatch):
 @pytest.mark.parametrize("escaped,expected", [("\\ud800", "\ud800"), ("\\ud83d\\ude00", "\ud83d\ude00")])
 def test_compiled_parser_refusal_preserves_existing_surrogate_reader_values(escaped, expected):
     assert loads(f'k: "{escaped}"') == {"k": expected}
+
+
+@pytest.mark.parametrize("text", ["k: a\tb", "k\t: v", "k: a\t\nz: b"])
+def test_unquoted_tabs_keep_existing_scanner_refusals(text):
+    with pytest.raises(RulesFileError):
+        loads(text)
+
+
+@pytest.mark.parametrize("text", ['k: "a\tb"', "k: 'a\tb'", "k: |\n  a\tb\n"])
+def test_quoted_and_block_tabs_keep_existing_values(text):
+    import yaml
+    from edgar_warehouse.rules import files
+    expected = files._value(files._rules_node(text, "<rules>", yaml.SafeLoader), "<rules>")
+    assert loads(text) == expected

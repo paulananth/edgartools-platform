@@ -110,10 +110,14 @@ def _rules_node(text: str, name: str, loader):
 def loads(text: str, name: str = "<rules>") -> Any:
     """The JSON value one rules document holds."""
     try:
+        # libyaml accepts tabs in some unquoted positions the existing Python
+        # scanner refuses. Use that scanner for all tab-containing documents
+        # so quoted/block tabs and plain-scalar refusals retain their semantics.
+        loader = yaml.SafeLoader if "\t" in text else _RULES_LOADER
         try:
-            node = _rules_node(text, name, _RULES_LOADER)
+            node = _rules_node(text, name, loader)
         except yaml.YAMLError:
-            if _RULES_LOADER is yaml.SafeLoader:
+            if loader is yaml.SafeLoader:
                 raise
             # libyaml is stricter about escaped surrogate code points. Preserve
             # the existing reader's acceptance; downstream UTF-8/digest checks
