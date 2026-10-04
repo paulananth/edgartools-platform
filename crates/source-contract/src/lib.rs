@@ -95,7 +95,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 12] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object"];
+const PRIMITIVES: [&str; 14] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -255,6 +255,14 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
     }
     if let Some(fields) = expr.get("object").and_then(|args| args.get("fields")).and_then(Value::as_mapping) {
         children.extend(fields.values());
+    }
+    if let Some(values) = expr.get("coalesce").and_then(|args| args.get("values")).and_then(Value::as_sequence) {
+        children.extend(values);
+    }
+    if let Some(args) = expr.get("choose") {
+        for key in ["condition", "then", "else"] {
+            if let Some(child) = args.get(key) { children.push(child); }
+        }
     }
     children
 }
@@ -452,6 +460,19 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
             if args.get("ignore_case").is_some() && args.get("null_if").is_none() {
                 return Err("text ignore_case requires null_if".into());
+            }
+        }
+        "coalesce" => {
+            let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("coalesce requires values and skip only")?;
+            let values = map.get(Value::String("values".into())).and_then(Value::as_sequence)
+                .filter(|v| !v.is_empty() && v.len() <= 16).ok_or("coalesce values has 1..16 expressions")?;
+            if !matches!(setting(args, "skip"), Some("null" | "falsey")) { return Err("coalesce skip is quoted null or falsey".into()); }
+            for value in values { validate_expr(value, steps)?; }
+        }
+        "choose" => {
+            let map = args.as_mapping().filter(|m| m.len() == 3).ok_or("choose requires condition, then and else only")?;
+            for key in ["condition", "then", "else"] {
+                validate_expr(map.get(Value::String(key.into())).ok_or("choose requires condition, then and else")?, steps)?;
             }
         }
         "object" => {
@@ -817,6 +838,19 @@ fn segments(path: &str) -> Vec<String> {
     out
 }
 
+fn falsey(value: &Val) -> bool {
+    match value {
+        Val::Null => true,
+        Val::Bool(v) => !v,
+        Val::Int(v) => *v == 0,
+        Val::UInt(v) => *v == 0,
+        Val::Float(v) => *v == 0.0,
+        Val::Str(v) => v.is_empty(),
+        Val::List(v) => v.is_empty(),
+        Val::Map(v) => v.is_empty(),
+    }
+}
+
 fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
@@ -844,6 +878,22 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
                 if ignore_case { text.eq_ignore_ascii_case(token) } else { text == token }
             });
             Ok(if matches { Val::Null } else { Val::Str(text.to_string()) })
+        }
+        "coalesce" => {
+            for expr in args["values"].as_sequence().unwrap() {
+                let value = eval(engine, context, document, item, ordinal, expr)?;
+                let skipped = if setting(args, "skip") == Some("null") { matches!(value, Val::Null) } else { falsey(&value) };
+                if !skipped { return Ok(value); }
+            }
+            Ok(Val::Null)
+        }
+        "choose" => {
+            let branch = match eval(engine, context, document, item, ordinal, &args["condition"])? {
+                Val::Bool(true) => "then",
+                Val::Bool(false) | Val::Null => "else",
+                _ => return Err(Rejected::new("choose_condition", "choose condition must be boolean or null")),
+            };
+            eval(engine, context, document, item, ordinal, &args[branch])
         }
         "object" => {
             let mut fields = BTreeMap::new();

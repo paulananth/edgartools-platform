@@ -42,7 +42,7 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
 
 pub(crate) fn validate_call(args: &Value) -> Result<(), String> {
     let map = args.as_mapping().ok_or("lookup arguments must be a mapping")?;
-    if map.keys().any(|k| !matches!(k.as_str(), Some("reference" | "column" | "key" | "on_missing"))) {
+    if map.keys().any(|k| !matches!(k.as_str(), Some("reference" | "column" | "key" | "on_missing" | "trim" | "case"))) {
         return Err("lookup has an unknown argument".into());
     }
     setting(args, "reference").ok_or("lookup names no reference")?;
@@ -50,6 +50,10 @@ pub(crate) fn validate_call(args: &Value) -> Result<(), String> {
     args.get("key").ok_or("lookup names no key expression")?;
     if args.get("on_missing").is_some_and(|v| !matches!(v.as_str(), Some("null" | "error"))) {
         return Err("lookup on_missing is quoted null or error".into());
+    }
+    if args.get("trim").is_some_and(|v| v.as_bool().is_none()) { return Err("lookup trim must be boolean".into()); }
+    if args.get("case").is_some_and(|v| !matches!(v.as_str(), Some("upper" | "lower" | "preserve"))) {
+        return Err("lookup case is upper, lower or preserve".into());
     }
     Ok(())
 }
@@ -74,7 +78,13 @@ pub(crate) fn read(read: &Value, args: &Value, key: &Val) -> Result<Val, Rejecte
     let column = setting(args, "column").unwrap();
     let value = match key {
         Val::Null => None,
-        Val::Str(key) => read["references"][reference].get(key).and_then(|row| row.get(column)),
+        Val::Str(key) => {
+            let key = if args.get("trim").and_then(Value::as_bool).unwrap_or(false) { key.trim() } else { key.as_str() };
+            let key = match setting(args, "case").unwrap_or("preserve") {
+                "upper" => key.to_uppercase(), "lower" => key.to_lowercase(), _ => key.to_string(),
+            };
+            read["references"][reference].get(&key).and_then(|row| row.get(column))
+        },
         _ => return Err(Rejected::new("lookup_key", "lookup key must be text or null; declare conversion explicitly")),
     };
     match value {
