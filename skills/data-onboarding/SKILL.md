@@ -317,7 +317,7 @@ starting from its "Defaults".
   and max_artifacts may each be 1 or 2. Declare `read.limits.max_bytes` at
   most 33554432 and `read.limits.max_records` from 1 to 100000. Choose bounds
   from measured inputs and split oversized captures into explicit units;
-  see READING.md for output and preparation limits. The `acquisition` section (how
+  see [READING.md](../data-platform/READING.md) for output and preparation limits. The `acquisition` section (how
   the platform captures the files) and the `bookkeeping` section (how it
   runs them) belong to the Bookkeeping skill. Leave them out for a feed
   onboarded from files already captured, and keep them as they are in an
