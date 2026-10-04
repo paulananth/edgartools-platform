@@ -101,6 +101,58 @@ matrix match retained acceptance and output rows with these explicit
 policies. Matching refusal decisions does not assert identical exception
 classes. Complete malformed-source equivalence remains a separate gate.
 
+## Frozen reference tables
+
+Reference data needed during reading belongs in `read.references`, embedded
+in the frozen contract so the source worker and verifier read identical data.
+It is separate from the caller-supplied membership sets used by `in_lookup`.
+No mutable path or callback is consulted.
+
+```yaml
+read:
+  format: json
+  references:
+    places:
+      DE: {iso: US-DE}
+      XX: {iso: null}
+  tables:
+    company:
+      each: .
+      columns:
+        jurisdiction:
+          lookup:
+            reference: places
+            column: iso
+            key: {text: {path: stateOfIncorporation, case: upper}}
+            on_missing: "null"
+```
+
+`lookup` uses an exact text key produced by its nested expression. Null or
+an absent key returns null by default; `on_missing: error` rejects the artifact
+with `lookup_missing`. An explicitly null cell is a successful lookup even in
+error mode. Non-text, non-null keys fail with `lookup_key`; convert them
+explicitly when the source requires it. References and every named column
+are validated at contract load, including unused expressions and empty inputs.
+Cells retain null, boolean, signed 64-bit integer, finite float or text types.
+There is no implicit default, string conversion or key case conversion.
+
+`text.case` is `preserve` by default, or explicit `upper`/`lower` using native
+Unicode case conversion. Conversion follows trimming and precedes `null_if`;
+case changes must be declared for both the value and null tokens when needed.
+Unicode compatibility is qualified for the source's inputs; this is not a
+claim of Python compatibility across every Unicode version.
+
+Bounds: at most 16 reference tables, 10,000 keyed rows per table, 32 columns
+per row and 100,000 cells in total. Names/keys are nonempty text of at most
+128 UTF-8 bytes; text cells are at most 4,096 bytes. Structured, tagged,
+nonfinite and out-of-range integer cells are refused. Duplicate YAML keys
+are refused by the contract parser. These are small dimension tables, not
+large artifact joins or permission to raise source-worker budgets.
+
+All 309 SEC place codes and explicit lowercase/whitespace variants are
+compared to the retained jurisdiction converter. Complete Company address,
+reference provenance and assertion equivalence remain source retirement gates.
+
 ## Qualification boundary
 
 The generic primitive and the installed worker protocol are tested

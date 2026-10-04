@@ -62,6 +62,7 @@ pub(crate) fn reference(args: &Value, read: &Value) -> Result<(), String> {
 
 fn references(expr: &Value, read: &Value) -> Result<(), String> {
     if let Some(args) = expr.get("context") { reference(args, read)?; }
+    if let Some(key) = expr.get("lookup").and_then(|v| v.get("key")) { references(key, read)?; }
     if let Some(calls) = expr.get("steps").and_then(Value::as_sequence) {
         for call in calls { references(call, read)?; }
     }
