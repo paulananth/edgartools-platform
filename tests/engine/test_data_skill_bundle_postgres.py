@@ -15,6 +15,7 @@ the repository, so nothing here can stand in for a missing file.
 - G5: `doctor` names a command a skill writes that does not exist.
 """
 import json
+import copy
 import os
 import shutil
 import subprocess
@@ -278,7 +279,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -291,9 +292,11 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     from tests.support.rules_authority import register_dataset
 
     custom_trial = trial_mode == "custom-step"
+    combined_trial = trial_mode == "combined-records"
+    profiles = ("source.read", *(("source.combine",) if combined_trial else ()), "mdm.prepare", "mdm.merge")
     python, root = installed
     store = Artifacts()
-    for profile in ("source.read", "mdm.prepare", "mdm.merge"):
+    for profile in profiles:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     mdm_name = f"mdm_bundle_{uuid4().hex[:8]}"
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -320,9 +323,22 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
     pipeline_name = f"parse-and-master-{trial_mode}"
-    pipeline = {**MASTER, "pipeline": pipeline_name}
+    pipeline = copy.deepcopy({**MASTER, "pipeline": pipeline_name})
+    if combined_trial:
+        steps = pipeline["bookkeeping"]["targets"]["master"]["steps"]
+        steps.insert(1, {"name": "combine", "operation": "source.combine", "requires": ["read"], "key": "{batch_id}",
+                         "leases": ["combined-output:{batch_id}"], "checks": ["input.hash", "output.receipt", "source.combined"]})
+        next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
+    if combined_trial:
+        spec = {"execution": {"profile": "source.read", "workers": 2, "max_artifacts": 2}, "read": {
+            "format": "json", "limits": {"max_bytes": 1048576, "max_records": 10}, "tables": {
+                "filers": {"each": "companies", "columns": {"cik": {"text": {"path": "cik"}}, "name": {"text": {"path": "name"}}}},
+                "aliases": {"each": "aliases", "columns": {"cik": {"text": {"path": "cik"}}, "name": {"text": {"path": "name"}},
+                                                       "rank": {"integer": {"path": "rank"}}}}}}}
+        contract_bytes = json.dumps(spec).encode()
+        filer_bytes = json.dumps({"companies": [json.loads(line) for line in FILERS.splitlines()], "aliases": []}).encode()
     if trial_mode in ("raw-person", "object-records"):
         spec = files.source("sec.submissions.person")
         spec["execution"]["max_artifacts"] = 2
@@ -451,10 +467,15 @@ read:
     if trial_mode in ("raw-person", "object-records"):
         second = store.put_bytes((tmp_path / "person2.json").as_uri(), json.dumps(raw_persons[1]).encode())
         read_manifest["artifacts"] = [filers, second]
+    if combined_trial:
+        aliases = [{"cik": "320193", "name": "Apple alt 2", "rank": 2}, {"cik": "320193", "name": "Apple alt 1", "rank": 1},
+                   {"cik": "320193", "name": "Apple alt 1", "rank": 3}, {"cik": "789019", "name": "Microsoft alt", "rank": 1}]
+        auxiliary = store.put_bytes((tmp_path / "aliases.json").as_uri(), json.dumps({"companies": [], "aliases": aliases}).encode())
+        read_manifest["artifacts"] = [filers, auxiliary]
     read_input = store.put(tmp_path.as_uri(), read_manifest)
     out = tmp_path / "out"
     keys = {"batch_id": "filers", "consumer": "fixture/filers"}
-    units = store.put(tmp_path.as_uri(), {"version": 2, "steps": {
+    unit_body = {"version": 2, "steps": {
         "read": [{"keys": keys, "input": read_input, "output": (out / "reading.json").as_uri(), "cursor": {}}],
         "prepare": [{"keys": {**keys, "table": "submissions" if trial_mode in ("raw-person", "object-records") else "filers",
                               "dataset": "sec.submissions.person.v1" if trial_mode in ("raw-person", "object-records") else "fixture.filers",
@@ -463,7 +484,16 @@ read:
                      "input": {"from": {"step": "read", "key": "filers"}},
                      "output": (out / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
         "merge": [{"keys": keys, "input": {"from": {"step": "prepare", "key": "filers"}},
-                   "output": (out / "merged.json").as_uri(), "cursor": {}}]}})
+                   "output": (out / "merged.json").as_uri(), "cursor": {}}]}}
+    if combined_trial:
+        from tests.engine.test_source_combine import group, join, plan, table
+        combine_contract = store.put(tmp_path.as_uri(), plan({"names": group("input", "aliases", "cik", "name", order_by=("rank", "name"), distinct=True)},
+                                      {"filers": table("input", "filers", {"aliases": join("names")})}))
+        unit_body["steps"]["combine"] = [{"keys": {**keys, "combine_contract_uri": combine_contract["uri"], "combine_contract_sha256": combine_contract["sha256"], "reading_name": "input"},
+                                         "input": {"from": {"step": "read", "key": "filers"}},
+                                         "output": (out / "combined.json").as_uri(), "cursor": {}}]
+        unit_body["steps"]["prepare"][0]["input"] = {"from": {"step": "combine", "key": "filers"}}
+    units = store.put(tmp_path.as_uri(), unit_body)
     databases.rules.prove("pipeline", pipeline_name, "1",
                           {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
     approve(databases.approver, "pipeline", pipeline_name, "1")
@@ -481,9 +511,20 @@ read:
 
     run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
-    for profile in ("source.read", "mdm.prepare", "mdm.merge"):
+    for profile in profiles:
         cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
+    if combined_trial:
+        combined = json.loads((out / "combined.json").read_bytes())
+        rows = combined["artifacts"][0]["tables"]["filers"]
+        assert rows == [{"cik": "320193", "name": "Apple Inc.", "aliases": ["Apple alt 1", "Apple alt 2"]},
+                        {"cik": "789019", "name": "Microsoft Corp", "aliases": ["Microsoft alt"]}]
+        assert len(store.json(combined["readings"]["input"])["artifacts"]) == 2
+        scope = store.json(combined["artifacts"][0]["input"])
+        assert scope["contract"] == combine_contract
+        assert scope["readings"] == combined["readings"]
+        prepared = json.loads((out / "mdm/manifest.json").read_bytes())
+        assert [json.loads(line) for line in (out / "mdm" / prepared["batches"][0]["input"]["path"]).read_text().splitlines()] == rows
     if custom_trial:
         from edgar_warehouse.rules.steps import epoch_microseconds
         reading = json.loads((out / "reading.json").read_bytes())
@@ -530,7 +571,7 @@ read:
         assert len(prepared["batches"]) == 1
         assert prepared["batches"][0]["input"]["record_count"] == 2
     state = json.loads(cli("bookkeeping", "finalize", run_id))
-    assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
+    assert state["counts"] == {"verified": len(profiles)} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:
         names = conn.execute(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_record "
                                   "WHERE object_type='stage_record' OR object_type='entity'")).scalars().all()

@@ -26,6 +26,7 @@ question at a time, with your recommendation.
 | 1 | Onboard a new feed or kind | [data-onboarding](../data-onboarding/SKILL.md) |
 | 1b | Change a live feed's rules | [refining-rules](../refining-rules/SKILL.md) |
 | 2 | Parse: read captured files with the configured engine | this file, then [bookkeeping RUN](../bookkeeping/RUN.md) |
+| 2b | Combine keyed collections and join configured readings | [COMBINING.md](COMBINING.md) |
 | 3 | Master: the parsed records into Clean MDM | this file |
 | 4 | Approve and switch on | [APPROVE](../data-onboarding/APPROVE.md) |
 | 5 | Recover a run | [bookkeeping RECOVERY](../bookkeeping/RECOVERY.md), [change-journal](../change-journal/SKILL.md) |
