@@ -136,7 +136,7 @@ def main():
         'source_read_units': units, 'captured_pages_qualified': True, 'complete_declared_page_forms_match': True,
         'producer_provenance_qualified': False, 'full_company_mastering': False, 'sec_requests': 0,
         'capture_manifest_sha256': hashlib.sha256(raw_manifest).hexdigest(), 'contract_sha256s': {k: digest(v) for k,v in contracts.items()},
-        'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_read.runtime_files(), Path(source_combine.__file__), Path(mdm_prepare.__file__)]},
+        'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_read.runtime_files(), Path(source_combine.__file__), *source_combine.runtime_files(), Path(mdm_prepare.__file__)]},
         'elapsed_seconds': round(time.monotonic()-started,3), 'publications': publications, 'evidence': evidence}
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(summary,indent=2)+'\n')
