@@ -49,3 +49,51 @@ fn invalid_reference_contracts_are_rejected_before_source_reading() {
     let large = CONTRACT.replace("iso: US-DE", &format!("iso: {}", "a".repeat(4097)));
     assert!(Engine::from_yaml(&large, Steps::new()).is_err());
 }
+
+#[test]
+fn nested_lookup_integer_keeps_exact_lexemes_and_overflow_policy() {
+    let contract = r#"
+read:
+  format: json
+  references:
+    keys:
+      '-9223372036854775808': {value: wrong-rounded-match}
+  tables:
+    rows:
+      each: .
+      columns:
+        result:
+          lookup:
+            reference: keys
+            column: value
+            key: {custom: {step: stringify, inputs: {value: {integer: {path: code, on_overflow: null}}}}}
+"#;
+    let mut steps = Steps::new();
+    steps.insert("stringify".into(), Box::new(|value| Ok(match value {
+        Val::Int(n) => Val::Str(n.to_string()), _ => Val::Null,
+    })));
+    let engine = Engine::from_yaml(contract, steps).unwrap();
+    let result = engine.read(br#"{"code":-9223372036854775809}"#, &Lookups::new()).unwrap();
+    assert_eq!(result.tables["rows"][0]["result"], Val::Null);
+    let result = engine.read(br#"{"code":-9223372036854775808}"#, &Lookups::new()).unwrap();
+    assert_eq!(result.tables["rows"][0]["result"], Val::Str("wrong-rounded-match".into()));
+}
+
+#[test]
+fn reference_literals_never_activate_expression_parsing_modes() {
+    let contract = r#"
+read:
+  format: csv
+  references:
+    modes:
+      DE: {coerce: python}
+  tables:
+    rows:
+      each: record
+      columns:
+        literal: {lookup: {reference: modes, column: coerce, key: {text: {path: code}}}}
+"#;
+    let engine = Engine::from_yaml(contract, Steps::new()).unwrap();
+    let result = engine.read(b"code\nDE\n", &Lookups::new()).unwrap();
+    assert_eq!(result.tables["rows"][0]["literal"], Val::Str("python".into()));
+}

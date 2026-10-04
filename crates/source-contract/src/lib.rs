@@ -241,29 +241,31 @@ impl Engine {
     }
 }
 
-/// The precise numeric path is used only by an opted-in integer expression.
-fn uses_integer(read: &Value) -> bool {
-    fn in_expression(expr: &Value) -> bool {
-        if expr.get("integer").is_some() { return true }
-        if expr.get("steps").and_then(Value::as_sequence).is_some_and(|steps| steps.iter().any(in_expression)) { return true }
+/// Inspect expressions, never literal reference rows or const/default values.
+fn uses_feature(read: &Value, predicate: fn(&Value) -> bool) -> bool {
+    fn in_expression(expr: &Value, predicate: fn(&Value) -> bool) -> bool {
+        if predicate(expr) { return true }
+        if expr.get("lookup").and_then(|args| args.get("key")).is_some_and(|key| in_expression(key, predicate)) { return true }
+        if expr.get("steps").and_then(Value::as_sequence).is_some_and(|steps| steps.iter().any(|step| in_expression(step, predicate))) { return true }
         expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping)
-            .is_some_and(|inputs| inputs.values().any(in_expression))
+            .is_some_and(|inputs| inputs.values().any(|input| in_expression(input, predicate)))
     }
     read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|tables| tables.values())
         .filter_map(|table| table.get("columns").and_then(Value::as_mapping))
-        .any(|columns| columns.values().any(in_expression))
+        .any(|columns| columns.values().any(|expr| in_expression(expr, predicate)))
+}
+
+/// The precise numeric path is used only by an opted-in integer expression.
+fn uses_integer(read: &Value) -> bool {
+    uses_feature(read, |expr| expr.get("integer").is_some())
 }
 
 fn setting<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
     value.get(name).and_then(Value::as_str)
 }
 
-fn uses_python_text(value: &Value) -> bool {
-    match value {
-        Value::Mapping(map) => setting(value, "coerce") == Some("python") || map.values().any(uses_python_text),
-        Value::Sequence(items) => items.iter().any(uses_python_text),
-        _ => false,
-    }
+fn uses_python_text(read: &Value) -> bool {
+    uses_feature(read, |expr| ["text", "date"].iter().any(|name| expr.get(*name).is_some_and(|args| setting(args, "coerce") == Some("python"))))
 }
 
 fn validate_coerce(args: &Value) -> Result<(), String> {
