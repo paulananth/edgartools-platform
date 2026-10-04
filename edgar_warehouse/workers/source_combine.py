@@ -21,6 +21,7 @@ TOTAL_BYTES = 64 * 1024**2
 OUTPUT_BYTES = 32 * 1024**2
 MAX_ROWS = 100_000
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
+COLLECTION_MODES = frozenset(("collect", "collect_flat"))
 
 
 def runtime_files() -> list[Path]:
@@ -61,17 +62,20 @@ def _contract(body, inputs):
         raise ValueError("Combination names max_rows 1..100000, groups and tables")
     groups = _mapping(plan["groups"], 32, "Groups")
     for spec in groups.values():
-        if not isinstance(spec, dict) or set(spec) != {"source", "table", "key", "value", "mode", "order_by", "distinct", "skip_null_values", "checks", "where"}:
+        required = {"source", "table", "key", "value", "mode", "order_by", "distinct", "skip_null_values", "checks", "where"}
+        if not isinstance(spec, dict) or not required <= set(spec) or set(spec) - required - {"sort_values"}:
             raise ValueError("Group requires source, table, key, value, mode, order_by, distinct, skip_null_values, checks and where")
         _selection(spec, inputs)
         if not _name(spec["key"]) or not (_name(spec["value"]) or spec["value"] == "."):
             raise ValueError("Group key/value are column names; value may be the whole row (.)")
-        if spec["mode"] not in ("collect", "first", "last"):
-            raise ValueError("Group mode is collect, first or last")
+        if spec["mode"] not in ("collect", "collect_flat", "first", "last"):
+            raise ValueError("Group mode is collect, collect_flat, first or last")
         if not isinstance(spec["order_by"], list) or len(spec["order_by"]) > 8 or not all(_name(k) for k in spec["order_by"]):
             raise ValueError("Group order_by names at most eight columns")
-        if type(spec["distinct"]) is not bool or type(spec["skip_null_values"]) is not bool or (spec["mode"] != "collect" and spec["distinct"]):
-            raise ValueError("Group flags are booleans; distinct requires collect")
+        if type(spec["distinct"]) is not bool or type(spec["skip_null_values"]) is not bool or (spec["mode"] not in COLLECTION_MODES and spec["distinct"]):
+            raise ValueError("Group flags are booleans; distinct requires collect or collect_flat")
+        if 'sort_values' in spec and (type(spec['sort_values']) is not bool or spec['mode'] not in COLLECTION_MODES):
+            raise ValueError('sort_values requires a boolean and a collection mode')
     tables = _mapping(plan["tables"], 16, "Output tables")
     if not tables:
         raise ValueError("Combination requires an output table")
@@ -117,8 +121,9 @@ def _rows(spec, inputs):
                     yield row
 
 
-def _group(spec, inputs):
+def _group(spec, inputs, maximum=MAX_ROWS):
     grouped, kinds = {}, {}
+    flattened = 0
     for row in _rows(spec, inputs):
         key = _key(_column(row, spec["key"]))
         if key is None:
@@ -126,6 +131,12 @@ def _group(spec, inputs):
         value = row if spec["value"] == "." else _column(row, spec["value"])
         if value is None and spec["skip_null_values"]:
             continue
+        if spec["mode"] == "collect_flat" and not isinstance(value, list):
+            raise ValueError("collect_flat requires list values; it flattens exactly one level")
+        if spec["mode"] == "collect_flat":
+            flattened += len(value)
+            if flattened > maximum:
+                raise ValueError("collect_flat exceeds the declared element budget")
         order = []
         for column in spec["order_by"]:
             item = _column(row, column)
@@ -139,13 +150,20 @@ def _group(spec, inputs):
             pairs.sort(key=lambda pair: pair[0])
         values, seen = [], set()
         for _, value in pairs:
-            if spec["distinct"]:
-                token = canonical(value)
-                if token in seen:
-                    continue
-                seen.add(token)
-            values.append(value)
-        result[key] = values if spec["mode"] == "collect" else values[0 if spec["mode"] == "first" else -1]
+            items = value if spec["mode"] == "collect_flat" else [value]
+            for item in items:
+                if spec["distinct"]:
+                    token = canonical(item)
+                    if token in seen:
+                        continue
+                    seen.add(token)
+                values.append(item)
+        if spec.get('sort_values', False):
+            if values and (type(values[0]) not in (str, int, float, bool)
+                           or any(type(item) is not type(values[0]) for item in values)):
+                raise ValueError('sort_values requires one exact scalar type and no nulls')
+            values.sort()
+        result[key] = values if spec["mode"] in COLLECTION_MODES else values[0 if spec["mode"] == "first" else -1]
     return result
 
 
@@ -219,7 +237,7 @@ def _documents(envelope, artifacts):
         if count > plan["max_rows"]:
             raise ValueError("Combination exceeds input row budget")
         inputs[name] = reading
-    groups = {name: _group(spec, inputs) for name, spec in plan["groups"].items()}
+    groups = {name: _group(spec, inputs, plan['max_rows']) for name, spec in plan["groups"].items()}
     tables, count = {}, 0
     for name, spec in plan["tables"].items():
         result = []
@@ -233,7 +251,7 @@ def _documents(envelope, artifacts):
                 if key not in group:
                     if join["on_missing"] == "error":
                         raise ValueError(f"No combination group match for {field}")
-                    output[field] = [] if plan["groups"][join["group"]]["mode"] == "collect" else None
+                    output[field] = [] if plan["groups"][join["group"]]["mode"] in COLLECTION_MODES else None
                 else:
                     output[field] = group[key]
             result.append(output)

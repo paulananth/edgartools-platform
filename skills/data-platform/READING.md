@@ -440,3 +440,20 @@ Join the resulting tables with a declared `source.combine` contract, then use
 still uses retained preparation until census, ticker catalog, pagination,
 classification/provenance and installed full-population replay are qualified.
 The read block alone is neither a source activation nor complete mastering.
+
+For a captured continuation page, use the packaged
+`rules/sources/sec.submissions.company/pagination.yaml` contract. It reads
+column arrays at the raw page root and emits all eighteen filing fields;
+it has no recent-limit context. Bind `cik`, `sync_run_id`, `raw_object_id`
+and `load_mode` to the page receipt. `raw_object_id` retains the caller's
+publication context; the independent `input` receipt identifies the exact
+page bytes. Do not invent a `filings` wrapper before configured reading.
+
+Capture all filenames declared by the pinned main document. Read pages in
+bounded pairs, combine up to seven page readings with the main reading,
+then combine the resulting per-Company form lists with `collect_flat` and
+`sort_values: true`. This preserves complete page scope through immutable
+reading receipts while keeping each work unit bounded. See
+[Combination](COMBINING.md) for list and element-budget semantics.
+Same-date S3 captures plus version/hash evidence prove captured bytes and
+declared page coverage; they do not prove Bookkeeping producer success.

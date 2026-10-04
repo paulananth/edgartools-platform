@@ -70,8 +70,22 @@ frozen units.
   order. `collect` returns a list; `distinct: true` keeps the first occurrence
   of each exact JSON value after sorting. `first`/`last` select a single
   value; they require `distinct: false`.
+- `collect_flat` requires list values and concatenates exactly one level.
+  Nested lists and objects remain typed values. Distinct comparison uses exact
+  canonical JSON, so false, integer zero and floating zero remain distinct.
+  Null whole values obey `skip_null_values`; null items inside lists remain.
+  Before deduplication, the total flattened element count across all selected
+  keys in each group must not exceed `max_rows`. An empty list contributes no
+  elements, while every duplicate still counts against this bound.
+- Optional `sort_values: true` sorts the collected JSON values
+  after flattening/deduplication. It is valid only for `collect` and
+  `collect_flat`, and must be a boolean. Omission preserves existing value
+  order; `order_by` still orders source rows before collection. Values must
+  have one exact scalar type (text, integer, float or boolean), with no nulls;
+  mixed types or structured values refuse. Sorting is natural within that
+  type, so prefix form names sort as `S-8`, then `S-8 POS`.
 - Joins preserve the base row and use the declared base key. `on_missing:
-  empty` produces `[]` for collect or null for first/last; `error` refuses
+  empty` produces `[]` for either collection mode or null for first/last; `error` refuses
   an unmatched key (including null). Existing fields require `replace: true`
   to overwrite; with false, a collision rejects the combination.
 - Bounds: 1–8 named readings, at most 32 groups, 1–16 output tables and

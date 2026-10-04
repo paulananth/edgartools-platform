@@ -12,7 +12,8 @@ import json
 from itertools import product
 from pathlib import Path
 
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_recent_filing_loader
+from edgar_warehouse.loaders.bronze_submission_extractors import stage_recent_filing_loader, stage_pagination_filing_loader
+from edgar_warehouse.control_contract import digest
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
@@ -20,19 +21,20 @@ CONTEXT = {'cik': 320193, 'sync_run_id': 'qualification', 'raw_object_id': 'capt
            'load_mode': 'default', 'recent_limit': None}
 
 
-def compare(engine: SourceEngine, payload: dict, limit: int | None) -> dict:
+def compare(engine: SourceEngine, payload: dict, limit: int | None, mode: str = 'recent') -> dict:
     try:
-        rows = stage_recent_filing_loader(payload, 320193, 'qualification', 'captured', 'default', limit)
+        rows = (stage_pagination_filing_loader({'filings': payload}, 320193, 'qualification', 'captured', 'default')
+                if mode == 'page' else stage_recent_filing_loader(payload, 320193, 'qualification', 'captured', 'default', limit))
         retained = {'rows': [{key: value.isoformat() if hasattr(value, 'isoformat') else value
                               for key, value in row.items()} for row in rows]}
     except (TypeError, KeyError, ValueError) as error:
         retained = {'error': type(error).__name__}
     try:
-        configured = {'rows': engine.read(json.dumps(payload).encode(),
-                         context={**CONTEXT, 'recent_limit': limit}).tables['filings']}
+        context = {k: v for k, v in CONTEXT.items() if k != 'recent_limit'} if mode == 'page' else {**CONTEXT, 'recent_limit': limit}
+        configured = {'rows': engine.read(json.dumps(payload).encode(), context=context).tables['filings']}
     except SourceRejected as error:
         configured = {'error': error.code}
-    same = retained == configured or ('error' in retained and 'error' in configured)
+    same = digest(retained) == digest(configured) or ('error' in retained and 'error' in configured)
     return {'payload': payload, 'recent_limit': limit, 'retained': retained,
             'configured': configured, 'same_acceptance_and_rows': same}
 
@@ -41,16 +43,24 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--contract', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--mode', choices=('recent', 'page'), default='recent')
     args = parser.parse_args()
     engine = SourceEngine(files.load(args.contract))
     anchors = [[], ['a'], ['a', 'b'], 'ab', {}, {'x': 'a'}, None, True, 1]
     fields = [[], ['4'], [True], [{'x': 1}], None, True, 1, {}, {'x': 1}, 'é🦀']
-    results = [compare(engine, {'filings': {'recent': {'accessionNumber': anchor, 'form': field}}}, limit)
-               for anchor, field, limit in product(anchors, fields, [None, -1, 0, 1, 2])]
+    if args.mode == 'page':
+        columns = ['form', 'filingDate', 'reportDate', 'acceptanceDateTime', 'act', 'fileNumber',
+                   'filmNumber', 'items', 'size', 'isXBRL', 'isInlineXBRL', 'primaryDocument', 'primaryDocDescription']
+        results = [compare(engine, {'accessionNumber': anchor, column: field}, None, 'page')
+                   for anchor, field, column in product(anchors, fields, columns)]
+    else:
+        results = [compare(engine, {'filings': {'recent': {'accessionNumber': anchor, 'form': field}}}, limit)
+                   for anchor, field, limit in product(anchors, fields, [None, -1, 0, 1, 2])]
     differences = [case for case in results if not case['same_acceptance_and_rows']]
     summary = {
         'scope': 'Finite JSON anchor/field/first-N acceptance matrix; both refusals are counted separately from exact exception identity. Not complete source equivalence.',
         'cases': len(results), 'matched': len(results) - len(differences), 'differences': differences,
+        'mode': args.mode, 'captured_pages_qualified': False,
         'contract_sha256': hashlib.sha256(args.contract.read_bytes()).hexdigest(),
         'matrix_sha256': hashlib.sha256(json.dumps(results, sort_keys=True, ensure_ascii=False).encode()).hexdigest(),
     }
