@@ -10,6 +10,7 @@ from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_address import retained as retained_address
 from tests.engine.test_source_combine import envelope, group, join, plan, table
+from scripts.qualification.qualify_company_main import require_tables
 
 
 CONTRACT = files.source('sec.submissions.company')
@@ -35,11 +36,20 @@ def expected(payload, context):
 def test_main_reading_preserves_company_filings_and_address(payload):
     result = SourceEngine(CONTRACT).read(json.dumps(payload).encode(), context=CONTEXT)
     company, filings = expected(payload, CONTEXT)
-    assert result.tables['company'] == [company]
-    assert result.tables['filings'] == filings
+    require_tables(result.tables['company'], [company])
+    require_tables(result.tables['filings'], filings)
     actual = result.tables['addresses']
     assert (actual[-1]['business_address'] if actual else None) == retained_address(payload)
     assert not result.deferred
+
+
+@pytest.mark.parametrize('original,changed', [(False, 0), (0, 0.0), (True, 1)])
+def test_qualification_detects_deliberate_json_type_substitutions(original, changed):
+    expected = {'company': [{'nested': {'value': original}}]}
+    substituted = {'company': [{'nested': {'value': changed}}]}
+    assert expected == substituted  # Deliberate fault defeats structural equality.
+    with pytest.raises(ValueError, match='JSON scalar types'):
+        require_tables(substituted, expected)
 
 
 def test_receipt_bound_main_read_combine_prepare_and_repeat(tmp_path):

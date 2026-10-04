@@ -22,6 +22,12 @@ def _scalar(value):
     raise TypeError(f'Unexpected retained scalar: {type(value).__name__}')
 
 
+def require_tables(actual, expected):
+    """Exact JSON values: Python equality conflates booleans and numbers."""
+    if digest(actual) != digest(expected):
+        raise ValueError('Company main tables differ in values or JSON scalar types')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--capture', type=Path, required=True)
@@ -74,8 +80,9 @@ def main():
             if len(read['artifacts']) != len(entries):
                 raise ValueError('Reading artifact count differs from frozen scope')
             for artifact, entry, (ref, tables) in zip(read['artifacts'], entries, expected_rows):
-                if artifact['input'] != entry['input'] or artifact.get('context') != entry['context'] or artifact['tables'] != tables or artifact['deferred']:
+                if artifact['input'] != entry['input'] or artifact.get('context') != entry['context'] or artifact['deferred']:
                     raise ValueError(f"Company main reading differs: {ref['key']}")
+                require_tables(artifact['tables'], tables)
                 evidence.append({'key': ref['key'], 'input_sha256': ref['sha256'], 'context_sha256': entry['context']['sha256'], 'tables_sha256': digest(tables)})
     result = {'captures': len(selected), 'company_rows': len(selected), 'filing_rows': filing_count, 'source_read_units': (len(selected) + 1) // 2,
               'all_main_tables_match': True, 'full_company_mastering': False, 'census_provenance_qualified': False, 'pagination_qualified': False,
