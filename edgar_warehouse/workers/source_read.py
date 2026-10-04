@@ -9,13 +9,13 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from edgar_warehouse.bookkeeping.clean.artifacts import json_value
+from edgar_warehouse.bookkeeping.clean import artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
 
 
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
-    return [*source_engine.runtime_files(), Path(files.__file__)]
+    return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__)]
 
 
 def _output(envelope: dict, artifacts) -> bytes:
@@ -49,7 +49,7 @@ def _output(envelope: dict, artifacts) -> bytes:
             if not isinstance(entry, dict) or set(entry) != {"input", "context"}:
                 raise ValueError("Version-2 artifact names input and context receipts")
             ref = entry["input"]
-            bound = json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
+            bound = artifact_store.json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
             if (not isinstance(bound, dict) or set(bound) != {"version", "input", "values"}
                     or type(bound["version"]) is not int or bound["version"] != 1
                     or bound["input"] != ref or not isinstance(bound["values"], dict)):

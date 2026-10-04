@@ -130,3 +130,13 @@ def test_context_identity_survives_prepare_and_verification(tmp_path):
     assert len({batch['input']['path'] for batch in batches}) == 2
     assert len({batch['batch_id'] for batch in batches}) == 2
     assert len({batch['input']['publication']['publication_key'] for batch in batches}) == 2
+
+
+def test_context_decoder_is_part_of_the_pinned_worker_runtime(tmp_path, monkeypatch):
+    from edgar_warehouse.workers.__main__ import runtime
+    decoder = tmp_path / 'decoder.py'
+    decoder.write_bytes(Path(source_read.artifact_store.__file__).read_bytes())
+    monkeypatch.setattr(source_read.artifact_store, '__file__', str(decoder))
+    before = runtime(source_read)
+    decoder.write_bytes(decoder.read_bytes().replace(b'raise ValueError("duplicate JSON key")', b'pass'))
+    assert runtime(source_read) != before
