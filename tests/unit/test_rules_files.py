@@ -65,3 +65,21 @@ def test_plain_json_literals_are_typed():
     assert loads("a: null\nb: true\nc: 600\nd: 0.95\ne: 1e-5") == {
         "a": None, "b": True, "c": 600, "d": 0.95, "e": 1e-05,
     }
+
+
+def test_python_backend_fallback_preserves_rules_round_trips(monkeypatch):
+    import yaml
+    from edgar_warehouse.rules import files
+    monkeypatch.setattr(files, "_RULES_LOADER", yaml.SafeLoader)
+    for value in TRICKY_TEXT + VALUES:
+        back = files.loads(files.dumps({"k": value}))["k"]
+        assert type(back) is type(value)
+        assert canonical(back) == canonical(value)
+    for text in ("a: &x 1\nb: *x", "k: !!str 1", "a: 1\na: 2", "k: yes", "a: 1\n---\nb: 2"):
+        with pytest.raises(RulesFileError):
+            files.loads(text)
+
+
+@pytest.mark.parametrize("escaped,expected", [("\\ud800", "\ud800"), ("\\ud83d\\ude00", "\ud83d\ude00")])
+def test_compiled_parser_refusal_preserves_existing_surrogate_reader_values(escaped, expected):
+    assert loads(f'k: "{escaped}"') == {"k": expected}

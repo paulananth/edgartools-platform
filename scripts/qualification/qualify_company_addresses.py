@@ -11,7 +11,7 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.loaders.bronze_submission_extractors import stage_address_loader
 from edgar_warehouse.mdm.clean.company_source import business_address
-from edgar_warehouse.rules import files, source_engine
+from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read
 
 
@@ -69,7 +69,7 @@ def main():
     result = {'captures': len(selected), 'business_addresses': present, 'source_read_units': (len(selected) + 1) // 2, 'raw_address_derivation_matches': True,
               'full_company_mastering': False, 'census_provenance_qualified': False,
               'receipts_sha256': hashlib.sha256(receipts).hexdigest(), 'contract_sha256': digest(contract_body),
-              'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_engine.runtime_files()]},
+              'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_read.runtime_files()]},
               'elapsed_seconds': round(time.monotonic() - started, 3), 'evidence': evidence}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')

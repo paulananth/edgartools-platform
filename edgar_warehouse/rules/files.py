@@ -44,6 +44,8 @@ _JSON_FLOAT = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?"
 _LITERALS = {"null": None, "true": True, "false": False}
 _STR = "tag:yaml.org,2002:str"
 _RESOLVER = yaml.resolver.Resolver()
+# Keep the same node/event validation with the compiled parser when available.
+_RULES_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
 class RulesFileError(ValueError):
@@ -96,15 +98,27 @@ def _value(node, name: str) -> Any:
     return result
 
 
+def _rules_node(text: str, name: str, loader):
+    for event in yaml.parse(text, Loader=loader):
+        if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
+            raise RulesFileError(f"{_where(name, event)}: anchors and aliases are not allowed")
+        if getattr(event, "tag", None) is not None:
+            raise RulesFileError(f"{_where(name, event)}: tags are not allowed")
+    return yaml.compose(text, Loader=loader)
+
+
 def loads(text: str, name: str = "<rules>") -> Any:
     """The JSON value one rules document holds."""
     try:
-        for event in yaml.parse(text, Loader=yaml.SafeLoader):
-            if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
-                raise RulesFileError(f"{_where(name, event)}: anchors and aliases are not allowed")
-            if getattr(event, "tag", None) is not None:
-                raise RulesFileError(f"{_where(name, event)}: tags are not allowed")
-        node = yaml.compose(text, Loader=yaml.SafeLoader)
+        try:
+            node = _rules_node(text, name, _RULES_LOADER)
+        except yaml.YAMLError:
+            if _RULES_LOADER is yaml.SafeLoader:
+                raise
+            # libyaml is stricter about escaped surrogate code points. Preserve
+            # the existing reader's acceptance; downstream UTF-8/digest checks
+            # remain authoritative. Both paths apply the same event/node rules.
+            node = _rules_node(text, name, yaml.SafeLoader)
     except yaml.YAMLError as error:
         raise RulesFileError(f"{name}: {error}") from error
     if node is None:
