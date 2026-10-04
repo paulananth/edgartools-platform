@@ -5,8 +5,8 @@ Continue the full self-sustaining skill goal from merged #811/#812. Preserve ret
 - [x] Inspect retained reader failures, native parsing and history; GoF review. Verified current code/history; retain functions and enums, add one focused coercion module rather than a hierarchy; 2026-10-04 07:55 ET.
 - [x] Add explicit configured text coercion and parallel shape policies with strict defaults preserved. Verified native acceptance and 61 focused Python tests; 2026-10-04 07:55 ET.
 - [x] Reproduce and resolve all six previously recorded filing coercion/shape differences; extend failure and numeric/string oracle coverage. Verified all seven original cases match, 10,000 generated float bit patterns plus 1,000 nested Unicode samples; halfway rounding fault fixed; 2026-10-04 07:55 ET.
-- [ ] Compare 18 columns on 1,000 receipt-pinned captures and exercise worker/verifier paths.
-- [ ] Document implemented grammar in the bundled skill; independent review and full CI; create PR.
+- [x] Compare 18 columns on 1,000 receipt-pinned captures and exercise worker/verifier paths. Verified 107,197 matching rows, immutable worker/verifier tests and all six installed PostgreSQL 16 trial modes; 2026-10-04 08:13 ET.
+- [x] Document implemented grammar in the bundled skill; independent review and full CI; create PR. Verified bundled doctor, Standards/Spec/GoF reviews, PR #813 and successful five-suite CI run 37201044075 on abe39a18; 2026-10-04 08:13 ET.
 - [ ] Complete configured Company and Person source blocks, reference joins and classification.
 - [ ] Complete GLEIF bounded native archive reading, source checks and equivalence.
 - [ ] Replace active callers and decommission all retained source parsers after full equivalence.
@@ -28,6 +28,8 @@ Spec: no scoped implementation findings. Standards/GoF: no documented violations
 
 `complete-qualification.json` compares all 18 columns on 1,000 distinct receipt-pinned captures / 107,197 rows with the corrected contract. `source-shape-audit.json` resolves the original seven cases. `remaining-failure-audit.json` expands the finite JSON anchor/field/first-N matrix to 450 cases: 341 match acceptance and rows, 109 differ. Both rejected inputs count as the same refusal decision, not identical exception classes. The retained reader permits empty object sequences and skips invalid fields when no rows are selected; the configured reader is still stricter. These differences are not source completion. Next work must explicitly support those semantics or obtain a reviewed source-contract change before retirement.
 
-Corrected Standards follow-up: no remaining scoped blocker. Spec review: zero scoped findings. Rust gate: 54 tests passed. Full local five-suite run and installed sixth trial remain pending.
+Corrected Standards follow-up: no remaining scoped blocker. Spec review: zero scoped findings. Rust gate: 54 tests passed. Full local five-suite run passed: 1,587 passed, one existing xfailed, no skipped prerequisites, in 836.22 seconds (13m56s). All six installed trial modes passed, including the new coercion mode on restricted PostgreSQL 16 roles. GitHub CI run 37201044075 passed every job and the aggregate gate on abe39a18.
 
 Reproduce the remaining matrix with `uv run python scripts/qualification/audit_filing_semantics.py --contract tests/engine/fixtures/filing-complete.yaml --output <report.json>`. The helper reproduced the committed artifact byte-for-byte; independent Standards and Spec follow-ups found no scoped blocker.
+
+This final checklist-only commit requires its own final-head CI before marking PR #813 ready. The unchecked Company/Person/GLEIF, refusal-equivalence, retirement and installed full-population replay parts remain incomplete.
