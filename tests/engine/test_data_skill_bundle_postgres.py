@@ -235,7 +235,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
         probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.submissions.company/pagination.yaml")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
-        raw = store.put_bytes((tmp_path / 'page.json').as_uri(), b'{"accessionNumber":["old"],"form":["20-F"],"size":["1,234"]}')
+        raw = store.put_bytes((tmp_path / 'page.json').as_uri(), b'{"accessionNumber":["old","older"],"form":["20-F","10-K"],"size":["1234","1,234"]}')
         context = store.put(tmp_path.as_uri(), {'version': 1, 'input': raw, 'values': {
             'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
@@ -276,6 +276,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     else:
         assert tables['filings'][0]['form'] == '20-F'
         assert tables['filings'][0]['size'] == 1234
+        assert tables['filings'][1]['size'] is None
         assert tables['filings'][0]['raw_object_id'] == '0' * 64
 
 
