@@ -418,3 +418,25 @@ contract. It preserves raw street/region text, derives country from the
 approved ISO reference, and keeps region only for subdivisions. This proves
 raw address derivation separately from census, complete provenance, pagination
 and full Company mastering; those remain required before parser retirement.
+
+### Company main-document reading
+
+`rules/sources/sec.submissions.company/source.yaml` now declares a generic
+`source.read` block for its main submissions document. It emits `company`,
+`filings` and `addresses` tables. Company fields retain their captured types;
+filings use the qualified parallel-array, date, numeric and first-N rules;
+business addresses use the frozen SEC place reference rows.
+
+Use a version-2 source input manifest. Each artifact has `input` and `context`
+receipts. The context document binds its values to that exact input receipt:
+`cik` (integer), `sync_run_id`, `raw_object_id`, `load_mode`, `last_synced_at`
+(text), and `recent_limit` (integer or null). These are explicit caller facts;
+the worker verifies their binding and the native engine verifies their types.
+An input hash does not independently prove a supplied capture identifier or
+observation time: the acquisition/census provenance gates must prove those.
+
+Join the resulting tables with a declared `source.combine` contract, then use
+`mdm.prepare` to write immutable input batches. The current Company target
+still uses retained preparation until census, ticker catalog, pagination,
+classification/provenance and installed full-population replay are qualified.
+The read block alone is neither a source activation nor complete mastering.
