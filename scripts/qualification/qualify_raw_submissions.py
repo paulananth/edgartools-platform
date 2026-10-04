@@ -25,9 +25,12 @@ def main():
     parser.add_argument('--limit', type=int, default=100)
     parser.add_argument('--company-contract', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--company-record-column', help='Select constructed objects instead of whole table rows')
     args = parser.parse_args()
     if not 1 <= args.limit <= 1000:
         parser.error('--limit must be 1..1000')
+    if args.company_record_column == '':
+        parser.error('--company-record-column must be nonempty')
     root = args.capture.resolve()
     receipt_bytes = (root / 'receipts.jsonl').read_bytes()
     receipts = [json.loads(line) for line in receipt_bytes.splitlines() if line.strip()]
@@ -73,12 +76,18 @@ def main():
         context = {'cik': int(payload['cik']), 'sync_run_id': 'qualification', 'raw_object_id': ref['sha256'], 'load_mode': 'default'}
         old = stage_company_loader(payload, **context)
         new = company.read(raw, context=context)
-        if new.deferred or canonical(new.tables['company']) != canonical(old):
+        rows = new.tables['company']
+        if args.company_record_column:
+            rows = [row[args.company_record_column] for row in rows]
+            if not all(isinstance(row, dict) for row in rows):
+                raise ValueError('Selected Company record column must hold objects')
+        if new.deferred or canonical(rows) != canonical(old):
             raise ValueError(f"Raw Company extraction differs: {ref['key']}")
         evidence.append({'key': ref['key'], 'input_sha256': ref['sha256'], 'raw_record_sha256': digest(actual),
                          'company_rows_sha256': digest(old), 'person_outcome': label, 'person_outcome_sha256': digest(actual_outcome)})
     result = {'captures': len(selected), 'complete_person_records': True, 'person_assertions_ids_deferrals': True,
-              'company_columns': list(company_contract['read']['tables']['company']['columns']),
+              'company_columns': list(rows[0]),
+              'company_record_column': args.company_record_column,
               'full_company_mastering': False, 'person_outcomes': dict(outcomes),
               'receipts_sha256': hashlib.sha256(receipt_bytes).hexdigest(),
               'person_read_sha256': digest(person_contract['read']), 'person_dataset_sha256': digest(dataset),
