@@ -47,6 +47,42 @@ including unknown fields, structural evidence and nested filing history.
 It does not activate a Rules version. Company raw-column qualification does
 not yet replace its catalog/census joins, address derivation or full mastering.
 
+## Constructed records
+
+`object` assembles a nested record from explicit field expressions:
+
+```yaml
+record:
+  object:
+    fields:
+      cik: {integer: {path: cik}}
+      evidence: {value: {path: evidence}}
+      origin:
+        object:
+          fields:
+            run: {context: {name: run}}
+            row: {ordinal: {}}
+```
+
+Put this expression under a table's `columns`. `object` names `fields` only;
+fields is a mapping of at most 128 entries with nonempty text names of at
+most 128 UTF-8 bytes. An empty mapping produces an empty object. Each field
+is one supported expression; it evaluates in the same document, item,
+context and ordinal as the containing column. Null remains an explicit
+field value. Child refusals propagate to the existing artifact/record
+handling; there is no partial constructed record or implicit fallback.
+Nested context and reference calls are validated before reading; nested
+integer, value and Python text policies enable the same exact numeric and
+format handling as top-level calls. Literal const/default/reference data
+never enables a feature. Existing scalar `const` behavior is unchanged.
+
+Use `record_column: record` in `mdm.prepare` to send the constructed object
+unchanged. This does not supply Company catalog/census joins or qualify its
+full preparation; compare those operations and assertion identities before
+retiring the retained reader. The installed object-records trial assembles
+the two raw Person fixture records from explicit fields and verifies them
+through preparation and the actual Person MDM contract.
+
 ## Parallel arrays
 
 A JSON document may hold columns as arrays, rather than a list of objects.

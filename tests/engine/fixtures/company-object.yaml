@@ -1,0 +1,68 @@
+source: qualification.sec.company.raw
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 1
+  context:
+    cik:
+      type: integer
+    sync_run_id:
+      type: text
+    raw_object_id:
+      type: text
+    load_mode:
+      type: text
+  tables:
+    company:
+      each: .
+      columns:
+        record:
+          object:
+            fields:
+              entity_name:
+                value:
+                  path: name
+              entity_type:
+                value:
+                  path: entityType
+              sic:
+                value:
+                  path: sic
+              sic_description:
+                value:
+                  path: sicDescription
+              state_of_incorporation:
+                value:
+                  path: stateOfIncorporation
+              state_of_incorporation_desc:
+                value:
+                  path: stateOfIncorporationDescription
+              fiscal_year_end:
+                value:
+                  path: fiscalYearEnd
+              ein:
+                value:
+                  path: ein
+              description:
+                value:
+                  path: description
+              category:
+                value:
+                  path: category
+              cik:
+                context:
+                  name: cik
+              sync_run_id:
+                context:
+                  name: sync_run_id
+              raw_object_id:
+                context:
+                  name: raw_object_id
+              load_mode:
+                context:
+                  name: load_mode

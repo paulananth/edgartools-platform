@@ -95,7 +95,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 11] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value"];
+const PRIMITIVES: [&str; 12] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -245,14 +245,24 @@ impl Engine {
     }
 }
 
+/// Child calls only: literal const/default/reference data is never executable.
+pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
+    let mut children = Vec::new();
+    if let Some(key) = expr.get("lookup").and_then(|args| args.get("key")) { children.push(key); }
+    if let Some(steps) = expr.get("steps").and_then(Value::as_sequence) { children.extend(steps); }
+    if let Some(inputs) = expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping) {
+        children.extend(inputs.values());
+    }
+    if let Some(fields) = expr.get("object").and_then(|args| args.get("fields")).and_then(Value::as_mapping) {
+        children.extend(fields.values());
+    }
+    children
+}
+
 /// Inspect expressions, never literal reference rows or const/default values.
 fn uses_feature(read: &Value, predicate: fn(&Value) -> bool) -> bool {
     fn in_expression(expr: &Value, predicate: fn(&Value) -> bool) -> bool {
-        if predicate(expr) { return true }
-        if expr.get("lookup").and_then(|args| args.get("key")).is_some_and(|key| in_expression(key, predicate)) { return true }
-        if expr.get("steps").and_then(Value::as_sequence).is_some_and(|steps| steps.iter().any(|step| in_expression(step, predicate))) { return true }
-        expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping)
-            .is_some_and(|inputs| inputs.values().any(|input| in_expression(input, predicate)))
+        predicate(expr) || expression_children(expr).into_iter().any(|child| in_expression(child, predicate))
     }
     read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|tables| tables.values())
         .filter_map(|table| table.get("columns").and_then(Value::as_mapping))
@@ -442,6 +452,17 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
             if args.get("ignore_case").is_some() && args.get("null_if").is_none() {
                 return Err("text ignore_case requires null_if".into());
+            }
+        }
+        "object" => {
+            let args = args.as_mapping().filter(|m| m.len() == 1).ok_or("object names fields only")?;
+            let fields = args.get(Value::String("fields".into())).and_then(Value::as_mapping)
+                .filter(|m| m.len() <= 128).ok_or("object fields is a mapping of at most 128 entries")?;
+            for (name, expr) in fields {
+                if !name.as_str().is_some_and(|name| !name.is_empty() && name.len() <= 128) {
+                    return Err("object field names are nonempty text of at most 128 bytes".into());
+                }
+                validate_expr(expr, steps)?;
             }
         }
         "value" => value::validate(args)?,
@@ -823,6 +844,13 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
                 if ignore_case { text.eq_ignore_ascii_case(token) } else { text == token }
             });
             Ok(if matches { Val::Null } else { Val::Str(text.to_string()) })
+        }
+        "object" => {
+            let mut fields = BTreeMap::new();
+            for (name, expr) in args["fields"].as_mapping().unwrap() {
+                fields.insert(name.as_str().unwrap().to_string(), eval(engine, context, document, item, ordinal, expr)?);
+            }
+            Ok(Val::Map(fields))
         }
         "value" => value::read(scope(document, item, args), args),
         "lookup" => {

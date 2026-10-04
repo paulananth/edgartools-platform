@@ -1,0 +1,28 @@
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 1}
+  context:
+    run: {type: text}
+  references:
+    places:
+      DE: {country: US}
+  tables:
+    rows:
+      each: .
+      columns:
+        record:
+          object:
+            fields:
+              cik: {integer: {path: cik}}
+              evidence: {value: {path: evidence}}
+              business_address:
+                object:
+                  fields:
+                    street: {text: {path: street, trim: false, null_if: [""]}}
+                    country: {lookup: {reference: places, column: country, key: {text: {path: code}}}}
+              origin:
+                object:
+                  fields:
+                    run: {context: {name: run}}
+                    row: {ordinal: {}}
