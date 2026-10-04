@@ -1,6 +1,6 @@
 ---
 name: refining-rules
-description: Improve a feed or domain that is ALREADY LIVE in Clean MDM and silver. Apply a steward's change to a Mapping Document, add or change a data quality check or fix, or add or tune a matching rule (e.g. the cascade passes, or records waiting for review). Then re-test, get the operator's (or steward's) approval and switch the change on. Use when the feed already has rules/sources/<source>/source.yaml, or the user says "mapping document", "data quality", "matching rule" or "merge rules" about something that exists. To bring in a new feed or domain, use data-onboarding.
+description: Improve an existing feed or domain's mapping, data quality or matching rules in Clean MDM. Measure changes on pinned captures, regenerate Mapping Documents, test and obtain operator approval of the exact version. Use data-onboarding for a new feed or domain.
 ---
 
 # Refining Rules
