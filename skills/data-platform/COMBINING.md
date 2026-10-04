@@ -130,3 +130,9 @@ address values are explicit fixture inputs: **raw address derivation, census
 joins, complete provenance and full Company mastering remain unqualified**.
 This profile does not authorize deletion of retained Company/GLEIF readers or
 activation of a source Rules version.
+
+Offline evidence in [PR #819](https://github.com/paulananth/edgartools-platform/pull/819)
+records exact recent-form comparisons on 1,000 distinct receipt-pinned main
+captures (107,197 filing rows). This exercised source.read and source.combine
+workers/verifiers directly, not the installed full Company pipeline. Its
+`pagination_qualified` and `full_company_mastering` flags remain false.
