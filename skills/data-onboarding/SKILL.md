@@ -46,9 +46,10 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | `rules/sources/<source>/MAPPING.xlsx`, `rules/merge/kinds/<kind>.xlsx` | The Mapping Documents, generated for stewards (**metadata**) |
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
 
-The worked examples are the files already in `rules/sources/`: `gleif`
-(three files, native publications) and `sec.submissions.company` (one
-reader, a silver target and an MDM target).
+The files in `rules/sources/` show Dataset Contracts and publication rules.
+For configured complete JSON reading, use `sec.submissions.person` and
+[data-platform READING](../data-platform/READING.md). A declared target is
+not evidence that its workers exist; check every profile before submitting.
 
 ## Two targets: MDM and silver
 
@@ -57,14 +58,12 @@ Every step says what differs for each target.
 - **MDM target.** The feed's records become MDM records through its
   Dataset Contract (`mdm` section) and its kind's merge rules. Everything in
   this skill builds it.
-- **Silver target.** The feed's records land as typed rows. For a feed with
-  a reader (SEC submissions), the silver step is a step of its
-  `bookkeeping.targets` pipeline (`company.silver`). The Bookkeeping skill
-  writes and runs that section.
-
-  A general silver writer (Delta or Lakebase tables, configured in a
-  `rules/outputs.yaml` that does not exist yet) is **not built** (rules-skill ticket 05). For a new feed with no reader,
-  say so, log it, and onboard the MDM target only.
+- **Silver target.** Typed landing needs an implemented, verified output
+  worker in the declared pipeline. Check every profile with
+  `edgar-warehouse workers describe <profile>`. Bookkeeping owns orchestration;
+  workers own reading and destination writes. A missing profile is unfinished
+  implementation: record the gap and qualify the supported MDM path. The
+  installed bundle currently has no general silver writer.
 
 ## How to run commands
 
@@ -241,14 +240,15 @@ for a reader ticket.
   (`defaults.sources`: the first one listed wins each field), and its
   comments record which value fills a shared field. Read them before you
   ask about a shared field.
-- **The reader.** Search for code that loads this source's rules file
-  (`rules_files.source("<name>")`, `mdm_contract(`) or names its source
-  code. If a reader exists:
-  - map from *its* records, not the raw files;
-  - do not write a second parser;
-  - its names are fixed;
-  - read its validation code, which may require exact values or refuse
-    keys.
+- **Configured reading.** Inspect the source's `read:` block and
+  [READING.md](../data-platform/READING.md). Define the records passed to its
+  Dataset Contract explicitly. For complete JSON evidence, `value: {path: .}`
+  preserves the object in a named column; `mdm.prepare` selects that column
+  with `record_column`. For projected rows, map from the configured columns.
+  Retained source readers are comparison oracles during retirement: compare
+  types, rows, refusals, assertion identities and provenance against them.
+  Company catalog/census joins and GLEIF streaming remain unfinished; a raw
+  projection does not qualify those full pipelines.
 - The source's public documentation on the web, never `sec.gov`: field
   definitions, identifiers, how often it publishes, full files or changes
   only. Third-party pages are hints, not authority.
@@ -281,8 +281,10 @@ for a reader ticket.
 - **Provenance:** trace stays beside the record (operator, 2026-09-27).
   Capture hashes, run ids and sync times never go into `provenance`. Only
   the source's own record may, when the reader keeps it (`native_record`).
-- **A value the reader drops:** write a comment where it would go, and log a
-  reader ticket. Never map a path the reader lacks.
+- **An unmapped source value:** first test whether configured `value`, paths,
+  iteration or frozen references can preserve it. Map only evidence the
+  tested reading emits. If the grammar cannot express it, record a minimal
+  failing example and follow data-platform Mode 6 for a reviewed custom step.
 - **The publication:** `semantics` (full file or changes only),
   `completeness` and `effective_time`.
 
@@ -309,7 +311,8 @@ starting from its "Defaults".
   field left out, a surprising path.
 - Check it: `files.source('<source>')` must equal what you passed to
   `files.dumps`.
-- Write only `source`, `bronze` and `mdm`. The `acquisition` section (how
+- Write `source`, `bronze`, `read` and `mdm` for a configured captured-file
+  path. The `acquisition` section (how
   the platform captures the files) and the `bookkeeping` section (how it
   runs them) belong to the Bookkeeping skill. Leave them out for a feed
   onboarded from files already captured, and keep them as they are in an
@@ -339,8 +342,9 @@ Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written
 here: it needs a measured proof, which is **refining-rules** work.
 
-**Silver target:** for a feed with a reader, the Bookkeeping skill writes
-the `bookkeeping` section's steps. Hand it the feed's name and the target.
+**Execution target:** use the data-platform Parse and Master flow to declare
+`source.read` → `mdm.prepare` → `mdm.merge` and any required publication
+steps. Hand Bookkeeping the feed, target and verified worker profiles.
 
 **Output:** `source.yaml` (and a new kind file, for a new domain) that loads
 cleanly.
@@ -394,20 +398,21 @@ fix for each from REFERENCE.md, "Data quality":
 
 ### test: run it on real captured files and record the result
 
-1. **Dry run.** `rules check` and Preview are **not built yet**. Do this by
-   hand and log it:
-   - **Feed with a reader:** run the reader on 5–10 sample records in the
-     source's own format. A reader of numbered releases (GLEIF) also needs
-     publication details and an approved list of identifiers. Call its
-     per-record function (`gleif_source.record_evidence`) with details taken
-     from the file names, and label them as test inputs in the log.
-   - **Feed with no reader:** pass records through
-     `edgar_warehouse.mdm.clean.adapters.normalize`:
-     - `contract=` your contract, `source_code=` your code,
-       `policy=files.policy()`. For a new kind whose file is only in your
-       draft folder, use `files.policy(root=<folder>)`;
-     - `publication={"artifact_sha256": <sha256 of the sample file>,
-       "member": <file name>, "publication_key": "dry-run", "revision": 0}`.
+1. **Captured-file qualification.** Use 5–10 receipt-verified records first,
+   with source hashes and publication facts taken from the capture. Execute
+   the candidate `read:` contract with the configured engine and select
+   precisely the records that `mdm.prepare` will send (whole rows, or its
+   explicit `record_column`). Follow data-platform Parse and Master for the
+   worker flow. Local tests may use a disposable candidate pipeline and
+   approval fixture; label these as test-only, not an active Rules version.
+   - Compare reading against retained readers when replacing them: values,
+     types, order, refusals, counts and complete evidence. Preserve full
+     publication checks and bounded streaming for numbered archive releases.
+   - For a diagnostic normalization pass, use
+     `edgar_warehouse.mdm.clean.adapters.normalize` with `contract=`,
+     `source_code=`, `policy=files.policy(root=<draft folder>)` and captured
+     publication facts. This tests mapping and quality only; it does not
+     prove installed parsing, leases, receipts or MDM commits.
    - Check the kind's merge rules accept the source. A source missing from
      `defaults.sources` fails its whole batch. For Company, run
      `merge.check_company_sources(files.policy(), assertions)`; for any
@@ -418,8 +423,11 @@ fix for each from REFERENCE.md, "Data quality":
      order below switches it on first. To see what it would do, add the
      verdict to a copy of the policy in memory only, and label that pass as
      a test input.
-   - Run the reader's tests, if any:
-     `uv run --no-sync pytest -q <those files>`.
+   - Run affected configured-engine and retained equivalence tests:
+     `uv run --no-sync pytest -q <those files>`. Then prove the full installed
+     parse → prepare → merge path on fresh PostgreSQL 16 with separate worker
+     and verifier roles, destination fencing and unchanged replay. Record
+     assertions, identities, quality counts and deferrals, not only row totals.
    - `normalize` runs the quality checks. Each record shows what they did
      under `provenance.quality`, and an `exception` raises
      `UnsupportedRecord("quality_<id>")`. Report the counts
@@ -519,8 +527,8 @@ Activate as in [APPROVE.md](APPROVE.md), "Switch on".
 
 Running the feed is the **bookkeeping** skill's **run** mode, with
 `--source <name> --feed <feed>`. It submits `rules run --target <target>`
-with an input manifest and its sha256. Run the MDM target first, then
-silver.
+with an input manifest and its sha256. Run targets in their declared
+dependency order, and report any missing worker as unfinished implementation.
 
 ## When a command is missing
 
