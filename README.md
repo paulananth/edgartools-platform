@@ -69,7 +69,7 @@ Captured/warehouse objects in AWS S3
 | --- | --- |
 | Install and run the data bundle | `uv`, Git, Python 3.12 for the qualified runtime, and Rust `cargo` to build the native engine. Package metadata permits Python 3.12+; CI qualifies 3.12. |
 | Local database qualification | PostgreSQL 16, four separate stores, migration-owner credentials, restricted worker/application roles and separate verifier roles. |
-| Run PostgreSQL tests | Docker; Colima on macOS. CI explicitly pulls `postgres:16-alpine`; missing prerequisites must fail rather than skip. |
+| Run the full test suite | Docker, Bash and `jq` (for infrastructure-script tests); Colima on macOS. CI explicitly pulls `postgres:16-alpine`; missing prerequisites must fail rather than skip. |
 | Review and contribute | A dedicated branch/worktree, GitHub CLI `gh`, and the repository's [agent guide](AGENTS.md). |
 | AWS / Snowflake operator work | AWS CLI, Terraform, Docker image tooling, Snowflake CLI, target-specific credentials and explicit rollout approval. Local mastering does not require cloud deployment. |
 
@@ -128,7 +128,9 @@ Configure credentials outside Git and supply these environment variables:
 Migrations use owner credentials, including `RULES_MIGRATION_DATABASE_URL`,
 `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and
 `CHANGE_JOURNAL_MIGRATION_DATABASE_URL`. Destination lease-guard installation
-uses `DESTINATION_MIGRATION_DATABASE_URL`. Runtime MDM uses the application role;
+uses `DESTINATION_MIGRATION_DATABASE_URL`. Run MDM migrations with an owner
+connection in `MDM_DATABASE_URL`; return to the application connection for runtime.
+Runtime MDM uses the application role;
 verification uses a separate restricted read login. See the bundled
 [Bookkeeping instructions](skills/bookkeeping/SKILL.md) and
 [MDM worker instructions](skills/data-platform/SKILL.md#3-master).
@@ -166,8 +168,8 @@ Fast checkout checks:
 uv run pytest tests/unit tests/architecture
 ```
 
-For full local qualification, sync the CI dependencies, keep Docker available,
-and provision the PostgreSQL image:
+For full local qualification, install `jq` and keep Docker available, then sync
+the CI dependencies and provision the PostgreSQL image:
 
 ```bash
 uv sync --frozen --extra s3 --extra mdm-runtime --extra mdm --extra engine

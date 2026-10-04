@@ -10,3 +10,7 @@ User request: recreate the README to correctly reflect current status and requir
 - [ ] Independent Standards/Spec review, commit, PR and full CI.
 
 No cloud deployment, migration, Rules activation or merge is included. The broader data-skill goal remains open until source equivalence and the full installed replay proof pass.
+
+## Review
+
+Independent Spec review found no scoped gaps. Standards review identified the missing `jq` prerequisite for script/architecture tests; README now names it. Clarified that MDM migration uses an owner connection before returning to application-role runtime. No code changes or deployment claims.
