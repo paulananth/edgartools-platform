@@ -17,3 +17,9 @@ Continue the active full skill goal after #813 (dependency, not merged). Separat
 Design: retain functions and enums. Sequence length and indexing are separate facts: Python counts object keys, but integer lookup fails for nonempty JSON objects; empty objects pad as zero-length sequences. Selected validation skips field access only when no row is selected, after checking the full anchor limit/count. All behavior is explicit contract data, with no source-specific branch or control/loader dependency.
 
 Qualification scope remains finite JSON and first-N behavior, not all malformed source equivalence. Arbitrary integer lexemes outside the existing numeric parser range, nonfinite values and unpaired surrogates retain existing parser refusals and require a source-contract decision/audit before retirement. No source Rules activation or cloud deployment is included.
+
+## Verified corpus and reviews
+
+`complete-qualification.json`: 1,000 receipt-pinned captures / 107,197 rows, all 18 columns match the retained reader with the selected-validation contract. `failure-audit.json`: all 450 acceptance/output decisions match. Independent Standards/Spec reviews found no scoped blockers; GoF review retains the procedural/enum structure. Full local engine suite (including the seventh installed trial) and full CI are running/pending.
+
+This change depends on #813, which remains open. CI only runs for PRs targeting main, so the PR targets main with the dependency explicit; review this incremental change from ef08b9ff. Merge #813 first and rebase this change before landing.
