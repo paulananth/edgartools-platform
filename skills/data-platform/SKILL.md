@@ -78,9 +78,9 @@ question at a time, with your recommendation.
 
 A feed is parsed by the `source.read` worker: the configured engine reads
 each captured file by the feed's contract (its `read:` block) and writes the
-tables and the records set aside. Nothing feed-specific runs. For captured
-JSON column arrays and exact source text, read [Configured reading](READING.md)
-before writing the contract.
+tables and the records set aside. Nothing feed-specific runs. Read
+[Configured reading](READING.md) before writing the contract: it covers
+complete JSON records, column arrays, exact source text and frozen references.
 
 1. The feed's pipeline is saved, tested, approved and switched on (Mode 4).
 2. Submit: `edgar-warehouse rules run --pipeline <name> --target <target> --input-manifest <uri> --input-sha256 <sha256>`.
@@ -88,8 +88,11 @@ before writing the contract.
 3. Work, as the worker login: `edgar-warehouse workers work source.read <run_id> --limit 100`.
 4. Verify, as the verifier login (a different `BOOKKEEPING_CLEAN_DATABASE_URL`):
    `edgar-warehouse workers verify source.read <run_id> --reports <uri> --limit 100`.
-5. Finish: `edgar-warehouse bookkeeping finalize <run_id>`. Done when
-   `run.state` is `complete` and every unit is `verified`.
+5. Repeat work and verify until every read unit is verified; the limit bounds
+   one invocation. For a read-only target, finish with
+   `edgar-warehouse bookkeeping finalize <run_id>` and check `run.state` is
+   `complete` with every unit `verified`. For a combined target, continue the
+   **same run_id** through Master; finalize after all declared steps verify.
 
 A step whose profile has no worker yet is a blocker to report, never a reason
 to run the step some other way. `edgar-warehouse workers describe <profile>`
@@ -125,23 +128,39 @@ then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application rol
 with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
 since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
 
-1. Submit: `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
+1. For a combined run already submitted in Parse, retain its `run_id` and
+   continue its declared steps. Otherwise submit:
+   `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
    An MDM target needs the operator's approval of that rules version first (Mode 4).
-2. Work with the MDM application login in `MDM_DATABASE_URL` (and its role in
-   `MDM_APPLICATION_ROLE`): `edgar-warehouse workers work mdm.merge <run_id> --limit 100`.
-3. Verify with another login for both Bookkeeping and MDM:
-   `edgar-warehouse workers verify mdm.merge <run_id> --reports <uri> --limit 100`.
-4. The same for `mdm.publish`. One consumer takes one batch at a time, in
-   order, so repeat work and verify until `edgar-warehouse bookkeeping status <run_id>`
-   shows every unit `verified`.
-5. Finish: `edgar-warehouse bookkeeping finalize <run_id>`.
+2. Work and verify **each declared profile in dependency order**: `source.read`,
+   `mdm.prepare`, `mdm.merge`, then each declared `mdm.publish` step. For example:
+   `edgar-warehouse workers work mdm.prepare <run_id> --limit 100`, then
+   `edgar-warehouse workers verify mdm.prepare <run_id> --reports <uri> --limit 100`.
+   Use the worker Bookkeeping login for work and the separate verifier login
+   for verify. For merge and publish, set `MDM_DATABASE_URL` to the MDM
+   application login for work (`MDM_APPLICATION_ROLE` names its role), and to
+   the separate MDM verifier login for verify.
+3. Repeat work and verify for each profile until its units are verified.
+   `--limit 100` bounds one invocation; it does not prove the whole step ran.
+   One publication consumer takes one batch at a time, in generation order.
+4. Finish: `edgar-warehouse bookkeeping finalize <run_id>`. Done when
+   `edgar-warehouse bookkeeping status <run_id>` shows the run complete and
+   every declared unit verified.
 
 A lost acknowledgement is harmless: the worker resumes the same MDM run, and
 MDM never merges or publishes a batch twice. After a stop, use
 `edgar-warehouse bookkeeping resume <run_id>` and run the workers again.
 
-**Not built yet:** the SEC Company, Person and GLEIF read blocks (to-do 21);
-until they land, those feeds have no `source.read` contract to start from.
+**Current source qualification:** Person has a configured complete-JSON read
+block in `sec.submissions.person/source.yaml`. Its installed PostgreSQL 16
+trial proves read → prepare → merge with the actual Person Dataset Contract
+and policy, preserving two fixture records; a separate 1,000-capture comparison
+proves retained outcomes and assertion identities. These are qualification
+results, not operator activation. Company raw columns and filing arrays are
+qualified components; its catalog/census joins and complete source read block
+remain unfinished. GLEIF still requires bounded archive streaming. Use only
+pipelines whose every profile resolves with `workers describe`; a declared
+Company acquisition or silver step without a worker remains incomplete.
 
 ## 6. Custom parsing
 

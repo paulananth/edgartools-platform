@@ -1,6 +1,6 @@
 ---
 name: refining-rules
-description: Improve a feed or domain that is ALREADY LIVE in Clean MDM and silver. Apply a steward's change to a Mapping Document, add or change a data quality check or fix, or add or tune a matching rule (e.g. the cascade passes, or records waiting for review). Then re-test, get the operator's (or steward's) approval and switch the change on. Use when the feed already has rules/sources/<source>/source.yaml, or the user says "mapping document", "data quality", "matching rule" or "merge rules" about something that exists. To bring in a new feed or domain, use data-onboarding.
+description: Improve an existing feed or domain's mapping, data quality or matching rules in Clean MDM. Measure changes on pinned captures, regenerate Mapping Documents, test and obtain operator approval of the exact version. Use data-onboarding for a new feed or domain.
 ---
 
 # Refining Rules
@@ -106,19 +106,18 @@ quality counts look wrong:
      sha256, bytes) is its manifest. Its sha256 is the `batch_hash`. Check
      each file's sha256 against its line. For a file's path, replace the
      key's leading `warehouse/bronze/` with `<capture>/bronze/`.
-   - **Build the rows the checks read.** Checks read the record after the
-     mapping, so rebuild the reader's rows from the raw files. For SEC
-     submissions, build one row per file from the repo's own loaders:
-     - `stage_company_loader(payload, cik, run_id, sha256, "dry-run")[0]`;
-     - the business address from `stage_address_loader(...)` through
-       `company_source.business_address`;
-     - `forms` from `filings.recent.form`;
-     - `tickers`: each CIK's tickers from the capture's
-       `bronze/reference/sec/company_tickers_exchange/…/company_tickers_exchange.json`.
-       The Company classification rule reads them, so without them the
-       "what MDM receives" count is wrong.
-     These are in `edgar_warehouse.loaders.bronze_submission_extractors`
-     and `edgar_warehouse.mdm.clean.company_source`.
+   - **Build the records the checks read.** Run the candidate configured
+     `read:` contract on the pinned files, then select the whole table rows or
+     the explicit `mdm.prepare.record_column` objects. Preserve source types,
+     unknown evidence and immutable input references. Use data-platform
+     [READING.md](../data-platform/READING.md) for supported expressions.
+     Company raw columns alone omit catalog/census joins and full address/
+     pagination preparation; retained preparation remains an equivalence
+     oracle until those operations are qualified. GLEIF likewise retains its
+     archive/publication validation until bounded streaming is implemented.
+     Label diagnostic runs on retained preparation as such; they do not prove
+     a configured replacement. Test grammar support before proposing custom
+     code, and use data-platform Mode 6 only for a demonstrated grammar gap.
    - **Count two ways, and report both:**
      - **All filers:** `adapters.mapped_values(row, contract)` returns each
        record's `quality` block.
