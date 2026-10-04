@@ -76,3 +76,28 @@ def test_raw_number_range_is_refused_rather_than_rounded(number):
     with pytest.raises(SourceRejected) as error:
         SourceEngine(PERSON).read(json.dumps({"cik": number}).encode())
     assert error.value.code == "value_number_range"
+
+
+@pytest.mark.parametrize("stage", ["source", "records", "manifest"])
+def test_worker_byte_budgets_fail_before_writing_unverifiable_output(tmp_path, monkeypatch, stage):
+    store = Artifacts()
+    payload = {"cik": "1", "name": "JOHN DOE", "nested": {"text": "x" * 256}}
+    contract = store.put(tmp_path.as_uri(), PERSON)
+    data = store.put_bytes((tmp_path / "raw.json").as_uri(), json.dumps(payload).encode())
+    manifest = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [data]})
+    output = tmp_path / "reading.json"
+    source = {"input": manifest, "output": output.as_uri(), "checks": ["source.output"]}
+    if stage == "source":
+        monkeypatch.setattr(source_read, "OUTPUT_BYTES", 128)
+        with pytest.raises(ValueError, match="verifier byte budget"):
+            source_read.execute(source, store)
+        assert not output.exists()
+        return
+    reading = source_read.execute(source, store)
+    monkeypatch.setattr(mdm_prepare, "RECORD_BYTES" if stage == "records" else "MANIFEST_BYTES", 128)
+    keys = {"record_column": "record", "table": "submissions", "dataset": "person", "policy": "0"*64,
+            "consumer": "qualified", "batch_id": "raw", "as_of": "2026-10-04T00:00:00Z"}
+    target = tmp_path / "mdm" / "manifest.json"
+    with pytest.raises(ValueError, match="verifier byte budget"):
+        mdm_prepare.execute({"input": reading, "output": target.as_uri(), "checks": ["mdm.prepared"], "keys": keys}, store)
+    assert not target.parent.exists()

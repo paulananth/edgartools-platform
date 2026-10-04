@@ -35,7 +35,11 @@ selected table holds complete records in a column. Every selected value must
 be an object. Preparation writes those exact objects as JSON Lines; its
 verifier rebuilds the same selection. Without `record_column`, the entire
 table row remains the record. A missing/null/list/scalar selection fails
-before output files are written. No field renaming or classification happens
+before output files are written. Reading outputs are bounded to the source
+verifier's 128 MiB budget; MDM preparation reads at most 32 MiB and refuses
+records files above 16 MiB or a manifest above 32 MiB before writing. Partition
+large inputs explicitly; source reading has no MDM-specific budget.
+No field renaming or classification happens
 in this worker; MDM uses its registered Dataset Contract and pinned policy.
 
 The Person source read block preserves the complete submissions document,

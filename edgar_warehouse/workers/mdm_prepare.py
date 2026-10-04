@@ -28,6 +28,8 @@ from edgar_warehouse.control_contract import reference
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
 BATCH = 1000
+RECORD_BYTES = 16 * 1024**2
+MANIFEST_BYTES = 32 * 1024**2
 
 
 def _lines(rows: list[dict]) -> bytes:
@@ -66,6 +68,8 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
         for start in range(0, len(rows), BATCH):
             chunk = rows[start:start + BATCH]
             data = _lines(chunk)
+            if len(data) > RECORD_BYTES:
+                raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")
             name = f"{source}.{start // BATCH}.jsonl"
             files[name] = data
             batches.append({
@@ -81,7 +85,10 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
         batch["expected_checkpoint"], batch["checkpoint"] = n, n + 1
     manifest = {"contract_version": 2, "as_of": keys["as_of"],
                 "policy_digest": keys["policy"], "batches": batches}
-    return files, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    if len(encoded) > MANIFEST_BYTES:
+        raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
+    return files, encoded
 
 
 def _beside(output: str, name: str) -> str:
@@ -101,9 +108,9 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     files, manifest = _documents(envelope, artifacts)
-    if artifacts.verified(envelope["candidate"], max_bytes=32 * 1024**2) != manifest:
+    if artifacts.verified(envelope["candidate"], max_bytes=MANIFEST_BYTES) != manifest:
         raise ValueError("The manifest differs from the reading")
     for name, data in files.items():
-        if artifacts.read(_beside(envelope["output"], name), max_bytes=16 * 1024**2) != data:
+        if artifacts.read(_beside(envelope["output"], name), max_bytes=RECORD_BYTES) != data:
             raise ValueError(f"The records file {name} differs from the reading")
     return {CHECK: True}, []
