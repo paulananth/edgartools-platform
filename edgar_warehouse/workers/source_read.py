@@ -9,12 +9,13 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
 
 
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
-    return [*source_engine.runtime_files(), Path(files.__file__)]
+    return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__)]
 
 
 def _output(envelope: dict, artifacts) -> bytes:
@@ -22,8 +23,8 @@ def _output(envelope: dict, artifacts) -> bytes:
         raise ValueError("source.read verifies source.output only")
     manifest = artifacts.json(envelope["input"])
     if (set(manifest) != {"version", "contract", "artifacts"}
-            or type(manifest["version"]) is not int or manifest["version"] != 1):
-        raise ValueError("Source input names version 1, contract and artifacts")
+            or type(manifest["version"]) is not int or manifest["version"] not in (1, 2)):
+        raise ValueError("Source input names version 1 or 2, contract and artifacts")
     contract = files.loads(artifacts.verified(manifest["contract"], max_bytes=1024**2).decode("utf-8"))
     execution = contract.get("execution")
     if (not isinstance(execution, dict) or set(execution) != {"profile", "workers", "max_artifacts"}
@@ -42,9 +43,23 @@ def _output(envelope: dict, artifacts) -> bytes:
     if type(max_records) is not int or not 1 <= max_records <= 100000:
         raise ValueError("source.read requires a limit of at most 100000 records")
 
-    def read(ref):
-        result = engine.read(artifacts.verified(ref, max_bytes=max_bytes))
-        return {"input": ref, "tables": result.tables, "deferred": result.deferred}
+    def read(entry):
+        context, evidence = {}, {}
+        if manifest["version"] == 2:
+            if not isinstance(entry, dict) or set(entry) != {"input", "context"}:
+                raise ValueError("Version-2 artifact names input and context receipts")
+            ref = entry["input"]
+            bound = artifact_store.json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
+            if (not isinstance(bound, dict) or set(bound) != {"version", "input", "values"}
+                    or type(bound["version"]) is not int or bound["version"] != 1
+                    or bound["input"] != ref or not isinstance(bound["values"], dict)):
+                raise ValueError("Context document must bind its values to the exact input receipt")
+            context = bound["values"]
+            evidence = {"context": entry["context"]}
+        else:
+            ref = entry
+        result = engine.read(artifacts.verified(ref, max_bytes=max_bytes), context=context)
+        return {"input": ref, **evidence, "tables": result.tables, "deferred": result.deferred}
 
     with ThreadPoolExecutor(max_workers=execution["workers"]) as pool:
         readings = list(pool.map(read, inputs))

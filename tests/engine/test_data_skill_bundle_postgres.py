@@ -278,7 +278,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -352,9 +352,33 @@ read:
 """
         rows = [json.loads(line) for line in FILERS.splitlines()]
         filer_bytes = json.dumps({key: [row[key] for row in rows] for key in ("cik", "name")}).encode()
+    if trial_mode == "artifact-context":
+        contract_bytes = b"""source: fixture.filers
+execution: { profile: source.read, workers: 2, max_artifacts: 2 }
+read:
+  format: json
+  context:
+    cik: {type: integer}
+    name: {type: text}
+  limits: { max_bytes: 1048576, max_records: 1000 }
+  tables:
+    filers:
+      each: .
+      columns:
+        cik: {context: {name: cik}}
+        name: {context: {name: name}}
+"""
+        filer_bytes = b'{"cik":0,"name":"document facts remain separate"}'
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
-    read_input = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [filers]})
+    read_manifest = {"version": 1, "contract": contract, "artifacts": [filers]}
+    if trial_mode == "artifact-context":
+        entries = []
+        for values in ({"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}):
+            bound = store.put(tmp_path.as_uri(), {"version": 1, "input": filers, "values": values})
+            entries.append({"input": filers, "context": bound})
+        read_manifest = {"version": 2, "contract": contract, "artifacts": entries}
+    read_input = store.put(tmp_path.as_uri(), read_manifest)
     out = tmp_path / "out"
     keys = {"batch_id": "filers", "consumer": "fixture/filers"}
     units = store.put(tmp_path.as_uri(), {"version": 2, "steps": {
@@ -397,6 +421,15 @@ read:
         assert all(type(row["cik"]) is int for row in rows)
         assert [row["is_xbrl"] for row in rows] == [False, True]
         assert all(type(row["is_xbrl"]) is bool for row in rows)
+    if trial_mode == "artifact-context":
+        reading = json.loads((out / "reading.json").read_bytes())
+        rows = [artifact["tables"]["filers"][0] for artifact in reading["artifacts"]]
+        assert rows == [{"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}]
+        assert reading["artifacts"][0]["input"] == reading["artifacts"][1]["input"]
+        assert reading["artifacts"][0]["context"] != reading["artifacts"][1]["context"]
+        prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
+        assert len({b["input"]["path"] for b in prepared["batches"]}) == 2
+        assert len({b["batch_id"] for b in prepared["batches"]}) == 2
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:

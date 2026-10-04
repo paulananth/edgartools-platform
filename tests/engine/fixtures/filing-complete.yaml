@@ -1,0 +1,129 @@
+source: qualification.filing-complete
+version: review-1
+execution:
+  profile: source.read
+  workers: 2
+  max_artifacts: 2
+read:
+  format: json
+  context:
+    cik: {type: integer}
+    sync_run_id: {type: text}
+    raw_object_id: {type: text}
+    load_mode: {type: text}
+    recent_limit: {type: integer, nullable: true}
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    filings:
+      take: {context: {name: recent_limit}}
+      each:
+        parallel:
+          path: filings.recent
+          anchor: accessionNumber
+          fields:
+            accession_number: accessionNumber
+            form: form
+            filing_date: filingDate
+            report_date: reportDate
+            acceptance_datetime: acceptanceDateTime
+            act: act
+            file_number: fileNumber
+            film_number: filmNumber
+            items: items
+            primary_document: primaryDocument
+            primary_doc_desc: primaryDocDescription
+            size: size
+            is_xbrl: isXBRL
+            is_inline_xbrl: isInlineXBRL
+          lengths: anchor
+      columns:
+        accession_number:
+          text:
+            path: accession_number
+            trim: false
+            null_if:
+            - ''
+        form:
+          text:
+            path: form
+            trim: false
+            null_if:
+            - ''
+        filing_date:
+          date:
+            path: filing_date
+            kind: calendar
+            basic_suffix: ignore
+            prefix_length: 10
+            on_invalid: null
+        report_date:
+          date:
+            path: report_date
+            kind: calendar
+            basic_suffix: ignore
+            prefix_length: 10
+            on_invalid: null
+        acceptance_datetime:
+          text:
+            path: acceptance_datetime
+            trim: false
+            null_if:
+            - ''
+        act:
+          text:
+            path: act
+            trim: false
+            null_if:
+            - ''
+        file_number:
+          text:
+            path: file_number
+            trim: false
+            null_if:
+            - ''
+        film_number:
+          text:
+            path: film_number
+            trim: false
+            null_if:
+            - ''
+        items:
+          text:
+            path: items
+            trim: false
+            null_if:
+            - ''
+        primary_document:
+          text:
+            path: primary_document
+            trim: false
+            null_if:
+            - ''
+        primary_doc_desc:
+          text:
+            path: primary_doc_desc
+            trim: false
+            null_if:
+            - ''
+        size:
+          integer:
+            path: size
+            on_invalid: null
+        is_xbrl:
+          integer:
+            path: is_xbrl
+            as: boolean
+            default: false
+            on_invalid: default
+        is_inline_xbrl:
+          integer:
+            path: is_inline_xbrl
+            as: boolean
+            default: false
+            on_invalid: default
+        cik: {context: {name: cik}}
+        sync_run_id: {context: {name: sync_run_id}}
+        raw_object_id: {context: {name: raw_object_id}}
+        load_mode: {context: {name: load_mode}}

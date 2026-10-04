@@ -1,0 +1,630 @@
+{
+  "scope": [
+    "accession_number",
+    "form",
+    "filing_date",
+    "report_date",
+    "acceptance_datetime",
+    "act",
+    "file_number",
+    "film_number",
+    "items",
+    "primary_document",
+    "primary_doc_desc",
+    "size",
+    "is_xbrl",
+    "is_inline_xbrl",
+    "cik",
+    "sync_run_id",
+    "raw_object_id",
+    "load_mode"
+  ],
+  "complete_filing_columns": true,
+  "recent_limit": 1,
+  "filings": 100,
+  "rows": 100,
+  "contract_sha256": "0f04ab7ab3e0db5a26945cc27ff3309602954d611886d408a84debaee74db15f",
+  "receipts_sha256": "3aee020551b37090e638b4e73d24a0119cc59456548557c883d1c032b6d5c247",
+  "evidence": [
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2030240/main/2026/08/28/CIK0002030240.json",
+      "input_sha256": "dfb215aa74674896ec6fdf57bc5b2541e095b6d707586aff915cbdf660575468",
+      "rows": 1,
+      "projection_sha256": "cd18d24f01e64314218bbd69a2e344938d532f9ec37b176772f00c760145a48e"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1740612/main/2026/05/13/CIK0001740612.json",
+      "input_sha256": "3ff9552c055f1de7dca9c3acfc5ee79630cc8fee499badd84da8ce7ac353a8d1",
+      "rows": 1,
+      "projection_sha256": "fb310e1170af02ee7873f372c5a519d1a3bcd69b06dc2b5b744c26f997839c8d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1817008/main/2026/06/03/CIK0001817008.json",
+      "input_sha256": "1724ed10e5366007f9fc0e5abbdc9a46d04539a6e04f3fd67b6add4babcfb85e",
+      "rows": 1,
+      "projection_sha256": "b5f9efd0806e975f6d0df81343de875ee3b59642f9c91972d37f0f732b1f1f1e"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1678544/main/2026/07/31/CIK0001678544.json",
+      "input_sha256": "6ceafdf3ab6bc242233e75be45c8d5061be660524cbffa6822420c1bafa10e27",
+      "rows": 1,
+      "projection_sha256": "f83778eb90b50a01d17ad1d61e8b80bed83901d84934f7ded20a95098ff6e59d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1807354/main/2026/06/05/CIK0001807354.json",
+      "input_sha256": "ef63876b7d97b4c3d5d9b2630bf9046b7986a393ba1a15fef994ba7677cc9934",
+      "rows": 1,
+      "projection_sha256": "98369a3b7d06e2518aa84fe6c0e3dfc8d1e248e085c55c7eaa9a414248bf9e1d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2150000/main/2026/08/29/CIK0002150000.json",
+      "input_sha256": "d4cabf7c213d18cd17e9179f8a0d6d3ad22f5d94920676bdf893c4ee96ab6b19",
+      "rows": 1,
+      "projection_sha256": "54aba8b9f18d669c1f04ee637f557e91c9e5dbd3c327dc63d3803db37dd36df5"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1835597/main/2026/06/23/CIK0001835597.json",
+      "input_sha256": "91e034c560b74902b3ccbde95a6706f5af0cb59dd25174137e134d820ec1aaa8",
+      "rows": 1,
+      "projection_sha256": "d1294d7aa8682426f72208880421d68b82843998628916d430eda069fe1f2b5c"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2141470/main/2026/08/04/CIK0002141470.json",
+      "input_sha256": "fec71d8db94219c74b88ea04446db8984387fe60a079a3969cc6326c9a1aeed3",
+      "rows": 1,
+      "projection_sha256": "22e618287d3be83044d2b11cb16b935c4655215ea5a41cd45733dd9fc722fa2e"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2139273/main/2026/06/09/CIK0002139273.json",
+      "input_sha256": "bd50dfd4443644a0066c76823171b02a14be5eb3ac7dacd3e434b00a8817126e",
+      "rows": 1,
+      "projection_sha256": "fda332b190813473b965a0c574ff5d84461b50c77b1f23e584e8a623715c41d4"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1802530/main/2026/07/24/CIK0001802530.json",
+      "input_sha256": "572f871cd4ed913d5d0f886ff2c7e46fdd2f8f50628546ed103c84c9ee836dce",
+      "rows": 1,
+      "projection_sha256": "dc212ed8510f6981aab03e7417400343bdb8e2b00fb99f77775045710154160d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1703157/main/2026/06/11/CIK0001703157.json",
+      "input_sha256": "5ab48675d18f4b485452283cf58d251b119b56a1224bd48d80366944b3f033a0",
+      "rows": 1,
+      "projection_sha256": "bd22591433b4c5956b0ebb3bda883703428530f220b45d1a67e9e159110875b1"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2147029/main/2026/07/30/CIK0002147029.json",
+      "input_sha256": "a00057f988dd0fdfcff332508c647e6efd378290a84b62d85e1da7cb5324bc42",
+      "rows": 1,
+      "projection_sha256": "25f5ea052da23462964fc95781278ed69b806e1a80466a969960d6789360541d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1861460/main/2026/06/18/CIK0001861460.json",
+      "input_sha256": "ca27c64358c082bb32e0b548d3118205b6cbb08a98263560c2a3a9d6c0269b89",
+      "rows": 1,
+      "projection_sha256": "0274e87d632811fc33c53687efd69ce57cec139e7b3c2eafb9b69ab69c64a215"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1870408/main/2026/06/11/CIK0001870408.json",
+      "input_sha256": "5135daadbe27dc378b55b6f05c0c93f9ec1e2292db0f88faaa34f26b5acc81d4",
+      "rows": 1,
+      "projection_sha256": "766abb667ae3f4dda2237d7189111e4905a012856a9940fc6ac6e65aaeb37f63"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1383669/main/2026/05/05/CIK0001383669.json",
+      "input_sha256": "79fdfc48bc1d49352b84b3e6d460a7320411af73417978b44a9c6dcb81322f3f",
+      "rows": 1,
+      "projection_sha256": "32166c5e014dc6478b48e6dd49aaf9e8bad457cf214146e05a69f3330cf29cb6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1766611/main/2026/05/20/CIK0001766611.json",
+      "input_sha256": "0c042b158e3a8b25a269100d07b1ffea0f5c90f8cc1f5ebfcdd64c31d6ef2790",
+      "rows": 1,
+      "projection_sha256": "81a6afc60bd176d886b9a81d902fb85a115b2e300c7aee0947ba8c65f280b20c"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1783876/main/2026/06/23/CIK0001783876.json",
+      "input_sha256": "d05bc972ae2bc5cb540fc5137da8446d2258912c4720a13a20c340748d0bc17f",
+      "rows": 1,
+      "projection_sha256": "310c366863583b3840d3cb39660451d60c51b0163bb7927726c3409e5f2e5a29"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1538263/main/2026/06/29/CIK0001538263.json",
+      "input_sha256": "55c3a8cc09b7b971328ecf1d4c91648f8ecd0ea88606dfc9b57a10096bff694a",
+      "rows": 1,
+      "projection_sha256": "984a28ff3f9d4eb553e21a9e0e0f37a3aa5172d5df8ed8269c96fb2384964ac6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1398053/main/2026/06/02/CIK0001398053.json",
+      "input_sha256": "8445ec21ebd49f8bd544828e0ed66e69c3521401c31fde4c75b729e2d243a954",
+      "rows": 1,
+      "projection_sha256": "9fa4beac897ab51dd7635f75ddaeb1e5a27aaeff5f902a6a168e0f6d0240b8b0"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2015287/main/2026/06/18/CIK0002015287.json",
+      "input_sha256": "3f6a3bdfc9cfe8a78c685424f7ebb7ce6bc568e4f131f00444895f274a7b6675",
+      "rows": 1,
+      "projection_sha256": "f918ba8d7e7360912899858ebada39574328573608bf6a72d4379ab9bac08fd8"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1191727/main/2026/09/02/CIK0001191727.json",
+      "input_sha256": "7f3af09c6ebb7ff9ef1d785b633e4e994cfba810a194b3377d606d5411169d1c",
+      "rows": 1,
+      "projection_sha256": "c8a67ef6950a12dbd02690bce03da8a0509c5494e463732583b575adcf3fcca1"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1287213/main/2026/07/02/CIK0001287213.json",
+      "input_sha256": "464e65509739879b670cae734a6b5568fb857a3da1cc0ba20cccb9ce44ae4766",
+      "rows": 1,
+      "projection_sha256": "e709362edb4fa29ac34275d6e0942969be36a468874815b8f1bbe80be7675dc6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1649094/main/2026/07/02/CIK0001649094.json",
+      "input_sha256": "c6fb527c89af26ff01ccbbf853f8a8fc50c24683bda6341eed4c923983cf2da5",
+      "rows": 1,
+      "projection_sha256": "c75a07e1e3d5aa1bed7977b1a47b1cfd7a73fe0a7ab80032aba6ef3e669141b5"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1995745/main/2026/06/22/CIK0001995745.json",
+      "input_sha256": "eea4aed012dd73291825e94d7a94396924c39ed0a5a18e93cf0ac072fe075fb6",
+      "rows": 1,
+      "projection_sha256": "7ce356451f0ae1ace8be88b61a07889db2b797191074d5b81fa3e88696fd6525"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1807909/main/2026/07/24/CIK0001807909.json",
+      "input_sha256": "e673308a8ecd7eb0c0d83b37879d9fd6dc728a1de182a95669f6361236bbd04e",
+      "rows": 1,
+      "projection_sha256": "9a0be557d02e8e967e8cb3056cf687dd91e6fd56f680f3c08e75b399dfd4aa68"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2136150/main/2026/05/22/CIK0002136150.json",
+      "input_sha256": "c8c4e466f6758567869d7441c159a52ec64c8d39b48d8c75526ffb92d7045eac",
+      "rows": 1,
+      "projection_sha256": "581fba6f101b9fc1279adf6a6f43358c2ab7470893acf39d685adab2eb1f030c"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1441862/main/2026/06/01/CIK0001441862.json",
+      "input_sha256": "d4b3e8519654453bbcbb1d5317f516d23791c1500435de53367f94c3adbe4635",
+      "rows": 1,
+      "projection_sha256": "cd92e1bf9f22b7e897565ca3347c71b574a1b38183757a2d29eda1ed2a81206e"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2061770/main/2026/06/08/CIK0002061770.json",
+      "input_sha256": "f1707aad7126928fa9a7fcc2e30ee36cb47f75f648a823696f3ed216d2fa3f22",
+      "rows": 1,
+      "projection_sha256": "8084db85f2dbf99bd556a2dbf9682c7cd2b9318ffbcd667f04a7be9561efc753"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2130603/main/2026/05/20/CIK0002130603.json",
+      "input_sha256": "49e73338f2e8da8ffbe74e3ff4da28c2190e48346c8e6505ec8ee72330892e58",
+      "rows": 1,
+      "projection_sha256": "f05a9ae0989c5a642670e7ac3967d213f7e975cc6dc8119f18814b481e9a5f8d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2154152/main/2026/09/12/CIK0002154152.json",
+      "input_sha256": "94e9f42624f217edce7892fc5a583831369469190a612659699a1148a615860d",
+      "rows": 1,
+      "projection_sha256": "9ca20d79011d1126f92e3f089046af2384b1ac031eb88c57cc5babd1bdf0a4fd"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2030058/main/2026/06/15/CIK0002030058.json",
+      "input_sha256": "b9c2c84251ad8d197d13fb2334e6d6c3d22390e191a49a438b7705752836fd44",
+      "rows": 1,
+      "projection_sha256": "4c71f5616420e180cb1e1a108be71dd0ac819a9b3ea4cf6fe6c080f34b11f8a4"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1931356/main/2026/06/24/CIK0001931356.json",
+      "input_sha256": "c5b027b2d1da128a07d18cf97d84e7354ecefac7dac876b90950e9c11197e6b0",
+      "rows": 1,
+      "projection_sha256": "0512c333b222d4ae65459a63b8aef27a2a715f944ad135e70d1105412cca2887"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2133609/main/2026/05/11/CIK0002133609.json",
+      "input_sha256": "eb03b2f5b0edc68d7f2334fd6c14d8d51aeb89d5b0f13323610a0e8c4bf20ae6",
+      "rows": 1,
+      "projection_sha256": "cdc875f8c19d1ac8d6c639b5432087dd00048c5be8c5119d741910c4a091dbc9"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1836399/main/2026/05/15/CIK0001836399.json",
+      "input_sha256": "8147974683bd8db6b6e469f7a17f2bb356bfc2498956c87570ab2de618259a1b",
+      "rows": 1,
+      "projection_sha256": "a706f04fa209231b9a32344a7098d9d24db039d65a6529e273056c709d4c62f0"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1432283/main/2026/06/30/CIK0001432283.json",
+      "input_sha256": "caf70cb932a7fdb09f42e8a9e57ff0bca7c7d97e65bbf791de0ee1c51a827f40",
+      "rows": 1,
+      "projection_sha256": "0e88fda5354a365d969d54e16690cbbd8c935415b113675d54830ba488fd1483"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1609009/main/2026/08/28/CIK0001609009.json",
+      "input_sha256": "8dc5d85d9f61a3a89e303e6cc32c5212e9c07e5cbf098c085b1eeb1a82691001",
+      "rows": 1,
+      "projection_sha256": "06bf20fefba6ca3f51ea2e6b03242205c7c41b1963c37246379e66a2607af055"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2005060/main/2026/07/01/CIK0002005060.json",
+      "input_sha256": "0c6b11bd267451d08abf84066e70f61f5da28ac370901715c8d0bab0a99751ce",
+      "rows": 1,
+      "projection_sha256": "ae6c28086f7c6bfccfa54eec9d765682480b9176a8cab5e8805e83e8ca767c18"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=778206/main/2026/06/08/CIK0000778206.json",
+      "input_sha256": "0210884d862ab976a1b7a7713db58fe2a38a63d6e05b5249db4b2a3a214ef5b8",
+      "rows": 1,
+      "projection_sha256": "b8963f917932bff964ba788065057c078048960420fdc558156b6aeafafbe067"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2051820/main/2026/06/29/CIK0002051820.json",
+      "input_sha256": "a94267a4c07d53089e13be65adbbb137c999de85ebc9ebf5ec8bfe708856e687",
+      "rows": 1,
+      "projection_sha256": "2f1928496cd1b8a86e03979168b5d8b169f3fad3547ac15dc0432cfbea94cf23"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2122527/main/2026/05/28/CIK0002122527.json",
+      "input_sha256": "d31c460cf3c8b02b7ea314d9bbbc2b2c8d0b7afc52f1dea9cec2deeef77db0e2",
+      "rows": 1,
+      "projection_sha256": "fe445ef44ee86aff7f063d7e3f142d29fcd35aeac59c060dc15b4bd502805d95"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1227489/main/2026/08/28/CIK0001227489.json",
+      "input_sha256": "383a3b2eb295ddd2d343c5c2b3be94dbe1b7f8bb82ed331827eb31c59352b0d0",
+      "rows": 1,
+      "projection_sha256": "3b3e61eaa6f6b3e9daa72c752144b2125c1a455cc03c73b5bb5c6a06028b8534"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1867946/main/2026/05/28/CIK0001867946.json",
+      "input_sha256": "f4fa4f62e6024bb6df303a8f4c30fbaf0d941f0d33c7b137a12fccc077a8d5b3",
+      "rows": 1,
+      "projection_sha256": "04e42b5d308dd3cd2e8ded940b9e8a68f2f9e064e0c02c862d5bae4dcd695d94"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1967837/main/2026/06/04/CIK0001967837.json",
+      "input_sha256": "f977e8151658f9ebc38a0cd6d4e871661874beb47cfb126f320170432da3bfcd",
+      "rows": 1,
+      "projection_sha256": "30ff46d41967b0456e93d58795a8397d48ea7b0412b3a0b570104c8e546ea2c6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1734770/main/2026/06/23/CIK0001734770.json",
+      "input_sha256": "aad6b165ec4c5f0b22d05566001e1d4f35b6a6f6bbff987aa57cf04a3d5070e6",
+      "rows": 1,
+      "projection_sha256": "6d08fe103385add653f9a930846b57e50ef679513a40aac0755f0f441fd4cf01"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1181628/main/2026/07/01/CIK0001181628.json",
+      "input_sha256": "b4b5516a905c7a9839afa01fbae66bd497cfb79d135740d3dfd6f70fb9a83e83",
+      "rows": 1,
+      "projection_sha256": "37fca97579e827e4ed2dbad4856f86fa96f5d9669f6933a0e9c84762dfb0a3cb"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1033284/main/2026/06/09/CIK0001033284.json",
+      "input_sha256": "b40a2bdb4ccc5be97d1840b8b3fe5a08097aa475e357fb276264f795af12598a",
+      "rows": 1,
+      "projection_sha256": "8ed0d336e8fdafad144ce93babf939e8aaa39359a31ed68d6c7aebe92dbb5ef0"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1954214/main/2026/07/02/CIK0001954214.json",
+      "input_sha256": "0b83741ba8a9ea57244a5f8e2dbe3481da8be7cb6dfb461e1d5d6e77584d5340",
+      "rows": 1,
+      "projection_sha256": "4fea77552b9988866daa98236e91dbda21d72f74641548fc80fe278479681ce9"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1818502/main/2026/06/27/CIK0001818502.json",
+      "input_sha256": "cdf2f90db52d9dac308e339ed0bc3e818e9713b23431eeb821134fd58fb4ce47",
+      "rows": 1,
+      "projection_sha256": "23346050cacdf92d23b1bc1524e6a89d353a92c34bb0c11a0af9f73bbec191a7"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1649999/main/2026/06/12/CIK0001649999.json",
+      "input_sha256": "21fdc52b4b2a711a9ff302c3dbd9d190ec69eab7acc61d9e94506e2a0b32080d",
+      "rows": 1,
+      "projection_sha256": "e509edb706612d18623ded1d4d090306abc18c90db0aeeeefc275b79ae4de083"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2047899/main/2026/09/12/CIK0002047899.json",
+      "input_sha256": "546d729de7b3c708eaec617a6332d325abbcd89f003f13a12a46af0d9ede13da",
+      "rows": 1,
+      "projection_sha256": "4361649d5bb64bc36d1e37ac445c279b08cbfd134241fb9290421f8be7737f6c"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2028336/main/2026/06/27/CIK0002028336.json",
+      "input_sha256": "2b191050df379c8530cfb00d386d46da6c1737de6cc7f9d6e8babceeedcf691c",
+      "rows": 1,
+      "projection_sha256": "09e14268445cb09406b4acad1281bcc7cfe967148bcd63201b2dddd53db217c9"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2054476/main/2026/07/24/CIK0002054476.json",
+      "input_sha256": "663ed2f76a925c81aaaa3fbd1cc3c0644f7b51b577746743cf5a6fbb0a1f8b3e",
+      "rows": 1,
+      "projection_sha256": "a6747f64c6f09487ef475885a82604e917d658948b79fc00decaa7b238486ec9"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1386935/main/2026/06/02/CIK0001386935.json",
+      "input_sha256": "6edf7021e42c7c8307a37a98f4fc3e7e1a27b965b3fc857332fc39bf196e1e9c",
+      "rows": 1,
+      "projection_sha256": "319347e680aa365c7afe2671da779130cd97729dc25453541ef32cf9febdd840"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2148164/main/2026/09/02/CIK0002148164.json",
+      "input_sha256": "2e7bfaa00459ae1efc212387189014ab6209dd036c719d48a77e13ef98211931",
+      "rows": 1,
+      "projection_sha256": "51ad4439489ec9e08ae72d6bea7e0c49e74bf1a9f2f4f7b89a212ccc986c6619"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1233915/main/2026/05/27/CIK0001233915.json",
+      "input_sha256": "174d795341216702dc3f24c16ba1e2a3690909becbc0ea470922beef1915a22b",
+      "rows": 1,
+      "projection_sha256": "9acc37cc602375aef01aa70861e6f511128be4e0ae44ff00fc42011d5fcd4311"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2023439/main/2026/06/18/CIK0002023439.json",
+      "input_sha256": "1772f926aeffa1a0363b2d7b1dc4cef65941cf01db6c0bb2468238b2214e1910",
+      "rows": 1,
+      "projection_sha256": "075f20379854f6250886f1e41238172f84faffe93a3868ad210fd1274ae128c0"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2148976/main/2026/08/28/CIK0002148976.json",
+      "input_sha256": "f951eb9628a72fdf88ae3be15242b42218e18bca954ec6e92dfa5a5bc4fcebdd",
+      "rows": 1,
+      "projection_sha256": "1f7b2a729e5846037b2d6ba53eb533201062202e52f57101f689b2d0ef7f82dd"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2150823/main/2026/08/27/CIK0002150823.json",
+      "input_sha256": "0b909efc5d4f147c3c1c33d7c1037494644fd3407447756a72caa5d4590504fc",
+      "rows": 1,
+      "projection_sha256": "986127bbcc773e4d844627518eb559e33009cffcb6fe92130fd48806f45761ae"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1742297/main/2026/06/17/CIK0001742297.json",
+      "input_sha256": "b8c758c39c0ec7e281751b57f831a2501b43748fc2757340486c32bb403600b7",
+      "rows": 1,
+      "projection_sha256": "5733f07c593d2d98018bd2d1a83559a281c89794a40e06c55f4398159952f3f6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1599795/main/2026/05/12/CIK0001599795.json",
+      "input_sha256": "d7cf6f4caf79b9e955287ee5096881581e8e91b0d173c7d023504656b85c0cdf",
+      "rows": 1,
+      "projection_sha256": "c2b90d1d841e00533361d10f31ef0ecc3368403289c183f774d47808c85c3f30"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=928658/main/2026/06/30/CIK0000928658.json",
+      "input_sha256": "143002ac76fe75416bfb5a073147423eceba5631fbaa688914cc550365e163b5",
+      "rows": 1,
+      "projection_sha256": "a9c899656ddf67dab6b07829b72f4b0c0948a4a03cb15c4b353f583c2c10b274"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1412740/main/2026/06/29/CIK0001412740.json",
+      "input_sha256": "a4c26a03c9d0a323a3ba53705767ea558977b534605b5706d2aa5d255bc3aa99",
+      "rows": 1,
+      "projection_sha256": "68d4cc5473e8f25792d3d40dcbb6a6c354c1a1f28cd765610a6ba14afde85c40"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2067120/main/2026/07/25/CIK0002067120.json",
+      "input_sha256": "e6d68d0a6d16d6d7618408f8445c80b0ac542d5243a905a911db6b63c07eea9d",
+      "rows": 1,
+      "projection_sha256": "cb7446721d7b699d56971a37071d9e7d058335e152c884acac239def15040e14"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2147967/main/2026/07/31/CIK0002147967.json",
+      "input_sha256": "be9eac739a071d291c4786c07b1042b1571ec11c67b6f0afd45f78d019a0c7e6",
+      "rows": 1,
+      "projection_sha256": "af428a55cb2609ad26cf9e5112431bfe576a96f50bfabcb0b8defe523f843126"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=49905/main/2026/07/02/CIK0000049905.json",
+      "input_sha256": "d417169e725cf159498bb594da09ee06ed5d2c531274f9dbf7a22af35b4e9025",
+      "rows": 1,
+      "projection_sha256": "0470ab809f7230938877926bb65c0fc9fc0304478ba5742d82363e4490dd0451"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2111359/main/2026/05/15/CIK0002111359.json",
+      "input_sha256": "af4389b8328c34c80479ae574f39483f95fe73c092e8d17a4b146ee91586c721",
+      "rows": 1,
+      "projection_sha256": "f59e1ca3d58f830e6b3296ab48fb0d531385a3195b0a27b31ef8e390c53c8d1b"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2111131/main/2026/07/25/CIK0002111131.json",
+      "input_sha256": "8dfcc6ca7c93391b9819020ef32c79507fac48e32356ace91e333d73e9e3d0ee",
+      "rows": 1,
+      "projection_sha256": "15e95f1d770b6e4f6b20a2b2160b6e8c5f1e171abce9d5f0d204d42641d385a1"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1979969/main/2026/05/18/CIK0001979969.json",
+      "input_sha256": "eb4216a83d036895421e5df00b424c00e1b516038c5e92a3b54031a22845d1bf",
+      "rows": 1,
+      "projection_sha256": "d7a4450551ee6276622b7db7b6f5f8bf83db3467edc828640fd3eea60cd97258"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2038798/main/2026/06/04/CIK0002038798.json",
+      "input_sha256": "1ec3f793d2eaf9d120d99bf2eacf0cdab2467c0dfb9f125a0aa8a593b329f2a7",
+      "rows": 1,
+      "projection_sha256": "ffade12b74055b53ffa937bee23bc3de707ede5b4d4080ff09d36d0a0760970e"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1435508/main/2026/05/07/CIK0001435508.json",
+      "input_sha256": "56fa778394a4ec6a55a99062257aefae17d0d87dfb0b6ca8958910e2bc5f7a0d",
+      "rows": 1,
+      "projection_sha256": "aaefaa4cbf505fb710c931e3e28fd3d2c9ee84f8ce4362dfe3ce0733c64195e1"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1927066/main/2026/05/26/CIK0001927066.json",
+      "input_sha256": "ce9b0dc4ac6049f0c519ddd2dcf14b8f2a48d315c5df4ce1fc6c7863e00b4cc8",
+      "rows": 1,
+      "projection_sha256": "71d3558d5125141559b673c355968900cba45fd15218b67d3fcbf1946381a4f6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2150222/main/2026/08/28/CIK0002150222.json",
+      "input_sha256": "663f7a006d3ca43aa2af367906af4aef9fd5e015bfb4ab3600152901826bfa2b",
+      "rows": 1,
+      "projection_sha256": "748ec0393fa1fe9c22330d940c6900a44a90f47202bb69993c2b5f268e31f75b"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1625053/main/2026/07/30/CIK0001625053.json",
+      "input_sha256": "b548f95f0d7914e46c98c4c18c1b90fed6ae4d9aca5084dcf55f3f1cfe785307",
+      "rows": 1,
+      "projection_sha256": "013e4025bdae9572e4c46dde3019ba70048a9788c6f8588f2f5e9bdc2aead272"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1793647/main/2026/05/15/CIK0001793647.json",
+      "input_sha256": "1a02bf1edc213fc837109069581c3b37c86fab67c09ecebff786e3132c14e2ae",
+      "rows": 1,
+      "projection_sha256": "54277a2e6b36bb908cdebbb890ee63539bf8d999964a0b231689626546b1b4b0"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1983835/main/2026/06/29/CIK0001983835.json",
+      "input_sha256": "5a4cf115b9e75828a1a6f0ac7e32dc5e632d9805a8dfd91aac1b4236d9e985ad",
+      "rows": 1,
+      "projection_sha256": "00030c9e555beabfe69c6a548df1337197ea17589d13f9b0f54a6d4ff8563895"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1999787/main/2026/05/20/CIK0001999787.json",
+      "input_sha256": "38c387f83f7d106929f487e3b5aa4e917deda85b350b4a2190dcd86a5e0e7969",
+      "rows": 1,
+      "projection_sha256": "070bf1643b7941cee8fd96394b9cee0660efbe3ca7485cb48a885e8c19a0edc9"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2116832/main/2026/06/23/CIK0002116832.json",
+      "input_sha256": "aa3472ef0502981a74a3000d29a5c31711b6f8a684e9526f549c2ab1f5c9d704",
+      "rows": 1,
+      "projection_sha256": "ce3802ea93f19f7cd8294b760665dbcfdc65c90e1502388c14bd9d634937a118"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1710059/main/2026/09/02/CIK0001710059.json",
+      "input_sha256": "59e3585037e4026a2d98f69ff686690d7c75fea7139e1de731f29714a860187b",
+      "rows": 1,
+      "projection_sha256": "e2eca3fc58d27b248a38db4c62750199572464146553787df03e2b0ab2318b0d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1598843/main/2026/05/18/CIK0001598843.json",
+      "input_sha256": "5c7d0d9f45d39141998ca06b7b4300c9992e5f6cdccbc6d0b853883f6b1dad88",
+      "rows": 1,
+      "projection_sha256": "cba2f296fcc9c71d8f4c6b3797e319250955c6dc3d36560efb4e3df79f4d6c79"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1979743/main/2026/06/25/CIK0001979743.json",
+      "input_sha256": "acf5ec30813dcf23fe2ca4f4339074c38b5f6a049d8c06f7c8a4096dcaa62373",
+      "rows": 1,
+      "projection_sha256": "e979f169f716dcdf1a69f957f7b2b7a9b3a19c49eb2ab08014e251aed296ea5d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1686835/main/2026/07/31/CIK0001686835.json",
+      "input_sha256": "3ab2cb9bd21005b6a0a4301755767e984a1c0fe3cffde5f156215aa3a4e1d324",
+      "rows": 1,
+      "projection_sha256": "d2fd61fc44e95b6868684bbeb1a9777d84796a5a2ee7f1ff5538bc8e5e1e6bcc"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1431827/main/2026/06/17/CIK0001431827.json",
+      "input_sha256": "a91e8634f80015d178ed23b69cc8e9427d6b0843414db7bf4c5cc12f53992816",
+      "rows": 1,
+      "projection_sha256": "a490bbe7f72c56fe446d078ec7f90304f6ad037c5cb742b954526cd17fdb0f54"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2073752/main/2026/06/05/CIK0002073752.json",
+      "input_sha256": "bf3c4ffad0bc91fd4a33b0b8b5e453bedd798a3c4932ccd7ca2448c2d5799b37",
+      "rows": 1,
+      "projection_sha256": "f37760f85a47739c709ff658dc8977b4a752400a5b7d536677ce14308698e55a"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2122820/main/2026/05/05/CIK0002122820.json",
+      "input_sha256": "c96feb4672c6b11eaf90389159232b5fa73469a15f3c391a564f6597ea71871f",
+      "rows": 1,
+      "projection_sha256": "554625e06ef0c9affd3d2a30371a77212afb122e4d7ea686339b8bd3bf8f605b"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2139911/main/2026/07/03/CIK0002139911.json",
+      "input_sha256": "6f902ba1402d66121b59577512fd555ef392c9a0218489c4cfede83467706b28",
+      "rows": 1,
+      "projection_sha256": "1c612bc20361eee430e0dc4dda0113fab992c596e2fa4066ee1252206ca319cb"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2137272/main/2026/06/25/CIK0002137272.json",
+      "input_sha256": "026ebed146bda67b9f3777419379d8ca9352d6b389e0f27c3c9f17c20efb7a79",
+      "rows": 1,
+      "projection_sha256": "32d32c666dab9687a9581b98f1e586ae7fdfb02dc69b9b80123d4168bbf6fcbd"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2092553/main/2026/07/03/CIK0002092553.json",
+      "input_sha256": "00d21d1eafd34df6b75591553b2b60526658f6a51cdf3c5879eaa1531ccf00e2",
+      "rows": 1,
+      "projection_sha256": "5a071c1dee1ade61c16cf3eb7d4e76e797c565f4dec84db619e63fe151b04d12"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2110604/main/2026/06/12/CIK0002110604.json",
+      "input_sha256": "98c87833455ba8371b4f5d655e452ffebb11536bd6ea486f6c701b50b1369d2b",
+      "rows": 1,
+      "projection_sha256": "0e85f37bde102fe21ea1406fa77d51aa6e73b7817ff7e7dd8508e9c5844249ea"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1776975/main/2026/05/07/CIK0001776975.json",
+      "input_sha256": "3c8ef678cb76350e3f3afae6bf5632050984e053ceb94fab5f922d363b6fc29a",
+      "rows": 1,
+      "projection_sha256": "28c20065d277680f4ff1388b91226e6007aeb54b4d864d8d60ce721741b849ec"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2149687/main/2026/08/28/CIK0002149687.json",
+      "input_sha256": "6b1644a142a0ce8973549a733cb913f60a356338a938872ef38fdf763f43aff4",
+      "rows": 1,
+      "projection_sha256": "ffc2579576ab5a36d38970a0661b55b45698c7fbf604062b8fd9324fab9f98b6"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1632188/main/2026/06/09/CIK0001632188.json",
+      "input_sha256": "21bc5864347cb06f15b73068cdc875dd271631cf259ac6d4652746cc1690cfbf",
+      "rows": 1,
+      "projection_sha256": "e00756c9106f7ad9057c5c7e923049f067c4f6ae4db0f46ae5ae44ea58e2ee9c"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1803480/main/2026/05/26/CIK0001803480.json",
+      "input_sha256": "cee5cb476079e4200866f2ffbc851013b70e79a7f1db68e49897fa700163755b",
+      "rows": 1,
+      "projection_sha256": "01655af2071e223d01223c3f3bcb35fdbbfb7253f1732a397a20ae349e5f11e0"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2098895/main/2026/06/25/CIK0002098895.json",
+      "input_sha256": "d55c08be65f3358009581ed056fd859e10e2a1c5cafa77549e9214e18dc30f6c",
+      "rows": 1,
+      "projection_sha256": "0f0b4099ba8ee25ee77884fb59449e8fbc9a609c3638a6815703f0fd0e13fe6d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2154170/main/2026/09/12/CIK0002154170.json",
+      "input_sha256": "a4b0254fa546e3e4beb4593bc8306d5d3d0ad00ecaaa616c9b6bf46d8c79175b",
+      "rows": 1,
+      "projection_sha256": "0bfec948074392f429cb7caa730bf9695c04397e6530a03c6844d7ce31a723a3"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1556386/main/2026/06/15/CIK0001556386.json",
+      "input_sha256": "62dd4f4b1d62c6bd47c3a5c1472ef339b536d8278cb6cc90f244ae9d7bcb0b47",
+      "rows": 1,
+      "projection_sha256": "47fbe4d446f0edd0db06c54a22dae6d9713dae8e6592cf1b84f1240f0a84a534"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1987316/main/2026/06/03/CIK0001987316.json",
+      "input_sha256": "d02a9ee7f93e80afc5b2ef4bfdd64f728e5de582ea5210478a0bb3d7343bf278",
+      "rows": 1,
+      "projection_sha256": "498b356ee9171988ee8d67dab20a5c62d26c920a694c7ed467ed2ce878838347"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1160676/main/2026/05/29/CIK0001160676.json",
+      "input_sha256": "c707dc0803bd7a0aa10b6bf0bb545c41099e41b14a43e969481848f66c31781d",
+      "rows": 1,
+      "projection_sha256": "ede9518cc12518e3c5697d8efccb16bbbd651799b9f4a237b841e024a704f998"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=1935707/main/2026/05/15/CIK0001935707.json",
+      "input_sha256": "93cdc66f5ab4ef360496eec1d3970a1e18a5e19acedf665380b8b425d2149728",
+      "rows": 1,
+      "projection_sha256": "e360cc05fd6226ca84770967351ec2860090c0a814f101c7455354eb39a5791d"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2132945/main/2026/06/01/CIK0002132945.json",
+      "input_sha256": "898e0ad25fd827739941e44a7debdd71f5f4fcbc1447feb7530241c2c1f4d2ec",
+      "rows": 1,
+      "projection_sha256": "4b4a72963e54aeafd03cb4db87fab652427e2af9cebb62388bf33104f0310bdc"
+    },
+    {
+      "key": "warehouse/bronze/submissions/sec/cik=2138390/main/2026/06/30/CIK0002138390.json",
+      "input_sha256": "338f9775912f767e50c022748f918eca9a82dcc009f4f46e892dbfa16d2e7880",
+      "rows": 1,
+      "projection_sha256": "2b3de145939d8027828c405386bfd81a6a42e673816df788c517f9096dda9801"
+    }
+  ]
+}
