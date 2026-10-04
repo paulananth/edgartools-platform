@@ -46,29 +46,30 @@ fn from_json(value: serde_json::Value) -> El {
 /// Borrow raw numeric lexemes through serde, without a source-specific parser.
 /// The ordinary Value parse first preserves its nesting/range checks. Raw
 /// child values borrow the bounded input; no nested subtree bytes are copied.
-fn from_raw(raw: &serde_json::value::RawValue) -> Result<El, Rejected> {
+fn from_raw(raw: &serde_json::value::RawValue, python_text: bool) -> Result<El, Rejected> {
     let text = raw.get();
     match text.as_bytes()[0] {
         b'{' => {
-            let map: std::collections::BTreeMap<String, &serde_json::value::RawValue> =
+            let map: indexmap::IndexMap<String, &serde_json::value::RawValue> =
                 serde_json::from_str(text).map_err(malformed)?;
             let mut el = El::default();
+            if python_text { el.json_keys = Some(map.keys().cloned().collect()); }
             for (key, raw) in map {
                 if (key == "$" || key.starts_with('@')) && raw.get().starts_with('"') {
                     let value = serde_json::from_str(raw.get()).map_err(malformed)?;
                     if key == "$" { el.text = Some(value) } else { el.attrs.insert(key, value); }
                 } else if raw.get().starts_with('[') {
                     let items: Vec<&serde_json::value::RawValue> = serde_json::from_str(raw.get()).map_err(malformed)?;
-                    let rows = items.into_iter().map(from_raw).collect::<Result<Vec<_>, _>>()?;
+                    let rows = items.into_iter().map(|raw| from_raw(raw, python_text)).collect::<Result<Vec<_>, _>>()?;
                     el.children.insert(key, Child::Many(rows));
-                } else { el.add_child(key, from_raw(raw)?); }
+                } else { el.add_child(key, from_raw(raw, python_text)?); }
             }
             Ok(el)
         }
         b'[' => {
             let items: Vec<&serde_json::value::RawValue> = serde_json::from_str(text).map_err(malformed)?;
             let mut el = El { array: true, ..El::default() };
-            el.children.insert("item".into(), Child::Many(items.into_iter().map(from_raw).collect::<Result<Vec<_>, _>>()?));
+            el.children.insert("item".into(), Child::Many(items.into_iter().map(|raw| from_raw(raw, python_text)).collect::<Result<Vec<_>, _>>()?));
             Ok(el)
         }
         _ => {
@@ -79,13 +80,13 @@ fn from_raw(raw: &serde_json::value::RawValue) -> Result<El, Rejected> {
     }
 }
 
-pub fn json(bytes: &[u8], exact_numbers: bool) -> Result<El, Rejected> {
-    if exact_numbers {
+pub fn json(bytes: &[u8], exact_numbers: bool, python_text: bool) -> Result<El, Rejected> {
+    if exact_numbers || python_text {
         // Validate with the existing parser before recursively borrowing raw
         // values: finite-number and nesting constraints remain unchanged.
         serde_json::from_slice::<serde_json::Value>(bytes).map_err(malformed)?;
         let raw: &serde_json::value::RawValue = serde_json::from_slice(bytes).map_err(malformed)?;
-        from_raw(raw)
+        from_raw(raw, python_text)
     } else {
         serde_json::from_slice(bytes).map(from_json).map_err(malformed)
     }
@@ -97,7 +98,7 @@ fn records(rows: Vec<El>) -> El {
     el
 }
 
-pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool) -> Result<El, Rejected> {
+pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool, python_text: bool) -> Result<El, Rejected> {
     let mut rows = Vec::new();
     for line in bytes.split(|b| *b == b'\n') {
         if line.iter().all(u8::is_ascii_whitespace) {
@@ -106,7 +107,7 @@ pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool) -> Result<El
         if rows.len() == max_records {
             return Err(Rejected::new("limit_exceeded", format!("more than {max_records} records")));
         }
-        rows.push(json(line, exact_numbers)?);
+        rows.push(json(line, exact_numbers, python_text)?);
     }
     Ok(records(rows))
 }

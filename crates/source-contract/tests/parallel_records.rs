@@ -141,3 +141,27 @@ fn text_defaults_retain_existing_null_token_normalization_unless_trim_is_disable
     let exact = contract.replace("path: missing", "path: missing, trim: false");
     assert_eq!(engine(&exact).read(data, &Lookups::new()).unwrap().tables["filings"][0]["form"], Val::Str(" x ".into()));
 }
+
+#[test]
+fn invalid_objects_and_character_sequences_require_explicit_policy() {
+    let contract = CONTRACT.replace("lengths: equal", "lengths: anchor\n          on_invalid_object: empty\n          strings: characters\n          on_empty_anchor: ignore_fields");
+    for data in [r#"{"filings":null}"#, r#"{"filings":{"recent":false}}"#, r#"{"filings":{"recent":[]}}"#] {
+        assert!(engine(&contract).read(data.as_bytes(), &Lookups::new()).unwrap().tables["filings"].is_empty());
+        assert_eq!(engine(CONTRACT).read(data.as_bytes(), &Lookups::new()).unwrap_err().code, "parallel_shape");
+    }
+    let reading = engine(&contract).read("{\"filings\":{\"recent\":{\"accessionNumber\":[\"a\",\"b\",\"c\"],\"form\":\"é🦀\"}}}".as_bytes(), &Lookups::new()).unwrap();
+    let rows = &reading.tables["filings"];
+    assert_eq!(rows[0]["form"], Val::Str("é".into()));
+    assert_eq!(rows[1]["form"], Val::Str("🦀".into()));
+    assert_eq!(rows[2]["form"], Val::Null);
+    assert_eq!(engine(&contract).read(br#"{"filings":{"recent":{"accessionNumber":[],"form":null}}}"#, &Lookups::new()).unwrap().tables["filings"].len(), 0);
+    assert_eq!(engine(&CONTRACT.replace("lengths: equal", "lengths: anchor")).read(br#"{"filings":{"recent":{"accessionNumber":[],"form":null}}}"#, &Lookups::new()).unwrap_err().code, "parallel_shape");
+    let long = format!(r#"{{"filings":{{"recent":{{"accessionNumber":"{}"}}}}}}"#, "a".repeat(100));
+    assert_eq!(engine(&contract).read(long.as_bytes(), &Lookups::new()).unwrap_err().code, "limit_exceeded");
+    // Object policy does not excuse an invalid array inside a valid object.
+    assert_eq!(engine(&contract).read(br#"{"filings":{"recent":{"accessionNumber":true}}}"#, &Lookups::new()).unwrap_err().code, "parallel_shape");
+    for bad in ["strings: null", "strings: bytes", "on_invalid_object: false", "on_invalid_object: skip", "on_empty_anchor: skip", "on_empty_anchor: ignore_fields"] {
+        let contract = format!("{}\n          {bad}\n      columns: {{}}\n", CONTRACT.split("      columns:").next().unwrap());
+        assert!(Engine::from_yaml(&contract, Steps::new()).is_err());
+    }
+}

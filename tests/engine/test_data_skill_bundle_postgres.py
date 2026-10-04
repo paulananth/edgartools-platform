@@ -278,7 +278,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -332,7 +332,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
 """
         filer_bytes = b"".join(json.dumps({**json.loads(line), "is_xbrl": flag}).encode() + b"\n"
                                for line, flag in zip(FILERS.splitlines(), [0.9, True], strict=True))
-    if trial_mode == "parallel-records":
+    if trial_mode in {"parallel-records", "source-coercion"}:
         contract_bytes = b"""source: fixture.filers
 execution: { profile: source.read, workers: 1, max_artifacts: 1 }
 read:
@@ -352,6 +352,16 @@ read:
 """
         rows = [json.loads(line) for line in FILERS.splitlines()]
         filer_bytes = json.dumps({key: [row[key] for row in rows] for key in ("cik", "name")}).encode()
+        if trial_mode == "source-coercion":
+            contract_bytes = contract_bytes.replace(b"fields: { cik: cik, name: name }", b"fields: { cik: cik, name: name, flag: flag, evidence: evidence, character: character }")
+            contract_bytes = contract_bytes.replace(b"lengths: equal", b"lengths: equal\n          on_invalid_object: empty\n          strings: characters")
+            contract_bytes += b"""        flag: {text: {path: flag, coerce: python}}
+        evidence: {text: {path: evidence, coerce: python}}
+        character: {text: {path: character, coerce: python}}
+"""
+            payload = json.loads(filer_bytes)
+            payload.update(flag=[True, False], evidence=[{'z': 1, 'a': []}, [None, True]], character='é🦀')
+            filer_bytes = json.dumps(payload).encode()
     if trial_mode == "artifact-context":
         contract_bytes = b"""source: fixture.filers
 execution: { profile: source.read, workers: 2, max_artifacts: 2 }
@@ -430,6 +440,12 @@ read:
         prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
         assert len({b["input"]["path"] for b in prepared["batches"]}) == 2
         assert len({b["batch_id"] for b in prepared["batches"]}) == 2
+    if trial_mode == "source-coercion":
+        reading = json.loads((out / "reading.json").read_bytes())
+        rows = reading["artifacts"][0]["tables"]["filers"]
+        assert [row["flag"] for row in rows] == ['True', 'False']
+        assert [row["evidence"] for row in rows] == ["{'z': 1, 'a': []}", '[None, True]']
+        assert [row["character"] for row in rows] == ['é', '🦀']
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 3} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:

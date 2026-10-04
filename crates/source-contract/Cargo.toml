@@ -14,6 +14,7 @@ python = ["dep:pyo3"]
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["alloc", "std"] }
 csv = "1"
+indexmap = { version = "2", features = ["serde"] }
 pyo3 = { version = "0.25", features = ["extension-module", "abi3-py312"], optional = true }
 quick-xml = "0.37"
 serde_json = { version = "1", features = ["raw_value"] }

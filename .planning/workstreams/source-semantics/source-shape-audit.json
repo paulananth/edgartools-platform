@@ -1,0 +1,357 @@
+{
+  "scope": "All seven original audit cases now match; full malformed source equivalence remains incomplete.",
+  "cases": [
+    {
+      "case": "text_boolean",
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": [
+              true
+            ]
+          }
+        }
+      },
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": "True",
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "rows": [
+          {
+            "acceptance_datetime": null,
+            "accession_number": "a",
+            "act": null,
+            "cik": 320193,
+            "file_number": null,
+            "filing_date": null,
+            "film_number": null,
+            "form": "True",
+            "is_inline_xbrl": false,
+            "is_xbrl": false,
+            "items": null,
+            "load_mode": "default",
+            "primary_doc_desc": null,
+            "primary_document": null,
+            "raw_object_id": "captured",
+            "report_date": null,
+            "size": null,
+            "sync_run_id": "qualification"
+          }
+        ]
+      },
+      "equal": true
+    },
+    {
+      "case": "text_float",
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": [
+              1.0
+            ]
+          }
+        }
+      },
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": "1.0",
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "rows": [
+          {
+            "acceptance_datetime": null,
+            "accession_number": "a",
+            "act": null,
+            "cik": 320193,
+            "file_number": null,
+            "filing_date": null,
+            "film_number": null,
+            "form": "1.0",
+            "is_inline_xbrl": false,
+            "is_xbrl": false,
+            "items": null,
+            "load_mode": "default",
+            "primary_doc_desc": null,
+            "primary_document": null,
+            "raw_object_id": "captured",
+            "report_date": null,
+            "size": null,
+            "sync_run_id": "qualification"
+          }
+        ]
+      },
+      "equal": true
+    },
+    {
+      "case": "text_object",
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": [
+              {
+                "x": 1
+              }
+            ]
+          }
+        }
+      },
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": "{'x': 1}",
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "rows": [
+          {
+            "acceptance_datetime": null,
+            "accession_number": "a",
+            "act": null,
+            "cik": 320193,
+            "file_number": null,
+            "filing_date": null,
+            "film_number": null,
+            "form": "{'x': 1}",
+            "is_inline_xbrl": false,
+            "is_xbrl": false,
+            "items": null,
+            "load_mode": "default",
+            "primary_doc_desc": null,
+            "primary_document": null,
+            "raw_object_id": "captured",
+            "report_date": null,
+            "size": null,
+            "sync_run_id": "qualification"
+          }
+        ]
+      },
+      "equal": true
+    },
+    {
+      "case": "text_array",
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": [
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        }
+      },
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": "[1, 2]",
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "rows": [
+          {
+            "acceptance_datetime": null,
+            "accession_number": "a",
+            "act": null,
+            "cik": 320193,
+            "file_number": null,
+            "filing_date": null,
+            "film_number": null,
+            "form": "[1, 2]",
+            "is_inline_xbrl": false,
+            "is_xbrl": false,
+            "items": null,
+            "load_mode": "default",
+            "primary_doc_desc": null,
+            "primary_document": null,
+            "raw_object_id": "captured",
+            "report_date": null,
+            "size": null,
+            "sync_run_id": "qualification"
+          }
+        ]
+      },
+      "equal": true
+    },
+    {
+      "case": "null_group",
+      "payload": {
+        "filings": null
+      },
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "rows": []
+      },
+      "equal": true
+    },
+    {
+      "case": "null_recent",
+      "payload": {
+        "filings": {
+          "recent": null
+        }
+      },
+      "retained": {
+        "rows": []
+      },
+      "configured": {
+        "rows": []
+      },
+      "equal": true
+    },
+    {
+      "case": "scalar_field",
+      "payload": {
+        "filings": {
+          "recent": {
+            "accessionNumber": [
+              "a"
+            ],
+            "form": "4"
+          }
+        }
+      },
+      "retained": {
+        "rows": [
+          {
+            "accession_number": "a",
+            "cik": 320193,
+            "form": "4",
+            "filing_date": null,
+            "report_date": null,
+            "acceptance_datetime": null,
+            "act": null,
+            "file_number": null,
+            "film_number": null,
+            "items": null,
+            "size": null,
+            "is_xbrl": false,
+            "is_inline_xbrl": false,
+            "primary_document": null,
+            "primary_doc_desc": null,
+            "sync_run_id": "qualification",
+            "raw_object_id": "captured",
+            "load_mode": "default"
+          }
+        ]
+      },
+      "configured": {
+        "rows": [
+          {
+            "acceptance_datetime": null,
+            "accession_number": "a",
+            "act": null,
+            "cik": 320193,
+            "file_number": null,
+            "filing_date": null,
+            "film_number": null,
+            "form": "4",
+            "is_inline_xbrl": false,
+            "is_xbrl": false,
+            "items": null,
+            "load_mode": "default",
+            "primary_doc_desc": null,
+            "primary_document": null,
+            "raw_object_id": "captured",
+            "report_date": null,
+            "size": null,
+            "sync_run_id": "qualification"
+          }
+        ]
+      },
+      "equal": true
+    }
+  ],
+  "contract_sha256": "1d3fe2f75a349321a7016fedb86b39b5828c5d1ef47d0c3529461e605acb29ca"
+}

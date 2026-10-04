@@ -25,6 +25,8 @@ pub struct El {
     pub exact_number: Option<String>,
     /// A JSON array at this node, distinct from an object with an `item` key.
     pub array: bool,
+    /// JSON object insertion order, retained only for declared Python text coercion.
+    pub json_keys: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]

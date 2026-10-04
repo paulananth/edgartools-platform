@@ -1,0 +1,35 @@
+# Source semantics and reader retirement
+
+Continue the full self-sustaining skill goal from merged #811/#812. Preserve retained readers until configured Company/Person/GLEIF outputs, failures and installed empty-store replay are proved.
+
+- [x] Inspect retained reader failures, native parsing and history; GoF review. Verified current code/history; retain functions and enums, add one focused coercion module rather than a hierarchy; 2026-10-04 07:55 ET.
+- [x] Add explicit configured text coercion and parallel shape policies with strict defaults preserved. Verified native acceptance and 61 focused Python tests; 2026-10-04 07:55 ET.
+- [x] Reproduce and resolve all six previously recorded filing coercion/shape differences; extend failure and numeric/string oracle coverage. Verified all seven original cases match, 10,000 generated float bit patterns plus 1,000 nested Unicode samples; halfway rounding fault fixed; 2026-10-04 07:55 ET.
+- [x] Compare 18 columns on 1,000 receipt-pinned captures and exercise worker/verifier paths. Verified 107,197 matching rows, immutable worker/verifier tests and all six installed PostgreSQL 16 trial modes; 2026-10-04 08:13 ET.
+- [x] Document implemented grammar in the bundled skill; independent review and full CI; create PR. Verified bundled doctor, Standards/Spec/GoF reviews, PR #813 and successful five-suite CI run 37201044075 on abe39a18; 2026-10-04 08:13 ET.
+- [ ] Complete configured Company and Person source blocks, reference joins and classification.
+- [ ] Complete GLEIF bounded native archive reading, source checks and equivalence.
+- [ ] Replace active callers and decommission all retained source parsers after full equivalence.
+- [ ] Installed empty-store qualification: 6,414 Companies, 3,052 CIK+LEI and unchanged replay.
+
+No source Rules activation or cloud deployment is included. Existing readers are qualification oracles until retirement is justified.
+
+## Safety and remaining equivalence
+
+`coerce: python` is explicit and generic, implemented in Rust. It retains JSON object order only when requested. Unicode behavior is pinned to the already qualified Python 3.12 / Unicode 15.0 policy. Strict scalar/array/object defaults remain covered. Character expansion is capped before allocation. No loader dependency or source-specific branch is added to control, workers or the engine.
+
+Resolving the original six differences does not prove all malformed source behavior. Empty object fields, zero first-N with invalid unused fields, JSON integers outside the existing finite-number parser range, and nonfinite/surrogate input policies still need an extended refusal audit before reader retirement. Full Company/Person/GLEIF integration remains open.
+
+## Independent review
+
+Spec: no scoped implementation findings. Standards/GoF: no documented violations or structural refactor recommendation; one correctness blocker found. The initial empty-anchor shortcut changed existing `lengths: anchor` behavior without opt-in. Added explicit `on_empty_anchor: ignore_fields` (only with anchor lengths) and a regression proving the default still rejects a null field. The first full local run was deliberately interrupted after 570 passes (112.62s) because its loaded binary and committed installation snapshot predated this correction. It is not final verification.
+
+## Corpus and extended refusal evidence
+
+`complete-qualification.json` compares all 18 columns on 1,000 distinct receipt-pinned captures / 107,197 rows with the corrected contract. `source-shape-audit.json` resolves the original seven cases. `remaining-failure-audit.json` expands the finite JSON anchor/field/first-N matrix to 450 cases: 341 match acceptance and rows, 109 differ. Both rejected inputs count as the same refusal decision, not identical exception classes. The retained reader permits empty object sequences and skips invalid fields when no rows are selected; the configured reader is still stricter. These differences are not source completion. Next work must explicitly support those semantics or obtain a reviewed source-contract change before retirement.
+
+Corrected Standards follow-up: no remaining scoped blocker. Spec review: zero scoped findings. Rust gate: 54 tests passed. Full local five-suite run passed: 1,587 passed, one existing xfailed, no skipped prerequisites, in 836.22 seconds (13m56s). All six installed trial modes passed, including the new coercion mode on restricted PostgreSQL 16 roles. GitHub CI run 37201044075 passed every job and the aggregate gate on abe39a18.
+
+Reproduce the remaining matrix with `uv run python scripts/qualification/audit_filing_semantics.py --contract tests/engine/fixtures/filing-complete.yaml --output <report.json>`. The helper reproduced the committed artifact byte-for-byte; independent Standards and Spec follow-ups found no scoped blocker.
+
+This final checklist-only commit requires its own final-head CI before marking PR #813 ready. The unchecked Company/Person/GLEIF, refusal-equivalence, retirement and installed full-population replay parts remain incomplete.

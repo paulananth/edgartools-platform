@@ -20,6 +20,7 @@ mod formats;
 mod integer;
 mod context;
 mod parallel;
+mod json_text;
 #[cfg(feature = "python")]
 mod python;
 mod tree;
@@ -191,8 +192,8 @@ impl Engine {
     fn document(&self, bytes: &[u8]) -> Result<El, Rejected> {
         let max_records = self.limits.max_records;
         match setting(&self.read, "format").unwrap_or_default() {
-            "json" => formats::json(bytes, uses_integer(&self.read)),
-            "jsonl" => formats::jsonl(bytes, max_records, uses_integer(&self.read)),
+            "json" => formats::json(bytes, uses_integer(&self.read), uses_python_text(&self.read)),
+            "jsonl" => formats::jsonl(bytes, max_records, uses_integer(&self.read), uses_python_text(&self.read)),
             "csv" => formats::csv(bytes, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
@@ -254,12 +255,30 @@ fn setting<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
     value.get(name).and_then(Value::as_str)
 }
 
+fn uses_python_text(value: &Value) -> bool {
+    match value {
+        Value::Mapping(map) => setting(value, "coerce") == Some("python") || map.values().any(uses_python_text),
+        Value::Sequence(items) => items.iter().any(uses_python_text),
+        _ => false,
+    }
+}
+
+fn validate_coerce(args: &Value) -> Result<(), String> {
+    if args.get("coerce").is_some_and(|value| !matches!(value.as_str(), Some("scalar" | "python"))) {
+        return Err("coerce is scalar or python".into());
+    }
+    Ok(())
+}
+
 /// Everything a contract names must exist now, not partway through a read.
 fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     context::validate(read)?;
     let format = setting(read, "format").ok_or("read.format is missing")?;
     if !FORMATS.contains(&format) {
         return Err(format!("format {format} is not read"));
+    }
+    if uses_python_text(read) && !matches!(format, "json" | "jsonl") {
+        return Err("Python text coercion requires JSON or JSON Lines".into());
     }
     for name in ["root", "namespace"] {
         if read.get(name).is_some_and(|value| value.as_str().is_none()) {
@@ -391,6 +410,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
         }
         "text" => {
+            validate_coerce(args)?;
             check_path(setting(args, "path").ok_or("text names no path")?)?;
             if let Some(values) = args.get("null_if") {
                 let values = values.as_sequence().ok_or("text null_if must be a list")?;
@@ -414,6 +434,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
         }
         "number" => check_path(setting(args, "path").ok_or("number names no path")?)?,
         "date" => {
+            validate_coerce(args)?;
             check_path(setting(args, "path").ok_or("date names no path")?)?;
             let kind = setting(args, "kind").unwrap_or("instant");
             if !matches!(kind, "instant" | "calendar") || args.get("kind").is_some_and(|v| v.as_str().is_none()) {
@@ -827,6 +848,14 @@ fn scope<'a>(document: &'a El, item: &'a El, args: &Value) -> &'a El {
 
 fn text_at(start: &El, args: &Value) -> Result<Option<String>, Rejected> {
     let path = setting(args, "path").unwrap_or_default();
+    if setting(args, "coerce") == Some("python") {
+        return match lookup_value(start, path, true)? {
+            Found::Missing => Ok(None),
+            Found::Text(text, kind, exact) => json_text::scalar(&text, kind, exact).map(Some),
+            Found::El(el) => json_text::value(el),
+            Found::List(rows) => json_text::list(rows).map(Some),
+        };
+    }
     match lookup(start, path)? {
         Found::Missing => Ok(None),
         Found::Text(text, _, _) => Ok(Some(text)),
