@@ -89,8 +89,10 @@ complete JSON records, column arrays, exact source text and frozen references.
 4. Verify, as the verifier login (a different `BOOKKEEPING_CLEAN_DATABASE_URL`):
    `edgar-warehouse workers verify source.read <run_id> --reports <uri> --limit 100`.
 5. Repeat work and verify until every read unit is verified; the limit bounds
-   one invocation. Finish: `edgar-warehouse bookkeeping finalize <run_id>`. Done when
-   `run.state` is `complete` and every unit is `verified`.
+   one invocation. For a read-only target, finish with
+   `edgar-warehouse bookkeeping finalize <run_id>` and check `run.state` is
+   `complete` with every unit `verified`. For a combined target, continue the
+   **same run_id** through Master; finalize after all declared steps verify.
 
 A step whose profile has no worker yet is a blocker to report, never a reason
 to run the step some other way. `edgar-warehouse workers describe <profile>`
@@ -126,7 +128,9 @@ then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application rol
 with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
 since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
 
-1. Submit: `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
+1. For a combined run already submitted in Parse, retain its `run_id` and
+   continue its declared steps. Otherwise submit:
+   `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
    An MDM target needs the operator's approval of that rules version first (Mode 4).
 2. Work and verify **each declared profile in dependency order**: `source.read`,
    `mdm.prepare`, `mdm.merge`, then each declared `mdm.publish` step. For example:
