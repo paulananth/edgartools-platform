@@ -36,7 +36,7 @@ def main():
     store = Artifacts()
     contracts = {'main': files.source('sec.submissions.company'),
                  'page': files.load(files.ROOT / 'sources/sec.submissions.company/pagination.yaml')}
-    evidence, groups, rows, units = [], {}, 0, 0
+    evidence, groups, publications, rows, units = [], {}, [], 0, 0
     with tempfile.TemporaryDirectory(prefix='codex-company-pages-') as folder:
         scratch = Path(folder)
         saved = {k: store.put(scratch.as_uri(), v) for k, v in contracts.items()}
@@ -128,13 +128,16 @@ def main():
             if mdm_prepare.verify({**prepare, 'candidate': prepared}, store) != ({'mdm.prepared': True}, []): raise ValueError('Prepare verification failed')
             batch = store.json(prepared)['batches'][0]
             require_tables(json.loads((scratch / f'mdm-{capture_label}' / batch['input']['path']).read_bytes()), company)
+            publications.append({'cik': cik, 'capture_date': stamp, 'pages': len(page_items), 'forms': company['forms'],
+                'parts': len(parts), 'main_sha256': main_ref['sha256'], 'combined_sha256': combined['sha256'],
+                'prepared_sha256': prepared['sha256']})
             print(json.dumps({'cik': cik, 'pages': len(page_items), 'form_count': len(company['forms'])}), flush=True)
-    summary = {'companies': len(groups), 'pages': sum(r['kind']=='page' for r in objects), 'filing_rows': rows,
+    summary = {'companies': len({cik for cik, _ in groups}), 'capture_groups': len(groups), 'pages': sum(r['kind']=='page' for r in objects), 'filing_rows': rows,
         'source_read_units': units, 'captured_pages_qualified': True, 'complete_declared_page_forms_match': True,
         'producer_provenance_qualified': False, 'full_company_mastering': False, 'sec_requests': 0,
         'capture_manifest_sha256': hashlib.sha256(raw_manifest).hexdigest(), 'contract_sha256s': {k: digest(v) for k,v in contracts.items()},
         'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_read.runtime_files(), Path(source_combine.__file__), Path(mdm_prepare.__file__)]},
-        'elapsed_seconds': round(time.monotonic()-started,3), 'evidence': evidence}
+        'elapsed_seconds': round(time.monotonic()-started,3), 'publications': publications, 'evidence': evidence}
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(summary,indent=2)+'\n')
     print(json.dumps({k:v for k,v in summary.items() if k!='evidence'}))
