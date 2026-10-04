@@ -1,7 +1,8 @@
 //! Generic JSON parallel arrays, with row count pinned to a declared anchor.
 use serde_yaml::Value;
+use std::borrow::Cow;
 
-use crate::tree::{Child, El};
+use crate::tree::{Child, El, ScalarKind};
 use crate::{check_path, setting, Rejected};
 
 pub(crate) fn validate(each: &Value, format: &str) -> Result<(), String> {
@@ -12,7 +13,7 @@ pub(crate) fn validate(each: &Value, format: &str) -> Result<(), String> {
         return Err("each.parallel requires one JSON document".into());
     }
     for key in args.keys() {
-        if !matches!(key.as_str(), Some("path" | "anchor" | "fields" | "lengths")) {
+        if !matches!(key.as_str(), Some("path" | "anchor" | "fields" | "lengths" | "on_invalid_object" | "strings")) {
             return Err("each.parallel has an unknown argument".into());
         }
     }
@@ -22,6 +23,12 @@ pub(crate) fn validate(each: &Value, format: &str) -> Result<(), String> {
     array_path(setting(spec, "anchor").ok_or("each.parallel names no anchor")?)?;
     if spec.get("lengths").is_some_and(|v| !matches!(v.as_str(), Some("equal" | "anchor"))) {
         return Err("each.parallel.lengths is equal or anchor".into());
+    }
+    if spec.get("on_invalid_object").is_some_and(|v| !matches!(v.as_str(), Some("reject" | "empty"))) {
+        return Err("each.parallel.on_invalid_object is reject or empty".into());
+    }
+    if spec.get("strings").is_some_and(|v| !matches!(v.as_str(), Some("reject" | "characters"))) {
+        return Err("each.parallel.strings is reject or characters".into());
     }
     let fields = spec.get("fields").and_then(Value::as_mapping).filter(|m| !m.is_empty())
         .ok_or("each.parallel.fields is a nonempty mapping")?;
@@ -60,12 +67,15 @@ fn object_at<'a>(start: &'a El, path: &str) -> Result<Option<&'a El>, Rejected> 
     Ok(Some(current))
 }
 
-fn array<'a>(container: &'a El, path: &str) -> Result<Option<&'a Vec<El>>, Rejected> {
+fn array<'a>(container: &'a El, path: &str, strings: bool, character_bound: usize) -> Result<Option<Cow<'a, [El]>>, Rejected> {
     let (parent, name) = path.rsplit_once('.').unwrap_or((".", path));
     let Some(parent) = object_at(container, parent)? else { return Ok(None) };
     match parent.children.get(name) {
         None => Ok(None),
-        Some(Child::Many(values)) => Ok(Some(values)),
+        Some(Child::Many(values)) => Ok(Some(Cow::Borrowed(values))),
+        Some(Child::One(el)) if strings && el.scalar && el.kind == ScalarKind::Text && el.text.is_some() => {
+            Ok(Some(Cow::Owned(el.text.as_ref().unwrap().chars().take(character_bound).map(|c| El::scalar(Some(c.to_string()))).collect())))
+        }
         Some(Child::One(_)) => Err(Rejected::new("parallel_shape", format!("{path} must be an array"))),
     }
 }
@@ -73,16 +83,23 @@ fn array<'a>(container: &'a El, path: &str) -> Result<Option<&'a Vec<El>>, Rejec
 pub(crate) fn rows(document: &El, each: &Value, max_records: usize) -> Result<Vec<El>, Rejected> {
     let spec = &each["parallel"];
     let path = setting(spec, "path").unwrap(); // validated on load
-    let Some(container) = object_at(document, path)? else { return Ok(Vec::new()) };
-    let count = array(container, setting(spec, "anchor").unwrap())?.map_or(0, Vec::len);
+    let container = match object_at(document, path) {
+        Err(_) if setting(spec, "on_invalid_object") == Some("empty") => return Ok(Vec::new()),
+        other => other?,
+    };
+    let Some(container) = container else { return Ok(Vec::new()) };
+    let strings = setting(spec, "strings") == Some("characters");
+    let count = array(container, setting(spec, "anchor").unwrap(), strings, max_records.saturating_add(1))?.map_or(0, |values| values.len());
     if count > max_records {
         return Err(Rejected::new("limit_exceeded", format!("parallel anchor has more than {max_records} records")));
     }
+    let equal = setting(spec, "lengths").unwrap_or("equal") == "equal";
+    if !equal && count == 0 { return Ok(Vec::new()); }
     let mut columns = Vec::new();
     for (name, path) in spec["fields"].as_mapping().unwrap() {
         let path = path.as_str().unwrap();
-        let values = array(container, path)?;
-        if setting(spec, "lengths").unwrap_or("equal") == "equal" && values.map_or(0, Vec::len) != count {
+        let values = array(container, path, strings, count.saturating_add(1))?;
+        if equal && values.as_ref().map_or(0, |values| values.len()) != count {
             return Err(Rejected::new("parallel_length", format!("{path} does not match the anchor's {count} records")));
         }
         columns.push((name.as_str().unwrap(), values));
@@ -90,7 +107,7 @@ pub(crate) fn rows(document: &El, each: &Value, max_records: usize) -> Result<Ve
     Ok((0..count).map(|index| {
         let mut row = El::default();
         for (name, values) in &columns {
-            let value = values.and_then(|values| values.get(index)).cloned().unwrap_or_else(|| El::scalar(None));
+            let value = values.as_ref().and_then(|values| values.get(index)).cloned().unwrap_or_else(|| El::scalar(None));
             row.children.insert((*name).into(), Child::One(value));
         }
         row

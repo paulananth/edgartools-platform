@@ -41,6 +41,17 @@ original document, so envelope facts need not be duplicated into every row.
   when the other arrays satisfy the declared length policy. A present scalar,
   null or array where an object is required is refused. A scalar or null
   where an array is required is refused, including one-element cases.
+- `on_invalid_object: empty` explicitly returns no rows when the object path
+  reaches a scalar, null or array. It does not excuse invalid arrays inside
+  a valid object. The default is `reject`.
+- `strings: characters` permits a string wherever an array is declared,
+  indexing Unicode code points in order. Padding/length checks still follow
+  `lengths`; null, numbers, booleans and objects remain invalid arrays.
+  The default is `reject`. Character expansion is bounded by the anchor
+  safety limit and the number of fields actually used.
+- With `lengths: anchor`, a zero-length anchor requires no field values and
+  produces no rows without inspecting those fields. `equal` still validates
+  all fields even when the anchor is empty.
 - The record limit is checked before expanding rows. Existing record
   checks can defer rows; their raw evidence is the aligned record with
   exactly the declared fields, not the complete original document.
@@ -56,6 +67,23 @@ input reference keeps the original artifact and its hash available.
 `trim`. For a source whose empty string is absent but whitespace is evidence,
 use `trim: false, null_if: [""]`. `ignore_case` retains its ASCII case
 comparison and requires `null_if`.
+
+For a JSON source that defines Python-style text conversion, declare
+`coerce: python` in `text` (or the text input of `date`). Booleans become
+`True`/`False`; finite floats use Python 3.12 notation; JSON integers retain
+their exact value as integers; containers use Python repr with original
+object insertion order, nested `None`, quote selection and Unicode 15.0
+printability. Null still uses the expression's default. Apply trim and
+null tokens after conversion. The default, `coerce: scalar`, retains the
+existing scalar-only behavior and lowercase boolean text. Python coercion
+requires JSON or JSON Lines; it is implemented in Rust without a Python
+callback or source loader. It does not expand the existing finite-number,
+UTF-8, nesting or byte safety limits.
+
+Declare these policies only after comparing both outputs and failures with
+the source contract. They do not authorize a source version or retire its
+reader. The six earlier filing coercion/shape differences have dedicated
+oracle coverage; full malformed-source equivalence remains a separate gate.
 
 ## Qualification boundary
 

@@ -7,17 +7,25 @@ execution:
 read:
   format: json
   context:
-    cik: {type: integer}
-    sync_run_id: {type: text}
-    raw_object_id: {type: text}
-    load_mode: {type: text}
-    recent_limit: {type: integer, nullable: true}
+    cik:
+      type: integer
+    sync_run_id:
+      type: text
+    raw_object_id:
+      type: text
+    load_mode:
+      type: text
+    recent_limit:
+      type: integer
+      nullable: true
   limits:
     max_bytes: 33554432
     max_records: 100000
   tables:
     filings:
-      take: {context: {name: recent_limit}}
+      take:
+        context:
+          name: recent_limit
       each:
         parallel:
           path: filings.recent
@@ -38,6 +46,8 @@ read:
             is_xbrl: isXBRL
             is_inline_xbrl: isInlineXBRL
           lengths: anchor
+          on_invalid_object: empty
+          strings: characters
       columns:
         accession_number:
           text:
@@ -45,12 +55,14 @@ read:
             trim: false
             null_if:
             - ''
+            coerce: python
         form:
           text:
             path: form
             trim: false
             null_if:
             - ''
+            coerce: python
         filing_date:
           date:
             path: filing_date
@@ -58,6 +70,7 @@ read:
             basic_suffix: ignore
             prefix_length: 10
             on_invalid: null
+            coerce: python
         report_date:
           date:
             path: report_date
@@ -65,48 +78,56 @@ read:
             basic_suffix: ignore
             prefix_length: 10
             on_invalid: null
+            coerce: python
         acceptance_datetime:
           text:
             path: acceptance_datetime
             trim: false
             null_if:
             - ''
+            coerce: python
         act:
           text:
             path: act
             trim: false
             null_if:
             - ''
+            coerce: python
         file_number:
           text:
             path: file_number
             trim: false
             null_if:
             - ''
+            coerce: python
         film_number:
           text:
             path: film_number
             trim: false
             null_if:
             - ''
+            coerce: python
         items:
           text:
             path: items
             trim: false
             null_if:
             - ''
+            coerce: python
         primary_document:
           text:
             path: primary_document
             trim: false
             null_if:
             - ''
+            coerce: python
         primary_doc_desc:
           text:
             path: primary_doc_desc
             trim: false
             null_if:
             - ''
+            coerce: python
         size:
           integer:
             path: size
@@ -123,7 +144,15 @@ read:
             as: boolean
             default: false
             on_invalid: default
-        cik: {context: {name: cik}}
-        sync_run_id: {context: {name: sync_run_id}}
-        raw_object_id: {context: {name: raw_object_id}}
-        load_mode: {context: {name: load_mode}}
+        cik:
+          context:
+            name: cik
+        sync_run_id:
+          context:
+            name: sync_run_id
+        raw_object_id:
+          context:
+            name: raw_object_id
+        load_mode:
+          context:
+            name: load_mode
