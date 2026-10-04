@@ -13,7 +13,7 @@ pub(crate) fn validate(each: &Value, format: &str) -> Result<(), String> {
         return Err("each.parallel requires one JSON document".into());
     }
     for key in args.keys() {
-        if !matches!(key.as_str(), Some("path" | "anchor" | "fields" | "lengths" | "on_invalid_object" | "strings")) {
+        if !matches!(key.as_str(), Some("path" | "anchor" | "fields" | "lengths" | "on_invalid_object" | "strings" | "on_empty_anchor")) {
             return Err("each.parallel has an unknown argument".into());
         }
     }
@@ -29,6 +29,12 @@ pub(crate) fn validate(each: &Value, format: &str) -> Result<(), String> {
     }
     if spec.get("strings").is_some_and(|v| !matches!(v.as_str(), Some("reject" | "characters"))) {
         return Err("each.parallel.strings is reject or characters".into());
+    }
+    if spec.get("on_empty_anchor").is_some_and(|v| !matches!(v.as_str(), Some("validate_fields" | "ignore_fields"))) {
+        return Err("each.parallel.on_empty_anchor is validate_fields or ignore_fields".into());
+    }
+    if setting(spec, "on_empty_anchor") == Some("ignore_fields") && setting(spec, "lengths") != Some("anchor") {
+        return Err("each.parallel.on_empty_anchor ignore_fields requires lengths anchor".into());
     }
     let fields = spec.get("fields").and_then(Value::as_mapping).filter(|m| !m.is_empty())
         .ok_or("each.parallel.fields is a nonempty mapping")?;
@@ -94,7 +100,7 @@ pub(crate) fn rows(document: &El, each: &Value, max_records: usize) -> Result<Ve
         return Err(Rejected::new("limit_exceeded", format!("parallel anchor has more than {max_records} records")));
     }
     let equal = setting(spec, "lengths").unwrap_or("equal") == "equal";
-    if !equal && count == 0 { return Ok(Vec::new()); }
+    if count == 0 && setting(spec, "on_empty_anchor") == Some("ignore_fields") { return Ok(Vec::new()); }
     let mut columns = Vec::new();
     for (name, path) in spec["fields"].as_mapping().unwrap() {
         let path = path.as_str().unwrap();

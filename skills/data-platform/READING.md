@@ -49,9 +49,10 @@ original document, so envelope facts need not be duplicated into every row.
   `lengths`; null, numbers, booleans and objects remain invalid arrays.
   The default is `reject`. Character expansion is bounded by the anchor
   safety limit and the number of fields actually used.
-- With `lengths: anchor`, a zero-length anchor requires no field values and
-  produces no rows without inspecting those fields. `equal` still validates
-  all fields even when the anchor is empty.
+- `on_empty_anchor: ignore_fields` with `lengths: anchor` produces no rows
+  without inspecting fields when the anchor is empty. The default,
+  `validate_fields`, preserves shape checks even for an empty anchor.
+  `ignore_fields` is invalid with `lengths: equal`.
 - The record limit is checked before expanding rows. Existing record
   checks can defer rows; their raw evidence is the aligned record with
   exactly the declared fields, not the complete original document.

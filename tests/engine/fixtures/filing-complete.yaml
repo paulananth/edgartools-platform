@@ -48,6 +48,7 @@ read:
           lengths: anchor
           on_invalid_object: empty
           strings: characters
+          on_empty_anchor: ignore_fields
       columns:
         accession_number:
           text:

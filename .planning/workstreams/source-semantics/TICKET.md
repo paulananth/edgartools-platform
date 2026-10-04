@@ -19,3 +19,7 @@ No source Rules activation or cloud deployment is included. Existing readers are
 `coerce: python` is explicit and generic, implemented in Rust. It retains JSON object order only when requested. Unicode behavior is pinned to the already qualified Python 3.12 / Unicode 15.0 policy. Strict scalar/array/object defaults remain covered. Character expansion is capped before allocation. No loader dependency or source-specific branch is added to control, workers or the engine.
 
 Resolving the original six differences does not prove all malformed source behavior. Empty object fields, zero first-N with invalid unused fields, JSON integers outside the existing finite-number parser range, and nonfinite/surrogate input policies still need an extended refusal audit before reader retirement. Full Company/Person/GLEIF integration remains open.
+
+## Independent review
+
+Spec: no scoped implementation findings. Standards/GoF: no documented violations or structural refactor recommendation; one correctness blocker found. The initial empty-anchor shortcut changed existing `lengths: anchor` behavior without opt-in. Added explicit `on_empty_anchor: ignore_fields` (only with anchor lengths) and a regression proving the default still rejects a null field. The first full local run was deliberately interrupted after 570 passes (112.62s) because its loaded binary and committed installation snapshot predated this correction. It is not final verification.
