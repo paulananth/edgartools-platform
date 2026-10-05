@@ -43,8 +43,9 @@ read:
 
 Every stream field is required. `container` is `none` or `zip`; ZIP requires
 one unencrypted file, verifies its CRC through EOF and enforces the expanded
-byte limit. `max_input_bytes` bounds the authenticated snapshot;
-`max_bytes` bounds expanded bytes. `max_record` applies the explicitly selected
+byte limit. `max_input_bytes` bounds the authenticated snapshot (at most 1 GiB);
+`max_bytes` bounds expanded bytes (at most 16 GiB). Private spool storage is
+capped at 1 GiB and each partition at 8 MiB. `max_record` applies the explicitly selected
 native or Python compact JSON encoding. Recursive object key order is retained
 before projection. `read.limits` bounds each projected record, and assertions
 run on each record. Ordinary `ordinal` expressions refer to rows within that
@@ -650,8 +651,9 @@ through 64 KiB reads, bounds snapshot disk usage explicitly, and closes the
 snapshot on success or failure. Use a compressed-byte cap when snapshotting
 an archive, then a separate expanded-byte cap while parsing its member.
 
-This boundary is not yet a configured `source.read` streaming mode. Before
-adopting it for GLEIF, implement configured record projection and immutable
-partitions, verify complete archive/member authentication and metadata,
-qualify installed worker dependencies, and prove publication/replay through
-EOF. JSON framing tests do not qualify XML or retire active GLEIF parsing.
+The configured worker mode is described under **Streamed JSON record
+projection** above. Its installed projection and partition verifier are
+qualified; downstream adoption remains unfinished. Before GLEIF cutover,
+verify complete archive/member authentication and metadata and prove
+publication/replay through EOF. JSON framing tests do not qualify XML or
+retire active GLEIF parsing.
