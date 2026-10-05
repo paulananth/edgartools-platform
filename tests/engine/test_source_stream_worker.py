@@ -149,3 +149,14 @@ def test_partition_byte_accounting_handles_nested_unicode_and_escaped_values(tmp
     assert parts[0]["record_count"] == 1
     assert parts[0]["bytes"] == rules["read"]["stream"]["partition_bytes"]
     assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+
+
+def test_expanded_policy_can_represent_the_actual_gleif_capture_size(tmp_path):
+    store = Artifacts()
+    rules = contract()
+    # ZIP central-directory preflight of the cached capture: this verifies
+    # contract representability, not the archive's bytes or complete parsing.
+    rules["read"]["stream"]["max_bytes"] = 13252301819
+    envelope = task(tmp_path, store, [b'{"records":[{"n":1}]}'], rules)
+    receipt = source_read.execute(envelope, store)
+    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])

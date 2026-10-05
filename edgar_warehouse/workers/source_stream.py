@@ -23,7 +23,7 @@ def _encode(value):
 def _policy(contract):
     read = contract["read"]
     spec = read["stream"]
-    maxima = {"max_input_bytes": 1024**3, "max_bytes": 8 * 1024**3,
+    maxima = {"max_input_bytes": 1024**3, "max_bytes": 16 * 1024**3,
               "max_record": 32 * 1024**2, "max_records": 10_000_000,
               "max_depth": 64, "partition_bytes": 8 * 1024**2,
               "partition_records": 100_000, "max_partitions": 4096,
