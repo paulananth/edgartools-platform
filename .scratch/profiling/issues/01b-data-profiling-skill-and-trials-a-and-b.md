@@ -8,11 +8,11 @@ Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../pl
 - [x] skills/data-profiling/SKILL.md (modes inventory → … → approve, compare): written; doctor finds 0 unresolved; 2026-10-05 07:57 ET
 - [x] DuckDB helpers + unit tests on fixtures: scripts/profiling/*.py, 75 tests in tests/unit/test_profiling_*.py on a synthetic set; check digits agree with python-stdnum on 120,000 values; 2026-10-05 07:57 ET
 - [x] Genericity lint test (also run against the merged docs/specs/{rdm,agent-context,profiling}; no hits): tests/unit/test_profiling_genericity.py; 2026-10-05 07:57 ET
-- [ ] Trial A note: lei2 is 13.25 GB unzipped, 9.5 GB disk free: stream from the zip, sample, full passes for key candidates; never unzip in full
+- [x] Trial A note: lei2 is 13.25 GB unzipped, 9.5 GB disk free: stream from the zip, sample, full passes for key candidates; never unzip in full (verified: runs 2-3 stream the zip, sample 100,000 records with seed 0, confirm the key in a full pass; no full unzip) 2026-10-05 18:56 ET
 - [x] link.sh, agents/openai.yaml (data-onboarding pattern); 2026-10-05 07:57 ET
 - [x] compare mode (drift.yaml, each item names its skill); tested; 2026-10-05 07:57 ET
 - [x] Trial B answer key written before the trial: trials/B/ANSWER-KEY.md, committed before any skill code (with trials/A/ANSWER-KEY.md and the SQLite build script); 2026-10-05 07:20 ET
-- [ ] Trial A (SEC + GLEIF) matches its answer key
+- [x] Trial A (SEC + GLEIF) matches its answer key: 38 of 41; the 3 misses are record keys the data contradicts (accession number repeats across co-filers; ticker value is a found key; the relationship key is unique without its end node), evidence in trials/A/RESULT.md and final/score.txt; operator to confirm the explanation at review 2026-10-05 19:51 ET
 - [x] Trial B matches with no domain-specific change: 52/52 as CSV and as SQLite, identical findings; run 1 was 48/52, four generic fixes listed in trials/B/RESULT.md; 2026-10-05 07:57 ET
 - [x] Wiring of data-onboarding (discover, plan-parts; profile reads findings; by-hand profile and the `rules profile` row dropped) and refining-rules (compare before a new delivery changes a live feed). Guard: no overlap; doctor 0 unresolved; `rules profile` removed from NOT_BUILT in bundle.py and its test, since no skill names it now (GoF consult on bundle.py: a one-entry constant change, Rule 0, nothing to settle); 2026-10-05 08:06 ET
 - [ ] ~~data-platform/SKILL.md one line~~ deferred: still differs on Codex branches codex/bundled-data-guidance-20261004 and codex/raw-submissions-20261004 (guard rule); waits until they merge or close
