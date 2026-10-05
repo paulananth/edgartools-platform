@@ -69,11 +69,12 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
 
     profiles = {p: profile.columns(con, p) for p in parts}
     say("profiled columns")
-    unique = {p: keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
+    # A list of plain values has no key of its own: its parent's key and the place in the list.
+    unique = {p: [] if keys.plain_values(cols) else keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
     say("found unique keys")
     confirmed = {}
     for p, part in parts.items():
-        if part.scan == "sampled" and part.parent is None:
+        if part.scan == "sampled" and part.parent is None:  # children keep keys found in the sample
             say(f"{p}: full pass for its identifier-like key candidates")
             confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
             say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
@@ -86,8 +87,9 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     record_keys: dict[str, dict] = {}
     for p in sorted(parts, key=lambda n: n.count(".")):  # parents before their children
         parent = parts[p].parent
-        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links,
-                                                record_keys[parent]["columns"] if parent else None)
+        parent_key = record_keys[parent]["columns"] if parent else None
+        within = keys.unique_within_parent(con, p, profiles[p]) if parent and not unique[p] else None
+        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within)
 
     findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}))
                       for p in parts]

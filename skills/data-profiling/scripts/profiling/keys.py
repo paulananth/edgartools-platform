@@ -206,8 +206,24 @@ def child_links(parts: dict[str, Part]) -> list[dict]:
             for name, part in sorted(parts.items()) if part.parent]
 
 
+def plain_values(columns: list[dict]) -> bool:
+    """A child part made from a list of plain values (its one data column is `value`)."""
+    return [c["name"] for c in columns if not c["structure"]] == ["value"]
+
+
+def unique_within_parent(con, part: str, columns: list[dict]) -> str | None:
+    """A column of a child part whose values never repeat inside one parent record."""
+    rows = columns[0]["rows"] if columns else 0
+    for c in sorted(_candidates(columns), key=lambda c: -c["distinct"]):
+        distinct = con.execute(f"SELECT count(*) FROM (SELECT DISTINCT {PARENT}, {sql_name(c['name'])} "
+                               f"FROM {sql_name(part)})").fetchone()[0]
+        if distinct == rows:
+            return c["name"]
+    return None
+
+
 def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], incoming: list[dict],
-                      parent_key: list[str] | None) -> dict:
+                      parent_key: list[str] | None, within: str | None = None) -> dict:
     """The record key: a found key the other parts point at, else a designed one."""
     pointed = {tuple(l["to"]["columns"]) for l in incoming if l["to"]["part"] == part}
     order = {c["name"]: i for i, c in enumerate(columns)}
@@ -220,6 +236,10 @@ def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], inc
         best = min(keys, key=rank)
         return {"columns": best, "found": True, "design": None, "rule": None,
                 "alternatives": [k for k in keys if k != best]}
+    if parent_key is not None and within:
+        return {"columns": [*parent_key, within], "found": True, "design": None,
+                "rule": f"{within} is unique within each parent record; with the parent's key it is unique",
+                "alternatives": []}
     if parent_key is not None:
         return {"columns": [*parent_key, POSITION], "found": False, "design": "natural_composite",
                 "rule": "the parent's record key plus the place in its list", "alternatives": []}

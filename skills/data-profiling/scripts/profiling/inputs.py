@@ -407,8 +407,16 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
         path.unlink()
     for part in sorted(files, key=lambda n: -n.count(".")):  # deepest first
         _fold_single_items(con, part)
-        parts.append(Part(part, "", "", 0, scan=scan, parent=part.rsplit(".", 1)[0] if part != name else None))
+        parts.append(Part(part, "", "", 0, scan=scan, parent=_enclosing(part, files) if part != name else None))
     return parts
+
+
+def _enclosing(part: str, parts) -> str:
+    """The nearest part a child part sits in: a list inside a nested object skips the object's name."""
+    parent = part.rsplit(".", 1)[0]
+    while parent not in parts and "." in parent:
+        parent = parent.rsplit(".", 1)[0]
+    return parent
 
 
 def _load_json_lines(con, part: str, path: Path) -> None:

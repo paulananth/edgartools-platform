@@ -134,3 +134,17 @@ def test_logical_type_of_dates_stored_as_text():
     cols = {c["name"]: c for c in profile.columns(con, "d")}
     assert profile.logical_type(cols["day"]) == "DATE" and cols["day"]["type"] == "VARCHAR"
     assert profile.logical_type(cols["other"]) == "VARCHAR"
+
+
+def test_first_and_last_mean_a_person_only_next_to_name():
+    assert not sensitivity.person_part(["FirstAddressLine", "LastUpdateDate", "LegalName"])
+    assert sensitivity.person_part(["first_name", "last_name"])
+    assert sensitivity.person_part(["GivenName", "Surname"])
+
+
+def test_dates_written_in_two_formats_are_still_dates():
+    con = duckdb.connect()
+    con.execute("""CREATE TABLE d AS SELECT CASE WHEN i % 2 = 0 THEN '2022-03-14T17:34:27Z'
+                   ELSE '2022-03-14T17:34:27.107Z' END AS at_time FROM range(10) r(i)""")
+    col = profile.columns(con, "d")[0]
+    assert col["shape_share"] == 0.5 and col["temporal_share"] == 1.0 and profile.is_temporal(col)

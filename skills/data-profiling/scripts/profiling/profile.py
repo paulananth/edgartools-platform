@@ -64,6 +64,10 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
         "tokens": round(float(tokens), 3),
         "top": [{"value": v, "rows": n} for v, n in top],
     })
+    if kind == "VARCHAR" and (modal_shape or "").startswith("9999-99-99"):
+        # Dates written in more than one format: count what reads as a timestamp at all.
+        converts = con.execute(f"SELECT count(TRY_CAST({c} AS TIMESTAMP)) FROM {t}").fetchone()[0]
+        profile["temporal_share"] = round(converts / non_null, 6)
     if kind in INTEGERS | FLOATS | TEMPORAL or kind.startswith("DECIMAL"):
         low, high = con.execute(f"SELECT CAST(min({c}) AS VARCHAR), CAST(max({c}) AS VARCHAR) FROM {t}").fetchone()
         profile.update({"min": low, "max": high})
@@ -85,9 +89,7 @@ def is_integer(profile: dict) -> bool:
 
 
 def is_temporal(profile: dict) -> bool:
-    return profile["type"] in TEMPORAL or (
-        profile["shape"] in {"9999-99-99", "9999-99-99A99:99:99", "9999-99-99 99:99:99", "9999-99-99A99:99:99.999A"}
-        and profile["shape_share"] >= 0.99)
+    return profile["type"] in TEMPORAL or profile.get("temporal_share", 0) >= 0.99
 
 
 def is_numeric(profile: dict) -> bool:

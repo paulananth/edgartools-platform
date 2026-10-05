@@ -199,3 +199,10 @@ def test_a_list_of_one_written_as_an_object_joins_its_list(con, tmp_path):
     assert con.execute('SELECT _parent_row, _position, start FROM "x.periods.period" ORDER BY 1, 2').fetchall() == [
         (0, 0, "2020"), (0, 1, "2022"), (1, 0, "2019")]
     assert con.execute('SELECT count(DISTINCT _row) FROM "x.periods.period"').fetchone()[0] == 3
+
+
+def test_a_list_inside_a_nested_object_names_its_enclosing_part(con, tmp_path):
+    f = tmp_path / "n.json"
+    f.write_text(json.dumps([{"id": 1, "group": {"items": [{"x": 1}, {"x": 2}]}}]))
+    parts = {p.name: p for p in inputs.register(con, "n", str(f), tmp_path / "w")}
+    assert parts["n.group.items"].parent == "n"

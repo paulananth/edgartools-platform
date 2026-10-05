@@ -25,8 +25,10 @@ IDENTITY = {"name", "given", "first", "last", "surname", "middle", "initial", "b
             "mail", "phone", "mobile", "address", "street", "zip", "postal", "postcode", "latitude", "longitude",
             "lat", "lon", "lng"}
 # Contact words: personal in any part (a contact is a person, whoever they work for).
-CONTACT = {"email", "mail", "phone", "mobile"}
-PERSON_PART = {"given", "first", "surname", "last", "birth", "birthday", "dob", "middle"}
+CONTACT = {"email", "phone", "mobile", "telephone"}  # "mail" alone is post (mail routing)
+PERSON_PART = {"given", "surname", "forename", "birth", "birthday", "dob", "middle", "maiden"}
+# "first" and "last" mean a person only next to "name": a first address line is not a person.
+PERSON_PAIRS = ({"first", "name"}, {"last", "name"})
 SENSITIVE = {"ssn", "passport", "national", "tax", "health", "diagnosis", "medical", "religion", "religious",
              "ethnicity", "ethnic", "race", "racial", "union", "biometric", "genetic", "sexual", "orientation",
              "political", "iban", "card", "account"}
@@ -46,7 +48,11 @@ def words(column: str) -> list[str]:
 
 def person_part(column_names: list[str]) -> bool:
     """A part describes people when its column names carry personal-name or birth words."""
-    found = {w for name in column_names for w in words(name)} & PERSON_PART
+    found = set()
+    for name in column_names:
+        said = set(words(name))
+        found |= said & PERSON_PART
+        found |= {"+".join(sorted(pair)) for pair in PERSON_PAIRS if pair <= said}
     return len(found) >= 2
 
 

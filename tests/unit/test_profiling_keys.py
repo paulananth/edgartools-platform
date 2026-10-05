@@ -82,3 +82,19 @@ def test_sampled_key_is_confirmed_in_full_and_links_use_every_value(tmp_path):
     assert confirmed["m"]["ref"]["unique"] and confirmed["m"]["ref"]["rows"] == 2000
     measured = keys.inclusion(con, "e", "ref", "m", "ref", confirmed)
     assert measured["sigma"] == 1.0
+
+
+def test_child_key_unique_within_its_parent_and_plain_value_lists(tmp_path):
+    import json
+    con = duckdb.connect()
+    f = tmp_path / "p.json"
+    # The same reference appears under two parents (shared by both), once per parent.
+    f.write_text(json.dumps([{"id": "A", "refs": [{"r": "x1"}, {"r": "x2"}], "tags": ["t", "t"]},
+                             {"id": "B", "refs": [{"r": "x1"}], "tags": ["u"]}]))
+    inputs.register(con, "p", str(f), tmp_path / "w")
+    refs = profile.columns(con, "p.refs")
+    assert keys.unique_keys(con, "p.refs", refs) == []
+    within = keys.unique_within_parent(con, "p.refs", refs)
+    chosen = keys.choose_record_key("p.refs", [], refs, [], ["id"], within)
+    assert chosen["columns"] == ["id", "r"] and chosen["found"]
+    assert keys.plain_values(profile.columns(con, "p.tags"))
