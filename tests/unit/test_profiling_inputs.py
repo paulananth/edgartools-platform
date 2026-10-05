@@ -111,9 +111,9 @@ def test_oversized_input_is_sampled_with_a_seed_and_full_pass_is_exact(con, tmp_
     again = duckdb.connect()
     inputs.register(again, "s", str(f), tmp_path / "w2", limit=100, sample=50, seed=7)
     assert rows(con, "s") == rows(again, "s")
-    assert inputs.full_pass(parts[0], ["k", "c"]) == {
-        "k": {"rows": 1000, "null_rows": 0, "distinct": 1000},
-        "c": {"rows": 1000, "null_rows": 334, "distinct": 2}}
+    values, total, nulls = inputs.full_values(parts[0], "c")
+    assert (values, total, nulls) == ({1, 2}, 1000, 334)
+    assert len(inputs.full_values(parts[0], "k")[0]) == 1000
 
 
 def test_database_file_tables_become_parts(con, tmp_path):

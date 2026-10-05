@@ -386,19 +386,17 @@ def _attached(con, name: str, location: str, fmt: str) -> list[Part]:
     return parts
 
 
-def full_pass(part: Part, columns: list[str]) -> dict[str, dict]:
-    """Read a sampled top-level part again, whole, for named columns: exact rows, nulls, distinct."""
+def full_values(part: Part, column: str) -> tuple[set, int, int]:
+    """Read a sampled top-level part again, whole: the distinct values of one column, rows and empty rows."""
     if part.reopen is None or part.parent is not None:
         raise ValueError(f"{part.name}: a full pass reads a top-level part read from records")
-    seen: dict[str, set] = {c: set() for c in columns}
-    nulls = dict.fromkeys(columns, 0)
-    rows = 0
+    values: set = set()
+    rows = nulls = 0
     for record in part.reopen():
-        values = Flattener().add(record, part.name)
+        value = Flattener().add(record, part.name).get(column)
         rows += 1
-        for c in columns:
-            if values.get(c) is None:
-                nulls[c] += 1
-            else:
-                seen[c].add(values[c])
-    return {c: {"rows": rows, "null_rows": nulls[c], "distinct": len(seen[c])} for c in columns}
+        if value is None:
+            nulls += 1
+        else:
+            values.add(value)
+    return values, rows, nulls
