@@ -71,8 +71,8 @@ def confirm_sampled(con, part: Part, keys: list[list[str]], columns: list[dict])
     evidence = {}
     for column, (values, rows, nulls) in full_values(part, wanted, con).items():
         table = sql_name(f"{part.name}#{column}")
-        con.execute(f"CREATE TABLE {table} (v VARCHAR)")
-        con.executemany(f"INSERT INTO {table} VALUES (?)", [[str(v)] for v in values])
+        # One statement for every value (row-by-row inserts take hours on millions of values).
+        con.execute(f"CREATE TABLE {table} AS SELECT unnest(?::VARCHAR[]) AS v", [[str(v) for v in values]])
         evidence[column] = {"rows": rows, "null_rows": nulls, "distinct": len(values),
                             "unique": len(values) == rows and nulls == 0, "scan": "full"}
     return evidence

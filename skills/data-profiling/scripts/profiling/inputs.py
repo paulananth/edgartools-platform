@@ -513,12 +513,26 @@ def full_values(part: Part, columns: list[str], con=None) -> dict[str, tuple[set
     values: dict[str, set] = {c: set() for c in columns}
     nulls = dict.fromkeys(columns, 0)
     rows = 0
+    paths = {c: c.split(".") for c in columns}
     for record in part.reopen():
-        flat = Flattener().add(record, part.name)
         rows += 1
-        for c in columns:
-            if flat.get(c) is None:
+        for c, path in paths.items():
+            value = _at(record, path)
+            if value is None:
                 nulls[c] += 1
             else:
-                values[c].add(flat[c])
+                values[c].add(value)
     return {c: (values[c], rows, nulls[c]) for c in columns}
+
+
+def _at(record: dict, path: list[str]):
+    """The value of a flattened column in one record, read without flattening the rest."""
+    value = record
+    for i, key in enumerate(path):
+        if not isinstance(value, dict):
+            return None
+        if key not in value:  # a key holding a dot itself
+            joined = ".".join(path[i:])
+            return _scalar(value.get(joined)) if joined in value else None
+        value = _scalar(value[key])
+    return None if isinstance(value, (dict, list)) else value
