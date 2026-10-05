@@ -1,0 +1,21 @@
+{
+  "cases": 2066,
+  "accepted": 2050,
+  "refused": 16,
+  "difference_count": 0,
+  "differences": [],
+  "comparison": "typed rows, recursive captured key order and refusal decisions; exception identities excluded",
+  "integer_minimum": -9223372036854775807,
+  "universal_equivalence": false,
+  "full_archive_qualification": false,
+  "sec_requests": 0,
+  "record_bounds": {
+    "cases": 6141,
+    "difference_count": 0,
+    "differences": [],
+    "record_encoding": "python",
+    "comparison": "typed rows, recursive captured-key order and encoded-size boundary acceptance",
+    "universal_equivalence": false,
+    "full_archive_qualification": false
+  }
+}

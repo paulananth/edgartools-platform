@@ -6,6 +6,7 @@ import json
 import math
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -74,6 +75,51 @@ class Artifacts:
         if hashlib.sha256(data).hexdigest() != ref["sha256"]:
             raise Blocked(f"Artifact hash mismatch: {ref['uri']}")
         return data
+
+    @contextmanager
+    def verified_stream(self, ref: dict, *, max_bytes: int):
+        """Yield a private, hash-verified snapshot with bounded memory.
+
+        Authentication completes before the consumer can read any bytes.
+        The snapshot prevents a mutable source from changing between hash
+        verification and parsing. Its disk usage is bounded by max_bytes.
+        """
+        reference(ref)
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 2**63 - 1:
+            raise Blocked("Stream snapshot requires a positive signed byte bound")
+        location = urlparse(ref["uri"])
+        with tempfile.TemporaryFile(mode="w+b") as snapshot:
+            try:
+                if location.scheme == "s3":
+                    source = self.s3.get_object(Bucket=location.netloc, Key=location.path.lstrip("/"))["Body"]
+                elif location.scheme == "file" and location.netloc in ("", "localhost"):
+                    source = Path(unquote(location.path)).open("rb")
+                else:
+                    raise Blocked("Artifact URI must be file:// (offline) or s3:// (AWS)")
+                checksum, size = hashlib.sha256(), 0
+                try:
+                    while True:
+                        requested = min(65536, max_bytes - size + 1)
+                        chunk = source.read(requested)
+                        if not isinstance(chunk, bytes) or len(chunk) > requested:
+                            raise Blocked("Artifact stream violated its bounded read contract")
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > max_bytes:
+                            raise Blocked("Artifact exceeds its bounded snapshot size")
+                        snapshot.write(chunk)
+                        checksum.update(chunk)
+                finally:
+                    source.close()
+                if checksum.hexdigest() != ref["sha256"]:
+                    raise Blocked(f"Artifact hash mismatch: {ref['uri']}")
+                snapshot.seek(0)
+            except Blocked:
+                raise
+            except Exception as exc:
+                raise Blocked(f"Artifact missing or unreadable: {ref['uri']}") from exc
+            yield snapshot
 
     def json(self, ref: dict) -> dict:
         try:

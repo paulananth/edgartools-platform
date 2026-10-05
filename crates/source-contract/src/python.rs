@@ -98,6 +98,11 @@ impl PyEngine {
         Engine::from_yaml(contract, registered).map(|inner| Self { inner }).map_err(rejected)
     }
 
+    fn validate_context(&self, context: &str) -> PyResult<()> {
+        let values = crate::context::from_json(context).map_err(rejected)?;
+        self.inner.validate_context(&values).map_err(rejected)
+    }
+
     #[pyo3(signature = (data, lookups, context="{}"))]
     fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>, context: &str) -> PyResult<PyObject> {
         let mut sets = Lookups::new();
@@ -141,5 +146,59 @@ impl PyEngine {
 fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
+    m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
     Ok(())
+}
+
+struct PythonReader(Py<PyAny>);
+
+impl std::io::Read for PythonReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        Python::with_gil(|py| {
+            let result = self.0.bind(py).call_method1("read", (buffer.len(),))?;
+            let bytes = result.downcast::<pyo3::types::PyBytes>()?.as_bytes();
+            if bytes.len() > buffer.len() { return Err(pyo3::exceptions::PyValueError::new_err("reader returned more bytes than requested")); }
+            buffer[..bytes.len()].copy_from_slice(bytes);
+            Ok(bytes.len())
+        }).map_err(|error: PyErr| std::io::Error::other(error.to_string()))
+    }
+}
+
+fn json_to_py(py: Python<'_>, value: &serde_json::Value) -> PyResult<PyObject> {
+    match value {
+        serde_json::Value::Null => Ok(py.None()),
+        serde_json::Value::Bool(value) => value.into_py_any(py),
+        serde_json::Value::String(value) => value.into_py_any(py),
+        serde_json::Value::Number(value) => match value.as_i64() {
+            Some(value) => value.into_py_any(py),
+            None => value.as_f64().unwrap().into_py_any(py),
+        },
+        serde_json::Value::Array(values) => {
+            let list = PyList::empty(py);
+            for value in values { list.append(json_to_py(py, value)?)?; }
+            list.into_py_any(py)
+        },
+        serde_json::Value::Object(values) => {
+            let dict = PyDict::new(py);
+            for (key, value) in values { dict.set_item(key, json_to_py(py, value)?)?; }
+            dict.into_py_any(py)
+        },
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (stream, wrapper, on_record, *, max_bytes, max_record, max_records, max_depth=64, min_integer=i64::MIN, record_encoding="native"))]
+fn scan_json_array(py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_record: Py<PyAny>,
+                   max_bytes: usize, max_record: usize, max_records: usize, max_depth: usize, min_integer: i64, record_encoding: &str) -> PyResult<(usize, usize)> {
+    let record_encoding = match record_encoding {
+        "native" => crate::json_sequence::RecordEncoding::Native,
+        "python" => crate::json_sequence::RecordEncoding::Python,
+        _ => return Err(rejected(crate::Rejected::new("contract", "record_encoding is native or python"))),
+    };
+    let limits = crate::json_sequence::Limits { max_bytes, max_record, max_records, max_depth, min_integer, record_encoding };
+    let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), &wrapper, limits, |record, ordinal| {
+        Python::with_gil(|py| on_record.call1(py, (json_to_py(py, &record)?, ordinal)).map(|_| ()))
+            .map_err(|error| crate::Rejected::new("stream_consumer", error))
+    })).map_err(rejected)?;
+    Ok((result.records, result.bytes))
 }

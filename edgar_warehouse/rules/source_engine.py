@@ -51,10 +51,51 @@ def _rejected(error: source_contract.SourceRejected) -> SourceRejected:
     return SourceRejected(*error.args)
 
 
+def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
+                      max_record: int, max_records: int, max_depth: int = 64,
+                      min_integer: int = -(2**63), record_encoding: str = "native") -> dict:
+    """Read one named object array without retaining the whole document.
+
+    Callbacks may prepare candidates. Only a successful return proves EOF;
+    callers must not publish, commit or authenticate earlier callback rows.
+    Transport/authentication and publication policy stay with the caller.
+    max_record caps encoded record bytes; raw reads and raw record bytes
+    permit 65,536 bytes of buffering headroom, including whitespace.
+    record_encoding='python' uses compact Python JSON float spelling for
+    byte limits; the default uses native JSON spelling.
+    """
+    if not isinstance(wrapper, str) or not wrapper or len(wrapper.encode()) > 128:
+        raise SourceRejected("contract", "JSON stream wrapper is bounded nonempty text")
+    bounds = {"max_bytes": max_bytes, "max_record": max_record, "max_records": max_records, "max_depth": max_depth}
+    if any(type(value) is not int or not 0 <= value <= 2**63 - 1 for value in bounds.values()):
+        raise SourceRejected("contract", "JSON stream bounds must be nonnegative signed integers")
+    if type(min_integer) is not int or not -(2**63) <= min_integer <= 2**63 - 1:
+        raise SourceRejected("contract", "JSON stream integer minimum must be a signed integer")
+    if type(record_encoding) is not str or record_encoding not in ("native", "python"):
+        raise SourceRejected("contract", "JSON stream record_encoding is native or python")
+    try:
+        records, size = source_contract.scan_json_array(stream, wrapper, on_record, min_integer=min_integer,
+                                                        record_encoding=record_encoding, **bounds)
+    except source_contract.SourceRejected as error:
+        raise _rejected(error) from None
+    return {"record_count": records, "expanded_bytes": size}
+
+
 class SourceEngine:
     def __init__(self, contract: Mapping):
+        read = contract.get("read")
+        if isinstance(read, Mapping) and "stream" in read:
+            raise SourceRejected("contract", "read.stream requires the source.read worker framing boundary")
         try:
             self._engine = source_contract.Engine(json.dumps(contract), STEPS)
+        except source_contract.SourceRejected as error:
+            raise _rejected(error) from None
+
+    def validate_context(self, context: Mapping[str, object]) -> None:
+        """Check declared caller facts before a stream can yield zero records."""
+        try:
+            self._engine.validate_context(json.dumps(dict(context), ensure_ascii=False,
+                                                     separators=(",", ":"), allow_nan=False))
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
 

@@ -4,6 +4,70 @@ Use this reference when writing a captured JSON contract. It describes the
 implemented engine grammar; a source version is approved through the normal
 Rules workflow after its test run.
 
+## Streamed JSON record projection
+
+For a captured single-wrapper array, `source.read` can authenticate the entire
+input into a private bounded snapshot, then project each object through the
+ordinary configured engine. Declare `read.stream` and use one execution worker:
+
+```yaml
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 4096, max_records: 100}
+  context:
+    source_index: {type: integer}
+  stream:
+    wrapper: records
+    container: none
+    max_input_bytes: 65536
+    max_bytes: 65536
+    max_record: 4096
+    max_records: 100
+    max_depth: 64
+    min_integer: -9223372036854775808
+    record_encoding: python
+    ordinal_context: source_index
+    partition_bytes: 4096
+    partition_records: 2
+    max_partitions: 10
+    max_spool_bytes: 65536
+    max_output_rows: 100
+  tables:
+    rows:
+      each: .
+      columns:
+        value: {value: {path: n}}
+        source_index: {context: {name: source_index}}
+```
+
+Every stream field is required. `container` is `none` or `zip`; ZIP requires
+one unencrypted file, verifies its CRC through EOF and enforces the expanded
+byte limit. `max_input_bytes` bounds the authenticated snapshot (at most 1 GiB);
+`max_bytes` bounds expanded bytes (at most 16 GiB). Private spool storage is
+capped at 1 GiB and each partition at 8 MiB. `max_record` applies the explicitly selected
+native or Python compact JSON encoding. Recursive object key order is retained
+before projection. `read.limits` bounds each projected record, and assertions
+run on each record. Ordinary `ordinal` expressions refer to rows within that
+record; `ordinal_context` supplies the one-based source record index and cannot
+be overridden by caller context. Use null when no source index is needed.
+Context is validated even for empty arrays.
+
+Projected tables and deferred records accumulate in private partitions.
+Partition count, bytes, record count, aggregate spool bytes and output rows
+are independently bounded. Every input must authenticate and reach valid EOF
+before any partition is written. The version-2 reading index names immutable
+content-addressed partitions, their byte sizes and source ordinal ranges.
+The verifier rebuilds them from the original receipts and compares their
+exact bytes without writes. A later output-write failure may leave immutable
+partitions for retry; the index is written last.
+
+This worker mode is under qualification. `source.combine` and `mdm.prepare`
+still consume version-1 inline readings; finish their partition adoption and
+installed source/population proof before activating a streamed source.
+Direct `SourceEngine.read` rejects stream contracts so they cannot silently
+take the eager path. Active GLEIF JSON/XML retirement remains unfinished.
+
 ## Document assertions
 
 Use `read.assertions` when the captured document must pass a shape or
@@ -560,3 +624,36 @@ oracle is test-only. Byte/header/row/numeric/Unicode safety boundaries remain
 explicit, so finite parity does not imply universal arbitrary-input parity.
 No source activation, producer success or complete Company mastering follows
 from successful catalog reading.
+
+## Large JSON array framing foundation
+
+For a captured document shaped as one object containing one named array,
+`source_engine.stream_json_array` reads object records incrementally through
+the native binding. Its callback receives the typed record and zero-based
+ordinal. Only successful return supplies an EOF receipt; callbacks prepare
+candidates and must not commit, publish or authenticate partial records.
+Duplicate keys, extra wrapper keys, non-object records, nonfinite numbers,
+depth overflow, integer overflow and trailing data refuse the input.
+
+`max_record` bounds the compact encoded record. Raw records and transport
+reads permit 65,536 additional bytes of buffering headroom, including
+whitespace. `max_bytes` bounds the whole expanded stream. Signed 64-bit
+integers are supported; an explicit `min_integer: -9223372036854775807`
+matches the historical GLEIF decoder's narrower negative boundary.
+Choose `record_encoding='python'` to apply the historical compact Python
+JSON byte limit. Default `native` measures native JSON spelling. These can
+accept different records at a tight float byte boundary even when their
+decoded values are identical; the policy must be pinned before cutover.
+
+`Artifacts.verified_stream(ref, max_bytes=...)` authenticates a complete
+private disk snapshot before allowing any parser reads. It bounds memory
+through 64 KiB reads, bounds snapshot disk usage explicitly, and closes the
+snapshot on success or failure. Use a compressed-byte cap when snapshotting
+an archive, then a separate expanded-byte cap while parsing its member.
+
+The configured worker mode is described under **Streamed JSON record
+projection** above. Its installed projection and partition verifier are
+qualified; downstream adoption remains unfinished. Before GLEIF cutover,
+verify complete archive/member authentication and metadata and prove
+publication/replay through EOF. JSON framing tests do not qualify XML or
+retire active GLEIF parsing.

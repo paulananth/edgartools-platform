@@ -107,6 +107,76 @@ def _stores(databases):
             "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
 
 
+def test_streaming_boundary_runs_from_installed_bundle_without_checkout(installed):
+    python, root = installed
+    result = _run(python, "-c", '''
+import hashlib, json
+from pathlib import Path
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules.source_engine import stream_json_array, SourceRejected
+body = b'{"records":[{"n":9007199254740993,"flag":true,"nested":{"z":1,"a":2}},{"float":-3.1163038337286385e203}]}'
+path = Path("captured.json")
+path.write_bytes(body)
+ref = {"uri": path.resolve().as_uri(), "sha256": hashlib.sha256(body).hexdigest()}
+store, rows = Artifacts(), []
+with store.verified_stream(ref, max_bytes=len(body)) as snapshot:
+    path.write_bytes(b"changed after authentication")
+    receipt = stream_json_array(snapshot, wrapper="records", on_record=lambda row, n: rows.append((n, row)),
+        max_bytes=1024, max_record=512, max_records=2, record_encoding="python")
+assert receipt == {"record_count": 2, "expanded_bytes": len(body)}
+assert rows == [(0, {"n":9007199254740993,"flag":True,"nested":{"z":1,"a":2}}), (1, {"float":-3.1163038337286385e203})]
+assert list(rows[0][1]) == ["n", "flag", "nested"]
+assert list(rows[0][1]["nested"]) == ["z", "a"]
+path.write_bytes(body + b" null")
+bad = {"uri": path.resolve().as_uri(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+try:
+    with store.verified_stream(bad, max_bytes=1024) as snapshot:
+        stream_json_array(snapshot, wrapper="records", on_record=lambda row, n: None,
+            max_bytes=1024, max_record=512, max_records=2)
+except SourceRejected:
+    pass
+else:
+    raise AssertionError("Trailing bytes produced a successful receipt")
+print(json.dumps(receipt))
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["record_count"] == 2
+
+
+def test_configured_stream_worker_runs_from_installed_bundle(installed):
+    python, root = installed
+    result = _run(python, "-c", '''
+import json
+from pathlib import Path
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.workers import source_read
+store = Artifacts()
+root = Path("configured-stream").resolve()
+root.mkdir()
+contract = {"execution":{"profile":"source.read","workers":1,"max_artifacts":1},
+ "read":{"format":"json","limits":{"max_bytes":4096,"max_records":100},
+  "tables":{"rows":{"each":".","columns":{"n":{"value":{"path":"n"}}}}},
+  "stream":{"wrapper":"records","container":"none","max_input_bytes":4096,
+   "max_bytes":4096,"max_record":1024,"max_records":100,"max_depth":64,
+   "min_integer":-9223372036854775808,"record_encoding":"python","ordinal_context":None,
+   "partition_bytes":4096,"partition_records":1,"max_partitions":10,
+   "max_spool_bytes":65536,"max_output_rows":100}}}
+ref = store.put_bytes((root / "captured.json").as_uri(), b'{"records":[{"n":1},{"n":2}]}')
+rules = store.put_bytes((root / "rules.yaml").as_uri(), json.dumps(contract).encode())
+manifest = store.put(root.as_uri(), {"version":1,"contract":rules,"artifacts":[ref]})
+task = {"input":manifest,"output":(root / "index.json").as_uri(),"checks":["source.output"]}
+receipt = source_read.execute(task, store)
+assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+reading = store.json(receipt)
+parts = reading["artifacts"][0]["partitions"]
+assert reading["version"] == 2 and len(parts) == 2
+assert [store.json(part["receipt"])["tables"]["rows"][0]["n"] for part in parts] == [1,2]
+print("configured stream passed")
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "configured stream passed"
+
+
 def test_doctor_passes_from_the_installed_bundle(installed, databases):
     python, root = installed
     # The console script itself, as an agent runs it; nothing from this checkout.

@@ -17,6 +17,7 @@
 //! into memory up to those limits: records are not streamed.
 
 mod formats;
+pub mod json_sequence;
 mod integer;
 mod reference;
 mod value;
@@ -142,6 +143,11 @@ impl Engine {
 
     pub fn read(&self, bytes: &[u8], lookups: &Lookups) -> Result<Reading, Rejected> {
         self.read_with_context(bytes, lookups, &Row::new())
+    }
+
+    /// Validate caller facts even when a framed source contains no records.
+    pub fn validate_context(&self, values: &Row) -> Result<(), Rejected> {
+        context::check(&self.read, values)
     }
 
     /// Caller facts never replace document fields or parsing configuration.
