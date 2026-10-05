@@ -9,3 +9,11 @@ Parent goal: self-sustaining installed Rules creator/parsing/MDM/custom orchestr
 - [x] Remove the unused runtime custom ticker parser after consumer inspection, retaining an independent historical oracle only for qualification. — 2026-10-05 07:58 ET; runtime consumer search empty; historical oracle moved to tests/support.
 - [ ] Verify installed bundle, full CI and independent Standards/Spec review; commit/push/create a reviewable PR.
 - [ ] Finish active submissions loader replacement, census/cascade/provenance, GLEIF/acquisition, full installed population/replay and complete parser retirement in the parent goal.
+
+## Installed qualification
+
+Both catalog modes passed from committed c756ce91 through the installed bundle, source worker and independent verifier with restricted PostgreSQL 16 roles: 2 passed, no skips, in 112.26 seconds. The exchange and dictionary contracts were loaded from the installed package.
+
+Independent Standards/GoF and Spec reviews closed the scoped findings. The Spec report-layout issue was corrected by sharing the complete fields/data array predicate; the Standards numeric-header concern was withdrawn after checking ordered raw JSON parsing.
+
+PR #827 is draft while full CI runs. PR #826 supplies the strict matrix reader and remains its open dependency. No merge, source activation or deployment is included.
