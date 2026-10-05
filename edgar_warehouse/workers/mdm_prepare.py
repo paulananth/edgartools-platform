@@ -22,14 +22,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
+import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
+import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.control_contract import reference
+from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
 BATCH = 1000
 RECORD_BYTES = 16 * 1024**2
 MANIFEST_BYTES = 32 * 1024**2
+INPUT_BYTES = 32 * 1024**2
+INPUT_ROWS = 100_000
+
+
+def runtime_files():
+    return [Path(artifact_store.__file__), Path(control_contract.__file__), Path(source_readings.__file__)]
 
 
 def _lines(rows: list[dict]) -> bytes:
@@ -45,7 +55,8 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     record_column = keys.get("record_column")
     if "record_column" in keys and (not isinstance(record_column, str) or not record_column):
         raise ValueError("mdm.prepare record_column must be nonempty text")
-    reading = artifacts.json(envelope["input"])
+    reading, _ = source_readings.load(envelope["input"], artifacts,
+                                      max_bytes=INPUT_BYTES, max_rows=INPUT_ROWS)
     if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
         raise ValueError("mdm.prepare reads a source.read output (version 1)")
     files, batches = {}, []

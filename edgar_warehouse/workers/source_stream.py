@@ -13,6 +13,7 @@ import zipfile
 from contextlib import ExitStack
 
 from edgar_warehouse.rules import source_engine
+from . import source_readings
 
 
 def _encode(value):
@@ -56,7 +57,9 @@ def _policy(contract):
         raise ValueError("Record projection requires bounded read.limits")
     projection = copy.deepcopy(contract)
     del projection["read"]["stream"]
-    return spec, source_engine.SourceEngine(projection)
+    engine = source_engine.SourceEngine(projection)
+    source_readings.table_names(list(read["tables"]))
+    return spec, engine
 
 
 def output(envelope, artifacts, documents, context_for, *, publish, max_index_bytes):
@@ -146,7 +149,8 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                 if spec["container"] == "zip" and scan["expanded_bytes"] != members[0].file_size:
                     raise ValueError("Stream ZIP expanded length differs from declared member size")
             flush()
-            readings.append({"input": ref, **evidence, **scan, "partitions": parts})
+            readings.append({"input": ref, **evidence, **scan,
+                             "table_names": list(contract["read"]["tables"]), "partitions": parts})
         encoded = _encode({"version": 2, "contract": manifest["contract"], "artifacts": readings})
         if len(encoded) > max_index_bytes:
             raise ValueError("Streamed reading index exceeds verifier byte budget")

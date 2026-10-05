@@ -149,7 +149,7 @@ def test_configured_stream_worker_runs_from_installed_bundle(installed):
 import json
 from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.workers import source_read
+from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 store = Artifacts()
 root = Path("configured-stream").resolve()
 root.mkdir()
@@ -171,6 +171,22 @@ reading = store.json(receipt)
 parts = reading["artifacts"][0]["partitions"]
 assert reading["version"] == 2 and len(parts) == 2
 assert [store.json(part["receipt"])["tables"]["rows"][0]["n"] for part in parts] == [1,2]
+combine_rules = store.put(root.as_uri(), {"execution":{"profile":"source.combine"},
+ "combine":{"max_rows":100,"groups":{},"tables":{"rows":{"source":"streamed","table":"rows",
+ "checks":{},"where":{},"joins":{}}}}})
+combine_manifest = store.put(root.as_uri(), {"version":1,"contract":combine_rules,"readings":{"streamed":receipt}})
+combine_task = {"input":combine_manifest,"output":(root / "combined.json").as_uri(),"checks":[source_combine.CHECK]}
+combined = source_combine.execute(combine_task, store)
+assert source_combine.verify({**combine_task,"candidate":combined}, store) == ({source_combine.CHECK:True},[])
+prepare_task = {"input":combined,"output":(root / "mdm/manifest.json").as_uri(),"checks":[mdm_prepare.CHECK],
+ "keys":{"table":"rows","dataset":"fixture.rows","policy":"0"*64,"consumer":"trial",
+ "batch_id":"trial","as_of":"2026-10-05T00:00:00Z"}}
+prepared = mdm_prepare.execute(prepare_task,store)
+assert mdm_prepare.execute(prepare_task,store) == prepared
+assert mdm_prepare.verify({**prepare_task,"candidate":prepared},store) == ({mdm_prepare.CHECK:True},[])
+batch = store.json(prepared)["batches"][0]
+assert [json.loads(line) for line in (root / "mdm" / batch["input"]["path"]).read_text().splitlines()] == [{"n":1},{"n":2}]
+assert store.json(store.json(combined)["artifacts"][0]["input"])["readings"] == {"streamed":receipt}
 print("configured stream passed")
 ''', cwd=root)
     assert result.returncode == 0, result.stderr
@@ -401,7 +417,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -453,6 +469,18 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
+    if trial_mode == "streamed-records":
+        spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
+            "format": "json", "limits": {"max_bytes": 4096, "max_records": 10}, "tables": {
+                "filers": {"each": ".", "columns": {"cik": {"text": {"path": "cik"}},
+                                                     "name": {"text": {"path": "name"}}}}},
+            "stream": {"wrapper": "records", "container": "none", "max_input_bytes": 4096,
+                       "max_bytes": 4096, "max_record": 1024, "max_records": 10, "max_depth": 64,
+                       "min_integer": -9223372036854775808, "record_encoding": "python",
+                       "ordinal_context": None, "partition_bytes": 4096, "partition_records": 1,
+                       "max_partitions": 10, "max_spool_bytes": 65536, "max_output_rows": 10}}}
+        contract_bytes = json.dumps(spec).encode()
+        filer_bytes = json.dumps({"records": [json.loads(line) for line in FILERS.splitlines()]}).encode()
     if trial_mode == "choice-records":
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "jsonl", "limits": {"max_bytes": 1048576, "max_records": 10}, "tables": {
@@ -646,6 +674,14 @@ read:
     for profile in profiles:
         cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
+    if trial_mode == "streamed-records":
+        reading = json.loads((out / "reading.json").read_bytes())
+        assert reading["version"] == 2
+        assert len(reading["artifacts"][0]["partitions"]) == 2
+        prepared = json.loads((out / "mdm/manifest.json").read_bytes())
+        assert len(prepared["batches"]) == 1
+        rows = [json.loads(line) for line in (out / "mdm" / prepared["batches"][0]["input"]["path"]).read_text().splitlines()]
+        assert rows == [json.loads(line) for line in FILERS.splitlines()]
     if trial_mode == "choice-records":
         reading = json.loads((out / "reading.json").read_bytes())
         assert reading["artifacts"][0]["tables"]["filers"] == [json.loads(line) for line in FILERS.splitlines()]
