@@ -25,6 +25,7 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
             }
         }
     }
+    for expr in crate::assertion_expressions(read) { references(expr, read)?; }
     for (_, table) in read["tables"].as_mapping().into_iter().flatten() {
         for expr in crate::table_expressions(table) {
             references(expr, read)?;

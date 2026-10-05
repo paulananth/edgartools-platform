@@ -4,7 +4,7 @@ import json
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_company_loader, stage_recent_filing_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_company_loader, stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare

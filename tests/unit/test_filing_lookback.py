@@ -15,8 +15,8 @@ from datetime import date
 import pytest
 
 from edgar_warehouse.application.errors import WarehouseRuntimeError
-from edgar_warehouse.loaders.bronze_submission_extractors import filter_rows_by_min_filing_date
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_submission_loaders.bronze_submission_extractors import filter_rows_by_min_filing_date
+from tests.support.retired_silver_landing_store import SilverLandingStore
 
 
 class TestFilterRowsByMinFilingDate:

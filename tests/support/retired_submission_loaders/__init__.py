@@ -1,6 +1,7 @@
+# Frozen historical oracle from 1e8146e7; test/qualification use only.
 """Pure loaders for the active SEC submissions landing path."""
 
-from edgar_warehouse.loaders.bronze_submission_extractors import (
+from tests.support.retired_submission_loaders.bronze_submission_extractors import (
     filter_rows_by_min_filing_date,
     is_individual_filer,
     stage_address_loader,

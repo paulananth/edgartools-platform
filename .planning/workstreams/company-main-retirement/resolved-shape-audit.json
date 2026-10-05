@@ -1,0 +1,11 @@
+{
+  "cases": 449,
+  "matched": 449,
+  "accepted": 395,
+  "refused": 54,
+  "difference_count": 0,
+  "differences": [],
+  "comparison": "canonical typed tables and refusal decision; exception identity excluded",
+  "universal_equivalence": false,
+  "sec_requests": 0
+}

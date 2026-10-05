@@ -158,6 +158,13 @@ impl Engine {
             bytes
         };
         let document = self.document(bytes)?;
+        for assertion in self.read.get("assertions").and_then(Value::as_sequence).into_iter().flatten() {
+            match eval(self, context, &document, &document, 1, &assertion["test"])? {
+                Val::Bool(true) => {},
+                Val::Bool(false) | Val::Null => return Err(Rejected::new("assertion_failed", setting(assertion, "reason").unwrap())),
+                _ => return Err(Rejected::new("assertion_condition", "a document assertion must return boolean or null")),
+            }
+        }
         for path in self.read.get("require").and_then(Value::as_sequence).into_iter().flatten() {
             let path = path.as_str().unwrap_or_default();
             match lookup(&document, path)? {
@@ -285,8 +292,19 @@ fn uses_feature(read: &Value, predicate: fn(&Value) -> bool) -> bool {
     fn in_expression(expr: &Value, predicate: fn(&Value) -> bool) -> bool {
         predicate(expr) || expression_children(expr).into_iter().any(|child| in_expression(child, predicate))
     }
-    read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|tables| tables.values())
-        .any(|table| table_expressions(table).into_iter().any(|expr| in_expression(expr, predicate)))
+    read_expressions(read).into_iter().any(|expr| in_expression(expr, predicate))
+}
+
+pub(crate) fn assertion_expressions(read: &Value) -> Vec<&Value> {
+    read.get("assertions").and_then(Value::as_sequence).into_iter().flatten().filter_map(|a| a.get("test")).collect()
+}
+
+fn read_expressions(read: &Value) -> Vec<&Value> {
+    let mut result = assertion_expressions(read);
+    for table in read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|tables| tables.values()) {
+        result.extend(table_expressions(table));
+    }
+    result
 }
 
 pub(crate) fn table_expressions(table: &Value) -> Vec<&Value> {
@@ -356,6 +374,19 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     }
     if read.get("require").is_some_and(|value| value.as_sequence().is_none()) {
         return Err("read.require must be a list".into());
+    }
+    if let Some(assertions) = read.get("assertions") {
+        let assertions = assertions.as_sequence().filter(|s| s.len() <= 32).ok_or("read.assertions is a list of at most 32 assertions")?;
+        for assertion in assertions {
+            let args = assertion.as_mapping().filter(|m| m.len() == 2).ok_or("a document assertion names test and reason only")?;
+            if args.keys().any(|k| !matches!(k.as_str(), Some("test" | "reason"))) {
+                return Err("a document assertion names test and reason only".into());
+            }
+            if !setting(assertion, "reason").is_some_and(|s| !s.is_empty() && s.len() <= 4096) {
+                return Err("an assertion reason is nonempty text of at most 4096 bytes".into());
+            }
+            validate_expr(assertion.get("test").ok_or("an assertion names no test")?, steps)?;
+        }
     }
     if let Some(container) = read.get("container") {
         if container.as_str() != Some("zip") {

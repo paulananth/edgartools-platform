@@ -9,7 +9,7 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_address_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_address_loader
 from edgar_warehouse.mdm.clean.company_source import business_address
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read

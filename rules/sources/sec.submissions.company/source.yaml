@@ -248,6 +248,15 @@ read:
       nullable: true
     last_synced_at:
       type: text
+  assertions:
+  - test: {test: {path: '.', kind: object}}
+    reason: Company submissions must be a JSON object
+  - test:
+      choose:
+        condition: {test: {path: addresses, kind: missing}}
+        then: {test: {path: addresses, kind: missing}}
+        else: {test: {path: addresses, kind: object}}
+    reason: An explicit addresses member must be a JSON object
   limits:
     max_bytes: 33554432
     max_records: 100000
@@ -441,7 +450,11 @@ read:
           context:
             name: last_synced_at
     addresses:
-      each: addresses.business
+      each:
+        choose:
+          condition: {test: {path: addresses.business, kind: object}}
+          then: addresses.business
+          else: {objects: {path: addresses.business, on_invalid: empty}}
       columns:
         business_address:
           object:
@@ -478,13 +491,10 @@ read:
                   case: upper
                   on_missing: "null"
                   key:
-                    coalesce:
-                      values:
-                      - value:
-                          path: stateOrCountry
-                      - value:
-                          path: countryCode
-                      skip: falsey
+                    choose:
+                      condition: {test: {path: stateOrCountry, kind: truthy}}
+                      then: {text: {path: stateOrCountry, coerce: python, trim: false}}
+                      else: {text: {path: countryCode, coerce: python, trim: false}}
               region:
                 choose:
                   condition:
@@ -495,13 +505,10 @@ read:
                       case: upper
                       on_missing: "null"
                       key:
-                        coalesce:
-                          values:
-                          - value:
-                              path: stateOrCountry
-                          - value:
-                              path: countryCode
-                          skip: falsey
+                        choose:
+                          condition: {test: {path: stateOrCountry, kind: truthy}}
+                          then: {text: {path: stateOrCountry, coerce: python, trim: false}}
+                          else: {text: {path: countryCode, coerce: python, trim: false}}
                   then:
                     coalesce:
                       values:

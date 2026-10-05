@@ -4,6 +4,45 @@ Use this reference when writing a captured JSON contract. It describes the
 implemented engine grammar; a source version is approved through the normal
 Rules workflow after its test run.
 
+## Document assertions
+
+Use `read.assertions` when the captured document must pass a shape or
+expression check before any table is read:
+
+```yaml
+read:
+  format: json
+  assertions:
+  - test: {test: {path: '.', kind: object}}
+    reason: The captured document must be an object
+  tables:
+    records:
+      each: records
+      columns:
+        record: {value: {path: '.'}}
+```
+
+An assertion names `test` (one ordinary expression) and `reason` (nonempty
+text, at most 4,096 UTF-8 bytes). At most 32 assertions run in declared order,
+after parsing and before required paths or table iteration. `true` passes;
+`false` or null rejects the whole artifact with `assertion_failed` and the
+declared reason. Any other result rejects with `assertion_condition`.
+Use `test`, boolean context or boolean reference cells for an assertion result.
+The existing `const` primitive renders boolean literals as text; such a value
+refuses with `assertion_condition`.
+Expressions, context names, references and custom steps are validated when
+the contract loads. The expression inventory also enables exact numeric and
+Python JSON formatting policies inside assertions. Assertions run even when
+every table is empty and cannot defer records. The source worker writes no
+reading output on rejection; the existing parser and byte limits still apply.
+
+The Company main contract requires an object document and an object
+`addresses` member when present. A business member contributes a row only
+when it is an object. Its place lookup explicitly converts the selected SEC
+code with Python text semantics, preserving the historical mapping of
+nontext codes to unknown places. These are configuration choices, not
+defaults for other contracts.
+
 ## Complete JSON records
 
 Use `value` to retain nested JSON evidence and original scalar types:
@@ -270,7 +309,7 @@ unchanged. Root document iteration is written `each: .`.
 
 SEC filing text/calendar qualification does not cover numeric flags,
 classification, Company or Person mastering, reference joins or complete
-assertion/failure equivalence. The old loaders remain until those are proved.
+assertion/failure equivalence. The unused historical landing API and loader modules are retired from the runtime; frozen oracles under `tests/support` remain for qualification. Active MDM preparation, provenance and full population/recovery still need replacement and proof.
 
 `basic_suffix` defaults to `reject`. Calendar-only `basic_suffix: ignore`
 reproduces the Python 3.12 loader exception: after prefix truncation, a

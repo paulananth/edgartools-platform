@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_silver_landing_store import SilverLandingStore
 from tests.support.silver_rows import open_landing_db
 
 
