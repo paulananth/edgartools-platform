@@ -1,0 +1,38 @@
+# The machine form of ANSWER-KEY.md (same content; the Markdown is the authority).
+parts:
+  customer: {class: [master], key: [CustomerKey]}
+  product: {class: [master], key: [ProductKey]}
+  store: {class: [master], key: [StoreKey]}
+  date: {class: [reference], key: [Date]}
+  currencyexchange: {class: [transaction, reference], key: [Date, FromCurrency, ToCurrency]}
+  orders: {class: [transaction], key: [OrderKey]}
+  orderrows: {class: [transaction], key: [OrderKey, LineNumber]}
+  sales: {class: [transaction], key: [OrderKey, LineNumber]}
+relationships:
+  - [orders, [CustomerKey], customer, [CustomerKey], "N:1"]
+  - [orders, [StoreKey], store, [StoreKey], "N:1"]
+  - [orders, [OrderDate], date, [Date], "N:1"]
+  - [orderrows, [OrderKey], orders, [OrderKey], "N:1"]
+  - [orderrows, [ProductKey], product, [ProductKey], "N:1"]
+  - [sales, [CustomerKey], customer, [CustomerKey], "N:1"]
+  - [sales, [StoreKey], store, [StoreKey], "N:1"]
+  - [sales, [ProductKey], product, [ProductKey], "N:1"]
+  - [sales, [OrderKey, LineNumber], orderrows, [OrderKey, LineNumber], "1:1"]
+hierarchies:
+  - {part: product, columns: [SubCategoryKey, CategoryKey], evidence: [functional_dependency, code_nesting]}
+  - {part: date, columns: [YearMonth, YearQuarter, Year], evidence: [functional_dependency]}
+code_lists:
+  customer: [Continent, Country, State, Gender, Title]
+  product: [CategoryKey, SubCategoryKey, Brand, Manufacturer, Color, WeightUnit]
+  store: [CountryCode, Status]
+  orders: [CurrencyCode]
+  currencyexchange: [FromCurrency, ToCurrency]
+personal:
+  customer: [GivenName, MiddleInitial, Surname, StreetAddress, ZipCode, Birthday, Age, Latitude, Longitude]
+no_personal: [product, store, date, currencyexchange, orders, orderrows, sales]
+time:
+  - [customer, as_of, [StartDT, EndDT]]
+  - [orders, event_time, [OrderDate]]
+  - [sales, event_time, [OrderDate]]
+  - [currencyexchange, series, [FromCurrency, ToCurrency, Date]]
+min_confidence: 0.6
