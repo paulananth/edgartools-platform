@@ -1,0 +1,17 @@
+{
+  "cases": 11806,
+  "accepted": 8125,
+  "refused": 3681,
+  "differences": 0,
+  "comparison": "canonical typed JSON and refusal decision",
+  "oracle": "silver_landing_store.py at e76fb929, archived in tests/support/ticker_catalog_oracle.py",
+  "universal_equivalence": false,
+  "explicit_boundaries": [
+    "32 MiB bytes",
+    "100000 input rows",
+    "128 headers",
+    "128 UTF-8 bytes per header",
+    "signed 64-bit CIK output",
+    "finite JSON numbers and supported Unicode"
+  ]
+}

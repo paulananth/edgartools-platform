@@ -1,25 +1,190 @@
-# Offline Company catalog qualification; this does not activate acquisition.
+# Both raw catalog shapes; offline qualification, no source activation.
 source: sec.submissions.company
-execution: {profile: source.read, workers: 1, max_artifacts: 1}
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
 read:
   format: json
-  limits: {max_bytes: 33554432, max_records: 100000}
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
   context:
-    sync_run_id: {type: text}
-    last_synced_at: {type: text}
-    source_name: {type: text}
+    sync_run_id:
+      type: text
+    last_synced_at:
+      type: text
+    source_name:
+      type: text
   tables:
     tickers:
-      each: {matrix: {headers: fields, rows: data}}
+      each:
+        choose:
+          condition:
+            choose:
+              condition:
+                test:
+                  path: fields
+                  kind: array
+                  from: document
+              then:
+                test:
+                  path: data
+                  kind: array
+                  from: document
+              else:
+                const:
+                  value: null
+          then:
+            matrix:
+              headers: fields
+              rows: data
+              lengths: zip
+              duplicates: last
+              headers_coerce: python
+              on_invalid_row: skip
+          else:
+            objects:
+              path: .
+              on_invalid: empty
       columns:
         cik:
-          integer: {path: cik, on_invalid: error, on_overflow: error}
-        ticker: {text: {path: ticker, trim: false, null_if: [""], coerce: python}}
-        exchange: {text: {path: exchange, trim: false, null_if: [""], coerce: python}}
-        source_rank: {ordinal: {}}
-        source_name: {context: {name: source_name}}
-        last_sync_run_id: {context: {name: sync_run_id}}
-        last_synced_at: {context: {name: last_synced_at}}
-      checks:
-        - {check: required, column: cik, on_fail: reject, reason: missing_cik}
-        - {check: required, column: ticker, on_fail: reject, reason: missing_ticker}
+          choose:
+            condition:
+              choose:
+                condition:
+                  test:
+                    path: fields
+                    kind: array
+                    from: document
+                then:
+                  test:
+                    path: data
+                    kind: array
+                    from: document
+                else:
+                  const:
+                    value: null
+            then:
+              choose:
+                condition:
+                  test:
+                    path: cik
+                    kind: truthy
+                then:
+                  integer:
+                    path: cik
+                    on_invalid: error
+                    on_overflow: error
+                else:
+                  integer:
+                    path: cik_str
+                    on_invalid: error
+                    on_overflow: error
+            else:
+              integer:
+                path: cik_str
+                on_invalid: error
+                on_overflow: error
+        ticker:
+          choose:
+            condition:
+              test:
+                path: ticker
+                kind: missing
+            then:
+              const:
+                value: ''
+            else:
+              choose:
+                condition:
+                  test:
+                    path: ticker
+                    kind: 'null'
+                then:
+                  const:
+                    value: None
+                else:
+                  text:
+                    path: ticker
+                    trim: false
+                    coerce: python
+        exchange:
+          choose:
+            condition:
+              test:
+                path: exchange
+                kind: truthy
+            then:
+              text:
+                path: exchange
+                trim: false
+                coerce: python
+            else:
+              const:
+                value: null
+        source_rank:
+          ordinal: {}
+        source_name:
+          context:
+            name: source_name
+        last_sync_run_id:
+          context:
+            name: sync_run_id
+        last_synced_at:
+          context:
+            name: last_synced_at
+      select:
+        choose:
+          condition:
+            test:
+              path: .
+              kind: object
+          then:
+            choose:
+              condition:
+                choose:
+                  condition:
+                    test:
+                      path: fields
+                      kind: array
+                      from: document
+                  then:
+                    test:
+                      path: data
+                      kind: array
+                      from: document
+                  else:
+                    const:
+                      value: null
+              then:
+                choose:
+                  condition:
+                    test:
+                      path: ticker
+                      kind: truthy
+                  then:
+                    choose:
+                      condition:
+                        test:
+                          path: cik
+                          kind: truthy
+                      then:
+                        test:
+                          path: cik
+                          kind: not_null
+                      else:
+                        test:
+                          path: cik_str
+                          kind: not_null
+                  else:
+                    const:
+                      value: null
+              else:
+                test:
+                  path: cik_str
+                  kind: not_null
+          else:
+            const:
+              value: null
+      ordinal: selected

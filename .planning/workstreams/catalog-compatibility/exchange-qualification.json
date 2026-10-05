@@ -1,0 +1,88 @@
+{
+  "catalog_rows": 10391,
+  "catalog_sha256": "836140c5ca9817b673e76f4c4cf25dda6650215683c1705e9fbe00b2e8f16fbf",
+  "capture_manifest_sha256": "563ddbbb40f4fc56aba7be772d2058d7684046f3cb40ae59c453d305d076986f",
+  "companies": 5,
+  "exact_typed_catalog_rows": true,
+  "ranked_distinct_ticker_joins": true,
+  "elapsed_seconds": 27.412,
+  "publications": [
+    {
+      "cik": 320193,
+      "tickers": [
+        "AAPL"
+      ],
+      "main_sha256": "ea2aa552e984a29e920cf80e0827cf32b632563935f029b6ec9de7f4fa3c026d",
+      "combined_sha256": "6226ba1346bbbeac803e40ba8d3db901f361937442388d9fd019dd2b7ec17031",
+      "prepared_sha256": "1948bca714cca9f5aee94fdf29d12290fc8150e1a53acc0c987090024d47bc5c"
+    },
+    {
+      "cik": 789019,
+      "tickers": [
+        "MSFT"
+      ],
+      "main_sha256": "432e216c5beb8daa0663f585a68c579ec30a9c06a32b08990a1b8d3dfc1e4c31",
+      "combined_sha256": "c39ad4a84e9cef2ae9f5bd0690924f225f1c710f929f2e3087d026fb3f4daef7",
+      "prepared_sha256": "b4937788eff1efa152f4d108eb1aff1c7235d30b2b74321fd71cce04701cd7ae"
+    },
+    {
+      "cik": 1067983,
+      "tickers": [
+        "BRK-B",
+        "BRK-A"
+      ],
+      "main_sha256": "07bbae58a50e61190e0566c35f41fbb720d3d08f1c4a1b7ba3c8167b03e680ac",
+      "combined_sha256": "aede8bb8a802627e913d81c5636f4d96dde1d1556cd4a2dcd79014e1db91ed60",
+      "prepared_sha256": "0fbc99a8098dd216beb2b04e78587d562563ef45ffd682c8049d50af48c959b0"
+    },
+    {
+      "cik": 19617,
+      "tickers": [
+        "JPM",
+        "JPM-PC",
+        "AMJB",
+        "JPM-PD",
+        "JPM-PJ",
+        "JPM-PK",
+        "JPM-PL",
+        "JPM-PM",
+        "VYLD"
+      ],
+      "main_sha256": "7461f6cac3d03b245fc108056195adb3b7360f9a8eb6d7c728b9704bbcab83ff",
+      "combined_sha256": "d46f99b06b69b75dd1ebaa61b6501f1b50a41d9eb2a86cf68b4755d2459cf05b",
+      "prepared_sha256": "3f710d1eac931de725be8cf7f979ff9152f4cfdb0446d982a550e756cb6c0a45"
+    },
+    {
+      "cik": 1306965,
+      "tickers": [
+        "SHEL",
+        "RYDAF"
+      ],
+      "main_sha256": "27ec7ffcb456dfb031d66dafafe899856bc8cf8c77e6c9a23737c12b436904f2",
+      "combined_sha256": "f3d4e5fd2d8ae98c407ee712c8f6e96cca7604644b2cb8015e6181b37d7f6538",
+      "prepared_sha256": "abdc018b2114fe4324672631047bcfd47d796f185a8800c80a8789a2d1491a19"
+    }
+  ],
+  "execution_sha256s": {
+    "source_engine.py": "f7f79115bbd8129bc763f045535806bfcf33d5dc88e007e099528f7627fbd57e",
+    "steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    "source_contract.abi3.so": "2bb41d33918542ff1cd67e5a39a4e05225f410256bc8cb653df206aa57b64fd3",
+    "files.py": "9df6ba6bfea975594a0377ab2134f18b7ce8312424b43959312236ac3b37d97f",
+    "artifacts.py": "cad73a7ac647b681505961495ac4686c934a47935f68ade1acbb82ad4e3d1ccb",
+    "source_read.py": "3b74e62bc41036d30bb6cb8e45ff08b86f7c2ed1748916f76d10eabddaeecd8a",
+    "source_combine.py": "b04ef46c5fe1f7193b8970724bc5593dba03e7183c656bc57178c4e18603d9a2",
+    "control_contract.py": "c0bc2c794a2382041065fd7a8ec4c4ce6681fb4aaea1d4b78354729772a0d792",
+    "mdm_prepare.py": "93534a511ff55b1ccf9a71dc370cd097f345136c6201efa1fd1f65bd2aa284ac"
+  },
+  "contract_sha256s": {
+    "catalog": "5826c573f8030d08ee0576331bddb54a55aabb13fcb725e1fcc18b6b8fa7b6af",
+    "main": "b27cf9a16df0a09bd2e720ae4b4180bfb8a1461d020e86442456f30a85b42f6b"
+  },
+  "sec_requests": 0,
+  "producer_provenance_qualified": false,
+  "full_company_mastering": false,
+  "catalog_layout": "matrix",
+  "catalog_receipt": null,
+  "legacy_dictionary_catalog_qualified": false,
+  "universal_malformed_catalog_equivalence": false
+}

@@ -150,3 +150,10 @@ records exact recent-form comparisons on 1,000 distinct receipt-pinned main
 captures (107,197 filing rows). This exercised source.read and source.combine
 workers/verifiers directly, not the installed full Company pipeline. Its
 `pagination_qualified` and `full_company_mastering` flags remain false.
+
+`skip_empty_text: true` is optional for `collect` and `collect_flat` groups.
+It excludes only the empty string. Whitespace, false, zero, empty lists/maps
+and null retain their existing policies. The default is false. Flattened
+input elements still count toward the declared budget before this exclusion
+or deduplication. Use this with ranked catalog ticker collections to preserve
+the landing rule that excludes empty ticker text without changing source ranks.

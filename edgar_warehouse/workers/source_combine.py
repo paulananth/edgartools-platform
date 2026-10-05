@@ -63,7 +63,7 @@ def _contract(body, inputs):
     groups = _mapping(plan["groups"], 32, "Groups")
     for spec in groups.values():
         required = {"source", "table", "key", "value", "mode", "order_by", "distinct", "skip_null_values", "checks", "where"}
-        if not isinstance(spec, dict) or not required <= set(spec) or set(spec) - required - {"sort_values"}:
+        if not isinstance(spec, dict) or not required <= set(spec) or set(spec) - required - {"sort_values", "skip_empty_text"}:
             raise ValueError("Group requires source, table, key, value, mode, order_by, distinct, skip_null_values, checks and where")
         _selection(spec, inputs)
         if not _name(spec["key"]) or not (_name(spec["value"]) or spec["value"] == "."):
@@ -74,6 +74,8 @@ def _contract(body, inputs):
             raise ValueError("Group order_by names at most eight columns")
         if type(spec["distinct"]) is not bool or type(spec["skip_null_values"]) is not bool or (spec["mode"] not in COLLECTION_MODES and spec["distinct"]):
             raise ValueError("Group flags are booleans; distinct requires collect or collect_flat")
+        if 'skip_empty_text' in spec and (type(spec['skip_empty_text']) is not bool or spec['mode'] not in COLLECTION_MODES):
+            raise ValueError('skip_empty_text requires a boolean and a collection mode')
         if 'sort_values' in spec and (type(spec['sort_values']) is not bool or spec['mode'] not in COLLECTION_MODES):
             raise ValueError('sort_values requires a boolean and a collection mode')
     tables = _mapping(plan["tables"], 16, "Output tables")
@@ -152,6 +154,8 @@ def _group(spec, inputs, maximum=MAX_ROWS):
         for _, value in pairs:
             items = value if spec["mode"] == "collect_flat" else [value]
             for item in items:
+                if spec.get("skip_empty_text", False) and type(item) is str and item == "":
+                    continue
                 if spec["distinct"]:
                     token = canonical(item)
                     if token in seen:

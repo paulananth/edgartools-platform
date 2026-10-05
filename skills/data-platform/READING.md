@@ -463,7 +463,7 @@ declared page coverage; they do not prove Bookkeeping producer success.
 Use `each: {matrix: {headers: fields, rows: data}}` for a JSON document with
 an array of header names and an array of row arrays. Paths may be nested.
 Both arguments are required; unknown arguments and non-JSON formats refuse.
-Headers must be 1..128 distinct names of at most 128 ASCII letters, digits or
+By default, headers must be 1..128 distinct names of at most 128 ASCII letters, digits or
 underscores. Every row must be an array of exactly the header length. Missing
 arrays, duplicate headers and malformed rows refuse the artifact. Ordinary
 column expressions read each cell by its header name, preserving typed values;
@@ -471,13 +471,53 @@ column expressions read each cell by its header name, preserving typed values;
 remain available. Full row-count and shape checks run even when `take` selects
 only a prefix; materialization is bounded by the artifact and record limits.
 
-The Company draft `rules/sources/sec.submissions.company/catalog.yaml` uses
-this generic iterator for the header-driven exchange catalog. Its receipt-bound
-context supplies catalog run, source name and sync time. Group `ticker` by CIK
-with `order_by: [source_rank]`, `distinct: true` and a catalog-run row check in
-`source.combine`. Keep the independent Company capture-run check on the base
-rows; these are different runs. This draft fails closed on missing CIK/ticker
-and does not reproduce the retained parser's malformed-row skipping or its
-alternate dictionary catalog. Qualify those cases before caller retirement.
+Optional matrix policies are explicit: `lengths: zip` maps only matching
+header/cell pairs, `duplicates: last` keeps the last assigned value with the
+first assigned key position, `headers_coerce: python` converts supported JSON
+headers with Python text semantics (including null as `None`), and
+`on_invalid_row: skip` ignores non-array rows. Defaults remain equal lengths,
+unique simple text headers and rejected malformed rows. Python header coercion
+allows zero headers and arbitrary header text, bounded to 128 headers and
+128 UTF-8 bytes per name. Full input count remains bounded before skipping.
+
+## Object entries and conditional iteration
+
+`each: {objects: {path: '.', on_invalid: empty}}` iterates a JSON object's
+values in captured key order. Default invalid-object behavior is `reject`;
+`empty` explicitly returns no rows for missing, scalar or array input. Input
+entry count includes values later excluded by selection.
+
+Choose a layout through `each.choose` with `condition`, `then` and `else`.
+The condition is an ordinary expression evaluated against the document;
+branches are iteration calls or paths. Boolean true selects `then`, false or
+null selects `else`, and other types refuse. Both branches validate before
+reading; only the selected branch reads the document. Nesting is capped at
+eight calls. Context/reference/custom names in all conditions must resolve.
+
+`test: {path: ticker, kind: truthy}` returns a native boolean without text
+coercion or materializing a subtree. Kinds are `truthy`, `missing`, `null`,
+`not_null`, `array` and `object`; optional `from: document` tests the original
+document. Null includes absent values; `missing` distinguishes absence from
+explicit null. Quote `'null'` in YAML so the kind is text. Truth follows the captured JSON type: zero, false, null and
+empty text/containers are false; whitespace text is true.
+
+A table may declare `select: <expression>` to exclude rows before column
+conversion and record checks. True retains a row; false/null excludes it;
+other values refuse. Selection runs after `take`, which still bounds the
+input prefix. Default `ordinal: source` reports iterator position;
+`ordinal: selected` counts retained selection rows, including rows that a
+later record check defers. Deferred/error locations keep source positions.
+Selection expressions see source positions. For permissive matrix iteration,
+non-array rows skipped by that iterator do not have a row position.
+
+The Company draft `catalog.yaml` declares both captured catalog layouts and
+legacy skip/fallback/text rules, using these generic calls. Receipt context
+supplies catalog run, source name and sync time. Group `ticker` by CIK with
+`order_by: [source_rank]`, `distinct: true`, `skip_empty_text: true` and a
+catalog-run row check. Keep the separate Company capture-run check on base
+rows. Both finite malformed-case and physical capture qualification must
+pass before adoption. Runtime custom ticker parsing is retired; its historical
+oracle is test-only. Byte/header/row/numeric/Unicode safety boundaries remain
+explicit, so finite parity does not imply universal arbitrary-input parity.
 No source activation, producer success or complete Company mastering follows
-from reading a catalog successfully.
+from successful catalog reading.
