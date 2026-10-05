@@ -313,10 +313,17 @@ def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
         targets = {l["to"]["part"] for l in ends}
         if f["class"] == "relationship" and len(ends) == 2 and len(targets) == 1:
             role = _role_column(f)
-            for h in hierarchy.by_link_part(con, p, ends[0]["from"]["columns"][0], ends[1]["from"]["columns"][0], role):
+            child, parent = _child_first(ends, f["record_key"]["columns"])
+            for h in hierarchy.by_link_part(con, p, child, parent, role):
                 h["type"] = "master_data"
                 found.append(h)
     return found
+
+
+def _child_first(ends: list[dict], key: list[str]) -> tuple[str, str]:
+    """A link part's two end columns, child first: the end in the record key has one row per role."""
+    a, b = (e["from"]["columns"][0] for e in ends)
+    return (b, a) if b in key and a not in key else (a, b)
 
 
 def _role_column(f: dict) -> str | None:

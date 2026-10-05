@@ -166,3 +166,10 @@ def test_a_stopped_run_removes_its_working_copy(tmp_path):
     run_.wait(timeout=60)
     assert run_.returncode != 0, "the run finished before the signal: nothing was tested"
     assert not list((tmp_path / "t").glob("profiling-*"))
+
+
+def test_link_part_ends_put_the_keyed_end_first_whatever_the_link_order():
+    ends = [{"from": {"columns": ["to_id"]}}, {"from": {"columns": ["from_id"]}}]
+    assert run._child_first(ends, ["from_id", "kind"]) == ("from_id", "to_id")
+    assert run._child_first(list(reversed(ends)), ["from_id", "kind"]) == ("from_id", "to_id")
+    assert run._child_first(ends, ["kind"]) == ("to_id", "from_id")
