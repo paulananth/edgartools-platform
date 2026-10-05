@@ -83,8 +83,18 @@ def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
 
 class SourceEngine:
     def __init__(self, contract: Mapping):
+        if "stream" in contract.get("read", {}):
+            raise SourceRejected("contract", "read.stream requires the source.read worker framing boundary")
         try:
             self._engine = source_contract.Engine(json.dumps(contract), STEPS)
+        except source_contract.SourceRejected as error:
+            raise _rejected(error) from None
+
+    def validate_context(self, context: Mapping[str, object]) -> None:
+        """Check declared caller facts before a stream can yield zero records."""
+        try:
+            self._engine.validate_context(json.dumps(dict(context), ensure_ascii=False,
+                                                     separators=(",", ":"), allow_nan=False))
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
 

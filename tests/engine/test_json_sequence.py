@@ -8,14 +8,14 @@ import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean.gleif_source import _BoundedReader, _json_records
 from edgar_warehouse.rules.source_engine import SourceRejected, stream_json_array
-from scripts.qualification.audit_json_sequence import audit, audit_record_bounds
+from scripts.qualification.audit_json_sequence import audit, audit_record_bounds, ordered
 
 LIMITS = {"max_bytes": 1024**2, "max_record": 4096, "max_records": 100, "max_depth": 64}
 
 
 def test_finite_typed_numeric_and_frame_audit_matches_historical_reader():
     result = audit()
-    assert result["cases"] == 2065
+    assert result["cases"] == 2066
     assert result["difference_count"] == 0, result["differences"]
 
 
@@ -30,7 +30,7 @@ def test_exact_comparator_detects_a_deliberate_float_rounding_fault():
 
 def test_python_encoded_size_boundaries_match_historical_record_policy():
     report = audit_record_bounds()
-    assert report["cases"] == 6138
+    assert report["cases"] == 6141
     assert report["difference_count"] == 0, report["differences"]
 
 
@@ -48,6 +48,16 @@ def native(body, **changes):
     result = stream_json_array(io.BytesIO(body), wrapper="records", on_record=lambda row, n: rows.append((n, row)),
                                **{**LIMITS, **changes})
     return result, rows
+
+
+def test_nested_captured_key_order_survives_and_comparator_detects_sorting_fault():
+    expected = [{"z": 1, "a": 2, "nested": {"y": 3, "b": 4}, "array": [{"q": 1, "c": 2}]}]
+    _, rows = native(json.dumps({"records": expected}).encode())
+    actual = [row for _, row in rows]
+    assert ordered(actual) == ordered(expected)
+    faulty = json.loads(json.dumps(actual, sort_keys=True))
+    assert digest(faulty) == digest(expected)
+    assert ordered(faulty) != ordered(expected)
 
 
 def test_streaming_preserves_exact_types_order_and_eof_receipt():

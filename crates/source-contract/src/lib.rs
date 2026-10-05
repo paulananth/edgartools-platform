@@ -145,6 +145,11 @@ impl Engine {
         self.read_with_context(bytes, lookups, &Row::new())
     }
 
+    /// Validate caller facts even when a framed source contains no records.
+    pub fn validate_context(&self, values: &Row) -> Result<(), Rejected> {
+        context::check(&self.read, values)
+    }
+
     /// Caller facts never replace document fields or parsing configuration.
     pub fn read_with_context(&self, bytes: &[u8], lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
         context::check(&self.read, context)?;

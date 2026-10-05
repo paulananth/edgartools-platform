@@ -98,6 +98,11 @@ impl PyEngine {
         Engine::from_yaml(contract, registered).map(|inner| Self { inner }).map_err(rejected)
     }
 
+    fn validate_context(&self, context: &str) -> PyResult<()> {
+        let values = crate::context::from_json(context).map_err(rejected)?;
+        self.inner.validate_context(&values).map_err(rejected)
+    }
+
     #[pyo3(signature = (data, lookups, context="{}"))]
     fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>, context: &str) -> PyResult<PyObject> {
         let mut sets = Lookups::new();

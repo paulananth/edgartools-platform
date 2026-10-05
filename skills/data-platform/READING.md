@@ -4,6 +4,69 @@ Use this reference when writing a captured JSON contract. It describes the
 implemented engine grammar; a source version is approved through the normal
 Rules workflow after its test run.
 
+## Streamed JSON record projection
+
+For a captured single-wrapper array, `source.read` can authenticate the entire
+input into a private bounded snapshot, then project each object through the
+ordinary configured engine. Declare `read.stream` and use one execution worker:
+
+```yaml
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 4096, max_records: 100}
+  context:
+    source_index: {type: integer}
+  stream:
+    wrapper: records
+    container: none
+    max_input_bytes: 65536
+    max_bytes: 65536
+    max_record: 4096
+    max_records: 100
+    max_depth: 64
+    min_integer: -9223372036854775808
+    record_encoding: python
+    ordinal_context: source_index
+    partition_bytes: 4096
+    partition_records: 2
+    max_partitions: 10
+    max_spool_bytes: 65536
+    max_output_rows: 100
+  tables:
+    rows:
+      each: .
+      columns:
+        value: {value: {path: n}}
+        source_index: {context: {name: source_index}}
+```
+
+Every stream field is required. `container` is `none` or `zip`; ZIP requires
+one unencrypted file, verifies its CRC through EOF and enforces the expanded
+byte limit. `max_input_bytes` bounds the authenticated snapshot;
+`max_bytes` bounds expanded bytes. `max_record` applies the explicitly selected
+native or Python compact JSON encoding. Recursive object key order is retained
+before projection. `read.limits` bounds each projected record, and assertions
+run on each record. Ordinary `ordinal` expressions refer to rows within that
+record; `ordinal_context` supplies the one-based source record index and cannot
+be overridden by caller context. Use null when no source index is needed.
+Context is validated even for empty arrays.
+
+Projected tables and deferred records accumulate in private partitions.
+Partition count, bytes, record count, aggregate spool bytes and output rows
+are independently bounded. Every input must authenticate and reach valid EOF
+before any partition is written. The version-2 reading index names immutable
+content-addressed partitions, their byte sizes and source ordinal ranges.
+The verifier rebuilds them from the original receipts and compares their
+exact bytes without writes. A later output-write failure may leave immutable
+partitions for retry; the index is written last.
+
+This worker mode is under qualification. `source.combine` and `mdm.prepare`
+still consume version-1 inline readings; finish their partition adoption and
+installed source/population proof before activating a streamed source.
+Direct `SourceEngine.read` rejects stream contracts so they cannot silently
+take the eager path. Active GLEIF JSON/XML retirement remains unfinished.
+
 ## Document assertions
 
 Use `read.assertions` when the captured document must pass a shape or

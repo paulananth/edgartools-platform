@@ -15,6 +15,7 @@ from edgar_warehouse.rules.source_engine import stream_json_array
 
 
 def cases():
+    yield "records", b'{"records":[{"z":1,"a":2,"nested":{"y":3,"b":4}}]}'
     values = [None, False, True, 0, 1, -(2**63 - 1), 2**63 - 1, 1.25, -0.0,
               "", "é🦀", [], {}, [1, {"n": True}], {"null": None}]
     for wrapper in ("records", "relations", "exceptions"):
@@ -45,6 +46,15 @@ def outcome(call):
         return {"refused": type(error).__name__}
 
 
+def ordered(value):
+    """Type and captured key order, including objects nested in arrays."""
+    if isinstance(value, dict):
+        return ["object", [[key, ordered(item)] for key, item in value.items()]]
+    if isinstance(value, list):
+        return ["array", [ordered(item) for item in value]]
+    return [type(value).__name__, value]
+
+
 def audit():
     differences = []
     total = accepted = refused = 0
@@ -63,12 +73,12 @@ def audit():
         accepted += "rows" in old
         refused += "refused" in old
         match = ("refused" in old and "refused" in new) or (
-            "rows" in old and "rows" in new and digest(old["rows"]) == digest(new["rows"]))
+            "rows" in old and "rows" in new and digest(ordered(old["rows"])) == digest(ordered(new["rows"])))
         if not match:
             differences.append({"wrapper": wrapper, "body": body.decode(), "old": old, "new": new})
     return {"cases": total, "accepted": accepted, "refused": refused,
             "difference_count": len(differences), "differences": differences,
-            "comparison": "canonical typed rows and refusal decisions; exception identities excluded",
+            "comparison": "typed rows, recursive captured key order and refusal decisions; exception identities excluded",
             "integer_minimum": -(2**63 - 1), "universal_equivalence": False,
             "full_archive_qualification": False, "sec_requests": 0}
 
@@ -94,10 +104,10 @@ def audit_record_bounds():
                 accepted = True
             except Exception:
                 accepted = False
-            if accepted != (limit >= size) or (accepted and digest(parsed) != digest(rows)):
+            if accepted != (limit >= size) or (accepted and digest(ordered(parsed)) != digest(ordered(rows))):
                 differences.append({"body": body.decode(), "limit": limit, "encoded_bytes": size, "accepted": accepted})
     return {"cases": total, "difference_count": len(differences), "differences": differences,
-            "record_encoding": "python", "comparison": "typed rows and encoded-size boundary acceptance",
+            "record_encoding": "python", "comparison": "typed rows, recursive captured-key order and encoded-size boundary acceptance",
             "universal_equivalence": False, "full_archive_qualification": False}
 
 

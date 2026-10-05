@@ -19,6 +19,17 @@ fn emits_exact_typed_objects_in_order_and_verifies_eof() {
 }
 
 #[test]
+fn retains_captured_object_order_at_every_depth() {
+    let body = br#"{"records":[{"z":1,"a":2,"nested":{"y":3,"b":4},"array":[{"q":1,"c":2}]}]}"#;
+    scan(&body[..], "records", limits(), |row, _| {
+        assert_eq!(row.as_object().unwrap().keys().map(String::as_str).collect::<Vec<_>>(), ["z", "a", "nested", "array"]);
+        assert_eq!(row["nested"].as_object().unwrap().keys().map(String::as_str).collect::<Vec<_>>(), ["y", "b"]);
+        assert_eq!(row["array"][0].as_object().unwrap().keys().map(String::as_str).collect::<Vec<_>>(), ["q", "c"]);
+        Ok(())
+    }).unwrap();
+}
+
+#[test]
 fn rejects_duplicate_keys_bad_shapes_numbers_depth_and_trailing_data() {
     for body in [r#"{}"#, r#"[]"#, r#"{"other":[]}"#, r#"{"records":{},"x":0}"#,
                  r#"{"records":[null]}"#, r#"{"records":[[]]}"#, r#"{"records":[],"records":[]}"#,

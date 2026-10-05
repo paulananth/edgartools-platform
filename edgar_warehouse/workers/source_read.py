@@ -11,16 +11,18 @@ from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
+from . import source_stream
 
 OUTPUT_BYTES = 128 * 1024**2
 
 
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
-    return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__)]
+    return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__),
+            Path(source_stream.__file__)]
 
 
-def _output(envelope: dict, artifacts) -> bytes:
+def _documents(envelope: dict, artifacts):
     if set(envelope["checks"]) != {"source.output"}:
         raise ValueError("source.read verifies source.output only")
     manifest = artifacts.json(envelope["input"])
@@ -37,6 +39,25 @@ def _output(envelope: dict, artifacts) -> bytes:
     inputs = manifest["artifacts"]
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= execution["max_artifacts"]:
         raise ValueError("Source input exceeds the contract's bounded artifact count")
+    return manifest, contract, execution, inputs
+
+
+def _context(manifest, entry, artifacts):
+    if manifest["version"] == 1:
+        return entry, {}, {}
+    if not isinstance(entry, dict) or set(entry) != {"input", "context"}:
+        raise ValueError("Version-2 artifact names input and context receipts")
+    ref = entry["input"]
+    bound = artifact_store.json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
+    if (not isinstance(bound, dict) or set(bound) != {"version", "input", "values"}
+            or type(bound["version"]) is not int or bound["version"] != 1
+            or bound["input"] != ref or not isinstance(bound["values"], dict)):
+        raise ValueError("Context document must bind its values to the exact input receipt")
+    return ref, bound["values"], {"context": entry["context"]}
+
+
+def _output(envelope: dict, artifacts, documents=None) -> bytes:
+    manifest, contract, execution, inputs = documents or _documents(envelope, artifacts)
     engine = source_engine.SourceEngine(contract)
     max_bytes = contract["read"].get("limits", {}).get("max_bytes", 32 * 1024**2)
     max_records = contract["read"].get("limits", {}).get("max_records")
@@ -46,20 +67,7 @@ def _output(envelope: dict, artifacts) -> bytes:
         raise ValueError("source.read requires a limit of at most 100000 records")
 
     def read(entry):
-        context, evidence = {}, {}
-        if manifest["version"] == 2:
-            if not isinstance(entry, dict) or set(entry) != {"input", "context"}:
-                raise ValueError("Version-2 artifact names input and context receipts")
-            ref = entry["input"]
-            bound = artifact_store.json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
-            if (not isinstance(bound, dict) or set(bound) != {"version", "input", "values"}
-                    or type(bound["version"]) is not int or bound["version"] != 1
-                    or bound["input"] != ref or not isinstance(bound["values"], dict)):
-                raise ValueError("Context document must bind its values to the exact input receipt")
-            context = bound["values"]
-            evidence = {"context": entry["context"]}
-        else:
-            ref = entry
+        ref, context, evidence = _context(manifest, entry, artifacts)
         result = engine.read(artifacts.verified(ref, max_bytes=max_bytes), context=context)
         return {"input": ref, **evidence, "tables": result.tables, "deferred": result.deferred}
 
@@ -73,13 +81,24 @@ def _output(envelope: dict, artifacts) -> bytes:
 
 
 def execute(envelope: dict, artifacts) -> dict:
-    return artifacts.put_bytes(envelope["output"], _output(envelope, artifacts))
+    documents = _documents(envelope, artifacts)
+    if "stream" in documents[1]["read"]:
+        output = source_stream.output(envelope, artifacts, documents, _context, publish=True,
+                                      max_index_bytes=OUTPUT_BYTES)
+    else:
+        output = _output(envelope, artifacts, documents)
+    return artifacts.put_bytes(envelope["output"], output)
 
 
 def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
-    expected = _output(envelope, artifacts)
+    documents = _documents(envelope, artifacts)
+    if "stream" in documents[1]["read"]:
+        expected = source_stream.output(envelope, artifacts, documents, _context, publish=False,
+                                        max_index_bytes=OUTPUT_BYTES)
+    else:
+        expected = _output(envelope, artifacts, documents)
     found = artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES)
     if found != expected:
         raise ValueError("Written source output differs from the configured reading")
