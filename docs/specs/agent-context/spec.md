@@ -12,7 +12,7 @@ already exists: Postgres views and the `edgar-warehouse` command bundle. There
 is no MCP server, no new service, no graph database and no embeddings.
 
 Everything here is generic: any kind, any code set, any relationship type.
-Kinds and codes named below are examples only.
+Specific kinds, codes and tables appear only in the Examples section.
 
 ## 2. Views (read only)
 
@@ -26,21 +26,35 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
 | `rdm.code_context` | RDM | code in the published version of each code set | `code_set`, `code`, `label`, `definition`, `synonyms`, `path`, `label_path`, `level`, `depth`, `version`, `sha256`, `valid_from`, `valid_to`, `status` |
 | `silver.table_context` | silver | silver table | `table_name`, `grain`, `key`, `links` (column → master kind), `time_columns`, `load_mode`, `definition`, `spec_ref` |
 
-`mdm.entity_context` is built on the existing `mdm.current_entity` view, so it
-covers every kind through one shape. A kind-specific table (such as today's
-`mdm.company`) feeds it through `current_entity`; agents never read
-kind-specific tables.
+**Where MDM context comes from (checked against the schema, 2026-10-05).**
+- MDM keeps history for every kind already: each committed batch stores its
+  projections in `mdm.batch.effects` with its `generation` and `created_at`.
+  A kind with its own versioned table (with `valid_from`, `valid_to`,
+  `from_generation`, `to_generation`) is read from that table instead.
+- The existing reader `ContractReader` (`edgar_warehouse/mdm/clean/consumer.py`)
+  already rebuilds an entity at any generation, follows `canonical_id`, and
+  returns `field_provenance` (each field's winning source). `mdm.entity_context`
+  and the command use it rather than re-deriving anything, so the view's
+  `fields` (value and winning source), `name` and `identifiers` come from the
+  entity body and its field provenance.
+- `valid_from` / `valid_to` for a kind without its own versioned table are the
+  `created_at` of the batch that introduced the projection and of the batch that
+  replaced it.
 
-As-of reads use the same views with a time argument (`--as-of`): for MDM, the
-record versions valid at that instant; for RDM, the version published at that
-instant.
+**Time.** Two times are kept apart (plan decision 9):
+- `--as-at <time>`: what MDM had recorded by then. The command takes the
+  highest `generation` whose batch `created_at` is at or before that time.
+- `--as-of <time>`: what was true in the business at that time. MDM masters
+  with an `as_of` per batch (`effects->>'as_of'`); the command takes the latest
+  generation whose `as_of` is at or before that time. RDM uses the version whose
+  `valid_from`..`valid_to` covers it.
 
 ## 3. The command
 
 ```
 edgar-warehouse context <kind|code_set|relationship|silver> <key>
 edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
-    [--as-of <ISO time>] [--hops N] [--detail brief|full] [--page <token>]
+    [--as-of <ISO time>] [--as-at <ISO time>] [--hops N] [--detail brief|full] [--page <token>]
 ```
 
 - `<kind>` is any MDM kind: `<key>` is an entity id, or `<namespace>:<value>`
@@ -96,6 +110,15 @@ operator's recorded approval publishes.
 ## 6. Done test (plan row 5)
 
 For any kind, code set, relationship and silver table in the trial stores:
-lookup, `--search`, `--as-of` and `--hops` each return valid JSON of at most
+lookup, `--search`, `--as-of`, `--as-at` and `--hops` each return valid JSON of at most
 8 KB with definition, path (codes), version and provenance; a missing key
 returns an actionable error; no output contains a database address.
+
+## Examples
+
+Examples only; nothing above depends on them.
+
+- `edgar-warehouse context company cik:0000320193` (a kind and an identifier).
+- `edgar-warehouse context us_state DE`, `--search "state banks"` (a code set).
+- Today's company-specific table `mdm.company` feeds `mdm.current_entity`, which
+  is why `entity_context` reads through the reader, not kind tables.

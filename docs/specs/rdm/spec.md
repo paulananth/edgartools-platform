@@ -6,8 +6,8 @@ Plan decisions 19–21, 24.
 
 ## 1. What RDM is
 
-Reference data gives values their meaning. A code such as `DE`, `10-K` or
-`6022` means nothing until a code set says what it stands for. RDM keeps those
+Reference data gives values their meaning. A code means nothing until a code
+set says what it stands for (see Examples). RDM keeps those
 code sets, apart from master data in concept:
 
 | | Master data (MDM) | Reference data (RDM) |
@@ -17,8 +17,8 @@ code sets, apart from master data in concept:
 | Changes by | new and changed records, merged by rules | a new version of the whole code set, approved |
 | Hierarchy | a **Master Data Hierarchy** is a set of MDM relationships | a **Reference Hierarchy** groups codes inside one code set |
 
-RDM is generic: it holds any code set from any source. Code sets named in this
-spec are examples only.
+RDM is generic: it holds any code set from any source. Specific code sets
+appear only in the Examples section.
 
 ## 2. The model
 
@@ -50,8 +50,9 @@ Integrity:
   publish refuses a cycle (recursive check with `CYCLE`).
 - Rows of a version are immutable once its status is `published`: a trigger
   refuses any update or delete; a change is a new version that `supersedes` it.
-- One `published` version per code set at any instant (`EXCLUDE USING gist`
-  on `code_set` and `tstzrange(valid_from, valid_to)`, `btree_gist`).
+- One `published` version per code set at any instant: `EXCLUDE USING gist
+  (code_set WITH =, tstzrange(valid_from, valid_to) WITH &&) WHERE (status =
+  'published')`, with `btree_gist`.
 
 ### 2.2 Hierarchy storage
 
@@ -105,8 +106,8 @@ Read: `rdm.code_context` (agent-context spec) through `edgar-warehouse context
 
 Write: agents create drafts only (`created_by` names the agent and skill).
 Publishing and approval are the operator's. A version diff
-(`edgar-warehouse rdm diff <code_set> <from> <to>`) lists added, removed,
-relabelled and moved codes.
+(`edgar-warehouse rdm diff <code_set> <from> <to>`, built in plan row 2) lists
+added, removed, relabelled and moved codes.
 
 ## 6. Publishing to silver
 
@@ -118,13 +119,15 @@ beside the version for consumers to load.
 
 ## 7. Migration of the existing reference YAML (plan row 2)
 
-- Each `rules/reference/<name>.yaml` becomes a code set version with its
-  crosswalk (e.g. a place-code list's ISO 3166 codes become crosswalk rows,
-  `exact`).
+- Each `rules/reference/<name>.yaml` becomes a code set version, with any
+  standard codes it carries as crosswalk rows (see Examples).
 - The Mastering Policy switches from embedding the YAML to pinning the version;
   `in_reference@1` reads the pinned version. The YAML is removed only after a
   run shows the same mastering counts with the pin.
-- Contract-embedded tables (PR #815) gain the pin beside their rows.
+- Contract-embedded tables (PR #815) gaining the pin beside their rows is a
+  **handoff request to Codex** in phase B: `rules/sources/**` and
+  `crates/source-contract/**` are Codex's paths (AGENTS.md, path ownership).
+  RDM only publishes the embeddable mapping and its pin.
 
 ## 8. Not in this spec
 
@@ -137,3 +140,13 @@ interface for stewards beyond the workbook sheet profiling generates.
   `bookkeeping` and `change_journal` (operator: "Own RDM database").
 - Every published version is kept; retired versions are never deleted, so any
   pin stays resolvable.
+
+## Examples
+
+Examples only; nothing above depends on them.
+
+- Codes needing a code set: `DE` (a state), `10-K` (a form type), `6022` (an
+  industry code).
+- A reference hierarchy: industry division → major group → industry.
+- The existing `rules/reference/sec-place-codes.yaml` becomes the first code set
+  in plan row 2; its ISO 3166 codes become `exact` crosswalk rows.
