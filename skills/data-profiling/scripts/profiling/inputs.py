@@ -16,6 +16,8 @@ records is kept, and `full_pass` reads it again for named columns only.
 
 from __future__ import annotations
 
+import gzip
+import io
 import json
 import os
 import random
@@ -124,6 +126,8 @@ def _json_records(stream, size: int) -> tuple[str | None, Iterator[dict]]:
     """
     if size <= WHOLE:
         data = json.load(stream)
+        if isinstance(data, dict) and (table := _split_table(data)) is not None:
+            return None, iter(table)
         if isinstance(data, list):
             return None, (d if isinstance(d, dict) else {"value": d} for d in data)
         if len(data) == 1 and isinstance(next(iter(data.values())), list):
@@ -133,14 +137,28 @@ def _json_records(stream, size: int) -> tuple[str | None, Iterator[dict]]:
     return _stream_json(stream)
 
 
+def _split_table(data: dict) -> list[dict] | None:
+    """A table written as one list of column names and one list of rows of that length."""
+    lists = [v for v in data.values() if isinstance(v, list)]
+    if len(lists) != 2:
+        return None
+    header = next((v for v in lists if v and all(isinstance(x, str) for x in v)), None)
+    rows = next((v for v in lists if v is not header), None)
+    if header is None or not rows or not all(isinstance(r, list) and len(r) == len(header) for r in rows):
+        return None
+    return [dict(zip(header, row)) for row in rows]
+
+
 def _stream_json(stream) -> tuple[str | None, Iterator[dict]]:
+    if not isinstance(stream, io.TextIOBase):
+        stream = io.TextIOWrapper(stream, encoding="utf-8")  # a character may span two chunks
     decoder = json.JSONDecoder()
     buffer = ""
 
     def fill() -> bool:
         nonlocal buffer
         chunk = stream.read(1 << 20)
-        buffer += chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
+        buffer += chunk
         return bool(chunk)
 
     def array() -> Iterator[dict]:
@@ -331,9 +349,10 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     files: dict[str, Path] = {}
 
     def spill() -> None:
+        # Compressed, and deleted once loaded: flattened rows repeat their column names.
         for part, rows in flattener.take().items():
-            target = files.setdefault(part, work / f"{part}.jsonl")
-            with target.open("a", encoding="utf-8") as handle:
+            target = files.setdefault(part, work / f"{part}.jsonl.gz")
+            with gzip.open(target, "at", encoding="utf-8", compresslevel=1) as handle:
                 handle.writelines(json.dumps(row, default=str) + "\n" for row in rows)
 
     if scan == "sampled":
@@ -354,6 +373,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     for part, path in sorted(files.items()):
         con.execute(f"CREATE TABLE {_sqlname(part)} AS SELECT * FROM read_json({_text(str(path))}, "
                     "format='newline_delimited', sample_size=-1, union_by_name=true)")
+        path.unlink()
         parts.append(Part(part, "", "", 0, scan=scan, parent=part.rsplit(".", 1)[0] if part != name else None))
     return parts
 
@@ -389,17 +409,19 @@ def _attached(con, name: str, location: str, fmt: str, copy: bool = False) -> li
     return parts
 
 
-def full_values(part: Part, column: str) -> tuple[set, int, int]:
-    """Read a sampled top-level part again, whole: the distinct values of one column, rows and empty rows."""
+def full_values(part: Part, columns: list[str]) -> dict[str, tuple[set, int, int]]:
+    """Read a sampled top-level part again, whole, once: per column its distinct values, rows and empty rows."""
     if part.reopen is None or part.parent is not None:
         raise ValueError(f"{part.name}: a full pass reads a top-level part read from records")
-    values: set = set()
-    rows = nulls = 0
+    values: dict[str, set] = {c: set() for c in columns}
+    nulls = dict.fromkeys(columns, 0)
+    rows = 0
     for record in part.reopen():
-        value = Flattener().add(record, part.name).get(column)
+        flat = Flattener().add(record, part.name)
         rows += 1
-        if value is None:
-            nulls += 1
-        else:
-            values.add(value)
-    return values, rows, nulls
+        for c in columns:
+            if flat.get(c) is None:
+                nulls[c] += 1
+            else:
+                values[c].add(flat[c])
+    return {c: (values[c], rows, nulls[c]) for c in columns}

@@ -111,9 +111,8 @@ def test_oversized_input_is_sampled_with_a_seed_and_full_pass_is_exact(con, tmp_
     again = duckdb.connect()
     inputs.register(again, "s", str(f), tmp_path / "w2", limit=100, sample=50, seed=7)
     assert rows(con, "s") == rows(again, "s")
-    values, total, nulls = inputs.full_values(parts[0], "c")
-    assert (values, total, nulls) == ({1, 2}, 1000, 334)
-    assert len(inputs.full_values(parts[0], "k")[0]) == 1000
+    read = inputs.full_values(parts[0], ["c", "k"])
+    assert read["c"] == ({1, 2}, 1000, 334) and len(read["k"][0]) == 1000
 
 
 def test_database_file_tables_become_parts(con, tmp_path):
@@ -140,3 +139,26 @@ def test_missing_environment_variable_names_it(con, tmp_path, monkeypatch):
     monkeypatch.delenv("PROFILE_TEST_DB", raising=False)
     with pytest.raises(SystemExit, match="PROFILE_TEST_DB"):
         inputs.register(con, "db", "env:PROFILE_TEST_DB", tmp_path / "w")
+
+
+def test_split_table_json_reads_as_rows(con, tmp_path):
+    f = tmp_path / "t.json"
+    f.write_text(json.dumps({"fields": ["a", "b"], "data": [[1, "x"], [2, "y"]]}))
+    inputs.register(con, "t", str(f), tmp_path / "w")
+    assert con.execute("SELECT a, b FROM t ORDER BY a").fetchall() == [(1, "x"), (2, "y")]
+
+
+def test_streamed_text_with_a_character_across_chunks(con, tmp_path, monkeypatch):
+    monkeypatch.setattr(inputs, "WHOLE", 10)
+    f = tmp_path / "u.json"
+    name = "\u00e9" * (1 << 19)  # 2 bytes each in UTF-8: the 1 MB chunk edge falls inside one
+    f.write_text(json.dumps([{"n": name}, {"n": "b"}]), encoding="utf-8")
+    inputs.register(con, "u", str(f), tmp_path / "w")
+    assert con.execute("SELECT count(*), max(length(n)) FROM u").fetchone() == (2, 1 << 19)
+
+
+def test_spill_files_are_removed_once_loaded(con, tmp_path):
+    f = tmp_path / "r.jsonl"
+    f.write_text("\n".join(json.dumps({"k": i}) for i in range(10)))
+    inputs.register(con, "r", str(f), tmp_path / "w")
+    assert not list((tmp_path / "w").glob("*.gz"))

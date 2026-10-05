@@ -76,8 +76,8 @@ def _record(con, part: str, columns: list[str], holds: float, kind: str) -> dict
     t = _sqlname(part)
     levels = []
     for depth, column in enumerate(reversed(columns), 1):
-        samples = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({_sqlname(column)} AS VARCHAR) v FROM {t} "
-                                             f"WHERE {_sqlname(column)} IS NOT NULL ORDER BY v LIMIT 3").fetchall()]
+        samples = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({_sqlname(column)} AS VARCHAR) FROM {t} "
+                                             f"WHERE {_sqlname(column)} IS NOT NULL ORDER BY 1 LIMIT 3").fetchall()]
         levels.append({"depth": depth, "name": None, "column": column, "samples": samples})
     rows = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
     return {"hierarchy": f"{part}: {' > '.join(reversed(columns))}", "type": None, "part": part,

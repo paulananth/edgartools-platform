@@ -60,8 +60,9 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     confirmed = {}
     for p, part in parts.items():
         if part.scan == "sampled" and part.parent is None:
-            say(f"{p}: full pass for key candidates {[k[0] for k in unique[p] if len(k) == 1]}")
-            confirmed[p] = keys.confirm_sampled(con, part, unique[p])
+            say(f"{p}: full pass for its identifier-like key candidates")
+            confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
+            say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
             unique[p] = [k for k in unique[p] if len(k) > 1 or confirmed[p].get(k[0], {}).get("unique")]
     found_links = keys.links(con, profiles, unique, parts, confirmed) + keys.composite_links(con, profiles, unique)
     child = keys.child_links(parts)

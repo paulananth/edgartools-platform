@@ -15,7 +15,7 @@ from __future__ import annotations
 import itertools
 from difflib import SequenceMatcher
 
-from .identifiers import dense_sequence
+from .identifiers import dense_sequence, identifier_shaped
 from .inputs import PARENT, POSITION, ROW, Part, _sqlname, full_values
 from .profile import is_integer, is_numeric, is_temporal, is_text
 from .sensitivity import words
@@ -61,16 +61,19 @@ def unique_keys(con, part: str, columns: list[dict]) -> list[list[str]]:
     return []
 
 
-def confirm_sampled(con, part: Part, keys: list[list[str]]) -> dict:
-    """For a sampled part: read each single-column key in full; keep those still unique.
+def confirm_sampled(con, part: Part, keys: list[list[str]], columns: list[dict]) -> dict:
+    """For a sampled part: read its identifier-like single-column keys in full, in one pass.
 
-    The full values are kept as a table `<part>#<column>` so links can be tested
-    against every value, not only the sample.
+    Only identifier-shaped or integer columns are read (a unique name in a sample
+    is not a key). The full values are kept as a table `<part>#<column>` so links
+    are tested against every value, not only the sample.
     """
+    profiles = {c["name"]: c for c in columns}
+    wanted = [k[0] for k in keys if len(k) == 1 and (identifier_shaped(profiles[k[0]]) or is_integer(profiles[k[0]]))]
+    if not wanted:
+        return {}
     evidence = {}
-    for key in [k for k in keys if len(k) == 1]:
-        column = key[0]
-        values, rows, nulls = full_values(part, column)
+    for column, (values, rows, nulls) in full_values(part, wanted).items():
         table = _sqlname(f"{part.name}#{column}")
         con.execute(f"CREATE TABLE {table} (v VARCHAR)")
         con.executemany(f"INSERT INTO {table} VALUES (?)", [[str(v)] for v in values])

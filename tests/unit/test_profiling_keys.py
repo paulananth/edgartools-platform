@@ -76,7 +76,8 @@ def test_sampled_key_is_confirmed_in_full_and_links_use_every_value(tmp_path):
     (tmp_path / "e.csv").write_text("ref\n" + "".join(f"R{i:05d}\n" for i in range(0, 2000, 3)))
     m = inputs.register(con, "m", str(tmp_path / "m.jsonl"), tmp_path / "w", limit=10, sample=100, seed=1)[0]
     inputs.register(con, "e", str(tmp_path / "e.csv"), tmp_path / "w")
-    confirmed = {"m": keys.confirm_sampled(con, m, [["ref"]])}
+    from profiling import profile as columns_of
+    confirmed = {"m": keys.confirm_sampled(con, m, [["ref"]], columns_of.columns(con, "m"))}
     assert confirmed["m"]["ref"]["unique"] and confirmed["m"]["ref"]["rows"] == 2000
     measured = keys.inclusion(con, "e", "ref", "m", "ref", confirmed)
     assert measured["sigma"] == 1.0

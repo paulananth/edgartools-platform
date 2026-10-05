@@ -1,5 +1,7 @@
 """Column profile of one part: exact counts, shapes, lengths and top values.
 
+Queries group and order by position, never by an alias a data column could shadow.
+
 Uniqueness and distinct counts are exact (`count(DISTINCT ...)`), never the
 approximate counts of DuckDB's SUMMARIZE.
 """
@@ -46,13 +48,13 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
     if not non_null:
         return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0}
     modal_shape, shape_count = con.execute(
-        f"SELECT {shape(text)} s, count(*) n FROM {t} WHERE {c} IS NOT NULL GROUP BY s ORDER BY n DESC, s LIMIT 1").fetchone()
+        f"SELECT {shape(text)}, count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
     length_count = con.execute(
-        f"SELECT count(*) n FROM {t} WHERE {c} IS NOT NULL GROUP BY length({text}) ORDER BY n DESC LIMIT 1").fetchone()[0]
+        f"SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY length({text}) ORDER BY 1 DESC LIMIT 1").fetchone()[0]
     tokens = con.execute(
         f"SELECT avg(len(string_split(trim({text}), ' '))) FROM {t} WHERE {c} IS NOT NULL").fetchone()[0]
     top = con.execute(
-        f"SELECT {text} v, count(*) n FROM {t} WHERE {c} IS NOT NULL GROUP BY v ORDER BY n DESC, v LIMIT {TOP}").fetchall()
+        f"SELECT {text}, count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT {TOP}").fetchall()
     profile.update({
         "shape": modal_shape, "shape_share": round(shape_count / non_null, 6),
         "length_share": round(length_count / non_null, 6),
