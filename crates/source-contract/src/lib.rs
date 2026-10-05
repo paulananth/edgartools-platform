@@ -22,6 +22,7 @@ mod reference;
 mod value;
 mod context;
 mod parallel;
+mod matrix;
 mod json_text;
 #[cfg(feature = "python")]
 mod python;
@@ -169,8 +170,15 @@ impl Engine {
             let name = name.as_str().unwrap_or_default().to_string();
             let expanded;
             let (items, count) = if table.get("each").is_some_and(|each| each.is_mapping()) {
-                expanded = parallel::rows(&document, &table["each"], self.limits.max_records, context::take(table, context))?;
-                (expanded.rows.iter().collect::<Vec<_>>(), expanded.count)
+                let take = context::take(table, context);
+                let count;
+                (expanded, count) = if table["each"].get("matrix").is_some() {
+                    matrix::rows(&document, &table["each"], self.limits.max_records, take)?
+                } else {
+                    let result = parallel::rows(&document, &table["each"], self.limits.max_records, take)?;
+                    (result.rows, result.count)
+                };
+                (expanded.iter().collect::<Vec<_>>(), count)
             } else {
                 let items = items_of(&document, setting(table, "each").unwrap_or("."))?;
                 let count = items.len();
@@ -355,9 +363,10 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     for (name, table) in tables {
         if let Some(each) = table.get("each") {
             if each.is_mapping() {
-                parallel::validate(each, format)?;
+                if each.get("matrix").is_some() { matrix::validate(each, format)?; }
+                else { parallel::validate(each, format)?; }
             } else if each.as_str().is_none() {
-                return Err("table.each must be text or one parallel call".into());
+                return Err("table.each must be text or one iteration call".into());
             }
         }
         if table.get("checks").is_some_and(|value| value.as_sequence().is_none()) {

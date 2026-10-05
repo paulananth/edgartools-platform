@@ -457,3 +457,27 @@ reading receipts while keeping each work unit bounded. See
 [Combination](COMBINING.md) for list and element-budget semantics.
 Same-date S3 captures plus version/hash evidence prove captured bytes and
 declared page coverage; they do not prove Bookkeeping producer success.
+
+## Header-driven JSON matrices
+
+Use `each: {matrix: {headers: fields, rows: data}}` for a JSON document with
+an array of header names and an array of row arrays. Paths may be nested.
+Both arguments are required; unknown arguments and non-JSON formats refuse.
+Headers must be 1..128 distinct names of at most 128 ASCII letters, digits or
+underscores. Every row must be an array of exactly the header length. Missing
+arrays, duplicate headers and malformed rows refuse the artifact. Ordinary
+column expressions read each cell by its header name, preserving typed values;
+`ordinal` retains the row's original position. Document/context expressions
+remain available. Full row-count and shape checks run even when `take` selects
+only a prefix; materialization is bounded by the artifact and record limits.
+
+The Company draft `rules/sources/sec.submissions.company/catalog.yaml` uses
+this generic iterator for the header-driven exchange catalog. Its receipt-bound
+context supplies catalog run, source name and sync time. Group `ticker` by CIK
+with `order_by: [source_rank]`, `distinct: true` and a catalog-run row check in
+`source.combine`. Keep the independent Company capture-run check on the base
+rows; these are different runs. This draft fails closed on missing CIK/ticker
+and does not reproduce the retained parser's malformed-row skipping or its
+alternate dictionary catalog. Qualify those cases before caller retirement.
+No source activation, producer success or complete Company mastering follows
+from reading a catalog successfully.
