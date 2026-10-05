@@ -1,0 +1,345 @@
+"""One profiling run: inputs → findings.yaml + REPORT.md.
+
+Every claim carries its evidence; anything without evidence is "unknown".
+Samples of personal columns are masked to their shape.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+import duckdb
+
+from . import classify, codes, hierarchy, identifiers, inputs, keys, profile, sensitivity, timing
+from .inputs import PARENT, POSITION, ROW
+
+VERSION = "data-profiling 1"
+MB_PER_SECOND = 40  # records read by Python, for the time estimate before a long pass
+
+
+def say(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
+                   sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
+                   work: Path | None = None) -> dict:
+    """Profile every input and return the findings (the findings.yaml document)."""
+    started = time.monotonic()
+    con = duckdb.connect()
+    work = work or Path(tempfile.mkdtemp(prefix="profiling-"))
+    parts: dict[str, inputs.Part] = {}
+    for input_name, location in sources.items():
+        if not location.startswith("env:"):
+            size = inputs._size(Path(location).expanduser())
+            if size > limit:
+                say(f"{input_name}: {size / inputs.GB:.1f} GB is over the {limit / inputs.GB:.0f} GB limit: "
+                    f"sampling {sample} records (seed {seed}), then full passes for key candidates; "
+                    f"about {2 * size / (MB_PER_SECOND * 1024 ** 2) / 60:.0f} minutes per pass")
+        for part in inputs.register(con, input_name, location, work / input_name, limit, sample, seed):
+            parts[part.name] = part
+    say(f"registered {len(parts)} parts")
+
+    profiles = {p: profile.columns(con, p) for p in parts}
+    unique = {p: keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
+    confirmed = {}
+    for p, part in parts.items():
+        if part.scan == "sampled" and part.parent is None:
+            say(f"{p}: full pass for key candidates {[k[0] for k in unique[p] if len(k) == 1]}")
+            confirmed[p] = keys.confirm_sampled(con, part, unique[p])
+            unique[p] = [k for k in unique[p] if len(k) > 1 or confirmed[p].get(k[0], {}).get("unique")]
+    found_links = keys.links(con, profiles, unique, parts, confirmed) + keys.composite_links(con, profiles, unique)
+    child = keys.child_links(parts)
+    say(f"found {len(found_links)} links")
+
+    record_keys: dict[str, dict] = {}
+    for p in sorted(parts, key=lambda n: n.count(".")):  # parents before their children
+        parent = parts[p].parent
+        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links,
+                                                record_keys[parent]["columns"] if parent else None)
+
+    findings_parts = []
+    facts_by_part = {}
+    for p in parts:
+        built = _part(con, p, parts, profiles, record_keys[p], found_links, child, kinds, confirmed.get(p, {}))
+        findings_parts.append(built)
+        facts_by_part[p] = built.pop("_facts")
+    _inherit(findings_parts, parts)
+    by_name = {f["part"]: f for f in findings_parts}
+    hierarchies = _hierarchies(con, by_name, profiles, found_links)
+    relationships = _relationships(found_links + child, by_name)
+    for f in findings_parts:
+        f["store_suggestion"] = classify.store(f["class"])
+        f["silver"] = _silver(f, relationships) if f["class"] in {"transaction", "reference"} else None
+    return {
+        "version": 1,
+        "dataset": {"name": name,
+                    "inputs": [parts[p].finding() for p in parts if parts[p].parent is None],
+                    "scan": {"mode": "sampled" if any(x.scan == "sampled" for x in parts.values()) else "full",
+                             "reason": f"an input over {limit / inputs.GB:.0f} GB" if any(
+                                 x.scan == "sampled" for x in parts.values()) else None,
+                             "seed": seed, "elapsed_seconds": round(time.monotonic() - started, 1)},
+                    "profiled_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                    "profiled_by": VERSION},
+        "parts": findings_parts,
+        "relationships": relationships,
+        "hierarchies": hierarchies,
+        "questions": _questions(findings_parts),
+        "approval": {"status": "draft", "approved_by": None, "approved_words": None, "approved_at": None},
+    }
+
+
+def _part(con, p, parts, profiles, record_key, found_links, child, kinds, confirmed) -> dict:
+    columns = profiles[p]
+    names = [c["name"] for c in columns if not c["structure"]]
+    people = sensitivity.person_part(names)
+    tags = {c["name"]: sensitivity.tag(c["name"], _values(con, p, c), people) for c in columns if not c["structure"]}
+    personal = {n for n, t in tags.items() if t["sensitivity"] != "none"}
+    code_list = codes.code_lists(con, p, columns, record_key["columns"], personal)
+    code_columns = {c["column"] for c in code_list} | {c["label_column"] for c in code_list if c["label_column"]}
+    labelled = {c["column"] for c in code_list if c["label_column"]}
+    key_labels = {c["label_column"] for c in code_list if c["label_column"] and [c["column"]] == record_key["columns"]}
+    times = timing.roles(con, p, columns, record_key["columns"], personal)
+    out = [l for l in found_links if l["from"]["part"] == p and l["to"]["part"] != p]
+    inbound = [l for l in found_links if l["to"]["part"] == p and l["from"]["part"] != p]
+    linked_columns = {c for l in out for c in l["from"]["columns"]}
+    # A number with a label column is a code; any other number may be a measure, even with few values.
+    measures = [c for c in columns if profile.is_numeric(c) and not c["structure"] and c["name"] not in linked_columns
+                and c["name"] not in record_key["columns"] and c["name"] not in labelled]
+    column_findings, identifier_findings = [], []
+    for c in columns:
+        if c["structure"]:
+            continue
+        tagged = tags[c["name"]]
+        role = _role(c, record_key, linked_columns, code_columns, times, measures)
+        top = [{"value": sensitivity.mask(t["value"]) if tagged["sensitivity"] != "none" else t["value"],
+                "rows": t["rows"]} for t in c["top"]]
+        column_findings.append({
+            "name": c["name"], "type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
+            "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
+            "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"]})
+        if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
+            identifier_findings.append(_identifier(con, p, c, record_key))
+    parent = parts[p].parent
+    facts = {
+        "rows": columns[0]["rows"] if columns else 0, "key": record_key["columns"], "key_found": record_key["found"],
+        "in_degree": len({l["from"]["part"] for l in inbound}),
+        "out_degree": len({l["to"]["part"] for l in out}) + (1 if parent else 0),
+        "self_ends": len({l["to"]["part"] for l in out}) == 1 and len(out) >= 2,
+        "key_links": sum(1 for c in record_key["columns"] if c in linked_columns),
+        "key_other": sum(1 for c in record_key["columns"] if c not in linked_columns),
+        "other_columns": len([n for n in names if n not in record_key["columns"]]),
+        # The key's own label names an entity; other labels name codes.
+        "name_like": sum(codes.name_like(c, code_columns - key_labels) for c in columns),
+        "attributes": sum(1 for c in columns if not c["structure"] and c["name"] not in record_key["columns"]
+                          and c["name"] not in code_columns and c["name"] not in linked_columns
+                          and not profile.is_temporal(c)),
+        "labels": sum(1 for c in code_list if c["label_column"]),
+        "measures": len(measures), "event_time": times["event_time"],
+        "metadata_share": round(sum(bool(set(sensitivity.words(n)) & classify.METADATA_WORDS) for n in names)
+                                / len(names), 3) if names else 0.0,
+        "rows_pointing": max([_rows(profiles, l["from"]["part"]) for l in inbound] or [0]),
+        "rows_pointed": max([_rows(profiles, l["to"]["part"]) for l in out] or [0]),
+    }
+    if not facts["in_degree"]:
+        facts["rows_pointing"] = facts["rows"] - 1  # nothing points at it: "smaller than" cannot pass
+    decided = classify.classify(facts)
+    if decided["class"] not in {"transaction", "unknown"}:
+        times["event_time"] = None  # an event time belongs to events
+    kind = next((k for k in kinds if k.lower() == p.rsplit(".", 1)[-1].lower()), None)
+    return {
+        "part": p, "parent_part": parent, "rows": facts["rows"], "scan": parts[p].scan,
+        "class": decided["class"], "confidence": decided["confidence"], "tests": decided["tests"],
+        "runner_up": decided["runner_up"],
+        "kind": kind,
+        "proposed_kind": None,
+        "record_key": {**record_key, "evidence": {"unique": record_key["found"], "null_rows": 0,
+                                                  "persistence": None, **({"full_pass": confirmed} if confirmed else {})}},
+        "identifiers": [i for i in identifier_findings if i],
+        "columns": column_findings,
+        "code_lists": code_list,
+        "time": times,
+        "quality": _quality(p, out, record_key),
+        "_facts": facts,
+    }
+
+
+def _values(con, p: str, c: dict) -> list[str]:
+    """Up to 200 distinct values of a text column, for the value detectors (never written out)."""
+    if not c["non_null"] or not profile.is_text(c):
+        return []
+    return [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs._sqlname(c['name'])} AS VARCHAR) FROM "
+                                      f"{inputs._sqlname(p)} WHERE {inputs._sqlname(c['name'])} IS NOT NULL "
+                                      "LIMIT 200").fetchall()]
+
+
+def _rows(profiles, part):
+    return profiles[part][0]["rows"] if profiles[part] else 0
+
+
+def _role(c, record_key, linked, code_columns, times, measures) -> str:
+    if c["name"] in record_key["columns"]:
+        return "key"
+    if c["name"] in linked:
+        return "link"
+    if c["name"] in code_columns:
+        return "code"
+    if c["name"] in {times["as_of"]["from"], times["as_of"]["to"], times["as_at"], times["event_time"]} or \
+            profile.is_temporal(c):
+        return "date"
+    if c in measures:
+        return "measure"
+    if identifiers.identifier_shaped(c):
+        return "identifier"
+    if profile.is_text(c) and c["distinct"] > 50:
+        return "name" if c.get("tokens", 0) <= 6 else "text"
+    return "other"
+
+
+def _identifier(con, p, c, record_key) -> dict | None:
+    values = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs._sqlname(c['name'])} AS VARCHAR) FROM "
+                                        f"{inputs._sqlname(p)} WHERE {inputs._sqlname(c['name'])} IS NOT NULL").fetchall()]
+    checked = identifiers.check_digits(values)
+    dense = profile.is_integer(c) and identifiers.dense_sequence(c)
+    is_key = c["name"] in record_key["columns"]
+    if is_key:
+        proposal, why = "record_key", "the part's record key"
+    elif checked["family"]:
+        proposal, why = "cross_reference", f"one shape and a {checked['family']} check digit: an issued identifier"
+    elif c["unique"] >= 0.99 and not dense:
+        proposal, why = "cross_reference", "one shape and unique: a second identifier for lookup only"
+    else:
+        proposal, why = "none", "repeats or is a local counter"
+    return {"column": c["name"], "shape": sensitivity.mask(c["shape"]) if c["shape"] else None,
+            "check_digit": checked["family"], "pass_rate": checked["pass_rate"], "chance_rate": checked["chance_rate"],
+            "fill": c["fill"], "unique": c["unique"], "local_counter": dense, "proposal": proposal, "why": why}
+
+
+def _quality(p, out, record_key) -> list[dict]:
+    found = []
+    for link in out:
+        if link["inclusion"] < 1.0:
+            found.append({"check": "link_not_found", "column": link["from"]["columns"][0],
+                          "share": round(1 - link["inclusion"], 6),
+                          "why": f"values of {', '.join(link['from']['columns'])} not found in "
+                                 f"{link['to']['part']}.{', '.join(link['to']['columns'])}",
+                          "proposal": "flag", "fix": None, "fix_evidence": None})
+    if not record_key["found"]:
+        found.append({"check": "no_natural_key", "column": None, "why": "no column or combination is unique",
+                      "proposal": "flag", "fix": record_key["rule"], "fix_evidence": None})
+    return found
+
+
+def _inherit(found: list[dict], parts) -> None:
+    """A list inside a record, with no key of its own, is an attribute list of its parent: same class."""
+    by_name = {f["part"]: f for f in found}
+    for f in sorted(found, key=lambda x: x["part"].count(".")):
+        parent = f["parent_part"]
+        if parent and not f["record_key"]["found"] and by_name[parent]["class"] != "unknown":
+            f["class"] = by_name[parent]["class"]
+            f["confidence"] = by_name[parent]["confidence"]
+            f["tests"] = [{"class": f["class"], "test": "a list inside its parent's records, with no key of its own",
+                           "value": parent, "passed": True}]
+
+
+def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
+    found = []
+    parent_columns = {(l["from"]["part"], l["from"]["columns"][0]) for l in links
+                      if l["from"]["part"] == l["to"]["part"] and len(l["from"]["columns"]) == 1}
+    for p, f in parts.items():
+        listed = {x["column"] for x in f["code_lists"]} | {x["label_column"] for x in f["code_lists"]}
+        # A parent column is its own hierarchy (below); here only code columns that are not one.
+        key = f["record_key"]["columns"]
+        key_side = set(key) | {x["label_column"] for x in f["code_lists"] if [x["column"]] == key}
+        code_columns = [c for c in profiles[p] if c["name"] in listed and (p, c["name"]) not in parent_columns
+                        and (f["class"] == "reference" or c["name"] not in key_side)]
+        for h in hierarchy.by_dependency(con, p, code_columns):
+            h["type"] = "reference"
+            found.append(h)
+    for link in links:
+        a, b = link["from"], link["to"]
+        if a["part"] == b["part"] and len(a["columns"]) == 1:
+            h = hierarchy.by_parent_column(con, a["part"], a["columns"][0], b["columns"][0])
+            h["type"] = "reference" if parts[a["part"]]["class"] == "reference" else "master_data"
+            found.append(h)
+    for p, f in parts.items():
+        ends = [l for l in links if l["from"]["part"] == p and l["to"]["part"] != p]
+        targets = {l["to"]["part"] for l in ends}
+        if f["class"] == "relationship" and len(ends) == 2 and len(targets) == 1:
+            role = _role_column(f)
+            for h in hierarchy.by_link_part(con, p, ends[0]["from"]["columns"][0], ends[1]["from"]["columns"][0], role):
+                h["type"] = "master_data"
+                found.append(h)
+    return found
+
+
+def _role_column(f: dict) -> str | None:
+    """A link part's role: a code column in its key, else any code column that is not a link."""
+    linked = {c["name"] for c in f["columns"] if c["role"] == "link"}
+    listed = [x["column"] for x in f["code_lists"] if x["column"] not in linked]
+    return next((c for c in f["record_key"]["columns"] if c in listed), listed[0] if listed else None)
+
+
+def _relationships(links, parts: dict) -> list[dict]:
+    found = []
+    for link in links:
+        a, b = parts[link["from"]["part"]], parts[link["to"]["part"]]
+        together = (a["class"] == "relationship" and b["class"] == "master") or \
+                   (a["parent_part"] == b["part"] and a["class"] == b["class"] == "master")
+        why = ("a link between masters, mastered with them" if a["class"] == "relationship" else
+               "an attribute list of its master" if together else
+               f"a {a['class']} part pointing at a {b['class']} part: onboarded after it")
+        found.append({
+            "relationship": f"{link['from']['part']}.{'+'.join(link['from']['columns'])} → "
+                            f"{link['to']['part']}.{'+'.join(link['to']['columns'])}",
+            "from": link["from"], "to": link["to"], "inclusion": link["inclusion"],
+            "cardinality": link["cardinality"], "via_part": a["part"] if a["class"] == "relationship" else None,
+            "role_column": _role_column(a) if a["class"] == "relationship" else None,
+            "valid": {"from": a["time"]["as_of"]["from"], "to": a["time"]["as_of"]["to"]},
+            "onboard": "together" if together else "separate", "why": why, "evidence": link["evidence"]})
+    return found
+
+
+def _silver(f: dict, relationships: list[dict]) -> dict:
+    links = [r for r in relationships if r["from"]["part"] == f["part"]]
+    return {
+        "table": f["part"].replace(".", "_").lower(),
+        "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
+        "columns": [{"name": c["name"], "type": c["type"], "nullable": c["fill"] < 1.0, "definition": None,
+                     "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in f["columns"]],
+        "key": f["record_key"]["columns"],
+        "links": [{"columns": r["from"]["columns"], "kind": None, "to_part": r["to"]["part"],
+                   "source_key": r["from"]["columns"][0], "mdm_id_column": f"{r['from']['columns'][0]}_mdm_id",
+                   "inclusion": r["inclusion"]} for r in links],
+        "time": {"as_of": f["time"]["as_of"]["from"], "as_at": f["time"]["as_at"] or "loaded_at",
+                 "event_time": f["time"]["event_time"]},
+        "partition": [f["time"]["event_time"]] if f["time"]["event_time"] else [],
+        "load_mode": "append" if f["class"] == "transaction" else "snapshot",
+        "why": "events are appended and never changed" if f["class"] == "transaction"
+        else "a published code-set version replaces the previous one",
+    }
+
+
+def _questions(parts: list[dict]) -> list[dict]:
+    asked = []
+    for f in parts:
+        if f["class"] == "master" and not f["kind"] and not f["parent_part"]:
+            name = f["part"].rsplit(".", 1)[-1]
+            f["proposed_kind"] = {"domain": name, "kind": name,
+                                  "why": "; ".join(t["test"] for t in f["tests"] if t["passed"])}
+            asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],
+                          "question": f"Is {f['part']} a new master kind named '{name}'?",
+                          "recommendation": f"yes: {f['proposed_kind']['why']}", "answer": None})
+        if not f["record_key"]["found"] and not f["parent_part"]:
+            asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],
+                          "question": f"{f['part']} has no unique column: use the designed key?",
+                          "recommendation": f["record_key"]["rule"], "answer": None})
+        if f["class"] == "unknown":
+            asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],
+                          "question": f"Which class is {f['part']}? Its tests did not decide.",
+                          "recommendation": "keep it raw (bronze only) until decided", "answer": None})
+    return asked

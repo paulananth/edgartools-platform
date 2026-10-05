@@ -107,7 +107,8 @@ def check_digits(values: list[str], seed: int = 0) -> dict:
 
 def identifier_shaped(profile: dict) -> bool:
     """One length or one shape for (nearly) every value, and more than a handful of values."""
-    if not profile["non_null"] or profile["structure"] or profile.get("tokens", 0) > 1.0:
+    from .profile import is_temporal
+    if not profile["non_null"] or profile["structure"] or profile.get("tokens", 0) > 1.0 or is_temporal(profile):
         return False
     return profile["distinct"] >= 20 and max(profile["shape_share"], profile["length_share"]) >= 0.99 \
         and (profile["min_length"] or 0) >= 3
