@@ -1,0 +1,25 @@
+# Offline Company catalog qualification; this does not activate acquisition.
+source: sec.submissions.company
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 100000}
+  context:
+    sync_run_id: {type: text}
+    last_synced_at: {type: text}
+    source_name: {type: text}
+  tables:
+    tickers:
+      each: {matrix: {headers: fields, rows: data}}
+      columns:
+        cik:
+          integer: {path: cik, on_invalid: error, on_overflow: error}
+        ticker: {text: {path: ticker, trim: false, null_if: [""], coerce: python}}
+        exchange: {text: {path: exchange, trim: false, null_if: [""], coerce: python}}
+        source_rank: {ordinal: {}}
+        source_name: {context: {name: source_name}}
+        last_sync_run_id: {context: {name: sync_run_id}}
+        last_synced_at: {context: {name: last_synced_at}}
+      checks:
+        - {check: required, column: cik, on_fail: reject, reason: missing_cik}
+        - {check: required, column: ticker, on_fail: reject, reason: missing_ticker}
