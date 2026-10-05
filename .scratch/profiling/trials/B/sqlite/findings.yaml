@@ -6,40 +6,56 @@ dataset:
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.currencyexchange
     format: sqlite
     bytes: 0
+    rows: 36525
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.customer
     format: sqlite
     bytes: 0
+    rows: 104990
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.date
     format: sqlite
     bytes: 0
+    rows: 1461
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.orderrows
     format: sqlite
     bytes: 0
+    rows: 7794
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.orders
     format: sqlite
     bytes: 0
+    rows: 3242
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.product
     format: sqlite
     bytes: 0
+    rows: 2517
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.sales
     format: sqlite
     bytes: 0
+    rows: 7794
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   - kind: table
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso.db#main.store
     format: sqlite
     bytes: 0
+    rows: 74
+    sha256: c1fdb1bc7bb9fc722b567e2417e727a6705b69834489184853d476c62a6e66c0
   scan:
     mode: full
     reason: null
     seed: 0
-    elapsed_seconds: 17.3
-  profiled_at: '2026-10-05T11:57:31+00:00'
+    elapsed_seconds: 31.0
+  profiled_at: '2026-10-05T08:32:22-04:00'
   profiled_by: data-profiling 1
 parts:
 - part: currencyexchange

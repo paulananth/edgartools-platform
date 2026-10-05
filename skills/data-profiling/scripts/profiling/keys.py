@@ -16,8 +16,8 @@ import itertools
 from difflib import SequenceMatcher
 
 from .identifiers import dense_sequence, identifier_shaped
-from .inputs import PARENT, POSITION, ROW, Part, _sqlname, full_values
-from .profile import is_integer, is_numeric, is_temporal, is_text
+from .inputs import PARENT, POSITION, ROW, Part, sql_name, full_values
+from .profile import FLOATS, is_integer, is_temporal, is_text
 from .sensitivity import words
 
 THETA = 0.9
@@ -26,14 +26,10 @@ MAX_COMBINATION_COLUMNS = 12
 RANDOMNESS = 0.7  # 1 - KS distance; below this a link must also be named alike
 
 
-def _col(name: str) -> str:
-    return _sqlname(name)
-
-
 def _candidates(columns: list[dict]) -> list[dict]:
     """Columns that may be part of a key: never empty, not free text, not a float measure."""
     return [c for c in columns if not c["structure"] and c["fill"] == 1.0 and c["distinct"] > 1
-            and c.get("tokens", 0) <= 2.0 and c["type"] not in {"DOUBLE", "FLOAT"}]
+            and c.get("tokens", 0) <= 2.0 and c["type"] not in FLOATS]
 
 
 def unique_keys(con, part: str, columns: list[dict]) -> list[list[str]]:
@@ -52,8 +48,8 @@ def unique_keys(con, part: str, columns: list[dict]) -> list[list[str]]:
             if any(set(k) <= {c["name"] for c in combo} for k in found):
                 continue
             names = [c["name"] for c in combo]
-            distinct = con.execute(f"SELECT count(*) FROM (SELECT DISTINCT {', '.join(map(_col, names))} "
-                                   f"FROM {_sqlname(part)})").fetchone()[0]
+            distinct = con.execute(f"SELECT count(*) FROM (SELECT DISTINCT {', '.join(map(sql_name, names))} "
+                                   f"FROM {sql_name(part)})").fetchone()[0]
             if distinct == rows:
                 found.append(names)
         if found:
@@ -73,8 +69,8 @@ def confirm_sampled(con, part: Part, keys: list[list[str]], columns: list[dict])
     if not wanted:
         return {}
     evidence = {}
-    for column, (values, rows, nulls) in full_values(part, wanted).items():
-        table = _sqlname(f"{part.name}#{column}")
+    for column, (values, rows, nulls) in full_values(part, wanted, con).items():
+        table = sql_name(f"{part.name}#{column}")
         con.execute(f"CREATE TABLE {table} (v VARCHAR)")
         con.executemany(f"INSERT INTO {table} VALUES (?)", [[str(v)] for v in values])
         evidence[column] = {"rows": rows, "null_rows": nulls, "distinct": len(values),
@@ -106,14 +102,14 @@ def name_similarity(f_part: str, f: str, p_part: str, p: str) -> float:
 def _source(part: str, column: str, confirmed: dict) -> str:
     """The values of a key column: all of them for a sampled part, else the view."""
     if column in confirmed.get(part, {}):
-        return f"SELECT v FROM {_sqlname(part + '#' + column)}"
-    return f"SELECT CAST({_col(column)} AS VARCHAR) v FROM {_sqlname(part)}"
+        return f"SELECT v FROM {sql_name(part + '#' + column)}"
+    return f"SELECT CAST({sql_name(column)} AS VARCHAR) v FROM {sql_name(part)}"
 
 
 def inclusion(con, f_part: str, f: str, p_part: str, p: str, confirmed: dict) -> dict:
     """sigma, coverage and randomness of F's distinct values within P's."""
     sql = f"""
-        WITH fv AS (SELECT DISTINCT CAST({_col(f)} AS VARCHAR) v FROM {_sqlname(f_part)} WHERE {_col(f)} IS NOT NULL),
+        WITH fv AS (SELECT DISTINCT CAST({sql_name(f)} AS VARCHAR) v FROM {sql_name(f_part)} WHERE {sql_name(f)} IS NOT NULL),
              pv AS (SELECT DISTINCT v FROM ({_source(p_part, p, confirmed)}) WHERE v IS NOT NULL),
              ranked AS (SELECT v, (row_number() OVER (ORDER BY TRY_CAST(v AS DOUBLE) NULLS LAST, v) - 0.5)
                                / count(*) OVER () r FROM pv),
@@ -135,7 +131,7 @@ def links(con, profiles: dict[str, list[dict]], keys: dict[str, list[list[str]]]
     targets = [(p_part, k[0]) for p_part, ks in keys.items() for k in ks if len(k) == 1]
     for f_part, columns in profiles.items():
         for f in columns:
-            if f["structure"] or f["distinct"] < 2 or f["type"] in {"DOUBLE", "FLOAT", "BOOLEAN"} \
+            if f["structure"] or f["distinct"] < 2 or f["type"] in FLOATS | {"BOOLEAN"} \
                     or f.get("tokens", 0) > 2.0:
                 continue
             for p_part, p_name in targets:
@@ -188,14 +184,14 @@ def composite_links(con, profiles: dict[str, list[dict]], keys: dict[str, list[l
             for f_part, columns in profiles.items():
                 if f_part == p_part or not set(key) <= {c["name"] for c in columns}:
                     continue
-                cols = ", ".join(map(_col, key))
+                cols = ", ".join(map(sql_name, key))
                 f_rows, hits = con.execute(
-                    f"SELECT count(*), count(*) FILTER (WHERE ({cols}) IN (SELECT ({cols}) FROM {_sqlname(p_part)})) "
-                    f"FROM (SELECT DISTINCT {cols} FROM {_sqlname(f_part)})").fetchone()
+                    f"SELECT count(*), count(*) FILTER (WHERE ({cols}) IN (SELECT ({cols}) FROM {sql_name(p_part)})) "
+                    f"FROM (SELECT DISTINCT {cols} FROM {sql_name(f_part)})").fetchone()
                 sigma = hits / f_rows if f_rows else 0.0
                 if sigma < THETA:
                     continue
-                unique = con.execute(f"SELECT count(*) = count(DISTINCT ({cols})) FROM {_sqlname(f_part)}").fetchone()[0]
+                unique = con.execute(f"SELECT count(*) = count(DISTINCT ({cols})) FROM {sql_name(f_part)}").fetchone()[0]
                 found.append({"from": {"part": f_part, "columns": key}, "to": {"part": p_part, "columns": key},
                               "inclusion": round(sigma, 6), "cardinality": "1:1" if unique else "N:1",
                               "evidence": {"test": "composite inclusion, same names", "scan": "full"}})
@@ -228,6 +224,7 @@ def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], inc
         return {"columns": [*parent_key, POSITION], "found": False, "design": "natural_composite",
                 "rule": "the parent's record key plus the place in its list", "alternatives": []}
     usable = [c["name"] for c in _candidates(columns)]
-    return {"columns": ["record_hash"], "found": False, "design": "surrogate",
-            "rule": f"sha256 of the normalized values of {', '.join(usable) or 'every column'}; "
-                    "changes when any of them changes", "alternatives": []}
+    return {"columns": ["record_id"], "found": False, "design": "surrogate",
+            "rule": "a durable id given when a record first appears and kept in a key map, so it never changes; "
+                    f"the operator chooses which columns identify a record (candidates: {', '.join(usable) or 'none'})",
+            "alternatives": []}

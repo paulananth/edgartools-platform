@@ -111,3 +111,35 @@ def test_compare_refuses_findings_that_are_not_approved(result, tmp_path):
     with pytest.raises(SystemExit, match="not approved"):
         profile_data.main(["compare", "--approved", str(path), "--input", f"set={result['folder']}",
                            "--out", str(tmp_path / "o")])
+
+
+def test_no_working_copy_outlives_the_run(result):
+    assert not (result["out"] / ".work").exists()
+    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml"]
+
+
+def test_inputs_carry_rows_and_sha256_and_silver_integers_are_wide(result):
+    inputs_found = result["findings"]["dataset"]["inputs"]
+    assert all(i["sha256"] and len(i["sha256"]) == 64 for i in inputs_found)
+    assert {i["rows"] for i in inputs_found} >= {300}
+    visit = part(result, "visit")
+    assert {c["name"]: c["type"] for c in visit["silver"]["columns"]}["visit_id"] == "BIGINT"
+    assert result["findings"]["dataset"]["profiled_at"][-6:] in {"-04:00", "-05:00"}
+
+
+def test_large_table_file_is_sampled_and_its_key_confirmed_in_full(tmp_path):
+    (tmp_path / "big.csv").write_text("ref,grp\n" + "".join(f"R{i:06d},{i % 7}\n" for i in range(5000)))
+    found = run.profile_inputs({"big": str(tmp_path / "big.csv")}, "big", limit=1000, sample=300, seed=3,
+                               work=tmp_path / "w")
+    big = found["parts"][0]
+    assert big["scan"] == "sampled" and big["rows"] == 300
+    assert big["record_key"]["columns"] == ["ref"]
+    assert big["record_key"]["evidence"]["full_pass"]["ref"] == {
+        "rows": 5000, "null_rows": 0, "distinct": 5000, "unique": True, "scan": "full"}
+
+
+def test_contact_details_are_personal_in_any_part():
+    from profiling import sensitivity
+    assert sensitivity.tag("support_email", ["a@b.co"], False)["sensitivity"] == "personal"
+    assert sensitivity.tag("contact", ["a@b.co", "c@d.org"], False)["sensitivity"] == "personal"
+    assert sensitivity.tag("street", ["1 Main"], False)["sensitivity"] == "none"

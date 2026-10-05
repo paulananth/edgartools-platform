@@ -22,15 +22,15 @@
 - [x] sales: class transaction (expected transaction)
 - [x] sales: key ['OrderKey', 'LineNumber'] (expected ['OrderKey', 'LineNumber'])
 - [x] sales: confidence 0.833
-- [x] link orders.CustomerKey → customer.CustomerKey N:1: inclusion 1.0, N:1
-- [x] link orders.StoreKey → store.StoreKey N:1: inclusion 1.0, N:1
-- [x] link orders.OrderDate → date.Date N:1: inclusion 1.0, N:1
-- [x] link orderrows.OrderKey → orders.OrderKey N:1: inclusion 1.0, N:1
-- [x] link orderrows.ProductKey → product.ProductKey N:1: inclusion 1.0, N:1
-- [x] link sales.CustomerKey → customer.CustomerKey N:1: inclusion 1.0, N:1
-- [x] link sales.StoreKey → store.StoreKey N:1: inclusion 1.0, N:1
-- [x] link sales.ProductKey → product.ProductKey N:1: inclusion 1.0, N:1
-- [x] link sales.OrderKey+LineNumber → orderrows.OrderKey+LineNumber 1:1: inclusion 1.0, 1:1
+- [x] link orders.CustomerKey → customer.CustomerKey N:1: inclusion 1.0, N:1, separate
+- [x] link orders.StoreKey → store.StoreKey N:1: inclusion 1.0, N:1, separate
+- [x] link orders.OrderDate → date.Date N:1: inclusion 1.0, N:1, separate
+- [x] link orderrows.OrderKey → orders.OrderKey N:1: inclusion 1.0, N:1, separate
+- [x] link orderrows.ProductKey → product.ProductKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.CustomerKey → customer.CustomerKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.StoreKey → store.StoreKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.ProductKey → product.ProductKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.OrderKey+LineNumber → orderrows.OrderKey+LineNumber 1:1: inclusion 1.0, 1:1, separate
 - [x] hierarchy product CategoryKey > SubCategoryKey: code_nesting
 - [x] hierarchy date Year > YearQuarter > YearMonth: functional_dependency
 - [x] code lists of customer: all found

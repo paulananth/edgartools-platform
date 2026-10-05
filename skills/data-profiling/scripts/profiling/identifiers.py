@@ -10,14 +10,14 @@ from __future__ import annotations
 import random
 import string
 
-_BASE36 = {ch: i for i, ch in enumerate(string.digits + string.ascii_uppercase)}
+BASE36 = {ch: i for i, ch in enumerate(string.digits + string.ascii_uppercase)}
 
 
 def mod97_10(value: str) -> bool:
     """ISO 7064 mod 97-10: letters read as 10-35; the number mod 97 is 1."""
     if len(value) < 3 or not value.isalnum() or not value.isascii():
         return False
-    return int("".join(str(_BASE36[ch]) for ch in value.upper())) % 97 == 1
+    return int("".join(str(BASE36[ch]) for ch in value.upper())) % 97 == 1
 
 
 def mod11_2(value: str) -> bool:
@@ -46,7 +46,7 @@ def mod37_36(value: str) -> bool:
         return False
     check = 18
     for ch in value.upper():
-        check = (((check or 36) * 2) % 37 + _BASE36[ch]) % 36
+        check = (((check or 36) * 2) % 37 + BASE36[ch]) % 36
     return check == 1
 
 

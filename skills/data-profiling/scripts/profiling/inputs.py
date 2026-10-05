@@ -17,6 +17,7 @@ records is kept, and `full_pass` reads it again for named columns only.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import io
 import json
 import os
@@ -48,10 +49,25 @@ class Part:
     parent: str | None = None
     wrapper: str | None = None  # a top-level object key holding the records
     reopen: Callable[[], Iterator[dict]] | None = field(default=None, repr=False)
+    source_sql: str | None = None  # a sampled table file, read again in full by this reader
+    sha256: str | None = None
 
-    def finding(self) -> dict:
+    def finding(self, rows: int) -> dict:
         return {"kind": "table" if self.format in {"sqlite", "postgres", "duckdb"} else "file",
-                "location": self.location, "format": self.format, "bytes": self.bytes}
+                "location": self.location, "format": self.format, "bytes": self.bytes, "rows": rows,
+                "sha256": self.sha256}
+
+
+def digest(path: Path) -> str:
+    """sha256 of a file, or of a folder's files (each relative path and content, in order)."""
+    total = hashlib.sha256()
+    for file in _members(path):
+        if path.is_dir():
+            total.update(str(file.relative_to(path)).encode() + b"\0")
+        with open(file, "rb") as handle:
+            while chunk := handle.read(1 << 22):
+                total.update(chunk)
+    return total.hexdigest()
 
 
 # ---------------------------------------------------------------- flattening
@@ -238,19 +254,19 @@ def _xml_records(stream) -> Iterator[dict]:
 
 # ---------------------------------------------------------------- registering
 
-def _format(path: Path) -> str:
+def format_of(path: Path) -> str:
     suffix = path.suffix.lower().lstrip(".")
     return {"ndjson": "jsonl", "db": "sqlite", "sqlite3": "sqlite", "txt": "csv", "tsv": "csv"}.get(suffix, suffix)
 
 
-def _sqlname(part: str) -> str:
+def sql_name(part: str) -> str:
     return '"' + part.replace('"', '""') + '"'
 
 
-def _text(value) -> str:
+def sql_text(value) -> str:
     """A SQL literal: a string, or a list of strings (views and ATTACH take no parameters)."""
     if isinstance(value, list):
-        return "[" + ", ".join(_text(v) for v in value) + "]"
+        return "[" + ", ".join(sql_text(v) for v in value) + "]"
     return "'" + str(value).replace("'", "''") + "'"
 
 
@@ -262,13 +278,13 @@ def _open_streams(path: Path) -> list[tuple[str, int, Callable]]:
     """(format, bytes, opener) for each file, zip members included."""
     found = []
     for file in _members(path):
-        if _format(file) == "zip":
+        if format_of(file) == "zip":
             with zipfile.ZipFile(file) as archive:
-                found += [(_format(Path(i.filename)), i.file_size,
+                found += [(format_of(Path(i.filename)), i.file_size,
                            lambda f=file, n=i.filename: zipfile.ZipFile(f).open(n))
                           for i in archive.infolist() if not i.is_dir()]
         else:
-            found.append((_format(file), file.stat().st_size, lambda f=file: open(f, "rb")))
+            found.append((format_of(file), file.stat().st_size, lambda f=file: open(f, "rb")))
     return found
 
 
@@ -295,45 +311,53 @@ def _record_reader(path: Path) -> tuple[str, Callable[[], Iterator[dict]], list]
     return fmt, records, wrappers
 
 
-def _size(path: Path) -> int:
+def size_of(path: Path) -> int:
     return sum(size for _, size, _ in _open_streams(path))
 
 
-def _tabular(con, name: str, files: list[Path], size: int) -> list[Part]:
-    """CSV or Parquet: files with one header are one part; otherwise each file is its own part."""
+def _tabular(con, name: str, files: list[Path], size: int, limit: int, sample: int, seed: int) -> list[Part]:
+    """CSV or Parquet: files with one header are one part; otherwise each file is its own part.
+
+    Over the size limit, a seeded reservoir sample of rows is kept; the full file
+    stays readable through `source_sql` for the key candidates' full passes.
+    """
     def header(file: Path) -> tuple:
         return tuple(r[0] for r in con.execute(f"DESCRIBE SELECT * FROM {_reader(file, str(file))}").fetchall())
 
     if len(files) > 1 and len({header(f) for f in files}) > 1:
-        return [p for f in files for p in _tabular(con, f.stem, [f], f.stat().st_size)]
-    fmt = _format(files[0])
-    con.execute(f"CREATE TABLE {_sqlname(name)} AS SELECT * FROM {_reader(files[0], [str(f) for f in files])}")
-    return [Part(name, str(files[0]) if len(files) == 1 else str(files[0].parent), fmt, size)]
+        return [p for f in files for p in _tabular(con, f.stem, [f], f.stat().st_size, limit, sample, seed)]
+    fmt = format_of(files[0])
+    source = _reader(files[0], [str(f) for f in files])
+    sampled = size > limit
+    rows = f" USING SAMPLE reservoir({int(sample)} ROWS) REPEATABLE ({int(seed)})" if sampled else ""
+    con.execute(f"CREATE TABLE {sql_name(name)} AS SELECT * FROM {source}{rows}")
+    return [Part(name, str(files[0]) if len(files) == 1 else str(files[0].parent), fmt, size,
+                 scan="sampled" if sampled else "full", source_sql=source if sampled else None)]
 
 
 def _reader(file: Path, source) -> str:
     """The DuckDB reader for a tabular file; CSV types come from a full scan, not a sample."""
-    if _format(file) == "parquet":
-        return f"read_parquet({_text(source)})"
-    return f"read_csv({_text(source)}, sample_size=-1)"
+    if format_of(file) == "parquet":
+        return f"read_parquet({sql_text(source)})"
+    return f"read_csv({sql_text(source)}, sample_size=-1)"
 
 
 def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Path,
              limit: int = DEFAULT_LIMIT, sample: int = SAMPLE_RECORDS, seed: int = 0) -> list[Part]:
-    """Register one input as views; returns its parts, child parts included.
+    """Register one input as tables; returns its parts, child parts included.
 
     `location` is a file, a folder, a zip, or `env:<VARIABLE>` naming a database.
     """
     if location.startswith("env:"):
         return _attach(con, name, location[4:])
     path = Path(location).expanduser()
-    if _format(path) in {"sqlite", "duckdb"}:
-        return _attach_file(con, name, path, _format(path))
+    if format_of(path) in {"sqlite", "duckdb"}:
+        return _attach_file(con, name, path, format_of(path))
     files = _members(path)
-    if {_format(f) for f in files} <= {"csv", "parquet"} and len({_format(f) for f in files}) == 1:
-        return _tabular(con, name, files, sum(f.stat().st_size for f in files))
+    if {format_of(f) for f in files} <= {"csv", "parquet"} and len({format_of(f) for f in files}) == 1:
+        return _tabular(con, name, files, sum(f.stat().st_size for f in files), limit, sample, seed)
     fmt, records, wrappers = _record_reader(path)
-    size = _size(path)
+    size = size_of(path)
     scan = "sampled" if size > limit else "full"
     parts = _write_records(con, name, records(), work, scan, sample, seed)
     for part in parts:
@@ -371,7 +395,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     spill()
     parts = []
     for part, path in sorted(files.items()):
-        con.execute(f"CREATE TABLE {_sqlname(part)} AS SELECT * FROM read_json({_text(str(path))}, "
+        con.execute(f"CREATE TABLE {sql_name(part)} AS SELECT * FROM read_json({sql_text(str(path))}, "
                     "format='newline_delimited', sample_size=-1, union_by_name=true)")
         path.unlink()
         parts.append(Part(part, "", "", 0, scan=scan, parent=part.rsplit(".", 1)[0] if part != name else None))
@@ -379,7 +403,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
 
 
 def _attach_file(con, name: str, path: Path, fmt: str) -> list[Part]:
-    con.execute(f"ATTACH {_text(str(path))} AS {_sqlname(name)} (TYPE {fmt}, READ_ONLY)")
+    con.execute(f"ATTACH {sql_text(str(path))} AS {sql_name(name)} (TYPE {fmt}, READ_ONLY)")
     return _attached(con, name, str(path), fmt, copy=True)
 
 
@@ -390,7 +414,7 @@ def _attach(con, name: str, variable: str) -> list[Part]:
         raise SystemExit(f"set {variable} to the read-only database address (outside the chat)")
     kind = "postgres" if url.startswith(("postgres://", "postgresql://")) else "sqlite"
     try:
-        con.execute(f"ATTACH {_text(url)} AS {_sqlname(name)} (TYPE {kind}, READ_ONLY)")
+        con.execute(f"ATTACH {sql_text(url)} AS {sql_name(name)} (TYPE {kind}, READ_ONLY)")
     except duckdb.Error as exc:
         raise SystemExit(f"{variable}: the database did not answer ({type(exc).__name__})") from None
     return _attached(con, name, f"${variable}", kind)
@@ -403,16 +427,24 @@ def _attached(con, name: str, location: str, fmt: str, copy: bool = False) -> li
     parts = []
     for schema, table, _ in tables:
         part = table if schema in {"main", "public"} else f"{schema}.{table}"
-        con.execute(f"CREATE {'TABLE' if copy else 'VIEW'} {_sqlname(part)} AS "
-                    f"SELECT * FROM {_sqlname(name)}.{_sqlname(schema)}.{_sqlname(table)}")
+        con.execute(f"CREATE {'TABLE' if copy else 'VIEW'} {sql_name(part)} AS "
+                    f"SELECT * FROM {sql_name(name)}.{sql_name(schema)}.{sql_name(table)}")
         parts.append(Part(part, f"{location}#{schema}.{table}", fmt, 0))
     return parts
 
 
-def full_values(part: Part, columns: list[str]) -> dict[str, tuple[set, int, int]]:
+def full_values(part: Part, columns: list[str], con=None) -> dict[str, tuple[set, int, int]]:
     """Read a sampled top-level part again, whole, once: per column its distinct values, rows and empty rows."""
+    if part.source_sql is not None:
+        found = {}
+        for c in columns:
+            rows, filled = con.execute(f"SELECT count(*), count({sql_name(c)}) FROM {part.source_sql}").fetchone()
+            values = {r[0] for r in con.execute(f"SELECT DISTINCT CAST({sql_name(c)} AS VARCHAR) FROM "
+                                                f"{part.source_sql} WHERE {sql_name(c)} IS NOT NULL").fetchall()}
+            found[c] = (values, rows, rows - filled)
+        return found
     if part.reopen is None or part.parent is not None:
-        raise ValueError(f"{part.name}: a full pass reads a top-level part read from records")
+        raise ValueError(f"{part.name}: a full pass reads a top-level part")
     values: dict[str, set] = {c: set() for c in columns}
     nulls = dict.fromkeys(columns, 0)
     rows = 0

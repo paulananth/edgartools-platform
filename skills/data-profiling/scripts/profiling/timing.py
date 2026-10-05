@@ -7,7 +7,7 @@ series).
 
 from __future__ import annotations
 
-from .inputs import _sqlname
+from .inputs import sql_name
 from .profile import is_numeric, is_temporal
 from .sensitivity import words
 
@@ -18,7 +18,7 @@ STEPS = 0.9
 
 
 def _as_time(column: str) -> str:
-    return f"TRY_CAST({_sqlname(column)} AS TIMESTAMP)"
+    return f"TRY_CAST({sql_name(column)} AS TIMESTAMP)"
 
 
 def valid_pair(con, part: str, temporal: list[dict]) -> dict | None:
@@ -30,7 +30,7 @@ def valid_pair(con, part: str, temporal: list[dict]) -> dict | None:
             ordered, both = con.execute(
                 f"SELECT count(*) FILTER (WHERE {_as_time(s['name'])} <= {_as_time(e['name'])}), "
                 f"count(*) FILTER (WHERE {_as_time(s['name'])} IS NOT NULL AND {_as_time(e['name'])} IS NOT NULL) "
-                f"FROM {_sqlname(part)}").fetchone()
+                f"FROM {sql_name(part)}").fetchone()
             if both and ordered / both >= 0.99:
                 return {"from": s["name"], "to": e["name"], "ordered": round(ordered / both, 6)}
     return None
@@ -57,10 +57,10 @@ def series(con, part: str, columns: list[dict], key: list[str], temporal: list[d
     if len(times) != 1 or not measures:
         return None
     entity = [c for c in key if c != times[0]]
-    group = ", ".join(map(_sqlname, entity)) if entity else "1"
+    group = ", ".join(map(sql_name, entity)) if entity else "1"
     t = _as_time(times[0])
     step, share, gaps = con.execute(f"""
-        WITH s AS (SELECT {t} - lag({t}) OVER (PARTITION BY {group} ORDER BY {t}) d FROM {_sqlname(part)}),
+        WITH s AS (SELECT {t} - lag({t}) OVER (PARTITION BY {group} ORDER BY {t}) d FROM {sql_name(part)}),
              m AS (SELECT d, count(*) n FROM s WHERE d IS NOT NULL GROUP BY d ORDER BY n DESC LIMIT 1)
         SELECT CAST(m.d AS VARCHAR), m.n / (SELECT count(*) FROM s WHERE d IS NOT NULL),
                (SELECT count(*) FROM s WHERE d > m.d) FROM m""").fetchone() or (None, 0, 0)

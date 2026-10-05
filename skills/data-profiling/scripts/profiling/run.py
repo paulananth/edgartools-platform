@@ -7,6 +7,7 @@ Samples of personal columns are masked to their shape.
 from __future__ import annotations
 
 import datetime as dt
+import shutil
 import sys
 import tempfile
 import time
@@ -15,13 +16,22 @@ from pathlib import Path
 import duckdb
 
 from . import classify, codes, hierarchy, identifiers, inputs, keys, profile, sensitivity, timing
-from .inputs import PARENT, POSITION, ROW
 
 VERSION = "data-profiling 1"
+SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
 MB_PER_SECOND = 40  # records read by Python, for the time estimate before a long pass
 
 
 _clock = [time.monotonic()]
+
+
+def now() -> str:
+    """The local business time (America/New_York), with its offset."""
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
+    except Exception:  # no time zone database: say so by keeping the UTC offset
+        return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
 def say(message: str) -> None:
@@ -44,12 +54,16 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     parts: dict[str, inputs.Part] = {}
     for input_name, location in sources.items():
         if not location.startswith("env:"):
-            size = inputs._size(Path(location).expanduser())
+            path = Path(location).expanduser()
+            size = inputs.size_of(path) if inputs.format_of(path) not in {"sqlite", "duckdb"} else path.stat().st_size
             if size > limit:
                 say(f"{input_name}: {size / inputs.GB:.1f} GB is over the {limit / inputs.GB:.0f} GB limit: "
                     f"sampling {sample} records (seed {seed}), then full passes for key candidates; "
                     f"about {2 * size / (MB_PER_SECOND * 1024 ** 2) / 60:.0f} minutes per pass")
-        for part in inputs.register(con, input_name, location, work / input_name, limit, sample, seed):
+        registered = inputs.register(con, input_name, location, work / input_name, limit, sample, seed)
+        sha = inputs.digest(Path(location).expanduser()) if not location.startswith("env:") else None
+        for part in registered:
+            part.sha256 = sha if part.parent is None else None
             parts[part.name] = part
     say(f"registered {len(parts)} parts")
 
@@ -63,7 +77,8 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
             say(f"{p}: full pass for its identifier-like key candidates")
             confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
             say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
-            unique[p] = [k for k in unique[p] if len(k) > 1 or confirmed[p].get(k[0], {}).get("unique")]
+            # Only keys a full pass confirmed: a combination unique in a sample is not a key.
+            unique[p] = [k for k in unique[p] if len(k) == 1 and confirmed[p].get(k[0], {}).get("unique")]
     found_links = keys.links(con, profiles, unique, parts, confirmed) + keys.composite_links(con, profiles, unique)
     child = keys.child_links(parts)
     say(f"found {len(found_links)} links")
@@ -74,30 +89,29 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links,
                                                 record_keys[parent]["columns"] if parent else None)
 
-    findings_parts = []
-    facts_by_part = {}
-    for p in parts:
-        built = _part(con, p, parts, profiles, record_keys[p], found_links, child, kinds, confirmed.get(p, {}))
-        findings_parts.append(built)
-        facts_by_part[p] = built.pop("_facts")
+    findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}))
+                      for p in parts]
     say("classified parts")
     _inherit(findings_parts, parts)
     by_name = {f["part"]: f for f in findings_parts}
     hierarchies = _hierarchies(con, by_name, profiles, found_links)
     say(f"found {len(hierarchies)} hierarchies")
     relationships = _relationships(found_links + child, by_name)
+    _mask_samples(hierarchies, by_name)
+    _propose_kinds(findings_parts)
     for f in findings_parts:
         f["store_suggestion"] = classify.store(f["class"])
         f["silver"] = _silver(f, relationships) if f["class"] in {"transaction", "reference"} else None
+    con.close()
     return {
         "version": 1,
         "dataset": {"name": name,
-                    "inputs": [parts[p].finding() for p in parts if parts[p].parent is None],
+                    "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts if parts[p].parent is None],
                     "scan": {"mode": "sampled" if any(x.scan == "sampled" for x in parts.values()) else "full",
                              "reason": f"an input over {limit / inputs.GB:.0f} GB" if any(
                                  x.scan == "sampled" for x in parts.values()) else None,
                              "seed": seed, "elapsed_seconds": round(time.monotonic() - started, 1)},
-                    "profiled_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                    "profiled_at": now(),
                     "profiled_by": VERSION},
         "parts": findings_parts,
         "relationships": relationships,
@@ -107,7 +121,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     }
 
 
-def _part(con, p, parts, profiles, record_key, found_links, child, kinds, confirmed) -> dict:
+def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) -> dict:
     columns = profiles[p]
     names = [c["name"] for c in columns if not c["structure"]]
     people = sensitivity.person_part(names)
@@ -172,14 +186,16 @@ def _part(con, p, parts, profiles, record_key, found_links, child, kinds, confir
         "runner_up": decided["runner_up"],
         "kind": kind,
         "proposed_kind": None,
-        "record_key": {**record_key, "evidence": {"unique": record_key["found"], "null_rows": 0,
-                                                  "persistence": None, **({"full_pass": confirmed} if confirmed else {})}},
+        "record_key": {**record_key, "evidence": {
+            "unique": record_key["found"],
+            "null_rows": max([c["rows"] - c["non_null"] for c in columns if c["name"] in record_key["columns"]] or [0]),
+            "persistence": None,  # needs a second delivery: measured by compare
+            **({"full_pass": confirmed} if confirmed else {})}},
         "identifiers": [i for i in identifier_findings if i],
         "columns": column_findings,
         "code_lists": code_list,
         "time": times,
         "quality": _quality(p, out, record_key),
-        "_facts": facts,
     }
 
 
@@ -187,8 +203,8 @@ def _values(con, p: str, c: dict) -> list[str]:
     """Up to 200 distinct values of a text column, for the value detectors (never written out)."""
     if not c["non_null"] or not profile.is_text(c):
         return []
-    return [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs._sqlname(c['name'])} AS VARCHAR) FROM "
-                                      f"{inputs._sqlname(p)} WHERE {inputs._sqlname(c['name'])} IS NOT NULL "
+    return [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs.sql_name(c['name'])} AS VARCHAR) FROM "
+                                      f"{inputs.sql_name(p)} WHERE {inputs.sql_name(c['name'])} IS NOT NULL "
                                       "LIMIT 200").fetchall()]
 
 
@@ -216,8 +232,8 @@ def _role(c, record_key, linked, code_columns, times, measures) -> str:
 
 
 def _identifier(con, p, c, record_key) -> dict | None:
-    values = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs._sqlname(c['name'])} AS VARCHAR) FROM "
-                                        f"{inputs._sqlname(p)} WHERE {inputs._sqlname(c['name'])} IS NOT NULL").fetchall()]
+    values = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs.sql_name(c['name'])} AS VARCHAR) FROM "
+                                        f"{inputs.sql_name(p)} WHERE {inputs.sql_name(c['name'])} IS NOT NULL").fetchall()]
     checked = identifiers.check_digits(values)
     dense = profile.is_integer(c) and identifiers.dense_sequence(c)
     is_key = c["name"] in record_key["columns"]
@@ -324,7 +340,8 @@ def _silver(f: dict, relationships: list[dict]) -> dict:
     return {
         "table": f["part"].replace(".", "_").lower(),
         "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
-        "columns": [{"name": c["name"], "type": c["type"], "nullable": c["fill"] < 1.0, "definition": None,
+        "columns": [{"name": c["name"], "type": SILVER_INTEGER if c["type"] in profile.INTEGERS else c["type"],
+                     "nullable": c["fill"] < 1.0, "definition": None,
                      "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in f["columns"]],
         "key": f["record_key"]["columns"],
         "links": [{"columns": r["from"]["columns"], "kind": None, "to_part": r["to"]["part"],
@@ -339,15 +356,34 @@ def _silver(f: dict, relationships: list[dict]) -> dict:
     }
 
 
-def _questions(parts: list[dict]) -> list[dict]:
-    asked = []
+def _mask_samples(hierarchies: list[dict], parts: dict) -> None:
+    """Hierarchy samples and role values of a personal column keep their shape only."""
+    for h in hierarchies:
+        tags = {c["name"]: c["sensitivity"] for c in parts[h["part"]]["columns"]}
+        for level in h["levels"]:
+            if tags.get(level["column"], "none") != "none":
+                level["samples"] = [sensitivity.mask(v) for v in level["samples"]]
+        role_column = _role_column(parts[h["part"]])
+        if h.get("role") and tags.get(role_column, "none") != "none":
+            h["role"] = sensitivity.mask(h["role"])
+            h["hierarchy"] = f"{h['part']}: per role (masked)"
+
+
+def _propose_kinds(parts: list[dict]) -> None:
+    """A master part with no existing kind gets a proposed domain and kind, for approval."""
     for f in parts:
         if f["class"] == "master" and not f["kind"] and not f["parent_part"]:
             name = f["part"].rsplit(".", 1)[-1]
             f["proposed_kind"] = {"domain": name, "kind": name,
                                   "why": "; ".join(t["test"] for t in f["tests"] if t["passed"])}
+
+
+def _questions(parts: list[dict]) -> list[dict]:
+    asked = []
+    for f in parts:
+        if f["proposed_kind"]:
             asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],
-                          "question": f"Is {f['part']} a new master kind named '{name}'?",
+                          "question": f"Is {f['part']} a new master kind named '{f['proposed_kind']['kind']}'?",
                           "recommendation": f"yes: {f['proposed_kind']['why']}", "answer": None})
         if not f["record_key"]["found"] and not f["parent_part"]:
             asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],

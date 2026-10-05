@@ -10,10 +10,10 @@ parts:
   rr: {class: [relationship], key: [StartNode.NodeID, EndNode.NodeID, RelationshipType]}
   repex: {class: [metadata, transaction, unknown], key_contains: [LEI, ExceptionCategory]}
 relationships:
-  - [rr, [StartNode.NodeID], lei2, [LEI], "N:1"]
-  - [rr, [EndNode.NodeID], lei2, [LEI], "N:1"]
-  - [repex, [LEI], lei2, [LEI], "N:1"]
-  - [tickers, [cik], submissions, [cik], "N:1"]
+  - [rr, [StartNode.NodeID], lei2, [LEI], "N:1", together]
+  - [rr, [EndNode.NodeID], lei2, [LEI], "N:1", together]
+  - [repex, [LEI], lei2, [LEI], "N:1", "separate|together"]
+  - [tickers, [cik], submissions, [cik], "N:1", "together|separate"]
 hierarchies:
   - {part: rr, columns: [], evidence: [parent_column], type: master_data}
 identifiers:

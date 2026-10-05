@@ -1,6 +1,6 @@
 # Profiling report: Trial B (sqlite)
 
-Profiled 2026-10-05T11:57:31+00:00 by data-profiling 1. Scan: **full**; 17.3 s. Approval: **draft**.
+Profiled 2026-10-05T08:32:22-04:00 by data-profiling 1. Scan: **full**; 31.0 s. Approval: **draft**.
 
 ## Parts
 

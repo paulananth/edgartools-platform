@@ -7,8 +7,9 @@ import sys
 import zipfile
 from pathlib import Path
 
-import duckdb
 import pytest
+
+duckdb = pytest.importorskip("duckdb")  # in the mdm extra, which CI installs
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "data-profiling" / "scripts"))
 from profiling import inputs  # noqa: E402

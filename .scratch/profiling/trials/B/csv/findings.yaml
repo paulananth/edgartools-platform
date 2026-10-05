@@ -6,40 +6,56 @@ dataset:
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/currencyexchange.csv
     format: csv
     bytes: 1011577
+    rows: 36525
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/customer.csv
     format: csv
     bytes: 23871850
+    rows: 104990
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/date.csv
     format: csv
     bytes: 150076
+    rows: 1461
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/orderrows.csv
     format: csv
     bytes: 275132
+    rows: 7794
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/orders.csv
     format: csv
     bytes: 152726
+    rows: 3242
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/product.csv
     format: csv
     bytes: 373660
+    rows: 2517
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/sales.csv
     format: csv
     bytes: 642115
+    rows: 7794
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   - kind: file
     location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/store.csv
     format: csv
     bytes: 6363
+    rows: 74
+    sha256: fd74da2f44a351b70adb5a0cc52df952012a69cf852c847d32be7a05fce53004
   scan:
     mode: full
     reason: null
     seed: 0
-    elapsed_seconds: 18.4
-  profiled_at: '2026-10-05T11:57:11+00:00'
+    elapsed_seconds: 35.0
+  profiled_at: '2026-10-05T08:31:48-04:00'
   profiled_by: data-profiling 1
 parts:
 - part: currencyexchange

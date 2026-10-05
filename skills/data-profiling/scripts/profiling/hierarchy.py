@@ -13,7 +13,7 @@ counted as invalid for data quality.
 from __future__ import annotations
 
 from .codes import determines
-from .inputs import _sqlname
+from .inputs import sql_name, sql_text
 
 HOLDS = 0.99
 MAX_DEPTH = 50
@@ -58,12 +58,12 @@ def by_dependency(con, part: str, code_columns: list[dict]) -> list[dict]:
 
 def nesting(con, part: str, child: str, parent: str) -> float:
     """Share of distinct child codes that start with their parent code."""
-    t = _sqlname(part)
+    t = sql_name(part)
     total, nested = con.execute(
         f"SELECT count(*), count(*) FILTER (WHERE starts_with(CAST(c AS VARCHAR), CAST(p AS VARCHAR)) "
         f"AND length(CAST(c AS VARCHAR)) > length(CAST(p AS VARCHAR))) "
-        f"FROM (SELECT DISTINCT {_sqlname(child)} c, {_sqlname(parent)} p FROM {t} "
-        f"WHERE {_sqlname(child)} IS NOT NULL AND {_sqlname(parent)} IS NOT NULL)").fetchone()
+        f"FROM (SELECT DISTINCT {sql_name(child)} c, {sql_name(parent)} p FROM {t} "
+        f"WHERE {sql_name(child)} IS NOT NULL AND {sql_name(parent)} IS NOT NULL)").fetchone()
     return round(nested / total, 6) if total else 0.0
 
 
@@ -73,11 +73,11 @@ def _record(con, part: str, columns: list[str], holds: float, kind: str) -> dict
         kind, rule = "code_nesting", "each code starts with its parent's code"
     else:
         rule = "each value of a level has one value at the next coarser level"
-    t = _sqlname(part)
+    t = sql_name(part)
     levels = []
     for depth, column in enumerate(reversed(columns), 1):
-        samples = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({_sqlname(column)} AS VARCHAR) FROM {t} "
-                                             f"WHERE {_sqlname(column)} IS NOT NULL ORDER BY 1 LIMIT 3").fetchall()]
+        samples = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({sql_name(column)} AS VARCHAR) FROM {t} "
+                                             f"WHERE {sql_name(column)} IS NOT NULL ORDER BY 1 LIMIT 3").fetchall()]
         levels.append({"depth": depth, "name": None, "column": column, "samples": samples})
     rows = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
     return {"hierarchy": f"{part}: {' > '.join(reversed(columns))}", "type": None, "part": part,
@@ -88,7 +88,7 @@ def _record(con, part: str, columns: list[str], holds: float, kind: str) -> dict
 
 def by_parent_column(con, part: str, child: str, key: str) -> dict:
     """A column of a part pointing at the same part's key: depth, orphans, cycles, shape."""
-    t, c, k = _sqlname(part), _sqlname(child), _sqlname(key)
+    t, c, k = sql_name(part), sql_name(child), sql_name(key)
     rows, orphans = con.execute(
         f"SELECT count(*), count(*) FILTER (WHERE {c} IS NOT NULL AND CAST({c} AS VARCHAR) NOT IN "
         f"(SELECT CAST({k} AS VARCHAR) FROM {t} WHERE {k} IS NOT NULL)) FROM {t}").fetchone()
@@ -102,13 +102,13 @@ def by_parent_column(con, part: str, child: str, key: str) -> dict:
 
 def by_link_part(con, link: str, child: str, parent: str, role: str | None) -> list[dict]:
     """A link part whose two ends name rows of one part: one hierarchy per role value."""
-    t = _sqlname(link)
+    t = sql_name(link)
     roles = [None] if role is None else [r[0] for r in con.execute(
-        f"SELECT DISTINCT CAST({_sqlname(role)} AS VARCHAR) FROM {t} ORDER BY 1").fetchall()]
+        f"SELECT DISTINCT CAST({sql_name(role)} AS VARCHAR) FROM {t} ORDER BY 1").fetchall()]
     found = []
     for value in roles:
-        where = "" if value is None else f"WHERE CAST({_sqlname(role)} AS VARCHAR) = '{value.replace(chr(39), chr(39) * 2)}'"
-        edges = f"SELECT CAST({_sqlname(child)} AS VARCHAR) node, CAST({_sqlname(parent)} AS VARCHAR) parent FROM {t} {where}"
+        where = "" if value is None else f"WHERE CAST({sql_name(role)} AS VARCHAR) = {sql_text(value)}"
+        edges = f"SELECT CAST({sql_name(child)} AS VARCHAR) node, CAST({sql_name(parent)} AS VARCHAR) parent FROM {t} {where}"
         nodes, single = con.execute(f"SELECT count(DISTINCT node), count(*) FILTER (WHERE n = 1) FROM "
                                     f"(SELECT node, count(DISTINCT parent) n FROM ({edges}) GROUP BY node)").fetchone()
         holds = round(single / nodes, 6) if nodes else 0.0

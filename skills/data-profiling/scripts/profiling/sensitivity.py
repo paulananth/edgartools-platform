@@ -1,7 +1,9 @@
 """Sensitivity tags and masking.
 
 A column is tagged from four signals: its name's words, detectors on its
-values, a vote over its values, and whether its part describes people.
+values, a vote over its values, and whether its part describes people. Contact
+details (email, phone) are personal in any part; other personal words count
+only in a part that describes people.
 Sensitive personal means GDPR Article 9 special categories, government
 identifiers and financial account numbers (operator ruling, 2026-10-05).
 
@@ -22,6 +24,8 @@ PERSONAL = {"name", "given", "first", "last", "surname", "middle", "initial", "b
 IDENTITY = {"name", "given", "first", "last", "surname", "middle", "initial", "birth", "birthday", "dob", "email",
             "mail", "phone", "mobile", "address", "street", "zip", "postal", "postcode", "latitude", "longitude",
             "lat", "lon", "lng"}
+# Contact words: personal in any part (a contact is a person, whoever they work for).
+CONTACT = {"email", "mail", "phone", "mobile"}
 PERSON_PART = {"given", "first", "surname", "last", "birth", "birthday", "dob", "middle"}
 SENSITIVE = {"ssn", "passport", "national", "tax", "health", "diagnosis", "medical", "religion", "religious",
              "ethnicity", "ethnic", "race", "racial", "union", "biometric", "genetic", "sexual", "orientation",
@@ -83,8 +87,10 @@ def tag(column: str, values: list[str], people: bool) -> dict:
         return {"sensitivity": "sensitive_personal", "signals": signals}
     if people and set(found) & PERSONAL:
         signals.append("name: personal word in a part describing people")
-    if people and detected.get("email", 0) >= 0.5:
-        signals.append("values: email addresses in a part describing people")
+    if set(found) & CONTACT:
+        signals.append("name: contact detail")
+    if detected.get("email", 0) >= 0.5:
+        signals.append("values: email addresses")
     return {"sensitivity": "personal" if signals else "none", "signals": signals}
 
 

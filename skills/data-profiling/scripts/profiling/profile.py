@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import duckdb
 
-from .inputs import PARENT, POSITION, ROW, _sqlname
+from .inputs import PARENT, POSITION, ROW, sql_name
 
 STRUCTURE = (ROW, PARENT, POSITION)  # columns the input step adds
+INTEGERS = {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT"}
+FLOATS = {"DOUBLE", "FLOAT"}
+TEMPORAL = {"DATE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"}
 TOP = 5
 
 
@@ -24,13 +27,13 @@ def shape(expression: str) -> str:
 
 def columns(con: duckdb.DuckDBPyConnection, part: str) -> list[dict]:
     """One profile per column of `part`, in table order."""
-    described = con.execute(f"DESCRIBE {_sqlname(part)}").fetchall()
-    rows = con.execute(f"SELECT count(*) FROM {_sqlname(part)}").fetchone()[0]
+    described = con.execute(f"DESCRIBE {sql_name(part)}").fetchall()
+    rows = con.execute(f"SELECT count(*) FROM {sql_name(part)}").fetchone()[0]
     return [column(con, part, name, kind, rows) for name, kind, *_ in described]
 
 
 def column(con, part: str, name: str, kind: str, rows: int) -> dict:
-    c, t = _sqlname(name), _sqlname(part)
+    c, t = sql_name(name), sql_name(part)
     text = f"CAST({c} AS VARCHAR)"
     nested = kind.endswith("]") or kind.startswith(("STRUCT", "MAP", "JSON"))
     if nested:
@@ -61,8 +64,7 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
         "tokens": round(float(tokens), 3),
         "top": [{"value": v, "rows": n} for v, n in top],
     })
-    if kind in {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UBIGINT", "UINTEGER", "DOUBLE", "FLOAT"} \
-            or kind.startswith("DECIMAL") or kind in {"DATE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"}:
+    if kind in INTEGERS | FLOATS | TEMPORAL or kind.startswith("DECIMAL"):
         low, high = con.execute(f"SELECT CAST(min({c}) AS VARCHAR), CAST(max({c}) AS VARCHAR) FROM {t}").fetchone()
         profile.update({"min": low, "max": high})
     return profile
@@ -79,17 +81,17 @@ def logical_type(profile: dict) -> str:
 
 
 def is_integer(profile: dict) -> bool:
-    return profile["type"] in {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UBIGINT", "UINTEGER"}
+    return profile["type"] in INTEGERS
 
 
 def is_temporal(profile: dict) -> bool:
-    return profile["type"] in {"DATE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"} or (
+    return profile["type"] in TEMPORAL or (
         profile["shape"] in {"9999-99-99", "9999-99-99A99:99:99", "9999-99-99 99:99:99", "9999-99-99A99:99:99.999A"}
         and profile["shape_share"] >= 0.99)
 
 
 def is_numeric(profile: dict) -> bool:
-    return is_integer(profile) or profile["type"] in {"DOUBLE", "FLOAT"} or profile["type"].startswith("DECIMAL")
+    return is_integer(profile) or profile["type"] in FLOATS or profile["type"].startswith("DECIMAL")
 
 
 def is_text(profile: dict) -> bool:

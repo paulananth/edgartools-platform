@@ -9,15 +9,15 @@ parts:
   orderrows: {class: [transaction], key: [OrderKey, LineNumber]}
   sales: {class: [transaction], key: [OrderKey, LineNumber]}
 relationships:
-  - [orders, [CustomerKey], customer, [CustomerKey], "N:1"]
-  - [orders, [StoreKey], store, [StoreKey], "N:1"]
-  - [orders, [OrderDate], date, [Date], "N:1"]
-  - [orderrows, [OrderKey], orders, [OrderKey], "N:1"]
-  - [orderrows, [ProductKey], product, [ProductKey], "N:1"]
-  - [sales, [CustomerKey], customer, [CustomerKey], "N:1"]
-  - [sales, [StoreKey], store, [StoreKey], "N:1"]
-  - [sales, [ProductKey], product, [ProductKey], "N:1"]
-  - [sales, [OrderKey, LineNumber], orderrows, [OrderKey, LineNumber], "1:1"]
+  - [orders, [CustomerKey], customer, [CustomerKey], "N:1", separate]
+  - [orders, [StoreKey], store, [StoreKey], "N:1", separate]
+  - [orders, [OrderDate], date, [Date], "N:1", separate]
+  - [orderrows, [OrderKey], orders, [OrderKey], "N:1", separate]
+  - [orderrows, [ProductKey], product, [ProductKey], "N:1", separate]
+  - [sales, [CustomerKey], customer, [CustomerKey], "N:1", separate]
+  - [sales, [StoreKey], store, [StoreKey], "N:1", separate]
+  - [sales, [ProductKey], product, [ProductKey], "N:1", separate]
+  - [sales, [OrderKey, LineNumber], orderrows, [OrderKey, LineNumber], "1:1", separate]
 hierarchies:
   - {part: product, columns: [SubCategoryKey, CategoryKey], evidence: [functional_dependency, code_nesting]}
   - {part: date, columns: [YearMonth, YearQuarter, Year], evidence: [functional_dependency]}

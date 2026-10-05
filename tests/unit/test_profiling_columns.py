@@ -5,18 +5,19 @@ import string
 import sys
 from pathlib import Path
 
-import duckdb
 import pytest
+
+duckdb = pytest.importorskip("duckdb")  # in the mdm extra, which CI installs
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "data-profiling" / "scripts"))
 from profiling import identifiers, profile, sensitivity  # noqa: E402
-from profiling.identifiers import _BASE36  # noqa: E402
+from profiling.identifiers import BASE36  # noqa: E402
 
 rng = random.Random(3)
 
 
 def with_mod97(base: str) -> str:
-    n = int("".join(str(_BASE36[c]) for c in base + "00"))
+    n = int("".join(str(BASE36[c]) for c in base + "00"))
     return f"{base}{98 - n % 97:02d}"
 
 

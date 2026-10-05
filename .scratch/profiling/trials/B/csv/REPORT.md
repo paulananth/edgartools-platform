@@ -1,6 +1,6 @@
 # Profiling report: Trial B (csv)
 
-Profiled 2026-10-05T11:57:11+00:00 by data-profiling 1. Scan: **full**; 18.4 s. Approval: **draft**.
+Profiled 2026-10-05T08:31:48-04:00 by data-profiling 1. Scan: **full**; 35.0 s. Approval: **draft**.
 
 ## Parts
 

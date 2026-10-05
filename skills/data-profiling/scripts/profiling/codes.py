@@ -7,8 +7,8 @@ distinct values compared with the rows, short, not a measure, not a date.
 from __future__ import annotations
 
 from .identifiers import identifier_shaped
-from .inputs import _sqlname
-from .profile import is_numeric, is_temporal, is_text
+from .inputs import sql_name
+from .profile import FLOATS, is_numeric, is_temporal, is_text
 
 MAX_CODES = 10_000  # the RDM bound for a code set embedded in a contract
 
@@ -16,7 +16,7 @@ MAX_CODES = 10_000  # the RDM bound for a code set embedded in a contract
 def code_like(profile: dict) -> bool:
     if profile["structure"] or not profile["non_null"] or is_temporal(profile):
         return False
-    if profile["type"] in {"DOUBLE", "FLOAT"} or profile["type"].startswith("DECIMAL"):
+    if profile["type"] in FLOATS or profile["type"].startswith("DECIMAL"):
         return False  # a measure
     few = profile["distinct"] <= min(MAX_CODES, max(50, profile["non_null"] // 20))
     return few and profile["distinct"] >= 2 and (is_text(profile) or is_numeric(profile)) \
@@ -25,11 +25,11 @@ def code_like(profile: dict) -> bool:
 
 def determines(con, part: str, a: str, b: str) -> float:
     """Share of rows that follow A → B: for each A value, its most common B value."""
-    t, ca, cb = _sqlname(part), _sqlname(a), _sqlname(b)
+    t, ca, cb = sql_name(part), sql_name(a), sql_name(b)
     held, rows = con.execute(
-        f"SELECT sum(top), (SELECT count(*) FROM {t} WHERE {ca} IS NOT NULL AND {cb} IS NOT NULL) FROM ("
-        f"SELECT max(n) top FROM (SELECT {ca}, {cb}, count(*) n FROM {t} WHERE {ca} IS NOT NULL AND {cb} IS NOT NULL "
-        f"GROUP BY ALL) GROUP BY {ca})").fetchone()
+        f"SELECT sum(top_rows), (SELECT count(*) FROM {t} WHERE {ca} IS NOT NULL AND {cb} IS NOT NULL) FROM ("
+        f"SELECT max(pair_rows) top_rows FROM (SELECT {ca} AS code_a, count(*) pair_rows FROM {t} "
+        f"WHERE {ca} IS NOT NULL AND {cb} IS NOT NULL GROUP BY {ca}, {cb}) GROUP BY code_a)").fetchone()
     return round(held / rows, 6) if rows else 0.0
 
 

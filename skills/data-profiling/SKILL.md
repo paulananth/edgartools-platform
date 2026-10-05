@@ -24,7 +24,7 @@ advice only.
 |---|---|
 | Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve` |
 | Guess a class, a key or a link | Report "unknown" with the failing tests, and ask |
-| Print a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`); samples are masked to their shape |
+| Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`); samples are masked to their shape; the run's working copy is deleted when it ends |
 | Request anything from a provider's website | Profile the local copies only |
 | Pin a finding on one source or one domain | Use the tests; names in this skill are generic |
 | Start a long pass silently | Say the size and the time estimate first (the run prints both) |
@@ -121,10 +121,20 @@ that matter most:
 
 ## Compare a new delivery
 
-Not built yet: run the same command on the new delivery into a new folder,
-then compare the two `findings.yaml` files part by part (classes, keys,
-links, code lists, fill rates). Each difference is a proposed change for
-refining-rules.
+refining-rules runs this before changing a live feed. It profiles the new
+delivery and lists each difference from the approved findings in `drift.yaml`:
+parts, columns, types, fill rates, sensitivity, keys, links, code counts,
+hierarchies and volume. Each item names the skill that handles it
+(data-quality, refining-rules or rdm).
+
+```
+uv run --with duckdb --with pyyaml python profile_data.py compare \
+  --approved <folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <folder>
+```
+
+It refuses findings that are not approved. Key persistence (the same record
+keeping its key between deliveries) and snapshot-or-changes are measured only
+when two deliveries exist, so a single run reports them as unknown.
 
 ## Examples
 

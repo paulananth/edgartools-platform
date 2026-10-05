@@ -11,8 +11,9 @@
 from __future__ import annotations
 
 import argparse
-import datetime as dt
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -20,6 +21,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import yaml  # noqa: E402
 
 from profiling import drift, inputs, report, run  # noqa: E402
+
+
+class _work:
+    """A private working folder for one run, removed afterwards, even on failure.
+
+    It holds the run's copy of every part (raw values, personal ones included),
+    so it never outlives the run and never sits beside the findings.
+    """
+
+    def __enter__(self) -> Path:
+        self.path = Path(tempfile.mkdtemp(prefix="profiling-"))
+        return self.path
+
+    def __exit__(self, *_exc) -> None:
+        shutil.rmtree(self.path, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,8 +64,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         sources = dict(item.split("=", 1) for item in args.input)
-        findings = run.profile_inputs(sources, args.name, int(args.limit_gb * inputs.GB), args.sample, args.seed,
-                                      tuple(k for k in args.kinds.split(",") if k), args.out / ".work")
+        with _work() as work:
+            findings = run.profile_inputs(sources, args.name, int(args.limit_gb * inputs.GB), args.sample, args.seed,
+                                          tuple(k for k in args.kinds.split(",") if k), work)
         data, text = report.write(findings, args.out)
         print(f"wrote {data} and {text}")
         return 0
@@ -58,8 +75,9 @@ def main(argv: list[str] | None = None) -> int:
         if approved["approval"]["status"] != "approved":
             raise SystemExit(f"{args.approved} is not approved: approve it before comparing")
         sources = dict(item.split("=", 1) for item in args.input)
-        new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
-                                 seed=args.seed, work=args.out / ".work")
+        with _work() as work:
+            new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
+                                     seed=args.seed, work=work)
         report.write(new, args.out)
         items = drift.compare(approved, new)
         (args.out / "drift.yaml").write_text(yaml.safe_dump({"approved": str(args.approved), "drift": items},
@@ -68,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     findings = yaml.safe_load(args.findings.read_text(encoding="utf-8"))
     findings["approval"] = {"status": "approved", "approved_by": args.by, "approved_words": args.words,
-                            "approved_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+                            "approved_at": run.now()}
     args.findings.write_text(yaml.safe_dump(findings, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
     print(f"approved {args.findings}")
     return 0

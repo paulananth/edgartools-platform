@@ -28,10 +28,12 @@ def score(found: dict, expected: dict) -> list[tuple[bool, str]]:
                       f"{name}: confidence {p['confidence']}"))
     rels = {(r["from"]["part"], tuple(r["from"]["columns"]), r["to"]["part"], tuple(r["to"]["columns"])): r
             for r in found["relationships"]}
-    for fp, fc, tp, tc, card in expected.get("relationships", []):
+    for fp, fc, tp, tc, card, *onboard in expected.get("relationships", []):
         r = rels.get((fp, tuple(fc), tp, tuple(tc)))
         ok = r is not None and r["inclusion"] >= 0.9 and r["cardinality"] == card
-        got = f"inclusion {r['inclusion']}, {r['cardinality']}" if r else "not found"
+        if ok and onboard:
+            ok = r["onboard"] in onboard[0].split("|")
+        got = f"inclusion {r['inclusion']}, {r['cardinality']}, {r['onboard']}" if r else "not found"
         lines.append((ok, f"link {fp}.{'+'.join(fc)} → {tp}.{'+'.join(tc)} {card}: {got}"))
     for h in expected.get("hierarchies", []):
         match = [x for x in found["hierarchies"] if x["part"] == h["part"] and x["evidence_kind"] in h["evidence"]
