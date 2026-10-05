@@ -658,7 +658,7 @@ an archive, then a separate expanded-byte cap while parsing its member.
 
 The configured worker mode is described under **Streamed JSON record
 projection** above. Its installed projection and partition verifier are
-qualified; downstream adoption remains unfinished. Before GLEIF cutover,
+qualified, including combining and preparation. Before GLEIF cutover,
 verify complete archive/member authentication and metadata and prove
 publication/replay through EOF. JSON framing tests do not qualify XML or
 retire active GLEIF parsing.
