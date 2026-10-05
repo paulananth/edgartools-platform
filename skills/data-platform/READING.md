@@ -57,13 +57,18 @@ Projected tables and deferred records accumulate in private partitions.
 Partition count, bytes, record count, aggregate spool bytes and output rows
 are independently bounded. Every input must authenticate and reach valid EOF
 before any partition is written. The version-2 reading index names immutable
-content-addressed partitions, their byte sizes and source ordinal ranges.
+content-addressed partitions, their byte sizes, source ordinal ranges and
+declared table names (at most 64 distinct names).
 The verifier rebuilds them from the original receipts and compares their
 exact bytes without writes. A later output-write failure may leave immutable
 partitions for retry; the index is written last.
 
-This worker mode is under qualification. `source.combine` and `mdm.prepare`
-still consume version-1 inline readings; finish their partition adoption and
+`source.combine` and `mdm.prepare` accept both inline and partitioned readings.
+They authenticate every partition and enforce aggregate consumer byte and row
+budgets before writing output. Partitions retain the original artifact/context
+identity and row order; they do not create additional MDM batches. Consumers
+materialize the selected tables within their existing 32 MiB input budget,
+so a full archive needs configured selection before this boundary. Finish
 installed source/population proof before activating a streamed source.
 Direct `SourceEngine.read` rejects stream contracts so they cannot silently
 take the eager path. Active GLEIF JSON/XML retirement remains unfinished.

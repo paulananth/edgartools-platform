@@ -11,7 +11,7 @@ from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
-from . import source_stream
+from . import source_stream, source_readings
 
 OUTPUT_BYTES = 128 * 1024**2
 
@@ -19,7 +19,7 @@ OUTPUT_BYTES = 128 * 1024**2
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
     return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__),
-            Path(source_stream.__file__)]
+            Path(source_stream.__file__), Path(source_readings.__file__)]
 
 
 def _documents(envelope: dict, artifacts):

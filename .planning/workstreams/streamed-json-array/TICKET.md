@@ -49,3 +49,13 @@ Cached archive preflight (central-directory metadata only, not authenticated ful
 Deliberate archive fault: changing the central-directory expanded length from 21 to 22 bytes while retaining valid content/CRC is accepted by Python's ZIP reader. The new regression initially failed (worker did not refuse), then passed after checking native EOF byte count against the declared ZIP member size before flushing/publishing. A separate payload mutation proves CRC rejection with no published partitions. All 18 stream cases pass; both review axes close the fix. Final expanded-ceiling/documentation CI 37387387879 passed on 09ffca8e; the later ZIP fix still requires its updated full gate.
 
 ZIP-fix gate 37388045092 passes every suite on 19cd34b6. Subsequent malformed-read probes found TypeError from new stream membership tests in both facade and worker; shape-guarded dispatch restores native SourceRejected(contract). Both red regressions pass after the correction; affected source/stream worker suite: 24 pass in 1.14s. Both review axes close the correction; its final full gate remains pending.
+
+## Partition consumer follow-up
+
+PR #829 merged as e5918e64 on 2026-10-05 19:43 ET after all six checks passed on f23b5cb0. Continue on `codex/partitioned-reading-consumers-20261005`; the full parent goal remains incomplete.
+
+- [x] Authenticate partitioned readings and preserve original artifact/context identity through combination and MDM batching — 2026-10-05 19:48 ET, 76 affected cases pass, including 1,005-row boundary equivalence, metadata/hash faults and aggregate byte/row bounds; both scoped review axes inspected the implementation.
+- [ ] Qualify installed stream→combine→prepare, immutable retry, and restricted PostgreSQL 16 stream→prepare→merge with independent verifiers.
+- [ ] Run the complete CI gate on the new committed branch; create the follow-up PR.
+
+Consumers reconstruct only selected tables within existing bounded input limits. This does not yet prove complete GLEIF archive adoption or the 6,414 Company / 3,052 CIK+LEI population gate.

@@ -8,24 +8,24 @@ from __future__ import annotations
 import io
 import hashlib
 import json
-import re
 from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse import control_contract
 from edgar_warehouse.control_contract import canonical, reference
+from . import source_readings
 
 CHECK = "source.combined"
 INPUT_BYTES = 32 * 1024**2
 TOTAL_BYTES = 64 * 1024**2
 OUTPUT_BYTES = 32 * 1024**2
 MAX_ROWS = 100_000
-NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
+NAME = source_readings.NAME
 COLLECTION_MODES = frozenset(("collect", "collect_flat"))
 
 
 def runtime_files() -> list[Path]:
-    return [Path(artifact_store.__file__), Path(control_contract.__file__)]
+    return [Path(artifact_store.__file__), Path(control_contract.__file__), Path(source_readings.__file__)]
 
 
 def _name(value):
@@ -173,6 +173,10 @@ def _group(spec, inputs, maximum=MAX_ROWS):
 
 def _reading(data):
     body = artifact_store.json_value(data)
+    return _reading_body(body)
+
+
+def _reading_body(body):
     if (not isinstance(body, dict) or type(body.get("version")) is not int or body["version"] != 1
             or not isinstance(body.get("artifacts"), list) or not body["artifacts"]):
         raise ValueError("Combination input is a version-1 reading with artifacts")
@@ -232,11 +236,11 @@ def _documents(envelope, artifacts):
     plan = _contract(contract, refs)
     inputs, size, count = {}, 0, 0
     for name, ref in refs.items():
-        data = artifacts.verified(ref, max_bytes=INPUT_BYTES)
-        size += len(data)
+        body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"])
+        size += consumed
         if size > TOTAL_BYTES:
             raise ValueError("Combination readings exceed total byte budget")
-        reading, rows = _reading(data)
+        reading, rows = _reading_body(body)
         count += rows
         if count > plan["max_rows"]:
             raise ValueError("Combination exceeds input row budget")

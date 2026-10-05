@@ -9,8 +9,13 @@ provider, classification or database dependency.
 
 A standalone input manifest is an object with `version: 1`, a `contract`
 receipt (`uri`, `sha256`), and `readings`: a mapping from logical names to
-reading receipts. Each receipt holds a version-1 configured reading, including
-its artifact input receipts, tables and empty `deferred` list. Unresolved
+reading receipts. Each receipt holds a version-1 inline or version-2 partitioned
+configured reading. Partition receipts are authenticated within the same
+aggregate input byte and row budgets as inline readings. Contiguous source
+ranges, declared table names and EOF counts are checked before combining.
+Original artifact/context receipts and row order are retained; storage
+partitions do not create new source identities. Both forms supply tables and
+an empty `deferred` list. Unresolved
 reading deferrals block combination; resolve them explicitly before this step.
 
 The contract is a JSON object with this shape (shown as YAML for review):
