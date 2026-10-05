@@ -42,7 +42,7 @@ TESTS: dict[str, list[Test]] = {
          lambda f: {"links": f["key_links"], "other": f["key_other"]}),
         ("points at two or more parts", lambda f: f["out_degree"] >= 2 or f["self_ends"], lambda f: f["out_degree"]),
         ("nothing points at it", lambda f: f["in_degree"] == 0, lambda f: f["in_degree"]),
-        ("few other columns", lambda f: f["other_columns"] <= 4, lambda f: f["other_columns"]),
+        ("few attributes besides codes and dates", lambda f: f["attributes"] <= 2, lambda f: f["attributes"]),
     ],
     "transaction": [
         ("has a unique key (required)", lambda f: f["key_found"], lambda f: f["key"]),

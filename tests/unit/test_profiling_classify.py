@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "data-pr
 from profiling import classify  # noqa: E402
 
 BASE = {"rows": 3000, "key": ["k"], "key_found": True, "in_degree": 2, "out_degree": 3, "self_ends": False,
-        "key_links": 0, "key_other": 1, "other_columns": 5, "name_like": 0, "labels": 0, "attributes": 0,
+        "key_links": 0, "key_other": 1, "name_like": 0, "labels": 0, "attributes": 0,
         "measures": 0, "event_time": "d", "metadata_share": 0.0, "rows_pointing": 8000, "rows_pointed": 100000}
 
 
@@ -19,7 +19,7 @@ def test_a_part_pointing_at_others_is_never_reference():
 
 
 def test_link_part_needs_a_key_of_links():
-    link = {**BASE, "in_degree": 0, "out_degree": 2, "key_links": 2, "key_other": 1, "other_columns": 1,
+    link = {**BASE, "in_degree": 0, "out_degree": 2, "key_links": 2, "key_other": 1, 
             "event_time": None}
     assert classify.classify(link)["class"] == "relationship"
     assert classify.classify({**link, "key_links": 1})["class"] != "relationship"
@@ -38,6 +38,6 @@ def test_store_is_advice_only():
 
 def test_link_part_between_records_of_one_part_may_key_on_one_end_and_a_role():
     link = {**BASE, "in_degree": 0, "out_degree": 1, "self_ends": True, "key_links": 1, "key_other": 1,
-            "other_columns": 3, "event_time": None}
+            "event_time": None}
     assert classify.classify(link)["class"] == "relationship"
     assert classify.classify({**link, "self_ends": False})["class"] != "relationship"

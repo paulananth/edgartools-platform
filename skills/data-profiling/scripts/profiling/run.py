@@ -169,12 +169,12 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         "self_ends": len({l["to"]["part"] for l in out}) == 1 and len(out) >= 2,
         "key_links": sum(1 for c in record_key["columns"] if c in linked_columns),
         "key_other": sum(1 for c in record_key["columns"] if c not in linked_columns),
-        "other_columns": len([n for n in names if n not in record_key["columns"]]),
         # The key's own label names an entity; other labels name codes.
         "name_like": sum(codes.name_like(c, code_columns - key_labels) for c in columns),
+        # A column holding one value for every row describes nothing: not an attribute.
         "attributes": sum(1 for c in columns if not c["structure"] and c["name"] not in record_key["columns"]
                           and c["name"] not in code_columns and c["name"] not in linked_columns
-                          and not profile.is_temporal(c)),
+                          and not profile.is_temporal(c) and c["distinct"] > 1),
         "labels": sum(1 for c in code_list if c["label_column"]),
         "measures": len(measures), "event_time": times["event_time"],
         "metadata_share": round(sum(bool(set(sensitivity.words(n)) & classify.METADATA_WORDS) for n in names)
