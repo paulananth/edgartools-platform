@@ -1,0 +1,12 @@
+{
+  "cases": 2065,
+  "accepted": 2049,
+  "refused": 16,
+  "difference_count": 0,
+  "differences": [],
+  "comparison": "canonical typed rows and refusal decisions; exception identities excluded",
+  "integer_minimum": -9223372036854775807,
+  "universal_equivalence": false,
+  "full_archive_qualification": false,
+  "sec_requests": 0
+}

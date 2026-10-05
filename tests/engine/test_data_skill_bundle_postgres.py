@@ -107,6 +107,40 @@ def _stores(databases):
             "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
 
 
+def test_streaming_boundary_runs_from_installed_bundle_without_checkout(installed):
+    python, root = installed
+    result = _run(python, "-c", '''
+import hashlib, json
+from pathlib import Path
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules.source_engine import stream_json_array, SourceRejected
+body = b'{"records":[{"n":9007199254740993,"flag":true},{"float":-3.1163038337286385e203}]}'
+path = Path("captured.json")
+path.write_bytes(body)
+ref = {"uri": path.resolve().as_uri(), "sha256": hashlib.sha256(body).hexdigest()}
+store, rows = Artifacts(), []
+with store.verified_stream(ref, max_bytes=len(body)) as snapshot:
+    path.write_bytes(b"changed after authentication")
+    receipt = stream_json_array(snapshot, wrapper="records", on_record=lambda row, n: rows.append((n, row)),
+        max_bytes=1024, max_record=512, max_records=2)
+assert receipt == {"record_count": 2, "expanded_bytes": len(body)}
+assert rows == [(0, {"n":9007199254740993,"flag":True}), (1, {"float":-3.1163038337286385e203})]
+path.write_bytes(body + b" null")
+bad = {"uri": path.resolve().as_uri(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+try:
+    with store.verified_stream(bad, max_bytes=1024) as snapshot:
+        stream_json_array(snapshot, wrapper="records", on_record=lambda row, n: None,
+            max_bytes=1024, max_record=512, max_records=2)
+except SourceRejected:
+    pass
+else:
+    raise AssertionError("Trailing bytes produced a successful receipt")
+print(json.dumps(receipt))
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["record_count"] == 2
+
+
 def test_doctor_passes_from_the_installed_bundle(installed, databases):
     python, root = installed
     # The console script itself, as an agent runs it; nothing from this checkout.

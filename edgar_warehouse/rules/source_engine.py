@@ -51,6 +51,31 @@ def _rejected(error: source_contract.SourceRejected) -> SourceRejected:
     return SourceRejected(*error.args)
 
 
+def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
+                      max_record: int, max_records: int, max_depth: int = 64,
+                      min_integer: int = -(2**63)) -> dict:
+    """Read one named object array without retaining the whole document.
+
+    Callbacks may prepare candidates. Only a successful return proves EOF;
+    callers must not publish, commit or authenticate earlier callback rows.
+    Transport/authentication and publication policy stay with the caller.
+    max_record caps encoded record bytes; raw reads and raw record bytes
+    permit 65,536 bytes of buffering headroom, including whitespace.
+    """
+    if not isinstance(wrapper, str) or not wrapper or len(wrapper.encode()) > 128:
+        raise SourceRejected("contract", "JSON stream wrapper is bounded nonempty text")
+    bounds = {"max_bytes": max_bytes, "max_record": max_record, "max_records": max_records, "max_depth": max_depth}
+    if any(type(value) is not int or not 0 <= value <= 2**63 - 1 for value in bounds.values()):
+        raise SourceRejected("contract", "JSON stream bounds must be nonnegative signed integers")
+    if type(min_integer) is not int or not -(2**63) <= min_integer <= 2**63 - 1:
+        raise SourceRejected("contract", "JSON stream integer minimum must be a signed integer")
+    try:
+        records, size = source_contract.scan_json_array(stream, wrapper, on_record, min_integer=min_integer, **bounds)
+    except source_contract.SourceRejected as error:
+        raise _rejected(error) from None
+    return {"record_count": records, "expanded_bytes": size}
+
+
 class SourceEngine:
     def __init__(self, contract: Mapping):
         try:

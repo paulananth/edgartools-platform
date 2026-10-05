@@ -17,6 +17,7 @@
 //! into memory up to those limits: records are not streamed.
 
 mod formats;
+pub mod json_sequence;
 mod integer;
 mod reference;
 mod value;

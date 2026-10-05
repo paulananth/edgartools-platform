@@ -386,6 +386,7 @@ dependencies = [
  "indexmap",
  "pyo3",
  "quick-xml",
+ "serde",
  "serde_json",
  "serde_yaml",
  "unicode-general-category",

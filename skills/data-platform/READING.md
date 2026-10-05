@@ -560,3 +560,31 @@ oracle is test-only. Byte/header/row/numeric/Unicode safety boundaries remain
 explicit, so finite parity does not imply universal arbitrary-input parity.
 No source activation, producer success or complete Company mastering follows
 from successful catalog reading.
+
+## Large JSON array framing foundation
+
+For a captured document shaped as one object containing one named array,
+`source_engine.stream_json_array` reads object records incrementally through
+the native binding. Its callback receives the typed record and zero-based
+ordinal. Only successful return supplies an EOF receipt; callbacks prepare
+candidates and must not commit, publish or authenticate partial records.
+Duplicate keys, extra wrapper keys, non-object records, nonfinite numbers,
+depth overflow, integer overflow and trailing data refuse the input.
+
+`max_record` bounds the compact encoded record. Raw records and transport
+reads permit 65,536 additional bytes of buffering headroom, including
+whitespace. `max_bytes` bounds the whole expanded stream. Signed 64-bit
+integers are supported; an explicit `min_integer: -9223372036854775807`
+matches the historical GLEIF decoder's narrower negative boundary.
+
+`Artifacts.verified_stream(ref, max_bytes=...)` authenticates a complete
+private disk snapshot before allowing any parser reads. It bounds memory
+through 64 KiB reads, bounds snapshot disk usage explicitly, and closes the
+snapshot on success or failure. Use a compressed-byte cap when snapshotting
+an archive, then a separate expanded-byte cap while parsing its member.
+
+This boundary is not yet a configured `source.read` streaming mode. Before
+adopting it for GLEIF, implement configured record projection and immutable
+partitions, verify complete archive/member authentication and metadata,
+qualify installed worker dependencies, and prove publication/replay through
+EOF. JSON framing tests do not qualify XML or retire active GLEIF parsing.
