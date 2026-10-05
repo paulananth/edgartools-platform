@@ -83,7 +83,8 @@ def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
 
 class SourceEngine:
     def __init__(self, contract: Mapping):
-        if "stream" in contract.get("read", {}):
+        read = contract.get("read")
+        if isinstance(read, Mapping) and "stream" in read:
             raise SourceRejected("contract", "read.stream requires the source.read worker framing boundary")
         try:
             self._engine = source_contract.Engine(json.dumps(contract), STEPS)

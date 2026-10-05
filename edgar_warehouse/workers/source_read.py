@@ -82,7 +82,8 @@ def _output(envelope: dict, artifacts, documents=None) -> bytes:
 
 def execute(envelope: dict, artifacts) -> dict:
     documents = _documents(envelope, artifacts)
-    if "stream" in documents[1]["read"]:
+    read = documents[1].get("read")
+    if isinstance(read, dict) and "stream" in read:
         output = source_stream.output(envelope, artifacts, documents, _context, publish=True,
                                       max_index_bytes=OUTPUT_BYTES)
     else:
@@ -94,7 +95,8 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     documents = _documents(envelope, artifacts)
-    if "stream" in documents[1]["read"]:
+    read = documents[1].get("read")
+    if isinstance(read, dict) and "stream" in read:
         expected = source_stream.output(envelope, artifacts, documents, _context, publish=False,
                                         max_index_bytes=OUTPUT_BYTES)
     else:

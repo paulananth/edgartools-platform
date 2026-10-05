@@ -196,3 +196,16 @@ def test_zip_crc_corruption_is_refused_before_partition_publication(tmp_path):
     with pytest.raises(SourceRejected):
         source_read.execute(envelope, store)
     assert not (tmp_path / "reading.json.parts").exists()
+
+
+@pytest.mark.parametrize("entrypoint", ["facade", "worker"])
+def test_malformed_read_keeps_the_native_contract_refusal(tmp_path, entrypoint):
+    rules = contract()
+    rules["read"] = None
+    with pytest.raises(SourceRejected, match="contract"):
+        if entrypoint == "facade":
+            SourceEngine(rules)
+        else:
+            store = Artifacts()
+            envelope = task(tmp_path, store, [b'{"records":[]}'], rules)
+            source_read.execute(envelope, store)
