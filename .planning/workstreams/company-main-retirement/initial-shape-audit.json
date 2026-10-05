@@ -1,0 +1,2100 @@
+{
+  "cases": 449,
+  "matched": 399,
+  "accepted": 395,
+  "refused": 54,
+  "difference_count": 50,
+  "differences": [
+    {
+      "case": "root",
+      "input": null,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": false,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": true,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": 0,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": 1,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": -1,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": 0.0,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": 9.9,
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": "",
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": " ",
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": "x",
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": [],
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "root",
+      "input": [
+        1
+      ],
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": null
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": false
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": false
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": true
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": true
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": 0
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": 0
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": 1
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": 1
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": -1
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": -1
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": 0.0
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": 0.0
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": 9.9
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": 9.9
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": ""
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": ""
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": " "
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": " "
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": "x"
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": "x"
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "refused": "invalid_path"
+      }
+    },
+    {
+      "case": "addresses",
+      "input": {
+        "addresses": []
+      },
+      "recent_limit": null,
+      "retained": {
+        "refused": "AttributeError"
+      },
+      "configured": {
+        "tables": {
+          "addresses": [],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "business",
+      "input": {
+        "addresses": {
+          "business": [
+            1
+          ]
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": []
+        }
+      },
+      "configured": {
+        "tables": {
+          "addresses": [
+            {
+              "business_address": {
+                "city": null,
+                "country": null,
+                "postal_code": null,
+                "region": null,
+                "street": null,
+                "street2": null
+              },
+              "cik": 320193,
+              "last_sync_run_id": "qualification"
+            }
+          ],
+          "company": [
+            {
+              "category": null,
+              "cik": 320193,
+              "description": null,
+              "ein": null,
+              "entity_name": null,
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "qualification"
+            }
+          ],
+          "filings": []
+        }
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": true
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": 1
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": -1
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": 9.9
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": [
+              1
+            ]
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": {
+              "x": true
+            }
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/stateOrCountry",
+      "input": {
+        "addresses": {
+          "business": {
+            "stateOrCountry": {
+              "street1": "x",
+              "stateOrCountry": "DE"
+            }
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": true
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": 1
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": -1
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": 9.9
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": [
+              1
+            ]
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": {
+              "x": true
+            }
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    },
+    {
+      "case": "address/countryCode",
+      "input": {
+        "addresses": {
+          "business": {
+            "countryCode": {
+              "street1": "x",
+              "stateOrCountry": "DE"
+            }
+          }
+        }
+      },
+      "recent_limit": null,
+      "retained": {
+        "tables": {
+          "company": [
+            {
+              "cik": 320193,
+              "entity_name": null,
+              "entity_type": null,
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "fiscal_year_end": null,
+              "ein": null,
+              "description": null,
+              "category": null,
+              "sync_run_id": "qualification",
+              "raw_object_id": "0000000000000000000000000000000000000000000000000000000000000000",
+              "load_mode": "default",
+              "last_sync_run_id": "qualification",
+              "last_synced_at": "2026-10-05T00:00:00Z"
+            }
+          ],
+          "filings": [],
+          "addresses": [
+            {
+              "cik": 320193,
+              "last_sync_run_id": "qualification",
+              "business_address": {
+                "street": null,
+                "street2": null,
+                "city": null,
+                "region": null,
+                "postal_code": null,
+                "country": null
+              }
+            }
+          ]
+        }
+      },
+      "configured": {
+        "refused": "lookup_key"
+      }
+    }
+  ],
+  "comparison": "canonical typed tables and refusal decision; exception identity excluded",
+  "universal_equivalence": false,
+  "sec_requests": 0
+}
