@@ -95,6 +95,14 @@ A column's `role` may also be `link` (it points at another part's key).
 `persistence` and `delivery` stay null and `unknown` until `compare` sees a
 second delivery.
 
+A record key designed on a name (research note 02; operator, 2026-10-05:
+"Same record: durable key") also writes `basis` (the name column) and, in its
+`evidence`, `unique_raw`, `unique_after_normalization`, `folded_collisions`
+(groups of raw variants that normalize to one name, masked) and `provisional`
+(true until a second delivery measures persistence). A name is never a found
+key; the key is a durable id kept in a key map looked up by the sha256 of the
+normalized name, and a rename is kept as an alias.
+
 ## 4. A relationship
 
 ```yaml

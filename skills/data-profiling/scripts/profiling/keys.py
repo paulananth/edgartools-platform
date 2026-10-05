@@ -27,9 +27,13 @@ RANDOMNESS = 0.7  # 1 - KS distance; below this a link must also be named alike
 
 
 def _candidates(columns: list[dict]) -> list[dict]:
-    """Columns that may be part of a key: never empty, not free text, not a float measure."""
+    """Columns that may be part of a found key: never empty, not a name, not a float measure.
+
+    A name (several words) is never a found key; see names.name_basis for a key designed on one.
+    """
+    from .names import is_name
     return [c for c in columns if not c["structure"] and c["fill"] == 1.0 and c["distinct"] > 1
-            and c.get("tokens", 0) <= 2.0 and c["type"] not in FLOATS]
+            and not is_name(c) and c.get("tokens", 0) <= 2.0 and c["type"] not in FLOATS]
 
 
 def unique_keys(con, part: str, columns: list[dict]) -> list[list[str]]:
@@ -230,7 +234,7 @@ def unique_within_parent(con, part: str, columns: list[dict]) -> str | None:
 
 
 def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], incoming: list[dict],
-                      parent_key: list[str] | None, within: str | None = None) -> dict:
+                      parent_key: list[str] | None, within: str | None = None, name: dict | None = None) -> dict:
     """The record key: a found key the other parts point at, else a designed one."""
     pointed = {tuple(l["to"]["columns"]) for l in incoming if l["to"]["part"] == part}
     order = {c["name"]: i for i, c in enumerate(columns)}
@@ -250,6 +254,14 @@ def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], inc
     if parent_key is not None:
         return {"columns": [*parent_key, POSITION], "found": False, "design": "natural_composite",
                 "rule": "the parent's record key plus the place in its list", "alternatives": []}
+    if name is not None:
+        from .names import NORMALIZATION
+        return {"columns": ["record_id"], "found": False, "design": "surrogate", "basis": [name["column"]],
+                "rule": f"a durable id given when a record first appears, kept in a key map looked up by "
+                        f"sha256(part, 0x1F, normalized {name['column']}); a rename or variant is kept as an alias of "
+                        f"the same id, so the key never changes (operator, 2026-10-05: same record: durable key). "
+                        f"{NORMALIZATION}",
+                "alternatives": [], "evidence_extra": name["evidence"]}
     usable = [c["name"] for c in _candidates(columns)]
     return {"columns": ["record_id"], "found": False, "design": "surrogate",
             "rule": "a durable id given when a record first appears and kept in a key map, so it never changes; "

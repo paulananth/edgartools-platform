@@ -15,7 +15,7 @@ from pathlib import Path
 
 import duckdb
 
-from . import classify, codes, hierarchy, identifiers, inputs, keys, profile, sensitivity, timing
+from . import classify, codes, hierarchy, identifiers, inputs, keys, names, profile, sensitivity, timing
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
@@ -89,7 +89,13 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         parent = parts[p].parent
         parent_key = record_keys[parent]["columns"] if parent else None
         within = keys.unique_within_parent(con, p, profiles[p]) if parent and not unique[p] else None
-        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within)
+        name = None
+        if not parent and not unique[p]:
+            people = sensitivity.person_part([c["name"] for c in profiles[p] if not c["structure"]])
+            personal = {c["name"] for c in profiles[p]
+                        if sensitivity.tag(c["name"], [], people)["sensitivity"] != "none"}
+            name = names.name_basis(con, p, profiles[p], personal)
+        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within, name)
 
     findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}))
                       for p in parts]
@@ -188,7 +194,8 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         "runner_up": decided["runner_up"],
         "kind": kind,
         "proposed_kind": None,
-        "record_key": {**record_key, "evidence": {
+        "record_key": {**{k: v for k, v in record_key.items() if k != "evidence_extra"}, "evidence": {
+            **record_key.get("evidence_extra", {}),
             "unique": record_key["found"],
             "null_rows": max([c["rows"] - c["non_null"] for c in columns if c["name"] in record_key["columns"]] or [0]),
             "persistence": None,  # needs a second delivery: measured by compare
