@@ -125,6 +125,24 @@ must not share an uncoordinated edit surface.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by another runtime unless explicitly instructed.
 
+## Path ownership: data profiling program (operator, 2026-10-04)
+
+The data profiling program (map `.scratch/profiling/map.md`) and Codex's
+configured-reading work (old-parser retirement) run at the same time. Each
+runtime edits only its own paths below. A shared path is edited only after
+`scripts/dev/overlap_guard.sh` passes, which shows no open PR or worktree of
+another runtime touches it. If it fails, stop and ask the operator.
+
+| Owner | Paths |
+|---|---|
+| Claude | `skills/data-profiling/**`, `skills/data-quality/**`, `docs/specs/rdm/**`, `docs/specs/agent-context/**`, `.scratch/profiling/**`, new MDM migrations for the cross-reference table and the context views, the `context` command module, `scripts/dev/overlap_guard.sh` |
+| Codex | `crates/source-contract/**`, `rules/sources/**`, `edgar_warehouse/workers/source_*.py`, `skills/data-platform/READING.md`, `skills/data-platform/COMBINING.md`, `tests/engine/test_data_skill_bundle_postgres.py` |
+| Shared (guard first) | `skills/data-onboarding/**`, `skills/refining-rules/**`, `skills/data-platform/SKILL.md`, `CONTEXT.md`, `edgar_warehouse/cli.py`, `AGENTS.md`, `CLAUDE.md` |
+
+Run the guard before every commit and push:
+`bash scripts/dev/overlap_guard.sh` (exit 0 = no overlap; exit 1 lists each
+overlapping file and the PR or worktree that holds it).
+
 ## Task checklists (MUST, every ticket, every runtime)
 
 **HARD RULE: every ticket keeps its parts as a Markdown checklist in the
