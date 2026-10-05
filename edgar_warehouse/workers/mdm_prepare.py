@@ -34,6 +34,7 @@ KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
 BATCH = 1000
 RECORD_BYTES = 16 * 1024**2
 MANIFEST_BYTES = 32 * 1024**2
+INPUT_BYTES = 32 * 1024**2
 INPUT_ROWS = 100_000
 
 
@@ -55,7 +56,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     if "record_column" in keys and (not isinstance(record_column, str) or not record_column):
         raise ValueError("mdm.prepare record_column must be nonempty text")
     reading, _ = source_readings.load(envelope["input"], artifacts,
-                                      max_bytes=MANIFEST_BYTES, max_rows=INPUT_ROWS)
+                                      max_bytes=INPUT_BYTES, max_rows=INPUT_ROWS)
     if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
         raise ValueError("mdm.prepare reads a source.read output (version 1)")
     files, batches = {}, []
