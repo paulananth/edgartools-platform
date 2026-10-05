@@ -268,11 +268,13 @@ def _quality(p, out, record_key) -> list[dict]:
 
 
 def _inherit(found: list[dict], parts) -> None:
-    """A list inside a record, with no key of its own, is an attribute list of its parent: same class."""
+    """A list inside a record that its own tests do not class (no key of its own, or "unknown")
+    is an attribute list of its parent: same class."""
     by_name = {f["part"]: f for f in found}
     for f in sorted(found, key=lambda x: x["part"].count(".")):
         parent = f["parent_part"]
-        if parent and not f["record_key"]["found"] and by_name[parent]["class"] != "unknown":
+        if parent and (not f["record_key"]["found"] or f["class"] == "unknown") \
+                and by_name[parent]["class"] != "unknown":
             f["class"] = by_name[parent]["class"]
             f["confidence"] = by_name[parent]["confidence"]
             f["tests"] = [{"class": f["class"], "test": "a list inside its parent's records, with no key of its own",

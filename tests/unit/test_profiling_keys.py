@@ -98,3 +98,11 @@ def test_child_key_unique_within_its_parent_and_plain_value_lists(tmp_path):
     chosen = keys.choose_record_key("p.refs", [], refs, [], ["id"], within)
     assert chosen["columns"] == ["id", "r"] and chosen["found"]
     assert keys.plain_values(profile.columns(con, "p.tags"))
+
+
+def test_zero_padded_text_matches_numbers(tmp_path):
+    con = duckdb.connect()
+    con.execute("CREATE TABLE p AS SELECT lpad(CAST(i AS VARCHAR), 10, '0') AS ref FROM range(1, 200) r(i)")
+    con.execute("CREATE TABLE f AS SELECT (i % 199) + 1 AS ref FROM range(500) r(i)")
+    assert keys.inclusion(con, "f", "ref", "p", "ref", {})["sigma"] == 0.0
+    assert keys.inclusion(con, "f", "ref", "p", "ref", {}, as_number=True)["sigma"] == 1.0

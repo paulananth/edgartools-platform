@@ -106,11 +106,17 @@ def _source(part: str, column: str, confirmed: dict) -> str:
     return f"SELECT CAST({sql_name(column)} AS VARCHAR) v FROM {sql_name(part)}"
 
 
-def inclusion(con, f_part: str, f: str, p_part: str, p: str, confirmed: dict) -> dict:
-    """sigma, coverage and randomness of F's distinct values within P's."""
+def inclusion(con, f_part: str, f: str, p_part: str, p: str, confirmed: dict, as_number: bool = False) -> dict:
+    """sigma, coverage and randomness of F's distinct values within P's.
+
+    With `as_number`, digit strings compare as numbers: `0000001750` stored as
+    text in one part is `1750` stored as a number in another.
+    """
+    norm = (lambda e: f"CAST(TRY_CAST({e} AS HUGEINT) AS VARCHAR)") if as_number else (lambda e: e)
     sql = f"""
-        WITH fv AS (SELECT DISTINCT CAST({sql_name(f)} AS VARCHAR) v FROM {sql_name(f_part)} WHERE {sql_name(f)} IS NOT NULL),
-             pv AS (SELECT DISTINCT v FROM ({_source(p_part, p, confirmed)}) WHERE v IS NOT NULL),
+        WITH fv AS (SELECT DISTINCT {norm(f"CAST({sql_name(f)} AS VARCHAR)")} v FROM {sql_name(f_part)}
+                    WHERE {sql_name(f)} IS NOT NULL),
+             pv AS (SELECT DISTINCT {norm("v")} v FROM ({_source(p_part, p, confirmed)}) WHERE v IS NOT NULL),
              ranked AS (SELECT v, (row_number() OVER (ORDER BY TRY_CAST(v AS DOUBLE) NULLS LAST, v) - 0.5)
                                / count(*) OVER () r FROM pv),
              hit AS (SELECT ranked.r FROM fv JOIN ranked USING (v)),
@@ -142,7 +148,8 @@ def links(con, profiles: dict[str, list[dict]], keys: dict[str, list[list[str]]]
                     continue
                 if parts[p_part].scan == "full" and f["distinct"] > p["distinct"] / THETA:
                     continue
-                measured = inclusion(con, f_part, f["name"], p_part, p_name, confirmed)
+                measured = inclusion(con, f_part, f["name"], p_part, p_name, confirmed,
+                                     as_number=is_integer(f) != is_integer(p))
                 if measured["sigma"] < THETA:
                     continue
                 named = name_similarity(f_part, f["name"], p_part, p_name)

@@ -34,3 +34,10 @@ def test_a_tie_is_unknown_and_every_test_is_reported():
 
 def test_store_is_advice_only():
     assert classify.store("reference") == {"store": "rdm", "why": classify.STORE["reference"][1], "advisory": True}
+
+
+def test_link_part_between_records_of_one_part_may_key_on_one_end_and_a_role():
+    link = {**BASE, "in_degree": 0, "out_degree": 1, "self_ends": True, "key_links": 1, "key_other": 1,
+            "other_columns": 3, "event_time": None}
+    assert classify.classify(link)["class"] == "relationship"
+    assert classify.classify({**link, "self_ends": False})["class"] != "relationship"

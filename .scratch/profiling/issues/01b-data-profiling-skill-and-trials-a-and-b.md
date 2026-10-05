@@ -25,4 +25,5 @@ Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../pl
 - [ ] ~~Snowflake profiled in place with SQL~~ deferred to phase B (row 6 adds the Snowflake sink); Postgres, SQLite and DuckDB work now
 - [ ] ~~Quality items with rows and masked examples; silver links.kind and column definitions~~ deferred to 01c and row 6 (kinds are known only after onboarding)
 - [ ] ~~Snapshot-or-changes, versions per key, refresh rate, key persistence~~ need two deliveries: reported unknown now; compare measures them in a follow-up
+- [ ] Name as the only unique key (operator, 2026-10-05: "names can become a unique key ... one option is to create a hash of the big long name"): research note .scratch/profiling/research/02-name-as-key.md (in progress), then the operator's ruling on its recommendation, then keys.py and a test. Today: names of more than two words are never key candidates; such a part gets a durable first-appearance surrogate kept in a key map
 - [ ] PR, CI, merge on the operator's word

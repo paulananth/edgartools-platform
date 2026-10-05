@@ -36,7 +36,9 @@ TESTS: dict[str, list[Test]] = {
         ("only codes, labels and dates", lambda f: f["attributes"] <= 1, lambda f: f["attributes"]),
     ],
     "relationship": [
-        ("key made of links to other parts (required)", lambda f: f["key_links"] >= 2 and f["key_other"] <= 2,
+        # A link between records of one part may key on one end plus a role (one parent per role).
+        ("key made of links to other parts (required)",
+         lambda f: (f["key_links"] >= 2 or (f["self_ends"] and f["key_links"] >= 1)) and f["key_other"] <= 2,
          lambda f: {"links": f["key_links"], "other": f["key_other"]}),
         ("points at two or more parts", lambda f: f["out_degree"] >= 2 or f["self_ends"], lambda f: f["out_degree"]),
         ("nothing points at it", lambda f: f["in_degree"] == 0, lambda f: f["in_degree"]),
