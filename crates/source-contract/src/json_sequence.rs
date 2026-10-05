@@ -12,6 +12,9 @@ use crate::Rejected;
 const BUFFER: usize = 65536;
 
 #[derive(Clone, Copy)]
+pub enum RecordEncoding { Native, Python }
+
+#[derive(Clone, Copy)]
 pub struct Limits {
     pub max_bytes: usize,
     /// Encoded record bytes. Raw records permit BUFFER bytes of whitespace
@@ -20,6 +23,7 @@ pub struct Limits {
     pub max_records: usize,
     pub max_depth: usize,
     pub min_integer: i64,
+    pub record_encoding: RecordEncoding,
 }
 
 #[derive(Debug, PartialEq)]
@@ -129,7 +133,7 @@ impl<'de, F: FnMut(Value, usize) -> Result<(), Rejected>> Visitor<'de> for Recor
             let record = JsonValue { depth: 0, maximum: self.limits.max_depth }.deserialize(&mut parser).map_err(de::Error::custom)?;
             if !record.is_object() { return Err(de::Error::custom("JSON record must be an object")); }
             if *self.count >= self.limits.max_records { return Err(de::Error::custom("JSON record count exceeds bound")); }
-            if serde_json::to_vec(&record).map_err(de::Error::custom)?.len() > self.limits.max_record {
+            if encoded_len(&record, self.limits.record_encoding).map_err(de::Error::custom)? > self.limits.max_record {
                 return Err(de::Error::custom("JSON record exceeds encoded byte bound"));
             }
             self.since_record.set(0);
@@ -140,6 +144,34 @@ impl<'de, F: FnMut(Value, usize) -> Result<(), Rejected>> Visitor<'de> for Recor
             *self.count += 1;
         }
     }
+}
+
+// Count compact UTF-8 JSON without retaining a second complete record.
+// String escaping is identical for serde and Python ensure_ascii=False;
+// floating point spelling is an explicit compatibility policy.
+fn encoded_len(value: &Value, encoding: RecordEncoding) -> Result<usize, Rejected> {
+    Ok(match value {
+        Value::Null => 4,
+        Value::Bool(value) => if *value { 4 } else { 5 },
+        Value::String(value) => serde_json::to_string(value).unwrap().len(),
+        Value::Number(value) => match encoding {
+            RecordEncoding::Python if value.is_f64() => crate::json_text::python_float(value.as_f64().unwrap())?.len(),
+            _ => value.to_string().len(),
+        },
+        Value::Array(values) => {
+            let mut size = 2usize.saturating_add(values.len().saturating_sub(1));
+            for value in values { size = size.saturating_add(encoded_len(value, encoding)?); }
+            size
+        },
+        Value::Object(values) => {
+            let mut size = 2usize.saturating_add(values.len().saturating_sub(1));
+            for (key, value) in values {
+                size = size.saturating_add(serde_json::to_string(key).unwrap().len()).saturating_add(1)
+                    .saturating_add(encoded_len(value, encoding)?);
+            }
+            size
+        },
+    })
 }
 
 // RawValue has already validated JSON syntax. Check integer lexemes before

@@ -19,7 +19,7 @@ pub(crate) fn scalar(text: &str, kind: ScalarKind, exact: Option<&str>) -> Resul
     }
 }
 
-fn python_float(value: f64) -> Result<String, Rejected> {
+pub(crate) fn python_float(value: f64) -> Result<String, Rejected> {
     // serde_json's shortest representation uses round-to-even for halfway
     // decimal choices; Rust Debug rounds some halfway values differently.
     let number = serde_json::Number::from_f64(value)

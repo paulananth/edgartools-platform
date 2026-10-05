@@ -122,7 +122,7 @@ store, rows = Artifacts(), []
 with store.verified_stream(ref, max_bytes=len(body)) as snapshot:
     path.write_bytes(b"changed after authentication")
     receipt = stream_json_array(snapshot, wrapper="records", on_record=lambda row, n: rows.append((n, row)),
-        max_bytes=1024, max_record=512, max_records=2)
+        max_bytes=1024, max_record=512, max_records=2, record_encoding="python")
 assert receipt == {"record_count": 2, "expanded_bytes": len(body)}
 assert rows == [(0, {"n":9007199254740993,"flag":True}), (1, {"float":-3.1163038337286385e203})]
 path.write_bytes(body + b" null")

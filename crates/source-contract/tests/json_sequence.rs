@@ -1,7 +1,7 @@
-use source_contract::json_sequence::{scan, Limits};
+use source_contract::json_sequence::{scan, Limits, RecordEncoding};
 use source_contract::Rejected;
 
-fn limits() -> Limits { Limits { max_bytes: 1 << 20, max_record: 4096, max_records: 100, max_depth: 64, min_integer: i64::MIN } }
+fn limits() -> Limits { Limits { max_bytes: 1 << 20, max_record: 4096, max_records: 100, max_depth: 64, min_integer: i64::MIN, record_encoding: RecordEncoding::Native } }
 
 #[test]
 fn emits_exact_typed_objects_in_order_and_verifies_eof() {
@@ -55,4 +55,18 @@ fn bounds_record_count_and_preserves_consumer_refusal() {
     assert_eq!(error.code, "candidate_refused");
     let symmetric = Limits { min_integer: -i64::MAX, ..limits() };
     assert!(scan(&br#"{"records":[{"n":-9223372036854775808}]}"#[..], "records", symmetric, |_, _| Ok(())).is_err());
+}
+
+#[test]
+fn python_record_encoding_preserves_float_byte_boundaries_explicitly() {
+    let python = Limits { max_record: 11, record_encoding: RecordEncoding::Python, ..limits() };
+    let native = Limits { max_record: 11, ..limits() };
+    let fixed = br#"{"records":[{"v":0.00001}]}"#;
+    assert!(scan(&fixed[..], "records", python, |_, _| Ok(())).is_ok());
+    assert!(scan(&fixed[..], "records", native, |_, _| Ok(())).is_err());
+    let exponent = br#"{"records":[{"v":1e-6}]}"#;
+    let python = Limits { max_record: 10, ..python };
+    let native = Limits { max_record: 10, ..native };
+    assert!(scan(&exponent[..], "records", python, |_, _| Ok(())).is_err());
+    assert!(scan(&exponent[..], "records", native, |_, _| Ok(())).is_ok());
 }

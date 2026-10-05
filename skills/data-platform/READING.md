@@ -576,6 +576,10 @@ reads permit 65,536 additional bytes of buffering headroom, including
 whitespace. `max_bytes` bounds the whole expanded stream. Signed 64-bit
 integers are supported; an explicit `min_integer: -9223372036854775807`
 matches the historical GLEIF decoder's narrower negative boundary.
+Choose `record_encoding='python'` to apply the historical compact Python
+JSON byte limit. Default `native` measures native JSON spelling. These can
+accept different records at a tight float byte boundary even when their
+decoded values are identical; the policy must be pinned before cutover.
 
 `Artifacts.verified_stream(ref, max_bytes=...)` authenticates a complete
 private disk snapshot before allowing any parser reads. It bounds memory

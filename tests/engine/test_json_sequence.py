@@ -8,7 +8,7 @@ import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean.gleif_source import _BoundedReader, _json_records
 from edgar_warehouse.rules.source_engine import SourceRejected, stream_json_array
-from scripts.qualification.audit_json_sequence import audit
+from scripts.qualification.audit_json_sequence import audit, audit_record_bounds
 
 LIMITS = {"max_bytes": 1024**2, "max_record": 4096, "max_records": 100, "max_depth": 64}
 
@@ -26,6 +26,21 @@ def test_exact_comparator_detects_a_deliberate_float_rounding_fault():
     assert digest([row for _, row in parsed]) == digest(rows)
     parsed[0][1]["number"] = math.nextafter(value, math.inf)
     assert digest([row for _, row in parsed]) != digest(rows)
+
+
+def test_python_encoded_size_boundaries_match_historical_record_policy():
+    report = audit_record_bounds()
+    assert report["cases"] == 6138
+    assert report["difference_count"] == 0, report["differences"]
+
+
+def test_encoded_size_policy_is_explicit_and_rejects_unknown_policy():
+    body = b'{"records":[{"v":0.00001}]}'
+    assert native(body, max_record=11, record_encoding="python")[1][0][1] == {"v": 1e-5}
+    with pytest.raises(SourceRejected):
+        native(body, max_record=11)
+    with pytest.raises(SourceRejected, match="contract"):
+        native(body, record_encoding="unknown")
 
 
 def native(body, **changes):

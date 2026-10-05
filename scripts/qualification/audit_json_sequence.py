@@ -9,7 +9,7 @@ import random
 import struct
 from pathlib import Path
 
-from edgar_warehouse.control_contract import digest
+from edgar_warehouse.control_contract import canonical, digest
 from edgar_warehouse.mdm.clean.gleif_source import _BoundedReader, _json_records
 from edgar_warehouse.rules.source_engine import stream_json_array
 
@@ -73,11 +73,40 @@ def audit():
             "full_archive_qualification": False, "sec_requests": 0}
 
 
+def audit_record_bounds():
+    """Compare limits just below, at and above Python's encoded record size."""
+    differences, total = [], 0
+    for wrapper, body in cases():
+        try:
+            rows = list(_json_records(_BoundedReader(io.BytesIO(body), 1024**2, 65536), wrapper))
+        except Exception:
+            continue
+        if not rows:
+            continue
+        size = max(len(canonical(row).encode()) for row in rows)
+        for limit in (size - 1, size, size + 1):
+            total += 1
+            parsed = []
+            try:
+                stream_json_array(io.BytesIO(body), wrapper=wrapper,
+                    on_record=lambda row, n: parsed.append(row), max_bytes=1024**2,
+                    max_record=limit, max_records=100, min_integer=-(2**63 - 1), record_encoding="python")
+                accepted = True
+            except Exception:
+                accepted = False
+            if accepted != (limit >= size) or (accepted and digest(parsed) != digest(rows)):
+                differences.append({"body": body.decode(), "limit": limit, "encoded_bytes": size, "accepted": accepted})
+    return {"cases": total, "difference_count": len(differences), "differences": differences,
+            "record_encoding": "python", "comparison": "typed rows and encoded-size boundary acceptance",
+            "universal_equivalence": False, "full_archive_qualification": False}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     report = audit()
+    report["record_bounds"] = audit_record_bounds()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps({k: v for k, v in report.items() if k != "differences"}))
