@@ -18,8 +18,12 @@ def score(found: dict, expected: dict) -> list[tuple[bool, str]]:
             lines.append((False, f"part {name}: not found"))
             continue
         lines.append((p["class"] in want["class"], f"{name}: class {p['class']} (expected {' or '.join(want['class'])})"))
-        lines.append((set(p["record_key"]["columns"]) == set(want["key"]),
-                      f"{name}: key {p['record_key']['columns']} (expected {want['key']})"))
+        if "key" in want:
+            lines.append((set(p["record_key"]["columns"]) == set(want["key"]),
+                          f"{name}: key {p['record_key']['columns']} (expected {want['key']})"))
+        else:
+            lines.append((set(want["key_contains"]) <= set(p["record_key"]["columns"]),
+                          f"{name}: key {p['record_key']['columns']} (expected to contain {want['key_contains']})"))
         lines.append((p["confidence"] >= expected["min_confidence"] or p["class"] not in want["class"],
                       f"{name}: confidence {p['confidence']}"))
     rels = {(r["from"]["part"], tuple(r["from"]["columns"]), r["to"]["part"], tuple(r["to"]["columns"])): r
@@ -31,9 +35,17 @@ def score(found: dict, expected: dict) -> list[tuple[bool, str]]:
         lines.append((ok, f"link {fp}.{'+'.join(fc)} → {tp}.{'+'.join(tc)} {card}: {got}"))
     for h in expected.get("hierarchies", []):
         match = [x for x in found["hierarchies"] if x["part"] == h["part"] and x["evidence_kind"] in h["evidence"]
-                 and set(h["columns"]) <= {lv["column"] for lv in x["levels"]}]
+                 and set(h["columns"]) <= {lv["column"] for lv in x["levels"]}
+                 and x["type"] == h.get("type", x["type"])]
         lines.append((bool(match), f"hierarchy {h['part']} {' > '.join(reversed(h['columns']))}: "
                                    f"{match[0]['evidence_kind'] if match else 'not found'}"))
+    for name, column, family in expected.get("identifiers", []):
+        found_ids = {i["column"]: i for i in parts[name]["identifiers"]} if name in parts else {}
+        got = found_ids.get(column, {}).get("check_digit")
+        lines.append((got == family, f"identifier {name}.{column}: check digit {got} (expected {family})"))
+    for name, scan in expected.get("scale", {}).items():
+        got = parts[name]["scan"] if name in parts else None
+        lines.append((got == scan, f"scan of {name}: {got} (expected {scan})"))
     for name, cols in expected.get("code_lists", {}).items():
         listed = {c["column"] for c in parts[name]["code_lists"]} | {c["label_column"] for c in parts[name]["code_lists"]}
         missing = [c for c in cols if c not in listed]

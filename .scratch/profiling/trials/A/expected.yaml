@@ -1,0 +1,33 @@
+# The machine form of ANSWER-KEY.md (same content; the Markdown is the authority).
+# Child parts made from lists carry the designed key (parent key, _position).
+parts:
+  submissions: {class: [master], key: [cik]}
+  submissions.tickers: {class: [reference, master], key: [cik, _position]}
+  submissions.formerNames: {class: [metadata, master], key: [cik, _position]}
+  submissions.filings.recent: {class: [transaction], key: [accessionNumber]}
+  tickers: {class: [master, reference], key: [ticker]}
+  lei2: {class: [master], key: [LEI]}
+  rr: {class: [relationship], key: [StartNode.NodeID, EndNode.NodeID, RelationshipType]}
+  repex: {class: [metadata, transaction, unknown], key_contains: [LEI, ExceptionCategory]}
+relationships:
+  - [rr, [StartNode.NodeID], lei2, [LEI], "N:1"]
+  - [rr, [EndNode.NodeID], lei2, [LEI], "N:1"]
+  - [repex, [LEI], lei2, [LEI], "N:1"]
+  - [tickers, [cik], submissions, [cik], "N:1"]
+hierarchies:
+  - {part: rr, columns: [], evidence: [parent_column], type: master_data}
+identifiers:
+  - [lei2, LEI, "mod 97-10"]
+code_lists:
+  submissions: [entityType, sic, stateOfIncorporation, category]
+  submissions.filings.recent: [form, act]
+  tickers: [exchange]
+  lei2: [Entity.LegalJurisdiction, Entity.EntityCategory, Entity.EntityStatus, Registration.RegistrationStatus, Entity.LegalForm.EntityLegalFormCode]
+  rr: [RelationshipType]
+  repex: [ExceptionCategory, ExceptionReason]
+no_personal: [lei2, rr, repex]
+time:
+  - [lei2, as_at, [Registration.LastUpdateDate]]
+scale:
+  lei2: sampled
+min_confidence: 0.6
