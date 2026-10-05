@@ -59,6 +59,12 @@ def installed(tmp_path_factory):
     assert done.returncode == 0, done.stderr
     python = root / "tools" / "edgartools-data" / "bin" / "python"
     assert (root / "bin" / "edgar-warehouse").is_file() and python.is_file()
+    retired = subprocess.run([str(python), "-I", "-c",
+                              "import importlib.util; "
+                              "assert importlib.util.find_spec('edgar_warehouse.loaders') is None; "
+                              "assert importlib.util.find_spec('edgar_warehouse.silver_landing_store') is None"],
+                             capture_output=True, text=True)
+    assert retired.returncode == 0, retired.stderr
     return python, root
 
 

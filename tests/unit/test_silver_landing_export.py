@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from edgar_warehouse import silver_schema
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_silver_landing_store import SilverLandingStore
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
 
 

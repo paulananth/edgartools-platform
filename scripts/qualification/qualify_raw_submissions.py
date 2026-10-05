@@ -14,7 +14,7 @@ from pathlib import Path
 
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_company_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_company_loader
 from edgar_warehouse.mdm.clean.adapters import normalize, UnsupportedRecord
 from edgar_warehouse.mdm.clean.store import canonical, digest
 

@@ -1,19 +1,9 @@
-"""Landing-zone export buffer for Snowflake-native silver.
+"""Landing-zone row buffer for immutable Snowflake export artifacts.
 
-silver-snowflake-migration map, Ticket 01: the landing zone is fed by
-exactly the rows a command parses and hands to `SilverLandingStore`'s
-merge_*/upsert_* methods this run -- never a re-read of earlier content,
-which would defeat "append-only" the moment two runs overlap.
-`SilverLandingStore` is the single chokepoint every one of those methods
-lives on. Each writer records into this buffer through
-`SilverLandingStore._record_landing_passthrough`, which adds the write-time
-columns the landing schema carries (silver-merge-engine-migration Tickets
-02-06); the `track_landing_rows`/`track_landing_row` decorators that
-recorded the caller's raw rows were deleted with Ticket 06e, once no writer
-used them.
-
-Opt-in: `SilverLandingStore()` with no `landing_export` argument records
-nothing.
+Rows are accumulated explicitly and flushed to Parquet plus a run manifest.
+The historical SilverLandingStore parser/writer API is retired from runtime;
+its frozen test oracle still uses this buffer to verify prior landed evidence.
+This buffer does not parse SEC documents or classify filers.
 """
 from __future__ import annotations
 

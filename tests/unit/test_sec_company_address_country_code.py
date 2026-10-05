@@ -12,9 +12,9 @@ import re
 from pathlib import Path
 
 from edgar_warehouse import silver_schema
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_address_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_address_loader
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_silver_landing_store import SilverLandingStore
 
 REPO = Path(__file__).resolve().parents[2]
 

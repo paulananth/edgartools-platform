@@ -8,7 +8,7 @@ per-file merge order."""
 
 from __future__ import annotations
 
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_silver_landing_store import SilverLandingStore
 
 
 def _filing_entry(accession_number, form, **overrides):

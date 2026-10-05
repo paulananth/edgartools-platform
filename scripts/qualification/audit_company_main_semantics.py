@@ -7,7 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.loaders.bronze_submission_extractors import (
+from tests.support.retired_submission_loaders.bronze_submission_extractors import (
     stage_address_loader, stage_company_loader, stage_recent_filing_loader,
 )
 from edgar_warehouse.mdm.clean.company_source import business_address

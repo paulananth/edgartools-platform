@@ -21,7 +21,7 @@ from pathlib import Path
 
 import ijson
 
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_company_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_company_loader
 
 BRONZE = {
     "0000320193": "cik=320193/main/2026/07/02/CIK0000320193.json",

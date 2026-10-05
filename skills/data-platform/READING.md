@@ -309,7 +309,7 @@ unchanged. Root document iteration is written `each: .`.
 
 SEC filing text/calendar qualification does not cover numeric flags,
 classification, Company or Person mastering, reference joins or complete
-assertion/failure equivalence. The old loaders remain until those are proved.
+assertion/failure equivalence. The unused historical landing API and loader modules are retired from the runtime; frozen oracles under `tests/support` remain for qualification. Active MDM preparation, provenance and full population/recovery still need replacement and proof.
 
 `basic_suffix` defaults to `reject`. Calendar-only `basic_suffix: ignore`
 reproduces the Python 3.12 loader exception: after prefix truncation, a

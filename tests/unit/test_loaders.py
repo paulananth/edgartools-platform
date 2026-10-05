@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from edgar_warehouse.loaders import (
+from tests.support.retired_submission_loaders import (
     stage_company_loader,
 )
 

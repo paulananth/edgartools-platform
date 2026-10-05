@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.loaders.common import parse_date
+from tests.support.retired_submission_loaders.common import parse_date
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
@@ -19,7 +19,7 @@ from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 def test_configured_calendar_dates_match_old_loader(value):
     # The old filing loader calls safe_str before parse_date; numeric inputs
     # therefore become strings. Input scalar conversion remains the engine's.
-    from edgar_warehouse.loaders.common import safe_str
+    from tests.support.retired_submission_loaders.common import safe_str
     contract = files.load(Path(__file__).parent / 'fixtures' / 'filing-text-calendar.yaml')
     payload = {'filings': {'recent': {'accessionNumber': ['a'], 'filingDate': [value]}}}
     result = SourceEngine(contract).read(json.dumps(payload).encode())

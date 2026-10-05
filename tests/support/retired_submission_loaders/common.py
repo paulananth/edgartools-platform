@@ -1,3 +1,4 @@
+# Frozen historical oracle from 1e8146e7; test/qualification use only.
 """Shared loader helpers."""
 
 from __future__ import annotations

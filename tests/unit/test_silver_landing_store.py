@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_silver_landing_store import SilverLandingStore
 
 
 @pytest.fixture()

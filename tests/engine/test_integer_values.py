@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.loaders.common import safe_int
+from tests.support.retired_submission_loaders.common import safe_int
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
@@ -75,7 +75,7 @@ def test_existing_number_text_and_custom_boolean_return_behavior_stays_unchanged
 def test_complete_filing_content_worker_and_verifier_without_source_loader(tmp_path):
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
     from edgar_warehouse.workers import source_read
-    from edgar_warehouse.loaders.bronze_submission_extractors import stage_recent_filing_loader
+    from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
     fixture = Path(__file__).parent / 'fixtures' / 'filing-content.yaml'
     payload = {'filings': {'recent': {'accessionNumber': ['a', 'b'], 'size': [9007199254740993],
         'isXBRL': [0.9, True], 'isInlineXBRL': ['bad'], 'filingDate': ['2024-02-29T00:00:00Z']}}}

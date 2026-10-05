@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from datetime import date, datetime
 
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_recent_filing_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
 

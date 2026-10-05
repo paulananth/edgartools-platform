@@ -9,7 +9,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import Blocked
-from edgar_warehouse.loaders.bronze_submission_extractors import stage_recent_filing_loader
+from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import mdm_prepare, source_read

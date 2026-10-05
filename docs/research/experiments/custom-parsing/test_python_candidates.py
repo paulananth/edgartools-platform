@@ -12,7 +12,7 @@ import zipfile
 
 import pytest
 
-from edgar_warehouse.loaders.bronze_submission_extractors import (
+from tests.support.retired_submission_loaders.bronze_submission_extractors import (
     OWNERSHIP_FORMS, is_individual_filer, stage_company_loader,
     stage_recent_filing_loader,
 )

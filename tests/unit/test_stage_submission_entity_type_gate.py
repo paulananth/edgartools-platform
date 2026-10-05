@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import pytest
 
-from edgar_warehouse.loaders.bronze_submission_extractors import is_individual_filer
+from tests.support.retired_submission_loaders.bronze_submission_extractors import is_individual_filer
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer
-from edgar_warehouse.silver_landing_store import SilverLandingStore
+from tests.support.retired_silver_landing_store import SilverLandingStore
 
 
 def _payload(entity_type, forms, *, sic="", tickers=()):

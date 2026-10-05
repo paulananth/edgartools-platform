@@ -1,3 +1,4 @@
+# Frozen historical oracle from 1e8146e7; test/qualification use only.
 """Loaders for SEC submissions JSON payloads."""
 
 from __future__ import annotations
@@ -5,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from edgar_warehouse.loaders.common import parse_date, safe_int, safe_str
+from tests.support.retired_submission_loaders.common import parse_date, safe_int, safe_str
 
 
 def filter_rows_by_min_filing_date(

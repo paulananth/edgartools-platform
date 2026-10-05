@@ -1,3 +1,4 @@
+# Frozen historical landing API from 1e8146e7; no executable consumers.
 """Store-free silver write path (silver-merge-engine-migration Tickets 14, 17).
 
 Every silver writer records its rows to the Snowflake landing zone through
@@ -185,7 +186,7 @@ class SilverLandingStore:
     ) -> dict[str, Any]:
         """Stage one company's full submission: run loaders, record the company
         tables for landing, merge the filing rows locally."""
-        from edgar_warehouse.loaders.bronze_submission_extractors import (
+        from tests.support.retired_submission_loaders.bronze_submission_extractors import (
             filter_rows_by_min_filing_date,
             is_individual_filer,
             stage_address_loader,
