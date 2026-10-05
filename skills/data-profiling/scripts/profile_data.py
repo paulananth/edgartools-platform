@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import signal
 import sys
 import tempfile
 from pathlib import Path
@@ -23,6 +24,10 @@ import yaml  # noqa: E402
 from profiling import drift, inputs, report, run  # noqa: E402
 
 
+def _stop(signum, _frame) -> None:
+    raise SystemExit(f"stopped by signal {signum}; working copy removed")
+
+
 class _work:
     """A private working folder for one run, removed afterwards, even on failure.
 
@@ -32,6 +37,9 @@ class _work:
 
     def __enter__(self) -> Path:
         self.path = Path(tempfile.mkdtemp(prefix="profiling-"))
+        # A stopped run (kill, closed terminal) still cleans up: the signal becomes an exit.
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, _stop)
         return self.path
 
     def __exit__(self, *_exc) -> None:

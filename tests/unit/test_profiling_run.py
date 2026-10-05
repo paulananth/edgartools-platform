@@ -143,3 +143,26 @@ def test_contact_details_are_personal_in_any_part():
     assert sensitivity.tag("support_email", ["a@b.co"], False)["sensitivity"] == "personal"
     assert sensitivity.tag("contact", ["a@b.co", "c@d.org"], False)["sensitivity"] == "personal"
     assert sensitivity.tag("street", ["1 Main"], False)["sensitivity"] == "none"
+
+
+def test_a_stopped_run_removes_its_working_copy(tmp_path):
+    import os
+    import signal
+    import subprocess
+    import time
+    big = tmp_path / "big.jsonl"
+    big.write_text("\n".join('{"k": %d}' % i for i in range(400_000)))
+    scripts = Path(__file__).resolve().parents[2] / "skills" / "data-profiling" / "scripts"
+    env = {**os.environ, "TMPDIR": str(tmp_path / "t")}
+    (tmp_path / "t").mkdir()
+    run_ = subprocess.Popen([sys.executable, "profile_data.py", "run", "--name", "x", "--input", f"b={big}",
+                             "--out", str(tmp_path / "o")], cwd=scripts, env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.monotonic() + 30
+    while not list((tmp_path / "t").glob("profiling-*")) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert list((tmp_path / "t").glob("profiling-*")), "the run never started"
+    run_.send_signal(signal.SIGTERM)
+    run_.wait(timeout=60)
+    assert run_.returncode != 0, "the run finished before the signal: nothing was tested"
+    assert not list((tmp_path / "t").glob("profiling-*"))
