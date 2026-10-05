@@ -238,6 +238,44 @@ _Avoid_: Calculated Ultimate Parent, ownership and accounting consolidation trea
 The terminal parent derived from accepted hierarchy edges for a specified scope, time and derivation rule, with the supporting path retained.
 _Avoid_: Reported Ultimate Parent, a result from an incomplete or cyclic hierarchy
 
+### Data classes, reference data and agent context
+
+**Master Data**:
+Data about the things a business deals with, each with its own identity and lifecycle, which grows with the business and is mastered in MDM.
+_Avoid_: Any table with a key, reference data, the events about those things
+
+**Reference Data**:
+The values that give other data its meaning: a small, near-constant code set, changed only as a whole new approved version.
+_Avoid_: Master data, a lookup table copied into a source without a version, free-text labels
+
+**Transaction Data**:
+Facts and events about master data over time, which only grow, are kept in silver, and point at their masters.
+_Avoid_: Master data, a snapshot of master attributes
+
+**Code Set**:
+One named list of codes in RDM, with labels, definitions, synonyms, valid dates and versions draft, approved and published.
+_Avoid_: An enum in code, a YAML list without a version
+
+**Crosswalk**:
+A row mapping a code in one code set version to a code in another, with its match type: exact, close, broad or narrow.
+_Avoid_: An unversioned mapping, an implied "same" without a match type
+
+**Reference Hierarchy**:
+The grouping of codes inside one code set, one parent code per code, with named levels and a path written when the version is published.
+_Avoid_: Master Data Hierarchy, a hierarchy inferred once and never documented
+
+**Master Data Hierarchy**:
+A chain of MDM relationships between master entities, such as parent and ultimate parent, each with its dates.
+_Avoid_: Reference Hierarchy, a parent code
+
+**Profiling Findings**:
+The approved record of what a data set holds: each part's class, kind, key, identifiers, relationships, hierarchies, time model, sensitivity, quality defects and silver spec, with the evidence for each.
+_Avoid_: A guess without evidence, an unapproved findings file used for onboarding
+
+**Agent Context**:
+The bounded, self-explaining answer an agent reads about an entity, code, relationship or silver table, carrying its definition, version, valid dates and provenance.
+_Avoid_: A raw table dump, an answer without its version or source
+
 ### Snowflake operational roles
 
 **Deployer Role**:

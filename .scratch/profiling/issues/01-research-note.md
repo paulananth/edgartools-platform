@@ -20,4 +20,4 @@ Type: research. Phase: A. Blocked by: 00. Map: [map](../map.md). Plan: [plan](..
 - [x] 2–3 open-licence candidates for trial B. Verified: section in research/01-classify-and-profile.md with cited sources; 2026-10-05 06:45 ET
 - [x] Reuse .scratch/data-quality/research/01-datakitchen-testgen-observability.md. Verified: section in research/01-classify-and-profile.md with cited sources; 2026-10-05 06:45 ET
 - [x] Operator rulings on the note's open points recorded (600 pairs, sensitive personal, Contoso V2); 2026-10-05 06:45 ET
-- [ ] Operator approves the note
+- [x] Operator approves the note. Operator: "merge 824"; PR #824 merged as e9c0032b, all 6 checks passed; 2026-10-05 06:51 ET
