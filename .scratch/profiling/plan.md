@@ -56,7 +56,7 @@ What exists today:
    - Below 5 GB, every test is a full scan.
    - Above 5 GB, profiling samples, then runs full passes on its candidates.
    - It states the time before any long pass.
-8. **Sensitive data.** Fields are tagged personal, sensitive personal or none, and their samples are masked.
+8. **Sensitive data.** Fields are tagged personal, sensitive personal or none, and their samples are masked. Sensitive personal = GDPR Article 9 categories, government-issued personal IDs, and financial account and card numbers (operator, 2026-10-05).
 9. **Time.** For each part, profiling reports: snapshot or changes only, date roles, versions per key and refresh rate. Where the data needs it, it designs an **as of** and **as at** time and a known time series.
 10. **Parseable first, never guess.** Nested lists become child tables. A finding without evidence is reported as "unknown". Unstructured content is listed, then handled under decision 31.
 11. **Hierarchies are inferred separately for each source.** Four kinds of evidence count:
@@ -116,7 +116,7 @@ What exists today:
 
 26. **Name-based matching for any master kind that carries names, gated by proof.**
     - Each rule pairs a normalized name with supporting attributes that profiling chooses for that kind.
-    - Approval needs precision of at least 99.5% on at least 500 labelled pairs per rule. Recall is reported.
+    - Approval needs at least 600 labelled pairs per rule, with the 95% lower confidence bound on precision at least 99.5% (operator, 2026-10-05). Recall is reported.
     - A match below the bar goes to the steward review queue.
     - The rules are written in refining-rules.
 27. **Unstructured extraction is accepted only when it is certain.** A value counts only if a deterministic parser read it from a structure (an HTML table, an iXBRL tag, a labelled section), or if it is cross-checked against structured data or a second, independent extraction. Everything else stays "candidate, unconfirmed", with its location, and never merges. The order is HTML and iXBRL first, then PDF and free text.
@@ -171,7 +171,7 @@ Each row is its own ticket, branch, worktree and PR. Each gets a GoF consult bef
 | 5 | **Agent context views** and the `edgar-warehouse context` command | For any kind, code set and relationship, lookup, `--search`, `--as-of` and `--hops` each return JSON of at most 8 KB with definition, path, version and provenance. |
 | 6 | **Silver writer** (ticket 05), driven by profiling's silver specs | A spec lands typed rows, each with its source key and MDM id. |
 | 7 | **Readers and custom parsing steps** for each captured feed with no reader, ordered by the findings | Each passes its tests on the cohort and reaches onboarding's test step. |
-| 7b | **Name-based matching** | Each rule shows precision of at least 99.5% on at least 500 labelled pairs. Matches below the bar are queued for stewards. |
+| 7b | **Name-based matching** | Each rule's 95% lower confidence bound on precision is at least 99.5%, on at least 600 labelled pairs. Matches below the bar are queued for stewards. |
 | 7c | **Unstructured extraction** | Only deterministic or cross-checked values are accepted. Unconfirmed candidates keep their location and never merge. |
 | 8 | **Recreation proof** | Every line of `DIFF.md` is matched or explained, and the operator accepts it. **This ends the program.** |
 
@@ -180,7 +180,7 @@ These rows may run side by side, at most 2 at a time: in phase A, 1c with 3, and
 ## Gap rulings (2026-10-04)
 
 34. **Labelling.** For each name rule, an agent pre-labels the pairs using only certain evidence, such as a shared issued identifier or cross-reference id. Pairs it cannot settle go to the operator, and the operator spot-checks 50 of the agent's labels. If any spot-check label is wrong, the whole set is relabelled.
-35. **Trial B's data set** is chosen from 2–3 open-licence candidates that the research note proposes. Its answer key is written before the skill sees it.
+35. **Trial B's data set is Contoso V2** (MIT), chosen by the operator 2026-10-05 from the research note's candidates. Its answer key is written before the skill sees it.
 36. **Silver for the trials and the proof** is a `silver` schema in a disposable local PG16. The writer goes through one small sink interface, so a Snowflake sink can follow as its own ticket. The spec format does not depend on the store.
 37. **Production hosting and deployment** are a separate, later program with its own map. This program ends at the accepted local recreation proof.
 38. **Row 7's size** is set after row 1b. Profiling's inventory lists each captured feed with no reader, and each one becomes a checklist part in the row 7 ticket, with its own branch and PR.

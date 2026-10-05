@@ -15,8 +15,8 @@ Any data set can be profiled, classified into master, reference, relationship, t
 
 | # | Ticket | Phase | Blocked by | Status |
 |---|---|---|---|---|
-| 00 | [Ownership and overlap guard](issues/00-ownership-and-overlap-guard.md) | A | — | in progress |
-| 01 | [Research note: classify, profile, RDM, agent context](issues/01-research-note.md) | A | 00 | open |
+| 00 | [Ownership and overlap guard](issues/00-ownership-and-overlap-guard.md) | A | — | done (#823) |
+| 01 | [Research note: classify, profile, RDM, agent context](issues/01-research-note.md) | A | 00 | in progress |
 | 01a | [Specs: RDM, agent context, silver table spec, findings schema](issues/01a-specs.md) | A | 01 | open |
 | 01b | [data-profiling skill and trials A and B](issues/01b-data-profiling-skill-and-trials-a-and-b.md) | A | 01a | open |
 | 01c | [data-quality skill](issues/01c-data-quality-skill.md) | A | 01b | open |
