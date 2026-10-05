@@ -1,0 +1,43 @@
+- [x] submissions: class master (expected master)
+- [x] submissions: key ['cik'] (expected ['cik'])
+- [x] submissions: confidence 0.833
+- [x] submissions.tickers: class master (expected reference or master)
+- [ ] submissions.tickers: key ['cik', 'value'] (expected ['cik', '_position'])
+- [x] submissions.tickers: confidence 0.833
+- [x] submissions.formerNames: class master (expected metadata or master)
+- [x] submissions.formerNames: key ['cik', '_position'] (expected ['cik', '_position'])
+- [x] submissions.formerNames: confidence 0.833
+- [x] submissions.filings.recent: class transaction (expected transaction)
+- [ ] submissions.filings.recent: key ['cik', 'accessionNumber'] (expected ['accessionNumber'])
+- [x] submissions.filings.recent: confidence 0.833
+- [x] tickers: class master (expected master or reference)
+- [x] tickers: key ['ticker'] (expected ['ticker'])
+- [x] tickers: confidence 0.833
+- [x] lei2: class master (expected master)
+- [x] lei2: key ['LEI'] (expected ['LEI'])
+- [x] lei2: confidence 1.0
+- [x] rr: class relationship (expected relationship)
+- [ ] rr: key ['RelationshipRecord.Relationship.StartNode.NodeID', 'RelationshipRecord.Relationship.RelationshipType'] (expected ['StartNode.NodeID', 'EndNode.NodeID', 'RelationshipType'])
+- [x] rr: confidence 1.0
+- [x] repex: class transaction (expected metadata or transaction or unknown)
+- [x] repex: key ['LEI', 'ExceptionCategory'] (expected to contain ['LEI', 'ExceptionCategory'])
+- [x] repex: confidence 0.833
+- [x] link rr.StartNode.NodeID → lei2.LEI N:1: inclusion 1.0, N:1, together
+- [x] link rr.EndNode.NodeID → lei2.LEI N:1: inclusion 0.999936, N:1, together
+- [x] link repex.LEI → lei2.LEI N:1: inclusion 1.0, N:1, separate
+- [x] link tickers.cik → submissions.cik N:1: inclusion 0.908011, N:1, separate
+- [x] hierarchy rr : parent_column
+- [x] identifier lei2.LEI: check digit mod 97-10 (expected mod 97-10)
+- [x] scan of lei2: sampled (expected sampled)
+- [x] code lists of submissions: all found
+- [x] code lists of submissions.filings.recent: all found
+- [x] code lists of tickers: all found
+- [x] code lists of lei2: all found
+- [x] code lists of rr: all found
+- [x] code lists of repex: all found
+- [x] no personal in lei2: none tagged
+- [x] no personal in rr: none tagged
+- [x] no personal in repex: none tagged
+- [x] time lei2 as_at: ['Registration.LastUpdateDate'] (expected ['Registration.LastUpdateDate'])
+
+38 of 41 lines match.

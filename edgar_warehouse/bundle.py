@@ -40,7 +40,7 @@ _COMMAND = re.compile(r"edgar-warehouse ([a-z][a-z-]*)((?:(?! \| )[^`\n])*)")
 _CHECKOUT_ONLY = re.compile(r"python -m edgar_warehouse|skills/[a-z-]+/scripts/")
 _LINK = re.compile(r"\]\(([^)#\s]+)")
 # Written in a skill with a fallback, and marked "not built" there.
-NOT_BUILT = {("rules", "profile"), ("rules", "check")}
+NOT_BUILT = {("rules", "check")}
 
 
 def _choices(parser: argparse.ArgumentParser) -> dict:

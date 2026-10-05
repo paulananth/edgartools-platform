@@ -1,0 +1,54 @@
+- [x] customer: class master (expected master)
+- [x] customer: key ['CustomerKey'] (expected ['CustomerKey'])
+- [x] customer: confidence 0.833
+- [x] product: class master (expected master)
+- [x] product: key ['ProductKey'] (expected ['ProductKey'])
+- [x] product: confidence 1.0
+- [x] store: class master (expected master)
+- [x] store: key ['StoreKey'] (expected ['StoreKey'])
+- [x] store: confidence 1.0
+- [x] date: class reference (expected reference)
+- [x] date: key ['Date'] (expected ['Date'])
+- [x] date: confidence 0.857
+- [x] currencyexchange: class transaction (expected transaction or reference)
+- [x] currencyexchange: key ['Date', 'FromCurrency', 'ToCurrency'] (expected ['Date', 'FromCurrency', 'ToCurrency'])
+- [x] currencyexchange: confidence 1.0
+- [x] orders: class transaction (expected transaction)
+- [x] orders: key ['OrderKey'] (expected ['OrderKey'])
+- [x] orders: confidence 0.833
+- [x] orderrows: class transaction (expected transaction)
+- [x] orderrows: key ['OrderKey', 'LineNumber'] (expected ['OrderKey', 'LineNumber'])
+- [x] orderrows: confidence 1.0
+- [x] sales: class transaction (expected transaction)
+- [x] sales: key ['OrderKey', 'LineNumber'] (expected ['OrderKey', 'LineNumber'])
+- [x] sales: confidence 0.833
+- [x] link orders.CustomerKey → customer.CustomerKey N:1: inclusion 1.0, N:1, separate
+- [x] link orders.StoreKey → store.StoreKey N:1: inclusion 1.0, N:1, separate
+- [x] link orders.OrderDate → date.Date N:1: inclusion 1.0, N:1, separate
+- [x] link orderrows.OrderKey → orders.OrderKey N:1: inclusion 1.0, N:1, separate
+- [x] link orderrows.ProductKey → product.ProductKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.CustomerKey → customer.CustomerKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.StoreKey → store.StoreKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.ProductKey → product.ProductKey N:1: inclusion 1.0, N:1, separate
+- [x] link sales.OrderKey+LineNumber → orderrows.OrderKey+LineNumber 1:1: inclusion 1.0, 1:1, separate
+- [x] hierarchy product CategoryKey > SubCategoryKey: code_nesting
+- [x] hierarchy date Year > YearQuarter > YearMonth: functional_dependency
+- [x] code lists of customer: all found
+- [x] code lists of product: all found
+- [x] code lists of store: all found
+- [x] code lists of orders: all found
+- [x] code lists of currencyexchange: all found
+- [x] personal in customer: all tagged
+- [x] no personal in product: none tagged
+- [x] no personal in store: none tagged
+- [x] no personal in date: none tagged
+- [x] no personal in currencyexchange: none tagged
+- [x] no personal in orders: none tagged
+- [x] no personal in orderrows: none tagged
+- [x] no personal in sales: none tagged
+- [x] time customer as_of: ['StartDT', 'EndDT'] (expected ['StartDT', 'EndDT'])
+- [x] time orders event_time: ['OrderDate'] (expected ['OrderDate'])
+- [x] time sales event_time: ['OrderDate'] (expected ['OrderDate'])
+- [x] time currencyexchange series: ['FromCurrency', 'ToCurrency', 'Date'] (expected ['FromCurrency', 'ToCurrency', 'Date'])
+
+52 of 52 lines match.

@@ -17,8 +17,8 @@ Any data set can be profiled, classified into master, reference, relationship, t
 |---|---|---|---|---|
 | 00 | [Ownership and overlap guard](issues/00-ownership-and-overlap-guard.md) | A | — | done (#823) |
 | 01 | [Research note: classify, profile, RDM, agent context](issues/01-research-note.md) | A | 00 | done (#824) |
-| 01a | [Specs: RDM, agent context, silver table spec, findings schema](issues/01a-specs.md) | A | 01 | in progress |
-| 01b | [data-profiling skill and trials A and B](issues/01b-data-profiling-skill-and-trials-a-and-b.md) | A | 01a | open |
+| 01a | [Specs: RDM, agent context, silver table spec, findings schema](issues/01a-specs.md) | A | 01 | done (#825) |
+| 01b | [data-profiling skill and trials A and B](issues/01b-data-profiling-skill-and-trials-a-and-b.md) | A | 01a | in review (#831) |
 | 01c | [data-quality skill](issues/01c-data-quality-skill.md) | A | 01b | open |
 | 02 | [RDM database, publish, MDM pin, migrate reference YAML](issues/02-rdm-database.md) | B | 01a, Codex retirement merged | open |
 | 03 | [MDM cross-reference table](issues/03-mdm-cross-reference-table.md) | A | 01a | open |

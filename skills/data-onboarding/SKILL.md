@@ -1,6 +1,6 @@
 ---
 name: data-onboarding
-description: Bring a NEW data feed or a NEW domain (for example Person) into Clean MDM and silver, starting from its captured files. Identify the feed, profile it, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
+description: Bring a NEW data feed or a NEW domain (for example Person) into Clean MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
 ---
 
 # Data Onboarding
@@ -110,9 +110,34 @@ The operator reads it, and it is how this skill gets fixed.
 
 ## Modes, in order
 
-A new feed runs **identify → profile → map → quality → metadata → test →
-approve → switch-on**. Set up the Rules Database first if it is not there
-(**init**).
+A new data set runs **discover → plan-parts**, then each part runs
+**identify → profile → map → quality → metadata → test → approve →
+switch-on**. Set up the Rules Database first if it is not there (**init**).
+
+### discover: profile the whole data set first
+
+Use the [data-profiling](../data-profiling/SKILL.md) skill on every file or
+table of the data set, unless approved findings for these same copies already
+exist (`approval.status: approved` in its `findings.yaml`, and the same input
+files). It says what each part is (master, reference, relationship,
+transaction or metadata), its record key, its links, code lists, hierarchies,
+time roles and personal columns, with evidence. Its questions and its
+approval are the operator's, one at a time. Do not go on without approved
+findings.
+
+**Output:** the path of the approved `findings.yaml`, in the log.
+
+### plan-parts: one onboarding per part, in dependency order
+
+From the approved findings, list one onboarding per part, in this order:
+1. reference parts (code sets for RDM; until RDM is built, log them);
+2. master parts, each with the relationships marked `onboard: together`;
+3. transaction parts and the relationships marked `separate` (silver target).
+
+Metadata parts go to Bookkeeping, not here. Show the list to the operator,
+then take the first part through **identify**.
+
+**Output:** the ordered list of parts, in the log.
 
 ### init: create the Rules Database schema
 
@@ -184,43 +209,22 @@ never unload over the repo's `rules/`.
 **Output:** a line in the log with the name, the source code(s), the family,
 and whether it is a new domain.
 
-### profile: learn the files' shape
+### profile: read the part's findings
 
-`rules profile` is **not built yet**. Profile by hand, and log the gap:
-1. Write a short script in your scratchpad that streams the files.
-2. Under about 100 MB, make one full pass. Above that, profile a bounded
-   sample first: records from the start, the middle and the end of each
-   file (files are often sorted).
-3. Make a full pass only for a count that decides something. Time the
-   sample first, and say how long the full pass will take before you start
-   it.
-4. A file inside a zip is one compressed stream. Stream it with Python's
-   `zipfile` (much faster than `unzip -p`). When a JSON pass is too slow,
-   count with a line-based pass over the file's fixed layout, checked
-   against the JSON pass on a slice.
+The approved `findings.yaml` (from **discover**) is the profile. For this
+part, take:
+- `record_key`: the key, and whether it was found or designed (a designed
+  key carries its rule and the operator's answer);
+- `identifiers`: the cross-reference proposals and check-digit families;
+- `columns`: types, fill, distinct counts, masked samples, `sensitivity`;
+- `code_lists`, `time` and the part's `relationships`;
+- `quality`: defects found while profiling, for **quality**.
 
-For each record type, find:
-- each path: its types, how often it is filled, its distinct count and
-  samples;
-- candidate record keys (unique and always filled);
-- identifier-shaped values. An LEI is 20 characters and passes mod 97; a
-  CIK is up to 10 digits. Say which you checked and how;
-- repeated groups, and keys that point at other records (candidate
-  relationships);
-- names shaped like organisations or like people, dates and addresses;
-- placeholder values for "none" (`000000000`, the text `NULL`, `8888`).
-  Log each one.
+Ask only what profiling cannot know: which MDM field each column fills,
+which source wins a field, and the `on_fail` of each check. A defect always
+blocks; do not ask whether it does.
 
-A file may hold several record types: profile each separately. A table
-stored as parallel arrays (one list per column) must be zipped into rows
-first. When the reader accepts JSON and XML, check each list path in both:
-XML often writes a list of one as a single object.
-
-Count every defect (a failed check digit, a missing key, a malformed
-record). A defect always blocks; do not ask whether it does. Log the counts
-for a reader ticket.
-
-**Output:** the profile in your scratchpad, and its summary in the log.
+**Output:** the part's findings path and its summary, in the log.
 
 ### map: write the Dataset Contract
 
@@ -545,7 +549,6 @@ Either way, write it in the log.
 
 | Command | State | What to do | Built by |
 |---|---|---|---|
-| `rules profile` | not built | Profile by hand (**profile**) | rules-skill ticket 06 |
 | `rules check` | not built | Dry run by hand (**test**) | rules-skill ticket 03 |
 | Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | rules-skill ticket 04 |
 | General silver writer | not built | Onboard the MDM target only (**Two targets**) | rules-skill ticket 05 |
