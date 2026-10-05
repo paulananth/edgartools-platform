@@ -163,3 +163,39 @@ def test_spill_files_are_removed_once_loaded(con, tmp_path):
     f.write_text("\n".join(json.dumps({"k": i}) for i in range(10)))
     inputs.register(con, "r", str(f), tmp_path / "w")
     assert not list((tmp_path / "w").glob("*.gz"))
+
+
+def test_a_date_column_that_fails_to_load_is_loaded_as_text(con, tmp_path):
+    # DuckDB fixes one format per date column; on a real 487,721-record file a
+    # later value with milliseconds failed the load. Drive that failure here.
+    f = tmp_path / "m.jsonl"
+    f.write_text("\n".join(json.dumps({"k": i, "ended": "2022-03-14"}) for i in range(5)))
+
+    class FailsFirstLoad:
+        def __init__(self, inner):
+            self.inner, self.failed = inner, False
+
+        def execute(self, sql, *args):
+            if sql.startswith("CREATE TABLE") and "columns=" not in sql and not self.failed:
+                self.failed = True
+                raise duckdb.InvalidInputException("Could not parse string according to format specifier")
+            return self.inner.execute(sql, *args)
+
+    inputs._load_json_lines(FailsFirstLoad(con), "m", f)
+    assert con.execute('SELECT typeof(any_value("ended")), typeof(any_value(k)), count(*) FROM m').fetchone() == (
+        "VARCHAR", "BIGINT", 5)
+
+
+def test_a_list_of_one_written_as_an_object_joins_its_list(con, tmp_path):
+    f = tmp_path / "x.json"
+    f.write_text(json.dumps([
+        {"id": 1, "periods": {"period": [{"start": "2020", "end": "2021"}, {"start": "2022", "end": None}]}},
+        {"id": 2, "periods": {"period": {"start": "2019", "end": "2020"}}},
+        {"id": 3},
+    ]))
+    parts = {p.name for p in inputs.register(con, "x", str(f), tmp_path / "w")}
+    assert "x.periods.period" in parts
+    assert not [c for (c, *_) in con.execute("DESCRIBE x").fetchall() if c.startswith("periods.")]
+    assert con.execute('SELECT _parent_row, _position, start FROM "x.periods.period" ORDER BY 1, 2').fetchall() == [
+        (0, 0, "2020"), (0, 1, "2022"), (1, 0, "2019")]
+    assert con.execute('SELECT count(DISTINCT _row) FROM "x.periods.period"').fetchone()[0] == 3

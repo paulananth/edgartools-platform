@@ -403,11 +403,68 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     spill()
     parts = []
     for part, path in sorted(files.items()):
-        con.execute(f"CREATE TABLE {sql_name(part)} AS SELECT * FROM read_json({sql_text(str(path))}, "
-                    "format='newline_delimited', sample_size=-1, union_by_name=true)")
+        _load_json_lines(con, part, path)
         path.unlink()
+    for part in sorted(files, key=lambda n: -n.count(".")):  # deepest first
+        _fold_single_items(con, part)
         parts.append(Part(part, "", "", 0, scan=scan, parent=part.rsplit(".", 1)[0] if part != name else None))
     return parts
+
+
+def _load_json_lines(con, part: str, path: Path) -> None:
+    """Load flattened rows with types from a full read.
+
+    DuckDB fixes one format per date column; if a later value has another
+    format (with or without milliseconds), that column is loaded as text and the
+    profile judges its shape instead.
+    """
+    source = f"read_json({sql_text(str(path))}, format='newline_delimited', sample_size=-1, union_by_name=true"
+    try:
+        con.execute(f"CREATE TABLE {sql_name(part)} AS SELECT * FROM {source})")
+    except duckdb.InvalidInputException:
+        described = con.execute(f"DESCRIBE SELECT * FROM {source})").fetchall()
+        types = {name: ("VARCHAR" if kind in {"DATE", "TIME", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"} else kind)
+                 for name, kind, *_ in described}
+        columns = "{" + ", ".join(f"{sql_text(n)}: {sql_text(t)}" for n, t in types.items()) + "}"
+        con.execute(f"CREATE TABLE {sql_name(part)} AS SELECT * FROM {source}, columns={columns})")
+
+
+def _fold_single_items(con, child: str) -> None:
+    """A list of one written as a single object (XML read as JSON often does this).
+
+    Where the parent holds dotted columns `<list>.<field>` for the same list
+    that became this child part, those rows move into the child as items at
+    position 0, and the dotted columns are dropped, so every item is in one place.
+    """
+    if "." not in child:
+        return
+    parent, path = child.rsplit(".", 1)
+    while not _exists(con, parent) and "." in parent:  # the list may sit inside a nested object
+        parent, path = parent.rsplit(".", 1)[0], f"{parent.rsplit('.', 1)[1]}.{path}"
+    if not _exists(con, parent):
+        return
+    columns = {r[0]: r[1] for r in con.execute(f"DESCRIBE {sql_name(parent)}").fetchall()}
+    dotted = {c[len(path) + 1:]: c for c in columns if c.startswith(f"{path}.")}
+    if not dotted:
+        return
+    child_columns = {r[0]: r[1] for r in con.execute(f"DESCRIBE {sql_name(child)}").fetchall()}
+    for field, source in dotted.items():
+        if field not in child_columns:
+            con.execute(f"ALTER TABLE {sql_name(child)} ADD COLUMN {sql_name(field)} {columns[source]}")
+            child_columns[field] = columns[source]
+    start = con.execute(f"SELECT coalesce(max({ROW}) + 1, 0) FROM {sql_name(child)}").fetchone()[0]
+    filled = " OR ".join(f"{sql_name(c)} IS NOT NULL" for c in dotted.values())
+    targets = ", ".join(sql_name(f) for f in dotted)
+    values = ", ".join(f"TRY_CAST({sql_name(c)} AS {child_columns[f]})" for f, c in dotted.items())
+    con.execute(f"INSERT INTO {sql_name(child)} ({ROW}, {PARENT}, {POSITION}, {targets}) "
+                f"SELECT {start} + row_number() OVER (ORDER BY {ROW}) - 1, {ROW}, 0, {values} "
+                f"FROM {sql_name(parent)} WHERE {filled}")
+    for source in dotted.values():
+        con.execute(f"ALTER TABLE {sql_name(parent)} DROP COLUMN {sql_name(source)}")
+
+
+def _exists(con, table: str) -> bool:
+    return bool(con.execute("SELECT count(*) FROM duckdb_tables() WHERE table_name = ?", [table]).fetchone()[0])
 
 
 def _attach_file(con, name: str, path: Path, fmt: str) -> list[Part]:
