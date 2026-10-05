@@ -60,7 +60,7 @@ pub(crate) fn rows(document: &El, each: &Value, maximum: usize, take: usize) -> 
         };
         if cells.len() != names.len() { return Err(Rejected::new("matrix_length", "Row length differs from header count")); }
         if index < take {
-            let mut record = El::default();
+            let mut record = El { json_keys: Some(names.iter().map(|name| (*name).to_string()).collect()), ..El::default() };
             for (name, cell) in names.iter().zip(cells) { record.children.insert((*name).into(), Child::One(cell.clone())); }
             output.push(record);
         }

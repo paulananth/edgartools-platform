@@ -56,3 +56,11 @@ fn configuration_rejects_unknown_keys_and_non_json() {
         assert!(Engine::from_yaml(&body, Steps::new()).is_err());
     }
 }
+
+#[test]
+fn whole_row_python_text_preserves_header_order() {
+    let contract = CONTRACT.replace("record: {value: {path: .}}", "record: {text: {path: ., coerce: python, trim: false}}");
+    let reading = Engine::from_yaml(&contract, Steps::new()).unwrap()
+        .read(br#"{"fields":["b","a"],"data":[[1,2]]}"#, &Lookups::new()).unwrap();
+    assert_eq!(reading.tables["rows"][0]["record"], Val::Str("{'b': 1, 'a': 2}".into()));
+}
