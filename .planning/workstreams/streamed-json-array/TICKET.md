@@ -55,7 +55,9 @@ ZIP-fix gate 37388045092 passes every suite on 19cd34b6. Subsequent malformed-re
 PR #829 merged as e5918e64 on 2026-10-05 19:43 ET after all six checks passed on f23b5cb0. Continue on `codex/partitioned-reading-consumers-20261005`; the full parent goal remains incomplete.
 
 - [x] Authenticate partitioned readings and preserve original artifact/context identity through combination and MDM batching — 2026-10-05 19:48 ET, 76 affected cases pass, including 1,005-row boundary equivalence, metadata/hash faults and aggregate byte/row bounds; both scoped review axes inspected the implementation.
-- [ ] Qualify installed stream→combine→prepare, immutable retry, and restricted PostgreSQL 16 stream→prepare→merge with independent verifiers.
+- [x] Qualify installed stream→combine→prepare, immutable retry, and restricted PostgreSQL 16 stream→prepare→merge with independent verifiers — 2026-10-05 19:49 ET, two isolated installed cases pass in 147.27s on da4ab2bf, no skips; the input/output limit correction is undergoing an additional installed check.
 - [ ] Run the complete CI gate on the new committed branch; create the follow-up PR.
 
 Consumers reconstruct only selected tables within existing bounded input limits. This does not yet prove complete GLEIF archive adoption or the 6,414 Company / 3,052 CIK+LEI population gate.
+
+The complete non-installed engine run exposed input/output budget coupling: 364 cases passed and the existing manifest-output fault test failed at input authentication. Separate INPUT_BYTES and MANIFEST_BYTES restore its intended refusal stage; 28 raw-record/consumer regressions pass after the correction.
