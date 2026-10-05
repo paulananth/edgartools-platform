@@ -1,0 +1,95 @@
+{
+  "catalog_rows": 10391,
+  "catalog_sha256": "3deeeb7d9c34de0d61648d29f174e4fb71a374b1656d04642c9d16e39799932b",
+  "capture_manifest_sha256": "563ddbbb40f4fc56aba7be772d2058d7684046f3cb40ae59c453d305d076986f",
+  "companies": 5,
+  "exact_typed_catalog_rows": true,
+  "ranked_distinct_ticker_joins": true,
+  "elapsed_seconds": 20.69,
+  "publications": [
+    {
+      "cik": 320193,
+      "tickers": [
+        "AAPL"
+      ],
+      "main_sha256": "ea2aa552e984a29e920cf80e0827cf32b632563935f029b6ec9de7f4fa3c026d",
+      "combined_sha256": "f168254ab3667452703fe4f6912ea8e2237e58d2539e4cf9bece14daf3583e90",
+      "prepared_sha256": "49366d24e0e536df84bb34911f0e8452a24e5a3be2fcfca517da088e5f1c86b5"
+    },
+    {
+      "cik": 789019,
+      "tickers": [
+        "MSFT"
+      ],
+      "main_sha256": "432e216c5beb8daa0663f585a68c579ec30a9c06a32b08990a1b8d3dfc1e4c31",
+      "combined_sha256": "f53aee18142c7d74ed2e0dcb210a126d1028cf522f7199b383e4aca39a8388fc",
+      "prepared_sha256": "5dc76566d8351a3e9e4a74b3bf310f343729326f2fb3812e53b255c5e5b03611"
+    },
+    {
+      "cik": 1067983,
+      "tickers": [
+        "BRK-B",
+        "BRK-A"
+      ],
+      "main_sha256": "07bbae58a50e61190e0566c35f41fbb720d3d08f1c4a1b7ba3c8167b03e680ac",
+      "combined_sha256": "3913d0a206e5f5d988bf3ef2b728a40fcb23371e0b12c7fb6a92073354d81543",
+      "prepared_sha256": "ff2887f404eb4ea4ab01a45088f5596eaafe94218bb13b38d5dfcd4380021b7e"
+    },
+    {
+      "cik": 19617,
+      "tickers": [
+        "JPM",
+        "JPM-PC",
+        "JPM-PD",
+        "JPM-PJ",
+        "AMJB",
+        "JPM-PK",
+        "JPM-PL",
+        "JPM-PM",
+        "VYLD"
+      ],
+      "main_sha256": "7461f6cac3d03b245fc108056195adb3b7360f9a8eb6d7c728b9704bbcab83ff",
+      "combined_sha256": "b1414bb4f49a930860f1c4d2ee0bbc28bb3aea67cb319915371bc13adfede5f4",
+      "prepared_sha256": "af1597f07de1e622e54f620bbc2c7a95879c8b33de5ad0bbd5532557b9207a4c"
+    },
+    {
+      "cik": 1306965,
+      "tickers": [
+        "SHEL",
+        "RYDAF"
+      ],
+      "main_sha256": "27ec7ffcb456dfb031d66dafafe899856bc8cf8c77e6c9a23737c12b436904f2",
+      "combined_sha256": "c6eada6dbc52d3402de937546d7ace325ac4940203a534a2976542dcbeb33911",
+      "prepared_sha256": "01a0a79e8806f6221c006bc994a3400140c3a3ea70b548bd3016c11378fc8bc6"
+    }
+  ],
+  "execution_sha256s": {
+    "source_engine.py": "f7f79115bbd8129bc763f045535806bfcf33d5dc88e007e099528f7627fbd57e",
+    "steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    "source_contract.abi3.so": "2bb41d33918542ff1cd67e5a39a4e05225f410256bc8cb653df206aa57b64fd3",
+    "files.py": "9df6ba6bfea975594a0377ab2134f18b7ce8312424b43959312236ac3b37d97f",
+    "artifacts.py": "cad73a7ac647b681505961495ac4686c934a47935f68ade1acbb82ad4e3d1ccb",
+    "source_read.py": "3b74e62bc41036d30bb6cb8e45ff08b86f7c2ed1748916f76d10eabddaeecd8a",
+    "source_combine.py": "b04ef46c5fe1f7193b8970724bc5593dba03e7183c656bc57178c4e18603d9a2",
+    "control_contract.py": "c0bc2c794a2382041065fd7a8ec4c4ce6681fb4aaea1d4b78354729772a0d792",
+    "mdm_prepare.py": "93534a511ff55b1ccf9a71dc370cd097f345136c6201efa1fd1f65bd2aa284ac"
+  },
+  "contract_sha256s": {
+    "catalog": "5826c573f8030d08ee0576331bddb54a55aabb13fcb725e1fcc18b6b8fa7b6af",
+    "main": "b27cf9a16df0a09bd2e720ae4b4180bfb8a1461d020e86442456f30a85b42f6b"
+  },
+  "sec_requests": 0,
+  "producer_provenance_qualified": false,
+  "full_company_mastering": false,
+  "catalog_layout": "dictionary",
+  "catalog_receipt": {
+    "bucket": "edgartools-prod-bronze-690839588395",
+    "key": "warehouse/bronze/reference/sec/company_tickers/2026/04/17/company_tickers.json",
+    "version_id": "IGNtZjXtt9PIGqMg.YNilaF18CLPyASB",
+    "size": 793840,
+    "sha256": "3deeeb7d9c34de0d61648d29f174e4fb71a374b1656d04642c9d16e39799932b",
+    "path": "company_tickers.json"
+  },
+  "legacy_dictionary_catalog_qualified": true,
+  "universal_malformed_catalog_equivalence": false
+}

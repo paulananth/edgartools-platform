@@ -208,7 +208,7 @@ def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(insta
     assert [rows["bundle-1"]] == gleif and rows["bundle-2"] == json.loads(saved.stdout)["digest"] == gleif[0]
 
 
-@pytest.mark.parametrize('reading_mode', ['13f', 'company-main', 'company-page', 'company-catalog'])
+@pytest.mark.parametrize('reading_mode', ['13f', 'company-main', 'company-page', 'company-catalog', 'company-dictionary'])
 def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_path, reading_mode):
     python, root = installed
     store = Artifacts()
@@ -239,11 +239,13 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
         context = store.put(tmp_path.as_uri(), {'version': 1, 'input': raw, 'values': {
             'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
-    if reading_mode == 'company-catalog':
+    if reading_mode in ('company-catalog', 'company-dictionary'):
         probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.submissions.company/catalog.yaml")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
-        raw = store.put_bytes((tmp_path / 'catalog.json').as_uri(), b'{"fields":["ticker","exchange","cik"],"data":[["A","NYSE",1],["A-B",null,1]]}')
+        payload = (b'{"fields":["ticker","exchange","cik"],"data":[["A","NYSE",1],["A-B",null,1]]}'
+                   if reading_mode == 'company-catalog' else b'{"z":null,"b":{"cik_str":1,"ticker":"A","exchange":"NYSE"},"a":{"cik_str":1,"ticker":"A-B"}}')
+        raw = store.put_bytes((tmp_path / 'catalog.json').as_uri(), payload)
         context = store.put(tmp_path.as_uri(), {'version': 1, 'input': raw, 'values': {
             'sync_run_id': 'catalog', 'source_name': 'company_tickers_exchange', 'last_synced_at': '2026-10-05T00:00:00Z'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})

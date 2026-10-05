@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files
-from edgar_warehouse.silver_landing_store import _parse_company_ticker_rows
+from tests.support.ticker_catalog_oracle import parse_rows
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from scripts.qualification.qualify_company_main import require_tables
 
@@ -16,6 +16,7 @@ from scripts.qualification.qualify_company_main import require_tables
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--catalog', type=Path, required=True)
+    parser.add_argument('--catalog-receipt', type=Path)
     parser.add_argument('--captures', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
@@ -24,15 +25,25 @@ def main():
     if catalog.stat().st_size > 32 * 1024**2: raise ValueError('Catalog exceeds 32 MiB')
     raw = catalog.read_bytes()
     payload = json.loads(raw)
-    rows = _parse_company_ticker_rows(payload)
-    if len(rows) != len(payload['data']): raise ValueError('Qualification requires no skipped catalog rows')
-    context = {'sync_run_id': 'catalog-qualification', 'source_name': 'company_tickers_exchange',
+    rows = parse_rows(payload)
+    matrix_layout = isinstance(payload.get('fields'), list) and isinstance(payload.get('data'), list)
+    receipt = None
+    if args.catalog_receipt is not None:
+        receipt_path = args.catalog_receipt.resolve()
+        if receipt_path.stat().st_size > 1024**2: raise ValueError('Catalog receipt exceeds budget')
+        document = json.loads(receipt_path.read_bytes())
+        members = [r for r in document['objects'] if (receipt_path.parent / r['path']).resolve() == catalog]
+        if len(members) != 1: raise ValueError('Need one exact catalog receipt')
+        receipt = members[0]
+        if not receipt.get('version_id') or not receipt.get('bucket') or receipt['size'] != len(raw) or receipt['sha256'] != hashlib.sha256(raw).hexdigest(): raise ValueError('Catalog receipt differs')
+    context = {'sync_run_id': 'catalog-qualification', 'source_name': 'company_tickers_exchange' if matrix_layout else 'company_tickers',
                'last_synced_at': '2026-10-05T00:00:00Z'}
     expected = [{**row, 'source_rank': rank, 'source_name': context['source_name'],
                  'last_sync_run_id': context['sync_run_id'], 'last_synced_at': context['last_synced_at']}
                 for rank, row in enumerate(rows, 1)]
     tickers = {}
     for row in rows:
+        if not row['ticker']: continue
         if row['ticker'] not in tickers.setdefault(row['cik'], []): tickers[row['cik']].append(row['ticker'])
     captures = args.captures.resolve()
     manifest_bytes = (captures / 'manifest.json').read_bytes()
@@ -70,7 +81,7 @@ def main():
             main_read = read(root, f'main-{index}', contracts['main'], body, values)
             combine = {'execution': {'profile': 'source.combine'}, 'combine': {'max_rows': 100000,
                 'groups': {'tickers': {'source': 'catalog', 'table': 'tickers', 'key': 'cik', 'value': 'ticker',
-                    'mode': 'collect', 'order_by': ['source_rank'], 'distinct': True, 'skip_null_values': True,
+                    'mode': 'collect', 'order_by': ['source_rank'], 'distinct': True, 'skip_null_values': True, 'skip_empty_text': True,
                     'checks': {'last_sync_run_id': context['sync_run_id']}, 'where': {}}},
                 'tables': {'company': {'source': 'main', 'table': 'company', 'checks': {'last_sync_run_id': values['sync_run_id']},
                     'where': {}, 'joins': {'tickers': {'group': 'tickers', 'key': 'cik', 'on_missing': 'empty', 'replace': False}}}}}}
@@ -98,7 +109,10 @@ def main():
         'contract_sha256s': {name: hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
                             for name, body in contracts.items()},
         'sec_requests': 0, 'producer_provenance_qualified': False, 'full_company_mastering': False,
-        'legacy_dictionary_catalog_qualified': False, 'legacy_malformed_catalog_equivalence': False}
+        'catalog_layout': 'matrix' if matrix_layout else 'dictionary',
+        'catalog_receipt': receipt,
+        'legacy_dictionary_catalog_qualified': not matrix_layout,
+        'universal_malformed_catalog_equivalence': False}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

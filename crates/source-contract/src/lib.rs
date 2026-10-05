@@ -23,6 +23,8 @@ mod value;
 mod context;
 mod parallel;
 mod matrix;
+mod iteration;
+mod predicate;
 mod json_text;
 #[cfg(feature = "python")]
 mod python;
@@ -96,7 +98,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 14] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose"];
+const PRIMITIVES: [&str; 15] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -170,14 +172,8 @@ impl Engine {
             let name = name.as_str().unwrap_or_default().to_string();
             let expanded;
             let (items, count) = if table.get("each").is_some_and(|each| each.is_mapping()) {
-                let take = context::take(table, context);
                 let count;
-                (expanded, count) = if table["each"].get("matrix").is_some() {
-                    matrix::rows(&document, &table["each"], self.limits.max_records, take)?
-                } else {
-                    let result = parallel::rows(&document, &table["each"], self.limits.max_records, take)?;
-                    (result.rows, result.count)
-                };
+                (expanded, count) = iteration::rows(self, context, &document, &table["each"], self.limits.max_records, context::take(table, context))?;
                 (expanded.iter().collect::<Vec<_>>(), count)
             } else {
                 let items = items_of(&document, setting(table, "each").unwrap_or("."))?;
@@ -189,8 +185,17 @@ impl Engine {
             }
             self.check_count(&document, &name, count)?;
             let rows = reading.tables.entry(name.clone()).or_default();
+            let mut selected = 0;
             for (index, item) in items.into_iter().take(context::take(table, context)).enumerate() {
-                let mut record = Record { engine: self, context, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
+                if let Some(select) = table.get("select") {
+                    match eval(self, context, &document, item, index as i64 + 1, select)? {
+                        Val::Bool(true) => {}, Val::Bool(false) | Val::Null => continue,
+                        _ => return Err(Rejected::new("select_condition", "Selection must be boolean or null")),
+                    }
+                }
+                selected += 1;
+                let column_ordinal = if setting(table, "ordinal") == Some("selected") { selected } else { index as i64 + 1 };
+                let mut record = Record { column_ordinal, engine: self, context, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
                 if let Some(reason) = record.failed_check(lookups)? {
                     reading.deferred.push(Deferred { table: name.clone(), ordinal: record.ordinal, reason, raw: item.raw() });
                     continue;
@@ -207,7 +212,7 @@ impl Engine {
     fn document(&self, bytes: &[u8]) -> Result<El, Rejected> {
         let max_records = self.limits.max_records;
         match setting(&self.read, "format").unwrap_or_default() {
-            "json" => formats::json(bytes, uses_integer(&self.read), uses_python_text(&self.read)),
+            "json" => formats::json(bytes, uses_integer(&self.read), uses_python_text(&self.read) || uses_iteration_order(&self.read)),
             "jsonl" => formats::jsonl(bytes, max_records, uses_integer(&self.read), uses_python_text(&self.read)),
             "csv" => formats::csv(bytes, max_records),
             _ => {
@@ -281,8 +286,19 @@ fn uses_feature(read: &Value, predicate: fn(&Value) -> bool) -> bool {
         predicate(expr) || expression_children(expr).into_iter().any(|child| in_expression(child, predicate))
     }
     read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|tables| tables.values())
-        .filter_map(|table| table.get("columns").and_then(Value::as_mapping))
-        .any(|columns| columns.values().any(|expr| in_expression(expr, predicate)))
+        .any(|table| table_expressions(table).into_iter().any(|expr| in_expression(expr, predicate)))
+}
+
+pub(crate) fn table_expressions(table: &Value) -> Vec<&Value> {
+    let mut result: Vec<_> = table.get("columns").and_then(Value::as_mapping).into_iter().flat_map(|m| m.values()).collect();
+    if let Some(select) = table.get("select") { result.push(select); }
+    if let Some(each) = table.get("each") { result.extend(iteration::expressions(each)); }
+    result
+}
+
+fn uses_iteration_order(read: &Value) -> bool {
+    read.get("tables").and_then(Value::as_mapping).into_iter().flat_map(|m| m.values())
+        .any(|table| table.get("each").is_some_and(iteration::needs_order))
 }
 
 /// The precise numeric path is used only by an opted-in integer expression.
@@ -363,12 +379,13 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     for (name, table) in tables {
         if let Some(each) = table.get("each") {
             if each.is_mapping() {
-                if each.get("matrix").is_some() { matrix::validate(each, format)?; }
-                else { parallel::validate(each, format)?; }
+                iteration::validate(each, format, steps, 0)?;
             } else if each.as_str().is_none() {
                 return Err("table.each must be text or one iteration call".into());
             }
         }
+        if let Some(select) = table.get("select") { validate_expr(select, steps)?; }
+        if table.get("ordinal").is_some_and(|v| !matches!(v.as_str(), Some("source" | "selected"))) { return Err("table.ordinal is source or selected".into()); }
         if table.get("checks").is_some_and(|value| value.as_sequence().is_none()) {
             return Err("table.checks must be a list".into());
         }
@@ -431,6 +448,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
         return Err(format!("primitive {name} is not known"));
     }
     match name {
+        "test" => predicate::validate(args)?,
         "steps" => {
             for step in args.as_sequence().ok_or("steps must be a list")? {
                 validate_expr(step, steps)?;
@@ -541,6 +559,7 @@ struct Record<'a> {
     document: &'a El,
     item: &'a El,
     ordinal: i64,
+    column_ordinal: i64,
     table: &'a Value,
     values: Row,
 }
@@ -551,7 +570,7 @@ impl Record<'_> {
             return Ok(value.clone());
         }
         let expr = self.table.get("columns").and_then(|c| c.get(name)).ok_or_else(|| contract_error(name))?;
-        let value = eval(self.engine, self.context, self.document, self.item, self.ordinal, expr)?;
+        let value = eval(self.engine, self.context, self.document, self.item, self.column_ordinal, expr)?;
         self.values.insert(name.to_string(), value.clone());
         Ok(value)
     }
@@ -751,6 +770,14 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
 /// Existing text readers treat an empty array as absent. Integer conversion
 /// retains it as a structured value so its explicit invalid policy applies.
 fn lookup_value<'a>(start: &'a El, path: &str, keep_empty_arrays: bool) -> Result<Found<'a>, Rejected> {
+    lookup_inner(start, path, keep_empty_arrays, false)
+}
+
+fn lookup_shape<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
+    lookup_inner(start, path, true, true)
+}
+
+fn lookup_inner<'a>(start: &'a El, path: &str, keep_empty_arrays: bool, keep_null: bool) -> Result<Found<'a>, Rejected> {
     if path == "." {
         return Ok(Found::El(start));
     }
@@ -803,7 +830,7 @@ fn lookup_value<'a>(start: &'a El, path: &str, keep_empty_arrays: bool) -> Resul
     }
     // A JSON scalar or a CSV cell is its value.
     Ok(match current {
-        Found::El(el) if el.scalar => el.text.clone().map_or(Found::Missing, |text| Found::Text(text, el.kind, el.exact_number.as_deref())),
+        Found::El(el) if el.scalar && !(keep_null && el.text.is_none()) => el.text.clone().map_or(Found::Missing, |text| Found::Text(text, el.kind, el.exact_number.as_deref())),
         other => other,
     })
 }
@@ -864,6 +891,7 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
         "ordinal" => Ok(Val::Int(ordinal)),
+        "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),
         "context" => Ok(context.get(setting(args, "name").unwrap()).unwrap().clone()),
         "const" => Ok(yaml_val(args.get("value"))),
         "text" => {

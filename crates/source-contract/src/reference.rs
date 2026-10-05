@@ -35,7 +35,7 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
         }
     }
     for (_, table) in read["tables"].as_mapping().into_iter().flatten() {
-        for (_, expr) in table["columns"].as_mapping().into_iter().flatten() { references(expr, read)?; }
+        for expr in crate::table_expressions(table) { references(expr, read)?; }
     }
     Ok(())
 }

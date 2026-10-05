@@ -277,3 +277,24 @@ def test_invalid_multiple_reading_selections_refuse_before_output(tmp_path, name
     with pytest.raises(ValueError):
         source_combine.execute(work, store)
     assert not (tmp_path / "output").exists()
+
+
+def test_empty_text_collection_filter_preserves_types_order_and_element_budget(tmp_path):
+    store = Artifacts()
+    values = ['', False, 0, 0.0, ' ', 'A', '']
+    refs = {'main': reading(store, tmp_path, {'rows': [{'cik': 1}]}),
+            'parts': reading(store, tmp_path, {'rows': [{'cik': 1, 'values': values}]})}
+    spec = group('parts', 'rows', 'cik', 'values', mode='collect_flat')
+    spec['skip_empty_text'] = True
+    work = envelope(store, tmp_path, plan({'values': spec}, {'rows': table('main', 'rows', {'values': join('values')})}, limit=10), refs)
+    result = source_combine.execute(work, store)
+    assert source_combine.verify({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
+    from edgar_warehouse.control_contract import canonical
+    assert canonical(store.json(result)['artifacts'][0]['tables']['rows'][0]['values']) == canonical([False, 0, 0.0, ' ', 'A'])
+    bounded = envelope(store, tmp_path, plan({'values': spec}, {'rows': table('main', 'rows', {'values': join('values')})}, limit=6), refs)
+    with pytest.raises(ValueError, match='element budget'):
+        source_combine.execute(bounded, store)
+    for bad in [dict(spec, skip_empty_text='true'), dict(spec, mode='first')]:
+        refused = envelope(store, tmp_path, plan({'values': bad}, {'rows': table('main', 'rows', {'values': join('values')})}), refs)
+        with pytest.raises(ValueError, match='skip_empty_text'):
+            source_combine.execute(refused, store)
