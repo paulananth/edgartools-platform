@@ -14,6 +14,8 @@ Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../pl
 - [x] Trial B answer key written before the trial: trials/B/ANSWER-KEY.md, committed before any skill code (with trials/A/ANSWER-KEY.md and the SQLite build script); 2026-10-05 07:20 ET
 - [ ] Trial A (SEC + GLEIF) matches its answer key
 - [x] Trial B matches with no domain-specific change: 52/52 as CSV and as SQLite, identical findings; run 1 was 48/52, four generic fixes listed in trials/B/RESULT.md; 2026-10-05 07:57 ET
-- [ ] Wiring of data-onboarding / refining-rules / data-platform SKILL.md (guard first; waits for a clear moment)
+- [x] Wiring of data-onboarding (discover, plan-parts; profile reads findings; by-hand profile and the `rules profile` row dropped) and refining-rules (compare before a new delivery changes a live feed). Guard: no overlap; doctor 0 unresolved; `rules profile` left NOT_BUILT in bundle.py and its test (GoF consult on bundle.py: a one-entry constant change, Rule 0, nothing to settle); 2026-10-05 08:06 ET
+- [ ] ~~data-platform/SKILL.md one line~~ deferred: still differs on Codex branches codex/bundled-data-guidance-20261004 and codex/raw-submissions-20261004 (guard rule); waits until they merge or close
+- [x] Affected tests: tests/unit + tests/architecture with testmon: 725 passed; the 15 failures are pre-existing on main (`jq` not installed locally; CI has it); 2026-10-05 08:06 ET
 - [x] doctor: 0 unresolved (bundle.unresolved over every skill); 2026-10-05 07:57 ET
 - [ ] Three-axis review, PR, CI, merge on word

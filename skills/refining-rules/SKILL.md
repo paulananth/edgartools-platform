@@ -58,7 +58,14 @@ both in the log.
 ## Modes
 
 Every change runs: the change mode → **test** → **approve** →
-**switch-on**. After any change to a rules file, regenerate its Mapping
+**switch-on**.
+
+**A new delivery comes first.** When a live feed's new delivery arrived, run
+[data-profiling](../data-profiling/SKILL.md)'s **compare** against the feed's
+approved findings before changing anything. Each drift item names the skill
+that handles it; the ones for refining-rules are the proposed changes, taken
+one at a time with the modes below. A feed with no approved findings yet:
+profile it with data-profiling first, and log it. After any change to a rules file, regenerate its Mapping
 Document (`rules mapdoc write --only <source or kind>`) and commit it with
 the change. `rules mapdoc check` and CI fail otherwise.
 

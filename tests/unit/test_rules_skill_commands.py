@@ -15,7 +15,7 @@ FILES = [
     SKILLS / "refining-rules" / "SKILL.md",
 ]
 # Named with a fallback, and marked "not built" in data-onboarding's table.
-NOT_BUILT = {"profile", "check"}
+NOT_BUILT = {"check"}
 
 
 def _built():
