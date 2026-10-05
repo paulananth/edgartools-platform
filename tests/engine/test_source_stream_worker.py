@@ -1,6 +1,7 @@
 """Actual configured streaming, immutable parts and independent verification."""
 import io
 import json
+import struct
 import zipfile
 
 import pytest
@@ -160,3 +161,38 @@ def test_expanded_policy_can_represent_the_actual_gleif_capture_size(tmp_path):
     envelope = task(tmp_path, store, [b'{"records":[{"n":1}]}'], rules)
     receipt = source_read.execute(envelope, store)
     assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+
+
+def test_forged_zip_expanded_length_is_refused_before_partition_publication(tmp_path):
+    body = b'{"records":[{"n":1}]}'
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("captured.json", body)
+    data = bytearray(buffer.getvalue())
+    central = data.index(b"PK\x01\x02")
+    struct.pack_into("<I", data, central + 24, len(body) + 1)
+    # Python's ZIP reader accepts this forged size with valid content/CRC.
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert archive.read(archive.infolist()[0]) == body
+    rules = contract()
+    rules["read"]["stream"]["container"] = "zip"
+    store = Artifacts()
+    envelope = task(tmp_path, store, [bytes(data)], rules)
+    with pytest.raises(ValueError, match="expanded length"):
+        source_read.execute(envelope, store)
+    assert not (tmp_path / "reading.json.parts").exists()
+
+
+def test_zip_crc_corruption_is_refused_before_partition_publication(tmp_path):
+    body = b'{"records":[{"n":1}]}'
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("captured.json", body)
+    data = buffer.getvalue().replace(body, b'{"records":[{"n":2}]}', 1)
+    rules = contract()
+    rules["read"]["stream"]["container"] = "zip"
+    store = Artifacts()
+    envelope = task(tmp_path, store, [data], rules)
+    with pytest.raises(SourceRejected):
+        source_read.execute(envelope, store)
+    assert not (tmp_path / "reading.json.parts").exists()

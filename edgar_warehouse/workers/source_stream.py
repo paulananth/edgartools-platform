@@ -143,6 +143,8 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                 scan = source_engine.stream_json_array(stream, wrapper=spec["wrapper"], on_record=project,
                     **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",
                                                   "min_integer", "record_encoding")})
+                if spec["container"] == "zip" and scan["expanded_bytes"] != members[0].file_size:
+                    raise ValueError("Stream ZIP expanded length differs from declared member size")
             flush()
             readings.append({"input": ref, **evidence, **scan, "partitions": parts})
         encoded = _encode({"version": 2, "contract": manifest["contract"], "artifacts": readings})
