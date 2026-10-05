@@ -5,14 +5,15 @@ Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../pl
 ## Checklist
 
 - [x] GoF consult: one input step registers a DuckDB view per part (a dict of reader functions); modes are plain functions per module over views, returning findings.yaml dicts; no class hierarchy. Large inputs stay inside the input step; 2026-10-05 07:20 ET
-- [ ] skills/data-profiling/SKILL.md (modes inventory → … → approve, compare)
-- [ ] DuckDB helpers + unit tests on fixtures
-- [ ] Genericity lint test (also run against the merged docs/specs/{rdm,agent-context,profiling}; fix hits)
+- [x] skills/data-profiling/SKILL.md (modes inventory → … → approve, compare): written; doctor finds 0 unresolved; 2026-10-05 07:57 ET
+- [x] DuckDB helpers + unit tests on fixtures: scripts/profiling/*.py, 75 tests in tests/unit/test_profiling_*.py on a synthetic set; check digits agree with python-stdnum on 120,000 values; 2026-10-05 07:57 ET
+- [x] Genericity lint test (also run against the merged docs/specs/{rdm,agent-context,profiling}; no hits): tests/unit/test_profiling_genericity.py; 2026-10-05 07:57 ET
 - [ ] Trial A note: lei2 is 13.25 GB unzipped, 9.5 GB disk free: stream from the zip, sample, full passes for key candidates; never unzip in full
-- [ ] link.sh, agents/openai.yaml
+- [x] link.sh, agents/openai.yaml (data-onboarding pattern); 2026-10-05 07:57 ET
+- [x] compare mode (drift.yaml, each item names its skill); tested; 2026-10-05 07:57 ET
 - [x] Trial B answer key written before the trial: trials/B/ANSWER-KEY.md, committed before any skill code (with trials/A/ANSWER-KEY.md and the SQLite build script); 2026-10-05 07:20 ET
 - [ ] Trial A (SEC + GLEIF) matches its answer key
-- [ ] Trial B matches with no domain-specific change
+- [x] Trial B matches with no domain-specific change: 52/52 as CSV and as SQLite, identical findings; run 1 was 48/52, four generic fixes listed in trials/B/RESULT.md; 2026-10-05 07:57 ET
 - [ ] Wiring of data-onboarding / refining-rules / data-platform SKILL.md (guard first; waits for a clear moment)
-- [ ] doctor: 0 unresolved
+- [x] doctor: 0 unresolved (bundle.unresolved over every skill); 2026-10-05 07:57 ET
 - [ ] Three-axis review, PR, CI, merge on word

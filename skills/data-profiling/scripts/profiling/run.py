@@ -21,8 +21,14 @@ VERSION = "data-profiling 1"
 MB_PER_SECOND = 40  # records read by Python, for the time estimate before a long pass
 
 
+_clock = [time.monotonic()]
+
+
 def say(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
+    """Progress on stderr, with the seconds since the last message."""
+    now = time.monotonic()
+    print(f"[{now - _clock[0]:6.1f}s] {message}", file=sys.stderr, flush=True)
+    _clock[0] = now
 
 
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
@@ -30,8 +36,11 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
                    work: Path | None = None) -> dict:
     """Profile every input and return the findings (the findings.yaml document)."""
     started = time.monotonic()
-    con = duckdb.connect()
     work = work or Path(tempfile.mkdtemp(prefix="profiling-"))
+    work.mkdir(parents=True, exist_ok=True)
+    database = work / "profile.duckdb"
+    database.unlink(missing_ok=True)
+    con = duckdb.connect(str(database))  # parts are tables on disk, not in memory
     parts: dict[str, inputs.Part] = {}
     for input_name, location in sources.items():
         if not location.startswith("env:"):
@@ -45,7 +54,9 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     say(f"registered {len(parts)} parts")
 
     profiles = {p: profile.columns(con, p) for p in parts}
+    say("profiled columns")
     unique = {p: keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
+    say("found unique keys")
     confirmed = {}
     for p, part in parts.items():
         if part.scan == "sampled" and part.parent is None:
@@ -68,9 +79,11 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         built = _part(con, p, parts, profiles, record_keys[p], found_links, child, kinds, confirmed.get(p, {}))
         findings_parts.append(built)
         facts_by_part[p] = built.pop("_facts")
+    say("classified parts")
     _inherit(findings_parts, parts)
     by_name = {f["part"]: f for f in findings_parts}
     hierarchies = _hierarchies(con, by_name, profiles, found_links)
+    say(f"found {len(hierarchies)} hierarchies")
     relationships = _relationships(found_links + child, by_name)
     for f in findings_parts:
         f["store_suggestion"] = classify.store(f["class"])
@@ -99,7 +112,8 @@ def _part(con, p, parts, profiles, record_key, found_links, child, kinds, confir
     people = sensitivity.person_part(names)
     tags = {c["name"]: sensitivity.tag(c["name"], _values(con, p, c), people) for c in columns if not c["structure"]}
     personal = {n for n, t in tags.items() if t["sensitivity"] != "none"}
-    code_list = codes.code_lists(con, p, columns, record_key["columns"], personal)
+    identity = {n for n in personal if set(sensitivity.words(n)) & sensitivity.IDENTITY}
+    code_list = codes.code_lists(con, p, columns, record_key["columns"], identity)
     code_columns = {c["column"] for c in code_list} | {c["label_column"] for c in code_list if c["label_column"]}
     labelled = {c["column"] for c in code_list if c["label_column"]}
     key_labels = {c["label_column"] for c in code_list if c["label_column"] and [c["column"]] == record_key["columns"]}
@@ -119,7 +133,7 @@ def _part(con, p, parts, profiles, record_key, found_links, child, kinds, confir
         top = [{"value": sensitivity.mask(t["value"]) if tagged["sensitivity"] != "none" else t["value"],
                 "rows": t["rows"]} for t in c["top"]]
         column_findings.append({
-            "name": c["name"], "type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
+            "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
             "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"]})
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:

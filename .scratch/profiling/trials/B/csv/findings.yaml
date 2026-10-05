@@ -1,0 +1,4085 @@
+version: 1
+dataset:
+  name: Trial B (csv)
+  inputs:
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/currencyexchange.csv
+    format: csv
+    bytes: 1011577
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/customer.csv
+    format: csv
+    bytes: 23871850
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/date.csv
+    format: csv
+    bytes: 150076
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/orderrows.csv
+    format: csv
+    bytes: 275132
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/orders.csv
+    format: csv
+    bytes: 152726
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/product.csv
+    format: csv
+    bytes: 373660
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/sales.csv
+    format: csv
+    bytes: 642115
+  - kind: file
+    location: /private/tmp/claude-501/-Users-aneenaananth-projects-edgartools-platform/448ef2c8-e025-4be6-8aef-0620c44e7a52/scratchpad/contoso10k/store.csv
+    format: csv
+    bytes: 6363
+  scan:
+    mode: full
+    reason: null
+    seed: 0
+    elapsed_seconds: 18.4
+  profiled_at: '2026-10-05T11:57:11+00:00'
+  profiled_by: data-profiling 1
+parts:
+- part: currencyexchange
+  parent_part: null
+  rows: 36525
+  scan: full
+  class: transaction
+  confidence: 1.0
+  tests:
+  - class: transaction
+    test: has a unique key (required)
+    value: &id001
+    - Date
+    - FromCurrency
+    - ToCurrency
+    passed: true
+  - class: transaction
+    test: points at other parts
+    value: 1
+    passed: true
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 1
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: Date
+      measures: 1
+    passed: true
+  - class: transaction
+    test: no name-like text
+    value: 0
+    passed: true
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 36525
+    passed: true
+  runner_up:
+  - - 0.5
+    - master
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id001
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: Date
+    shape: '9999-99-99'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.04
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: FromCurrency
+    shape: AAA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.000137
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: ToCurrency
+    shape: AAA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.000137
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: Date
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 1461
+    unique: 0.04
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2021-01-01'
+      rows: 25
+    - value: '2021-01-02'
+      rows: 25
+    - value: '2021-01-03'
+      rows: 25
+    - value: '2021-01-04'
+      rows: 25
+    - value: '2021-01-05'
+      rows: 25
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: FromCurrency
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5
+    unique: 0.000137
+    shape: AAA
+    shape_share: 1.0
+    top:
+    - value: AUD
+      rows: 7305
+    - value: CAD
+      rows: 7305
+    - value: EUR
+      rows: 7305
+    - value: GBP
+      rows: 7305
+    - value: USD
+      rows: 7305
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ToCurrency
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5
+    unique: 0.000137
+    shape: AAA
+    shape_share: 1.0
+    top:
+    - value: AUD
+      rows: 7305
+    - value: CAD
+      rows: 7305
+    - value: EUR
+      rows: 7305
+    - value: GBP
+      rows: 7305
+    - value: USD
+      rows: 7305
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Exchange
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 15067
+    unique: 0.412512
+    shape: '9.99999'
+    shape_share: 0.60794
+    top:
+    - value: '1.0'
+      rows: 7307
+    - value: '0.68157'
+      rows: 18
+    - value: '1.4672'
+      rows: 18
+    - value: '0.68231'
+      rows: 13
+    - value: '0.78415'
+      rows: 13
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: FromCurrency
+    distinct: 5
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: ToCurrency
+    distinct: 5
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: Date
+    versions_per_key: null
+    series:
+      key:
+      - FromCurrency
+      - ToCurrency
+      time: Date
+      step: 1 day
+      step_share: 1.0
+      gaps: 0
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: silver
+    why: 'append-heavy events and measures read by wide scans: silver'
+    advisory: true
+  silver:
+    table: currencyexchange
+    grain: one row per Date + FromCurrency + ToCurrency
+    columns:
+    - name: Date
+      type: DATE
+      nullable: false
+      definition: null
+      source: currencyexchange.Date
+      sensitivity: none
+    - name: FromCurrency
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: currencyexchange.FromCurrency
+      sensitivity: none
+    - name: ToCurrency
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: currencyexchange.ToCurrency
+      sensitivity: none
+    - name: Exchange
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: currencyexchange.Exchange
+      sensitivity: none
+    key: *id001
+    links:
+    - columns: &id009
+      - Date
+      kind: null
+      to_part: date
+      source_key: Date
+      mdm_id_column: Date_mdm_id
+      inclusion: 1.0
+    time:
+      as_of: null
+      as_at: loaded_at
+      event_time: Date
+    partition:
+    - Date
+    load_mode: append
+    why: events are appended and never changed
+- part: customer
+  parent_part: null
+  rows: 104990
+  scan: full
+  class: master
+  confidence: 0.833
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id002
+    - CustomerKey
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 2
+    passed: true
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 5
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 104990
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 9
+    passed: true
+  runner_up:
+  - - 0.571
+    - reference
+  kind: null
+  proposed_kind:
+    domain: customer
+    kind: customer
+    why: has a unique key (required); other parts point at it; points at few parts; has name-like text; has attributes besides
+      codes and dates
+  record_key:
+    columns: *id002
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: CustomerKey
+    shape: '9999999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: CustomerKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 104990
+    unique: 1.0
+    shape: '9999999'
+    shape_share: 0.523955
+    top:
+    - value: '1000'
+      rows: 1
+    - value: '1000020'
+      rows: 1
+    - value: '1000044'
+      rows: 1
+    - value: '1000102'
+      rows: 1
+    - value: '1000114'
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: GeoAreaKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 608
+    unique: 0.005791
+    shape: '999'
+    shape_share: 0.651024
+    top:
+    - value: '570'
+      rows: 4754
+    - value: '17'
+      rows: 4287
+    - value: '609'
+      rows: 3488
+    - value: '2'
+      rows: 3155
+    - value: '25'
+      rows: 2891
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: StartDT
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 11305
+    unique: 0.107677
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '1985-10-31'
+      rows: 28
+    - value: '1984-12-23'
+      rows: 27
+    - value: '1987-05-11'
+      rows: 27
+    - value: '1985-07-29'
+      rows: 26
+    - value: '1981-11-09'
+      rows: 25
+    role: date
+    sensitivity: none
+    sensitivity_signals: []
+  - name: EndDT
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 14711
+    unique: 0.140118
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2043-04-13'
+      rows: 28
+    - value: '2044-09-30'
+      rows: 27
+    - value: '2044-12-06'
+      rows: 27
+    - value: '2045-07-24'
+      rows: 27
+    - value: '2045-08-04'
+      rows: 27
+    role: date
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Continent
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 3
+    unique: 2.9e-05
+    shape: Aaaaa Aaaaaaa
+    shape_share: 0.52666
+    top:
+    - value: North America
+      rows: 55294
+    - value: Europe
+      rows: 39588
+    - value: Australia
+      rows: 10108
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Gender
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 2
+    unique: 1.9e-05
+    shape: aaaa
+    shape_share: 0.50541
+    top:
+    - value: aaaa
+      rows: 53063
+    - value: aaaaaa
+      rows: 51927
+    role: code
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: Title
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 4
+    unique: 3.8e-05
+    shape: Aa.
+    shape_share: 0.772521
+    top:
+    - value: Aa.
+      rows: 51463
+    - value: Aa.
+      rows: 26457
+    - value: Aaa.
+      rows: 23883
+    - value: Aa.
+      rows: 3187
+    role: code
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: GivenName
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 9294
+    unique: 0.088523
+    shape: Aaaaa
+    shape_share: 0.23828
+    top:
+    - value: Aaaaaa
+      rows: 1013
+    - value: Aaaaa
+      rows: 995
+    - value: Aaaa
+      rows: 982
+    - value: Aaaaaaa
+      rows: 887
+    - value: Aaaaa
+      rows: 833
+    role: name
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: MiddleInitial
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 37
+    unique: 0.000352
+    shape: A
+    shape_share: 0.9988
+    top:
+    - value: A
+      rows: 10696
+    - value: A
+      rows: 10491
+    - value: A
+      rows: 9757
+    - value: A
+      rows: 7336
+    - value: A
+      rows: 6863
+    role: other
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: Surname
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 20325
+    unique: 0.19359
+    shape: Aaaaaa
+    shape_share: 0.228603
+    top:
+    - value: Aaaaa
+      rows: 624
+    - value: Aaaaaaa
+      rows: 516
+    - value: Aaaaa
+      rows: 433
+    - value: Aaaaaaaa
+      rows: 430
+    - value: Aaaaa
+      rows: 381
+    role: name
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: StreetAddress
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 95854
+    unique: 0.912982
+    shape: 9999 Aaaaaa Aaaaaa
+    shape_share: 0.03748
+    top:
+    - value: 99 Aaaaa Aaaaaaaa
+      rows: 6
+    - value: 99 Aaaaaaaa Aaaaa
+      rows: 5
+    - value: 99 Aaaaaaaaa Aaaa
+      rows: 5
+    - value: 99 Aaaaaaaa Aaaaa
+      rows: 5
+    - value: 99 aaa Aaaaaaa Aaaaa
+      rows: 5
+    role: name
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: City
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 34581
+    unique: 0.329374
+    shape: Aaaaaaa
+    shape_share: 0.148014
+    top:
+    - value: Toronto
+      rows: 1248
+    - value: New York
+      rows: 786
+    - value: Los Angeles
+      rows: 624
+    - value: Montreal
+      rows: 565
+    - value: Houston
+      rows: 537
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+  - name: State
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 565
+    unique: 0.005381
+    shape: AA
+    shape_share: 0.785027
+    top:
+    - value: CA
+      rows: 4904
+    - value: 'ON'
+      rows: 4287
+    - value: IL
+      rows: 3758
+    - value: TX
+      rows: 3488
+    - value: NSW
+      rows: 3155
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: StateFull
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 610
+    unique: 0.00581
+    shape: Aaaaaaa
+    shape_share: 0.160168
+    top:
+    - value: California
+      rows: 4754
+    - value: Ontario
+      rows: 4287
+    - value: Texas
+      rows: 3488
+    - value: New South Wales
+      rows: 3155
+    - value: Freistaat Bayern
+      rows: 2891
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ZipCode
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 40639
+    unique: 0.387075
+    shape: '99999'
+    shape_share: 0.619859
+    top:
+    - value: '99999'
+      rows: 406
+    - value: A9A 9A9
+      rows: 339
+    - value: '99999'
+      rows: 193
+    - value: '99999'
+      rows: 188
+    - value: '99999'
+      rows: 169
+    role: name
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: Country
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 8
+    unique: 7.6e-05
+    shape: AA
+    shape_share: 1.0
+    top:
+    - value: US
+      rows: 45183
+    - value: GB
+      rows: 14781
+    - value: CA
+      rows: 10111
+    - value: AU
+      rows: 10108
+    - value: DE
+      rows: 9981
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CountryFull
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 8
+    unique: 7.6e-05
+    shape: Aaaaaa Aaaaaa
+    shape_share: 0.430355
+    top:
+    - value: United States
+      rows: 45183
+    - value: United Kingdom
+      rows: 14781
+    - value: Canada
+      rows: 10111
+    - value: Australia
+      rows: 10108
+    - value: Germany
+      rows: 9981
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Birthday
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 24147
+    unique: 0.229993
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '9999-99-99'
+      rows: 15
+    - value: '9999-99-99'
+      rows: 14
+    - value: '9999-99-99'
+      rows: 14
+    - value: '9999-99-99'
+      rows: 13
+    - value: '9999-99-99'
+      rows: 13
+    role: date
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: Age
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 67
+    unique: 0.000638
+    shape: '99'
+    shape_share: 1.0
+    top:
+    - value: '99'
+      rows: 1660
+    - value: '99'
+      rows: 1649
+    - value: '99'
+      rows: 1648
+    - value: '99'
+      rows: 1637
+    - value: '99'
+      rows: 1626
+    role: code
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: Occupation
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 2571
+    unique: 0.024488
+    shape: Aaaaaaaaa
+    shape_share: 0.023078
+    top:
+    - value: Manufacturers
+      rows: 84
+    - value: ATF agent
+      rows: 81
+    - value: Broker
+      rows: 72
+    - value: Construction engineer
+      rows: 63
+    - value: Electronic home entertainment equipment installer
+      rows: 63
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Company
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.999
+    distinct: 1030
+    unique: 0.00982
+    shape: Aaaaaaa
+    shape_share: 0.026048
+    top:
+    - value: Brendle's
+      rows: 136
+    - value: 'Maxiserve '
+      rows: 132
+    - value: Waccamaw Pottery
+      rows: 131
+    - value: Builderama
+      rows: 130
+    - value: Montana's Cookhouse
+      rows: 130
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Vehicle
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 11760
+    unique: 0.112011
+    shape: 9999 Aaaaaa Aaaaaa
+    shape_share: 0.043461
+    top:
+    - value: 2005 Vauxhall Vectra
+      rows: 23
+    - value: 2008 Opel Vectra
+      rows: 22
+    - value: 1999 Mitsubishi Lancer
+      rows: 21
+    - value: 2006 Mazda Drifter
+      rows: 21
+    - value: 2009 Honda Accord
+      rows: 21
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Latitude
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 104777
+    unique: 0.997971
+    shape: '99.999999'
+    shape_share: 0.813392
+    top:
+    - value: '-99.999999'
+      rows: 2
+    - value: '-99.999999'
+      rows: 2
+    - value: '-99.999999'
+      rows: 2
+    - value: '-99.999999'
+      rows: 2
+    - value: '99.999999'
+      rows: 2
+    role: measure
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  - name: Longitude
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 104879
+    unique: 0.998943
+    shape: '-99.999999'
+    shape_share: 0.356615
+    top:
+    - value: '-9.999999'
+      rows: 2
+    - value: '-9.999999'
+      rows: 2
+    - value: '-9.999999'
+      rows: 2
+    - value: '-9.999999'
+      rows: 2
+    - value: '-9.999999'
+      rows: 2
+    role: measure
+    sensitivity: personal
+    sensitivity_signals:
+    - 'name: personal word in a part describing people'
+  code_lists:
+  - column: GeoAreaKey
+    distinct: 608
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Continent
+    distinct: 3
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Gender
+    distinct: 2
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Title
+    distinct: 4
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: State
+    distinct: 565
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: StateFull
+    distinct: 610
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Country
+    distinct: 8
+    label_column: CountryFull
+    code_set: null
+    proposed_code_set: null
+  - column: Age
+    distinct: 67
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Occupation
+    distinct: 2571
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Company
+    distinct: 1030
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: StartDT
+      to: EndDT
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+- part: date
+  parent_part: null
+  rows: 1461
+  scan: full
+  class: reference
+  confidence: 0.857
+  tests:
+  - class: reference
+    test: has a unique key (required)
+    value: &id003
+    - Date
+    passed: true
+  - class: reference
+    test: other parts point at it
+    value: 3
+    passed: true
+  - class: reference
+    test: at most 10000 rows
+    value: 1461
+    passed: true
+  - class: reference
+    test: points at no other part (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 0
+    passed: true
+  - class: reference
+    test: codes with label columns
+    value: 7
+    passed: true
+  - class: reference
+    test: only codes, labels and dates
+    value: 2
+    passed: false
+  runner_up:
+  - - 0.833
+    - master
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id003
+    found: true
+    design: null
+    rule: null
+    alternatives:
+    - - DateKey
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: Date
+    shape: '9999-99-99'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: DateKey
+    shape: '99999999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  - column: YearMonthNumber
+    shape: '99999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.032854
+    local_counter: false
+    proposal: none
+    why: repeats or is a local counter
+  columns:
+  - name: Date
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 1461
+    unique: 1.0
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2021-01-01'
+      rows: 1
+    - value: '2021-01-02'
+      rows: 1
+    - value: '2021-01-03'
+      rows: 1
+    - value: '2021-01-04'
+      rows: 1
+    - value: '2021-01-05'
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: DateKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 1461
+    unique: 1.0
+    shape: '99999999'
+    shape_share: 1.0
+    top:
+    - value: '20210101'
+      rows: 1
+    - value: '20210102'
+      rows: 1
+    - value: '20210103'
+      rows: 1
+    - value: '20210104'
+      rows: 1
+    - value: '20210105'
+      rows: 1
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Year
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 4
+    unique: 0.002738
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '2024'
+      rows: 366
+    - value: '2021'
+      rows: 365
+    - value: '2022'
+      rows: 365
+    - value: '2023'
+      rows: 365
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: YearQuarter
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 16
+    unique: 0.010951
+    shape: A9-9999
+    shape_share: 1.0
+    top:
+    - value: Q3-2021
+      rows: 92
+    - value: Q3-2022
+      rows: 92
+    - value: Q3-2023
+      rows: 92
+    - value: Q3-2024
+      rows: 92
+    - value: Q4-2021
+      rows: 92
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: YearQuarterNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 16
+    unique: 0.010951
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '8087'
+      rows: 92
+    - value: '8088'
+      rows: 92
+    - value: '8091'
+      rows: 92
+    - value: '8092'
+      rows: 92
+    - value: '8095'
+      rows: 92
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Quarter
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 4
+    unique: 0.002738
+    shape: A9
+    shape_share: 1.0
+    top:
+    - value: Q3
+      rows: 368
+    - value: Q4
+      rows: 368
+    - value: Q2
+      rows: 364
+    - value: Q1
+      rows: 361
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: YearMonth
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 48
+    unique: 0.032854
+    shape: Aaaaaaaa 9999
+    shape_share: 0.244353
+    top:
+    - value: August 2021
+      rows: 31
+    - value: August 2022
+      rows: 31
+    - value: August 2023
+      rows: 31
+    - value: August 2024
+      rows: 31
+    - value: December 2021
+      rows: 31
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: YearMonthShort
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 48
+    unique: 0.032854
+    shape: Aaa 9999
+    shape_share: 1.0
+    top:
+    - value: Aug 2021
+      rows: 31
+    - value: Aug 2022
+      rows: 31
+    - value: Aug 2023
+      rows: 31
+    - value: Aug 2024
+      rows: 31
+    - value: Dec 2021
+      rows: 31
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: YearMonthNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 48
+    unique: 0.032854
+    shape: '99999'
+    shape_share: 1.0
+    top:
+    - value: '24253'
+      rows: 31
+    - value: '24255'
+      rows: 31
+    - value: '24257'
+      rows: 31
+    - value: '24259'
+      rows: 31
+    - value: '24260'
+      rows: 31
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Month
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 12
+    unique: 0.008214
+    shape: Aaaaaaaa
+    shape_share: 0.244353
+    top:
+    - value: August
+      rows: 124
+    - value: December
+      rows: 124
+    - value: January
+      rows: 124
+    - value: July
+      rows: 124
+    - value: March
+      rows: 124
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: MonthShort
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 12
+    unique: 0.008214
+    shape: Aaa
+    shape_share: 1.0
+    top:
+    - value: Aug
+      rows: 124
+    - value: Dec
+      rows: 124
+    - value: Jan
+      rows: 124
+    - value: Jul
+      rows: 124
+    - value: Mar
+      rows: 124
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: MonthNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 12
+    unique: 0.008214
+    shape: '9'
+    shape_share: 0.748118
+    top:
+    - value: '1'
+      rows: 124
+    - value: '10'
+      rows: 124
+    - value: '12'
+      rows: 124
+    - value: '3'
+      rows: 124
+    - value: '5'
+      rows: 124
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: DayofWeek
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 7
+    unique: 0.004791
+    shape: Aaaaaa
+    shape_share: 0.429158
+    top:
+    - value: Friday
+      rows: 209
+    - value: Monday
+      rows: 209
+    - value: Saturday
+      rows: 209
+    - value: Sunday
+      rows: 209
+    - value: Tuesday
+      rows: 209
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: DayofWeekShort
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 7
+    unique: 0.004791
+    shape: Aaa
+    shape_share: 1.0
+    top:
+    - value: Fri
+      rows: 209
+    - value: Mon
+      rows: 209
+    - value: Sat
+      rows: 209
+    - value: Sun
+      rows: 209
+    - value: Tue
+      rows: 209
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: DayofWeekNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 7
+    unique: 0.004791
+    shape: '9'
+    shape_share: 1.0
+    top:
+    - value: '1'
+      rows: 209
+    - value: '2'
+      rows: 209
+    - value: '3'
+      rows: 209
+    - value: '6'
+      rows: 209
+    - value: '7'
+      rows: 209
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: WorkingDay
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 2
+    unique: 0.001369
+    shape: '9'
+    shape_share: 1.0
+    top:
+    - value: '1'
+      rows: 1003
+    - value: '0'
+      rows: 458
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: WorkingDayNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 1004
+    unique: 0.687201
+    shape: '999'
+    shape_share: 0.897331
+    top:
+    - value: '10'
+      rows: 4
+    - value: '103'
+      rows: 4
+    - value: '127'
+      rows: 4
+    - value: '171'
+      rows: 4
+    - value: '195'
+      rows: 4
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: Year
+    distinct: 4
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: YearQuarterNumber
+    distinct: 16
+    label_column: YearQuarter
+    code_set: null
+    proposed_code_set: null
+  - column: Quarter
+    distinct: 4
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: YearMonthShort
+    distinct: 48
+    label_column: YearMonth
+    code_set: null
+    proposed_code_set: null
+  - column: YearMonthNumber
+    distinct: 48
+    label_column: YearMonth
+    code_set: null
+    proposed_code_set: null
+  - column: MonthShort
+    distinct: 12
+    label_column: Month
+    code_set: null
+    proposed_code_set: null
+  - column: MonthNumber
+    distinct: 12
+    label_column: Month
+    code_set: null
+    proposed_code_set: null
+  - column: DayofWeekShort
+    distinct: 7
+    label_column: DayofWeek
+    code_set: null
+    proposed_code_set: null
+  - column: DayofWeekNumber
+    distinct: 7
+    label_column: DayofWeek
+    code_set: null
+    proposed_code_set: null
+  - column: WorkingDay
+    distinct: 2
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series:
+      key: []
+      time: Date
+      step: 1 day
+      step_share: 1.0
+      gaps: 0
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: rdm
+    why: 'a small set of codes that gives other values their meaning: an RDM code set, published to silver'
+    advisory: true
+  silver:
+    table: date
+    grain: one row per Date
+    columns:
+    - name: Date
+      type: DATE
+      nullable: false
+      definition: null
+      source: date.Date
+      sensitivity: none
+    - name: DateKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.DateKey
+      sensitivity: none
+    - name: Year
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.Year
+      sensitivity: none
+    - name: YearQuarter
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.YearQuarter
+      sensitivity: none
+    - name: YearQuarterNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.YearQuarterNumber
+      sensitivity: none
+    - name: Quarter
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.Quarter
+      sensitivity: none
+    - name: YearMonth
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.YearMonth
+      sensitivity: none
+    - name: YearMonthShort
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.YearMonthShort
+      sensitivity: none
+    - name: YearMonthNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.YearMonthNumber
+      sensitivity: none
+    - name: Month
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.Month
+      sensitivity: none
+    - name: MonthShort
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.MonthShort
+      sensitivity: none
+    - name: MonthNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.MonthNumber
+      sensitivity: none
+    - name: DayofWeek
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.DayofWeek
+      sensitivity: none
+    - name: DayofWeekShort
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: date.DayofWeekShort
+      sensitivity: none
+    - name: DayofWeekNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.DayofWeekNumber
+      sensitivity: none
+    - name: WorkingDay
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.WorkingDay
+      sensitivity: none
+    - name: WorkingDayNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: date.WorkingDayNumber
+      sensitivity: none
+    key: *id003
+    links: []
+    time:
+      as_of: null
+      as_at: loaded_at
+      event_time: null
+    partition: []
+    load_mode: snapshot
+    why: a published code-set version replaces the previous one
+- part: orderrows
+  parent_part: null
+  rows: 7794
+  scan: full
+  class: transaction
+  confidence: 1.0
+  tests:
+  - class: transaction
+    test: has a unique key (required)
+    value: &id004
+    - OrderKey
+    - LineNumber
+    passed: true
+  - class: transaction
+    test: points at other parts
+    value: 3
+    passed: true
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 3
+      in: 1
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 4
+    passed: true
+  - class: transaction
+    test: no name-like text
+    value: 0
+    passed: true
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 7794
+    passed: true
+  runner_up:
+  - - 0.667
+    - master
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id004
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: OrderKey
+    shape: '999999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.415961
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: LineNumber
+    shape: '9'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.000898
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: OrderKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 3242
+    unique: 0.415961
+    shape: '999999'
+    shape_share: 1.0
+    top:
+    - value: '235501'
+      rows: 7
+    - value: '239400'
+      rows: 7
+    - value: '239600'
+      rows: 7
+    - value: '240400'
+      rows: 7
+    - value: '241100'
+      rows: 7
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: LineNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 7
+    unique: 0.000898
+    shape: '9'
+    shape_share: 1.0
+    top:
+    - value: '0'
+      rows: 3242
+    - value: '1'
+      rows: 2092
+    - value: '2'
+      rows: 1269
+    - value: '3'
+      rows: 635
+    - value: '4'
+      rows: 272
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ProductKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 1916
+    unique: 0.24583
+    shape: '9999'
+    shape_share: 0.627919
+    top:
+    - value: '1590'
+      rows: 24
+    - value: '421'
+      rows: 23
+    - value: '1586'
+      rows: 22
+    - value: '1589'
+      rows: 22
+    - value: '423'
+      rows: 22
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Quantity
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 10
+    unique: 0.001283
+    shape: '9'
+    shape_share: 0.989094
+    top:
+    - value: '1'
+      rows: 2148
+    - value: '2'
+      rows: 1776
+    - value: '3'
+      rows: 1342
+    - value: '4'
+      rows: 716
+    - value: '6'
+      rows: 477
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: UnitPrice
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 787
+    unique: 0.100975
+    shape: '999.9'
+    shape_share: 0.442135
+    top:
+    - value: '9.99'
+      rows: 133
+    - value: '219.0'
+      rows: 99
+    - value: '299.0'
+      rows: 79
+    - value: '268.0'
+      rows: 78
+    - value: '12.66'
+      rows: 76
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: NetPrice
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 3355
+    unique: 0.430459
+    shape: '999.9'
+    shape_share: 0.225173
+    top:
+    - value: '9.99'
+      rows: 45
+    - value: '268.0'
+      rows: 42
+    - value: '219.0'
+      rows: 32
+    - value: '289.99'
+      rows: 31
+    - value: '259.99'
+      rows: 29
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: UnitCost
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 858
+    unique: 0.110085
+    shape: '999.99'
+    shape_share: 0.294457
+    top:
+    - value: '5.09'
+      rows: 133
+    - value: '72.56'
+      rows: 97
+    - value: '123.24'
+      rows: 77
+    - value: '5.82'
+      rows: 76
+    - value: '86.14'
+      rows: 69
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: LineNumber
+    distinct: 7
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Quantity
+    distinct: 10
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: silver
+    why: 'append-heavy events and measures read by wide scans: silver'
+    advisory: true
+  silver:
+    table: orderrows
+    grain: one row per OrderKey + LineNumber
+    columns:
+    - name: OrderKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orderrows.OrderKey
+      sensitivity: none
+    - name: LineNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orderrows.LineNumber
+      sensitivity: none
+    - name: ProductKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orderrows.ProductKey
+      sensitivity: none
+    - name: Quantity
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orderrows.Quantity
+      sensitivity: none
+    - name: UnitPrice
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: orderrows.UnitPrice
+      sensitivity: none
+    - name: NetPrice
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: orderrows.NetPrice
+      sensitivity: none
+    - name: UnitCost
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: orderrows.UnitCost
+      sensitivity: none
+    key: *id004
+    links:
+    - columns: &id010
+      - OrderKey
+      kind: null
+      to_part: orders
+      source_key: OrderKey
+      mdm_id_column: OrderKey_mdm_id
+      inclusion: 1.0
+    - columns: &id011
+      - ProductKey
+      kind: null
+      to_part: product
+      source_key: ProductKey
+      mdm_id_column: ProductKey_mdm_id
+      inclusion: 1.0
+    - columns: &id007
+      - OrderKey
+      - LineNumber
+      kind: null
+      to_part: sales
+      source_key: OrderKey
+      mdm_id_column: OrderKey_mdm_id
+      inclusion: 1.0
+    time:
+      as_of: null
+      as_at: loaded_at
+      event_time: null
+    partition: []
+    load_mode: append
+    why: events are appended and never changed
+- part: orders
+  parent_part: null
+  rows: 3242
+  scan: full
+  class: transaction
+  confidence: 0.833
+  tests:
+  - class: transaction
+    test: has a unique key (required)
+    value: &id005
+    - OrderKey
+    passed: true
+  - class: transaction
+    test: points at other parts
+    value: 3
+    passed: true
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 3
+      in: 2
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: OrderDate
+      measures: 0
+    passed: true
+  - class: transaction
+    test: no name-like text
+    value: 0
+    passed: true
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 3242
+    passed: false
+  runner_up:
+  - - 0.5
+    - master
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id005
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: OrderKey
+    shape: '999999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: OrderKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 3242
+    unique: 1.0
+    shape: '999999'
+    shape_share: 1.0
+    top:
+    - value: '233000'
+      rows: 1
+    - value: '233100'
+      rows: 1
+    - value: '233200'
+      rows: 1
+    - value: '233300'
+      rows: 1
+    - value: '233400'
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CustomerKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 3165
+    unique: 0.976249
+    shape: '9999999'
+    shape_share: 0.576496
+    top:
+    - value: '1746321'
+      rows: 3
+    - value: '2061443'
+      rows: 3
+    - value: '869699'
+      rows: 3
+    - value: '1127498'
+      rows: 2
+    - value: '1131266'
+      rows: 2
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: StoreKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 58
+    unique: 0.01789
+    shape: '999999'
+    shape_share: 0.537631
+    top:
+    - value: '999999'
+      rows: 1743
+    - value: '610'
+      rows: 47
+    - value: '450'
+      rows: 46
+    - value: '100'
+      rows: 45
+    - value: '510'
+      rows: 44
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: OrderDate
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 846
+    unique: 0.26095
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2022-02-19'
+      rows: 14
+    - value: '2023-02-18'
+      rows: 14
+    - value: '2023-02-25'
+      rows: 12
+    - value: '2024-02-17'
+      rows: 12
+    - value: '2022-02-26'
+      rows: 11
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: DeliveryDate
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 936
+    unique: 0.288711
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2022-02-19'
+      rows: 13
+    - value: '2022-12-31'
+      rows: 13
+    - value: '2023-02-18'
+      rows: 13
+    - value: '2022-02-24'
+      rows: 12
+    - value: '2022-02-18'
+      rows: 11
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CurrencyCode
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5
+    unique: 0.001542
+    shape: AAA
+    shape_share: 1.0
+    top:
+    - value: USD
+      rows: 1683
+    - value: EUR
+      rows: 723
+    - value: CAD
+      rows: 356
+    - value: GBP
+      rows: 278
+    - value: AUD
+      rows: 202
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: StoreKey
+    distinct: 58
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: CurrencyCode
+    distinct: 5
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: OrderDate
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: silver
+    why: 'append-heavy events and measures read by wide scans: silver'
+    advisory: true
+  silver:
+    table: orders
+    grain: one row per OrderKey
+    columns:
+    - name: OrderKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orders.OrderKey
+      sensitivity: none
+    - name: CustomerKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orders.CustomerKey
+      sensitivity: none
+    - name: StoreKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: orders.StoreKey
+      sensitivity: none
+    - name: OrderDate
+      type: DATE
+      nullable: false
+      definition: null
+      source: orders.OrderDate
+      sensitivity: none
+    - name: DeliveryDate
+      type: DATE
+      nullable: false
+      definition: null
+      source: orders.DeliveryDate
+      sensitivity: none
+    - name: CurrencyCode
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: orders.CurrencyCode
+      sensitivity: none
+    key: *id005
+    links:
+    - columns: &id012
+      - CustomerKey
+      kind: null
+      to_part: customer
+      source_key: CustomerKey
+      mdm_id_column: CustomerKey_mdm_id
+      inclusion: 1.0
+    - columns: &id013
+      - DeliveryDate
+      kind: null
+      to_part: date
+      source_key: DeliveryDate
+      mdm_id_column: DeliveryDate_mdm_id
+      inclusion: 1.0
+    - columns: &id014
+      - OrderDate
+      kind: null
+      to_part: date
+      source_key: OrderDate
+      mdm_id_column: OrderDate_mdm_id
+      inclusion: 1.0
+    - columns: &id015
+      - StoreKey
+      kind: null
+      to_part: store
+      source_key: StoreKey
+      mdm_id_column: StoreKey_mdm_id
+      inclusion: 1.0
+    time:
+      as_of: null
+      as_at: loaded_at
+      event_time: OrderDate
+    partition:
+    - OrderDate
+    load_mode: append
+    why: events are appended and never changed
+- part: product
+  parent_part: null
+  rows: 2517
+  scan: full
+  class: master
+  confidence: 1.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id006
+    - ProductKey
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 2
+    passed: true
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 2517
+    passed: true
+  - class: master
+    test: has attributes besides codes and dates
+    value: 4
+    passed: true
+  runner_up:
+  - - 0.714
+    - reference
+  kind: null
+  proposed_kind:
+    domain: product
+    kind: product
+    why: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller than the parts
+      pointing at it; has attributes besides codes and dates
+  record_key:
+    columns: *id006
+    found: true
+    design: null
+    rule: null
+    alternatives:
+    - - ProductCode
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: ProductKey
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: true
+    proposal: record_key
+    why: the part's record key
+  - column: ProductCode
+    shape: '9999999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  - column: SubCategoryKey
+    shape: '999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.012714
+    local_counter: false
+    proposal: none
+    why: repeats or is a local counter
+  columns:
+  - name: ProductKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 2517
+    unique: 1.0
+    shape: '9999'
+    shape_share: 0.603099
+    top:
+    - value: '1'
+      rows: 1
+    - value: '10'
+      rows: 1
+    - value: '100'
+      rows: 1
+    - value: '1000'
+      rows: 1
+    - value: '1001'
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ProductCode
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 2517
+    unique: 1.0
+    shape: '9999999'
+    shape_share: 1.0
+    top:
+    - value: '0101001'
+      rows: 1
+    - value: '0101002'
+      rows: 1
+    - value: '0101003'
+      rows: 1
+    - value: '0101004'
+      rows: 1
+    - value: '0101005'
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ProductName
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 2517
+    unique: 1.0
+    shape: Aaaaaaa Aaaa Aaaaaaa Aaaaaa 9.9 Aaaaaaa A9999 Aaaaa
+    shape_share: 0.015495
+    top:
+    - value: A. Datum Advanced Digital Camera M300 Azure
+      rows: 1
+    - value: A. Datum Advanced Digital Camera M300 Black
+      rows: 1
+    - value: A. Datum Advanced Digital Camera M300 Green
+      rows: 1
+    - value: A. Datum Advanced Digital Camera M300 Grey
+      rows: 1
+    - value: A. Datum Advanced Digital Camera M300 Orange
+      rows: 1
+    role: text
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Manufacturer
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 11
+    unique: 0.00437
+    shape: Aaaaaaa, Aaa
+    shape_share: 0.282082
+    top:
+    - value: Contoso, Ltd
+      rows: 710
+    - value: Fabrikam, Inc.
+      rows: 267
+    - value: Litware, Inc.
+      rows: 264
+    - value: Proseware, Inc.
+      rows: 244
+    - value: Adventure Works
+      rows: 192
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Brand
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 15
+    unique: 0.005959
+    shape: Aaaaaaa
+    shape_share: 0.346444
+    top:
+    - value: Contoso
+      rows: 644
+    - value: Proseware
+      rows: 244
+    - value: Litware
+      rows: 228
+    - value: Fabrikam
+      rows: 195
+    - value: Southridge Video
+      rows: 192
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Color
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 17
+    unique: 0.006754
+    shape: Aaaaa
+    shape_share: 0.505364
+    top:
+    - value: Black
+      rows: 602
+    - value: White
+      rows: 505
+    - value: Silver
+      rows: 417
+    - value: Grey
+      rows: 283
+    - value: Blue
+      rows: 197
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: WeightUnit
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.9118
+    distinct: 3
+    unique: 0.001307
+    shape: aaaaaa
+    shape_share: 0.995643
+    top:
+    - value: pounds
+      rows: 1867
+    - value: ounces
+      rows: 418
+    - value: grams
+      rows: 10
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Weight
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 0.887167
+    distinct: 296
+    unique: 0.132557
+    shape: '9.9'
+    shape_share: 0.537394
+    top:
+    - value: '4.0'
+      rows: 77
+    - value: '2.0'
+      rows: 62
+    - value: '6.0'
+      rows: 45
+    - value: '1.0'
+      rows: 43
+    - value: '8.0'
+      rows: 43
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Cost
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 480
+    unique: 0.190703
+    shape: '99.99'
+    shape_share: 0.43385
+    top:
+    - value: '15.29'
+      rows: 34
+    - value: '210.72'
+      rows: 29
+    - value: '321.44'
+      rows: 29
+    - value: '52.0'
+      rows: 28
+    - value: '152.94'
+      rows: 27
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Price
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 426
+    unique: 0.169249
+    shape: '999.9'
+    shape_share: 0.471196
+    top:
+    - value: '29.99'
+      rows: 30
+    - value: '635.99'
+      rows: 29
+    - value: '699.0'
+      rows: 29
+    - value: '129.0'
+      rows: 28
+    - value: '299.0'
+      rows: 28
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CategoryKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 8
+    unique: 0.003178
+    shape: '9'
+    shape_share: 1.0
+    top:
+    - value: '8'
+      rows: 661
+    - value: '3'
+      rows: 606
+    - value: '4'
+      rows: 372
+    - value: '5'
+      rows: 285
+    - value: '2'
+      rows: 222
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CategoryName
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 8
+    unique: 0.003178
+    shape: Aaaa Aaaaaaaaaa
+    shape_share: 0.262614
+    top:
+    - value: Home Appliances
+      rows: 661
+    - value: Computers
+      rows: 606
+    - value: 'Cameras and camcorders '
+      rows: 372
+    - value: Cell phones
+      rows: 285
+    - value: TV and Video
+      rows: 222
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: SubCategoryKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 32
+    unique: 0.012714
+    shape: '999'
+    shape_share: 1.0
+    top:
+    - value: '308'
+      rows: 201
+    - value: '806'
+      rows: 158
+    - value: '702'
+      rows: 120
+    - value: '305'
+      rows: 103
+    - value: '405'
+      rows: 103
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: SubCategoryName
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 32
+    unique: 0.012714
+    shape: Aaaaaaaaaa
+    shape_share: 0.081446
+    top:
+    - value: Computers Accessories
+      rows: 201
+    - value: Lamps
+      rows: 158
+    - value: Download Games
+      rows: 120
+    - value: Camcorders
+      rows: 103
+    - value: Projectors & Screens
+      rows: 103
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: ProductKey
+    distinct: 2517
+    label_column: ProductCode
+    code_set: null
+    proposed_code_set: null
+  - column: Manufacturer
+    distinct: 11
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Brand
+    distinct: 15
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Color
+    distinct: 17
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: WeightUnit
+    distinct: 3
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: CategoryKey
+    distinct: 8
+    label_column: CategoryName
+    code_set: null
+    proposed_code_set: null
+  - column: SubCategoryKey
+    distinct: 32
+    label_column: SubCategoryName
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+- part: sales
+  parent_part: null
+  rows: 7794
+  scan: full
+  class: transaction
+  confidence: 0.833
+  tests:
+  - class: transaction
+    test: has a unique key (required)
+    value: *id007
+    passed: true
+  - class: transaction
+    test: points at other parts
+    value: 6
+    passed: true
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 6
+      in: 1
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: OrderDate
+      measures: 5
+    passed: true
+  - class: transaction
+    test: no name-like text
+    value: 0
+    passed: true
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 7794
+    passed: false
+  runner_up:
+  - - 0.667
+    - master
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id007
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: OrderKey
+    shape: '999999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.415961
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: LineNumber
+    shape: '9'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.000898
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: OrderKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 3242
+    unique: 0.415961
+    shape: '999999'
+    shape_share: 1.0
+    top:
+    - value: '235501'
+      rows: 7
+    - value: '239400'
+      rows: 7
+    - value: '239600'
+      rows: 7
+    - value: '240400'
+      rows: 7
+    - value: '241100'
+      rows: 7
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: LineNumber
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 7
+    unique: 0.000898
+    shape: '9'
+    shape_share: 1.0
+    top:
+    - value: '0'
+      rows: 3242
+    - value: '1'
+      rows: 2092
+    - value: '2'
+      rows: 1269
+    - value: '3'
+      rows: 635
+    - value: '4'
+      rows: 272
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: OrderDate
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 846
+    unique: 0.108545
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2023-02-18'
+      rows: 41
+    - value: '2022-12-24'
+      rows: 37
+    - value: '2023-02-23'
+      rows: 34
+    - value: '2024-02-17'
+      rows: 32
+    - value: '2022-02-24'
+      rows: 30
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: DeliveryDate
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 936
+    unique: 0.120092
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2023-02-18'
+      rows: 40
+    - value: '2022-02-24'
+      rows: 34
+    - value: '2024-02-20'
+      rows: 34
+    - value: '2022-05-21'
+      rows: 30
+    - value: '2023-01-14'
+      rows: 30
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CustomerKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 3165
+    unique: 0.406082
+    shape: '9999999'
+    shape_share: 0.575186
+    top:
+    - value: '2061443'
+      rows: 9
+    - value: '778825'
+      rows: 9
+    - value: '422865'
+      rows: 8
+    - value: '1015119'
+      rows: 7
+    - value: '1015450'
+      rows: 7
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: StoreKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 58
+    unique: 0.007442
+    shape: '999999'
+    shape_share: 0.537978
+    top:
+    - value: '999999'
+      rows: 4193
+    - value: '610'
+      rows: 130
+    - value: '270'
+      rows: 114
+    - value: '510'
+      rows: 111
+    - value: '80'
+      rows: 111
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ProductKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 1916
+    unique: 0.24583
+    shape: '9999'
+    shape_share: 0.627919
+    top:
+    - value: '1590'
+      rows: 24
+    - value: '421'
+      rows: 23
+    - value: '1586'
+      rows: 22
+    - value: '1589'
+      rows: 22
+    - value: '423'
+      rows: 22
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Quantity
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 10
+    unique: 0.001283
+    shape: '9'
+    shape_share: 0.989094
+    top:
+    - value: '1'
+      rows: 2148
+    - value: '2'
+      rows: 1776
+    - value: '3'
+      rows: 1342
+    - value: '4'
+      rows: 716
+    - value: '6'
+      rows: 477
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: UnitPrice
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 787
+    unique: 0.100975
+    shape: '999.9'
+    shape_share: 0.442135
+    top:
+    - value: '9.99'
+      rows: 133
+    - value: '219.0'
+      rows: 99
+    - value: '299.0'
+      rows: 79
+    - value: '268.0'
+      rows: 78
+    - value: '12.66'
+      rows: 76
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: NetPrice
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 3355
+    unique: 0.430459
+    shape: '999.9'
+    shape_share: 0.225173
+    top:
+    - value: '9.99'
+      rows: 45
+    - value: '268.0'
+      rows: 42
+    - value: '219.0'
+      rows: 32
+    - value: '289.99'
+      rows: 31
+    - value: '259.99'
+      rows: 29
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: UnitCost
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 858
+    unique: 0.110085
+    shape: '999.99'
+    shape_share: 0.294457
+    top:
+    - value: '5.09'
+      rows: 133
+    - value: '72.56'
+      rows: 97
+    - value: '123.24'
+      rows: 77
+    - value: '5.82'
+      rows: 76
+    - value: '86.14'
+      rows: 69
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CurrencyCode
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5
+    unique: 0.000642
+    shape: AAA
+    shape_share: 1.0
+    top:
+    - value: USD
+      rows: 4004
+    - value: EUR
+      rows: 1814
+    - value: CAD
+      rows: 829
+    - value: GBP
+      rows: 685
+    - value: AUD
+      rows: 462
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: ExchangeRate
+    type: DOUBLE
+    stored_type: DOUBLE
+    fill: 1.0
+    distinct: 1026
+    unique: 0.13164
+    shape: '9.9'
+    shape_share: 0.514113
+    top:
+    - value: '1.0'
+      rows: 4007
+    - value: '0.92217'
+      rows: 20
+    - value: '0.92013'
+      rows: 19
+    - value: '0.98049'
+      rows: 19
+    - value: '0.99463'
+      rows: 19
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: LineNumber
+    distinct: 7
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: StoreKey
+    distinct: 58
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Quantity
+    distinct: 10
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: CurrencyCode
+    distinct: 5
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: OrderDate
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: silver
+    why: 'append-heavy events and measures read by wide scans: silver'
+    advisory: true
+  silver:
+    table: sales
+    grain: one row per OrderKey + LineNumber
+    columns:
+    - name: OrderKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: sales.OrderKey
+      sensitivity: none
+    - name: LineNumber
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: sales.LineNumber
+      sensitivity: none
+    - name: OrderDate
+      type: DATE
+      nullable: false
+      definition: null
+      source: sales.OrderDate
+      sensitivity: none
+    - name: DeliveryDate
+      type: DATE
+      nullable: false
+      definition: null
+      source: sales.DeliveryDate
+      sensitivity: none
+    - name: CustomerKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: sales.CustomerKey
+      sensitivity: none
+    - name: StoreKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: sales.StoreKey
+      sensitivity: none
+    - name: ProductKey
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: sales.ProductKey
+      sensitivity: none
+    - name: Quantity
+      type: BIGINT
+      nullable: false
+      definition: null
+      source: sales.Quantity
+      sensitivity: none
+    - name: UnitPrice
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: sales.UnitPrice
+      sensitivity: none
+    - name: NetPrice
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: sales.NetPrice
+      sensitivity: none
+    - name: UnitCost
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: sales.UnitCost
+      sensitivity: none
+    - name: CurrencyCode
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: sales.CurrencyCode
+      sensitivity: none
+    - name: ExchangeRate
+      type: DOUBLE
+      nullable: false
+      definition: null
+      source: sales.ExchangeRate
+      sensitivity: none
+    key: *id007
+    links:
+    - columns: &id016
+      - CustomerKey
+      kind: null
+      to_part: customer
+      source_key: CustomerKey
+      mdm_id_column: CustomerKey_mdm_id
+      inclusion: 1.0
+    - columns: &id017
+      - DeliveryDate
+      kind: null
+      to_part: date
+      source_key: DeliveryDate
+      mdm_id_column: DeliveryDate_mdm_id
+      inclusion: 1.0
+    - columns: &id018
+      - OrderDate
+      kind: null
+      to_part: date
+      source_key: OrderDate
+      mdm_id_column: OrderDate_mdm_id
+      inclusion: 1.0
+    - columns: &id019
+      - OrderKey
+      kind: null
+      to_part: orders
+      source_key: OrderKey
+      mdm_id_column: OrderKey_mdm_id
+      inclusion: 1.0
+    - columns: &id020
+      - ProductKey
+      kind: null
+      to_part: product
+      source_key: ProductKey
+      mdm_id_column: ProductKey_mdm_id
+      inclusion: 1.0
+    - columns: &id021
+      - StoreKey
+      kind: null
+      to_part: store
+      source_key: StoreKey
+      mdm_id_column: StoreKey_mdm_id
+      inclusion: 1.0
+    - columns: *id004
+      kind: null
+      to_part: orderrows
+      source_key: OrderKey
+      mdm_id_column: OrderKey_mdm_id
+      inclusion: 1.0
+    time:
+      as_of: null
+      as_at: loaded_at
+      event_time: OrderDate
+    partition:
+    - OrderDate
+    load_mode: append
+    why: events are appended and never changed
+- part: store
+  parent_part: null
+  rows: 74
+  scan: full
+  class: master
+  confidence: 1.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id008
+    - StoreKey
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 2
+    passed: true
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 2
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 74
+    passed: true
+  - class: master
+    test: has attributes besides codes and dates
+    value: 4
+    passed: true
+  runner_up:
+  - - 0.714
+    - reference
+  kind: null
+  proposed_kind:
+    domain: store
+    kind: store
+    why: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller than the parts
+      pointing at it; has attributes besides codes and dates
+  record_key:
+    columns: *id008
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: StoreKey
+    shape: '999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: StoreKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 74
+    unique: 1.0
+    shape: '999'
+    shape_share: 0.824324
+    top:
+    - value: '10'
+      rows: 1
+    - value: '100'
+      rows: 1
+    - value: '110'
+      rows: 1
+    - value: '120'
+      rows: 1
+    - value: '130'
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+  - name: StoreCode
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 67
+    unique: 0.905405
+    shape: '99'
+    shape_share: 0.824324
+    top:
+    - value: '7'
+      rows: 3
+    - value: '25'
+      rows: 2
+    - value: '3'
+      rows: 2
+    - value: '46'
+      rows: 2
+    - value: '58'
+      rows: 2
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: GeoAreaKey
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 1.0
+    distinct: 67
+    unique: 0.905405
+    shape: '999'
+    shape_share: 0.513514
+    top:
+    - value: '12'
+      rows: 3
+    - value: '29'
+      rows: 2
+    - value: '5'
+      rows: 2
+    - value: '574'
+      rows: 2
+    - value: '594'
+      rows: 2
+    role: measure
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CountryCode
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 9
+    unique: 0.121622
+    shape: AA
+    shape_share: 0.986486
+    top:
+    - value: US
+      rows: 27
+    - value: DE
+      rows: 10
+    - value: AU
+      rows: 7
+    - value: CA
+      rows: 7
+    - value: FR
+      rows: 7
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CountryName
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 9
+    unique: 0.121622
+    shape: Aaaaaa Aaaaaa
+    shape_share: 0.364865
+    top:
+    - value: United States
+      rows: 27
+    - value: Germany
+      rows: 10
+    - value: Australia
+      rows: 7
+    - value: Canada
+      rows: 7
+    - value: France
+      rows: 7
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: State
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 67
+    unique: 0.905405
+    shape: Aaaaaa
+    shape_share: 0.135135
+    top:
+    - value: New Brunswick
+      rows: 3
+    - value: Delaware
+      rows: 2
+    - value: Mecklenburg-Vorpommern
+      rows: 2
+    - value: North Dakota
+      rows: 2
+    - value: Rhode Island
+      rows: 2
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+  - name: OpenDate
+    type: DATE
+    stored_type: DATE
+    fill: 1.0
+    distinct: 32
+    unique: 0.432432
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2010-01-01'
+      rows: 9
+    - value: '2012-12-15'
+      rows: 5
+    - value: '2015-04-04'
+      rows: 4
+    - value: '2007-07-08'
+      rows: 3
+    - value: '2008-03-06'
+      rows: 3
+    role: date
+    sensitivity: none
+    sensitivity_signals: []
+  - name: CloseDate
+    type: DATE
+    stored_type: DATE
+    fill: 0.216216
+    distinct: 15
+    unique: 0.9375
+    shape: '9999-99-99'
+    shape_share: 1.0
+    top:
+    - value: '2015-07-06'
+      rows: 2
+    - value: '2013-12-05'
+      rows: 1
+    - value: '2014-03-09'
+      rows: 1
+    - value: '2015-03-03'
+      rows: 1
+    - value: '2015-04-04'
+      rows: 1
+    role: date
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Description
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 67
+    unique: 0.905405
+    shape: Aaaaaaa Aaaaa Aaaaaa
+    shape_share: 0.121622
+    top:
+    - value: Contoso Store New Brunswick
+      rows: 3
+    - value: Contoso Store Delaware
+      rows: 2
+    - value: Contoso Store Mecklenburg-Vorpommern
+      rows: 2
+    - value: Contoso Store North Dakota
+      rows: 2
+    - value: Contoso Store Rhode Island
+      rows: 2
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+  - name: SquareMeters
+    type: BIGINT
+    stored_type: BIGINT
+    fill: 0.986486
+    distinct: 39
+    unique: 0.534247
+    shape: '9999'
+    shape_share: 0.821918
+    top:
+    - value: '2000'
+      rows: 16
+    - value: '1260'
+      rows: 4
+    - value: '2100'
+      rows: 4
+    - value: '350'
+      rows: 4
+    - value: '1015'
+      rows: 2
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  - name: Status
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.202703
+    distinct: 2
+    unique: 0.133333
+    shape: Aaaaaa
+    shape_share: 0.533333
+    top:
+    - value: Closed
+      rows: 8
+    - value: Restructured
+      rows: 7
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+  code_lists:
+  - column: CountryCode
+    distinct: 9
+    label_column: CountryName
+    code_set: null
+    proposed_code_set: null
+  - column: SquareMeters
+    distinct: 39
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: Status
+    distinct: 2
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: OpenDate
+      to: CloseDate
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+relationships:
+- relationship: currencyexchange.Date → date.Date
+  from:
+    part: currencyexchange
+    columns: *id009
+  to:
+    part: date
+    columns:
+    - Date
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a reference part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 1.0
+    randomness: 1.0
+    name_similarity: 1.0
+    score: 1.0
+    scan: full
+- relationship: orderrows.OrderKey → orders.OrderKey
+  from:
+    part: orderrows
+    columns: *id010
+  to:
+    part: orders
+    columns:
+    - OrderKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a transaction part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 1.0
+    randomness: 1.0
+    name_similarity: 1.0
+    score: 1.0
+    scan: full
+- relationship: orderrows.ProductKey → product.ProductKey
+  from:
+    part: orderrows
+    columns: *id011
+  to:
+    part: product
+    columns:
+    - ProductKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a master part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.761224
+    randomness: 0.929
+    name_similarity: 1.0
+    score: 0.976
+    scan: full
+- relationship: orders.CustomerKey → customer.CustomerKey
+  from:
+    part: orders
+    columns: *id012
+  to:
+    part: customer
+    columns:
+    - CustomerKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a master part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.030146
+    randomness: 0.911
+    name_similarity: 1.0
+    score: 0.97
+    scan: full
+- relationship: orders.DeliveryDate → date.Date
+  from:
+    part: orders
+    columns: *id013
+  to:
+    part: date
+    columns:
+    - Date
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a reference part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.640657
+    randomness: 0.814
+    name_similarity: 0.5
+    score: 0.771
+    scan: full
+- relationship: orders.OrderDate → date.Date
+  from:
+    part: orders
+    columns: *id014
+  to:
+    part: date
+    columns:
+    - Date
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a reference part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.579055
+    randomness: 0.812
+    name_similarity: 0.615
+    score: 0.809
+    scan: full
+- relationship: orders.StoreKey → store.StoreKey
+  from:
+    part: orders
+    columns: *id015
+  to:
+    part: store
+    columns:
+    - StoreKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a master part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.783784
+    randomness: 0.975
+    name_similarity: 1.0
+    score: 0.992
+    scan: full
+- relationship: sales.CustomerKey → customer.CustomerKey
+  from:
+    part: sales
+    columns: *id016
+  to:
+    part: customer
+    columns:
+    - CustomerKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a master part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.030146
+    randomness: 0.911
+    name_similarity: 1.0
+    score: 0.97
+    scan: full
+- relationship: sales.DeliveryDate → date.Date
+  from:
+    part: sales
+    columns: *id017
+  to:
+    part: date
+    columns:
+    - Date
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a reference part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.640657
+    randomness: 0.814
+    name_similarity: 0.5
+    score: 0.771
+    scan: full
+- relationship: sales.OrderDate → date.Date
+  from:
+    part: sales
+    columns: *id018
+  to:
+    part: date
+    columns:
+    - Date
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a reference part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.579055
+    randomness: 0.812
+    name_similarity: 0.615
+    score: 0.809
+    scan: full
+- relationship: sales.OrderKey → orders.OrderKey
+  from:
+    part: sales
+    columns: *id019
+  to:
+    part: orders
+    columns:
+    - OrderKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a transaction part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 1.0
+    randomness: 1.0
+    name_similarity: 1.0
+    score: 1.0
+    scan: full
+- relationship: sales.ProductKey → product.ProductKey
+  from:
+    part: sales
+    columns: *id020
+  to:
+    part: product
+    columns:
+    - ProductKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a master part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.761224
+    randomness: 0.929
+    name_similarity: 1.0
+    score: 0.976
+    scan: full
+- relationship: sales.StoreKey → store.StoreKey
+  from:
+    part: sales
+    columns: *id021
+  to:
+    part: store
+    columns:
+    - StoreKey
+  inclusion: 1.0
+  cardinality: N:1
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a master part: onboarded after it'
+  evidence:
+    test: inclusion+rostin+zhang
+    coverage: 0.783784
+    randomness: 0.975
+    name_similarity: 1.0
+    score: 0.992
+    scan: full
+- relationship: sales.OrderKey+LineNumber → orderrows.OrderKey+LineNumber
+  from:
+    part: sales
+    columns: *id004
+  to:
+    part: orderrows
+    columns: *id004
+  inclusion: 1.0
+  cardinality: '1:1'
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a transaction part: onboarded after it'
+  evidence:
+    test: composite inclusion, same names
+    scan: full
+- relationship: orderrows.OrderKey+LineNumber → sales.OrderKey+LineNumber
+  from:
+    part: orderrows
+    columns: *id007
+  to:
+    part: sales
+    columns: *id007
+  inclusion: 1.0
+  cardinality: '1:1'
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a transaction part pointing at a transaction part: onboarded after it'
+  evidence:
+    test: composite inclusion, same names
+    scan: full
+hierarchies:
+- hierarchy: 'customer: State > GeoAreaKey > StateFull'
+  type: reference
+  part: customer
+  evidence_kind: functional_dependency
+  levels:
+  - depth: 1
+    name: null
+    column: State
+    samples:
+    - AB
+    - ACT
+    - AG
+  - depth: 2
+    name: null
+    column: GeoAreaKey
+    samples:
+    - '1'
+    - '10'
+    - '100'
+  - depth: 3
+    name: null
+    column: StateFull
+    samples:
+    - Aberdeen
+    - Aberdeenshire
+    - Agrigento
+  rule: each value of a level has one value at the next coarser level
+  holds: 0.999962
+  depth: 3
+  shape: balanced
+  orphans: 0
+  cycles: 0
+  invalid_rows: 4
+  valid_dates:
+    from: null
+    to: null
+- hierarchy: 'customer: Continent > Country'
+  type: reference
+  part: customer
+  evidence_kind: functional_dependency
+  levels:
+  - depth: 1
+    name: null
+    column: Continent
+    samples:
+    - Australia
+    - Europe
+    - North America
+  - depth: 2
+    name: null
+    column: Country
+    samples:
+    - AU
+    - CA
+    - DE
+  rule: each value of a level has one value at the next coarser level
+  holds: 1.0
+  depth: 2
+  shape: balanced
+  orphans: 0
+  cycles: 0
+  invalid_rows: 0
+  valid_dates:
+    from: null
+    to: null
+- hierarchy: 'date: Year > YearQuarter > YearMonth'
+  type: reference
+  part: date
+  evidence_kind: functional_dependency
+  levels:
+  - depth: 1
+    name: null
+    column: Year
+    samples:
+    - '2021'
+    - '2022'
+    - '2023'
+  - depth: 2
+    name: null
+    column: YearQuarter
+    samples:
+    - Q1-2021
+    - Q1-2022
+    - Q1-2023
+  - depth: 3
+    name: null
+    column: YearMonth
+    samples:
+    - April 2021
+    - April 2022
+    - April 2023
+  rule: each value of a level has one value at the next coarser level
+  holds: 1.0
+  depth: 3
+  shape: balanced
+  orphans: 0
+  cycles: 0
+  invalid_rows: 0
+  valid_dates:
+    from: null
+    to: null
+- hierarchy: 'date: Quarter > Month'
+  type: reference
+  part: date
+  evidence_kind: functional_dependency
+  levels:
+  - depth: 1
+    name: null
+    column: Quarter
+    samples:
+    - Q1
+    - Q2
+    - Q3
+  - depth: 2
+    name: null
+    column: Month
+    samples:
+    - April
+    - August
+    - December
+  rule: each value of a level has one value at the next coarser level
+  holds: 1.0
+  depth: 2
+  shape: balanced
+  orphans: 0
+  cycles: 0
+  invalid_rows: 0
+  valid_dates:
+    from: null
+    to: null
+- hierarchy: 'product: CategoryKey > SubCategoryKey'
+  type: reference
+  part: product
+  evidence_kind: code_nesting
+  levels:
+  - depth: 1
+    name: null
+    column: CategoryKey
+    samples:
+    - '1'
+    - '2'
+    - '3'
+  - depth: 2
+    name: null
+    column: SubCategoryKey
+    samples:
+    - '101'
+    - '104'
+    - '106'
+  rule: each code starts with its parent's code
+  holds: 1.0
+  depth: 2
+  shape: balanced
+  orphans: 0
+  cycles: 0
+  invalid_rows: 0
+  valid_dates:
+    from: null
+    to: null
+- hierarchy: 'product: Manufacturer > Brand'
+  type: reference
+  part: product
+  evidence_kind: functional_dependency
+  levels:
+  - depth: 1
+    name: null
+    column: Manufacturer
+    samples:
+    - A. Datum Corporation
+    - Adventure Works
+    - Contoso, Ltd
+  - depth: 2
+    name: null
+    column: Brand
+    samples:
+    - A. Datum
+    - Adventure Works
+    - 'Adventure Works '
+  rule: each value of a level has one value at the next coarser level
+  holds: 1.0
+  depth: 2
+  shape: balanced
+  orphans: 0
+  cycles: 0
+  invalid_rows: 0
+  valid_dates:
+    from: null
+    to: null
+questions:
+- id: q1
+  about: customer
+  question: Is customer a new master kind named 'customer'?
+  recommendation: 'yes: has a unique key (required); other parts point at it; points at few parts; has name-like text; has
+    attributes besides codes and dates'
+  answer: null
+- id: q2
+  about: product
+  question: Is product a new master kind named 'product'?
+  recommendation: 'yes: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller
+    than the parts pointing at it; has attributes besides codes and dates'
+  answer: null
+- id: q3
+  about: store
+  question: Is store a new master kind named 'store'?
+  recommendation: 'yes: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller
+    than the parts pointing at it; has attributes besides codes and dates'
+  answer: null
+approval:
+  status: draft
+  approved_by: null
+  approved_words: null
+  approved_at: null

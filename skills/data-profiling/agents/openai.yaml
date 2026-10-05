@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Profiling"
+  short_description: "Find master, reference, relationship and transaction data in any data set"
+  default_prompt: "Use $data-profiling to profile the data set whose copies are in <folder>."

@@ -1,6 +1,7 @@
-"""The input step: every input becomes one DuckDB view per part.
+"""The input step: every input becomes one DuckDB table per part.
 
-Later steps read views only and never ask what format a part came from.
+Each part is read once into a table (a remote database stays a read-only view),
+and later steps read tables only, never asking what format a part came from.
 
 - CSV and Parquet are read by DuckDB directly, with a full type scan.
 - JSON, JSON Lines, XML and zip members are read by the Python standard
@@ -288,7 +289,7 @@ def _tabular(con, name: str, files: list[Path], size: int) -> list[Part]:
     if len(files) > 1 and len({header(f) for f in files}) > 1:
         return [p for f in files for p in _tabular(con, f.stem, [f], f.stat().st_size)]
     fmt = _format(files[0])
-    con.execute(f"CREATE VIEW {_sqlname(name)} AS SELECT * FROM {_reader(files[0], [str(f) for f in files])}")
+    con.execute(f"CREATE TABLE {_sqlname(name)} AS SELECT * FROM {_reader(files[0], [str(f) for f in files])}")
     return [Part(name, str(files[0]) if len(files) == 1 else str(files[0].parent), fmt, size)]
 
 
@@ -351,7 +352,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     spill()
     parts = []
     for part, path in sorted(files.items()):
-        con.execute(f"CREATE VIEW {_sqlname(part)} AS SELECT * FROM read_json({_text(str(path))}, "
+        con.execute(f"CREATE TABLE {_sqlname(part)} AS SELECT * FROM read_json({_text(str(path))}, "
                     "format='newline_delimited', sample_size=-1, union_by_name=true)")
         parts.append(Part(part, "", "", 0, scan=scan, parent=part.rsplit(".", 1)[0] if part != name else None))
     return parts
@@ -359,7 +360,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
 
 def _attach_file(con, name: str, path: Path, fmt: str) -> list[Part]:
     con.execute(f"ATTACH {_text(str(path))} AS {_sqlname(name)} (TYPE {fmt}, READ_ONLY)")
-    return _attached(con, name, str(path), fmt)
+    return _attached(con, name, str(path), fmt, copy=True)
 
 
 def _attach(con, name: str, variable: str) -> list[Part]:
@@ -375,13 +376,15 @@ def _attach(con, name: str, variable: str) -> list[Part]:
     return _attached(con, name, f"${variable}", kind)
 
 
-def _attached(con, name: str, location: str, fmt: str) -> list[Part]:
+def _attached(con, name: str, location: str, fmt: str, copy: bool = False) -> list[Part]:
+    """Each table of an attached database is a part: copied when the file is local, else a view."""
     tables = con.execute("SELECT schema_name, table_name, estimated_size FROM duckdb_tables() "
                          "WHERE database_name = ? ORDER BY 1, 2", [name]).fetchall()
     parts = []
     for schema, table, _ in tables:
         part = table if schema in {"main", "public"} else f"{schema}.{table}"
-        con.execute(f"CREATE VIEW {_sqlname(part)} AS SELECT * FROM {_sqlname(name)}.{_sqlname(schema)}.{_sqlname(table)}")
+        con.execute(f"CREATE {'TABLE' if copy else 'VIEW'} {_sqlname(part)} AS "
+                    f"SELECT * FROM {_sqlname(name)}.{_sqlname(schema)}.{_sqlname(table)}")
         parts.append(Part(part, f"{location}#{schema}.{table}", fmt, 0))
     return parts
 

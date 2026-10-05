@@ -125,3 +125,11 @@ def test_published_check_digit_vectors():
     assert identifiers.mod11_10("794623") and not identifiers.mod11_10("794624")
     assert identifiers.mod37_36("A12425GABC1234002M") and not identifiers.mod37_36("A12425GABC1234002N")
     assert identifiers.luhn("79927398713") and not identifiers.luhn("79927398710")
+
+
+def test_logical_type_of_dates_stored_as_text():
+    con = duckdb.connect()
+    con.execute("CREATE TABLE d AS SELECT '2025-01-0' || i AS day, 'x' || i AS other FROM range(1, 9) r(i)")
+    cols = {c["name"]: c for c in profile.columns(con, "d")}
+    assert profile.logical_type(cols["day"]) == "DATE" and cols["day"]["type"] == "VARCHAR"
+    assert profile.logical_type(cols["other"]) == "VARCHAR"

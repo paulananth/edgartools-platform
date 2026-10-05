@@ -2,6 +2,8 @@
 
     uv run --with duckdb --with pyyaml python profile_data.py run --name <set> \
         --input <part>=<file|folder|zip|db file|env:VARIABLE> ... --out <folder>
+    uv run --with duckdb --with pyyaml python profile_data.py compare --approved <folder>/findings.yaml \
+        --input <part>=<new delivery> ... --out <folder>
     uv run --with duckdb --with pyyaml python profile_data.py approve --findings <folder>/findings.yaml \
         --by <operator> --words "<their exact words>"
 """
@@ -17,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import yaml  # noqa: E402
 
-from profiling import inputs, report, run  # noqa: E402
+from profiling import drift, inputs, report, run  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     profile.add_argument("--sample", type=int, default=inputs.SAMPLE_RECORDS)
     profile.add_argument("--seed", type=int, default=0)
     profile.add_argument("--kinds", default="", help="existing master kinds, comma separated")
+    compare = commands.add_parser("compare", help="Profile a new delivery and list its drift from approved findings")
+    compare.add_argument("--approved", required=True, type=Path, help="the approved findings.yaml")
+    compare.add_argument("--input", action="append", required=True, metavar="NAME=LOCATION")
+    compare.add_argument("--out", required=True, type=Path)
+    compare.add_argument("--limit-gb", type=float, default=inputs.DEFAULT_LIMIT / inputs.GB)
+    compare.add_argument("--seed", type=int, default=0)
     approve = commands.add_parser("approve", help="Record the operator's approval, in their exact words")
     approve.add_argument("--findings", required=True, type=Path)
     approve.add_argument("--by", required=True)
@@ -44,6 +52,19 @@ def main(argv: list[str] | None = None) -> int:
                                       tuple(k for k in args.kinds.split(",") if k), args.out / ".work")
         data, text = report.write(findings, args.out)
         print(f"wrote {data} and {text}")
+        return 0
+    if args.command == "compare":
+        approved = yaml.safe_load(args.approved.read_text(encoding="utf-8"))
+        if approved["approval"]["status"] != "approved":
+            raise SystemExit(f"{args.approved} is not approved: approve it before comparing")
+        sources = dict(item.split("=", 1) for item in args.input)
+        new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
+                                 seed=args.seed, work=args.out / ".work")
+        report.write(new, args.out)
+        items = drift.compare(approved, new)
+        (args.out / "drift.yaml").write_text(yaml.safe_dump({"approved": str(args.approved), "drift": items},
+                                                            sort_keys=False, allow_unicode=True), encoding="utf-8")
+        print(f"{len(items)} drift items in {args.out / 'drift.yaml'}")
         return 0
     findings = yaml.safe_load(args.findings.read_text(encoding="utf-8"))
     findings["approval"] = {"status": "approved", "approved_by": args.by, "approved_words": args.words,

@@ -79,3 +79,35 @@ def test_report_names_every_part_and_says_advice_only(result):
     for name in ("member", "item", "grp", "visit", "line", "pairing"):
         assert f"| {name} |" in result["report"]
     assert "advice only" in result["report"]
+
+
+def test_compare_lists_drift_against_approved_findings(result, tmp_path):
+    import shutil
+    approved = result["out"] / "findings.yaml"
+    findings = yaml.safe_load(approved.read_text())
+    findings["approval"]["status"] = "approved"
+    approved_copy = tmp_path / "approved.yaml"
+    approved_copy.write_text(yaml.safe_dump(findings, sort_keys=False))
+    changed = tmp_path / "set"
+    shutil.copytree(result["folder"], changed)
+    lines = (changed / "visit.csv").read_text().splitlines()
+    lines = [lines[0] + ",channel"] + [line.replace(",", ",9", 1) + ",web" for line in lines[1:]]
+    (changed / "visit.csv").write_text("\n".join(lines) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["compare", "--approved", str(approved_copy), "--input", f"set={changed}",
+                              "--out", str(out)]) == 0
+    drift = yaml.safe_load((out / "drift.yaml").read_text())["drift"]
+    kinds = {(d["drift"], d["part"]) for d in drift}
+    assert ("column_new", "visit") in kinds
+    assert ("link_broken", "visit") in kinds or ("link_weaker", "visit") in kinds
+    assert all(d["handled_by"] in {"data-quality", "refining-rules", "rdm"} for d in drift)
+
+
+def test_compare_refuses_findings_that_are_not_approved(result, tmp_path):
+    draft = yaml.safe_load((result["out"] / "findings.yaml").read_text())
+    draft["approval"]["status"] = "draft"
+    path = tmp_path / "draft.yaml"
+    path.write_text(yaml.safe_dump(draft))
+    with pytest.raises(SystemExit, match="not approved"):
+        profile_data.main(["compare", "--approved", str(path), "--input", f"set={result['folder']}",
+                           "--out", str(tmp_path / "o")])

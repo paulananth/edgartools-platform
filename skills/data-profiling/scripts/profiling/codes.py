@@ -37,10 +37,11 @@ def code_lists(con, part: str, columns: list[dict], key: list[str], skip: set[st
     """Each code column with its label column (a column that names it one to one), if any.
 
     A single-column key counts too when it has a label: the part is then itself a
-    list of codes. Columns in `skip` (personal data) are never code lists.
+    list of codes. Columns in `skip` (values that identify a person) are never code lists.
     """
     keyed = [c for c in columns if key == [c["name"]]]
-    codes = keyed + [c for c in columns if code_like(c) and c["name"] not in key and c["name"] not in skip]
+    # Members of a composite key may be codes; a single-column key is the part's own identity.
+    codes = keyed + [c for c in columns if code_like(c) and [c["name"]] != key and c["name"] not in skip]
     found, labels = [], set()
     for code in codes:
         if code["name"] in labels:

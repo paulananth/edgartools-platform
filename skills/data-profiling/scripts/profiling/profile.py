@@ -66,6 +66,16 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
     return profile
 
 
+def logical_type(profile: dict) -> str:
+    """The type a full read proves: text whose every value is a date (or a timestamp) is a date."""
+    if profile["type"] == "VARCHAR" and profile["shape_share"] == 1.0 and profile["fill"] > 0:
+        if profile["shape"] == "9999-99-99":
+            return "DATE"
+        if profile["shape"] in {"9999-99-99A99:99:99", "9999-99-99 99:99:99"}:
+            return "TIMESTAMP"
+    return profile["type"]
+
+
 def is_integer(profile: dict) -> bool:
     return profile["type"] in {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UBIGINT", "UINTEGER"}
 

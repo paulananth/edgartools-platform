@@ -18,6 +18,10 @@ from .identifiers import luhn, mod97_10
 PERSONAL = {"name", "given", "first", "last", "surname", "middle", "initial", "birth", "birthday", "dob",
             "age", "email", "mail", "phone", "mobile", "address", "street", "zip", "postal", "postcode",
             "latitude", "longitude", "lat", "lon", "lng", "gender", "sex", "title"}
+# Personal words whose values identify a person (never a code list); gender or title may be codes.
+IDENTITY = {"name", "given", "first", "last", "surname", "middle", "initial", "birth", "birthday", "dob", "email",
+            "mail", "phone", "mobile", "address", "street", "zip", "postal", "postcode", "latitude", "longitude",
+            "lat", "lon", "lng"}
 PERSON_PART = {"given", "first", "surname", "last", "birth", "birthday", "dob", "middle"}
 SENSITIVE = {"ssn", "passport", "national", "tax", "health", "diagnosis", "medical", "religion", "religious",
              "ethnicity", "ethnic", "race", "racial", "union", "biometric", "genetic", "sexual", "orientation",
