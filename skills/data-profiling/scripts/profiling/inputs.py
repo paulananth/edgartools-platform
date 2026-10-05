@@ -165,50 +165,58 @@ def _split_table(data: dict) -> list[dict] | None:
     return [dict(zip(header, row)) for row in rows]
 
 
+_BLANK = re.compile(r"[\s,]*")
+
+
 def _stream_json(stream) -> tuple[str | None, Iterator[dict]]:
+    """Records of a large JSON array, one at a time, in linear time.
+
+    The reader moves an index through a buffer and drops what it has read only
+    when it refills, so no record costs a copy of the buffer.
+    """
     if not isinstance(stream, io.TextIOBase):
         stream = io.TextIOWrapper(stream, encoding="utf-8")  # a character may span two chunks
     decoder = json.JSONDecoder()
-    buffer = ""
+    buffer, pos = "", 0
 
     def fill() -> bool:
-        nonlocal buffer
-        chunk = stream.read(1 << 20)
-        buffer += chunk
+        nonlocal buffer, pos
+        chunk = stream.read(1 << 22)
+        buffer, pos = buffer[pos:] + chunk, 0
         return bool(chunk)
 
     def array() -> Iterator[dict]:
-        nonlocal buffer
+        nonlocal pos
         while True:
-            while not buffer.lstrip() and fill():
-                pass
-            buffer = buffer.lstrip()
-            if not buffer or buffer[0] == "]":
-                buffer = buffer[1:]
-                return
-            if buffer[0] == ",":
-                buffer = buffer[1:]
+            pos = _BLANK.match(buffer, pos).end()  # blanks and the commas between records
+            if pos >= len(buffer):
+                if not fill():
+                    return
                 continue
+            if buffer[pos] == "]":
+                pos += 1
+                return
             while True:
                 try:
-                    item, end = decoder.raw_decode(buffer)
+                    item, end = decoder.raw_decode(buffer, pos)
                     break
                 except json.JSONDecodeError:
                     if not fill():
                         raise
-            buffer = buffer[end:]
+            pos = end
             yield item if isinstance(item, dict) else {"value": item}
 
     fill()
-    buffer = buffer.lstrip()
-    if buffer.startswith("["):
-        buffer = buffer[1:]
+    pos = len(buffer) - len(buffer.lstrip())
+    if buffer.startswith("[", pos):
+        pos += 1
         return None, array()
-    while not (head := re.match(r'\s*\{\s*"((?:[^"\\]|\\.)*)"\s*:\s*\[', buffer)) and len(buffer) < 4096 and fill():
+    while not (head := re.compile(r'\s*\{\s*"((?:[^"\\]|\\.)*)"\s*:\s*\[').match(buffer, pos)) \
+            and len(buffer) < 4096 and fill():
         pass
     if not head:
         raise ValueError("a JSON text this large must be an array, or an object whose first key holds the records")
-    buffer = buffer[head.end():]
+    pos = head.end()
     return json.loads(f'"{head.group(1)}"'), array()
 
 
