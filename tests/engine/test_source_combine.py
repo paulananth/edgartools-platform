@@ -37,6 +37,60 @@ def plan(groups, tables, limit=1000):
     return {"execution": {"profile": "source.combine"}, "combine": {"max_rows": limit, "groups": groups, "tables": tables}}
 
 
+def test_flat_collections_preserve_one_level_types_and_missing_keys(tmp_path):
+    store = Artifacts()
+    refs = {'main': reading(store, tmp_path, {'companies': [{'cik': 1}, {'cik': 2}, {'cik': None}]}),
+            'parts': reading(store, tmp_path, {'parts': [{'cik': 1, 'values': ['8-K', '10-K', False, 0, ['nested']]},
+                            {'cik': 1, 'values': ['20-F', '10-K', 0.0]}, {'cik': 1, 'values': []}]})}
+    spec = group('parts', 'parts', 'cik', 'values', mode='collect_flat', distinct=True)
+    work = envelope(store, tmp_path, plan({'values': spec}, {'company': table('main', 'companies', {'values': join('values')})}), refs)
+    result = source_combine.execute(work, store)
+    assert source_combine.verify({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
+    from edgar_warehouse.control_contract import canonical
+    expected = ['8-K', '10-K', False, 0, ['nested'], '20-F', 0.0]
+    assert canonical(store.json(result)['artifacts'][0]['tables']['company'][0]['values']) == canonical(expected)
+    assert [r['values'] for r in store.json(result)['artifacts'][0]['tables']['company'][1:]] == [[], []]
+    body = plan({'values': spec}, {'company': table('main', 'companies', {'values': join('values', missing='error')})})
+    refused = envelope(store, tmp_path, body, refs)
+    refused['output'] = (tmp_path / 'refused.json').as_uri()
+    with pytest.raises(ValueError, match='No combination group match'):
+        source_combine.execute(refused, store)
+    assert not (tmp_path / 'refused.json').exists()
+
+
+@pytest.mark.parametrize('mutation', ['scalar', 'null', 'element_budget', 'bad_sort', 'sort_first', 'mixed_sort', 'structured_sort'])
+def test_flat_collection_refuses_bad_values_options_and_element_budget(tmp_path, mutation):
+    store = Artifacts()
+    value = [1, 2, 3]
+    if mutation == 'scalar': value = 3
+    if mutation == 'null': value = None
+    if mutation == 'mixed_sort': value = [False, 0]
+    if mutation == 'structured_sort': value = [[]]
+    spec = group('parts', 'parts', 'cik', 'values', mode='collect_flat')
+    spec['skip_null_values'] = False
+    if mutation == 'bad_sort': spec['sort_values'] = 'true'
+    if mutation == 'sort_first': spec.update(mode='first', sort_values=True)
+    if mutation in ('mixed_sort', 'structured_sort'): spec['sort_values'] = True
+    refs = {'main': reading(store, tmp_path, {'companies': [{'cik': 1}]}),
+            'parts': reading(store, tmp_path, {'parts': [{'cik': 1, 'values': value}]})}
+    work = envelope(store, tmp_path, plan({'values': spec}, {'company': table('main', 'companies', {'values': join('values')})}, limit=2), refs)
+    with pytest.raises(ValueError): source_combine.execute(work, store)
+    assert not (tmp_path / 'output').exists()
+
+
+def test_flat_value_sort_is_natural_including_prefix_form_names(tmp_path):
+    store = Artifacts()
+    refs = {'main': reading(store, tmp_path, {'companies': [{'cik': 1}]}),
+            'parts': reading(store, tmp_path, {'parts': [{'cik': 1, 'values': ['S-8 POS', '20-F']},
+                            {'cik': 1, 'values': ['S-8', '10-K', '20-F']}]})}
+    spec = group('parts', 'parts', 'cik', 'values', mode='collect_flat', distinct=True)
+    spec['sort_values'] = True
+    work = envelope(store, tmp_path, plan({'values': spec}, {'company': table('main', 'companies', {'values': join('values')})}), refs)
+    result = source_combine.execute(work, store)
+    assert source_combine.verify({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
+    assert store.json(result)['artifacts'][0]['tables']['company'][0]['values'] == ['10-K', '20-F', 'S-8', 'S-8 POS']
+
+
 def test_order_distinct_exact_keys_and_preparation_share_verified_scope(tmp_path):
     store = Artifacts()
     refs = {"main": reading(store, tmp_path, {"companies": [{"cik": 1}, {"cik": "1"}, {"cik": 2}]}),
