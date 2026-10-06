@@ -17,4 +17,4 @@ Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../pl
 - [ ] ~~History (--as-at/--as-of) for cross-references~~ the view answers "now"; ticket 05 decides whether history is needed (added 2026-10-06 07:01 ET)
 - [x] Adding a cross-reference is a new version, not a new source code (it never decides which record is which); written in REFERENCE.md (added 2026-10-06 07:16 ET)
 - [x] Three-axis review findings applied (format check once, one hash-rule comment, lookup STRICT with qualified parameters, index comment, EXPLAIN test, own-name namespace test, another kind's ids note) (added 2026-10-06 07:16 ET) (Standards, Spec and GoF: no hard violations, no bugs; all small findings applied; per-kind views test now lists cross_reference; PG16: 46 affected integration tests pass; plain EXPLAIN on 400 records reads the index) 2026-10-06 07:19 ET
-- [ ] Review, PR, CI, merge on word (review done 2026-10-06 07:19 ET; PR, CI and merge pending)
+- [x] Review, PR, CI, merge on word: PR #835, CI green 2026-10-06 07:24 ET (unit, MDM, integration, engine, lint, gate); merged on the operator's word 2026-10-06 07:26 ET
