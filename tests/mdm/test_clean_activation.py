@@ -548,8 +548,10 @@ class TestTheCompanyPolicy:
         # ticket 15 the CIK matching rule, all switched off; without them the
         # policy is unchanged.
         # Ticket 25 switched the two name matching rules on; platform
-        # validation 06a added GLEIF's relationship file to the sources.
+        # validation 06a added GLEIF's relationship file to the sources;
+        # profiling ticket 04 moved the relationship types into the policy.
         assert policy_layers.digests(policy_layers.company_part(POLICY)) == [
+            "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",
             "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5",
             "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
             "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",

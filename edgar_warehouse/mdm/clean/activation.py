@@ -86,6 +86,10 @@ def check_policy(body: dict) -> None:
     for kind, block in sorted(kinds.items()):
         for family, bar in sorted((block.get("bars") or {}).items()):
             _check_bar(kind, family, bar)
+    if "relationships" in body:
+        from .relationships import check_types
+
+        check_types(body["relationships"])
     _check_shared_namespaces(kinds)
     seen = set()
     for kind, rule in _rules(body):

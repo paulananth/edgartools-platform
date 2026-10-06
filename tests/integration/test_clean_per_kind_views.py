@@ -105,10 +105,12 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     # Plus two views across every kind: the records still waiting, each with
     # its Probable Kind (036), and the one read of a current entity (042);
     # the Section 16 insiders over the Person links (004); and every
-    # lookup-only cross-reference id (005).
+    # lookup-only cross-reference id (005); and every relationship with its
+    # ends named, one row per period (006).
     assert installed_views(database) == ({
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
-    } | {"stage_waiting", "current_entity", "is_insider", "cross_reference"}) - {"company_master"}
+    } | {"stage_waiting", "current_entity", "is_insider", "cross_reference",
+         "relationship_context"}) - {"company_master"}
     assert columns(database, "company")
     # Exact equality above already forbids it, but say it outright: 034 renamed
     # 033's source-side pair, so not one view still carries the old name.

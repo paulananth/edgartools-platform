@@ -215,13 +215,18 @@ def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -
 
 
 def policy(root: Path | None = None) -> dict:
-    """The Mastering Policy: `merge/policy.yaml`, one file per kind, and every
-    reference table, so the policy's digest also covers the tables its rules
-    read (an edit to `reference/sec-place-codes.yaml` is a new policy)."""
+    """The Mastering Policy: `merge/policy.yaml`, one file per kind,
+    `merge/relationships.yaml` (the relationship types) and every reference
+    table, so the policy's digest also covers the tables its rules read (an
+    edit to `reference/sec-place-codes.yaml` is a new policy)."""
     root = root or ROOT
     body = load(root / "merge" / "policy.yaml")
     body["kinds"] = {path.stem: load(path) for path in sorted((root / "merge" / "kinds").glob("*.yaml"))}
     body["reference"] = {path.stem: load(path) for path in sorted((root / "reference").glob("*.yaml"))}
+    # The relationship types MDM masters (profiling ticket 04): data, not code.
+    relationship_types = root / "merge" / "relationships.yaml"
+    if relationship_types.exists():
+        body["relationships"] = load(relationship_types)
     return body
 
 
@@ -237,7 +242,13 @@ def write_policy(body: dict, root: Path) -> None:
         if {p.stem for p in folder.glob("*.yaml")} - set(parts):
             raise RulesFileError(f"Output folder has {key} absent from this version; use an empty export folder")
     (root / "merge").mkdir(parents=True, exist_ok=True)
-    (root / "merge" / "policy.yaml").write_text(dumps({k: v for k, v in body.items() if k not in split}), encoding="utf-8")
+    (root / "merge" / "policy.yaml").write_text(
+        dumps({k: v for k, v in body.items() if k not in split and k != "relationships"}), encoding="utf-8")
+    types_file = root / "merge" / "relationships.yaml"
+    if "relationships" in body:
+        types_file.write_text(dumps(body["relationships"]), encoding="utf-8")
+    elif types_file.exists():
+        raise RulesFileError("Output folder has relationship types absent from this version; use an empty export folder")
     for key, folder in split.items():
         folder.mkdir(parents=True, exist_ok=True)
         for name, value in body.get(key, {}).items():

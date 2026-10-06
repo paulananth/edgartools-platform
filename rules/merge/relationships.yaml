@@ -1,0 +1,105 @@
+# Relationship types MDM masters (profiling ticket 04; operator, 2026-10-06:
+# "Types as data"). Part of the Mastering Policy: a change here is a new policy
+# version, approved by its digest. A new type needs no code change.
+#
+# Each type:
+#   from, to          the kinds of the two ends (any of the MDM kinds)
+#   from_profile,     a role profile the end must hold over the link's period
+#   to_profile        (an adviser, a fund, an audit firm)
+#   capacities        a link in a capacity (a Person link): the capacities it
+#                     accepts; its dates come from dated sightings, folded
+#   hierarchy: true   the links form parent chains: cycles are checked, and the
+#                     chain can be walked (mdm.relationship_chain)
+#   cycles            for a hierarchy: invalid (a cycle's links are not
+#                     mastered) or review (they are, and a steward is told)
+#   one_parent: true  for a hierarchy: one parent at a time per scope; two
+#                     overlapping parents are both held back for a steward
+#   ultimate_parent   for a hierarchy: derive each record's ultimate parent with
+#                     this algorithm (accounting-chain-v1)
+#
+# Before this file the same table was held in code; a policy registered without
+# this section still uses it (relationships.TYPES_V0), so the two must agree.
+version: relationship-types-v1
+types:
+  AUDITED_BY:
+    from: [company]
+    to: [company]
+    to_profile: audit_firm
+  ISSUED_BY:
+    from: [security]
+    to: [company, fund_structure, government, international_organization]
+  EMPLOYED_BY:
+    from: [person]
+    to: [company]
+    capacities: [director, employee, officer]
+  CONTROLS:
+    from: [person]
+    to: [company]
+    capacities: [control_person, owner, ten_percent_owner]
+  HOLDS:
+    from: [company, fund_structure, person]
+    to: [security]
+  MANAGES_FUND:
+    from: [company, person]
+    to: [company, fund_structure]
+    from_profile: adviser
+    to_profile: fund
+  OWNERSHIP_PARENT:
+    from: [company, fund_structure, government, international_organization]
+    to: [company, fund_structure, government, international_organization]
+    hierarchy: true
+    cycles: review
+  ACCOUNTING_PARENT:
+    from: [company, fund_structure, government, international_organization]
+    to: [company, fund_structure, government, international_organization]
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+    ultimate_parent: accounting-chain-v1
+  IS_DIRECTLY_CONSOLIDATED_BY:
+    from: [company]
+    to: [company]
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+    ultimate_parent: accounting-chain-v1
+  IS_ULTIMATELY_CONSOLIDATED_BY:
+    from: [company]
+    to: [company]
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+  REPORTED_ULTIMATE_PARENT:
+    from: [company, fund_structure, government, international_organization]
+    to: [company, fund_structure, government, international_organization]
+  IS_INTERNATIONAL_BRANCH_OF:
+    from: [branch]
+    to: [company, fund_structure, government, international_organization]
+    hierarchy: true
+    cycles: invalid
+  VENUE_OPERATOR:
+    from: [venue]
+    to: [company, fund_structure, government, international_organization]
+  VENUE_SEGMENT_OF:
+    from: [venue]
+    to: [venue]
+    hierarchy: true
+    cycles: invalid
+  IS_SUBFUND_OF:
+    from: [company, fund_structure]
+    to: [company, fund_structure]
+    from_profile: fund
+    to_profile: fund
+    hierarchy: true
+    cycles: invalid
+  IS_FEEDER_TO:
+    from: [company, fund_structure]
+    to: [company, fund_structure]
+    from_profile: fund
+    to_profile: fund
+    hierarchy: true
+    cycles: invalid
+  IS_FUND-MANAGED_BY:
+    from: [company, fund_structure]
+    to: [company, person]
+    from_profile: fund

@@ -22,9 +22,29 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
 | View | Database | One row per | Columns |
 |---|---|---|---|
 | `mdm.entity_context` | MDM | live master entity (any kind) | `entity_id`, `kind`, `name` (the surviving name), `status`, `canonical_id`, `identifiers` (jsonb: namespace → values, from the record and the cross-reference table), `fields` (jsonb: surviving values, each with its winning source), `sources` (jsonb: source code → record keys), `valid_from`, `valid_to`, `batch_id`, `published_at` |
-| `mdm.relationship_context` | MDM | live relationship (any type) | `relationship_id`, `type`, `from_entity_id`, `from_kind`, `from_name`, `to_entity_id`, `to_kind`, `to_name`, `role`, `valid_from`, `valid_to`, `source_code`, `record_key`, `batch_id` |
+| `mdm.relationship_context` | MDM | period of a live relationship (any type) | `relationship_id`, `type`, `from_entity_id`, `from_kind`, `from_name`, `to_entity_id`, `to_kind`, `to_name`, `role`, `scope`, `derived`, `period`, `valid_from`, `valid_to`, `valid_from_basis`, `valid_to_basis`, `last_seen`, `sources` (jsonb: each source code and record key that states it), `batch_id` |
 | `rdm.code_context` | RDM | code in the published version of each code set | `code_set`, `code`, `label`, `definition`, `synonyms`, `path`, `label_path`, `level`, `depth`, `version`, `sha256`, `valid_from`, `valid_to`, `status` |
 | `silver.table_context` | silver | silver table | `table_name`, `grain`, `key`, `links` (column → master kind), `time_columns`, `load_mode`, `definition`, `spec_ref` |
+
+**How `mdm.relationship_context` reads a relationship (ticket 04, built 2026-10-06).**
+- One row per period: a relationship held, left and held again has two rows,
+  each with its own `valid_from` and `valid_to`.
+- `role` is a person's capacity in the link (director, owner); it is empty for
+  other links. `scope` is the family the source states it in.
+- A link MDM calculates (an ultimate parent walked from the stated parents) is
+  one row with `derived` true and no dates.
+- Retired links are left out. A link can be stated by several records, so the
+  stating records are a list (`sources`), not one source code and record key.
+- What a type means (the kinds at its ends, whether it is a hierarchy) is in
+  the Mastering Policy's relationship types (`rules/merge/relationships.yaml`);
+  the view names no type.
+- `mdm.relationship_chain(entity, type, max_hops, at)` walks one entity's
+  parents through one type within one scope, nearest first, with the links
+  that hold at `at` (business time; now by default), up to `max_hops` (at most
+  50, for checks; the command's `--hops` stays at most 3). A link back to an
+  entity already on the chain ends it, marked `cycle`. The view reads the
+  current records only: `--as-at` (a past generation) and walking towards
+  children are ticket 05's to build.
 
 **Where MDM context comes from (checked against the schema, 2026-10-05).**
 - MDM keeps history for every kind already: each committed batch stores its
