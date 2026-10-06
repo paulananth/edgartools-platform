@@ -428,7 +428,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -480,7 +480,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
-    if trial_mode == "streamed-records":
+    if trial_mode in ("streamed-records", "xml-streamed-records"):
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "json", "limits": {"max_bytes": 4096, "max_records": 10}, "tables": {
                 "filers": {"each": ".", "columns": {"cik": {"text": {"path": "cik"}},
@@ -490,8 +490,25 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                        "min_integer": -9223372036854775808, "record_encoding": "python",
                        "ordinal_context": None, "partition_bytes": 4096, "partition_records": 1,
                        "max_partitions": 10, "max_spool_bytes": 65536, "max_output_rows": 10}}}
-        contract_bytes = json.dumps(spec).encode()
         filer_bytes = json.dumps({"records": [json.loads(line) for line in FILERS.splitlines()]}).encode()
+        if trial_mode == "xml-streamed-records":
+            from xml.sax.saxutils import escape
+            for column in spec["read"]["tables"]["filers"]["columns"].values():
+                column["text"]["path"] += ".$"
+            stream = spec["read"]["stream"]
+            for name in ("wrapper", "min_integer", "record_encoding"):
+                del stream[name]
+            stream.update(framing="xml_records", xml={"namespace": "urn:filers", "root": "Data",
+                "header": "Header", "container": "Records", "record": "Record", "record_wrapper": None},
+                header_read={"format": "json", "limits": {"max_bytes": 1024, "max_records": 1},
+                    "references": {"counts": {"2": {"valid": True}}},
+                    "assertions": [{"test": {"lookup": {"reference": "counts", "column": "valid",
+                        "key": {"text": {"path": "Count.$"}}, "on_missing": "null"}}, "reason": "pinned-count"}],
+                    "tables": {"header": {"each": "no_rows", "columns": {}}}})
+            rows = [json.loads(line) for line in FILERS.splitlines()]
+            records = "".join(f"<Record><cik>{escape(row['cik'])}</cik><name>{escape(row['name'])}</name></Record>" for row in rows)
+            filer_bytes = f"<Data xmlns='urn:filers'><Header><Count>2</Count></Header><Records>{records}</Records></Data>".encode()
+        contract_bytes = json.dumps(spec).encode()
     if trial_mode == "choice-records":
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "jsonl", "limits": {"max_bytes": 1048576, "max_records": 10}, "tables": {
@@ -685,7 +702,7 @@ read:
     for profile in profiles:
         cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
-    if trial_mode == "streamed-records":
+    if trial_mode in ("streamed-records", "xml-streamed-records"):
         reading = json.loads((out / "reading.json").read_bytes())
         assert reading["version"] == 2
         assert len(reading["artifacts"][0]["partitions"]) == 2

@@ -119,6 +119,29 @@ class SourceEngine:
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
 
+    def stream_xml_records(self, stream, *, envelope: Mapping, header_engine: SourceEngine,
+                           on_reading, max_bytes: int, max_record: int, max_records: int,
+                           max_depth: int = 64, context: Mapping[str, object] | None = None,
+                           ordinal_context: str | None = None) -> dict:
+        """Normalize bounded XML records and project them with configured JSON rules.
+
+        The header has its own configured assertions and the same caller context.
+        All callbacks prepare candidates; successful return proves complete EOF.
+        """
+        arguments = _stream_arguments("xml", max_bytes, max_record, max_records, max_depth, -(2**63), "python")
+        del arguments["min_integer"], arguments["record_encoding"]
+        def receive(body, index):
+            on_reading(Reading(tables=body["tables"], deferred=body["deferred"]), index)
+        try:
+            records, size = self._engine.scan_xml_records(stream,
+                json.dumps(dict(envelope), ensure_ascii=False, separators=(",", ":")),
+                header_engine._engine, receive, context=json.dumps(dict(context or {}),
+                    ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+                ordinal_context=ordinal_context, **arguments)
+        except source_contract.SourceRejected as error:
+            raise _rejected(error) from None
+        return {"record_count": records, "expanded_bytes": size}
+
     def read(self, data: bytes, *, lookups: Mapping[str, Iterable[str]] | None = None,
              context: Mapping[str, object] | None = None) -> Reading:
         """`lookups` names the sets an `in_lookup` check reads, such as an

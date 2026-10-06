@@ -18,7 +18,7 @@ indexmap = { version = "2", features = ["serde"] }
 pyo3 = { version = "0.25", features = ["extension-module", "abi3-py312"], optional = true }
 quick-xml = "0.37"
 serde_json = { version = "1", features = ["raw_value", "float_roundtrip", "preserve_order"] }
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
