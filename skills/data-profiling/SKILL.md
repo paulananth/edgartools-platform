@@ -71,9 +71,9 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 - **Size:** inputs up to `--limit-gb` (default 5) are read in full. A larger
   one is read once into a seeded sample, then read again in full for its key
   candidates. The run prints the estimate before it starts.
-- **Kinds:** pass the master kinds that already exist (from the operator, or the
-  agent context once it is built) so a matching part is not
-  proposed as new.
+- **Kinds:** pass the master kinds that already exist (from the operator, or
+  `edgar-warehouse context <kind> --search "<words>"` on a few of the part's
+  names) so a matching part is not proposed as new.
 
 ## How to work
 

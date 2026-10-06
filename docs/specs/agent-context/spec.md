@@ -21,7 +21,7 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
 
 | View | Database | One row per | Columns |
 |---|---|---|---|
-| `mdm.entity_context` | MDM | live master entity (any kind) | `entity_id`, `kind`, `name` (the surviving name), `status`, `canonical_id`, `identifiers` (jsonb: namespace → values, from the record and the cross-reference table), `fields` (jsonb: surviving values, each with its winning source), `sources` (jsonb: source code → record keys), `valid_from`, `valid_to`, `batch_id`, `published_at` |
+| `mdm.entity_context` | MDM | live master entity (any kind) | `entity_id`, `kind`, `name` (the surviving name), `status`, `canonical_id`, `identifiers` (jsonb: namespace → values that decide identity), `cross_references` (jsonb: namespace → values its records carry, lookup only, kept apart so an agent never reads one as identity), `fields` (jsonb: surviving values, each with its winning source), `sources` (jsonb: source code → record keys), `valid_from`, `valid_to`, `batch_id`, `published_at` |
 | `mdm.relationship_context` | MDM | period of a live relationship (any type) | `relationship_id`, `type`, `from_entity_id`, `from_kind`, `from_name`, `to_entity_id`, `to_kind`, `to_name`, `role`, `scope`, `derived`, `period`, `valid_from`, `valid_to`, `valid_from_basis`, `valid_to_basis`, `last_seen`, `sources` (jsonb: each source code and record key that states it), `batch_id` |
 | `rdm.code_context` | RDM | code in the published version of each code set | `code_set`, `code`, `label`, `definition`, `synonyms`, `path`, `label_path`, `level`, `depth`, `version`, `sha256`, `valid_from`, `valid_to`, `status` |
 | `silver.table_context` | silver | silver table | `table_name`, `grain`, `key`, `links` (column → master kind), `time_columns`, `load_mode`, `definition`, `spec_ref` |
@@ -42,9 +42,14 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   parents through one type within one scope, nearest first, with the links
   that hold at `at` (business time; now by default), up to `max_hops` (at most
   50, for checks; the command's `--hops` stays at most 3). A link back to an
-  entity already on the chain ends it, marked `cycle`. The view reads the
-  current records only: `--as-at` (a past generation) and walking towards
-  children are ticket 05's to build.
+  entity already on the chain ends it, marked `cycle`.
+- The command's relationship walk (ticket 05) goes both ways (parents and
+  children) with one query per hop through the link-start and link-end
+  indexes, up to `--hops` 3 and at most 1,000 links, and says so when it stops.
+  `--as-of` picks the links that hold at a business time. `--as-at` (a past
+  recording) is not read for relationships yet: no index finds one entity's
+  links in the batch history, so the command names `--as-of` and the view
+  instead. A versioned relationship table would make it cheap.
 
 **Where MDM context comes from (checked against the schema, 2026-10-05).**
 - MDM keeps history for every kind already: each committed batch stores its
@@ -53,10 +58,16 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   `from_generation`, `to_generation`) is read from that table instead.
 - The existing reader `ContractReader` (`edgar_warehouse/mdm/clean/consumer.py`)
   already rebuilds an entity at any generation, follows `canonical_id`, and
-  returns `field_provenance` (each field's winning source). `mdm.entity_context`
-  and the command use it rather than re-deriving anything, so the view's
-  `fields` (value and winning source), `name` and `identifiers` come from the
-  entity body and its field provenance.
+  returns `field_provenance` (each field's winning source). The command reads
+  every entity lookup through it (at the generation `--as-at` or `--as-of`
+  picks, or the latest). `mdm.entity_context` is SQL over the current state;
+  its `fields` (value and winning source), `name` and `identifiers` come from
+  the same entity body, and a test holds the view equal to the reader at the
+  latest generation. Search reads the view's tables, never the reader.
+- What each kind and relationship type means is data, in
+  `rules/context/definitions.yaml`, outside the Mastering Policy (an edit is a
+  reviewed PR, not a new policy version). A test fails until a new kind or
+  type has its line.
 - `valid_from` / `valid_to` for a kind without its own versioned table are the
   `created_at` of the batch that introduced the projection and of the batch that
   replaced it.
@@ -80,15 +91,19 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
 - `<kind>` is any MDM kind: `<key>` is an entity id, or `<namespace>:<value>`
   for an identifier. `<code_set>` takes a code. `relationship <entity_id>`
   lists that entity's relationships, following up to `--hops` (default 1,
-  maximum 3) with recursive SQL. `silver <table>` returns a table's spec.
+  maximum 3), one query per hop. `silver <table>` returns a table's spec.
 - `--search` matches labels, synonyms and names: Postgres full-text search
   (`websearch_to_tsquery`, `simple` configuration for codes) ranked with
-  `ts_rank_cd`, then `pg_trgm` similarity for near misses. Returns the top
+  `ts_rank_cd`; when that finds nothing, names containing the words as typed
+  (`ILIKE`, plan decision 23; no extension needed). MDM names are searched by
+  `mdm.entity_search`, which uses a word index on each name. Returns the top
   matches with their path or kind so the agent picks one. A search with no
   match is logged (`context-search-miss`), which is how embeddings would be
   reconsidered later.
-- It reads with read-only logins from the existing environment variables. It
-  never prints a database address or a secret.
+- It reads through the existing environment variables (`MDM_DATABASE_URL`),
+  as the application role, which may only read tables, and in read-only
+  transactions. It never prints a database address or a secret: a driver
+  error is reported by its type only.
 
 ### 3.1 The answer (JSON, at most 8 KB)
 
@@ -108,6 +123,20 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
 ```
 
 - Names come first; ids appear beside names, never alone.
+- **An MDM entity answer, as built (ticket 05):** `name`, `kind`, `key`,
+  `entity_id`, `status`, `definition`; `fields` as a list of
+  `{field, value, source}` (with `record_key` and `effective_at` under
+  `--detail full`), sorted by field, so it pages like any list; `identifiers`
+  and `cross_references` apart; `sources` (source codes, or each with its
+  record keys under full); `trust` (`generation`, `recorded_at`, `as_of`,
+  `policy_digest`, `run_id`, `status`); the first 10 `related` links with
+  `related_count`; and `merged_from` when the key named an entity merged into
+  another. A relationship answer lists `related` links (`depth`, `type`, `from`
+  and `to` each named, `role` for a person's capacity, `derived`) with each
+  type's `definitions`. A search answer lists `matches`
+  (`name`, `kind`, `entity_id`, `status`, `matched_by`).
+- One list per answer pages: `fields`, `related` or `matches`. A string over
+  1,000 characters is clipped, and the answer says `clipped`.
 - Over 8 KB, the answer is cut at a whole list item, `truncated` is true and
   `next_page` gives the token.
 - An error says what was wrong and the exact command that would work.

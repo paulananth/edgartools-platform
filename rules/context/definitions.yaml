@@ -1,0 +1,50 @@
+# What each master kind and relationship type means, in plain words, for the
+# agent context command (`edgar-warehouse context`, profiling ticket 05).
+#
+# Not part of the Mastering Policy: nothing here changes what MDM decides, so
+# an edit is a reviewed PR, not a new policy version. A new kind or a new
+# relationship type needs its line here; a test fails until it has one.
+version: context-definitions-v1
+kinds:
+  company: >-
+    One legal company or other legal person, known by its identifiers. A
+    subsidiary is its own company. Its adviser, audit firm and fund roles are
+    profiles on it, not other entities.
+  person: >-
+    One natural person. Their links to companies carry the capacity they hold
+    there (director, officer, owner).
+  security: >-
+    One financial instrument, known by its instrument identifier. Each share
+    class is its own security; its issuer is a relationship, not a field.
+  fund_structure: >-
+    A fund arrangement that is not a company: a registered fund, a privately
+    offered fund or trust, or a separate account that pools investors' money.
+    The securities that represent interests in it are separate.
+  branch: >-
+    A separately identified branch establishment, linked to its head office,
+    even where the branch is not a legal person of its own.
+  government: >-
+    A government body in its own right, apart from a company a government owns.
+  international_organization: >-
+    An organization accepted as international from its source's category,
+    apart from companies and governments.
+  venue: >-
+    A trading market or venue, apart from the organization that operates it.
+relationships:
+  AUDITED_BY: The company's accounts are audited by the other company, an audit firm.
+  ISSUED_BY: The security is issued by this entity.
+  EMPLOYED_BY: The person works for the company in the capacity shown (director, officer, employee).
+  CONTROLS: The person owns or controls the company in the capacity shown (owner, ten percent owner, control person).
+  HOLDS: The entity holds the security.
+  MANAGES_FUND: The adviser manages the fund.
+  OWNERSHIP_PARENT: The entity is owned by the other entity (an ownership parent; chains may loop and are reviewed).
+  ACCOUNTING_PARENT: The entity's accounts are consolidated by the other entity (its direct accounting parent).
+  IS_DIRECTLY_CONSOLIDATED_BY: The company is consolidated by the other company, its direct parent, as the source states it.
+  IS_ULTIMATELY_CONSOLIDATED_BY: The company's ultimate consolidating parent, as the source states it.
+  REPORTED_ULTIMATE_PARENT: The ultimate parent a source reports for the entity, kept as reported.
+  IS_INTERNATIONAL_BRANCH_OF: The branch belongs to this head office.
+  VENUE_OPERATOR: The venue is operated by this entity.
+  VENUE_SEGMENT_OF: The venue is a segment of the other venue.
+  IS_SUBFUND_OF: The fund is a subfund of the other fund (an umbrella).
+  IS_FEEDER_TO: The fund feeds its money into the other fund (a master fund).
+  IS_FUND-MANAGED_BY: The fund is managed by this company or person.

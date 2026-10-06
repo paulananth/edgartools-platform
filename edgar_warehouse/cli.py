@@ -1,4 +1,4 @@
-"""CLI surface: Rules, Bookkeeping, Change Journal and Clean MDM.
+"""CLI surface: Rules, Bookkeeping, Change Journal, Clean MDM and agent context.
 
 The legacy warehouse commands and their code are deleted (platform
 validation slice 2a). Configure a source or feed through Rules and submit
@@ -104,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     from edgar_warehouse.bookkeeping.clean.cli import register as register_bookkeeping
     from edgar_warehouse.application.journal_recovery import register as register_journal
     from edgar_warehouse.bundle import register as register_bundle
+    from edgar_warehouse.context import register as register_context
     from edgar_warehouse.mdm.cli import register_mdm_subparser
     from edgar_warehouse.rules.cli import register as register_rules
     from edgar_warehouse.application.plan_cli import register as register_plan
@@ -115,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_journal(subparsers)
     worker_arguments(subparsers.add_parser("workers", help="Run a worker or a verifier for one profile and run"))
     register_plan(subparsers)
+    register_context(subparsers)
     register_bundle(subparsers, parser)
     return parser
 

@@ -48,6 +48,7 @@ MIGRATIONS: tuple[str, ...] = (
     "004_is_insider.sql",
     "005_cross_reference.sql",
     "006_relationship_context.sql",
+    "007_entity_context.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -67,6 +68,7 @@ RUNTIME_FUNCTIONS = (
     "entity_name(jsonb)",
     "relationship_holds(jsonb,timestamp with time zone)",
     "relationship_chain(text,text,integer,timestamp with time zone)",
+    "entity_search(text,text,integer)",
     "record_match_proposal(text,uuid)",
     "supersede_match_proposal(text,uuid)",
 )

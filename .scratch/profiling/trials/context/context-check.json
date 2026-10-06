@@ -1,0 +1,296 @@
+{
+ "entities_in_view": 679,
+ "asked_about": 60,
+ "answers": 480,
+ "largest_answer_bytes": 8151,
+ "over_8kb": 0,
+ "outcome": {
+  "lookup found": 60,
+  "lookup by lei found the same entity": 60,
+  "search by first word lists it": 60,
+  "searched": 60,
+  "as-at answered (generation 1)": 60,
+  "as-of answered (generation 1)": 60,
+  "hops 1 answered": 60,
+  "hops 1 truncated": 0,
+  "hops 2 answered": 60,
+  "hops 2 truncated": 0,
+  "hops 3 answered": 60,
+  "hops 3 truncated": 3
+ },
+ "seconds": {
+  "lookup": {
+   "median": 0.033771967981010675,
+   "max": 0.04670015396550298
+  },
+  "lookup by lei": {
+   "median": 0.04359271703287959,
+   "max": 0.04969595395959914
+  },
+  "search": {
+   "median": 0.01731855608522892,
+   "max": 0.026879126904532313
+  },
+  "as-at": {
+   "median": 0.03254546411335468,
+   "max": 0.059970233123749495
+  },
+  "as-of": {
+   "median": 0.05762753891758621,
+   "max": 0.11615838692523539
+  },
+  "hops 1": {
+   "median": 0.0040337760001420975,
+   "max": 0.005499891936779022
+  },
+  "hops 2": {
+   "median": 0.005185048095881939,
+   "max": 0.007729320088401437
+  },
+  "hops 3": {
+   "median": 0.005382915958762169,
+   "max": 0.010503631783649325
+  }
+ },
+ "examples": {
+  "lookup": {
+   "name": "BROOKFIELD CORPORATION",
+   "kind": "company",
+   "key": "ae6a84b1-e16d-495b-9342-89508a2622d4",
+   "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4",
+   "status": "accepted",
+   "definition": "One legal company or other legal person, known by its identifiers. A subsidiary is its own company. Its adviser, audit firm and fund roles are profiles on it, not other entities.",
+   "fields": [
+    {
+     "field": "address",
+     "value": {
+      "city": "TORONTO",
+      "street": "Suite 100, Brookfield Place, 181 Bay Street",
+      "country": "CA",
+      "postcode": "M5J 2T3"
+     },
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_entity_creation_date",
+     "value": "2005-01-01T01:00:00+01:00",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_entity_status",
+     "value": "ACTIVE",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_initial_registration",
+     "value": "2012-06-06T17:56:00+02:00",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_last_update",
+     "value": "2025-11-28T11:23:16+01:00",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_legal_form",
+     "value": "O90R",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_managing_lou",
+     "value": "529900F6BNUR3RJ2WH29",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_next_renewal",
+     "value": "2026-12-31T13:58:16+01:00",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_registration_authority",
+     "value": "RA000079",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_registration_authority_entity_id",
+     "value": "1644037",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_registration_status",
+     "value": "ISSUED",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "gleif_validation_source",
+     "value": "FULLY_CORROBORATED",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "jurisdiction",
+     "value": "CA-ON",
+     "source": "gleif.level1.v1"
+    },
+    {
+     "field": "name",
+     "value": "BROOKFIELD CORPORATION",
+     "source": "gleif.level1.v1"
+    }
+   ],
+   "identifiers": {
+    "lei": [
+     "C6J3FGIWG6MBDGTE8F80"
+    ]
+   },
+   "cross_references": {},
+   "sources": [
+    "gleif.level1.v1"
+   ],
+   "trust": {
+    "generation": 1,
+    "recorded_at": "2026-10-06T08:48:00.176717-04:00",
+    "as_of": "2026-09-11T16:00:00+00:00",
+    "policy_digest": "9b862d026f4369c9f066d7aed2722fbb891e7681125aee782daf05c73c0ee6a3",
+    "run_id": "2d047f59-3b3e-40c5-b662-d33de52378d2",
+    "status": "accepted"
+   },
+   "related": [
+    {
+     "depth": 1,
+     "type": "CALCULATED_ULTIMATE_PARENT",
+     "from": {
+      "name": "BRE COLOMBIA HYDRO INVESTMENTS SL",
+      "entity_id": "b445eacb-05d4-43bd-86a6-950cadceba47"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     },
+     "derived": true
+    },
+    {
+     "depth": 1,
+     "type": "CALCULATED_ULTIMATE_PARENT",
+     "from": {
+      "name": "Brookfield Renewable Partners L.P.",
+      "entity_id": "fefbbff0-78c2-4438-b3de-117c001290f3"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     },
+     "derived": true
+    },
+    {
+     "depth": 1,
+     "type": "IS_DIRECTLY_CONSOLIDATED_BY",
+     "from": {
+      "name": "Brookfield Renewable Partners L.P.",
+      "entity_id": "fefbbff0-78c2-4438-b3de-117c001290f3"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     }
+    },
+    {
+     "depth": 1,
+     "type": "IS_ULTIMATELY_CONSOLIDATED_BY",
+     "from": {
+      "name": "BRE COLOMBIA HYDRO INVESTMENTS SL",
+      "entity_id": "b445eacb-05d4-43bd-86a6-950cadceba47"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     }
+    }
+   ],
+   "related_count": 4,
+   "truncated": false,
+   "next_page": null,
+   "next_step": "edgar-warehouse context relationship ae6a84b1-e16d-495b-9342-89508a2622d4 --detail full"
+  },
+  "relationship hops 2": {
+   "name": "BROOKFIELD CORPORATION",
+   "kind": "company",
+   "key": "ae6a84b1-e16d-495b-9342-89508a2622d4",
+   "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4",
+   "at": "2026-10-06T12:48:09.559573+00:00",
+   "hops": 2,
+   "definitions": {
+    "CALCULATED_ULTIMATE_PARENT": "",
+    "IS_DIRECTLY_CONSOLIDATED_BY": "The company is consolidated by the other company, its direct parent, as the source states it.",
+    "IS_ULTIMATELY_CONSOLIDATED_BY": "The company's ultimate consolidating parent, as the source states it."
+   },
+   "related": [
+    {
+     "depth": 1,
+     "type": "CALCULATED_ULTIMATE_PARENT",
+     "from": {
+      "name": "BRE COLOMBIA HYDRO INVESTMENTS SL",
+      "entity_id": "b445eacb-05d4-43bd-86a6-950cadceba47"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     },
+     "derived": true
+    },
+    {
+     "depth": 1,
+     "type": "CALCULATED_ULTIMATE_PARENT",
+     "from": {
+      "name": "Brookfield Renewable Partners L.P.",
+      "entity_id": "fefbbff0-78c2-4438-b3de-117c001290f3"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     },
+     "derived": true
+    },
+    {
+     "depth": 1,
+     "type": "IS_DIRECTLY_CONSOLIDATED_BY",
+     "from": {
+      "name": "Brookfield Renewable Partners L.P.",
+      "entity_id": "fefbbff0-78c2-4438-b3de-117c001290f3"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     }
+    },
+    {
+     "depth": 1,
+     "type": "IS_ULTIMATELY_CONSOLIDATED_BY",
+     "from": {
+      "name": "BRE COLOMBIA HYDRO INVESTMENTS SL",
+      "entity_id": "b445eacb-05d4-43bd-86a6-950cadceba47"
+     },
+     "to": {
+      "name": "BROOKFIELD CORPORATION",
+      "entity_id": "ae6a84b1-e16d-495b-9342-89508a2622d4"
+     }
+    },
+    {
+     "depth": 2,
+     "type": "IS_DIRECTLY_CONSOLIDATED_BY",
+     "from": {
+      "name": "BRE COLOMBIA HYDRO INVESTMENTS SL",
+      "entity_id": "b445eacb-05d4-43bd-86a6-950cadceba47"
+     },
+     "to": {
+      "name": "Brookfield Renewable Partners L.P.",
+      "entity_id": "fefbbff0-78c2-4438-b3de-117c001290f3"
+     }
+    }
+   ],
+   "related_count": 5,
+   "truncated": false,
+   "next_page": null,
+   "next_step": "edgar-warehouse context <kind> <entity_id> for any entity listed"
+  }
+ }
+}
