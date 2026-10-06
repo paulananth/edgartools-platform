@@ -1,0 +1,89 @@
+version: Trial A-lei2.Entity.OtherAddresses.OtherAddress-quality-trial
+quality:
+  lei2_entity_otheraddresses_otheraddress:
+    checks:
+    - id: placeholder_postal_code
+      test: placeholder@1
+      value: fields.postal_code
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: code_list_xml_lang
+      test: in_set@1
+      value: fields.xml_lang
+      on_fail: flag
+      args:
+        values:
+        - ar
+        - bg
+        - de
+        - el
+        - en
+        - en-IE
+        - es
+        - et
+        - fr
+        - he
+        - is
+        - it
+        - ja
+        - ko
+        - la
+        - lt
+        - mt
+        - pl
+        - pt
+        - ru
+        - sr
+        - sv
+        - th
+        - vi
+        - zh
+    - id: code_list_country
+      test: in_set@1
+      value: fields.country
+      on_fail: flag
+      args:
+        values:
+        - AE
+        - BG
+        - BY
+        - CN
+        - CY
+        - DE
+        - EE
+        - FR
+        - GE
+        - HK
+        - IL
+        - IS
+        - IT
+        - JP
+        - KR
+        - KY
+        - KZ
+        - LT
+        - MK
+        - MT
+        - MX
+        - NC
+        - PL
+        - PT
+        - RS
+        - RU
+        - SA
+        - SE
+        - SG
+        - TH
+        - TW
+        - UA
+        - US
+        - UY
+        - VG
+        - VN

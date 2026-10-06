@@ -1,0 +1,16 @@
+version: Trial A-rr.RelationshipRecord.Relationship.RelationshipQuantifiers.RelationshipQuantifier-quality-trial
+quality:
+  rr_relationshiprecord_relationship_relationshipquantifiers_relationshipquantifier:
+    checks:
+    - id: placeholder_quantifier_amount
+      test: placeholder@1
+      value: fields.quantifier_amount
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE

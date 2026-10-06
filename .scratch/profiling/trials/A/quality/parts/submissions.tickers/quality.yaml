@@ -1,0 +1,4 @@
+version: Trial A-submissions.tickers-quality-trial
+quality:
+  submissions_tickers:
+    checks: []

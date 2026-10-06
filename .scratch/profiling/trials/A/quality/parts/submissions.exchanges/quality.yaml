@@ -1,0 +1,14 @@
+version: Trial A-submissions.exchanges-quality-trial
+quality:
+  submissions_exchanges:
+    checks:
+    - id: code_list_value
+      test: in_set@1
+      value: fields.value
+      on_fail: flag
+      args:
+        values:
+        - CBOE
+        - NYSE
+        - Nasdaq
+        - OTC

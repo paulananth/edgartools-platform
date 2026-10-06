@@ -1,0 +1,20 @@
+version: Trial A-repex.ExceptionReason-quality-trial
+quality:
+  repex_exceptionreason:
+    checks:
+    - id: code_list_value
+      test: in_set@1
+      value: fields.value
+      on_fail: flag
+      args:
+        values:
+        - BINDING_LEGAL_COMMITMENTS
+        - CONSENT_NOT_OBTAINED
+        - DETRIMENT_NOT_EXCLUDED
+        - DISCLOSURE_DETRIMENTAL
+        - LEGAL_OBSTACLES
+        - NATURAL_PERSONS
+        - NON_CONSOLIDATING
+        - NON_PUBLIC
+        - NO_KNOWN_PERSON
+        - NO_LEI

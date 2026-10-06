@@ -1,0 +1,14 @@
+version: Trial A-rr.RelationshipRecord.Relationship.RelationshipQualifiers.RelationshipQualifier-quality-trial
+quality:
+  rr_relationshiprecord_relationship_relationshipqualifiers_relationshipqualifier:
+    checks:
+    - id: code_list_qualifier_category
+      test: in_set@1
+      value: fields.qualifier_category
+      on_fail: flag
+      args:
+        values:
+        - GOVERNMENT_ACCOUNTING_STANDARD
+        - IFRS
+        - OTHER_ACCOUNTING_STANDARD
+        - US_GAAP

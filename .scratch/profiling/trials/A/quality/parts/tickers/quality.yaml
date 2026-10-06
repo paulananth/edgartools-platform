@@ -1,0 +1,26 @@
+version: Trial A-tickers-quality-trial
+quality:
+  tickers:
+    checks:
+    - id: placeholder_ticker
+      test: placeholder@1
+      value: fields.ticker
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: code_list_exchange
+      test: in_set@1
+      value: fields.exchange
+      on_fail: flag
+      args:
+        values:
+        - CBOE
+        - NYSE
+        - Nasdaq
+        - OTC

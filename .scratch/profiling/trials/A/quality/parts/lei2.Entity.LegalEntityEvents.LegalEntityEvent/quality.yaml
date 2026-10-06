@@ -1,0 +1,54 @@
+version: Trial A-lei2.Entity.LegalEntityEvents.LegalEntityEvent-quality-trial
+quality:
+  lei2_entity_legalentityevents_legalentityevent:
+    checks:
+    - id: code_list_group_type
+      test: in_set@1
+      value: fields.group_type
+      on_fail: flag
+      args:
+        values:
+        - CHANGE_LEGAL_FORM_AND_NAME
+        - COMPLEX_CHANGE_LEGAL_FORM
+        - STANDALONE
+    - id: code_list_event_status
+      test: in_set@1
+      value: fields.event_status
+      on_fail: flag
+      args:
+        values:
+        - COMPLETED
+        - IN_PROGRESS
+        - WITHDRAWN_CANCELLED
+    - id: code_list_legal_entity_event_type
+      test: in_set@1
+      value: fields.legal_entity_event_type
+      on_fail: flag
+      args:
+        values:
+        - ABSORPTION
+        - BANKRUPTCY
+        - BREAKUP
+        - CHANGE_HQ_ADDRESS
+        - CHANGE_LEGAL_ADDRESS
+        - CHANGE_LEGAL_FORM
+        - CHANGE_LEGAL_NAME
+        - CHANGE_OTHER_NAMES
+        - DEMERGER
+        - DISSOLUTION
+        - INSOLVENCY
+        - LIQUIDATION
+        - MERGERS_AND_ACQUISITIONS
+        - SPINOFF
+        - VOLUNTARY_ARRANGEMENT
+    - id: code_list_validation_documents
+      test: in_set@1
+      value: fields.validation_documents
+      on_fail: flag
+      args:
+        values:
+        - ACCOUNTS_FILING
+        - CONTRACTS
+        - OTHER_OFFICIAL_DOCUMENTS
+        - REGULATORY_FILING
+        - SUPPORTING_DOCUMENTS

@@ -1,0 +1,4 @@
+version: Trial A-submissions.formerNames-quality-trial
+quality:
+  submissions_formernames:
+    checks: []

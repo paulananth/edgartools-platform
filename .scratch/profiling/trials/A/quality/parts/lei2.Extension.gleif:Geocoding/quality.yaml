@@ -1,0 +1,130 @@
+version: Trial A-lei2.Extension.gleif:Geocoding-quality-trial
+quality:
+  lei2_extension_gleif_geocoding:
+    checks:
+    - id: placeholder_gleif_relevance
+      test: placeholder@1
+      value: fields.gleif_relevance
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_gleif_lat
+      test: placeholder@1
+      value: fields.gleif_lat
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_gleif_lng
+      test: placeholder@1
+      value: fields.gleif_lng
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_gleif_mapped_city
+      test: placeholder@1
+      value: fields.gleif_mapped_city
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: code_list_gleif_match_type
+      test: in_set@1
+      value: fields.gleif_match_type
+      on_fail: flag
+      args:
+        values:
+        - interpolated
+        - pointAddress
+    - id: code_list_gleif_match_level
+      test: in_set@1
+      value: fields.gleif_match_level
+      on_fail: flag
+      args:
+        values:
+        - city
+        - district
+        - houseNumber
+        - intersection
+        - postalCode
+        - state
+        - street
+    - id: code_list_gleif_geocoding_failed
+      test: in_set@1
+      value: fields.gleif_geocoding_failed
+      on_fail: flag
+      args:
+        values:
+        - Ambigous geocoding results
+        - No geocoding results
+        - 'java.net.UnknownHostException: geocoder.api.here.com'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.253.15.8, geocoder.api.here.com/34.255.101.79]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.253.15.8, geocoder.api.here.com/52.212.42.199]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.253.15.8, geocoder.api.here.com/54.220.167.71]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.254.103.202, geocoder.api.here.com/34.255.101.79]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.255.101.79, geocoder.api.here.com/34.253.15.8]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.255.101.79, geocoder.api.here.com/34.254.103.202]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/34.255.101.79, geocoder.api.here.com/52.51.95.222]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/52.212.42.199, geocoder.api.here.com/34.253.15.8]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/52.212.68.165, geocoder.api.here.com/54.220.167.71]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/52.51.95.222, geocoder.api.here.com/34.255.101.79]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/54.220.167.71, geocoder.api.here.com/34.253.15.8]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/54.220.167.71, geocoder.api.here.com/52.212.68.165]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/54.220.167.71, geocoder.api.here.com/54.77.223.50]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/54.253.216.63, geocoder.api.here.com/13.237.201.182]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/54.253.216.63, geocoder.api.here.com/54.253.73.223]
+          failed: Connection timed out (Connection timed out)'
+        - 'org.apache.http.conn.HttpHostConnectException: Connect to geocoder.api.here.com:443
+          [geocoder.api.here.com/54.77.223.50, geocoder.api.here.com/54.220.167.71]
+          failed: Connection timed out (Connection timed out)'
