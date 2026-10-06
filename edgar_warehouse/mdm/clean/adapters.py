@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
+import unicodedata
 from typing import Any
 
 from .activation import activated
@@ -50,12 +52,28 @@ def _lei(item) -> str:
     return value
 
 
+def _name_id(item) -> str:
+    """An id made from a name, for a record with no id another source shares
+    (operator, 2026-10-06: "no id exists you just need to create a id using
+    name", kept in the cross-reference table). NFKC, case fold, split on every
+    run of characters that is not a letter or a digit; every token kept, so
+    "class a" and "class c" stay apart; the sha256 of the tokens. One recipe
+    for every source, so two sources' records with one name share it. The
+    profiling skill's `name_matching.name_id` computes the same value."""
+    folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", str(item)).casefold())
+    tokens = [t for t in re.split(r"[^\w]+|_", folded) if t]
+    if not tokens:
+        raise UnsupportedRecord("invalid_name")
+    return hashlib.sha256(("name_id@1\x1f" + " ".join(tokens)).encode("utf-8")).hexdigest()
+
+
 # One table of named formats, read by identifiers, record keys and
 # registration alike, so adding one is one entry here (GoF consult,
 # 2026-09-24: the names were listed in two places and a third was coming).
 FORMATS = {
     "sec_cik": _sec_cik,
     "lei": _lei,
+    "name_id@1": _name_id,
 }
 
 

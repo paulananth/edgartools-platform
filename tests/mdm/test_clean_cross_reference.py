@@ -59,6 +59,19 @@ def test_a_cross_reference_takes_a_named_format():
     assert body["cross_references"] == {"other_filer": "0000789019"}
 
 
+def test_a_name_gives_one_name_id_in_every_source_and_keeps_what_tells_names_apart():
+    # Ticket 07b (operator, 2026-10-06): with no id another source shares, an
+    # id made from the name goes into the cross-reference table.
+    def name_id(name, source):
+        return normalize({"id": "1", "cik": "320193", "name": name}, source_code=source, publication=PUBLICATION,
+                         contract=contract(cross_references={"name_id": "name"},
+                                           cross_reference_formats={"name_id": "name_id@1"}))["cross_references"]["name_id"]
+
+    assert name_id("ACME, Inc.", "fixture.primary") == name_id("Acme Inc", "fixture.secondary")
+    assert name_id("Acme Fund Class A", "fixture.primary") != name_id("Acme Fund Class C", "fixture.primary")
+    assert len(name_id("Acme", "fixture.primary")) == 64
+
+
 @pytest.mark.parametrize("adapter, words", [
     ({"cross_references": {"cik": "cik"}}, "also an identifier"),
     ({"cross_references": {"lei": "lei"}}, "binds records"),

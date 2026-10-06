@@ -27,7 +27,7 @@ Type: task. Phase: A (MDM) / B (RDM). Blocked by: 03, 04 (02 for RDM). Map: [map
 - [ ] ~~Relationships `--as-at`~~ deferred to a relationship-versioning ticket (map fog): it needs a versioned relationship table or an index into the batch history (added 2026-10-06 13:53 ET)
 - [ ] `mdm migrate` for 005, 006 and 007 and an MDM image rebuild: not run on deploy; `MDM_DATABASE_URL` not set here and no container runtime (added 2026-10-06 13:53 ET)
 - [x] CI found the data skill bundle could not import the new module (its wheel lists modules one by one): `edgar_warehouse/context.py` added to `packages/data-skill/pyproject.toml` 2026-10-06 14:15 ET
-- [ ] PR, CI, merge (operator's word "Merge" given 2026-10-06 13:53 ET, before the PR existed; merged only once CI is green)
+- [x] PR, CI, merge: PR #837, all six checks green after the bundle fix; merged on the operator's "Merge" (squash a9aaac91) 2026-10-06 14:32 ET
 
 ## Decisions
 
