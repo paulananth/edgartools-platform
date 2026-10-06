@@ -103,6 +103,38 @@ impl PyEngine {
         self.inner.validate_context(&values).map_err(rejected)
     }
 
+    #[pyo3(signature = (stream, wrapper, on_reading, *, max_bytes, max_record, max_records, max_depth=64, min_integer=i64::MIN, record_encoding="native", context="{}", ordinal_context=None))]
+    fn scan_json_array(&self, py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_reading: Py<PyAny>,
+                       max_bytes: usize, max_record: usize, max_records: usize, max_depth: usize,
+                       min_integer: i64, record_encoding: &str, context: &str, ordinal_context: Option<String>) -> PyResult<(usize, usize)> {
+        let record_encoding = match record_encoding {
+            "native" => crate::json_sequence::RecordEncoding::Native,
+            "python" => crate::json_sequence::RecordEncoding::Python,
+            _ => return Err(rejected(crate::Rejected::new("contract", "record_encoding is native or python"))),
+        };
+        self.inner.validate_json_projection().map_err(rejected)?;
+        let mut values = crate::context::from_json(context).map_err(rejected)?;
+        if let Some(name) = &ordinal_context {
+            if values.contains_key(name) {
+                return Err(rejected(crate::Rejected::new("invalid_context", "stream ordinal context is generated, never supplied")));
+            }
+            values.insert(name.clone(), Val::Int(1));
+        }
+        self.inner.validate_context(&values).map_err(rejected)?;
+        let limits = crate::json_sequence::Limits { max_bytes, max_record, max_records, max_depth, min_integer, record_encoding };
+        let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), &wrapper, limits, |record, ordinal| {
+            if let Some(name) = &ordinal_context {
+                let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
+                    .ok_or_else(|| crate::Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
+                values.insert(name.clone(), Val::Int(position));
+            }
+            let reading = self.inner.read_json_value(record, &Lookups::new(), &values)?;
+            Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
+                .map_err(|error| crate::Rejected::new("stream_consumer", error))
+        })).map_err(rejected)?;
+        Ok((result.records, result.bytes))
+    }
+
     #[pyo3(signature = (data, lookups, context="{}"))]
     fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>, context: &str) -> PyResult<PyObject> {
         let mut sets = Lookups::new();
@@ -114,32 +146,36 @@ impl PyEngine {
         // Other Python threads run while the engine reads; a step takes the
         // interpreter back for its own call.
         let reading = py.allow_threads(|| self.inner.read_with_context(data, &sets, &context)).map_err(rejected)?;
-        let tables = PyDict::new(py);
-        for (name, rows) in &reading.tables {
-            let list = PyList::empty(py);
-            for row in rows {
-                let dict = PyDict::new(py);
-                for (column, value) in row {
-                    dict.set_item(column, to_py(py, value)?)?;
-                }
-                list.append(dict)?;
-            }
-            tables.set_item(name, list)?;
-        }
-        let deferred = PyList::empty(py);
-        for record in &reading.deferred {
-            let dict = PyDict::new(py);
-            dict.set_item("table", &record.table)?;
-            dict.set_item("ordinal", record.ordinal)?;
-            dict.set_item("reason", &record.reason)?;
-            dict.set_item("raw", raw_to_py(py, &record.raw)?)?;
-            deferred.append(dict)?;
-        }
-        let out = PyDict::new(py);
-        out.set_item("tables", tables)?;
-        out.set_item("deferred", deferred)?;
-        out.into_py_any(py)
+        reading_to_py(py, &reading)
     }
+}
+
+fn reading_to_py(py: Python<'_>, reading: &crate::Reading) -> PyResult<PyObject> {
+    let tables = PyDict::new(py);
+    for (name, rows) in &reading.tables {
+        let list = PyList::empty(py);
+        for row in rows {
+            let dict = PyDict::new(py);
+            for (column, value) in row {
+                dict.set_item(column, to_py(py, value)?)?;
+            }
+            list.append(dict)?;
+        }
+        tables.set_item(name, list)?;
+    }
+    let deferred = PyList::empty(py);
+    for record in &reading.deferred {
+        let dict = PyDict::new(py);
+        dict.set_item("table", &record.table)?;
+        dict.set_item("ordinal", record.ordinal)?;
+        dict.set_item("reason", &record.reason)?;
+        dict.set_item("raw", raw_to_py(py, &record.raw)?)?;
+        deferred.append(dict)?;
+    }
+    let out = PyDict::new(py);
+    out.set_item("tables", tables)?;
+    out.set_item("deferred", deferred)?;
+    out.into_py_any(py)
 }
 
 #[pymodule]

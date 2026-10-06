@@ -164,6 +164,29 @@ impl Engine {
             bytes
         };
         let document = self.document(bytes)?;
+        self.read_document(&document, lookups, context)
+    }
+
+    /// Project a validated framed JSON record through the ordinary configured
+    /// interpreter. Input size follows the worker's typed Python JSON policy.
+    pub fn read_json_value(&self, value: serde_json::Value, lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
+        context::check(&self.read, context)?;
+        self.validate_json_projection()?;
+        if json_sequence::encoded_len(&value, json_sequence::RecordEncoding::Python)? as u64 > self.limits.max_bytes {
+            return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
+        }
+        let document = formats::json_value(value, uses_integer(&self.read), uses_python_text(&self.read) || uses_iteration_order(&self.read));
+        self.read_document(&document, lookups, context)
+    }
+
+    pub(crate) fn validate_json_projection(&self) -> Result<(), Rejected> {
+        if setting(&self.read, "format") != Some("json") || self.read.get("container").is_some() {
+            return Err(Rejected::new("contract", "framed JSON projection requires json without a container"));
+        }
+        Ok(())
+    }
+
+    fn read_document(&self, document: &El, lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
         for assertion in self.read.get("assertions").and_then(Value::as_sequence).into_iter().flatten() {
             match eval(self, context, &document, &document, 1, &assertion["test"])? {
                 Val::Bool(true) => {},

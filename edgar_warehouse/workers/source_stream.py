@@ -104,11 +104,8 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                 pending_count = 0
                 pending_size = len(_encode(pending))
 
-            def project(row, index):
+            def project(result, index):
                 nonlocal pending_count, pending_size, first, total_rows
-                values = {**context, **({ordinal: index + 1} if ordinal is not None else {})}
-                result = engine.read(json.dumps(row, ensure_ascii=False, separators=(",", ":"),
-                                                allow_nan=False).encode(), context=values)
                 total_rows += sum(len(rows) for rows in result.tables.values()) + len(result.deferred)
                 if total_rows > spec["max_output_rows"]:
                     raise ValueError("Stream projection exceeds output row bound")
@@ -143,7 +140,8 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                     if members[0].file_size > spec["max_bytes"]:
                         raise ValueError("Stream ZIP member exceeds expanded byte bound")
                     stream = stack.enter_context(archive.open(members[0]))
-                scan = source_engine.stream_json_array(stream, wrapper=spec["wrapper"], on_record=project,
+                scan = engine.stream_json_array(stream, wrapper=spec["wrapper"], on_reading=project,
+                    context=context, ordinal_context=ordinal,
                     **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",
                                                   "min_integer", "record_encoding")})
                 if spec["container"] == "zip" and scan["expanded_bytes"] != members[0].file_size:

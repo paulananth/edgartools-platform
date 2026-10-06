@@ -1,0 +1,23 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip",
+    "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+  },
+  "metadata": {
+    "format": "json.zip",
+    "cdf_version": "LEI_3.1",
+    "content_date": "2026-09-11T16:00:00+00:00",
+    "file_content": "GLEIF_FULL_PUBLISHED",
+    "delta_start": null,
+    "record_count": 3428477
+  },
+  "receipt": {
+    "record_count": 3428477,
+    "expanded_bytes": 13252301819
+  },
+  "historical_expanded_bytes": 13252301819,
+  "canonical_source_hash": "6b96e737d5426dcc3e05df5bae104e3cd9a1e2accf87f227d281895d0ecc9f8b",
+  "typed_order_differences": 0,
+  "seconds": 5618.334779342869,
+  "scope": "full Level1 JSON framing parity; configured projection, XML and mastering are separate unfinished gates"
+}

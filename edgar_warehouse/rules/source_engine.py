@@ -64,6 +64,15 @@ def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
     record_encoding='python' uses compact Python JSON float spelling for
     byte limits; the default uses native JSON spelling.
     """
+    arguments = _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, min_integer, record_encoding)
+    try:
+        records, size = source_contract.scan_json_array(stream, wrapper, on_record, **arguments)
+    except source_contract.SourceRejected as error:
+        raise _rejected(error) from None
+    return {"record_count": records, "expanded_bytes": size}
+
+
+def _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, min_integer, record_encoding):
     if not isinstance(wrapper, str) or not wrapper or len(wrapper.encode()) > 128:
         raise SourceRejected("contract", "JSON stream wrapper is bounded nonempty text")
     bounds = {"max_bytes": max_bytes, "max_record": max_record, "max_records": max_records, "max_depth": max_depth}
@@ -73,12 +82,7 @@ def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
         raise SourceRejected("contract", "JSON stream integer minimum must be a signed integer")
     if type(record_encoding) is not str or record_encoding not in ("native", "python"):
         raise SourceRejected("contract", "JSON stream record_encoding is native or python")
-    try:
-        records, size = source_contract.scan_json_array(stream, wrapper, on_record, min_integer=min_integer,
-                                                        record_encoding=record_encoding, **bounds)
-    except source_contract.SourceRejected as error:
-        raise _rejected(error) from None
-    return {"record_count": records, "expanded_bytes": size}
+    return {**bounds, "min_integer": min_integer, "record_encoding": record_encoding}
 
 
 class SourceEngine:
@@ -90,6 +94,22 @@ class SourceEngine:
             self._engine = source_contract.Engine(json.dumps(contract), STEPS)
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
+
+    def stream_json_array(self, stream, *, wrapper: str, on_reading, max_bytes: int,
+                          max_record: int, max_records: int, max_depth: int = 64,
+                          min_integer: int = -(2**63), record_encoding: str = "native",
+                          context: Mapping[str, object] | None = None, ordinal_context: str | None = None) -> dict:
+        """Frame and project inside Rust; callbacks prepare readings until valid EOF."""
+        arguments = _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, min_integer, record_encoding)
+        def receive(body, index):
+            on_reading(Reading(tables=body["tables"], deferred=body["deferred"]), index)
+        try:
+            records, size = self._engine.scan_json_array(stream, wrapper, receive,
+                context=json.dumps(dict(context or {}), ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+                ordinal_context=ordinal_context, **arguments)
+        except source_contract.SourceRejected as error:
+            raise _rejected(error) from None
+        return {"record_count": records, "expanded_bytes": size}
 
     def validate_context(self, context: Mapping[str, object]) -> None:
         """Check declared caller facts before a stream can yield zero records."""
