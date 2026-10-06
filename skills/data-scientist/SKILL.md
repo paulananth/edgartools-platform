@@ -28,6 +28,7 @@ This skill reports evidence. It does not decide the model and it does not move a
 | Treat similar names as one entity | `CONTEXT.md` forbids it. The name-matching trial is not on `main` |
 | Print a raw personal value | Use the masked shape from the findings |
 | Request `sec.gov`, or edit profiling and source-contract paths | Use local findings and leave those paths to their owners |
+| Freeze a run, or run a command that can mark it blocked | Read `bookkeeping status`. A resume or a block goes to data-engineer |
 
 ## Workflow
 
@@ -36,14 +37,14 @@ This skill reports evidence. It does not decide the model and it does not move a
    - What the files contain: the approved `findings.yaml` and `REPORT.md` from data-profiling. Cite the class, the counts, and the tests.
    - Whether a new delivery drifted: data-profiling's compare mode. List each drift item and the skill it names. Do not apply the change.
    - How many records a check fires on: data-quality's measure mode, on the records that skill describes. Report the count and that a planted record fired. Do not choose `on_fail`.
-   - What MDM holds, or what a run already checked:
+   - What MDM holds, or what a run has already recorded:
 
      ```bash
      edgar-warehouse context <kind> --search "<words>"
      edgar-warehouse mdm counts
-     edgar-warehouse bookkeeping checks <run-id>
+     edgar-warehouse bookkeeping status <run-id> --limit 100
      ```
 
-     These commands only read. `context` does not return reference-data or silver views. If the question needs those, say they are specified and not served, and cite the findings instead.
+     These three only select. `bookkeeping status` returns the run, the item states, and the checks already stored on each item. It does not freeze the run. `context` does not return reference-data or silver views. If the question needs those, say they are specified and not served, and cite the findings instead. A resume or a block goes to data-engineer.
 3. **Write the report.** One section per claim. Under each claim put the count or the command output it comes from, or the word unknown. Masked examples only.
 4. **Name the handoff** from the list above when the evidence asks for a decision, a rule change, or a run. Stop there. Do not carry out that skill's steps.
