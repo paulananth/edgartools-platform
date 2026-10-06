@@ -41,6 +41,7 @@ bypass-selection = true
 [tool.hatch.build.targets.wheel.force-include]
 "../../edgar_warehouse/cli.py" = "edgar_warehouse/cli.py"
 "../../edgar_warehouse/bundle.py" = "edgar_warehouse/bundle.py"
+"../../edgar_warehouse/context.py" = "edgar_warehouse/context.py"
 "../../edgar_warehouse/snowflake_settings.py" = "edgar_warehouse/snowflake_settings.py"
 "../../edgar_warehouse/application" = "edgar_warehouse/application"
 "../../edgar_warehouse/mdm" = "edgar_warehouse/mdm"

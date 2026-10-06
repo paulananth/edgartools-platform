@@ -110,7 +110,7 @@ def test_one_view_per_kind_per_shape_and_no_others(database):
     assert installed_views(database) == ({
         f"{kind}_{shape}" for kind in schema_kinds for shape in SHAPES
     } | {"stage_waiting", "current_entity", "is_insider", "cross_reference",
-         "relationship_context"}) - {"company_master"}
+         "relationship_context", "entity_context"}) - {"company_master"}
     assert columns(database, "company")
     # Exact equality above already forbids it, but say it outright: 034 renamed
     # 033's source-side pair, so not one view still carries the old name.

@@ -111,6 +111,11 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
 
     load(database, {"a": [(DIRECT, "b")]})
     with database.admin.begin() as conn:
+        # 007 builds on 006: a store at 005 has neither.
+        conn.execute(text("DROP FUNCTION mdm.entity_search(text, text, integer)"))
+        conn.execute(text("DROP VIEW mdm.entity_context"))
+        conn.execute(text("DROP INDEX mdm.stage_record_identifiers, mdm.current_record_entity_name_search, "
+                          "mdm.company_name_search"))
         conn.execute(text("DROP FUNCTION mdm.relationship_chain(text, text, integer, timestamp with time zone)"))
         conn.execute(text("DROP FUNCTION mdm.relationship_holds(jsonb, timestamp with time zone)"))
         conn.execute(text("DROP VIEW mdm.relationship_context"))
@@ -118,7 +123,8 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
         # The migration ledger is append-only; only this simulation of an older
         # store goes around that, as the database owner.
         conn.execute(text("SET LOCAL session_replication_role = replica"))
-        conn.execute(text("DELETE FROM mdm.migration WHERE name='006_relationship_context.sql'"))
+        conn.execute(text("DELETE FROM mdm.migration WHERE name IN "
+                          "('006_relationship_context.sql', '007_entity_context.sql')"))
         conn.execute(text("SET LOCAL session_replication_role = origin"))
         count = conn.scalar(text("SELECT count(*) FROM mdm.current_record"))
     migrate(database.admin, application_role="clean_application")

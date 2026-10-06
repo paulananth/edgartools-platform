@@ -176,6 +176,26 @@ hierarchy that does not say what its cycles do, an unknown ultimate-parent
 algorithm. Agents read every mastered link through `mdm.relationship_context`,
 and a parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
 
+## Reading MDM's context
+
+`edgar-warehouse context` reads what MDM already holds, read only, as JSON of
+at most 8 KB. Use it before proposing a kind, an identifier or a relationship
+type, and cite what it showed in your question to the operator.
+
+- `edgar-warehouse context <kind> --search "<words>"`: entities whose name
+  matches, best first.
+- `edgar-warehouse context <kind> <namespace>:<value>`: the one entity carrying
+  that identifier (or cross-reference id, lookup only), with its fields, each
+  field's winning source, and its source records.
+- `edgar-warehouse context relationship <entity id> --hops 2`: its links, both
+  ways.
+- `--as-of <time>` reads what was true then; `--as-at <time>` what MDM had
+  recorded by then (entities only). Follow `next_step` in each answer.
+
+What each kind and relationship type means is in
+`rules/context/definitions.yaml`. A new kind or relationship type adds its
+line there in the same PR; a test fails until it does.
+
 ## Merge rules
 
 `rules/merge/kinds/<kind>.yaml` ranks the sources per kind (the first listed
