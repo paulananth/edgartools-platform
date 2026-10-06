@@ -38,7 +38,7 @@ def found(tmp_path_factory):
     for n in range(1, 401):
         ref = f"AB{n:04d}" if n not in (7, 8) else f"A{n}"  # two values off the one shape
         status = ["open", "closed", "held"][n % 3]
-        note = "N/A" if n in (11, 12, 13) else f"note {n}"  # placeholders in a text column
+        note = "unknown" if n in (11, 12, 13) else f"note {n}"  # placeholders in a text column
         issued = _luhn_value(1000 + n) if n != 20 else f"{1000 + n:09d}5"  # one check digit wrong
         if identifiers.luhn(issued) and n == 20:
             issued = f"{1000 + n:09d}6"
@@ -69,14 +69,14 @@ def test_shape_outliers_have_rows_examples_and_a_pattern(found):
 def test_placeholders_are_counted_with_their_values(found):
     findings, _ = found
     item, = _items(findings, "account", "placeholder")
-    assert item["column"] == "note" and item["rows"] == 3 and item["examples"] == ["N/A"]
+    assert item["column"] == "note" and item["rows"] == 3 and item["examples"] == ["unknown"]
     assert item["proposal"] == "withhold"
 
 
 def test_check_digit_failures_name_the_family(found):
     findings, _ = found
     item, = _items(findings, "account", "check_digit")
-    assert item["column"] == "issued_no" and item["rows"] == 1 and item["args"]["family"] == "luhn"
+    assert item["column"] == "issued_no" and item["rows"] == 1 and item["args"] == {"family": "luhn", "length": 10}
 
 
 def test_a_code_list_gets_a_guard_for_codes_not_seen(found):

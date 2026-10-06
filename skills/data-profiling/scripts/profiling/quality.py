@@ -20,8 +20,9 @@ from . import identifiers, profile, sensitivity
 from .inputs import sql_name
 
 EXAMPLES = 3
-# Generic stand-ins for "no value", compared after removing everything but letters and digits.
-PLACEHOLDERS = ("NA", "NONE", "NULL", "NIL", "UNKNOWN", "TBD", "NOTAPPLICABLE", "NOTAVAILABLE")
+# Generic stand-ins for "no value", compared after removing everything but letters and digits. "N/A"
+# is left out: once folded it equals a real two-letter code or a short name ("NA", "Na").
+PLACEHOLDERS = ("NONE", "NULL", "UNKNOWN", "TBD", "NOTAPPLICABLE", "NOTAVAILABLE")
 NEAR_SHAPE = 0.95   # a column this close to one shape has outliers, not two formats
 GUARDED_CODES = 50  # a code list this small is guarded as a whole
 
@@ -98,9 +99,11 @@ def _regex(shape: str) -> str:
 
 def shape_outliers(facts: Facts) -> list[dict]:
     found = []
+    # A code column is guarded by its code list: a code of another length is not an outlier.
+    guarded = {code["column"] for code in facts.code_lists}
     for c in facts.columns:
         if not _text(c) or not c["shape"] or not NEAR_SHAPE <= c["shape_share"] < 1.0 or c.get("tokens", 0) > 1.0 \
-                or facts.roles.get(c["name"]) in {"name", "text", "date", "measure"}:
+                or facts.roles.get(c["name"]) in {"name", "text", "date", "measure"} or c["name"] in guarded:
             continue
         pattern = _regex(c["shape"])
         where = f"{sql_name(c['name'])} IS NOT NULL AND NOT regexp_full_match(CAST({sql_name(c['name'])} AS VARCHAR), " \
@@ -129,10 +132,12 @@ def check_digits(facts: Facts) -> list[dict]:
         where = f"CAST({c} AS VARCHAR) IN (SELECT unnest(?::VARCHAR[]))"
         rows = facts.con.execute(f"SELECT count(*) FROM {sql_name(facts.part)} WHERE {where}", [failing]).fetchone()[0]
         shown = sorted(failing)[:EXAMPLES]
+        column = next((c for c in facts.columns if c["name"] == ident["column"]), {})
+        length = column.get("min_length") if column.get("min_length") == column.get("max_length") else None
         found.append(item("check_digit", ident["column"], rows,
                           [sensitivity.mask(v) for v in shown] if ident["column"] in facts.personal else shown,
                           f"the {family} check digit fails: a mistyped or invented identifier",
-                          proposal="withhold", args={"family": family}))
+                          proposal="withhold", args={"family": family, "length": length}))
     return found
 
 
@@ -181,7 +186,7 @@ def hierarchy_items(h: dict, marked: list[dict]) -> list[dict]:
         return []
     mine = [m for m in marked if m["hierarchy"] == h["hierarchy"]]
     return [item("hierarchy_invalid", h["levels"][0]["column"] if h["levels"] else None, h["invalid_rows"],
-                 [m["value"] for m in mine[:EXAMPLES]],
+                 list(dict.fromkeys(m["value"] for m in mine))[:EXAMPLES],
                  f"rows that break the rule '{h['rule']}'",
                  args={"hierarchy": h["hierarchy"], "fixed": sum(m["fix"] is not None for m in mine),
                        "needs_steward": sum(m["needs_steward"] for m in mine)})]
