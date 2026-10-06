@@ -11,19 +11,28 @@ fn malformed(detail: impl ToString) -> Rejected {
 }
 
 fn from_json(value: serde_json::Value) -> El {
+    json_value(value, false, false)
+}
+
+/// A framed, already validated JSON record: preserve the same tree policies
+/// as parsing its typed Python JSON representation, without another parse.
+pub(crate) fn json_value(value: serde_json::Value, exact_numbers: bool, python_text: bool) -> El {
     use serde_json::Value;
     match value {
         Value::Null => El::scalar(None),
         Value::Bool(b) => El { kind: ScalarKind::Boolean, ..El::scalar(Some(b.to_string())) },
-        Value::Number(n) => El { kind: ScalarKind::Number, ..El::scalar(Some(n.to_string())) },
+        Value::Number(n) => El { kind: ScalarKind::Number,
+            exact_number: (exact_numbers || python_text).then(|| n.to_string()),
+            ..El::scalar(Some(n.to_string())) },
         Value::String(s) => El::scalar(Some(s)),
         Value::Array(items) => {
             let mut el = El { array: true, ..El::default() };
-            el.children.insert("item".into(), Child::Many(items.into_iter().map(from_json).collect()));
+            el.children.insert("item".into(), Child::Many(items.into_iter().map(|v| json_value(v, exact_numbers, python_text)).collect()));
             el
         }
         Value::Object(map) => {
             let mut el = El::default();
+            if python_text { el.json_keys = Some(map.keys().cloned().collect()); }
             for (key, value) in map {
                 match value {
                     // `$` is the text and `@x` an attribute, as GLEIF's JSON
@@ -33,9 +42,9 @@ fn from_json(value: serde_json::Value) -> El {
                         el.attrs.insert(key, text);
                     }
                     Value::Array(items) => {
-                        el.children.insert(key, Child::Many(items.into_iter().map(from_json).collect()));
+                        el.children.insert(key, Child::Many(items.into_iter().map(|v| json_value(v, exact_numbers, python_text)).collect()));
                     }
-                    other => el.add_child(key, from_json(other)),
+                    other => el.add_child(key, json_value(other, exact_numbers, python_text)),
                 }
             }
             el

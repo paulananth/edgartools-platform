@@ -30,7 +30,8 @@ def _policy(contract):
               "partition_records": 100_000, "max_partitions": 4096,
               "max_spool_bytes": 1024**3, "max_output_rows": 10_000_000}
     required = {*maxima, "wrapper", "container", "min_integer", "record_encoding", "ordinal_context"}
-    if not isinstance(spec, dict) or set(spec) != required:
+    if (not isinstance(spec, dict) or not required <= set(spec)
+            or set(spec) - required - {"expected_records_context"}):
         raise ValueError("read.stream must declare every framing, partition and spool bound")
     for key, maximum in maxima.items():
         minimum = 0 if key == "max_records" else 1
@@ -49,6 +50,11 @@ def _policy(contract):
         declared = read.get("context", {}).get(ordinal) if isinstance(ordinal, str) else None
         if not isinstance(declared, dict) or declared.get("type") != "integer":
             raise ValueError("Stream ordinal_context must name a declared integer context")
+    expected = spec.get("expected_records_context")
+    if "expected_records_context" in spec:
+        declared = read.get("context", {}).get(expected) if isinstance(expected, str) else None
+        if not isinstance(declared, dict) or declared.get("type") != "integer":
+            raise ValueError("Stream expected_records_context must name a declared integer context")
     limits = read.get("limits", {})
     if (type(limits.get("max_bytes")) is not int
             or not 1 <= limits["max_bytes"] <= 32 * 1024**2
@@ -78,6 +84,11 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
             if ordinal is not None and ordinal in context:
                 raise ValueError("Stream ordinal context is generated, never supplied by a caller")
             engine.validate_context({**context, **({ordinal: 1} if ordinal is not None else {})})
+            expected_name = spec.get("expected_records_context")
+            expected_count = context.get(expected_name) if expected_name is not None else None
+            if expected_name is not None and (type(expected_count) is not int
+                    or not 0 <= expected_count <= spec["max_records"]):
+                raise ValueError("Stream expected record count is outside its declared bound")
             parts, pending_count, first = [], 0, 0
             pending = {"version": 1, "tables": {name: [] for name in contract["read"]["tables"]}, "deferred": []}
             pending_size = len(_encode(pending))
@@ -104,11 +115,8 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                 pending_count = 0
                 pending_size = len(_encode(pending))
 
-            def project(row, index):
+            def project(result, index):
                 nonlocal pending_count, pending_size, first, total_rows
-                values = {**context, **({ordinal: index + 1} if ordinal is not None else {})}
-                result = engine.read(json.dumps(row, ensure_ascii=False, separators=(",", ":"),
-                                                allow_nan=False).encode(), context=values)
                 total_rows += sum(len(rows) for rows in result.tables.values()) + len(result.deferred)
                 if total_rows > spec["max_output_rows"]:
                     raise ValueError("Stream projection exceeds output row bound")
@@ -143,9 +151,12 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                     if members[0].file_size > spec["max_bytes"]:
                         raise ValueError("Stream ZIP member exceeds expanded byte bound")
                     stream = stack.enter_context(archive.open(members[0]))
-                scan = source_engine.stream_json_array(stream, wrapper=spec["wrapper"], on_record=project,
+                scan = engine.stream_json_array(stream, wrapper=spec["wrapper"], on_reading=project,
+                    context=context, ordinal_context=ordinal,
                     **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",
                                                   "min_integer", "record_encoding")})
+                if expected_count is not None and scan["record_count"] != expected_count:
+                    raise ValueError("Stream record count differs from pinned context")
                 if spec["container"] == "zip" and scan["expanded_bytes"] != members[0].file_size:
                     raise ValueError("Stream ZIP expanded length differs from declared member size")
             flush()

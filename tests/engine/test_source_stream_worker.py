@@ -209,3 +209,36 @@ def test_malformed_read_keeps_the_native_contract_refusal(tmp_path, entrypoint):
             store = Artifacts()
             envelope = task(tmp_path, store, [b'{"records":[]}'], rules)
             source_read.execute(envelope, store)
+
+
+@pytest.mark.parametrize("expected", [0, 1, 3, -1, 101, True])
+def test_stream_publication_count_refuses_mismatch_before_output(tmp_path, expected):
+    store = Artifacts()
+    rules = contract()
+    rules["read"]["context"]["publication_count"] = {"type": "integer"}
+    rules["read"]["stream"]["expected_records_context"] = "publication_count"
+    envelope = task(tmp_path, store, [b'{"records":[{"n":1},{"n":2}]}'], rules)
+    manifest = store.json(envelope["input"])
+    ref = manifest["artifacts"][0]
+    context = store.put(tmp_path.as_uri(), {"version":1,"input":ref,"values":{"publication_count":expected}})
+    envelope["input"] = store.put(tmp_path.as_uri(), {**manifest,"version":2,"artifacts":[{"input":ref,"context":context}]})
+    with pytest.raises((ValueError, SourceRejected)):
+        source_read.execute(envelope, store)
+    assert not (tmp_path / "reading.json").exists()
+    assert not (tmp_path / "reading.json.parts").exists()
+
+
+def test_stream_publication_count_is_bound_to_input_and_checked_through_eof(tmp_path):
+    store = Artifacts()
+    rules = contract()
+    rules["read"]["context"]["publication_count"] = {"type":"integer"}
+    rules["read"]["stream"]["expected_records_context"] = "publication_count"
+    envelope = task(tmp_path, store, [b'{"records":[{"n":1},{"n":2}]}'], rules)
+    manifest = store.json(envelope["input"])
+    ref = manifest["artifacts"][0]
+    context = store.put(tmp_path.as_uri(), {"version":1,"input":ref,"values":{"publication_count":2}})
+    envelope["input"] = store.put(tmp_path.as_uri(), {**manifest,"version":2,"artifacts":[{"input":ref,"context":context}]})
+    receipt = source_read.execute(envelope, store)
+    assert store.json(receipt)["artifacts"][0]["record_count"] == 2
+    assert store.json(receipt)["artifacts"][0]["context"] == context
+    assert source_read.verify({**envelope,"candidate":receipt}, store) == ({"source.output":True},[])

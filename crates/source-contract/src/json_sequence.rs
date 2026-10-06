@@ -149,7 +149,7 @@ impl<'de, F: FnMut(Value, usize) -> Result<(), Rejected>> Visitor<'de> for Recor
 // Count compact UTF-8 JSON without retaining a second complete record.
 // String escaping is identical for serde and Python ensure_ascii=False;
 // floating point spelling is an explicit compatibility policy.
-fn encoded_len(value: &Value, encoding: RecordEncoding) -> Result<usize, Rejected> {
+pub(crate) fn encoded_len(value: &Value, encoding: RecordEncoding) -> Result<usize, Rejected> {
     Ok(match value {
         Value::Null => 4,
         Value::Bool(value) => if *value { 4 } else { 5 },

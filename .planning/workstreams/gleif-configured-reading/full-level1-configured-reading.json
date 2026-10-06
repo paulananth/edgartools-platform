@@ -1,0 +1,32 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip",
+    "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+  },
+  "contract": {
+    "uri": "file:///private/tmp/codex-full-gleif-configured-20261006/contract.json",
+    "sha256": "14983b13de4e42d60119a255f78f57be8372b431f461942fb1fdc253dc4f7ce0"
+  },
+  "context": {
+    "uri": "file:///private/tmp/codex-full-gleif-configured-20261006/bd0abd2187d673c541efe4fef726b8a6bae6dc7763c6f9f2d04330c4dc8e54f2.json",
+    "sha256": "bd0abd2187d673c541efe4fef726b8a6bae6dc7763c6f9f2d04330c4dc8e54f2"
+  },
+  "input": {
+    "uri": "file:///private/tmp/codex-full-gleif-configured-20261006/724d1d89e3fb0f22e60b3ac237af12952a63fbf306a2d632322dea639e29ce97.json",
+    "sha256": "724d1d89e3fb0f22e60b3ac237af12952a63fbf306a2d632322dea639e29ce97"
+  },
+  "reading": {
+    "uri": "file:///private/tmp/codex-full-gleif-configured-20261006/reading.json",
+    "sha256": "c8327a26ceef8ebce5f66a872843ff1a7a9a1817e3a808c58952577c9ff7faa4"
+  },
+  "source_records": 3428477,
+  "selected_records": 3755,
+  "historical_selected_records": 3755,
+  "historical_selection_sha256": "03735954936270e135249c9e7eb9950a13b6ae13362f62d7dda7b91f37503c67",
+  "selected_reading_sha256": "0d84b5331891d9b49b0caf552e6e8d3c3bb813888e971cb0508e0953b803e442",
+  "projection_differences": 0,
+  "consumer_bytes": 7201215,
+  "execute_seconds": 695.0668901749887,
+  "verify_seconds": 524.0030050240457,
+  "scope": "complete archive configured JSON projection and independent output verifier, historical selected cohort comparison; XML, installed MDM population and retirement remain incomplete"
+}
