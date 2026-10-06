@@ -8,9 +8,14 @@ from edgar_warehouse.bundle import named_commands, unresolved
 from edgar_warehouse.cli import build_parser
 
 ROOT = Path(__file__).resolve().parents[2]
-OPERATIONAL = (
-    ("data-modeling", "data-modeling"),
-    ("data-scientist", "data-scientist"),
+OPERATIONAL = (("data-modeling", "data-modeling"),)
+SCIENTIST = ("data-scientist", "data-scientist")
+SCIENTIST_SECTIONS = (
+    "## 1. Collection & Storage",
+    "## 2. Preparation (cleaning)",
+    "## 3. Exploration & Visualization (EDA)",
+    "## 4. Experimentation & Prediction",
+    "## Deliverable checklist",
 )
 FUNDAMENTALS = ("data-engineering-fundamentals", "data-engineering-fundamentals")
 FUNDAMENTALS_SECTIONS = (
@@ -65,4 +70,18 @@ def test_role_skills_name_registered_commands() -> None:
     assert commands == []
     assert unresolved(parser, path.parent) == []
     bodies.append(text.split("## Concept modules", 1)[1])
-    assert len(set(bodies)) == len(OPERATIONAL) + 1
+
+    folder, expected_name = SCIENTIST
+    path = ROOT / "skills" / folder / "SKILL.md"
+    text = path.read_text(encoding="utf-8")
+    meta = _frontmatter(text)
+    assert meta["name"] == expected_name
+    assert meta["description"].startswith("Use when")
+    assert "standard data science workflow" in meta["description"]
+    for heading in SCIENTIST_SECTIONS:
+        assert heading in text
+    commands = [item for item in named_commands(path.parent) if item[0] == "SKILL.md"]
+    assert commands == []
+    assert unresolved(parser, path.parent) == []
+    bodies.append(text.split("## 1. Collection & Storage", 1)[1])
+    assert len(set(bodies)) == len(OPERATIONAL) + 2
