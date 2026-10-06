@@ -1,0 +1,13 @@
+version: Trial A-rr.RelationshipRecord.Relationship.RelationshipPeriods.RelationshipPeriod-quality-trial
+quality:
+  rr_relationshiprecord_relationship_relationshipperiods_relationshipperiod:
+    checks:
+    - id: code_list_period_type
+      test: in_set@1
+      value: fields.period_type
+      on_fail: flag
+      args:
+        values:
+        - ACCOUNTING_PERIOD
+        - DOCUMENT_FILING_PERIOD
+        - RELATIONSHIP_PERIOD

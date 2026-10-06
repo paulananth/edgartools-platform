@@ -52,7 +52,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | hierarchies | Per source: parent columns, functional dependencies, code nesting | `hierarchies` |
 | time | As of (valid from/to), as at (record time), event time, time series | `time` |
 | sensitivity | none, personal, sensitive personal; samples masked | `sensitivity` |
-| quality | Defects found on the way, handed to the data-quality skill | `quality` |
+| quality | Defects found on the way, with exact rows and masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec for transaction and reference parts | `store_suggestion`, `silver` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
@@ -95,8 +95,9 @@ uv run --with duckdb --with pyyaml python profile_data.py approve \
 6. **Hand over.** data-onboarding reads the approved `findings.yaml`, plans one
    onboarding per part in dependency order (reference data, then master kinds
    with their "together" relationships, then transaction data and "separate"
-   relationships), and prefills its steps. The `quality` items go to the
-   data-quality skill.
+   relationships), and prefills its steps. The `quality` items and
+   `invalid_rows.jsonl` go to the [data-quality](../data-quality/SKILL.md)
+   skill.
 
 ## Reading the findings
 
@@ -116,7 +117,8 @@ that matter most:
   part between masters, or an attribute list); `separate` comes after.
 - **hierarchies:** `reference` hierarchies group codes in one code set (RDM);
   `master_data` hierarchies are relationships between master records (MDM).
-  `invalid_rows` are rows that break the rule; they are marked, never dropped.
+  `invalid_rows` are rows that break the rule; each is marked in
+  `invalid_rows.jsonl` beside the findings, never dropped.
 - **silver:** the table spec for a part MDM does not own.
 
 ## Compare a new delivery
@@ -124,7 +126,7 @@ that matter most:
 refining-rules runs this before changing a live feed. It profiles the new
 delivery and lists each difference from the approved findings in `drift.yaml`:
 parts, columns, types, fill rates, sensitivity, keys, links, code counts,
-hierarchies and volume. Each item names the skill that handles it
+codes not in an approved code list, hierarchies and volume. Each item names the skill that handles it
 (data-quality, refining-rules or rdm).
 
 ```

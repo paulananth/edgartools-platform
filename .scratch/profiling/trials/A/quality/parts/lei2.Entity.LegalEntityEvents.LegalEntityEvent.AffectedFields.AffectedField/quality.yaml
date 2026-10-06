@@ -1,0 +1,4 @@
+version: Trial A-lei2.Entity.LegalEntityEvents.LegalEntityEvent.AffectedFields.AffectedField-quality-trial
+quality:
+  lei2_entity_legalentityevents_legalentityevent_affectedfields_affectedfield:
+    checks: []

@@ -1,0 +1,4 @@
+version: Trial A-lei2.Entity.TransliteratedOtherAddresses.TransliteratedOtherAddress.AdditionalAddressLine-quality-trial
+quality:
+  lei2_entity_transliteratedotheraddresses_transliteratedotheraddress_additionaladdressline:
+    checks: []

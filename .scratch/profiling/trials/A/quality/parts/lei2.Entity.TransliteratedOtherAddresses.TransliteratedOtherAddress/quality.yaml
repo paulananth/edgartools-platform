@@ -1,0 +1,72 @@
+version: Trial A-lei2.Entity.TransliteratedOtherAddresses.TransliteratedOtherAddress-quality-trial
+quality:
+  lei2_entity_transliteratedotheraddresses_transliteratedotheraddress:
+    checks:
+    - id: code_list_xml_lang
+      test: in_set@1
+      value: fields.xml_lang
+      on_fail: flag
+      args:
+        values:
+        - bg
+        - cs
+        - da
+        - de
+        - el
+        - en
+        - en-IE
+        - es
+        - et
+        - fi
+        - fo
+        - fr
+        - fr-FR
+        - fr-LU
+        - hu
+        - is
+        - lb
+        - lt
+        - lv
+        - nb
+        - nl
+        - 'no'
+        - pl
+        - pt
+        - ro
+        - sk
+        - sv
+        - th
+    - id: code_list_country
+      test: in_set@1
+      value: fields.country
+      on_fail: flag
+      args:
+        values:
+        - BE
+        - BG
+        - BR
+        - CH
+        - CY
+        - CZ
+        - DE
+        - DK
+        - EE
+        - FI
+        - FO
+        - FR
+        - GB
+        - GR
+        - HU
+        - IE
+        - IS
+        - LT
+        - LU
+        - LV
+        - MX
+        - 'NO'
+        - PL
+        - PT
+        - RO
+        - SE
+        - SK
+        - TH

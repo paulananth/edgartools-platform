@@ -1,0 +1,82 @@
+version: Trial A-submissions.filings.recent-quality-trial
+quality:
+  submissions_filings_recent:
+    checks:
+    - id: placeholder_file_number
+      test: placeholder@1
+      value: fields.file_number
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_film_number
+      test: placeholder@1
+      value: fields.film_number
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_primary_doc_description
+      test: placeholder@1
+      value: fields.primary_doc_description
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: code_list_act
+      test: in_set@1
+      value: fields.act
+      on_fail: flag
+      args:
+        values:
+        - ''
+        - '33'
+        - '34'
+        - '35'
+        - '39'
+        - '40'
+        - 40,33
+        - DF
+        - IA
+        - IC
+        - IC,IA
+        - NE
+    - id: code_list_is_xbrl
+      test: in_set@1
+      value: fields.is_xbrl
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'
+    - id: code_list_is_inline_xbrl
+      test: in_set@1
+      value: fields.is_inline_xbrl
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'
+    - id: code_list_is_xbrlnumeric
+      test: in_set@1
+      value: fields.is_xbrlnumeric
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'

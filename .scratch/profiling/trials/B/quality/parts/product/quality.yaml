@@ -1,0 +1,126 @@
+version: contoso-product-quality-trial
+quality:
+  product:
+    checks:
+    - id: code_list_manufacturer
+      test: in_set@1
+      value: fields.manufacturer
+      on_fail: flag
+      args:
+        values:
+        - A. Datum Corporation
+        - Adventure Works
+        - Contoso, Ltd
+        - Fabrikam, Inc.
+        - Litware, Inc.
+        - Northwind Traders
+        - Proseware, Inc.
+        - Southridge Video
+        - Tailspin Toys
+        - The Phone Company
+        - Wide World Importers
+    - id: code_list_brand
+      test: in_set@1
+      value: fields.brand
+      on_fail: flag
+      args:
+        values:
+        - A. Datum
+        - Adventure Works
+        - 'Adventure Works '
+        - Contoso
+        - 'Contoso '
+        - Fabrikam
+        - 'Fabrikam  '
+        - Litware
+        - 'Litware '
+        - Northwind Traders
+        - Proseware
+        - Southridge Video
+        - Tailspin Toys
+        - The Phone Company
+        - Wide World Importers
+    - id: code_list_color
+      test: in_set@1
+      value: fields.color
+      on_fail: flag
+      args:
+        values:
+        - Azure
+        - Black
+        - Blue
+        - Brown
+        - Gold
+        - Green
+        - Grey
+        - Orange
+        - Pink
+        - Purple
+        - Red
+        - Silver
+        - Silver Grey
+        - Transparent
+        - White
+        - Yellow
+        - blue
+    - id: code_list_weight_unit
+      test: in_set@1
+      value: fields.weight_unit
+      on_fail: flag
+      args:
+        values:
+        - grams
+        - ounces
+        - pounds
+    - id: code_list_category_key
+      test: in_set@1
+      value: fields.category_key
+      on_fail: flag
+      args:
+        values:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+    - id: code_list_sub_category_key
+      test: in_set@1
+      value: fields.sub_category_key
+      on_fail: flag
+      args:
+        values:
+        - '101'
+        - '104'
+        - '106'
+        - '201'
+        - '202'
+        - '203'
+        - '205'
+        - '301'
+        - '303'
+        - '304'
+        - '305'
+        - '306'
+        - '308'
+        - '401'
+        - '402'
+        - '405'
+        - '406'
+        - '501'
+        - '503'
+        - '504'
+        - '505'
+        - '602'
+        - '701'
+        - '702'
+        - '801'
+        - '802'
+        - '803'
+        - '804'
+        - '805'
+        - '806'
+        - '807'
+        - '808'

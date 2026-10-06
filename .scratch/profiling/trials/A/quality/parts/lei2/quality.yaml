@@ -1,0 +1,306 @@
+version: Trial A-lei2-quality-trial
+quality:
+  lei2:
+    checks:
+    - id: placeholder_entity_legal_address_city
+      test: placeholder@1
+      value: fields.entity_legal_address_city
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_legal_address_postal_code
+      test: placeholder@1
+      value: fields.entity_legal_address_postal_code
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_headquarters_address_city
+      test: placeholder@1
+      value: fields.entity_headquarters_address_city
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_headquarters_address_postal_code
+      test: placeholder@1
+      value: fields.entity_headquarters_address_postal_code
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_entity_status
+      test: placeholder@1
+      value: fields.entity_entity_status
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_registration_validation_authority_validation_authority_entity_id
+      test: placeholder@1
+      value: fields.registration_validation_authority_validation_authority_entity_id
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_extension_gleif_conformity_gleif_conformityflag
+      test: placeholder@1
+      value: fields.extension_gleif_conformity_gleif_conformityflag
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_legal_address_address_number
+      test: placeholder@1
+      value: fields.entity_legal_address_address_number
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_headquarters_address_address_number
+      test: placeholder@1
+      value: fields.entity_headquarters_address_address_number
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_extension_leifr_economic_activity_leifr_naceclass_code
+      test: placeholder@1
+      value: fields.extension_leifr_economic_activity_leifr_naceclass_code
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_legal_address_address_number_within_building
+      test: placeholder@1
+      value: fields.entity_legal_address_address_number_within_building
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_entity_headquarters_address_address_number_within_building
+      test: placeholder@1
+      value: fields.entity_headquarters_address_address_number_within_building
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: shape_outlier_extension_leifr_fund_number
+      test: pattern@1
+      value: fields.extension_leifr_fund_number
+      on_fail: flag
+      args:
+        regex: '[A-Z][A-Z][A-Z][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+    - id: shape_outlier_extension_ext_cif
+      test: pattern@1
+      value: fields.extension_ext_cif
+      on_fail: flag
+      args:
+        regex: '[A-Z][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+    - id: check_digit_lei
+      test: lei_check_digit@1
+      value: fields.lei
+      on_fail: withhold
+    - id: code_list_entity_entity_category
+      test: in_set@1
+      value: fields.entity_entity_category
+      on_fail: flag
+      args:
+        values:
+        - BRANCH
+        - FUND
+        - GENERAL
+        - INTERNATIONAL_ORGANIZATION
+        - RESIDENT_GOVERNMENT_ENTITY
+        - SOLE_PROPRIETOR
+    - id: code_list_entity_entity_status
+      test: in_set@1
+      value: fields.entity_entity_status
+      on_fail: flag
+      args:
+        values:
+        - ACTIVE
+        - INACTIVE
+        - 'NULL'
+    - id: code_list_registration_registration_status
+      test: in_set@1
+      value: fields.registration_registration_status
+      on_fail: flag
+      args:
+        values:
+        - ANNULLED
+        - DUPLICATE
+        - ISSUED
+        - LAPSED
+        - PENDING_ARCHIVAL
+        - PENDING_TRANSFER
+        - RETIRED
+    - id: code_list_registration_managing_lou
+      test: in_set@1
+      value: fields.registration_managing_lou
+      on_fail: flag
+      args:
+        values:
+        - 029200067A7K6CH0H586
+        - 097900BEFH0000000217
+        - 213800WAVVOPS85N2205
+        - 253400M18U5TB02TW421
+        - 254900LXHEVKYGERER05
+        - 254900PMALKJRL1YGQ18
+        - 259400L3KBYEVNHEJF55
+        - 315700LK78Z7C0WMIL03
+        - 335800FVH4MOKZS9VH40
+        - 353800279ADEFGKNTV65
+        - 378900F4A0A690EA6735
+        - 39120001KULK7200U106
+        - 4117IB8J63IUO2SES575
+        - 4469000001AVO26P9X86
+        - 485100001PLJJ09NZT59
+        - 48510000JZ17NWGUA510
+        - 506700LOLO7M6V0E4247
+        - 5299000J2N45DDNE4Y28
+        - 52990034RLKT0WSOAM90
+        - 529900F6BNUR3RJ2WH29
+        - 529900T8BM49AURSDO55
+        - 5493001KJTIIGC8Y1R12
+        - 549300O897ZC5H7CY412
+        - 558600FNC30A8J9EGQ54
+        - 635400DZBUIMTBCXGA12
+        - 636700184FM9OFFK8562
+        - 655600IJ8LS3CCDA4421
+        - 724500A93Z8V1MJK5349
+        - 743700OO8O2N3TQKJC81
+        - 747800R0J5YBJED3N877
+        - 789000TVSB96MCOKSB52
+        - 815600EAD78C57FCE690
+        - 894500IIP432AHQ64V02
+        - 959800R2X69K6Y6MX775
+        - 969500Q2MA9VBQ8BG884
+        - 98450045AN5EB5FDC780
+        - 984500ID493BDCR4B368
+        - 9884008RRMX1X5HV6625
+        - EVK05KS7XY1DEII3R011
+    - id: code_list_registration_validation_sources
+      test: in_set@1
+      value: fields.registration_validation_sources
+      on_fail: flag
+      args:
+        values:
+        - ENTITY_SUPPLIED_ONLY
+        - FULLY_CORROBORATED
+        - PARTIALLY_CORROBORATED
+    - id: code_list_extension_gleif_conformity_gleif_conformityflag
+      test: in_set@1
+      value: fields.extension_gleif_conformity_gleif_conformityflag
+      on_fail: flag
+      args:
+        values:
+        - CONFORMING
+        - NON_CONFORMING
+        - NOT_APPLICABLE
+    - id: code_list_extension_leifr_legal_form_codification
+      test: in_set@1
+      value: fields.extension_leifr_legal_form_codification
+      on_fail: flag
+      args:
+        values:
+        - '22'
+        - '23'
+        - '24'
+        - '29'
+        - '31'
+        - '32'
+        - '41'
+        - '51'
+        - '52'
+        - '53'
+        - '54'
+        - '55'
+        - '56'
+        - '57'
+        - '58'
+        - '62'
+        - '63'
+        - '64'
+        - '65'
+        - '72'
+        - '73'
+        - '81'
+        - '82'
+        - '83'
+        - '84'
+        - '85'
+        - '92'
+        - '93'
+        - '99'
+    - id: code_list_entity_entity_sub_category
+      test: in_set@1
+      value: fields.entity_entity_sub_category
+      on_fail: flag
+      args:
+        values:
+        - CENTRAL_GOVERNMENT
+        - LOCAL_GOVERNMENT
+        - SOCIAL_SECURITY
+        - STATE_GOVERNMENT

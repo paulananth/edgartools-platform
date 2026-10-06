@@ -1,0 +1,248 @@
+version: Trial A-submissions-quality-trial
+quality:
+  submissions:
+    checks:
+    - id: placeholder_sic
+      test: placeholder@1
+      value: fields.sic
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_ein
+      test: placeholder@1
+      value: fields.ein
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_lei
+      test: placeholder@1
+      value: fields.lei
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_mailing_street
+      test: placeholder@1
+      value: fields.addresses_mailing_street
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_mailing_city
+      test: placeholder@1
+      value: fields.addresses_mailing_city
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_mailing_zip_code
+      test: placeholder@1
+      value: fields.addresses_mailing_zip_code
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_mailing_foreign_state_territory
+      test: placeholder@1
+      value: fields.addresses_mailing_foreign_state_territory
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_mailing_country
+      test: placeholder@1
+      value: fields.addresses_mailing_country
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_business_street
+      test: placeholder@1
+      value: fields.addresses_business_street
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_business_zip_code
+      test: placeholder@1
+      value: fields.addresses_business_zip_code
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_business_foreign_state_territory
+      test: placeholder@1
+      value: fields.addresses_business_foreign_state_territory
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_addresses_business_country
+      test: placeholder@1
+      value: fields.addresses_business_country
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_phone
+      test: placeholder@1
+      value: fields.phone
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: shape_outlier_ein
+      test: pattern@1
+      value: fields.ein
+      on_fail: flag
+      args:
+        regex: '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+    - id: code_list_entity_type
+      test: in_set@1
+      value: fields.entity_type
+      on_fail: flag
+      args:
+        values:
+        - investment
+        - operating
+        - other
+    - id: code_list_owner_org
+      test: in_set@1
+      value: fields.owner_org
+      on_fail: flag
+      args:
+        values:
+        - ''
+        - 01 Energy & Transportation
+        - 02 Finance
+        - 03 Life Sciences
+        - 04 Manufacturing
+        - 05 Real Estate & Construction
+        - 06 Technology
+        - 07 Trade & Services
+        - 08 Industrial Applications and Services
+        - 09 Crypto Assets
+        - AD 09 Branch 9A
+        - AD 09 Branch 9B
+        - CF
+        - International Corp Fin
+        - Office of Structured Finance
+    - id: code_list_insider_transaction_for_owner_exists
+      test: in_set@1
+      value: fields.insider_transaction_for_owner_exists
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'
+    - id: code_list_insider_transaction_for_issuer_exists
+      test: in_set@1
+      value: fields.insider_transaction_for_issuer_exists
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'
+    - id: code_list_category
+      test: in_set@1
+      value: fields.category
+      on_fail: flag
+      args:
+        values:
+        - ''
+        - <br>Emerging growth company
+        - Accelerated filer
+        - Accelerated filer<br>Emerging growth company
+        - Accelerated filer<br>Smaller reporting company
+        - Accelerated filer<br>Smaller reporting company<br>Emerging growth company
+        - Large Accelerated
+        - Large Accelerated<br>Well Known Seasoned Issuer
+        - Large accelerated filer
+        - Non-accelerated filer
+        - Non-accelerated filer<br>Emerging growth company
+        - Non-accelerated filer<br>Smaller reporting company
+        - Non-accelerated filer<br>Smaller reporting company<br>Emerging growth company
+        - Smaller reporting company
+    - id: code_list_addresses_mailing_is_foreign_location
+      test: in_set@1
+      value: fields.addresses_mailing_is_foreign_location
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'
+    - id: code_list_flags
+      test: in_set@1
+      value: fields.flags
+      on_fail: flag
+      args:
+        values:
+        - ''
+        - REVOKED

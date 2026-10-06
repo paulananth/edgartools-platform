@@ -1,0 +1,114 @@
+version: Trial A-rr-quality-trial
+quality:
+  rr:
+    checks:
+    - id: placeholder_relationship_record_relationship_relationship_status
+      test: placeholder@1
+      value: fields.relationship_record_relationship_relationship_status
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_relationship_record_registration_validation_reference
+      test: placeholder@1
+      value: fields.relationship_record_registration_validation_reference
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: code_list_relationship_record_relationship_relationship_status
+      test: in_set@1
+      value: fields.relationship_record_relationship_relationship_status
+      on_fail: flag
+      args:
+        values:
+        - ACTIVE
+        - INACTIVE
+        - 'NULL'
+    - id: code_list_relationship_record_registration_registration_status
+      test: in_set@1
+      value: fields.relationship_record_registration_registration_status
+      on_fail: flag
+      args:
+        values:
+        - LAPSED
+        - PENDING_ARCHIVAL
+        - PENDING_TRANSFER
+        - PUBLISHED
+    - id: code_list_relationship_record_registration_managing_lou
+      test: in_set@1
+      value: fields.relationship_record_registration_managing_lou
+      on_fail: flag
+      args:
+        values:
+        - 029200067A7K6CH0H586
+        - 097900BEFH0000000217
+        - 213800WAVVOPS85N2205
+        - 222100T6ICDIY8V4VX70
+        - 253400M18U5TB02TW421
+        - 254900LXHEVKYGERER05
+        - 254900PMALKJRL1YGQ18
+        - 259400L3KBYEVNHEJF55
+        - 315700LK78Z7C0WMIL03
+        - 335800FVH4MOKZS9VH40
+        - 353800279ADEFGKNTV65
+        - 378900F4A0A690EA6735
+        - 39120001KULK7200U106
+        - 4117IB8J63IUO2SES575
+        - 4469000001AVO26P9X86
+        - 485100001PLJJ09NZT59
+        - 48510000JZ17NWGUA510
+        - 506700LOLO7M6V0E4247
+        - 5299000J2N45DDNE4Y28
+        - 52990034RLKT0WSOAM90
+        - 529900F6BNUR3RJ2WH29
+        - 529900T8BM49AURSDO55
+        - 5493001KJTIIGC8Y1R12
+        - 549300O897ZC5H7CY412
+        - 558600FNC30A8J9EGQ54
+        - 635400DZBUIMTBCXGA12
+        - 655600IJ8LS3CCDA4421
+        - 724500A93Z8V1MJK5349
+        - 743700OO8O2N3TQKJC81
+        - 7478000050A040C0D041
+        - 747800R0J5YBJED3N877
+        - 789000TVSB96MCOKSB52
+        - 815600EAD78C57FCE690
+        - 815600F58F7382929F40
+        - 894500IIP432AHQ64V02
+        - 959800R2X69K6Y6MX775
+        - 969500Q2MA9VBQ8BG884
+        - 98450045AN5EB5FDC780
+        - 984500ID493BDCR4B368
+        - 9884008RRMX1X5HV6625
+        - EVK05KS7XY1DEII3R011
+    - id: code_list_relationship_record_registration_validation_sources
+      test: in_set@1
+      value: fields.relationship_record_registration_validation_sources
+      on_fail: flag
+      args:
+        values:
+        - ENTITY_SUPPLIED_ONLY
+        - FULLY_CORROBORATED
+        - PARTIALLY_CORROBORATED
+    - id: code_list_relationship_record_registration_validation_documents
+      test: in_set@1
+      value: fields.relationship_record_registration_validation_documents
+      on_fail: flag
+      args:
+        values:
+        - ACCOUNTS_FILING
+        - CONTRACTS
+        - OTHER_OFFICIAL_DOCUMENTS
+        - REGULATORY_FILING
+        - SUPPORTING_DOCUMENTS

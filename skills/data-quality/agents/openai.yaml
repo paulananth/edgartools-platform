@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Quality"
+  short_description: "Turn profiling defects into checks and fixes, and mark invalid rows with evidence"
+  default_prompt: "Use $data-quality to plan the checks for part <part> from the approved findings in <folder>."

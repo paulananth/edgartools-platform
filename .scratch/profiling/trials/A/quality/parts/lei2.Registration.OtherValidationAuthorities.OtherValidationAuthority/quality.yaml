@@ -1,0 +1,12 @@
+version: Trial A-lei2.Registration.OtherValidationAuthorities.OtherValidationAuthority-quality-trial
+quality:
+  lei2_registration_othervalidationauthorities_othervalidationauthority:
+    checks:
+    - id: code_list_other_validation_authority_id
+      test: in_set@1
+      value: fields.other_validation_authority_id
+      on_fail: flag
+      args:
+        values:
+        - Dubai Aviation City Corporation (DACC)
+        - FCRA Services

@@ -54,3 +54,32 @@ def test_link_part_gives_one_hierarchy_per_role_with_one_parent(con):
     found = hierarchy.by_link_part(con, "l", "child", "parent", "kind")
     assert [h["role"] for h in found] == ["owns"]  # "knows" has two parents for b: a network
     assert found[0]["depth"] == 3 and found[0]["evidence_kind"] == "parent_column"
+
+
+def test_a_node_that_names_itself_as_parent_is_marked_apart_from_a_cycle(con):
+    con.execute("CREATE TABLE selfish AS SELECT * FROM (VALUES ('a', 'b', 'r'), ('b', 'a', 'r'), ('c', 'c', 'r'), "
+                "('d', 'a', 'r')) t(child, parent, kind)")
+    h, = hierarchy.by_link_part(con, "selfish", "child", "parent", "kind", ["child", "kind"])
+    reasons = sorted((m["value"], m["reason"]) for m in h["marked"])
+    assert reasons == [("a", "on a cycle of parents"), ("b", "on a cycle of parents"), ("c", "names itself as its parent")]
+    assert h["cycles"] == 3 and h["invalid_rows"] == 3 and all(m["needs_steward"] for m in h["marked"])
+
+
+def test_a_row_breaking_two_levels_is_one_invalid_row_with_counted_evidence(con):
+    rows = [(f"r{n}", f"c{n % 6}", f"m{n % 6 // 2}", f"t{n % 6 // 4}") for n in range(60)]
+    rows.append(("bad", "c0", "m2", "t9"))  # breaks fine → middle and middle → top
+    con.execute("CREATE TABLE levels (row_id VARCHAR, fine VARCHAR, middle VARCHAR, top VARCHAR)")
+    con.executemany("INSERT INTO levels VALUES (?, ?, ?, ?)", rows)
+    h = hierarchy._record(con, "levels", ["fine", "middle", "top"], 0.99, "functional_dependency", ["row_id"])
+    assert h["invalid_rows"] == 1 and [m["key"] for m in h["marked"]] == [{"row_id": "bad"}]
+    m, = h["marked"]
+    assert m["fix"] == "m0" and m["support"] == {"rows": 10, "of": 11} and m["parent_column"] == "middle"
+
+
+def test_a_child_part_marks_its_rows_by_its_parent_row(con):
+    rows = [(n // 10, f"r{n}", f"c{n % 6}", f"m{n % 6 // 2}") for n in range(60)]
+    rows.append((9, "bad", "c0", "m2"))
+    con.execute("CREATE TABLE child (_parent_row BIGINT, line VARCHAR, fine VARCHAR, middle VARCHAR)")
+    con.executemany("INSERT INTO child VALUES (?, ?, ?, ?)", rows)
+    h = hierarchy._record(con, "child", ["fine", "middle"], 0.99, "functional_dependency", ["parent_id", "line"])
+    assert [m["key"] for m in h["marked"]] == [{"_parent_row": "9", "line": "bad"}]

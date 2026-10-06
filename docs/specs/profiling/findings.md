@@ -78,6 +78,7 @@ approval:                       # §9
     refresh: <duration|unknown>
   quality:                      # handed to data-quality
     - {check: <id from the check list>, column: <col>, rows: <n>, examples: [<masked>],
+       args: {<what a check needs: regex, values, family, length>}, why: <words>,
        proposal: exception|withhold|flag|blank, fix: <proposed fix|null>, fix_evidence: <words|null>}
   silver: <silver table spec, §6, for parts MDM does not own; else null>
   store_suggestion: {store: mdm|rdm|mdm_relationships|silver|bronze_only|bookkeeping, why: <words>, advisory: true}
@@ -133,9 +134,32 @@ normalized name, and a rename is kept as an alias.
   shape: balanced|ragged
   orphans: <n>
   cycles: <n>
-  invalid_rows: <n>             # rows that break the rule; marked, with a proposed check and fix
+  invalid_rows: <n>             # rows that break the rule; each marked in invalid_rows.jsonl (§5.1)
   valid_dates: {from: <col|null>, to: <col|null>}
 ```
+
+### 5.1 Marked rows: `invalid_rows.jsonl`
+
+Beside `findings.yaml`, one JSON object per invalid row of every hierarchy,
+never inside the findings (it can be long):
+
+```yaml
+{hierarchy: <name>, part: <name>, key: {<record key column>: <value>}, column: <col>, value: <value>,
+ reason: parent not found|names itself as its parent|on a cycle of parents|several parents|<parent> differs,
+ fix: <value|null>, fix_evidence: <words|null>, needs_steward: <bool>}
+```
+
+A fix is proposed only with evidence: the one key equal to the value once
+case, spaces and leading zeros are folded, or the parent most rows with the
+same code have. Otherwise `needs_steward` is true. Values of a personal
+column are masked. The part gets one `hierarchy_invalid` quality item with
+the count.
+
+The check list (`check` in a quality item): `missing` (an empty record key
+column), `placeholder`, `shape_outlier`, `check_digit`, `code_list` (a small
+code list, guarded as a whole; `rows` is 0), `link_not_found`,
+`no_natural_key`, `hierarchy_invalid`. compare reports a code not in an
+approved code list as `codes_new`.
 
 ## 6. The silver table spec
 
