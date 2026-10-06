@@ -23,7 +23,10 @@ Type: task. Phase: A (MDM) / B (RDM). Blocked by: 03, 04 (02 for RDM). Map: [map
 - [x] Trial check on the ticket 04 slice (real GLEIF entities): lookup, search, as-at, as-of, hops each under 8 KB (`.scratch/profiling/trials/context/RESULT.md`) 2026-10-06 08:50 ET
 - [ ] `rdm.code_context` (phase B)
 - [ ] `silver.table_context` (phase B, with ticket 06)
-- [ ] Review (Standards, Spec, GoF), PR, CI, merge on word
+- [x] Three-axis review applied: a page with no item that fits is an error, not a page pointing at itself; search pages with `--page`; error commands are whole commands, with search words shell-quoted; search and relationship answers carry `trust` (latest generation, recorded time, policy digest); `--detail full` links carry their stating records (one query); an `--as-at`/`--as-of` entity answer says cross-references and source records are current; the "names no kind" claim names the company table; the view-equals-reader test also compares name and identifiers. Not applied: the Standards "missing subject index" (stage_record.subject is indexed by its UNIQUE constraint, stage_record_subject_key); GoF's dispatch dict and one next-page helper, as the first commit of phase B (unit, PG16 tests: 68 passed) 2026-10-06 13:53 ET
+- [ ] ~~Relationships `--as-at`~~ deferred to a relationship-versioning ticket (map fog): it needs a versioned relationship table or an index into the batch history (added 2026-10-06 13:53 ET)
+- [ ] `mdm migrate` for 005, 006 and 007 and an MDM image rebuild: not run on deploy; `MDM_DATABASE_URL` not set here and no container runtime (added 2026-10-06 13:53 ET)
+- [ ] PR, CI, merge (operator's word "Merge" given 2026-10-06 13:53 ET, before the PR existed; merged only once CI is green)
 
 ## Decisions
 

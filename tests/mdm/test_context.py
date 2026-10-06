@@ -65,8 +65,8 @@ def test_a_bad_page_token_says_what_to_pass(page):
 
 def test_a_time_needs_a_zone():
     with pytest.raises(context.ContextError) as error:
-        context._time("2026-01-31", "--as-of")
-    assert error.value.command == "--as-of 2026-01-31T00:00:00+00:00"
+        context._time("2026-01-31", "--as-of", "edgar-warehouse context company x")
+    assert error.value.command == "edgar-warehouse context company x --as-of 2026-01-31T00:00:00+00:00"
 
 
 def test_the_command_is_registered():
@@ -92,5 +92,6 @@ def test_a_missing_login_says_what_to_set(monkeypatch, capsys):
 def test_an_item_too_big_for_a_page_is_an_error_not_a_loop():
     big = answer_with([{"text": "z" * 900} for _ in range(3)])
     big.update({f"note_{i}": "n" * 999 for i in range(7)})  # under the clip, together near 7 KB
+    big["items"] = [{"text": "z" * 1000} for _ in range(3)]  # each item alone overflows what is left
     with pytest.raises(context.ContextError):
         context.fit(big, "items", 0, "cmd")

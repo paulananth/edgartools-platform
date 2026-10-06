@@ -4,7 +4,9 @@
 -- kept apart) and the source records it is built from; a name search; and an
 -- index that finds the records carrying any identifier.
 --
--- This file names no kind. Migrations run in one transaction, so the indexes
+-- This file names no kind beyond MDM's storage: companies keep their own
+-- versioned table (mdm.company), every other kind lives in mdm.current_record.
+-- Migrations run in one transaction, so the indexes
 -- are built without CONCURRENTLY: each blocks writes to its table (not reads)
 -- while it builds.
 

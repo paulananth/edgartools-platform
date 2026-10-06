@@ -133,8 +133,12 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
   `related_count`; and `merged_from` when the key named an entity merged into
   another. A relationship answer lists `related` links (`depth`, `type`, `from`
   and `to` each named, `role` for a person's capacity, `derived`) with each
-  type's `definitions`. A search answer lists `matches`
-  (`name`, `kind`, `entity_id`, `status`, `matched_by`).
+  type's `definitions`, and under `--detail full` each link's stating records
+  (`sources`). A search answer lists `matches`
+  (`name`, `kind`, `entity_id`, `status`, `matched_by`). Search and
+  relationship answers carry `trust` for MDM's latest generation; an entity
+  read `--as-at` or `--as-of` says which parts are current
+  (`trust.current_parts`).
 - One list per answer pages: `fields`, `related` or `matches`. A string over
   1,000 characters is clipped, and the answer says `clipped`.
 - Over 8 KB, the answer is cut at a whole list item, `truncated` is true and

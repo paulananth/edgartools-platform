@@ -3,8 +3,9 @@
 Profiling ticket 05; `docs/specs/agent-context/spec.md` §3. One command reads
 MDM's context through read-only connections and answers in JSON of at most
 8 KB: names first, what the thing is, where each value came from, and what an
-agent can ask next. It names no kind, identifier or relationship type: the
-kinds come from MDM, their meanings from `rules/context/definitions.yaml`.
+agent can ask next. It names no identifier or relationship type, and no kind
+beyond MDM's own storage (companies keep their own versioned table): the kinds
+come from MDM, their meanings from `rules/context/definitions.yaml`.
 
 Reference data (`rdm.code_context`) and silver table specs join this command
 with phase B (tickets 02 and 06).
@@ -15,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import sys
 from datetime import UTC, datetime
 
@@ -105,13 +107,13 @@ def definitions() -> dict:
     return files.load(files.ROOT / "context" / "definitions.yaml")
 
 
-def _time(value: str, flag: str) -> datetime:
+def _time(value: str, flag: str, command: str) -> datetime:
     try:
         moment = datetime.fromisoformat(value)
     except ValueError:
         moment = None
     if moment is None or moment.tzinfo is None:
-        raise ContextError(f"{flag} needs an ISO time with a zone, not {value!r}.", f"{flag} 2026-01-31T00:00:00+00:00")
+        raise ContextError(f"{flag} needs an ISO time with a zone, not {value!r}.", f"{command} {flag} 2026-01-31T00:00:00+00:00")
     return moment.astimezone(UTC)
 
 
@@ -198,7 +200,7 @@ class Context:
             )
         if args.search is not None:
             if args.key:
-                raise ContextError("Give a key or --search, not both.", f"{PROG} {args.subject} --search \"{args.search}\"")
+                raise ContextError("Give a key or --search, not both.", f"{PROG} {args.subject} --search {shlex.quote(args.search)}")
             return self.search(args)
         if not args.key:
             raise ContextError(f"Name the {args.subject}: an entity id or <namespace>:<value>.", f"{PROG} {args.subject} --search \"<words>\"")
@@ -255,10 +257,10 @@ class Context:
         from sqlalchemy import text
 
         if args.as_at:
-            moment, flag = _time(args.as_at, "--as-at"), "--as-at"
+            moment, flag = _time(args.as_at, "--as-at", f"{PROG} {args.subject} {args.key}"), "--as-at"
             generation = conn.scalar(text("SELECT max(generation) FROM mdm.batch WHERE created_at <= :t"), {"t": moment})
         elif args.as_of:
-            moment, flag = _time(args.as_of, "--as-of"), "--as-of"
+            moment, flag = _time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}"), "--as-of"
             generation = conn.scalar(text(
                 "SELECT max(generation) FROM mdm.batch WHERE (effects ->> 'as_of')::timestamptz <= :t"), {"t": moment})
         else:
@@ -333,6 +335,9 @@ class Context:
                 "status": body.get("status"),
             },
         }
+        if generation:
+            answer["trust"]["current_parts"] = ["cross_references", "sources"]
+            answer["trust"]["note"] = "Fields, identifiers and status are of that generation; cross-references and source records are as MDM holds them now."
         if canonical != entity_id:
             answer["merged_from"] = entity_id
         if args.as_at:
@@ -352,15 +357,16 @@ class Context:
 
         if args.as_of or args.as_at:
             raise ContextError("Search reads current names; look the entity up by its id with --as-of or --as-at.",
-                               f"{PROG} {args.subject} --search \"{args.search}\"")
+                               f"{PROG} {args.subject} --search {shlex.quote(args.search)}")
         if not 1 <= args.limit <= SEARCH_MAX:
-            raise ContextError(f"--limit is 1 to {SEARCH_MAX}.", f"{PROG} {args.subject} --search \"{args.search}\" --limit 5")
+            raise ContextError(f"--limit is 1 to {SEARCH_MAX}.", f"{PROG} {args.subject} --search {shlex.quote(args.search)} --limit 5")
         words = args.search.strip()
         if not words:
             raise ContextError("--search needs some words.", f"{PROG} {args.subject} --search \"<words>\"")
         with self.engine.connect() as conn:
             rows = conn.execute(text("SELECT * FROM mdm.entity_search(:w, :k, :n)"),
                                 {"w": words, "k": args.subject, "n": args.limit}).mappings().all()
+            trust = _latest(conn)
         matches = [{"name": r["name"], "kind": r["kind"], "entity_id": r["entity_id"], "status": r["status"],
                     "matched_by": r["matched_by"]} for r in rows]
         if not matches:
@@ -370,18 +376,19 @@ class Context:
             "kind": args.subject,
             "definition": definitions().get("kinds", {}).get(args.subject, ""),
             "matches": matches,
+            "trust": trust,
             "truncated": False,
             "next_page": None,
             "next_step": (f"{PROG} {args.subject} <entity_id>" if matches
                           else f"No {args.subject} name matches. Try fewer words, or {PROG} {args.subject} <namespace>:<value>."),
         }
-        return fit(answer, "matches", 0, f"{PROG} {args.subject} --search \"{words}\" --limit {args.limit}")
+        return fit(answer, "matches", _offset(args.page), f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}")
 
     # -- Relationships -------------------------------------------------------
 
     @staticmethod
     def _at(args) -> datetime:
-        return _time(args.as_of, "--as-of") if args.as_of else datetime.now(UTC)
+        return _time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}") if args.as_of else datetime.now(UTC)
 
     def _walk(self, conn, start: str, hops: int, at: datetime, relationship_type: str, cap: int):
         """The links around one entity, both directions, up to `hops` away.
@@ -449,8 +456,11 @@ class Context:
             if entity_id not in names:
                 raise ContextError(f"No entity {entity_id} in MDM.", f"{PROG} company --search \"<name>\"")
             links, count, cut = self._walk(conn, entity_id, args.hops, at, args.relationship_type, WALK_CAP)
+            trust = _latest(conn)
+            full = args.detail == "full"
+            if full:
+                _attach_sources(conn, links)
         types = definitions().get("relationships", {})
-        full = args.detail == "full"
         related = [_full_link(link) if full else _brief_link(link) for link in links]
         answer = {
             "name": names[entity_id]["name"],
@@ -462,6 +472,7 @@ class Context:
             "definitions": {t: types.get(t, "") for t in sorted({link["body"].get("type") for link in links})},
             "related": related,
             "related_count": f"{count}+" if cut else count,
+            "trust": trust,
             "truncated": cut,
             "next_page": None,
             "next_step": (f"Over {WALK_CAP} links: narrow it with --type <TYPE> or --hops 1, or query mdm.relationship_context."
@@ -506,4 +517,33 @@ def _full_link(link: dict) -> dict:
     return {**_brief_link(link), "relationship_id": link["relationship_id"],
             "from": link["from"], "to": link["to"], "scope": body.get("scope"),
             "valid_from": period.get("valid_from"), "valid_to": period.get("valid_to"),
-            "valid_from_basis": period.get("valid_from_basis"), "last_seen": body.get("last_seen")}
+            "valid_from_basis": period.get("valid_from_basis"), "last_seen": body.get("last_seen"),
+            "sources": link.get("sources", [])}
+
+
+def _latest(conn) -> dict:
+    """The generation an answer over current state reads: MDM's latest batch."""
+    from sqlalchemy import text
+
+    row = conn.execute(text(
+        "SELECT generation, created_at, policy_digest, effects ->> 'as_of' FROM mdm.batch "
+        "ORDER BY generation DESC LIMIT 1")).first()
+    if row is None:
+        return {"generation": None}
+    return {"generation": row[0], "recorded_at": row[1].isoformat(), "policy_digest": row[2], "as_of": row[3]}
+
+
+def _attach_sources(conn, links: list[dict]) -> None:
+    """Each link's stating records (source code and record key), in one query."""
+    from sqlalchemy import text
+
+    wanted = {item.get("assertion_id") for link in links for item in link["body"].get("evidence", []) if item.get("assertion_id")}
+    if not wanted:
+        return
+    found = {r[0]: {"source_code": r[1], "record_key": r[2]} for r in conn.execute(text(
+        "SELECT assertion_id, source_code, record_key FROM mdm.source_reading WHERE assertion_id = ANY(:ids)"),
+        {"ids": sorted(wanted)})}
+    for link in links:
+        stated = {(found[i["assertion_id"]]["source_code"], found[i["assertion_id"]]["record_key"])
+                  for i in link["body"].get("evidence", []) if i.get("assertion_id") in found}
+        link["sources"] = [{"source_code": c, "record_key": k} for c, k in sorted(stated)]

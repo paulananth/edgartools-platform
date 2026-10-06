@@ -84,8 +84,10 @@ def test_a_person_comes_back_from_the_entity_rows(database):
 def test_the_view_agrees_with_the_reader(database):
     load_group(database)
     reader = ContractReader(database.application)
-    for row in rows(database, "SELECT entity_id, name, fields FROM mdm.entity_context"):
+    for row in rows(database, "SELECT entity_id, name, identifiers, fields FROM mdm.entity_context"):
         body = reader.entity(row["entity_id"])["identity"]
+        assert row["name"] == body["fields"]["name"]["value"]
+        assert row["identifiers"] == body["identifiers"]
         expected = {name: {"value": f.get("value"), "source_code": f["winner"]["source_code"],
                            "record_key": f["winner"]["record_key"]}
                     for name, f in body["fields"].items() if not f.get("cleared")}
@@ -129,6 +131,7 @@ def test_search_finds_words_then_falls_back_to_contains_and_logs_a_miss(database
     assert [(m["entity_id"], m["matched_by"]) for m in words["matches"]][:1] == [(ids["b"], "words")]
     contains = ask(database, "company", search="ompany")
     assert {m["matched_by"] for m in contains["matches"]} == {"contains"} and len(contains["matches"]) == 3
+    assert words["trust"]["generation"] == 1
     assert ask(database, "company", search="nothing like it")["matches"] == []
     assert "context-search-miss" in capsys.readouterr().err
     assert ask(database, "person", search="company")["matches"] == []
@@ -149,7 +152,8 @@ def test_as_at_and_as_of_read_the_version_of_that_time(database):
              assertions=[core.source("x", revision=2, fields={"name": "New name"})])
     entity = identity["entity_id"]
     assert ask(database, "company", entity)["name"] == "New name"
-    assert ask(database, "company", entity, as_at=recorded["created_at"].isoformat())["name"] == "Old name"
+    earlier = ask(database, "company", entity, as_at=recorded["created_at"].isoformat())
+    assert earlier["name"] == "Old name" and earlier["trust"]["current_parts"] == ["cross_references", "sources"]
     assert ask(database, "company", entity, as_of="2026-04-01T00:00:00+00:00")["name"] == "Old name"
     assert ask(database, "company", entity, as_of="2026-07-01T00:00:00+00:00")["name"] == "New name"
     with pytest.raises(ContextError):
@@ -176,6 +180,10 @@ def test_the_relationship_walk_goes_both_ways_up_to_the_hop_limit(database):
     assert "--as-of" in as_at.value.command
     full = ask(database, "relationship", ids["b"], detail="full", relationship_type=DIRECT)
     assert all(r["scope"] == "consolidated" for r in full["related"] if not r.get("derived"))
+    stated = [r for r in full["related"] if not r.get("derived")]
+    assert {(r["from"]["name"], tuple(x["record_key"] for x in r["sources"])) for r in stated} == {
+        ("Company b", ("b",)), ("Company c", ("c",))}
+    assert one["trust"]["generation"] == 1 and one["trust"]["policy_digest"]
 
 
 def test_a_long_answer_is_cut_at_a_whole_item_and_pages_on(database):
