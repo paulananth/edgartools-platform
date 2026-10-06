@@ -8,62 +8,82 @@ from datetime import UTC, datetime
 from .evidence import instant
 from .store import digest
 
-LEGAL = {"company", "fund_structure", "government", "international_organization"}
-CONTRACTS = {
-    "AUDITED_BY": ({"company"}, {"company"}, None, "audit_firm"),
-    "ISSUED_BY": ({"security"}, LEGAL, None, None),
-    "EMPLOYED_BY": ({"person"}, {"company"}, None, None),
-    "CONTROLS": ({"person"}, {"company"}, None, None),
-    "HOLDS": ({"person", "company", "fund_structure"}, {"security"}, None, None),
-    "MANAGES_FUND": (
-        {"company", "person"},
-        {"company", "fund_structure"},
-        "adviser",
-        "fund",
-    ),
-    "OWNERSHIP_PARENT": (LEGAL, LEGAL, None, None),
-    "ACCOUNTING_PARENT": (LEGAL, LEGAL, None, None),
-    "IS_DIRECTLY_CONSOLIDATED_BY": ({"company"}, {"company"}, None, None),
-    "IS_ULTIMATELY_CONSOLIDATED_BY": ({"company"}, {"company"}, None, None),
-    "REPORTED_ULTIMATE_PARENT": (LEGAL, LEGAL, None, None),
-    "IS_INTERNATIONAL_BRANCH_OF": ({"branch"}, LEGAL, None, None),
-    "VENUE_OPERATOR": ({"venue"}, LEGAL, None, None),
-    "VENUE_SEGMENT_OF": ({"venue"}, {"venue"}, None, None),
-    "IS_SUBFUND_OF": (
-        {"company", "fund_structure"},
-        {"company", "fund_structure"},
-        "fund",
-        "fund",
-    ),
-    "IS_FEEDER_TO": (
-        {"company", "fund_structure"},
-        {"company", "fund_structure"},
-        "fund",
-        "fund",
-    ),
-    "IS_FUND-MANAGED_BY": (
-        {"company", "fund_structure"},
-        {"company", "person"},
-        "fund",
-        None,
-    ),
+_LEGAL = ["company", "fund_structure", "government", "international_organization"]
+# The relationship types MDM masters are data: `rules/merge/relationships.yaml`,
+# carried in the Mastering Policy (profiling ticket 04; operator, 2026-10-06:
+# "Types as data"). A policy registered before that section existed keeps the
+# table the code held then, so it masters the same links; the rules file must
+# agree with it (tests/mdm/test_clean_relationship_types.py).
+TYPES_V0 = {
+    "AUDITED_BY": {"from": ["company"], "to": ["company"], "to_profile": "audit_firm"},
+    "ISSUED_BY": {"from": ["security"], "to": _LEGAL},
+    "EMPLOYED_BY": {"from": ["person"], "to": ["company"], "capacities": ["director", "employee", "officer"]},
+    "CONTROLS": {"from": ["person"], "to": ["company"],
+                 "capacities": ["control_person", "owner", "ten_percent_owner"]},
+    "HOLDS": {"from": ["company", "fund_structure", "person"], "to": ["security"]},
+    "MANAGES_FUND": {"from": ["company", "person"], "to": ["company", "fund_structure"],
+                     "from_profile": "adviser", "to_profile": "fund"},
+    "OWNERSHIP_PARENT": {"from": _LEGAL, "to": _LEGAL, "hierarchy": True, "cycles": "review"},
+    "ACCOUNTING_PARENT": {"from": _LEGAL, "to": _LEGAL, "hierarchy": True, "cycles": "invalid",
+                          "one_parent": True, "ultimate_parent": "accounting-chain-v1"},
+    "IS_DIRECTLY_CONSOLIDATED_BY": {"from": ["company"], "to": ["company"], "hierarchy": True,
+                                    "cycles": "invalid", "one_parent": True,
+                                    "ultimate_parent": "accounting-chain-v1"},
+    "IS_ULTIMATELY_CONSOLIDATED_BY": {"from": ["company"], "to": ["company"], "hierarchy": True,
+                                      "cycles": "invalid", "one_parent": True},
+    "REPORTED_ULTIMATE_PARENT": {"from": _LEGAL, "to": _LEGAL},
+    "IS_INTERNATIONAL_BRANCH_OF": {"from": ["branch"], "to": _LEGAL, "hierarchy": True, "cycles": "invalid"},
+    "VENUE_OPERATOR": {"from": ["venue"], "to": _LEGAL},
+    "VENUE_SEGMENT_OF": {"from": ["venue"], "to": ["venue"], "hierarchy": True, "cycles": "invalid"},
+    "IS_SUBFUND_OF": {"from": ["company", "fund_structure"], "to": ["company", "fund_structure"],
+                      "from_profile": "fund", "to_profile": "fund", "hierarchy": True, "cycles": "invalid"},
+    "IS_FEEDER_TO": {"from": ["company", "fund_structure"], "to": ["company", "fund_structure"],
+                     "from_profile": "fund", "to_profile": "fund", "hierarchy": True, "cycles": "invalid"},
+    "IS_FUND-MANAGED_BY": {"from": ["company", "fund_structure"], "to": ["company", "person"],
+                           "from_profile": "fund"},
 }
-HIERARCHIES = {
-    "ACCOUNTING_PARENT",
-    "IS_DIRECTLY_CONSOLIDATED_BY",
-    "IS_ULTIMATELY_CONSOLIDATED_BY",
-    "IS_INTERNATIONAL_BRANCH_OF",
-    "VENUE_SEGMENT_OF",
-    "IS_SUBFUND_OF",
-    "IS_FEEDER_TO",
-}
-# A Person link names the capacity it is in (`docs/specs/person/consumer.md`,
-# "Relationships"): a 10% holder is not an employee. `IS_INSIDER` is no link of
-# its own but the `mdm.is_insider` view over both types (mastering to-do 14).
-CAPACITIES = {
-    "EMPLOYED_BY": {"director", "officer", "employee"},
-    "CONTROLS": {"ten_percent_owner", "owner", "control_person"},
-}
+# The keys a type may carry, and the ultimate-parent algorithms this code runs.
+_TYPE_KEYS = {"from", "to", "from_profile", "to_profile", "capacities", "hierarchy", "cycles", "one_parent",
+              "ultimate_parent"}
+ULTIMATE_PARENT_ALGORITHMS = {"accounting-chain-v1"}
+CYCLES = {"invalid", "review"}
+
+
+def types_of(policy: dict) -> dict:
+    """The relationship types a policy masters: its own, or the table every
+    earlier policy used."""
+    return (policy.get("relationships") or {}).get("types") or TYPES_V0
+
+
+def check_types(section: dict) -> None:
+    """Refuse a relationship-types section that could not run exactly as written."""
+    from .evidence import KINDS
+    from .store import Conflict
+
+    if not isinstance(section, dict) or set(section) != {"version", "types"} or not section.get("version"):
+        raise Conflict("The relationships section holds a version and its types")
+    for name, spec in section["types"].items():
+        if not isinstance(name, str) or not name or not isinstance(spec, dict):
+            raise Conflict(f"Relationship type {name!r} must be a name with its rules")
+        if set(spec) - _TYPE_KEYS:
+            raise Conflict(f"Relationship type {name} has an unknown key: {sorted(set(spec) - _TYPE_KEYS)}")
+        for end in ("from", "to"):
+            kinds = spec.get(end)
+            if not isinstance(kinds, list) or not kinds:
+                raise Conflict(f"Relationship type {name} names at least one kind at its {end} end")
+            if set(kinds) - KINDS:
+                raise Conflict(f"Relationship type {name} names an unknown kind: {sorted(set(kinds) - KINDS)}")
+        if "capacities" in spec and (not isinstance(spec["capacities"], list) or not spec["capacities"]):
+            raise Conflict(f"Relationship type {name}: capacities is a list of names")
+        if spec.get("hierarchy"):
+            if spec.get("cycles") not in CYCLES:
+                raise Conflict(f"Relationship type {name}: a hierarchy says what its cycles do: invalid or review")
+        elif {"cycles", "one_parent", "ultimate_parent"} & set(spec):
+            raise Conflict(f"Relationship type {name}: cycles, one_parent and ultimate_parent go only on a hierarchy")
+        if "ultimate_parent" in spec and spec["ultimate_parent"] not in ULTIMATE_PARENT_ALGORITHMS:
+            raise Conflict(f"Relationship type {name}: unknown ultimate-parent algorithm {spec['ultimate_parent']}")
+
+
 MIN = datetime.min.replace(tzinfo=UTC)
 MAX = datetime.max.replace(tzinfo=UTC)
 
@@ -151,8 +171,12 @@ def fold_sightings(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def project(
-    claims: dict, state, entities: dict, as_of: str
+    claims: dict, state, entities: dict, as_of: str, types: dict | None = None
 ) -> tuple[list[dict], list[dict]]:
+    """Each stated link checked against its type (`types`, from the policy;
+    `TYPES_V0` for a policy registered without them), folded into one
+    relationship per identity, with its periods."""
+    types = TYPES_V0 if types is None else types
     edges = {}
     reviews = []
 
@@ -170,22 +194,23 @@ def project(
             start = reported.get("source_subject") or subject
             target = reported.get("target_subject")
             kind = reported.get("type")
-            contract = CONTRACTS.get(kind)
+            spec = types.get(kind)
             context = {
                 "assertion_id": record["assertion_id"],
                 "relationship": reported,
                 "subject": subject,
             }
-            if not contract:
+            if not spec:
                 review("unsupported_relationship", **context)
                 continue
-            if kind in CAPACITIES and reported.get("capacity") not in CAPACITIES[kind]:
+            capacities = spec.get("capacities")
+            if capacities and reported.get("capacity") not in capacities:
                 review("unsupported_capacity", **context)
                 continue
             # A Person link is stated as dated sightings, folded below; an
             # observed start is enough. Other links state their periods.
             sighting = reported.get("on")
-            if kind in CAPACITIES and not sighting:
+            if capacities and not sighting:
                 review("unknown_relationship_start", **context)
                 continue
             if sighting and reported.get("basis", "observed") not in BASES:
@@ -203,7 +228,7 @@ def project(
                 continue
             source = entities[source_id]
             dest = entities[target_id]
-            if source["kind"] not in contract[0] or dest["kind"] not in contract[1]:
+            if source["kind"] not in spec["from"] or dest["kind"] not in spec["to"]:
                 review("incompatible_endpoint", **context)
                 continue
             if source.get("status") != "accepted" or dest.get("status") != "accepted":
@@ -221,7 +246,7 @@ def project(
                 if interval(period)[0] >= interval(period)[1]:
                     review("invalid_relationship_interval", **context)
                     continue
-            required_profiles = [(source, contract[2]), (dest, contract[3])]
+            required_profiles = [(source, spec.get("from_profile")), (dest, spec.get("to_profile"))]
             eligible = True
             for entity, role in required_profiles:
                 if role and not any(
@@ -289,11 +314,8 @@ def project(
         for period in e["periods"]:
             grouped[(e["type"], e["scope"])].append((key, {**e, **period}))
     for (kind, scope), group in grouped.items():
-        if kind in {
-            "ACCOUNTING_PARENT",
-            "IS_DIRECTLY_CONSOLIDATED_BY",
-            "IS_ULTIMATELY_CONSOLIDATED_BY",
-        }:
+        spec = types.get(kind) or {}
+        if spec.get("one_parent"):
             for i, (key, e) in enumerate(group):
                 for other_key, other in group[i + 1 :]:
                     if (
@@ -307,14 +329,14 @@ def project(
                             edges=sorted([key, other_key]),
                             entities=sorted({e["source_id"], e["target_id"], other["target_id"]}),
                         )
-        if kind not in HIERARCHIES | {"OWNERSHIP_PARENT"}:
+        if not spec.get("hierarchy"):
             continue
         adjacency = defaultdict(list)
         for key, e in group:
             adjacency[e["source_id"]].append((key, e))
 
         def walk(
-            start, node, path, seen, lo, hi, adjacency=adjacency, kind=kind, scope=scope
+            start, node, path, seen, lo, hi, adjacency=adjacency, kind=kind, scope=scope, spec=spec
         ):
             for key, e in adjacency[node]:
                 a, b = interval(e)
@@ -332,7 +354,7 @@ def project(
                         edges=cycle,
                         entities=sorted(ends),
                     )
-                    if kind != "OWNERSHIP_PARENT":
+                    if spec.get("cycles") == "invalid":
                         invalid.update(cycle)
                 elif e["target_id"] not in seen:
                     walk(
@@ -349,10 +371,17 @@ def project(
     result = [e for key, e in edges.items() if key not in invalid]
     for e in result:
         e["evidence"] = sorted(e["evidence"], key=digest)
-    # Calculated accounting ultimate parents preserve their full asserted path.
+    result += _ultimate_parents(grouped, invalid, types, as_of)
+    return sorted(result, key=lambda e: e["relationship_id"]), reviews
+
+def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> list[dict]:
+    """Calculated ultimate parents, for each hierarchy whose type names an
+    algorithm (accounting-chain-v1 is the one this code runs): each record's
+    current parent chain walked to its end, with the full asserted path."""
+    result = []
     now = instant(as_of)
     for (kind, scope), group in grouped.items():
-        if kind not in {"ACCOUNTING_PARENT", "IS_DIRECTLY_CONSOLIDATED_BY"}:
+        if (types.get(kind) or {}).get("ultimate_parent") != "accounting-chain-v1":
             continue
         eligible = {
             e["source_id"]: e
@@ -385,4 +414,4 @@ def project(
             }
             derived["relationship_id"] = digest(derived)
             result.append(derived)
-    return sorted(result, key=lambda e: e["relationship_id"]), reviews
+    return result

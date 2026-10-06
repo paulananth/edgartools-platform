@@ -67,6 +67,13 @@ WITH_GLEIF_PARENT_LINKS = {
     "policy": "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5",
 }
 
+# Profiling ticket 04 moved the relationship types from code into the policy
+# (operator, 2026-10-06: "Types as data"); without them the policy is the one
+# above. Production keeps the policy above until the operator approves this one.
+WITH_RELATIONSHIP_TYPES = {
+    "policy": "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",
+}
+
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -104,7 +111,7 @@ SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.

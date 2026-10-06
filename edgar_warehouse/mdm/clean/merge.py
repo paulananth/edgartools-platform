@@ -668,7 +668,9 @@ class MergeStage:
                         }
                     )
             reviews.extend(automatic["reviews"])
-            edges, edge_reviews = relationships.project(claims, state, projected, as_of)
+            edges, edge_reviews = relationships.project(
+                claims, state, projected, as_of, types=relationships.types_of(policy)
+            )
             reviews.extend(edge_reviews)
             projections = [
                 {"object_type": "entity", "object_id": key, "body": body}

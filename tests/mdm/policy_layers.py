@@ -36,6 +36,13 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
+def without_relationship_types(policy: dict) -> dict:
+    """Profiling ticket 04 (operator, 2026-10-06: "Types as data"): the
+    relationship types, moved from code into the policy (`relationships`). A
+    policy without them masters the same table (`relationships.TYPES_V0`)."""
+    return {k: v for k, v in _copy(policy).items() if k != "relationships"}
+
+
 def without_gleif_parent_links(policy: dict) -> dict:
     """Platform validation 06a: adds GLEIF's relationship file to Company's
     sources, for its accounting-parent links (it fills no field)."""
@@ -87,7 +94,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:
