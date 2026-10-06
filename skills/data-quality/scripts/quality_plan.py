@@ -32,7 +32,7 @@ CATALOG = {
     "code_list": {"test": "in_set@1", "args": lambda a: {"values": a["values"]}},
     # The engine's mod 97-10 test reads a 20-character identifier; other families are new code.
     "check_digit": {"test": "lei_check_digit@1", "args": lambda a: {},
-                    "when": lambda a: a.get("family") == "mod97_10" and a.get("length") == 20},
+                    "when": lambda a: a.get("family") == "mod 97-10" and a.get("length") == 20},
 }
 # What the check a new-code item needs would test, for its ticket.
 NEW_CODE = {
@@ -43,8 +43,13 @@ NEW_CODE = {
     "no_natural_key": "the designed record key is filled and unique",
 }
 # A value each engine test refuses, for the planted record.
-TRIPS = {"present@1": None, "placeholder@1": "NONE", "pattern@1": "\u0000", "in_set@1": "\u0000",
-         "lei_check_digit@1": "0" * 19 + "1"}
+TRIPS = {
+    "present@1": None,
+    "placeholder@1": "0000",  # all zeros is a placeholder whatever the list
+    "pattern@1": "\u0000",
+    "in_set@1": "\u0000",
+    "lei_check_digit@1": "0" * 20,  # remainder 0 under mod 97; a valid value leaves 1
+}
 
 
 class PlanError(ValueError):

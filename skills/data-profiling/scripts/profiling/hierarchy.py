@@ -13,7 +13,7 @@ counted as invalid for data quality.
 from __future__ import annotations
 
 from .codes import determines
-from .inputs import sql_name, sql_text
+from .inputs import PARENT, sql_name, sql_text
 
 HOLDS = 0.99
 MAX_DEPTH = 50
@@ -139,7 +139,11 @@ class _Marking:
     """Where marked rows come from: one hierarchy of one part, each row named by the part's record key."""
 
     def __init__(self, con, part: str, hierarchy: str, record_key: list[str]):
-        self.con, self.part, self.hierarchy, self.record_key = con, part, hierarchy, record_key
+        self.con, self.part, self.hierarchy = con, part, hierarchy
+        # A child part's key starts with its parent's key, which its table holds as the parent's row number.
+        present = {r[0] for r in con.execute(f"DESCRIBE {sql_name(part)}").fetchall()}
+        own = [k for k in record_key if k in present]
+        self.record_key = own if len(own) == len(record_key) or PARENT not in present else [PARENT, *own]
 
     def row(self, key: tuple, value, column: str, parent_column: str, reason: str, fix=None, support=None,
             fix_evidence=None) -> dict:

@@ -54,8 +54,8 @@ dataset:
     mode: full
     reason: null
     seed: 0
-    elapsed_seconds: 19.4
-  profiled_at: '2026-10-05T20:29:50-04:00'
+    elapsed_seconds: 14.3
+  profiled_at: '2026-10-05T21:28:51-04:00'
   profiled_by: data-profiling 1
 parts:
 - part: currencyexchange

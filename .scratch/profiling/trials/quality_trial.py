@@ -78,9 +78,9 @@ def main() -> int:
             (folder / "QUALITY.md").write_text(quality_plan.report(plan), encoding="utf-8")
             wanted = sorted(fields)
             select = ", ".join(f"CAST({inputs.sql_name(c)} AS VARCHAR)" for c in wanted)
-            cursor = con.execute(f"SELECT {select} FROM {inputs.sql_name(part['part'])}")
             counts = {i["id"]: 0 for i in [*(plan["block"].get("fixes") or []), *plan["block"]["checks"]]}
-            while batch := cursor.fetchmany(50_000):  # millions of rows: measured a batch at a time
+            cursor = con.execute(f"SELECT {select} FROM {inputs.sql_name(part['part'])}") if counts else None
+            while cursor and (batch := cursor.fetchmany(50_000)):  # millions of rows: measured a batch at a time
                 for check_id, n in quality_plan.measure(
                         plan["block"], [quality_plan.mapped(dict(zip(wanted, row)), fields) for row in batch]).items():
                     counts[check_id] += n

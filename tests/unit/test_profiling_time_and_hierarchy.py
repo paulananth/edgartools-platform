@@ -74,3 +74,12 @@ def test_a_row_breaking_two_levels_is_one_invalid_row_with_counted_evidence(con)
     assert h["invalid_rows"] == 1 and [m["key"] for m in h["marked"]] == [{"row_id": "bad"}]
     m, = h["marked"]
     assert m["fix"] == "m0" and m["support"] == {"rows": 10, "of": 11} and m["parent_column"] == "middle"
+
+
+def test_a_child_part_marks_its_rows_by_its_parent_row(con):
+    rows = [(n // 10, f"r{n}", f"c{n % 6}", f"m{n % 6 // 2}") for n in range(60)]
+    rows.append((9, "bad", "c0", "m2"))
+    con.execute("CREATE TABLE child (_parent_row BIGINT, line VARCHAR, fine VARCHAR, middle VARCHAR)")
+    con.executemany("INSERT INTO child VALUES (?, ?, ?, ?)", rows)
+    h = hierarchy._record(con, "child", ["fine", "middle"], 0.99, "functional_dependency", ["parent_id", "line"])
+    assert [m["key"] for m in h["marked"]] == [{"_parent_row": "9", "line": "bad"}]

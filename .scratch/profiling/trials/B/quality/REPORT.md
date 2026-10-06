@@ -1,6 +1,6 @@
 # Profiling report: None
 
-Profiled 2026-10-05T20:29:50-04:00 by data-profiling 1. Scan: **full**; 19.4 s. Approval: **draft**.
+Profiled 2026-10-05T21:28:51-04:00 by data-profiling 1. Scan: **full**; 14.3 s. Approval: **draft**.
 
 ## Parts
 

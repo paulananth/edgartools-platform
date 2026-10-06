@@ -58,7 +58,7 @@ def test_draft_maps_findings_onto_engine_checks_and_lists_new_code():
 def test_a_check_digit_maps_only_where_the_engine_test_fits():
     findings = _findings()
     findings["parts"][0]["quality"] = [{"check": "check_digit", "column": "ref", "rows": 1, "examples": [],
-                                        "args": {"family": "mod97_10", "length": 20}, "proposal": "withhold"}]
+                                        "args": {"family": "mod 97-10", "length": 20}, "proposal": "withhold"}]
     plan = quality_plan.draft(findings, "acct", FIELDS, "v1")
     assert [c["test"] for c in plan["block"]["checks"]] == ["lei_check_digit@1"] and not plan["new_code"]
     findings["parts"][0]["quality"][0]["args"]["length"] = 18
@@ -94,8 +94,22 @@ def test_write_gives_the_source_file_shape(tmp_path):
     quality.check_quality({"version": body["version"], **body["quality"]["acct_code"]})
 
 
-def test_every_catalog_test_has_a_planted_value():
+def test_the_check_digit_family_is_named_as_profiling_names_it():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "data-profiling" / "scripts"))
+    from profiling import identifiers
+
+    assert "mod 97-10" in identifiers.FAMILIES
+    assert quality_plan.CATALOG["check_digit"]["when"]({"family": "mod 97-10", "length": 20})
+
+
+def test_every_catalog_test_has_a_planted_value_that_fires():
     assert {t["test"] for t in quality_plan.CATALOG.values()} <= quality_plan.TRIPS.keys()
+    block = {"version": "v1", "checks": [
+        {"id": f"c_{n}", "test": t["test"], "value": "fields.value", "on_fail": "flag",
+         **({"args": {"values": ["X"]}} if t["test"] in {"placeholder@1", "in_set@1"} else {}),
+         **({"args": {"regex": "[a-z]+"}} if t["test"] == "pattern@1" else {})}
+        for n, t in enumerate(quality_plan.CATALOG.values()) if t["test"] != "present@1"]}
+    assert all(quality_plan.planted_fire(block).values())
 
 
 def test_two_withhold_checks_on_one_field_are_counted_apart():
