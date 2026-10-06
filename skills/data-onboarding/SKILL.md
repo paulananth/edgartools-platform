@@ -360,27 +360,18 @@ cleanly.
 
 ### quality: the first data quality checks and fixes
 
-From the profile, list what would harm a match or a merge. Pick a check or
-fix for each from REFERENCE.md, "Data quality":
+Use the [data-quality](../data-quality/SKILL.md) skill on this part, with
+its approved findings and the field each column fills (from **map**):
+**plan** (its `quality` items become the engine's checks; anything else is
+new code, for a ticket), **measure** (on the records **test** builds),
+**decide** (each `on_fail` and each fix with the operator, one at a time),
+**mark** (invalid hierarchy rows, with evidence-backed fixes, for the
+steward) and **write** (`rules/sources/<source>/quality.yaml`, never inside
+the contract). Each `exception` check's reason `quality_<id>` goes in the
+contract's `nonblocking_deferred_reasons`.
 
-| Problem | Check or fix |
-|---|---|
-| A code the source writes wrongly, or for "none" (SEC's `DC` state, `000000000`) | A fix that blanks it (`blank_values@1`) |
-| A registered agent's or placeholder address | A check that withholds it from matching (`on_fail: withhold`); it stays on the record |
-| A critical data element missing (e.g. no name) | A check that makes the record an exception (`on_fail: exception`). It never merges and never stops the run. List its reason `quality_<id>` in the contract's `nonblocking_deferred_reasons`, or registration refuses the contract. Keep these few (operator, 2026-09-28). |
-| Anything worth watching | A check that only counts (`on_fail: flag`) |
-
-- Every check reads the record *after* the mapping (`fields.<name>` or
-  `matching.<name>`), never the raw file.
-- A check or fix not in REFERENCE.md is new code: log it for a ticket; do
-  not write it.
-- Count, on the profile sample, how many records each would touch. Ask the
-  operator about each `on_fail` and each fix, with its count and two or
-  three examples.
-- Write `rules/sources/<source>/quality.yaml` (`version`, then `quality`,
-  one entry per source code), never inside the contract.
-  `files.write_source(body, folder)` writes both files.
-- `files.source('<source>')` must load with `quality` inside each contract.
+**Output:** `quality.yaml` that `files.source('<source>')` loads, with
+`quality` inside each contract, and the data-quality skill's `QUALITY.md`.
 
 ### metadata: the Mapping Document and the Data Catalog
 

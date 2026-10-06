@@ -102,8 +102,8 @@ PR.
 
 ### change-quality: add or change a data quality check or fix
 
-For when the operator asks about a live feed's data quality, or a run's
-quality counts look wrong:
+For when the operator asks about a live feed's data quality, a run's quality
+counts look wrong, or **compare** lists drift handled by data-quality:
 1. Read `rules/sources/<source>/quality.yaml`.
    - The counts of the last runs are in each run's report, if the operator
      has them.
@@ -148,29 +148,14 @@ quality counts look wrong:
    - A zero count is only meaningful if the check can fire. Feed it one
      made-up record that should trip it, and label that input.
    - Report up to 10 examples of each check and fix.
-3. **Decide with the operator.** Pick the check or fix from REFERENCE.md,
-   "Data quality", using the same table as data-onboarding **quality**.
-   - **A check:** ask about its `on_fail` (exception, withhold or flag),
-     with its count and two or three examples.
-   - **A fix:** there is no `on_fail`. Ask whether to keep it, change it or
-     remove it, with its count and examples.
-   - **What a check tests exactly:** `present@1` on
-     `fields.address.postcode` also fires when there is no address at all.
-     Say so, with both counts. A check limited to some records (e.g. US
-     addresses only) is a conditional check, which is new code: log it for
-     a ticket.
-   - **Judging an existing fix:** remove it in memory only, rerun, and
-     compare record by record. Then say whether any check would still catch
-     those values without it.
-   - **What is "right"** (e.g. a state code) comes from the repo:
-     `rules/reference/sec-place-codes.yaml` and the contract's comments.
-     When the files cannot settle it, say so.
-4. **Write the change.** `files.write_source` rewrites `quality.yaml`
-   without its comments. For a small change, edit the file as text instead,
-   keeping the comments, then check that `files.source('<source>')` still
-   loads and holds the new check. Give `quality.yaml` a new `version`
-   name. The source's contract changes
-   with it, so this is a new source version.
+3. **Decide and write with the data-quality skill.** Its
+   [measure](../data-quality/SKILL.md) mode runs the candidate
+   `quality.yaml` on the records built above and fires a planted record per
+   check; its **decide** mode asks the operator about each `on_fail` and each
+   fix, and its **write** mode gives `quality.yaml` a new `version` name. The
+   source's contract changes with it, so this is a new source version. For
+   a new defect a profile found, start at its **plan** mode with the
+   delivery's approved findings.
 
 ### change-matching: add or tune a matching rule
 
