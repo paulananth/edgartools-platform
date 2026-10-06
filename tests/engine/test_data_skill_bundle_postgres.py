@@ -155,15 +155,17 @@ root = Path("configured-stream").resolve()
 root.mkdir()
 contract = {"execution":{"profile":"source.read","workers":1,"max_artifacts":1},
  "read":{"format":"json","limits":{"max_bytes":4096,"max_records":100},
+  "context":{"publication_count":{"type":"integer"}},
   "tables":{"rows":{"each":".","columns":{"n":{"value":{"path":"n"}}}}},
   "stream":{"wrapper":"records","container":"none","max_input_bytes":4096,
    "max_bytes":4096,"max_record":1024,"max_records":100,"max_depth":64,
-   "min_integer":-9223372036854775808,"record_encoding":"python","ordinal_context":None,
+   "min_integer":-9223372036854775808,"record_encoding":"python","ordinal_context":None,"expected_records_context":"publication_count",
    "partition_bytes":4096,"partition_records":1,"max_partitions":10,
    "max_spool_bytes":65536,"max_output_rows":100}}}
 ref = store.put_bytes((root / "captured.json").as_uri(), b'{"records":[{"n":1},{"n":2}]}')
 rules = store.put_bytes((root / "rules.yaml").as_uri(), json.dumps(contract).encode())
-manifest = store.put(root.as_uri(), {"version":1,"contract":rules,"artifacts":[ref]})
+context = store.put(root.as_uri(), {"version":1,"input":ref,"values":{"publication_count":2}})
+manifest = store.put(root.as_uri(), {"version":2,"contract":rules,"artifacts":[{"input":ref,"context":context}]})
 task = {"input":manifest,"output":(root / "index.json").as_uri(),"checks":["source.output"]}
 receipt = source_read.execute(task, store)
 assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
@@ -187,6 +189,15 @@ assert mdm_prepare.verify({**prepare_task,"candidate":prepared},store) == ({mdm_
 batch = store.json(prepared)["batches"][0]
 assert [json.loads(line) for line in (root / "mdm" / batch["input"]["path"]).read_text().splitlines()] == [{"n":1},{"n":2}]
 assert store.json(store.json(combined)["artifacts"][0]["input"])["readings"] == {"streamed":receipt}
+bad_context = store.put(root.as_uri(), {"version":1,"input":ref,"values":{"publication_count":3}})
+bad_manifest = store.put(root.as_uri(), {"version":2,"contract":rules,"artifacts":[{"input":ref,"context":bad_context}]})
+try:
+    source_read.execute({**task,"input":bad_manifest,"output":(root / "refused.json").as_uri()},store)
+except ValueError as error:
+    assert "record count differs" in str(error)
+else:
+    raise AssertionError("publication count mismatch accepted")
+assert not (root / "refused.json").exists() and not (root / "refused.json.parts").exists()
 print("configured stream passed")
 ''', cwd=root)
     assert result.returncode == 0, result.stderr

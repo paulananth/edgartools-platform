@@ -1,0 +1,27 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip",
+    "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+  },
+  "sample_records": 1000,
+  "sample_bytes": 1666521,
+  "rounds": 5,
+  "selected_records": 10,
+  "projection_differences": 0,
+  "python_roundtrip_seconds": [
+    0.25491396710276604,
+    0.36482673906721175,
+    0.3067730339244008,
+    0.2666516820900142,
+    0.24357340298593044
+  ],
+  "native_projection_seconds": [
+    0.12217378197237849,
+    0.155861996114254,
+    0.12464003195054829,
+    0.10933161503635347,
+    0.10385703714564443
+  ],
+  "median_speedup": 2.1825605934855963,
+  "scope": "authenticated captured prefix, framing plus configured projection; not full archive or mastering qualification"
+}

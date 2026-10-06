@@ -51,7 +51,18 @@ before projection. `read.limits` bounds each projected record, and assertions
 run on each record. Ordinary `ordinal` expressions refer to rows within that
 record; `ordinal_context` supplies the one-based source record index and cannot
 be overridden by caller context. Use null when no source index is needed.
-Context is validated even for empty arrays.
+Context is validated even for empty arrays. An optional
+`expected_records_context` names a declared integer context field holding the
+publication's exact record count. Bind that context receipt to the captured
+input. The worker checks its range before opening the source and compares it
+with the full EOF count before publishing any partitions. Selected output rows
+may be fewer than source records; the publication count always counts every
+framed source record.
+
+Record projection runs in Rust through the ordinary table interpreter;
+Python receives projected readings, retains private partitions and orchestrates
+verification. Approved custom expressions keep their registered step boundary.
+This avoids converting and serializing every raw record through Python.
 
 Projected tables and deferred records accumulate in private partitions.
 Partition count, bytes, record count, aggregate spool bytes and output rows
@@ -662,3 +673,19 @@ qualified, including combining and preparation. Before GLEIF cutover,
 verify complete archive/member authentication and metadata and prove
 publication/replay through EOF. JSON framing tests do not qualify XML or
 retire active GLEIF parsing.
+
+## GLEIF Level 1 JSON qualification template
+
+The bundled `gleif/level1-json.yaml` template declares ZIP framing, explicit
+historical numeric/record limits, pinned publication count and a receipt-bound
+source ordinal. Populate `read.references.approved_scope` with the reviewed
+LEIs as `{LEI: {selected: true}}` before submission; the supplied empty map is
+a template, not an approved cohort. Source scope is a frozen reference table
+in the same contract receipt as selection. `record` retains typed source
+fields for MDM interpretation; `source_index` is one-based. Compare provenance
+with the historical zero-based ordinal explicitly before runtime adoption.
+
+The complete archive framing parity result and the captured-sample performance
+measurement do not by themselves prove installed configured projection,
+producer publication, XML parity or complete Company mastering. Complete those
+checks before replacing the active GLEIF runtime or activating source Rules.

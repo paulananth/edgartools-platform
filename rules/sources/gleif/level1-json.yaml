@@ -1,0 +1,41 @@
+# Qualification template; fill approved_scope from an approved immutable cohort.
+# This does not activate a Dataset, source Rules or a mastering policy.
+source: gleif.level1
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 100}
+  context:
+    source_index: {type: integer}
+    publication_count: {type: integer}
+  references:
+    approved_scope: {}  # LEI: {selected: true}; never infer scope from this file.
+  tables:
+    level1:
+      each: '.'
+      select:
+        lookup:
+          reference: approved_scope
+          column: selected
+          key: {text: {path: LEI.$}}
+          on_missing: 'null'
+      columns:
+        record: {value: {path: '.'}}
+        source_index: {context: {name: source_index}}
+  stream:
+    wrapper: records
+    container: zip
+    max_input_bytes: 1073741824
+    max_bytes: 17179869184
+    max_record: 1048576
+    max_records: 10000000
+    max_depth: 64
+    min_integer: -9223372036854775807
+    record_encoding: python
+    ordinal_context: source_index
+    expected_records_context: publication_count
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 4096
+    max_spool_bytes: 1073741824
+    max_output_rows: 100000
