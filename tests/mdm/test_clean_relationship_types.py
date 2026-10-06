@@ -78,6 +78,22 @@ def test_a_type_that_could_not_run_is_refused(change, words):
         check_policy(body)
 
 
+def test_an_empty_types_section_is_refused_not_read_as_the_old_table():
+    body = files.policy()
+    body["relationships"]["types"] = {}
+    with pytest.raises(Conflict, match="at least one type"):
+        check_policy(body)
+
+
+def test_the_types_round_trip_through_an_export(tmp_path):
+    body = files.policy()
+    files.write_policy(body, tmp_path)
+    assert files.policy(tmp_path)["relationships"] == body["relationships"]
+    older = {k: v for k, v in body.items() if k != "relationships"}
+    with pytest.raises(files.RulesFileError, match="relationship types absent"):
+        files.write_policy(older, tmp_path)
+
+
 def test_the_rules_file_passes_the_policy_check():
     check_policy(files.policy())
 

@@ -82,7 +82,7 @@ def test_chain_check(database):
             stated = chosen["stated_ultimate"][child]
             if child not in entity or stated not in entity:
                 outcome["an end has no Level 1 record in MDM"] += 1
-                per_child[child] = "not in MDM"
+                per_child[child] = {"outcome": "not in MDM", "end": None}
                 continue
             walked = conn.execute(text("SELECT to_entity_id, cycle FROM mdm.relationship_chain(:e, :t, 50)"),
                                   {"e": entity[child], "t": DIRECT}).all()
@@ -96,7 +96,8 @@ def test_chain_check(database):
             else:
                 outcome["chain ends elsewhere"] += 1
                 key = "elsewhere"
-            per_child[child] = key
+            lei_of = {v: k for k, v in entity.items()}
+            per_child[child] = {"outcome": key, "end": lei_of.get(end)}
             if len(examples[key]) < 5:
                 examples[key].append({"child": child, "stated_ultimate": stated, "hops": len(walked),
                                       "engine_calculated_equals_chain_end": calculated.get(entity[child]) == end})

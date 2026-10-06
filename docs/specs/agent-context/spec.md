@@ -38,10 +38,13 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
 - What a type means (the kinds at its ends, whether it is a hierarchy) is in
   the Mastering Policy's relationship types (`rules/merge/relationships.yaml`);
   the view names no type.
-- `mdm.relationship_chain(entity, type, max_hops)` walks one entity's parents
-  through one type, nearest first, with the links that hold now, up to
-  `max_hops` (at most 50); a link back to an entity already on the chain ends
-  it, marked `cycle`. `--hops` uses it.
+- `mdm.relationship_chain(entity, type, max_hops, at)` walks one entity's
+  parents through one type within one scope, nearest first, with the links
+  that hold at `at` (business time; now by default), up to `max_hops` (at most
+  50, for checks; the command's `--hops` stays at most 3). A link back to an
+  entity already on the chain ends it, marked `cycle`. The view reads the
+  current records only: `--as-at` (a past generation) and walking towards
+  children are ticket 05's to build.
 
 **Where MDM context comes from (checked against the schema, 2026-10-05).**
 - MDM keeps history for every kind already: each committed batch stores its

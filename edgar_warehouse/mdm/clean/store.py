@@ -65,7 +65,8 @@ RUNTIME_FUNCTIONS = (
     "reading_link_subjects(jsonb)",
     "cross_reference_lookup(text,text)",
     "entity_name(jsonb)",
-    "relationship_chain(text,text,integer)",
+    "relationship_holds(jsonb,timestamp with time zone)",
+    "relationship_chain(text,text,integer,timestamp with time zone)",
     "record_match_proposal(text,uuid)",
     "supersede_match_proposal(text,uuid)",
 )

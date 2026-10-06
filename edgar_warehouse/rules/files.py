@@ -244,8 +244,11 @@ def write_policy(body: dict, root: Path) -> None:
     (root / "merge").mkdir(parents=True, exist_ok=True)
     (root / "merge" / "policy.yaml").write_text(
         dumps({k: v for k, v in body.items() if k not in split and k != "relationships"}), encoding="utf-8")
+    types_file = root / "merge" / "relationships.yaml"
     if "relationships" in body:
-        (root / "merge" / "relationships.yaml").write_text(dumps(body["relationships"]), encoding="utf-8")
+        types_file.write_text(dumps(body["relationships"]), encoding="utf-8")
+    elif types_file.exists():
+        raise RulesFileError("Output folder has relationship types absent from this version; use an empty export folder")
     for key, folder in split.items():
         folder.mkdir(parents=True, exist_ok=True)
         for name, value in body.get(key, {}).items():

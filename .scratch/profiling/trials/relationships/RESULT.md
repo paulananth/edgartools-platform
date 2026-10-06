@@ -24,12 +24,12 @@ the source faithfully. The engine's calculated ultimate parent agrees in all
    compared with the ultimate parent GLEIF states, and with the source's own
    chain.
 
-## Outcome (`chain-check.json`)
+## Outcome (`chain-check.json`, cross-tabulated by `compare.py` into `compare.json`)
 
 | Source's own direct chain | MDM | Entities |
 |---|---|---|
 | ends at the stated ultimate parent | chain ends at the stated ultimate parent | 273 |
-| ends elsewhere (GLEIF disagrees with itself) | chain ends at the same place | 11 |
+| ends elsewhere (GLEIF disagrees with itself) | chain ends at the same entity as the source's chain | 11 |
 | ends at the stated ultimate parent | an end is not a Company in MDM | 12 |
 | ends elsewhere | an end is not a Company in MDM | 4 |
 
@@ -38,3 +38,8 @@ the source faithfully. The engine's calculated ultimate parent agrees in all
   government entities). Their links wait (`unresolved_endpoint`, 30 reviews),
   which is why 16 sampled entities cannot be checked.
 - No relationship record was refused.
+
+`compare.py` walks each sampled entity's direct chain in the slice's own
+relationship records and compares the entity it ends at with the entity
+MDM's chain ends at: the same for all 284 checkable entities. Rerun
+2026-10-06 08:16 ET with the chain function after review (scope, time, hop limit).

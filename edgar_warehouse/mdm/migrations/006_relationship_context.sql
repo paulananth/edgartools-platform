@@ -7,8 +7,8 @@
 -- (`rules/merge/relationships.yaml`); this file names no type. Retired links
 -- are left out, as `mdm.is_insider` leaves them out.
 
--- The name an entity is known by: a kind names it `name`, or (a person)
--- `legal_name`; the first one filled.
+-- The name an entity is known by: the first filled of `name`, `legal_name` (a
+-- person) and `display_name`.
 CREATE FUNCTION mdm.entity_name(body jsonb) RETURNS text
     LANGUAGE sql IMMUTABLE PARALLEL SAFE
     SET search_path TO 'pg_catalog'
@@ -19,7 +19,7 @@ CREATE FUNCTION mdm.entity_name(body jsonb) RETURNS text
 $$;
 
 COMMENT ON FUNCTION mdm.entity_name(jsonb) IS
-    'The name a master entity is known by: its surviving name, or for a person its legal name; empty when it has none yet.';
+    'The name a master entity is known by: the first filled of its name, its legal name (a person) and its display name; empty when it has none yet.';
 
 CREATE VIEW mdm.relationship_context AS
  SELECT r.object_id AS relationship_id,
@@ -74,38 +74,60 @@ COMMENT ON COLUMN mdm.relationship_context.last_seen IS 'When a source last stat
 COMMENT ON COLUMN mdm.relationship_context.sources IS 'The source records that state it: each a source code and record key.';
 COMMENT ON COLUMN mdm.relationship_context.batch_id IS 'The batch that last wrote the relationship.';
 
--- The parent chain of one entity through one relationship type, up to
--- max_hops links (at most 50), each relationship current now. A cycle stops at
--- the entity it returns to; `cycle` says so.
-CREATE FUNCTION mdm.relationship_chain(entity_id text, relationship_type text, max_hops integer DEFAULT 3)
-    RETURNS TABLE(depth integer, relationship_id text, from_entity_id text, from_name text,
+-- Whether a stated relationship holds at a time: not retired, not derived, and
+-- one of its periods covers that time.
+CREATE FUNCTION mdm.relationship_holds(body jsonb, at timestamp with time zone) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    SET search_path TO 'pg_catalog'
+    AS $$
+    SELECT coalesce(body -> 'retired', 'false'::jsonb) = 'false'::jsonb
+       AND NOT coalesce((body ->> 'derived')::boolean, false)
+       AND EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(body -> 'periods', '[]'::jsonb)) p(period)
+                    WHERE (p.period ->> 'valid_from')::timestamptz <= at
+                      AND (p.period ->> 'valid_to' IS NULL OR (p.period ->> 'valid_to')::timestamptz > at))
+$$;
+
+COMMENT ON FUNCTION mdm.relationship_holds(jsonb, timestamp with time zone) IS
+    'Whether a stated relationship holds at a time: it is not retired, and one of its periods covers that time.';
+
+-- The parent chain of one entity through one relationship type, within the
+-- scope of each first link (the engine checks cycles and one parent per type
+-- and scope), up to max_hops links (at most 50), each relationship holding at
+-- `at`. Each step finds the next links through current_record_link_start.
+CREATE FUNCTION mdm.relationship_chain(entity_id text, relationship_type text, max_hops integer DEFAULT 3,
+                                       at timestamp with time zone DEFAULT now())
+    RETURNS TABLE(depth integer, relationship_id text, scope text, from_entity_id text, from_name text,
                   to_entity_id text, to_name text, cycle boolean)
     LANGUAGE sql STABLE STRICT PARALLEL SAFE
     SET search_path TO 'pg_catalog', 'mdm'
     AS $$
-    WITH RECURSIVE current_links AS (
-        SELECT DISTINCT ON (c.relationship_id) c.relationship_id, c.from_entity_id, c.from_name,
-               c.to_entity_id, c.to_name
-          FROM mdm.relationship_context c
-         WHERE c.type = relationship_chain.relationship_type
-           AND NOT c.derived
-           AND c.valid_from <= now() AND (c.valid_to IS NULL OR c.valid_to > now())
-    ),
-    walk(depth, relationship_id, from_entity_id, from_name, to_entity_id, to_name, path, cycle) AS (
-        SELECT 1, l.relationship_id, l.from_entity_id, l.from_name, l.to_entity_id, l.to_name,
-               ARRAY[l.from_entity_id, l.to_entity_id], l.to_entity_id = l.from_entity_id
-          FROM current_links l
-         WHERE l.from_entity_id = relationship_chain.entity_id
+    WITH RECURSIVE walk(depth, relationship_id, scope, from_entity_id, to_entity_id, path, cycle) AS (
+        SELECT 1, r.object_id, r.body ->> 'scope', r.body ->> 'source_id', r.body ->> 'target_id',
+               ARRAY[r.body ->> 'source_id', r.body ->> 'target_id'], r.body ->> 'target_id' = r.body ->> 'source_id'
+          FROM mdm.current_record r
+         WHERE r.object_type = 'relationship'
+           AND r.body ->> 'source_id' = relationship_chain.entity_id
+           AND r.body ->> 'type' = relationship_chain.relationship_type
+           AND mdm.relationship_holds(r.body, relationship_chain.at)
+           AND relationship_chain.max_hops >= 1
         UNION ALL
-        SELECT w.depth + 1, l.relationship_id, l.from_entity_id, l.from_name, l.to_entity_id, l.to_name,
-               w.path || l.to_entity_id, l.to_entity_id = ANY(w.path)
+        SELECT w.depth + 1, r.object_id, w.scope, r.body ->> 'source_id', r.body ->> 'target_id',
+               w.path || (r.body ->> 'target_id'), (r.body ->> 'target_id') = ANY(w.path)
           FROM walk w
-          JOIN current_links l ON l.from_entity_id = w.to_entity_id
-         WHERE NOT w.cycle AND w.depth < least(relationship_chain.max_hops, 50)
+          JOIN mdm.current_record r
+            ON r.object_type = 'relationship' AND r.body ->> 'source_id' = w.to_entity_id
+         WHERE r.body ->> 'type' = relationship_chain.relationship_type
+           AND r.body ->> 'scope' = w.scope
+           AND mdm.relationship_holds(r.body, relationship_chain.at)
+           AND NOT w.cycle AND w.depth < least(relationship_chain.max_hops, 50)
     )
-    SELECT depth, relationship_id, from_entity_id, from_name, to_entity_id, to_name, cycle
-      FROM walk ORDER BY depth, relationship_id
+    SELECT w.depth, w.relationship_id, w.scope, w.from_entity_id, mdm.entity_name(f.body),
+           w.to_entity_id, mdm.entity_name(t.body), w.cycle
+      FROM walk w
+      LEFT JOIN mdm.current_entity f ON f.object_id = w.from_entity_id
+      LEFT JOIN mdm.current_entity t ON t.object_id = w.to_entity_id
+     ORDER BY w.depth, w.relationship_id
 $$;
 
-COMMENT ON FUNCTION mdm.relationship_chain(text, text, integer) IS
-    'The parents of one entity through one relationship type, nearest first, up to max_hops links (at most 50), using the links that hold now. A link back to an entity already on the chain ends it, marked cycle.';
+COMMENT ON FUNCTION mdm.relationship_chain(text, text, integer, timestamp with time zone) IS
+    'The parents of one entity through one relationship type, nearest first: within one scope, up to max_hops links (at most 50; the context command asks for at most 3), using the links that hold at a time (now, unless given). A link back to an entity already on the chain ends it, marked cycle.';

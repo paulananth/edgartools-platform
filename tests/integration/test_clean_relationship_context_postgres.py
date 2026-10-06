@@ -95,6 +95,8 @@ def test_the_hop_limit_holds(database):
     ids = load(database, {"a": [(DIRECT, "b")], "b": [(DIRECT, "c")], "c": [(DIRECT, "d")]})
     assert [r["depth"] for r in chain(database, ids["a"], hops=2)] == [1, 2]
     assert [r["depth"] for r in chain(database, ids["a"], hops=500)] == [1, 2, 3]  # capped at 50, ends at d
+    assert chain(database, ids["a"], hops=0) == []
+    assert {r["scope"] for r in chain(database, ids["a"])} == {"consolidated"}
 
 
 def test_a_cycle_ends_the_walk(database):
@@ -109,7 +111,8 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
 
     load(database, {"a": [(DIRECT, "b")]})
     with database.admin.begin() as conn:
-        conn.execute(text("DROP FUNCTION mdm.relationship_chain(text, text, integer)"))
+        conn.execute(text("DROP FUNCTION mdm.relationship_chain(text, text, integer, timestamp with time zone)"))
+        conn.execute(text("DROP FUNCTION mdm.relationship_holds(jsonb, timestamp with time zone)"))
         conn.execute(text("DROP VIEW mdm.relationship_context"))
         conn.execute(text("DROP FUNCTION mdm.entity_name(jsonb)"))
         # The migration ledger is append-only; only this simulation of an older

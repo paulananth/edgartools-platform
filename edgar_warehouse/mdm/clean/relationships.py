@@ -52,7 +52,7 @@ CYCLES = {"invalid", "review"}
 def types_of(policy: dict) -> dict:
     """The relationship types a policy masters: its own, or the table every
     earlier policy used."""
-    return (policy.get("relationships") or {}).get("types") or TYPES_V0
+    return policy["relationships"]["types"] if "relationships" in policy else TYPES_V0
 
 
 def check_types(section: dict) -> None:
@@ -62,6 +62,8 @@ def check_types(section: dict) -> None:
 
     if not isinstance(section, dict) or set(section) != {"version", "types"} or not section.get("version"):
         raise Conflict("The relationships section holds a version and its types")
+    if not isinstance(section["types"], dict) or not section["types"]:
+        raise Conflict("The relationships section declares at least one type")
     for name, spec in section["types"].items():
         if not isinstance(name, str) or not name or not isinstance(spec, dict):
             raise Conflict(f"Relationship type {name!r} must be a name with its rules")
@@ -373,6 +375,7 @@ def project(
         e["evidence"] = sorted(e["evidence"], key=digest)
     result += _ultimate_parents(grouped, invalid, types, as_of)
     return sorted(result, key=lambda e: e["relationship_id"]), reviews
+
 
 def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> list[dict]:
     """Calculated ultimate parents, for each hierarchy whose type names an
