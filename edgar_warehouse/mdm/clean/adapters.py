@@ -242,6 +242,16 @@ def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
     return apply(contract["quality"], fields, matching)
 
 
+def _named_values(row: dict, paths: dict, formats: dict) -> dict[str, str]:
+    """namespace → path into namespace → formatted value; an empty value is left out."""
+    found = {}
+    for namespace, path in paths.items():
+        item = value(row, path)
+        if item is not None and str(item).strip():
+            found[namespace] = format_value(item, formats.get(namespace))
+    return found
+
+
 def normalize(
     row: dict,
     *,
@@ -285,13 +295,11 @@ def normalize(
         raise UnsupportedRecord("unsupported_identity_kind")
     key = record_key(row, mapping["record_key"])
     key = format_value(key, mapping.get("record_key_format"))
-    identifiers = {}
-    for namespace, path in mapping.get("identifiers", {}).items():
-        item = value(row, path)
-        if item is not None and str(item).strip():
-            identifiers[namespace] = format_value(
-                item, mapping.get("identifier_formats", {}).get(namespace)
-            )
+    identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}))
+    # Lookup-only ids (profiling ticket 03): kept with the record, never bound.
+    cross_references = _named_values(
+        row, mapping.get("cross_references", {}), mapping.get("cross_reference_formats", {})
+    )
     fields = _fields(row, mapping)
     profiles = []
     for spec in mapping.get("profiles", []):
@@ -388,6 +396,7 @@ def normalize(
         kind=kind,
         fields=fields,
         identifiers=identifiers,
+        cross_references=cross_references,
         profiles=profiles,
         relationships=relationships,
         schema_version=contract["schema_version"],

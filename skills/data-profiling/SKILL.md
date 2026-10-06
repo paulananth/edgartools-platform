@@ -112,7 +112,8 @@ that matter most:
 - **identifiers:** other identifier-shaped columns. A check-digit family is
   named only when at least 99% of values pass and the rate is at least five
   times chance. `cross_reference` means "propose for the MDM cross-reference
-  table": lookup only, never used to join.
+  table": lookup only, never used to join (a Dataset Contract's
+  `cross_references`, in data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md)).
 - **relationships:** `onboard: together` is mastered with its master (a link
   part between masters, or an attribute list); `separate` comes after.
 - **hierarchies:** `reference` hierarchies group codes in one code set (RDM);

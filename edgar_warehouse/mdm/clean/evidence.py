@@ -47,6 +47,7 @@ def assertion(
     schema_version: str = "1",
     mapping_version: int = 1,
     identifiers: dict[str, str] | None = None,
+    cross_references: dict[str, str] | None = None,
     profiles: list[dict] | None = None,
     relationships: list[dict] | None = None,
     provenance: dict | None = None,
@@ -94,6 +95,12 @@ def assertion(
         "relationships": relationships or [],
         "provenance": provenance or {},
     }
+    # Optional parts have one canonical form when unused: absent. Stating them
+    # would move every assertion id already written.
+    # Cross-references (profiling ticket 03) are lookup-only ids: never read by
+    # matching or binding, which read `identifiers` alone.
+    if cross_references:
+        body["cross_references"] = dict(sorted(cross_references.items()))
     # The first reading has one canonical form: absent. Stating it explicitly
     # would move every assertion id already written, orphaning the decisions
     # that cite them, and a body that says 1 and a body that says nothing
@@ -124,6 +131,7 @@ def validate_assertion(body: dict) -> None:
                 "provenance",
             )
         },
+        cross_references=body.get("cross_references"),
         # Incoming only: `merge.py` validates what a batch carries, never a
         # stored row, so an assertion written before mapping versions existed
         # is not re-hashed. Absent means the first reading.
