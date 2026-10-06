@@ -1,9 +1,11 @@
 # Configured GLEIF reading and complete parser retirement
 
-Continue the original self-sustaining skills / Rules creator / parsing / MDM / custom-mode goal. Local qualification only. Branch `codex/gleif-configured-reading-20261005` follows ready PR #830; no merge or source activation is authorized here.
+Continue the original self-sustaining skills / Rules creator / parsing / MDM / custom-mode goal. Local qualification only. Branch `codex/gleif-configured-reading-20261005` follows merged PR #830; no merge or source activation is authorized here.
 
 - [x] Verify complete cached Level 1 JSON parity against the independent historical reader, including typed values, key order, canonical digest, metadata count, archive bytes, expanded bytes, CRC and EOF — 2026-10-06 06:12 ET, full-level1-json-parity.json records 3,428,477 exact comparisons, zero differences, 13,252,301,819 expanded bytes, 5,618.33s (93.6 minutes). Configured projection, XML and mastering remain separate unfinished gates.
 - [x] Project framed JSON records inside the native engine using the existing configured table interpreter; measure against the current Python materialization/serialization path on captured records — 2026-10-06 06:23 ET, six native projection tests, 365 non-installed engine passes, both independent reviews and 1,009-case finite parity; captured 1,000-record/five-run benchmark records exact outputs and 2.18x median speedup. Full configured archive proof remains separate below.
+- [x] Qualify complete configured Level 1 JSON reading and independent output verification against the historical selected cohort — 2026-10-06 06:45 ET, full-level1-configured-reading.json records 3,428,477 source records, 3,755 selected rows, zero projection differences; execution 695.07s (11.6 minutes), verifier 524.00s (8.7 minutes).
+- [x] Qualify installed stream/count publication with restricted PostgreSQL 16 and run the full CI gate — 2026-10-06 06:45 ET, three installed cases passed in 113.02s without skips; CI 37449955179 passed on 148b5442.
 - [ ] Add configured GLEIF member contracts, approved scope and source metadata evidence; qualify installed private publication and refusal/recovery.
 - [ ] Implement and qualify generic XML record framing, namespace/header/metadata assertions and all three GLEIF members.
 - [ ] Replace active GLEIF runtime consumers and remove the old reader/dependency after complete source proof.
@@ -19,3 +21,5 @@ Full JSON comparison finished successfully as process handle 98749 using `/priva
 PR #830 is merged as bc146cd4 and #831 is merged as d4f7fe36. Rebase this active branch onto current main while preserving its native-projection work. The first Spec review attempt failed due to an agent usage limit. A later retry completed: both independent axes found no scoped blocker at 9f20a548; Spec independently matched 1,009 eager/fused cases. The new metadata-count changes need a separate scoped review.
 
 New generic publication-count policy and Level 1 JSON template are under qualification. All 33 focused fused/stream cases pass, including count mismatch, invalid counts and installed-test extensions. Full configured archive and independent verifier are live as process 83248; final output comparison targets the historical 3,755-record cohort. The complete parent goal remains incomplete.
+
+Publication-count changes passed both independent review axes. Process 83248 terminated successfully with the complete configured archive evidence above. PR #833 is ready and its full CI gate passed; XML, runtime consumer replacement and full mastering population remain incomplete.
