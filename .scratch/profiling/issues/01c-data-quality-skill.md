@@ -19,4 +19,4 @@ Type: task. Phase: A. Blocked by: 01b. Map: [map](../map.md). Plan: [plan](../pl
 - [x] Three-axis review (Standards, Spec, GoF): masking gaps in marked rows, double-counted rows, per-code queries, withhold double-count, a crash on tests with no planted value, and smaller items fixed with tests; loading through files.source answered by loads() (rules loader plus registration's checks) 2026-10-05 22:23 ET
 - [ ] ~~Tell coincidental code dependencies from real hierarchies~~ deferred to a profiling follow-up: Trial A finds dependency "hierarchies" such as a flag over the form type; their fixes stay steward proposals (trials/A/quality/RESULT-quality.md) (added 2026-10-05 22:23 ET)
 - [ ] ~~A hierarchy check in the engine~~ deferred: new engine code, outside this program's ownership; listed as new code with what it would test (added 2026-10-05 22:23 ET)
-- [ ] Review, PR, CI, merge on word
+- [ ] Review, PR, CI, merge on word (PR #832 opened 2026-10-05 22:24 ET; CI and merge pending)
