@@ -13,7 +13,8 @@ This skill reports evidence. It does not decide the model and it does not move a
 
 - there are no findings yet, or a new delivery must be compared: [data-profiling](../data-profiling/SKILL.md) (profile, or compare). Read its report. Do not restate its run
 - the question is which kind, identifier, or relationship type: [data-modeling](../data-modeling/SKILL.md)
-- the operator wants a load, a worker, or a resume: [data-engineer](../data-engineer/SKILL.md)
+- the operator wants a load or a worker: [data-platform](../data-platform/SKILL.md)
+- the operator wants a resume or a block: [bookkeeping](../bookkeeping/SKILL.md)
 - a count should become a check, and the operator must pick `on_fail`: [data-quality](../data-quality/SKILL.md)
 - a measured difference should change a live rule: [refining-rules](../refining-rules/SKILL.md)
 
@@ -28,7 +29,7 @@ This skill reports evidence. It does not decide the model and it does not move a
 | Treat similar names as one entity | `CONTEXT.md` forbids it. The name-matching trial is not on `main` |
 | Print a raw personal value | Use the masked shape from the findings |
 | Request `sec.gov`, or edit profiling and source-contract paths | Use local findings and leave those paths to their owners |
-| Freeze a run, or run a command that can mark it blocked | Read `bookkeeping status`. A resume or a block goes to data-engineer |
+| Freeze a run, or run a command that can mark it blocked | Read `bookkeeping status`. A resume or a block goes to [bookkeeping](../bookkeeping/SKILL.md) |
 
 ## Workflow
 
@@ -45,6 +46,6 @@ This skill reports evidence. It does not decide the model and it does not move a
      edgar-warehouse bookkeeping status <run-id> --limit 100
      ```
 
-     These three only select. `bookkeeping status` returns the run, the item states, and the checks already stored on each item. It does not freeze the run. `context` does not return reference-data or silver views. If the question needs those, say they are specified and not served, and cite the findings instead. A resume or a block goes to data-engineer.
+     These three only select. `bookkeeping status` returns the run, the item states, and the checks already stored on each item. It does not freeze the run. `context` does not return reference-data or silver views. If the question needs those, say they are specified and not served, and cite the findings instead. A resume or a block goes to [bookkeeping](../bookkeeping/SKILL.md).
 3. **Write the report.** One section per claim. Under each claim put the count or the command output it comes from, or the word unknown. Masked examples only.
 4. **Name the handoff** from the list above when the evidence asks for a decision, a rule change, or a run. Stop there. Do not carry out that skill's steps.

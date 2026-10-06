@@ -1,4 +1,4 @@
-"""The three role skills name commands the real CLI registers."""
+"""Role skills: platform skills name real CLI commands; the course skill does not."""
 
 from __future__ import annotations
 
@@ -8,10 +8,19 @@ from edgar_warehouse.bundle import named_commands, unresolved
 from edgar_warehouse.cli import build_parser
 
 ROOT = Path(__file__).resolve().parents[2]
-ROLES = (
+OPERATIONAL = (
     ("data-modeling", "data-modeling"),
-    ("data-engineer", "data-engineer"),
     ("data-scientist", "data-scientist"),
+)
+FUNDAMENTALS = ("data-engineering-fundamentals", "data-engineering-fundamentals")
+FUNDAMENTALS_SECTIONS = (
+    "## Role definition",
+    "## Where data engineering sits in the data workflow",
+    "## Concept modules",
+    "## Three core stories",
+    "## Response templates",
+    "## Lexicon",
+    "## Guardrails",
 )
 
 
@@ -28,8 +37,8 @@ def _frontmatter(text: str) -> dict[str, str]:
 
 def test_role_skills_name_registered_commands() -> None:
     parser = build_parser()
-    workflows: list[str] = []
-    for folder, expected_name in ROLES:
+    bodies: list[str] = []
+    for folder, expected_name in OPERATIONAL:
         path = ROOT / "skills" / folder / "SKILL.md"
         text = path.read_text(encoding="utf-8")
         meta = _frontmatter(text)
@@ -38,5 +47,22 @@ def test_role_skills_name_registered_commands() -> None:
         commands = [item for item in named_commands(path.parent) if item[0] == "SKILL.md"]
         assert commands, f"{folder} names no edgar-warehouse command"
         assert unresolved(parser, path.parent) == []
-        workflows.append(text.split("## Workflow", 1)[1])
-    assert len(set(workflows)) == len(ROLES)
+        bodies.append(text.split("## Workflow", 1)[1])
+
+    folder, expected_name = FUNDAMENTALS
+    path = ROOT / "skills" / folder / "SKILL.md"
+    text = path.read_text(encoding="utf-8")
+    meta = _frontmatter(text)
+    assert meta["name"] == expected_name
+    assert meta["description"].startswith("Use when")
+    assert "pipelines" in meta["description"]
+    for heading in FUNDAMENTALS_SECTIONS:
+        assert heading in text
+    assert "Seagate, November 2018" in text
+    assert "undated in the source" in text
+    assert len(text.splitlines()) < 500
+    commands = [item for item in named_commands(path.parent) if item[0] == "SKILL.md"]
+    assert commands == []
+    assert unresolved(parser, path.parent) == []
+    bodies.append(text.split("## Concept modules", 1)[1])
+    assert len(set(bodies)) == len(OPERATIONAL) + 1

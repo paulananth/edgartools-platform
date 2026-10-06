@@ -12,9 +12,9 @@ In scope:
 - Reading `REPORT.md` and `findings.yaml`, including the tests, the counts, and the unknowns data-profiling already recorded.
 - A comparison of a new delivery, by data-profiling's compare mode. The drift list is the evidence. This skill does not turn drift into a rule change.
 - A count of checks on records, by data-quality's measure mode. The count is the evidence. Choosing `on_fail` stays with the operator, through data-quality.
-- A read of mastered entities, and of one run's recorded state, through commands that only select. The run read is `bookkeeping status`. It returns item states and the checks already stored on those items. `bookkeeping checks` is not a read: it freezes the run and can mark the run blocked. That command stays with the data engineer.
+- A read of mastered entities, and of one run's recorded state, through commands that only select. The run read is `bookkeeping status`. It returns item states and the checks already stored on those items. `bookkeeping checks` is not a read: it freezes the run and can mark the run blocked. That command stays with bookkeeping.
 
-Out of scope: deciding a kind or a relationship type (data-modeling); moving a run forward (data-engineer); writing `quality.yaml`, `source.yaml`, or a merge rule; approving findings; switching a matching rule on.
+Out of scope: deciding a kind or a relationship type (data-modeling); moving a run forward (bookkeeping); writing `quality.yaml`, `source.yaml`, or a merge rule; approving findings; switching a matching rule on.
 
 ## Use when
 
@@ -31,7 +31,7 @@ Do not use it to onboard a feed, to resume a run, or to approve a model of ident
 - Do not replace an unknown with a guess. One delivery cannot show that a key persisted. Say unknown.
 - Do not treat similar names as one entity. `CONTEXT.md` forbids that.
 - Do not edit Claude-owned or Codex-owned paths, and do not request anything from `sec.gov`.
-- Do not run a bookkeeping command that freezes a run or can mark it blocked. Hand the run to the data engineer.
+- Do not run a bookkeeping command that freezes a run or can mark it blocked. Hand the run to bookkeeping.
 
 ## Open questions
 
