@@ -95,17 +95,16 @@ def assertion(
         "relationships": relationships or [],
         "provenance": provenance or {},
     }
-    # Optional parts have one canonical form when unused: absent. Stating them
-    # would move every assertion id already written.
-    # Cross-references (profiling ticket 03) are lookup-only ids: never read by
-    # matching or binding, which read `identifiers` alone.
+    # Optional parts have one canonical form when unused: absent, so a new
+    # optional part never moves an assertion id already written (that would
+    # orphan the decisions citing it). Two follow the rule:
+    # - cross-references (profiling ticket 03): lookup-only ids, never read by
+    #   matching or binding, which read `identifiers` alone;
+    # - the reading number: a body that says 1 and a body that says nothing
+    #   describe the same first reading; a re-read states its version, so it
+    #   hashes differently and sits beside its predecessor.
     if cross_references:
         body["cross_references"] = dict(sorted(cross_references.items()))
-    # The first reading has one canonical form: absent. Stating it explicitly
-    # would move every assertion id already written, orphaning the decisions
-    # that cite them, and a body that says 1 and a body that says nothing
-    # describe the same reading. A re-read states its version and so hashes
-    # differently, which is what lets it sit beside its predecessor.
     if mapping_version > 1:
         body["mapping_version"] = mapping_version
     body["assertion_id"] = digest(body)

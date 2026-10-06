@@ -69,3 +69,10 @@ def test_a_cross_reference_takes_a_named_format():
 def test_registration_refuses_a_cross_reference_that_could_join_or_cannot_run(adapter, words):
     with pytest.raises(ValueError, match=words):
         register_dataset(None, "fixture.primary", contract(**adapter))
+
+
+def test_a_sources_own_copy_of_a_binding_id_takes_its_own_name():
+    """Operator, 2026-09-26: a source's own copy of another register's id goes under its own
+    namespace (for example `<source>_lei`), which registration accepts."""
+    with pytest.raises(ValueError, match="no Rules source authority|approved frozen"):
+        register_dataset(None, "fixture.primary", contract(cross_references={"src_lei": "lei"}))

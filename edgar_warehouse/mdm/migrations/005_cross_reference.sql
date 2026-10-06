@@ -14,6 +14,9 @@
 CREATE INDEX stage_record_cross_references ON mdm.stage_record
     USING gin ((reading -> 'cross_references') jsonb_path_ops);
 
+COMMENT ON INDEX mdm.stage_record_cross_references IS
+    'Finds the source records that carry one cross-reference id, for mdm.cross_reference_lookup.';
+
 CREATE VIEW mdm.cross_reference AS
  SELECT x.key AS namespace,
     x.value,
@@ -43,13 +46,14 @@ COMMENT ON COLUMN mdm.cross_reference.batch_id IS 'The batch that wrote that rea
 -- The lookup: the index finds the records, the view says what each one is.
 CREATE FUNCTION mdm.cross_reference_lookup(namespace text, value text)
     RETURNS SETOF mdm.cross_reference
-    LANGUAGE sql STABLE PARALLEL SAFE
+    LANGUAGE sql STABLE STRICT PARALLEL SAFE
     SET search_path TO 'pg_catalog', 'mdm'
     AS $$
     SELECT v.* FROM mdm.cross_reference v
      WHERE (v.source_code, v.record_key) IN (
             SELECT s.source_code, s.record_key FROM mdm.stage_record s
-             WHERE s.reading -> 'cross_references' @> jsonb_build_object(namespace, value))
+             WHERE s.reading -> 'cross_references'
+                   @> jsonb_build_object(cross_reference_lookup.namespace, cross_reference_lookup.value))
        AND v.namespace = cross_reference_lookup.namespace
        AND v.value = cross_reference_lookup.value
      ORDER BY v.source_code, v.record_key

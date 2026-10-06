@@ -122,6 +122,12 @@ def test_the_lookup_is_served_by_its_index(database):
     while (after := index_scans(database)) == before and time.monotonic() < deadline:
         time.sleep(0.2)
     assert [r[0] for r in rows] == ["r7"]
+    # With the planner's own settings, on 400 records, the lookup's query reads the index.
+    with database.admin.connect() as conn:
+        plan = "\n".join(r[0] for r in conn.execute(text(
+            "EXPLAIN SELECT s.record_key FROM mdm.stage_record s "
+            "WHERE s.reading -> 'cross_references' @> jsonb_build_object('tax_id', '07-0000007')")))
+    assert "stage_record_cross_references" in plan, plan
     assert after > before
 
 
