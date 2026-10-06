@@ -112,15 +112,41 @@ struct Frame {
     values: Map<String, Value>,
     text: String,
     child_seen: bool,
+    size: usize,
 }
 
 impl Frame {
-    fn finish(mut self) -> Value {
+    fn leading_text(&mut self, text: &str, maximum: usize) -> Result<(), Rejected> {
+        if self.child_seen { return Ok(()); }
+        self.text.push_str(text);
         let text = self.text.trim();
-        if !text.is_empty() { self.values.insert("$".into(), Value::String(text.into())); }
-        Value::Object(self.values)
+        if !text.is_empty() {
+            let extra = serde_json::to_string(text).unwrap().len().saturating_add(4)
+                .saturating_add(usize::from(!self.values.is_empty()));
+            if self.size.saturating_add(extra) > maximum {
+                return Err(reject("XML normalized text exceeds encoded byte bound"));
+            }
+        }
+        Ok(())
     }
-    fn child(&mut self, name: String, value: Value) {
+    fn finish(mut self, maximum: usize) -> Result<Value, Rejected> {
+        let text = self.text.trim();
+        if !text.is_empty() {
+            let value = Value::String(text.into());
+            self.child("$".into(), value, maximum)?;
+        }
+        Ok(Value::Object(self.values))
+    }
+    fn child(&mut self, name: String, value: Value, maximum: usize) -> Result<(), Rejected> {
+        let value_size = encoded_len(&value, RecordEncoding::Python)?;
+        let extra = match self.values.get(&name) {
+            None => serde_json::to_string(&name).unwrap().len().saturating_add(1)
+                .saturating_add(value_size).saturating_add(usize::from(!self.values.is_empty())),
+            Some(Value::Array(_)) => value_size.saturating_add(1),
+            Some(_) => value_size.saturating_add(3),
+        };
+        let size = self.size.saturating_add(extra);
+        if size > maximum { return Err(reject("XML normalized node exceeds encoded byte bound")); }
         match self.values.get_mut(&name) {
             None => { self.values.insert(name, value); },
             Some(Value::Array(values)) => values.push(value),
@@ -129,6 +155,8 @@ impl Frame {
                 *previous = Value::Array(vec![first, value]);
             },
         }
+        self.size = size;
+        Ok(())
     }
 }
 
@@ -218,15 +246,20 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                     _ => {},
                 }
                 let mut values = Map::new();
+                let mut size = 2usize;
                 for (raw, value) in attributes {
                     let (ns, local) = resolved(&raw, true, &bindings, &stack)?;
                     let key = match ns { Some(ns) => format!("@{{{ns}}}{local}"), None => format!("@{local}") };
+                    size = size.saturating_add(serde_json::to_string(&key).unwrap().len())
+                        .saturating_add(1).saturating_add(serde_json::to_string(&value).unwrap().len())
+                        .saturating_add(usize::from(!values.is_empty()));
+                    if size > limits.max_record { return Err(reject("XML normalized attributes exceed byte bound")); }
                     if values.insert(key, Value::String(value)).is_some() {
                         return Err(reject("duplicate expanded XML attribute"));
                     }
                 }
                 if let Some(parent) = stack.last_mut() { parent.child_seen = true; }
-                stack.push(Frame { bindings, namespace, name, values, text: String::new(), child_seen: false });
+                stack.push(Frame { bindings, namespace, name, values, text: String::new(), child_seen: false, size });
             },
             Event::Text(text) => {
                 if stack.is_empty() && text.as_ref().contains(&b'&') { return Err(reject("entity reference outside XML root")); }
@@ -236,7 +269,7 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                     if !text.chars().all(|c| matches!(c, ' ' | '\t' | '\r' | '\n')) { return Err(reject("unexpected XML envelope text")); }
                 } else if let Some(frame) = stack.last_mut() {
                     // Match an element's leading text; tail text is not a field.
-                    if !frame.child_seen { frame.text.push_str(&text); }
+                    frame.leading_text(&text, limits.max_record)?;
                 }
             },
             Event::CData(text) => {
@@ -244,7 +277,7 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                 let text = std::str::from_utf8(text.as_ref()).map_err(reject)?.replace("\r\n", "\n").replace('\r', "\n");
                 xml_chars(&text)?;
                 let frame = stack.last_mut().unwrap();
-                if !frame.child_seen { frame.text.push_str(&text); }
+                frame.leading_text(&text, limits.max_record)?;
             },
             Event::End(_) => {
                 let frame = stack.pop().ok_or_else(|| reject("unbalanced XML end tag"))?;
@@ -252,19 +285,19 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                     else { match &frame.namespace { Some(ns) => format!("{{{ns}}}{}", frame.name), None => frame.name.clone() } };
                 if stack.is_empty() { root_closed = true; }
                 else if stack.len() == 1 && frame.name == envelope.header {
-                    let value = frame.finish();
+                    let value = frame.finish(limits.max_record)?;
                     if encoded_len(&value, RecordEncoding::Python)? > limits.max_record { return Err(reject("XML header exceeds byte bound")); }
                     header(value)?;
                     header_seen = true;
                     since_record.set(0);
                 } else if stack.len() == 2 && stack[1].name == envelope.container {
-                    let mut value = frame.finish();
+                    let mut value = frame.finish(limits.max_record)?;
                     if let Some(wrapper) = &envelope.record_wrapper { value = Value::Object(Map::from_iter([(wrapper.clone(), value)])); }
                     if encoded_len(&value, RecordEncoding::Python)? > limits.max_record { return Err(reject("XML record exceeds encoded byte bound")); }
                     consume(value, records)?;
                     records += 1;
                     since_record.set(0);
-                } else if stack.len() >= 2 { stack.last_mut().unwrap().child(key, frame.finish()); }
+                } else if stack.len() >= 2 { stack.last_mut().unwrap().child(key, frame.finish(limits.max_record)?, limits.max_record)?; }
             },
             Event::Eof => break,
             Event::Comment(text) => { xml_chars(std::str::from_utf8(text.as_ref()).map_err(reject)?)?; },

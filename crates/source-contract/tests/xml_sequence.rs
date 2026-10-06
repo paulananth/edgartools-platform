@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 use source_contract::{xml_sequence::{scan, Envelope, Limits}, Rejected};
+use std::{cell::Cell, io::{self, Read}};
 
 fn envelope() -> Envelope {
     Envelope { namespace: "urn:feed".into(), root: "Data".into(), header: "Header".into(),
@@ -123,4 +124,29 @@ fn byte_record_count_encoded_size_and_depth_limits_are_independent() {
     }
     let huge = document(&format!("<Record><V>{}</V></Record>", "x".repeat(100000)));
     assert!(scan(huge.as_bytes(), &envelope(), limits(), |_| Ok(()), |_, _| Ok(())).is_err());
+}
+
+#[test]
+fn namespace_expansion_refuses_before_accumulating_the_remaining_record() {
+    struct Counted<'a> { source: &'a [u8], read: &'a Cell<usize> }
+    impl Read for Counted<'_> {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            let size = buffer.len().min(64).min(self.source.len());
+            buffer[..size].copy_from_slice(&self.source[..size]);
+            self.source = &self.source[size..];
+            self.read.set(self.read.get() + size);
+            Ok(size)
+        }
+    }
+    for attributes in [false, true] {
+        let uri = format!("urn:{}", "x".repeat(2000));
+        let children: String = (0..1000).map(|n| format!("<f:N{n}/>")).collect();
+        let payload = if attributes { format!("<Record f:a='value'>{children}</Record>") }
+            else { format!("<Record>{children}</Record>") };
+        let xml = document(&payload).replace("xmlns='urn:feed'", &format!("xmlns='urn:feed' xmlns:f='{uri}'"));
+        let read = Cell::new(0);
+        let source = Counted { source: xml.as_bytes(), read: &read };
+        assert!(scan(source, &envelope(), Limits { max_record: 1024, ..limits() }, |_| Ok(()), |_, _| Ok(())).is_err());
+        assert!(read.get() < 3000, "read {} of {} bytes before refusing expanded namespace keys", read.get(), xml.len());
+    }
 }
