@@ -1,0 +1,57 @@
+version: contoso-customer-quality-trial
+quality:
+  customer:
+    checks:
+    - id: placeholder_given_name
+      test: placeholder@1
+      value: fields.given_name
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: placeholder_middle_initial
+      test: placeholder@1
+      value: fields.middle_initial
+      on_fail: withhold
+      args:
+        values:
+        - NONE
+        - 'NULL'
+        - UNKNOWN
+        - TBD
+        - NOTAPPLICABLE
+        - NOTAVAILABLE
+    - id: shape_outlier_middle_initial
+      test: pattern@1
+      value: fields.middle_initial
+      on_fail: flag
+      args:
+        regex: '[A-Z]'
+    - id: code_list_continent
+      test: in_set@1
+      value: fields.continent
+      on_fail: flag
+      args:
+        values:
+        - Australia
+        - Europe
+        - North America
+    - id: code_list_country
+      test: in_set@1
+      value: fields.country
+      on_fail: flag
+      args:
+        values:
+        - AU
+        - CA
+        - DE
+        - FR
+        - GB
+        - IT
+        - NL
+        - US

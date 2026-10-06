@@ -49,15 +49,14 @@ def compare(approved: dict, new: dict) -> list[dict]:
         for code in cur["code_lists"]:
             before = old_codes.get(code["column"])
             if before and code["distinct"] != before["distinct"]:
-                skill = "rdm" if cur["class"] == "reference" else "data-quality"
-                add("codes_changed", name, f"{before['distinct']} → {code['distinct']} distinct codes", skill,
-                    code["column"])
+                add("codes_changed", name, f"{before['distinct']} → {code['distinct']} distinct codes",
+                    _codes_owner(cur), code["column"])
         approved_codes = _guarded(old)
         for column, values in sorted(_guarded(cur).items()):
             added = sorted(set(values) - set(approved_codes.get(column, values)))
             if added:
                 add("codes_new", name, f"{len(added)} codes not in the approved list: {', '.join(added[:10])}",
-                    "rdm" if cur["class"] == "reference" else "data-quality", column)
+                    _codes_owner(cur), column)
     old_links = {_link(r): r for r in approved["relationships"]}
     new_links = {_link(r): r for r in new["relationships"]}
     for key in sorted(old_links.keys() - new_links.keys()):
@@ -74,6 +73,11 @@ def compare(approved: dict, new: dict) -> list[dict]:
                                                 f"{before['depth']} → {h['depth']}", "rdm" if h["type"] == "reference"
                 else "refining-rules")
     return items
+
+
+def _codes_owner(part: dict) -> str:
+    """A reference part's codes are RDM's; any other part's are a data quality matter."""
+    return "rdm" if part["class"] == "reference" else "data-quality"
 
 
 def _guarded(part: dict) -> dict[str, list]:

@@ -65,8 +65,9 @@ It writes `quality.yaml` (checked by the engine's own `check_quality`),
 | `placeholder`: a stand-in for no value | `placeholder@1` | withhold |
 | `shape_outlier`: a value off the column's one shape | `pattern@1` | flag |
 | `code_list`: a small code list | `in_set@1` (a code not seen is flagged) | flag |
+| any item proposed as `blank`, with the values to blank | `blank_values@1` (a fix) | — |
 | `check_digit` with a mod 97-10 family on 20 characters | `lei_check_digit@1` | withhold |
-| any other `check_digit`, `link_not_found`, `hierarchy_invalid`, `no_natural_key` | none: new code | — |
+| any other `check_digit`, `link_not_found`, `hierarchy_invalid`, `no_natural_key` | none: new code, with what its check would test | — |
 
 An item whose column has no field in the map is listed as "no field mapped":
 map the column, or leave the item out and say why in the log.
@@ -85,17 +86,21 @@ uv run python <this skill's folder>/scripts/quality_plan.py measure \
   [--expected <folder>/expected.yaml]
 ```
 
-It prints each check's count, compares it with profiling's, and fires a
-planted record per check (exit 1 if a count differs or a planted record does
-not fire). Read the counts carefully:
-- An `exception` sets its record aside, so later checks do not see that
-  record, as in a run.
+It checks the file as the rules loader and registration do (and names the
+`exception` reasons the contract must list as non-blocking), prints how many
+records each fix changed and each check fired on, compares them with
+profiling's, and fires a planted record per check (exit 1 if a count differs
+or a planted record does not fire). Read the counts carefully:
+- Each check is counted on its own, as profiling counts it. In a run, an
+  `exception` sets its record aside, so later checks do not see that record:
+  a run's counts can be smaller.
 - A count over records from the contract can be smaller than profiling's
   over the raw rows: the classification rule rejects some records first.
   Report both.
 - A fix counts every record it touched, even when a later fix puts the value
   back. Report the net change too: records whose final value differs.
-- Up to 10 examples per check and fix.
+- Profiling's examples (up to three per item, masked for a personal
+  column) are in the findings; show two or three when you ask.
 
 ### decide: one question per check or fix
 
@@ -108,6 +113,8 @@ Pick each `on_fail` with the operator, with its count and examples:
 | A critical data element missing | A check with `on_fail: exception`. The record never merges and never stops the run; it waits as an open exception until fixed or ignored. Keep these few. |
 | Anything worth watching | A check with `on_fail: flag` (only counted) |
 
+- **A check:** ask about its `on_fail`. **A fix:** there is no `on_fail`;
+  ask whether to keep it, change it or remove it.
 - Every check reads the record after the mapping, never the raw file.
 - What a check tests exactly: `present@1` on an address part also fires when
   there is no address at all. Say so, with both counts.
@@ -116,8 +123,8 @@ Pick each `on_fail` with the operator, with its count and examples:
 - Judging an existing fix: remove it in memory only, measure again, and
   compare record by record; then say whether a check would still catch those
   values without it.
-- What is "right" (a code, a place) comes from the repository's reference
-  tables and the contract's comments. When they cannot settle it, say so.
+- What is "right" (a code, a place) comes from the reference tables under
+  `rules/reference/` and the contract's comments. When they cannot settle it, say so.
 
 ### mark: invalid hierarchy rows
 

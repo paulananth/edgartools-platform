@@ -63,3 +63,14 @@ def test_a_node_that_names_itself_as_parent_is_marked_apart_from_a_cycle(con):
     reasons = sorted((m["value"], m["reason"]) for m in h["marked"])
     assert reasons == [("a", "on a cycle of parents"), ("b", "on a cycle of parents"), ("c", "names itself as its parent")]
     assert h["cycles"] == 3 and h["invalid_rows"] == 3 and all(m["needs_steward"] for m in h["marked"])
+
+
+def test_a_row_breaking_two_levels_is_one_invalid_row_with_counted_evidence(con):
+    rows = [(f"r{n}", f"c{n % 6}", f"m{n % 6 // 2}", f"t{n % 6 // 4}") for n in range(60)]
+    rows.append(("bad", "c0", "m2", "t9"))  # breaks fine → middle and middle → top
+    con.execute("CREATE TABLE levels (row_id VARCHAR, fine VARCHAR, middle VARCHAR, top VARCHAR)")
+    con.executemany("INSERT INTO levels VALUES (?, ?, ?, ?)", rows)
+    h = hierarchy._record(con, "levels", ["fine", "middle", "top"], 0.99, "functional_dependency", ["row_id"])
+    assert h["invalid_rows"] == 1 and [m["key"] for m in h["marked"]] == [{"row_id": "bad"}]
+    m, = h["marked"]
+    assert m["fix"] == "m0" and m["support"] == {"rows": 10, "of": 11} and m["parent_column"] == "middle"

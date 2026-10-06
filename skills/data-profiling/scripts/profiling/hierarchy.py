@@ -80,29 +80,35 @@ def _record(con, part: str, columns: list[str], holds: float, kind: str, record_
                                              f"WHERE {sql_name(column)} IS NOT NULL ORDER BY 1 LIMIT 3").fetchall()]
         levels.append({"depth": depth, "name": None, "column": column, "samples": samples})
     name = f"{part}: {' > '.join(reversed(columns))}"
-    marked = [m for a, b in zip(columns, columns[1:]) for m in _off_parent(con, part, a, b, record_key or [a], name)]
+    marking = _Marking(con, part, name, record_key or [columns[0]])
+    marked, seen = [], set()
+    for a, b in zip(columns, columns[1:]):
+        for m in _off_parent(marking, a, b):
+            if tuple(m["key"].values()) not in seen:  # a row breaking two levels is one invalid row
+                seen.add(tuple(m["key"].values()))
+                marked.append(m)
     return {"hierarchy": name, "type": None, "part": part,
             "evidence_kind": kind, "levels": levels, "rule": rule, "holds": holds, "depth": len(columns),
             "shape": "balanced", "orphans": 0, "cycles": 0, "invalid_rows": len(marked),
             "valid_dates": {"from": None, "to": None}, "marked": marked}
 
 
-def _off_parent(con, part: str, child: str, parent: str, record_key: list[str], hierarchy: str) -> list[dict]:
-    """Rows whose parent code is not the one most rows with the same code have. The fix is that parent,
-    with its share of the code's rows as the evidence."""
-    t, c, p = sql_name(part), sql_name(child), sql_name(parent)
-    usual = con.execute(
-        f"SELECT code, arg_max(up, n), max(n), sum(n) FROM (SELECT CAST({c} AS VARCHAR) code, CAST({p} AS VARCHAR) up, "
-        f"count(*) n FROM {t} WHERE {c} IS NOT NULL AND {p} IS NOT NULL GROUP BY 1, 2) GROUP BY code "
-        f"HAVING count(*) > 1").fetchall()
-    marked = []
-    for code, up, top, total in usual:
-        where = f"CAST({c} AS VARCHAR) = ? AND {p} IS NOT NULL AND CAST({p} AS VARCHAR) <> ?"
-        evidence = f"{top} of {total} rows with {child} {code} have {parent} {up}"
-        for m in _rows_of(con, part, where, [code, up], record_key, child, hierarchy, f"{parent} differs",
-                          fix=up if top * 2 > total else None, fix_evidence=evidence if top * 2 > total else None):
-            marked.append(m)
-    return marked
+def _off_parent(marking: "_Marking", child: str, parent: str) -> list[dict]:
+    """Rows whose parent code is not the one most rows with the same code have. The fix is that parent
+    when more than half the code's rows have it; the counts are the evidence."""
+    t, c, p = sql_name(marking.part), sql_name(child), sql_name(parent)
+    keys = ", ".join(f"CAST(t.{sql_name(k)} AS VARCHAR)" for k in marking.record_key)
+    rows = marking.con.execute(f"""
+        WITH pairs AS (SELECT CAST({c} AS VARCHAR) code, CAST({p} AS VARCHAR) up, count(*) n FROM {t}
+                       WHERE {c} IS NOT NULL AND {p} IS NOT NULL GROUP BY 1, 2),
+        usual AS (SELECT code, arg_max(up, n) up, max(n) top, sum(n) total FROM pairs GROUP BY code HAVING count(*) > 1)
+        SELECT {keys}, CAST(t.{c} AS VARCHAR), u.up, u.top, u.total FROM {t} t JOIN usual u ON CAST(t.{c} AS VARCHAR) = u.code
+        WHERE t.{p} IS NOT NULL AND CAST(t.{p} AS VARCHAR) <> u.up ORDER BY 1""").fetchall()
+    n = len(marking.record_key)
+    return [marking.row(r[:n], r[n], child, parent, f"{parent} differs",
+                        fix=r[n + 1] if r[n + 2] * 2 > r[n + 3] else None,
+                        support={"rows": r[n + 2], "of": r[n + 3]} if r[n + 2] * 2 > r[n + 3] else None)
+            for r in rows]
 
 
 def by_parent_column(con, part: str, child: str, key: str, record_key: list[str] | None = None) -> dict:
@@ -112,12 +118,13 @@ def by_parent_column(con, part: str, child: str, key: str, record_key: list[str]
     orphan = f"{c} IS NOT NULL AND CAST({c} AS VARCHAR) NOT IN (SELECT CAST({k} AS VARCHAR) FROM {t} WHERE {k} IS NOT NULL)"
     depth, cycles, leaf_depths = _walk(con, f"SELECT CAST({k} AS VARCHAR) node, CAST({c} AS VARCHAR) parent FROM {t}")
     name = f"{part}: {child} → {key}"
-    marked = _orphans(con, part, child, key, orphan, record_key or [key], name)
+    marking = _Marking(con, part, name, record_key or [key])
+    marked = _orphans(marking, child, key, orphan)
     in_cycle = f"CAST({k} AS VARCHAR) IN (SELECT unnest(?::VARCHAR[]))"
-    marked += _rows_of(con, part, f"{in_cycle} AND CAST({c} AS VARCHAR) = CAST({k} AS VARCHAR)", [cycles],
-                       record_key or [key], key, name, "names itself as its parent")
-    marked += _rows_of(con, part, f"{in_cycle} AND CAST({c} AS VARCHAR) <> CAST({k} AS VARCHAR)", [cycles],
-                       record_key or [key], key, name, "on a cycle of parents")
+    marked += marking.rows(f"{in_cycle} AND CAST({c} AS VARCHAR) = CAST({k} AS VARCHAR)", [cycles], key, child,
+                           "names itself as its parent")
+    marked += marking.rows(f"{in_cycle} AND CAST({c} AS VARCHAR) <> CAST({k} AS VARCHAR)", [cycles], key, child,
+                           "on a cycle of parents")
     orphans = sum(1 for m in marked if m["reason"] == "parent not found")
     return {"hierarchy": name, "type": None, "part": part, "evidence_kind": "parent_column",
             "levels": [{"depth": d, "name": None, "column": None, "samples": []} for d in range(1, depth + 1)],
@@ -128,30 +135,42 @@ def by_parent_column(con, part: str, child: str, key: str, record_key: list[str]
             "marked": marked}
 
 
-def _rows_of(con, part: str, where: str, params: list, record_key: list[str], value: str, hierarchy: str,
-             reason: str, fix=None, fix_evidence=None) -> list[dict]:
-    """The rows matching `where`, each marked by its record key, with a fix only when there is evidence."""
-    columns = ", ".join(f"CAST({sql_name(c)} AS VARCHAR)" for c in [*record_key, value])
-    return [{"hierarchy": hierarchy, "part": part, "key": dict(zip(record_key, r[:-1])), "column": value,
-             "value": r[-1], "reason": reason, "fix": fix, "fix_evidence": fix_evidence,
-             "needs_steward": fix is None}
-            for r in con.execute(f"SELECT {columns} FROM {sql_name(part)} WHERE {where} ORDER BY 1", params).fetchall()]
+class _Marking:
+    """Where marked rows come from: one hierarchy of one part, each row named by the part's record key."""
+
+    def __init__(self, con, part: str, hierarchy: str, record_key: list[str]):
+        self.con, self.part, self.hierarchy, self.record_key = con, part, hierarchy, record_key
+
+    def row(self, key: tuple, value, column: str, parent_column: str, reason: str, fix=None, support=None,
+            fix_evidence=None) -> dict:
+        """One marked row. `support` ({rows, of}) or `fix_evidence` says why the fix; without a fix, a steward
+        decides. The evidence text is written once values are masked (run.py)."""
+        return {"hierarchy": self.hierarchy, "part": self.part, "key": dict(zip(self.record_key, key)),
+                "column": column, "value": value, "parent_column": parent_column, "reason": reason, "fix": fix,
+                "support": support, "fix_evidence": fix_evidence, "needs_steward": fix is None}
+
+    def rows(self, where: str, params: list, column: str, parent_column: str, reason: str) -> list[dict]:
+        """The rows matching `where`, none with a fix."""
+        cols = ", ".join(f"CAST({sql_name(c)} AS VARCHAR)" for c in [*self.record_key, column])
+        return [self.row(r[:-1], r[-1], column, parent_column, reason)
+                for r in self.con.execute(f"SELECT {cols} FROM {sql_name(self.part)} WHERE {where} ORDER BY 1",
+                                          params).fetchall()]
 
 
-def _orphans(con, part: str, child: str, key: str, orphan: str, record_key: list[str], hierarchy: str) -> list[dict]:
+def _orphans(marking: _Marking, child: str, key: str, orphan: str) -> list[dict]:
     """A parent value not found as a key. The fix is a key it equals once case, spaces and leading zeros
     are folded, when exactly one key does; otherwise a steward decides."""
-    t, c, k = sql_name(part), sql_name(child), sql_name(key)
+    t, c, k = sql_name(marking.part), sql_name(child), sql_name(key)
     folded = "regexp_replace(upper(trim(CAST({x} AS VARCHAR))), '^0+(.)', '\\1')"
-    matches = dict(con.execute(
+    matches = dict(marking.con.execute(
         f"SELECT o, any_value(k) FROM (SELECT DISTINCT CAST({c} AS VARCHAR) o FROM {t} WHERE {orphan}) "
         f"JOIN (SELECT CAST({k} AS VARCHAR) k FROM {t} WHERE {k} IS NOT NULL) "
         f"ON {folded.format(x='o')} = {folded.format(x='k')} GROUP BY o HAVING count(DISTINCT k) = 1").fetchall())
-    marked = _rows_of(con, part, orphan, [], record_key, child, hierarchy, "parent not found")
+    marked = marking.rows(orphan, [], child, key, "parent not found")
     for m in marked:
         if m["value"] in matches:
             m.update(fix=matches[m["value"]], needs_steward=False,
-                     fix_evidence=f"the only key equal to it once case, spaces and leading zeros are folded")
+                     fix_evidence="the only key equal to it once case, spaces and leading zeros are folded")
     return marked
 
 
@@ -177,13 +196,12 @@ def by_link_part(con, link: str, child: str, parent: str, role: str | None,
         several = [r[0] for r in con.execute(f"SELECT node FROM ({edges}) GROUP BY node "
                                              f"HAVING count(DISTINCT parent) > 1").fetchall()]
         node = f"CAST({sql_name(child)} AS VARCHAR) IN (SELECT unnest(?::VARCHAR[]))"
-        marked = _rows_of(con, link, f"{in_role} AND {node}", [several], record_key, child, name, "several parents")
+        marking = _Marking(con, link, name, record_key)
+        marked = marking.rows(f"{in_role} AND {node}", [several], child, parent, "several parents")
         looped = [[n for n in cycles if n not in several]]
         itself = f"CAST({sql_name(child)} AS VARCHAR) = CAST({sql_name(parent)} AS VARCHAR)"
-        marked += _rows_of(con, link, f"{in_role} AND {node} AND {itself}", looped, record_key, child, name,
-                           "names itself as its parent")
-        marked += _rows_of(con, link, f"{in_role} AND {node} AND NOT ({itself})", looped, record_key, child, name,
-                           "on a cycle of parents")
+        marked += marking.rows(f"{in_role} AND {node} AND {itself}", looped, child, parent, "names itself as its parent")
+        marked += marking.rows(f"{in_role} AND {node} AND NOT ({itself})", looped, child, parent, "on a cycle of parents")
         found.append({"hierarchy": name, "type": None, "part": link, "evidence_kind": "parent_column", "role": value,
                       "levels": [{"depth": d, "name": None, "column": None, "samples": []} for d in range(1, depth + 1)],
                       "rule": f"{child} has one {parent} per role", "holds": holds, "depth": depth,

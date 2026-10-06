@@ -1,0 +1,72 @@
+version: contoso-store-quality-trial
+quality:
+  store:
+    checks:
+    - id: code_list_country_code
+      test: in_set@1
+      value: fields.country_code
+      on_fail: flag
+      args:
+        values:
+        - --
+        - AU
+        - CA
+        - DE
+        - FR
+        - GB
+        - IT
+        - NL
+        - US
+    - id: code_list_square_meters
+      test: in_set@1
+      value: fields.square_meters
+      on_fail: flag
+      args:
+        values:
+        - '1000'
+        - '1015'
+        - '1085'
+        - '1105'
+        - '1120'
+        - '1190'
+        - '1200'
+        - '1210'
+        - '1225'
+        - '1260'
+        - '1295'
+        - '1300'
+        - '1330'
+        - '1365'
+        - '1500'
+        - '1540'
+        - '1610'
+        - '1645'
+        - '1715'
+        - '1785'
+        - '1800'
+        - '1855'
+        - '1900'
+        - '2000'
+        - '2100'
+        - '2105'
+        - '245'
+        - '2800'
+        - '3000'
+        - '310'
+        - '350'
+        - '3500'
+        - '385'
+        - '400'
+        - '560'
+        - '595'
+        - '665'
+        - '840'
+        - '910'
+    - id: code_list_status
+      test: in_set@1
+      value: fields.status
+      on_fail: flag
+      args:
+        values:
+        - Closed
+        - Restructured

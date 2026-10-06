@@ -1,0 +1,15 @@
+version: contoso-orders-quality-trial
+quality:
+  orders:
+    checks:
+    - id: code_list_currency_code
+      test: in_set@1
+      value: fields.currency_code
+      on_fail: flag
+      args:
+        values:
+        - AUD
+        - CAD
+        - EUR
+        - GBP
+        - USD

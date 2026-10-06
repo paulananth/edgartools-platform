@@ -207,8 +207,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         "code_lists": code_list,
         "time": times,
         "quality": quality.find(quality.Facts(
-            con, p, [c for c in columns if not c["structure"]], {f["name"]: f["role"] for f in column_findings},
-            personal, record_key["columns"], out, [i for i in identifier_findings if i], code_list))
+            con=con, part=p, columns=[c for c in columns if not c["structure"]],
+            roles={f["name"]: f["role"] for f in column_findings}, personal=personal, key=record_key["columns"],
+            links=out, identifiers=[i for i in identifier_findings if i], code_lists=code_list))
         + quality.no_natural_key(record_key),
     }
 
@@ -379,15 +380,24 @@ def _mask_samples(hierarchies: list[dict], parts: dict) -> None:
 
 
 def _mark(hierarchies: list[dict], parts: dict) -> list[dict]:
-    """Each hierarchy's invalid rows, masked where a column is personal; its part gets one quality item."""
+    """Each hierarchy's invalid rows, masked where a column is personal, with the evidence for each fix
+    written from the masked values; the hierarchy's part gets one quality item."""
     marked = []
     for h in hierarchies:
         rows = h.pop("marked")
         personal = {c["name"] for c in parts[h["part"]]["columns"] if c["sensitivity"] != "none"}
+
+        def shown(column, value):
+            return sensitivity.mask(value) if column in personal and value is not None else value
+
         for m in rows:
-            m["key"] = {k: sensitivity.mask(v) if k in personal else v for k, v in m["key"].items()}
-            if m["column"] in personal:
-                m["value"], m["fix"] = sensitivity.mask(m["value"]), sensitivity.mask(m["fix"])
+            m["hierarchy"] = h["hierarchy"]  # the role in its name is masked when personal
+            m["key"] = {k: shown(k, v) for k, v in m["key"].items()}
+            m["value"], m["fix"] = shown(m["column"], m["value"]), shown(m["parent_column"], m["fix"])
+            support = m.pop("support")
+            if support:
+                m["fix_evidence"] = (f"{support['rows']} of {support['of']} rows with {m['column']} {m['value']} "
+                                     f"have {m['parent_column']} {m['fix']}")
         parts[h["part"]]["quality"] += quality.hierarchy_items(h, rows)
         marked += rows
     return marked

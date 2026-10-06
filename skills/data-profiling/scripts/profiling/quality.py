@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import identifiers, profile, sensitivity
-from .inputs import sql_name
+from .inputs import sql_name, sql_text
 
 EXAMPLES = 3
 # Generic stand-ins for "no value", compared after removing everything but letters and digits. "N/A"
@@ -82,8 +82,9 @@ def placeholders(facts: Facts) -> list[dict]:
     for c in facts.columns:
         if not _text(c) or facts.roles.get(c["name"]) in {"measure", "date"}:
             continue
-        plain = f"upper(regexp_replace(CAST({sql_name(c['name'])} AS VARCHAR), '[^A-Za-z0-9]', '', 'g'))"
-        where = f"{plain} IN ({', '.join(repr(p) for p in PLACEHOLDERS)}) OR regexp_full_match({plain}, '0+')"
+        # Folded as the engine's placeholder test folds: upper case, then only letters and digits of any script.
+        plain = f"regexp_replace(upper(CAST({sql_name(c['name'])} AS VARCHAR)), '[^\\pL\\pN]', '', 'g')"
+        where = f"{plain} IN ({', '.join(sql_text(p) for p in PLACEHOLDERS)}) OR regexp_full_match({plain}, '0+')"
         rows = _count(facts, where)
         if rows:
             found.append(item("placeholder", c["name"], rows, _examples(facts, c["name"], where),
@@ -107,7 +108,7 @@ def shape_outliers(facts: Facts) -> list[dict]:
             continue
         pattern = _regex(c["shape"])
         where = f"{sql_name(c['name'])} IS NOT NULL AND NOT regexp_full_match(CAST({sql_name(c['name'])} AS VARCHAR), " \
-                f"'{pattern.replace(chr(39), chr(39) * 2)}')"
+                f"{sql_text(pattern)})"
         rows = _count(facts, where)
         if rows:
             found.append(item("shape_outlier", c["name"], rows, _examples(facts, c["name"], where),
@@ -181,12 +182,11 @@ def no_natural_key(record_key: dict) -> list[dict]:
 
 
 def hierarchy_items(h: dict, marked: list[dict]) -> list[dict]:
-    """One item per hierarchy with invalid rows; the rows themselves go to the sidecar file."""
-    if not h["invalid_rows"]:
+    """One item per hierarchy with invalid rows (`marked`, already masked); the rows go to the sidecar file."""
+    if not marked:
         return []
-    mine = [m for m in marked if m["hierarchy"] == h["hierarchy"]]
-    return [item("hierarchy_invalid", h["levels"][0]["column"] if h["levels"] else None, h["invalid_rows"],
-                 list(dict.fromkeys(m["value"] for m in mine))[:EXAMPLES],
+    return [item("hierarchy_invalid", h["levels"][0]["column"] if h["levels"] else None, len(marked),
+                 list(dict.fromkeys(m["value"] for m in marked))[:EXAMPLES],
                  f"rows that break the rule '{h['rule']}'",
-                 args={"hierarchy": h["hierarchy"], "fixed": sum(m["fix"] is not None for m in mine),
-                       "needs_steward": sum(m["needs_steward"] for m in mine)})]
+                 args={"hierarchy": h["hierarchy"], "fixed": sum(m["fix"] is not None for m in marked),
+                       "needs_steward": sum(m["needs_steward"] for m in marked)})]

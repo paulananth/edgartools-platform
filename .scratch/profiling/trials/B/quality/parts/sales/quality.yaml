@@ -1,0 +1,31 @@
+version: contoso-sales-quality-trial
+quality:
+  sales:
+    checks:
+    - id: code_list_quantity
+      test: in_set@1
+      value: fields.quantity
+      on_fail: flag
+      args:
+        values:
+        - '1'
+        - '10'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+        - '9'
+    - id: code_list_currency_code
+      test: in_set@1
+      value: fields.currency_code
+      on_fail: flag
+      args:
+        values:
+        - AUD
+        - CAD
+        - EUR
+        - GBP
+        - USD

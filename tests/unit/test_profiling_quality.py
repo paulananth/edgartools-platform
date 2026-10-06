@@ -115,3 +115,17 @@ def test_compare_lists_codes_not_in_the_approved_code_list():
     item, = [i for i in drift.compare(findings(["a"], "reference"), findings(["a", "b"], "reference"))
              if i["drift"] == "codes_new"]
     assert item["handled_by"] == "rdm"
+
+
+def test_marked_rows_never_carry_a_personal_value(tmp_path):
+    folder = tmp_path / "set"
+    folder.mkdir()
+    sex = {"Mister": "Male", "Missus": "Female", "Miz": "Female", "Doctor": "Other"}
+    rows = [[n, f"Ann{n}", f"Lee{n}", title, sex[title]] for n, title in enumerate(sorted(sex) * 50, 1)]
+    rows[7][4] = "Female" if rows[7][3] == "Mister" else "Male"  # one row's sex differs from its title's
+    _write(folder / "people.csv", ["person_id", "given_name", "surname", "title", "gender"], rows)
+    findings = run.profile_inputs({"set": str(folder)}, "people")
+    marked = findings["marked_rows"]
+    assert marked and marked[0]["fix_evidence"], "the planted row must be marked for this test to mean anything"
+    text = json.dumps(marked) + json.dumps(findings["hierarchies"])
+    assert not any(word in text for word in [*sex, *sex.values()]), text[:500]

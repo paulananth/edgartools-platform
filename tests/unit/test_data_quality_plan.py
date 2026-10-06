@@ -92,3 +92,56 @@ def test_write_gives_the_source_file_shape(tmp_path):
     body = yaml.safe_load(path.read_text())
     assert body["version"] == "acct-quality-v1" and set(body["quality"]) == {"acct_code"}
     quality.check_quality({"version": body["version"], **body["quality"]["acct_code"]})
+
+
+def test_every_catalog_test_has_a_planted_value():
+    assert {t["test"] for t in quality_plan.CATALOG.values()} <= quality_plan.TRIPS.keys()
+
+
+def test_two_withhold_checks_on_one_field_are_counted_apart():
+    block = {"version": "v1", "checks": [
+        {"id": "placeholder_note", "test": "placeholder@1", "value": "fields.note", "on_fail": "withhold",
+         "args": {"values": ["NONE"]}},
+        {"id": "shape_outlier_note", "test": "pattern@1", "value": "fields.note", "on_fail": "withhold",
+         "args": {"regex": "[a-z]+"}}]}
+    records = [quality_plan.mapped({"note": v}, {"note": "fields.note"}) for v in ["NONE", "ok", "B4"]]
+    assert quality_plan.measure(block, records) == {"placeholder_note": 1, "shape_outlier_note": 2}
+
+
+def test_an_exception_does_not_hide_a_record_from_other_checks():
+    block = {"version": "v1", "checks": [
+        {"id": "missing_id", "test": "present@1", "value": "fields.id", "on_fail": "exception"},
+        {"id": "placeholder_note", "test": "placeholder@1", "value": "fields.note", "on_fail": "flag",
+         "args": {"values": ["NONE"]}}]}
+    record = quality_plan.mapped({"id": None, "note": "none"}, {"id": "fields.id", "note": "fields.note"})
+    assert quality_plan.measure(block, [record]) == {"missing_id": 1, "placeholder_note": 1}
+
+
+def test_a_live_test_with_no_planted_value_is_reported_not_a_crash():
+    block = {"version": "v1", "checks": [{"id": "agent_address", "test": "registered_agent_address@1",
+                                          "value": "fields.address", "on_fail": "withhold",
+                                          "args": {"markers": ["C/O"]}}]}
+    assert quality_plan.planted_fire(block) == {"agent_address": None}
+
+
+def test_a_blank_proposal_becomes_a_fix_and_is_counted():
+    findings = _findings()
+    findings["parts"][0]["quality"] = [{"check": "placeholder", "column": "note", "rows": 1, "examples": [],
+                                        "args": {"values": ["XX"]}, "proposal": "blank"}]
+    plan = quality_plan.draft(findings, "acct", FIELDS, "v1")
+    assert plan["block"]["fixes"] == [{"id": "placeholder_note", "fix": "blank_values@1",
+                                       "args": {"field": "fields.note", "values": ["XX"]}}]
+    records = [quality_plan.mapped({"note": v}, FIELDS) for v in ["XX", "ok"]]
+    assert quality_plan.measure(plan["block"], records) == {"placeholder_note": 1}
+
+
+def test_new_code_says_what_its_check_would_test():
+    plan = quality_plan.draft(_findings(), "acct", FIELDS, "v1")
+    assert all(i["check_would_test"] for i in plan["new_code"])
+    assert "New code" in quality_plan.report(plan)
+
+
+def test_a_written_file_loads_as_the_rules_loader_reads_it(tmp_path):
+    plan = quality_plan.draft(_findings(), "acct", FIELDS, "acct-quality-v1")
+    path = quality_plan.write(plan, "acct_code", tmp_path / "quality.yaml")
+    assert quality_plan.loads(path, "acct_code") == {"quality_missing_id"}

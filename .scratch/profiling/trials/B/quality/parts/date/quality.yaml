@@ -1,0 +1,224 @@
+version: contoso-date-quality-trial
+quality:
+  date:
+    checks:
+    - id: code_list_year
+      test: in_set@1
+      value: fields.year
+      on_fail: flag
+      args:
+        values:
+        - '2021'
+        - '2022'
+        - '2023'
+        - '2024'
+    - id: code_list_year_quarter_number
+      test: in_set@1
+      value: fields.year_quarter_number
+      on_fail: flag
+      args:
+        values:
+        - '8085'
+        - '8086'
+        - '8087'
+        - '8088'
+        - '8089'
+        - '8090'
+        - '8091'
+        - '8092'
+        - '8093'
+        - '8094'
+        - '8095'
+        - '8096'
+        - '8097'
+        - '8098'
+        - '8099'
+        - '8100'
+    - id: code_list_quarter
+      test: in_set@1
+      value: fields.quarter
+      on_fail: flag
+      args:
+        values:
+        - Q1
+        - Q2
+        - Q3
+        - Q4
+    - id: code_list_year_month_short
+      test: in_set@1
+      value: fields.year_month_short
+      on_fail: flag
+      args:
+        values:
+        - Apr 2021
+        - Apr 2022
+        - Apr 2023
+        - Apr 2024
+        - Aug 2021
+        - Aug 2022
+        - Aug 2023
+        - Aug 2024
+        - Dec 2021
+        - Dec 2022
+        - Dec 2023
+        - Dec 2024
+        - Feb 2021
+        - Feb 2022
+        - Feb 2023
+        - Feb 2024
+        - Jan 2021
+        - Jan 2022
+        - Jan 2023
+        - Jan 2024
+        - Jul 2021
+        - Jul 2022
+        - Jul 2023
+        - Jul 2024
+        - Jun 2021
+        - Jun 2022
+        - Jun 2023
+        - Jun 2024
+        - Mar 2021
+        - Mar 2022
+        - Mar 2023
+        - Mar 2024
+        - May 2021
+        - May 2022
+        - May 2023
+        - May 2024
+        - Nov 2021
+        - Nov 2022
+        - Nov 2023
+        - Nov 2024
+        - Oct 2021
+        - Oct 2022
+        - Oct 2023
+        - Oct 2024
+        - Sep 2021
+        - Sep 2022
+        - Sep 2023
+        - Sep 2024
+    - id: code_list_year_month_number
+      test: in_set@1
+      value: fields.year_month_number
+      on_fail: flag
+      args:
+        values:
+        - '24253'
+        - '24254'
+        - '24255'
+        - '24256'
+        - '24257'
+        - '24258'
+        - '24259'
+        - '24260'
+        - '24261'
+        - '24262'
+        - '24263'
+        - '24264'
+        - '24265'
+        - '24266'
+        - '24267'
+        - '24268'
+        - '24269'
+        - '24270'
+        - '24271'
+        - '24272'
+        - '24273'
+        - '24274'
+        - '24275'
+        - '24276'
+        - '24277'
+        - '24278'
+        - '24279'
+        - '24280'
+        - '24281'
+        - '24282'
+        - '24283'
+        - '24284'
+        - '24285'
+        - '24286'
+        - '24287'
+        - '24288'
+        - '24289'
+        - '24290'
+        - '24291'
+        - '24292'
+        - '24293'
+        - '24294'
+        - '24295'
+        - '24296'
+        - '24297'
+        - '24298'
+        - '24299'
+        - '24300'
+    - id: code_list_month_short
+      test: in_set@1
+      value: fields.month_short
+      on_fail: flag
+      args:
+        values:
+        - Apr
+        - Aug
+        - Dec
+        - Feb
+        - Jan
+        - Jul
+        - Jun
+        - Mar
+        - May
+        - Nov
+        - Oct
+        - Sep
+    - id: code_list_month_number
+      test: in_set@1
+      value: fields.month_number
+      on_fail: flag
+      args:
+        values:
+        - '1'
+        - '10'
+        - '11'
+        - '12'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
+        - '9'
+    - id: code_list_dayof_week_short
+      test: in_set@1
+      value: fields.dayof_week_short
+      on_fail: flag
+      args:
+        values:
+        - Fri
+        - Mon
+        - Sat
+        - Sun
+        - Thu
+        - Tue
+        - Wed
+    - id: code_list_dayof_week_number
+      test: in_set@1
+      value: fields.dayof_week_number
+      on_fail: flag
+      args:
+        values:
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+    - id: code_list_working_day
+      test: in_set@1
+      value: fields.working_day
+      on_fail: flag
+      args:
+        values:
+        - '0'
+        - '1'
