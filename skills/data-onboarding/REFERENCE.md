@@ -142,13 +142,39 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`; for a kind with no field list in code, its consumer spec, e.g. `docs/specs/person/consumer.md`). |
 | `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. Only `address` takes components; every other field is one path. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
-| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a GLEIF relationship record starts at its child's Level 1 record), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. |
+| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a GLEIF relationship record starts at its child's Level 1 record), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. The `type` must be declared in `rules/merge/relationships.yaml` (below). |
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
 | `provenance` | `name: path` kept with each record. Only values that stay the same across captures (the source's own record); capture hashes, run ids and sync times stay beside the record. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
 | `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. A value may also be a whole address, written as `fields.address` is (`components:`), for example GLEIF's headquarters address beside the legal address MDM shows. Data quality fixes and checks can read it (`matching.<name>`). |
 | `retain_deferred` | `true`: keep a record MDM cannot take yet, with its reason. |
 | `native_member` | For a source parsed by native code, the member this contract maps. |
+
+## Relationship types
+
+`rules/merge/relationships.yaml` declares every relationship type MDM masters
+(operator, 2026-10-06: "Types as data"). It is part of the Mastering Policy, so
+a change to it is a new policy version, approved by its digest. A new type
+needs no code change:
+
+```yaml
+types:
+  <TYPE_NAME>:
+    from: [<kind>, ...]          # the kinds at the start (the child, for a parent link)
+    to: [<kind>, ...]            # the kinds at the end
+    from_profile: <role>         # optional: a role profile the start must hold over the period
+    to_profile: <role>           # optional: the same for the end
+    capacities: [<name>, ...]    # optional: a person's link in a capacity, dated by sightings
+    hierarchy: true              # optional: the links form parent chains
+    cycles: invalid | review     # a hierarchy: a cycle's links are held back, or kept and reviewed
+    one_parent: true             # optional, a hierarchy: one parent at a time per scope
+    ultimate_parent: accounting-chain-v1   # optional, a hierarchy: derive each record's ultimate parent
+```
+
+`check_policy` refuses a type it could not run: an unknown kind or key, a
+hierarchy that does not say what its cycles do, an unknown ultimate-parent
+algorithm. Agents read every mastered link through `mdm.relationship_context`,
+and a parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
 
 ## Merge rules
 
