@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,11 @@ import yaml
 def write(findings: dict, out: Path) -> tuple[Path, Path]:
     out.mkdir(parents=True, exist_ok=True)
     data, report = out / "findings.yaml", out / "REPORT.md"
+    findings = dict(findings)
+    marked = findings.pop("marked_rows", [])
+    with (out / "invalid_rows.jsonl").open("w", encoding="utf-8") as handle:
+        for row in marked:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     data.write_text(yaml.safe_dump(findings, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
     report.write_text(markdown(findings), encoding="utf-8")
     return data, report

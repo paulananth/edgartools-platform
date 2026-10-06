@@ -54,3 +54,12 @@ def test_link_part_gives_one_hierarchy_per_role_with_one_parent(con):
     found = hierarchy.by_link_part(con, "l", "child", "parent", "kind")
     assert [h["role"] for h in found] == ["owns"]  # "knows" has two parents for b: a network
     assert found[0]["depth"] == 3 and found[0]["evidence_kind"] == "parent_column"
+
+
+def test_a_node_that_names_itself_as_parent_is_marked_apart_from_a_cycle(con):
+    con.execute("CREATE TABLE selfish AS SELECT * FROM (VALUES ('a', 'b', 'r'), ('b', 'a', 'r'), ('c', 'c', 'r'), "
+                "('d', 'a', 'r')) t(child, parent, kind)")
+    h, = hierarchy.by_link_part(con, "selfish", "child", "parent", "kind", ["child", "kind"])
+    reasons = sorted((m["value"], m["reason"]) for m in h["marked"])
+    assert reasons == [("a", "on a cycle of parents"), ("b", "on a cycle of parents"), ("c", "names itself as its parent")]
+    assert h["cycles"] == 3 and h["invalid_rows"] == 3 and all(m["needs_steward"] for m in h["marked"])

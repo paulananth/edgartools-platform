@@ -15,7 +15,7 @@ from pathlib import Path
 
 import duckdb
 
-from . import classify, codes, hierarchy, identifiers, inputs, keys, names, profile, sensitivity, timing
+from . import classify, codes, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
@@ -106,6 +106,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     say(f"found {len(hierarchies)} hierarchies")
     relationships = _relationships(found_links + child, by_name)
     _mask_samples(hierarchies, by_name)
+    marked = _mark(hierarchies, by_name)
     _propose_kinds(findings_parts)
     for f in findings_parts:
         f["store_suggestion"] = classify.store(f["class"])
@@ -125,6 +126,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         "relationships": relationships,
         "hierarchies": hierarchies,
         "questions": _questions(findings_parts),
+        "marked_rows": marked,  # written beside findings.yaml as invalid_rows.jsonl, never inside it
         "approval": {"status": "draft", "approved_by": None, "approved_words": None, "approved_at": None},
     }
 
@@ -204,7 +206,10 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         "columns": column_findings,
         "code_lists": code_list,
         "time": times,
-        "quality": _quality(p, out, record_key),
+        "quality": quality.find(quality.Facts(
+            con, p, [c for c in columns if not c["structure"]], {f["name"]: f["role"] for f in column_findings},
+            personal, record_key["columns"], out, [i for i in identifier_findings if i], code_list))
+        + quality.no_natural_key(record_key),
     }
 
 
@@ -259,21 +264,6 @@ def _identifier(con, p, c, record_key) -> dict | None:
             "fill": c["fill"], "unique": c["unique"], "local_counter": dense, "proposal": proposal, "why": why}
 
 
-def _quality(p, out, record_key) -> list[dict]:
-    found = []
-    for link in out:
-        if link["inclusion"] < 1.0:
-            found.append({"check": "link_not_found", "column": link["from"]["columns"][0],
-                          "share": round(1 - link["inclusion"], 6),
-                          "why": f"values of {', '.join(link['from']['columns'])} not found in "
-                                 f"{link['to']['part']}.{', '.join(link['to']['columns'])}",
-                          "proposal": "flag", "fix": None, "fix_evidence": None})
-    if not record_key["found"]:
-        found.append({"check": "no_natural_key", "column": None, "why": "no column or combination is unique",
-                      "proposal": "flag", "fix": record_key["rule"], "fix_evidence": None})
-    return found
-
-
 def _inherit(found: list[dict], parts) -> None:
     """A list inside a record that its own tests do not class (no key of its own, or "unknown")
     is an attribute list of its parent: same class."""
@@ -299,13 +289,14 @@ def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
         key_side = set(key) | {x["label_column"] for x in f["code_lists"] if [x["column"]] == key}
         code_columns = [c for c in profiles[p] if c["name"] in listed and (p, c["name"]) not in parent_columns
                         and (f["class"] == "reference" or c["name"] not in key_side)]
-        for h in hierarchy.by_dependency(con, p, code_columns):
+        for h in hierarchy.by_dependency(con, p, code_columns, key):
             h["type"] = "reference"
             found.append(h)
     for link in links:
         a, b = link["from"], link["to"]
         if a["part"] == b["part"] and len(a["columns"]) == 1:
-            h = hierarchy.by_parent_column(con, a["part"], a["columns"][0], b["columns"][0])
+            h = hierarchy.by_parent_column(con, a["part"], a["columns"][0], b["columns"][0],
+                                           parts[a["part"]]["record_key"]["columns"])
             h["type"] = "reference" if parts[a["part"]]["class"] == "reference" else "master_data"
             found.append(h)
     for p, f in parts.items():
@@ -314,7 +305,7 @@ def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
         if f["class"] == "relationship" and len(ends) == 2 and len(targets) == 1:
             role = _role_column(f)
             child, parent = _child_first(ends, f["record_key"]["columns"])
-            for h in hierarchy.by_link_part(con, p, child, parent, role):
+            for h in hierarchy.by_link_part(con, p, child, parent, role, f["record_key"]["columns"]):
                 h["type"] = "master_data"
                 found.append(h)
     return found
@@ -385,6 +376,21 @@ def _mask_samples(hierarchies: list[dict], parts: dict) -> None:
         if h.get("role") and tags.get(role_column, "none") != "none":
             h["role"] = sensitivity.mask(h["role"])
             h["hierarchy"] = f"{h['part']}: per role (masked)"
+
+
+def _mark(hierarchies: list[dict], parts: dict) -> list[dict]:
+    """Each hierarchy's invalid rows, masked where a column is personal; its part gets one quality item."""
+    marked = []
+    for h in hierarchies:
+        rows = h.pop("marked")
+        personal = {c["name"] for c in parts[h["part"]]["columns"] if c["sensitivity"] != "none"}
+        for m in rows:
+            m["key"] = {k: sensitivity.mask(v) if k in personal else v for k, v in m["key"].items()}
+            if m["column"] in personal:
+                m["value"], m["fix"] = sensitivity.mask(m["value"]), sensitivity.mask(m["fix"])
+        parts[h["part"]]["quality"] += quality.hierarchy_items(h, rows)
+        marked += rows
+    return marked
 
 
 def _propose_kinds(parts: list[dict]) -> None:

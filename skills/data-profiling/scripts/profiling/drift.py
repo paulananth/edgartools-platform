@@ -52,6 +52,12 @@ def compare(approved: dict, new: dict) -> list[dict]:
                 skill = "rdm" if cur["class"] == "reference" else "data-quality"
                 add("codes_changed", name, f"{before['distinct']} → {code['distinct']} distinct codes", skill,
                     code["column"])
+        approved_codes = _guarded(old)
+        for column, values in sorted(_guarded(cur).items()):
+            added = sorted(set(values) - set(approved_codes.get(column, values)))
+            if added:
+                add("codes_new", name, f"{len(added)} codes not in the approved list: {', '.join(added[:10])}",
+                    "rdm" if cur["class"] == "reference" else "data-quality", column)
     old_links = {_link(r): r for r in approved["relationships"]}
     new_links = {_link(r): r for r in new["relationships"]}
     for key in sorted(old_links.keys() - new_links.keys()):
@@ -68,6 +74,11 @@ def compare(approved: dict, new: dict) -> list[dict]:
                                                 f"{before['depth']} → {h['depth']}", "rdm" if h["type"] == "reference"
                 else "refining-rules")
     return items
+
+
+def _guarded(part: dict) -> dict[str, list]:
+    """The values of each code list the profile guards (its code_list quality items)."""
+    return {q["column"]: q["args"]["values"] for q in part.get("quality") or [] if q["check"] == "code_list"}
 
 
 def _link(r: dict) -> tuple:

@@ -115,7 +115,7 @@ def test_compare_refuses_findings_that_are_not_approved(result, tmp_path):
 
 def test_no_working_copy_outlives_the_run(result):
     assert not (result["out"] / ".work").exists()
-    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml"]
+    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml", "invalid_rows.jsonl"]
 
 
 def test_inputs_carry_rows_and_sha256_and_silver_integers_are_wide(result):
