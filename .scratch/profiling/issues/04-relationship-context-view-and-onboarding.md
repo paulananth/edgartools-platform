@@ -21,4 +21,6 @@ Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../pl
 - [x] Three-axis review applied: empty types refused (not read as the old table); export refuses a stale relationships.yaml; the chain stays within one scope, takes a time, honours a zero hop limit and finds each step through the link-start index; entity_name comment; spec: command --hops stays at most 3, as-at and walking to children are ticket 05's; real-data evidence now compares entities exactly (compare.py) 2026-10-06 08:16 ET
 - [ ] ~~Roles on real data~~ shown by the PG16 person-link test; GLEIF links carry no roles; a person-link trial comes with ticket 05 or 07 (added 2026-10-06 08:16 ET)
 - [ ] Policy gate (correcting an earlier note): an image built after this merge carries policy 1e38238f…03da4; MDM runs from it refuse until the operator approves that digest. Order: merge, approve, then the next MDM run (added 2026-10-06 08:16 ET)
-- [ ] Review, PR, CI, merge on word
+- [x] Operator approved the policy carrying the relationship types: "Policy approved" (2026-10-06 08:18 ET), for digest 1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4 as explained (the relationship rules moved from code, unchanged). 2026-10-06 08:18 ET
+- [ ] Record that approval in the Rules Database after merge (rules save, record-proof, pending, approve --merge with the operator's exact words), then the next MDM run (added 2026-10-06 08:18 ET)
+- [ ] Review, PR, CI, merge on word (PR #836 opened)
