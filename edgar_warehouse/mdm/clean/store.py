@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
@@ -41,7 +42,12 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
 # The schema's first file, then each later file once, in order, by checksum.
 # A later change to the schema is a new file added to MIGRATIONS.
 BASELINE = "001_mdm.sql"
-MIGRATIONS: tuple[str, ...] = ("002_link_start.sql", "003_lookup_indexes.sql", "004_is_insider.sql")
+MIGRATIONS: tuple[str, ...] = (
+    "002_link_start.sql",
+    "003_lookup_indexes.sql",
+    "004_is_insider.sql",
+    "005_cross_reference.sql",
+)
 
 # The functions the application login may run. It has no table rights beyond
 # SELECT: every change to master data goes through these, and the closure reads
@@ -56,6 +62,7 @@ RUNTIME_FUNCTIONS = (
     "finish_run(uuid,jsonb,boolean)",
     "match_proposal_snapshot(jsonb)",
     "reading_link_subjects(jsonb)",
+    "cross_reference_lookup(text,text)",
     "record_match_proposal(text,uuid)",
     "supersede_match_proposal(text,uuid)",
 )
@@ -212,6 +219,28 @@ def register_policy(conn: Connection, body: dict) -> str:
     return key
 
 
+def _check_cross_references(adapter: dict) -> None:
+    """Lookup-only ids (profiling ticket 03) must never be able to join records:
+    a namespace that is also one of the contract's identifiers, or one a binding
+    rule matches on, is refused, so the operator's "lookup only" holds by
+    construction."""
+    from .activation import NAMESPACES
+
+    names = adapter.get("cross_references", {})
+    formats = adapter.get("cross_reference_formats", {})
+    if not isinstance(names, dict) or not isinstance(formats, dict):
+        raise ValueError("cross_references and cross_reference_formats map a namespace to a path or a format")
+    for namespace in names:
+        if not isinstance(namespace, str) or not re.fullmatch(r"[a-z][a-z0-9_]*", namespace):
+            raise ValueError(f"A cross-reference namespace is lower-case words: {namespace!r}")
+        if namespace in adapter.get("identifiers", {}):
+            raise ValueError(f"Cross-reference {namespace} is also an identifier of this contract")
+        if namespace in NAMESPACES:
+            raise ValueError(f"Cross-reference {namespace} names a namespace that binds records; use its own name")
+    if set(formats) - set(names):
+        raise ValueError(f"A format for no cross-reference: {sorted(set(formats) - set(names))}")
+
+
 def register_dataset(
     conn: Connection,
     code: str,
@@ -241,9 +270,11 @@ def register_dataset(
         raise ValueError("probable_kind_values must map source values to kinds")
     from .adapters import FORMATS
 
+    _check_cross_references(adapter)
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),
+        *adapter.get("cross_reference_formats", {}).values(),
     ]
     if any(f is not None and f not in FORMATS for f in formats):
         raise ValueError("Unknown format in Dataset Contract")

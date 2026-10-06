@@ -96,7 +96,8 @@ require it to equal `adapter.version`. So:
   approves it. A change to a record key, the publication key or the
   identifiers needs a new source code instead: the engine refuses it within
   one source code (`PROTECTED_ADAPTER_PARTS` in
-  `edgar_warehouse/mdm/clean/store.py`).
+  `edgar_warehouse/mdm/clean/store.py`). Cross-references never decide which
+  record is which, so adding one is a new version, not a new source code.
 
 ## Optional envelope keys
 
@@ -136,6 +137,8 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `classification` | Instead of a kind: the Mastering Policy rule that decides it: `kind`, `rule_id`, `version`. |
 | `identifiers` | `namespace: path`, e.g. `lei: firm.lei`. |
 | `identifier_formats` | `namespace: format`, from `FORMATS`. |
+| `cross_references` | `namespace: path`: an id kept so any document can be looked up by it, **never used to join records** (operator, 2026-09-26: "lookup only"). Matching and binding read `identifiers` only. Name it for what it is (`tax_id`, or `<source>_<id>` for a source's own copy of another register's id); registration refuses a namespace that is also one of `identifiers`, or one a binding rule matches on (`cik`, `lei`). An empty value is left out. An id of another kind of entity (a security's ticker on a company's record) goes on that kind's contract, not here. Look one up with `mdm.cross_reference_lookup(namespace, value)`; `mdm.cross_reference` lists them all. |
+| `cross_reference_formats` | `namespace: format`, from `FORMATS`, for a cross-reference. |
 | `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`; for a kind with no field list in code, its consumer spec, e.g. `docs/specs/person/consumer.md`). |
 | `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. Only `address` takes components; every other field is one path. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
