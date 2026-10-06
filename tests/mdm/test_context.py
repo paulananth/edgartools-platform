@@ -87,3 +87,10 @@ def test_a_missing_login_says_what_to_set(monkeypatch, capsys):
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     assert main(["context", "company", "x"]) == 2
     assert "MDM_DATABASE_URL" in json.loads(capsys.readouterr().out)["error"]
+
+
+def test_an_item_too_big_for_a_page_is_an_error_not_a_loop():
+    big = answer_with([{"text": "z" * 900} for _ in range(3)])
+    big.update({f"note_{i}": "n" * 999 for i in range(7)})  # under the clip, together near 7 KB
+    with pytest.raises(context.ContextError):
+        context.fit(big, "items", 0, "cmd")

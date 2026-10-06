@@ -173,8 +173,10 @@ def fit(answer: dict, list_key: str, offset: int, command: str) -> dict:
         else:
             high = middle - 1
     result = page(low)
-    if _size(result) > LIMIT_BYTES:
-        raise ContextError("The answer does not fit in 8 KB even with no list items.", f"{command} --detail brief")
+    if _size(result) > LIMIT_BYTES or (low == 0 and rest):
+        # A page with no item would point at itself: say so rather than loop.
+        raise ContextError("The answer does not fit in 8 KB.",
+                           "Query the view instead, e.g. SELECT * FROM mdm.entity_context WHERE entity_id = '<id>'.")
     return result
 
 
