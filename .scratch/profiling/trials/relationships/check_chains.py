@@ -77,11 +77,12 @@ def test_chain_check(database):
             "WHERE t = 'CALCULATED_ULTIMATE_PARENT'")).all())
         reviews = collections.Counter(conn.execute(text(
             "SELECT body->>'reason' FROM mdm.current_record WHERE object_type='review'")).scalars())
-        outcome, examples = collections.Counter(), collections.defaultdict(list)
+        outcome, examples, per_child = collections.Counter(), collections.defaultdict(list), {}
         for child in chosen["sample"]:
             stated = chosen["stated_ultimate"][child]
             if child not in entity or stated not in entity:
                 outcome["an end has no Level 1 record in MDM"] += 1
+                per_child[child] = "not in MDM"
                 continue
             walked = conn.execute(text("SELECT to_entity_id, cycle FROM mdm.relationship_chain(:e, :t, 50)"),
                                   {"e": entity[child], "t": DIRECT}).all()
@@ -95,6 +96,7 @@ def test_chain_check(database):
             else:
                 outcome["chain ends elsewhere"] += 1
                 key = "elsewhere"
+            per_child[child] = key
             if len(examples[key]) < 5:
                 examples[key].append({"child": child, "stated_ultimate": stated, "hops": len(walked),
                                       "engine_calculated_equals_chain_end": calculated.get(entity[child]) == end})
@@ -103,7 +105,7 @@ def test_chain_check(database):
                     calculated.get(entity[child]) == entity.get(chosen["stated_ultimate"][child]))
     result = {"sample": len(chosen["sample"]), "level1_records": len(level1), "level1_refused": level1_refused,
               "relationship_records": len(links), "relationships_refused": links_refused,
-              "outcome": outcome, "engine_calculated_equals_stated": agree, "reviews": reviews, "examples": examples}
+              "outcome": outcome, "per_child": per_child, "engine_calculated_equals_stated": agree, "reviews": reviews, "examples": examples}
     out.mkdir(parents=True, exist_ok=True)
     (out / "chain-check.json").write_text(json.dumps(result, indent=1, default=dict))
-    print(json.dumps(result, indent=1, default=dict))
+    print(json.dumps({k: v for k, v in result.items() if k not in {"per_child", "examples"}}, indent=1, default=dict))
