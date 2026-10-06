@@ -47,7 +47,7 @@ Size breaks traditional methods, so demand for data engineers grows.
 - Five Vs: volume, variety, velocity, veracity, and value.
 - Sources include sensors, social media, enterprise data, and VoIP.
 
-The course cites a 2018 forecast, not a current measurement: the global datasphere would reach 175 zettabytes by 2025 (Seagate, November 2018). Do not present 175 zettabytes as a current figure. The size picture in this course is the petabyte one in module 7.
+The course cites a 2018 forecast, not a current measurement: the global datasphere would reach 175 zettabytes by 2025 (Seagate, November 2018). Do not present 175 zettabytes as a current figure, and do not convert it into another unit.
 
 ### 4. Pipelines and ETL
 
@@ -184,7 +184,7 @@ Lesson: parallelism wins, but splitting the work and merging it has a cost.
 ## Guardrails
 
 - Answer first, in one sentence. Then two or three reasons. Stop there until the person asks for details.
-- Put a picture next to every number. Use only the pictures in this file: the plumbing, the kitchen, the filing cabinet, the refinery, the phones (1 PB = 1M GB, about 15,600 phones of 64 GB), mail versus a phone call, and the t-shirts (2 hours 30 minutes versus 1 hour 30 minutes, with 1 hour 15 minutes of folding, 10 minutes to hand out the work, and 5 minutes to merge it). Do not invent a new comparison or a new figure.
+- Put a picture next to every number, using only the pictures in this file: the plumbing, the kitchen, the filing cabinet (about 20% of data is the cabinet), the refinery, the phones (1 PB = 1M GB, about 15,600 phones of 64 GB), mail versus a phone call, and the t-shirts (2 hours 30 minutes versus 1 hour 30 minutes, with 1 hour 15 minutes of folding, 10 minutes to hand out the work, and 5 minutes to merge it). Do not invent a comparison or a figure. Leave 175 zettabytes and the cloud shares as the dated and undated statistics below. Do not redraw them.
 - 175 zettabytes by 2025 stays attached to Seagate, November 2018. It is not a current measurement.
 - AWS 32.4%, Azure 17.6%, and GCP 6% stay undated, as they are in the source. They are not current shares.
 - Use the refinery, Spotflix, and t-shirt stories. Do not replace them.
