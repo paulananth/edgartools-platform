@@ -230,6 +230,10 @@ blocks; do not ask whether it does.
 
 **Research first.** If a document named here is missing, go on and log it.
 - `CONTEXT.md`: the words MDM uses.
+- What MDM and RDM already hold: `edgar-warehouse context <kind|relationship|code set> <key|--search words>`
+  (read only, at most 8 KB; [REFERENCE.md](REFERENCE.md), "Reading MDM's context").
+  Check a kind's existing records, a relationship type's links, or a code set's
+  codes before you map onto them.
 - `docs/specs/clean-mdm/`: start with `source-evidence.md` and
   `company-policy.md`.
 - MDM kinds: `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`.

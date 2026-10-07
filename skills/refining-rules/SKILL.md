@@ -37,6 +37,9 @@ both in the log.
 
 - **The contract language:** [REFERENCE.md](../data-onboarding/REFERENCE.md).
 - **Approval and switch-on:** [APPROVE.md](../data-onboarding/APPROVE.md).
+- **What MDM and RDM hold now:** `edgar-warehouse context <kind|relationship|code set>
+  <key|--search words>` ([REFERENCE.md](../data-onboarding/REFERENCE.md), "Reading MDM's
+  context"). Look up the records, links or codes a change moves, before and after.
 - **How to run commands, the environment variables, and the dry run**
   (`test` mode): see data-onboarding's SKILL.md, "How to run commands" and
   "test".
