@@ -36,3 +36,17 @@ def test_header_reference_four_context_three_actual_three_refuses(tmp_path, memb
         source_read.execute(task, store)
     assert not (tmp_path / 'reading.json').exists()
     assert not (tmp_path / 'reading.json.parts').exists()
+
+
+@pytest.mark.parametrize('member', ('relationships', 'reporting-exceptions'))
+def test_bundled_xml_contract_refuses_inconsistent_publication_count(tmp_path, member):
+    # Exercise the shipped template directly, without adding an assertion in this test.
+    rules, store = configured(member, 'xml'), Artifacts()
+    header = rules['read']['stream']['header_read']
+    header['references']['record_counts'] = {'4': {'valid': True}}
+    body = archive(rules, member, 'xml', header_changes={'RecordCount': '4'})
+    task = bound_task(tmp_path, store, body, rules, count=3)
+    with pytest.raises(SourceRejected, match='input-bound publication count'):
+        source_read.execute(task, store)
+    assert not (tmp_path / 'reading.json').exists()
+    assert not (tmp_path / 'reading.json.parts').exists()

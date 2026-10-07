@@ -14,7 +14,7 @@ User goal: one installable skill bundle containing the Rules creator and orchest
 
 ## Audit
 
-PR #805 merged: installed bundle, Rules creator and command/link drift checks. PR #806: verified worker parse → prepare → merge and independent publication. The source-specific read blocks and full-corpus proof remain absent. G4 has only callback rejection/failure tests before this follow-up.
+PR #805 merged: installed bundle, Rules creator and command/link drift checks. PR #806: verified worker parse → prepare → merge and independent publication. This paragraph described the initial audit. Current Company/Person/GLEIF read blocks exist; their complete runtime retirement and full installed population proof remain unfinished. Current continuation and corpus evidence are tracked in `.planning/workstreams/gleif-member-contracts/TICKET.md`. PRs #806/#807 are merged with all five suites and aggregate gate passed (live GitHub reverified 2026-10-06 21:40 ET).
 
 ## GoF review
 

@@ -36,7 +36,7 @@ RUN python -m pip install --upgrade --no-cache-dir pip uv
 
 COPY pyproject.toml uv.lock README.md /app/
 
-RUN uv sync --frozen --no-dev --extra s3 --extra mdm-runtime --no-install-project \
+RUN uv sync --frozen --no-dev --extra s3 --extra mdm-runtime --no-install-project --no-install-package source-contract \
     && uv cache clean
 
 COPY --from=engine /wheels /wheels

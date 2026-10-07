@@ -10,10 +10,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import IO, BinaryIO
 
-import ijson
 from lxml import etree
 
 from edgar_warehouse.rules import files as rules_files
+from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
 from .adapters import (
     UnsupportedRecord,
@@ -100,47 +100,6 @@ class _BoundedReader:
         if self.total > self.maximum or self.since_record > self.record_limit + 65536:
             raise Conflict("GLEIF expanded file or record exceeds bound")
         return raw
-
-
-def _json_records(stream: _BoundedReader, wrapper: str):
-    events = iter(ijson.basic_parse(stream, use_float=True))
-
-    def expect(event, value=None):
-        if next(events) != (event, value):
-            raise Conflict("Unexpected GLEIF JSON structure")
-
-    def value(first, depth=0):
-        if depth > 64:
-            raise Conflict("GLEIF nesting exceeds bound")
-        event, item = first
-        if event == "start_map":
-            result = {}
-            while (entry := next(events))[0] != "end_map":
-                if entry[0] != "map_key" or entry[1] in result:
-                    raise Conflict("Duplicate or invalid GLEIF JSON key")
-                result[entry[1]] = value(next(events), depth + 1)
-            return result
-        if event == "start_array":
-            items = []
-            while (entry := next(events))[0] != "end_array":
-                items.append(value(entry, depth + 1))
-            return items
-        if event not in {"string", "number", "boolean", "null"}:
-            raise Conflict("Invalid GLEIF JSON value")
-        return item
-
-    expect("start_map")
-    expect("map_key", wrapper)
-    expect("start_array")
-    while (entry := next(events))[0] != "end_array":
-        if entry[0] != "start_map":
-            raise Conflict("Native GLEIF record must be an object")
-        record = value(entry)
-        stream.since_record = 0
-        yield record
-    expect("end_map")
-    if next(events, None) is not None:
-        raise Conflict("Trailing GLEIF JSON data")
 
 
 def _xml_value(node, namespace):
@@ -256,6 +215,7 @@ def inspect_archive(
     validate_metadata(member, metadata)
     sha, size, count = hashlib.sha256(), 0, 0
     content = hashlib.sha256()
+    consumer_error = None
     with tempfile.TemporaryFile() as snapshot:
         while raw := stream.read(1024**2):
             size += len(raw)
@@ -274,13 +234,8 @@ def inspect_archive(
                 if files[0].file_size > max_expanded:
                     raise Conflict("GLEIF expanded size exceeds bound")
                 with archive.open(files[0]) as source:
-                    bounded = _BoundedReader(source, max_expanded, max_record)
-                    records = (
-                        _json_records(bounded, FORMATS[member][1])
-                        if metadata["format"] == "json.zip"
-                        else _xml_records(bounded, member, metadata)
-                    )
-                    for row in records:
+                    def consume(row, ordinal):
+                        nonlocal count, consumer_error
                         encoded = canonical(row).encode()
                         if len(encoded) > max_record:
                             raise Conflict("GLEIF record exceeds bound")
@@ -288,21 +243,71 @@ def inspect_archive(
                         if count >= metadata["record_count"]:
                             raise Conflict("GLEIF record count mismatch")
                         if on_record:
-                            on_record(row, count)
+                            try:
+                                on_record(row, ordinal)
+                            except BaseException as error:
+                                consumer_error = error
+                                raise
                         count += 1
-                    if (
-                        count != metadata["record_count"]
-                        or bounded.total != files[0].file_size
-                    ):
+
+                    if metadata["format"] == "json.zip":
+                        # Reading every record is required for source attestation
+                        # and the Name Census. This grants no mastering scope.
+                        contract = rules_files.load(
+                            rules_files.ROOT / "sources" / "gleif"
+                            / f"{member.replace('_', '-')}-json.yaml"
+                        )
+                        read = contract["read"]
+                        framing = read.pop("stream")
+                        table = member
+                        read["tables"][table].pop("select")
+                        read["limits"]["max_bytes"] = max(1, max_record)
+                        engine = SourceEngine(contract)
+
+                        def consume_reading(reading, ordinal):
+                            rows = reading.tables[table]
+                            if reading.deferred or len(rows) != 1:
+                                raise Conflict("GLEIF source attestation must read every record")
+                            row = rows[0]
+                            if row["source_index"] != ordinal + 1:
+                                raise Conflict("GLEIF source ordinal mismatch")
+                            consume(row["record"], ordinal)
+
+                        try:
+                            receipt = engine.stream_json_array(
+                                source, wrapper=framing["wrapper"], on_reading=consume_reading,
+                                max_bytes=max_expanded,
+                                max_record=max(1, max_record),
+                                max_records=min(metadata["record_count"], framing["max_records"]),
+                                max_depth=framing["max_depth"],
+                                min_integer=framing["min_integer"],
+                                record_encoding=framing["record_encoding"],
+                                context={"publication_count": metadata["record_count"]},
+                                ordinal_context=framing["ordinal_context"],
+                            )
+                        except SourceRejected:
+                            if consumer_error is not None:
+                                raise consumer_error
+                            raise
+                        expanded = receipt["expanded_bytes"]
+                    else:
+                        bounded = _BoundedReader(source, max_expanded, max_record)
+                        for ordinal, row in enumerate(_xml_records(bounded, member, metadata)):
+                            consume(row, ordinal)
+                        expanded = bounded.total
+                    if count != metadata["record_count"] or expanded != files[0].file_size:
                         raise Conflict("GLEIF record count or expanded length mismatch")
+
         except (
             zipfile.BadZipFile,
-            ijson.JSONError,
+            SourceRejected,
             etree.XMLSyntaxError,
             StopIteration,
             ValueError,
         ) as exc:
-            raise Conflict(f"Invalid GLEIF archive: {exc}") from exc
+            if isinstance(exc, SourceRejected) and exc is consumer_error:
+                raise
+            raise Conflict(f"Invalid GLEIF archive or bound: {exc}") from exc
     return {
         "adapter_version": VERSION,
         "raw_evidence_hash": sha.hexdigest(),
@@ -315,7 +320,7 @@ def inspect_archive(
             f"{VERSION}\n{member}\n{content.hexdigest()}".encode()
         ).hexdigest(),
         "compressed_bytes": size,
-        "expanded_bytes": bounded.total,
+        "expanded_bytes": expanded,
     }
 
 
