@@ -98,9 +98,45 @@ def test_the_calculated_id_does_not_change_with_the_run_date():
             == _of(later, ULTIMATE, True)[("A", "B")]["relationship_id"])
 
 
-def test_a_period_after_the_run_date_is_not_calculated():
-    edges, _ = _project([("A", "B", PARENT, {"valid_from": "2027-01-01T00:00:00+00:00"})])
-    assert _of(edges, ULTIMATE, derived=True) == {}
+def test_a_stated_date_to_come_is_calculated_too():
+    # A's parent is B until a stated end in 2027, then C: an --as-of after it answers C.
+    later = "2027-01-01T00:00:00+00:00"
+    edges, _ = _project([
+        ("A", "B", PARENT, {"valid_from": Y2020, "valid_to": later}),
+        ("A", "C", PARENT, {"valid_from": later}),
+    ])
+    calculated = _of(edges, ULTIMATE, derived=True)
+    assert [(p["valid_from"], p["valid_to"]) for p in calculated[("A", "C")]["periods"]] == [(later, None)]
+
+
+def test_a_link_seen_in_many_publications_starts_when_first_seen():
+    names = ["A", "B"]
+    claims = {f"r{i}": {"assertion_id": f"a{i}", "source_meta": {"effective_at": seen}, "relationships": [
+        {"type": PARENT, "source_subject": "A", "target_subject": "B", "scope": ""}]}
+        for i, seen in enumerate([Y2024, Y2020, Y2022])}
+    state = SimpleNamespace(bindings={n: n for n in names}, canonical={n: n for n in names})
+    entities = {n: {"kind": "company", "status": "accepted", "profiles": []} for n in names}
+    edges, _ = relationships.project(claims, state, entities, AS_OF, types=TYPES)
+    assert _of(edges, PARENT)[("A", "B")]["periods"] == [{"valid_from": Y2020, "valid_from_basis": "observed"}]
+
+
+def test_a_disputed_link_higher_up_cuts_the_period():
+    # A -> B always; B has two parents from 2022 (disputed): A's ultimate parent
+    # is B until 2022, then unknown.
+    edges, reviews = _project([
+        ("A", "B", PARENT, {"valid_from": Y2020}),
+        ("B", "C", PARENT, {"valid_from": Y2022}),
+        ("B", "D", PARENT, {"valid_from": Y2022}),
+    ])
+    calculated = _of(edges, ULTIMATE, derived=True)
+    assert [(p["valid_from"], p["valid_to"]) for p in calculated[("A", "B")]["periods"]] == [(Y2020, Y2022)]
+    assert ("A", "C") not in calculated and ("A", "D") not in calculated
+    assert "conflicting_accounting_parents" in [r["reason"] for r in reviews]
+
+
+def test_a_date_basis_the_rules_do_not_know_goes_to_a_steward():
+    edges, reviews = _project([("A", "B", PARENT, {"valid_from": Y2020, "valid_from_basis": "guessed"})])
+    assert edges == [] and [r["reason"] for r in reviews] == ["unknown_date_basis"]
 
 
 def test_the_v1_algorithm_is_unchanged():

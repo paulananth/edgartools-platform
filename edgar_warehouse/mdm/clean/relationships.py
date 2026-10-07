@@ -254,6 +254,9 @@ def project(
                 period = {k: v for k, v in reported.items() if k not in NOT_PERIOD}
                 # A date the source gives is stated; with none, the link starts
                 # when it was first seen (profiling ticket 04b, part B).
+                if {period.get("valid_from_basis"), period.get("valid_to_basis")} - BASES - {None}:
+                    review("unknown_date_basis", **context)
+                    continue
                 if period.get("valid_from"):
                     period.setdefault("valid_from_basis", "stated")
                 elif seen:
@@ -300,6 +303,16 @@ def project(
                     {"on": sighting, "basis": reported.get("basis", "observed"),
                      "held": reported.get("held", True), "title": reported.get("title"),
                      "assertion_id": record["assertion_id"], "subject": subject})
+            elif period.get("valid_from_basis") == "observed":
+                # A start first seen is the earliest sighting, not one period
+                # per publication that repeats the link.
+                rest = {k: v for k, v in period.items() if k != "valid_from"}
+                same = next((p for p in value["periods"] if p.get("valid_from_basis") == "observed"
+                             and {k: v for k, v in p.items() if k != "valid_from"} == rest), None)
+                if same is None:
+                    value["periods"].append(period)
+                elif instant(period["valid_from"]) < instant(same["valid_from"]):
+                    same["valid_from"] = period["valid_from"]
             elif period not in value["periods"]:
                 value["periods"].append(period)
             # Absence never closes a link (design 2): readers compare when it
@@ -399,8 +412,8 @@ def _end_at_succession(edges: dict, types: dict, review) -> None:
     """A succession (a type with `ends_parent_links`, e.g. a successor entity)
     ends the ceased entity's parent links on its date, and its children's
     links unless a source stated them again after that date. The end cites
-    the succession. A parent period that starts on or after it goes to a
-    steward (operator, 2026-10-07: "It should also consider corporate actions")."""
+    the succession. A parent period that starts on or after it is left out
+    and goes to a steward (operator, 2026-10-07: "It should also consider corporate actions")."""
     ceased = {}
     for key, e in sorted(edges.items()):
         if not (types.get(e["type"]) or {}).get("ends_parent_links") or not e["periods"]:
@@ -445,7 +458,8 @@ def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> l
     for (kind, scope), group in grouped.items():
         algorithm = (types.get(kind) or {}).get("ultimate_parent")
         if algorithm == "accounting-chain-v2":
-            result += _ultimate_parent_history(types[kind], scope, group, invalid, now)
+            result += _ultimate_parent_history(types[kind], scope, group, invalid)
+            continue
         if algorithm != "accounting-chain-v1":
             continue
         eligible = {
@@ -485,24 +499,22 @@ def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> l
     return result
 
 
-def _ultimate_parent_history(spec: dict, scope: str, group: list, invalid: set, now: datetime) -> list[dict]:
+def _ultimate_parent_history(spec: dict, scope: str, group: list, invalid: set) -> list[dict]:
     """Each record's ultimate parent through time: the parent chain walked at
-    every date a link in it starts or ends, up to the run date. One
-    relationship per record and top; a new period whenever the chain changes,
-    each with the path walked. Its id leaves out the run date, so a later run
-    keeps it."""
+    every date a link in it, or a disputed one, starts or ends (a stated date
+    to come included, as the stated links hold it). One relationship per
+    record and top; a new period whenever the chain changes, each with the
+    path walked. Its id leaves out the run date, so a later run keeps it."""
     links = [e for key, e in group if key not in invalid]
     disputed = [e for key, e in group if key in invalid]
     text = {}
-    for e in links:
+    for e in links + disputed:
         for field, at in zip(("valid_from", "valid_to"), interval(e)):
-            if MIN < at < MAX:
-                text.setdefault(at, e[field])
+            if at < MAX:
+                text.setdefault(at, e.get(field))
     cuts = sorted(text)
     found = {}
     for i, lo in enumerate(cuts):
-        if lo > now:
-            break
         hi = cuts[i + 1] if i + 1 < len(cuts) else MAX
         holds = [e for e in links if interval(e)[0] <= lo < interval(e)[1]]
         parents = {e["source_id"]: e for e in holds}

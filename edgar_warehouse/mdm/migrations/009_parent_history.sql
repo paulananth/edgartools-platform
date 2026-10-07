@@ -38,6 +38,8 @@ CREATE OR REPLACE VIEW mdm.relationship_context AS
   WHERE r.object_type = 'relationship'
     AND coalesce(r.body -> 'retired', 'false'::jsonb) = 'false'::jsonb;
 
+COMMENT ON VIEW mdm.relationship_context IS
+    'Every mastered relationship of any type, both ends named, one row per period (a link held, left and held again has two rows). A calculated ultimate parent has one row per stretch of time its chain held; under an earlier algorithm (accounting-chain-v1) it has one row with no dates. Retired links are left out. What each type means is in the Mastering Policy''s relationship types.';
 COMMENT ON COLUMN mdm.relationship_context.valid_from_basis IS 'stated (the source gave the date, e.g. a corporate action''s effective date) or observed (first seen then); empty for a calculated link.';
 COMMENT ON COLUMN mdm.relationship_context.valid_to_basis IS 'stated or observed; empty while it holds or for a calculated link.';
 COMMENT ON COLUMN mdm.relationship_context.period IS 'The period''s number. A calculated ultimate parent has one period for each stretch of time its chain held.';

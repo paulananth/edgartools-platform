@@ -122,4 +122,7 @@ on a date. The parent model follows them:
 - [x] PR A review (Standards, Spec, GoF): every name matches its approval, none invented; GoF no refactor; fixed: basis read only from `derived` (older policies' ids unchanged), HOLDS carries the filings' own fields instead of a second meaning of `basis`, the insider view says a ten percent owner may be an entity (12 PG16 and 29 unit tests pass) 2026-10-07 11:34 ET
 - [x] PR A: push, PR #850 (digest explained), CI green, merged on the operator's word 2026-10-07 11:50 ET
 - [ ] (PR B) The new Mastering Policy digest (Company part c608d93a…), with the peel layer `without_parent_history` back to bf682fa4…, for the operator's approval
-- [ ] PR B: review, PR, CI, merge on word
+- [x] PR B review (Standards, Spec, GoF): GoF no refactor; fixed: a link with no stated start keeps its earliest first-seen start instead of one period per publication; a disputed link's dates also cut the calculated periods; stated dates to come are calculated too, so `--as-of` after them answers; a date basis outside stated/observed goes to a steward; the view's own comment says the calculated periods (14 unit tests; 339 affected unit and PG16 tests pass) 2026-10-07 11:58 ET
+- [ ] Operator's word: a parent period's end from "last seen" (the ruling) versus "silence never ends a link" (design 2, 2026-10-01); PR B keeps design 2 and records `last_seen`
+- [ ] Operator's word: a succession ends links of every parent hierarchy type (also `IS_SUBFUND_OF`, `IS_FEEDER_TO`, `IS_INTERNATIONAL_BRANCH_OF`, `IS_SEGMENT_OF_EXCHANGE`), not only consolidation
+- [ ] PR B: PR, CI, merge on word
