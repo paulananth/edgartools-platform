@@ -1,4 +1,4 @@
-# 04b Parent relationship types: real names, two types and a basis; corporate actions
+# 04b Relationship types: real names; parents with a basis; corporate actions
 
 Type: task. Phase: A. Blocked by: 04. Map: [map](../map.md). Plan: [plan](../plan.md).
 
@@ -56,6 +56,29 @@ local GLEIF Golden Copy of 2026-09-11 (relationship file: 126,688
 
 The definitions in the ruling above stand; only the names change.
 
+### Every other type (operator, 2026-10-07, one by one, after "Ask again if anything is unclear"; recorded 2026-10-07 09:24 ET)
+
+Evidence: the element names in the installed edgartools parser (Forms 3/4/5
+`reportingOwnerRelationship` with `isDirector`, `isOfficer`, `officerTitle`,
+`isTenPercentOwner`, `isOther`; 13F `nameOfIssuer`, `titleOfClass`,
+`investmentDiscretion`, `votingAuthority` with Sole, Shared, None; XBRL
+`AuditorName`, `AuditorFirmId`; "beneficial owner"; Exhibit 21 "Subsidiaries
+of the registrant"); the GLEIF Golden Copy counts; ISO 10383 as published (no
+MIC file is held locally) and Form ADV as published (no ADV file is held).
+
+| Type today | Approved |
+|---|---|
+| `EMPLOYED_BY` | Kept, for director, officer (with title) and employee. The ten percent owner leaves it for `BENEFICIAL_OWNER_OF` ("I like employed_by and something devoting ownership") |
+| `CONTROLS` | Removed. An adviser's link to what it manages carries discretion, discretionary or non-discretionary (Form ADV Item 5.F), and a 13F holding the manager's investment discretion and voting authority as filed: who decides. Who owns is a separate link (`BENEFICIAL_OWNER_OF`, `HOLDS`). ("Is discretionary vs non-discretionary is how who owns", then "Yes, as shown") |
+| `HOLDS` | Kept (SEC's word for both reports); each link says its basis: `investment_discretion` (13F) or `beneficial_ownership` (Forms 3/4/5) |
+| `OWNERSHIP_PARENT` | Split: `IS_SUBSIDIARY_OF` (Exhibit 21: subsidiary → registrant) and `BENEFICIAL_OWNER_OF` (Schedules 13D/13G and Forms 3/4/5: beneficial owner → issuer, with the percent) |
+| `MANAGES_FUND` | Removed. Two roles, two names ("if it is a fund use fund manager, if adviser use investment adviser"): `IS_FUND-MANAGED_BY` (GLEIF's name, fund → its fund manager, for any source) and `INVESTMENT_ADVISER_TO` (Form ADV and N-CEN's role: adviser → fund, with discretion) |
+| `AUDITED_BY` | Kept |
+| `ISSUED_BY` | Kept |
+| `IS_FUND-MANAGED_BY`, `IS_SUBFUND_OF`, `IS_FEEDER_TO`, `IS_INTERNATIONAL_BRANCH_OF` | Kept as GLEIF writes them |
+| `VENUE_OPERATOR` | `OPERATED_BY_LEGAL_ENTITY` (ISO 10383's legal entity of a MIC, with its LEI) |
+| `VENUE_SEGMENT_OF` | `IS_SEGMENT_OF_EXCHANGE` (the operator rejected both first options, "Both don't make any sense make it better", then chose it: e.g. Nasdaq Global Select Market (XNGS) is a segment of the Nasdaq exchange (XNAS)) |
+
 ## Corporate actions (operator, 2026-10-07 08:37 ET: "It should also consider corporate actions"; then "SUCCEEDED_BY type (Recommended)")
 
 Mergers, acquisitions, spin-offs and reorganisations change an entity's parent
@@ -80,7 +103,9 @@ on a date. The parent model follows them:
 
 - [x] Ruling recorded, with the definitions shown to the operator 2026-10-07 08:36 ET
 - [x] Each name reviewed against the source's own terms and approved one by one (table above) 2026-10-07 09:08 ET
-- [ ] Every other relationship name reviewed the same way, each for the operator's approval (`OWNERSHIP_PARENT`, `EMPLOYED_BY`, `CONTROLS`, `HOLDS`, `MANAGES_FUND`, `AUDITED_BY`, `ISSUED_BY`, `VENUE_OPERATOR`, `VENUE_SEGMENT_OF`) (added 2026-10-07 09:08 ET)
+- [x] Every other relationship name reviewed the same way and approved one by one (table above) 2026-10-07 09:24 ET
+- [ ] `rules/merge/relationships.yaml` and `rules/context/definitions.yaml`: every approved name; the removed names gone; attributes: `basis`, `discretion`, `investment_discretion`, `voting_authority`, `percent`, capacities as approved
+- [ ] `CONTEXT.md`: the glossary uses the approved names (Ownership Parent, Accounting Direct Parent, Reported and Calculated Ultimate Parent, MANAGES_FUND entries rewritten)
 - [ ] GoF consult (relationships.py types and derivation, relationships.yaml, the relationship view)
 - [ ] `rules/merge/relationships.yaml`: `IS_DIRECTLY_CONSOLIDATED_BY` for any legal kind (hierarchy, cycles invalid, one parent, derives the ultimate parent) and `IS_ULTIMATELY_CONSOLIDATED_BY` (stated or calculated); `ACCOUNTING_PARENT` and `REPORTED_ULTIMATE_PARENT` removed; `rules/context/definitions.yaml` and `CONTEXT.md` say the definitions above
 - [ ] A relationship carries its `basis` (`stated` or `calculated`); `mdm.relationship_context` and `context relationship` show it
