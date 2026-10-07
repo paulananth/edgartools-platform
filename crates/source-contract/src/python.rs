@@ -149,10 +149,10 @@ impl PyEngine {
         reading_to_py(py, &reading)
     }
 
-    #[pyo3(signature = (stream, envelope, header_engine, on_reading, *, max_bytes, max_record, max_records, max_depth=64, context="{}", ordinal_context=None))]
+    #[pyo3(signature = (stream, envelope, header_engine, on_reading, *, max_bytes, max_record, max_records, max_depth=64, max_header=None, context="{}", ordinal_context=None))]
     fn scan_xml_records(&self, py: Python<'_>, stream: Py<PyAny>, envelope: &str, header_engine: &PyEngine,
                         on_reading: Py<PyAny>, max_bytes: usize, max_record: usize, max_records: usize,
-                        max_depth: usize, context: &str, ordinal_context: Option<String>) -> PyResult<(usize, usize)> {
+                        max_depth: usize, max_header: Option<usize>, context: &str, ordinal_context: Option<String>) -> PyResult<(usize, usize)> {
         if envelope.len() > 4096 { return Err(rejected(Rejected::new("contract", "XML envelope exceeds bound"))); }
         let envelope: crate::xml_sequence::Envelope = serde_json::from_str(envelope)
             .map_err(|error| rejected(Rejected::new("contract", error)))?;
@@ -167,7 +167,7 @@ impl PyEngine {
         header_engine.inner.validate_context(&values).map_err(rejected)?;
         let header_context = values.clone();
         let header = &header_engine.inner;
-        let limits = crate::xml_sequence::Limits { max_bytes, max_record, max_records, max_depth };
+        let limits = crate::xml_sequence::Limits { max_bytes, max_record, max_header: max_header.unwrap_or(max_record), max_records, max_depth };
         let result = py.allow_threads(|| crate::xml_sequence::scan(PythonReader(stream), &envelope, limits, |value| {
             let reading = header.read_json_value(value, &Lookups::new(), &header_context)?;
             if !reading.deferred.is_empty() { return Err(Rejected::new("xml_header", "XML header assertions must pass, not defer")); }

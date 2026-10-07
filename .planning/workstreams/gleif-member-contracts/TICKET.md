@@ -47,3 +47,15 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 
 - [x] Qualify complete configured relationships JSON runtime: 487,721 records, 1,120,235,207 expanded bytes and canonical hash equal to independent full corpus proof; 158.97s, exact callback ordinals, raw/publisher count/size/CRC/EOF and actual native-extension/runtime hashes unchanged before/after; stored full report (2026-10-06 21:40 ET).
 - [x] Reconcile issue 21 and initial completion audit with live merged #806/#807 checks and current read contracts; preserve unfinished retirement and 6,414/3,052 installed-population gates (2026-10-06 21:40 ET).
+
+- [x] Merge PR #842 on the operator's request; exact ad1de482 head passed every CI check in 37558509346, GitHub confirms squash 17c21ef77c3522eb8361d9b6e0daee02590c2edc (2026-10-07 06:22 ET).
+- [x] Preserve XML follow-up on dedicated codex/gleif-xml-runtime-retirement-20261007 branch; 626 affected tests passed in 17.91s (2026-10-07 06:22 ET).
+- [x] Qualify full Level 1 XML framing: 3,428,477 records, 11,826,399,913 expanded bytes, zero typed differences, count/hash/CRC/EOF; 4539.76s (75m40s), stored report (2026-10-07 06:22 ET).
+- [x] Qualify complete reporting-exceptions configured JSON runtime: 6,351,397 records, canonical hash matches independent corpus; 433.04s (7m13s), stored report (2026-10-07 06:22 ET).
+- [x] Separate generic XML normalized header and record bounds, preserve strict record/raw caps, regress small-record compatibility and fail-closed worker publication; 117 native tests, 620 MDM/XML/archive tests, 58 member/stream tests pass on isolated new native wheel; independent Spec/Standards review finds no scoped blocker (2026-10-07 06:30 ET).
+- [ ] Retry Level 1 configured JSON runtime after snapshot creation failed with OSError 28; no successful runtime report exists for this member.
+- [ ] Qualify replacement XML runtime against all three complete captured corpora with actual native binary pinned before and after execution.
+
+- [x] Add reproducible full-runtime qualification CLI with pinned publisher/independent reports and actual native binary before/after; 10 JSON/XML valid and deliberate fault cases pass (2026-10-07 06:30 ET).
+- [ ] Install this committed XML replacement bundle outside checkout and verify refusal/recovery on fresh restricted PostgreSQL 16.
+- [ ] Rebase follow-up onto merged main, commit/push, independent final review and full CI on exact head.

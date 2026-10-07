@@ -36,7 +36,8 @@ def _policy(contract):
     required |= ({"wrapper", "min_integer", "record_encoding"} if framing == "json_array"
                  else {"framing", "xml", "header_read"})
     if (not isinstance(spec, dict) or not required <= set(spec)
-            or set(spec) - required - {"expected_records_context", "framing"}):
+            or set(spec) - required - {"expected_records_context", "framing"} -
+                ({"max_header"} if framing == "xml_records" else set())):
         raise ValueError("read.stream must declare every framing, partition and spool bound")
     for key, maximum in maxima.items():
         minimum = 0 if key == "max_records" else 1
@@ -53,6 +54,9 @@ def _policy(contract):
         raise ValueError("JSON array stream requires explicit numeric and wrapper policy")
     header_engine = None
     if framing == "xml_records":
+        if "max_header" in spec and (type(spec["max_header"]) is not int
+                or not 1 <= spec["max_header"] <= 32 * 1024**2):
+            raise ValueError("read.stream max_header is outside its bounded range")
         xml = spec.get("xml")
         fields = {"namespace", "root", "header", "container", "record", "record_wrapper"}
         if (not isinstance(xml, dict) or set(xml) != fields
@@ -183,6 +187,7 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                 else:
                     scan = engine.stream_xml_records(stream, envelope=spec["xml"], header_engine=header_engine,
                         on_reading=project, context=context, ordinal_context=ordinal,
+                        max_header=spec.get("max_header"),
                         **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth")})
                 if expected_count is not None and scan["record_count"] != expected_count:
                     raise ValueError("Stream record count differs from pinned context")

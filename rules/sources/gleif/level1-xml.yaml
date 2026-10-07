@@ -40,6 +40,7 @@ read:
     max_input_bytes: 1073741824
     max_bytes: 17179869184
     max_record: 1048576
+    max_header: 1048576
     max_records: 10000000
     max_depth: 64
     ordinal_context: source_index
@@ -102,6 +103,15 @@ read:
                 trim: false
             on_missing: "null"
         reason: XML record count must match pinned publication metadata
+      - test:
+          equal:
+            left:
+              integer:
+                path: RecordCount.$
+            right:
+              context:
+                name: publication_count
+        reason: Header count must equal the input-bound publication count
       - test:
           choose:
             condition:

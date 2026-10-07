@@ -625,3 +625,21 @@ def test_configured_json_preserves_consumer_failure_identity(kind):
             expected_sha256=hashlib.sha256(raw).hexdigest(), on_record=fail,
         )
     assert caught.value is failure
+
+
+def test_small_xml_record_limit_does_not_limit_authenticated_header():
+    xml = b"""<LEIData xmlns="http://www.gleif.org/data/schema/leidata/2016">
+      <LEIHeader><ContentDate>2026-09-11T16:00:00Z</ContentDate>
+      <FileContent>GLEIF_FULL_PUBLISHED</FileContent><RecordCount>1</RecordCount></LEIHeader>
+      <LEIRecords><LEIRecord/></LEIRecords></LEIData>"""
+    raw = archive_bytes(xml, "source.xml")
+    seen = []
+    report = inspect_archive(io.BytesIO(raw), member="level1", metadata=metadata(format="xml.zip"),
+        expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2,
+        on_record=lambda row, ordinal: seen.append((row, ordinal)))
+    assert seen == [({}, 0)]
+    assert report["record_count"] == 1
+    raw = archive_bytes(xml.replace(b"<LEIRecord/>", b"<LEIRecord><LEI>large</LEI></LEIRecord>"), "source.xml")
+    with pytest.raises(Conflict):
+        inspect_archive(io.BytesIO(raw), member="level1", metadata=metadata(format="xml.zip"),
+            expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2)

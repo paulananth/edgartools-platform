@@ -726,7 +726,12 @@ one-based ordinal context internally as for JSON framing. The optional
 XML framing uses the same compressed/expanded bytes, record/depth/count,
 partition and private spool bounds as JSON framing. Omit the JSON-only
 `wrapper`, `min_integer` and `record_encoding` fields. Normalized records use
-compact Python JSON byte accounting. Attributes retain expanded namespace
+compact Python JSON byte accounting. XML may declare `read.stream.max_header`
+(1..32 MiB) separately for normalized header/envelope nodes; omission defaults
+to `max_record`. Match `header_read.limits.max_bytes` to the intended header
+projection bound. Increasing `max_header` never increases normalized record
+limits or the raw per-record buffering allowance (`max_record` + 65,536 bytes).
+Attributes retain expanded namespace
 names (`@{URI}local`); children in the declared namespace use local names;
 foreign children retain `{URI}local`. Repeated children become lists and
 leading stripped text becomes `$`; tail text is ignored. Namespace scopes,
@@ -766,10 +771,9 @@ spellings by using the existing `date` expression.
 Bind `publication_count` to each exact input receipt using the version-2
 source input manifest. Pin the same publisher count in the header reference;
 the worker compares the complete framed count at EOF before publication.
-The creator must derive both pins from the same publication. The relationships and reporting-exceptions XML templates configure the generic
-`equal` assertion above to compare header count directly to context count.
-Level 1 still checks the pins independently while its qualification scan
-requires a stable template; do not claim that it rejects inconsistent pins. Also keep API `publish_date`
+The creator must derive both pins from the same publication. All three XML member templates configure the generic `equal` assertion
+above to compare header count directly to context count; independently pinned
+header references must also agree with the authenticated publication metadata. Also keep API `publish_date`
 separate from XML `ContentDate`: captured members can have different content
 timestamps within one publication slot. Pin authenticated capture-header
 evidence explicitly when the download API does not supply that field.

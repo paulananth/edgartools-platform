@@ -1,0 +1,61 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-repex-golden-copy.json.zip",
+    "sha256": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831"
+  },
+  "member": "reporting_exceptions",
+  "publisher_metadata": {
+    "path": ".planning/workstreams/gleif-member-contracts/repex-publisher-metadata.json",
+    "sha256": "54e6031c17fb105785eb219b09384ebe6b0b221fbf31087c1a40f5c62d512d82"
+  },
+  "independent_full_parity_report": {
+    "path": ".planning/workstreams/gleif-member-contracts/full-reporting-exceptions-json-parity.json",
+    "sha256": "6b5a7257ea6bee7ad8b163c01d620bb6df5e1e02c653946c5455c17dfead660d"
+  },
+  "runtime_implementation": [
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/gleif_source.py",
+      "sha256": "0d11cc07dfd9a9d81f4dc26e8c143469e385ad4c6598b644dcafeb42c976c3ca"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/source_engine.py",
+      "sha256": "933c64a450cac96362c8e8f6fa36834e6bd4c9f3f9361524e519bd86bc257fa5"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/steps.py",
+      "sha256": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810"
+    },
+    {
+      "path": "/private/tmp/codex-equality-site-20261006/source_contract/source_contract.abi3.so",
+      "sha256": "e62faebd7582ad3b019851bdcfb58092c839b679514e46a9acf143962cf88e49"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/rules/sources/gleif/reporting-exceptions-json.yaml",
+      "sha256": "79ab5adc0940dd6874fd06ffbe42814d134a7b3173888c4a80de91629bb7b639"
+    },
+    {
+      "path": "/private/tmp/qualify-configured-gleif-runtime.py",
+      "sha256": "f53400edb895cdb546b9efe421b999a52558a18775db601f727200dda5a2baf5"
+    }
+  ],
+  "metadata": {
+    "format": "json.zip",
+    "cdf_version": "REPEX_2.1",
+    "content_date": "2026-09-11T16:00:00+00:00",
+    "file_content": "GLEIF_FULL_PUBLISHED",
+    "delta_start": null,
+    "record_count": 6351397
+  },
+  "receipt": {
+    "adapter_version": "gleif-native-record-v1",
+    "raw_evidence_hash": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831",
+    "canonical_source_hash": "618f34c21b4364e844acdd6b2087ed83dbd2a2437568707f46511c312cb058cb",
+    "record_count": 6351397,
+    "domain_content_hash": "825be19b88a1743bdf5a674f6c244919ca557473a465cef2cb678c9d8a0ae2bc",
+    "compressed_bytes": 63719264,
+    "expanded_bytes": 1554543947
+  },
+  "callback_count": 6351397,
+  "seconds": 433.0406966309529,
+  "scope": "complete configured JSON runtime attestation matches independent full corpus canonical evidence; actual native extension hashed before/after; not installed mastering qualification"
+}

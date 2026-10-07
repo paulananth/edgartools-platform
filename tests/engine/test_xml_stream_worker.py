@@ -92,3 +92,55 @@ def test_xml_configuration_refuses_before_publication(tmp_path, fault):
     with pytest.raises((SourceRejected, ValueError)):
         source_read.execute(envelope, store)
     assert not (tmp_path / "reading.json.parts").exists()
+
+
+def test_separate_header_bound_keeps_worker_record_limit_and_publication_atomic(tmp_path):
+    rules = xml_contract()
+    rules["read"]["stream"].update(max_header=4096, max_record=64)
+    padded = document().replace(b"</Header>", b"<Extra>" + b"x" * 100 + b"</Extra></Header>")
+    store = Artifacts()
+    receipt = source_read.execute(task(tmp_path, store, [padded], rules), store)
+    assert store.json(receipt)["artifacts"][0]["record_count"] == 2
+    bad = padded.replace(b"<n>20</n>", b"<n>20</n><Extra>" + b"x" * 100 + b"</Extra>")
+    refused = tmp_path / "refused"
+    refused.mkdir()
+    with pytest.raises(SourceRejected):
+        source_read.execute(task(refused, store, [padded, bad], rules), store)
+    assert not (refused / "reading.json.parts").exists()
+
+
+@pytest.mark.parametrize("maximum", [True, 0, -1, "4096", 32 * 1024**2 + 1])
+def test_header_policy_refuses_invalid_bounds_before_publication(tmp_path, maximum):
+    rules = xml_contract()
+    rules["read"]["stream"]["max_header"] = maximum
+    store = Artifacts()
+    with pytest.raises(ValueError, match="max_header"):
+        source_read.execute(task(tmp_path, store, [document()], rules), store)
+    assert not (tmp_path / "reading.json.parts").exists()
+
+
+def test_too_small_header_bound_yields_no_candidate(tmp_path):
+    rules = xml_contract()
+    rules["read"]["stream"]["max_header"] = 2
+    store = Artifacts()
+    with pytest.raises(SourceRejected):
+        source_read.execute(task(tmp_path, store, [document()], rules), store)
+    assert not (tmp_path / "reading.json.parts").exists()
+
+
+@pytest.mark.parametrize("maximum", [True, 0, -1, "4096", 2**63])
+def test_facade_validates_separate_header_bound(maximum):
+    from edgar_warehouse.workers.source_stream import _policy
+    spec, engine, header = _policy(xml_contract())
+    with pytest.raises(SourceRejected, match="header bound"):
+        engine.stream_xml_records(io.BytesIO(document()), envelope=spec["xml"],
+            header_engine=header, on_reading=lambda *_: None,
+            max_bytes=4096, max_record=4096, max_records=2, max_header=maximum)
+
+
+def test_json_stream_refuses_xml_header_policy(tmp_path):
+    rules = contract()
+    rules["read"]["stream"]["max_header"] = 4096
+    store = Artifacts()
+    with pytest.raises(ValueError):
+        source_read.execute(task(tmp_path, store, [b'{"records":[]}'], rules), store)
