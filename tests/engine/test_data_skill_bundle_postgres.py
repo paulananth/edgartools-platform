@@ -919,3 +919,67 @@ print("six installed GLEIF member contracts passed")
 ''', cwd=root)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'six installed GLEIF member contracts passed'
+
+
+def test_company_combination_blueprint_runs_from_installed_bundle(installed):
+    """Installed raw readings compose/prepare without retained Company loaders."""
+    python, root = installed
+    result = _run(python, '-c', '''
+import json
+from pathlib import Path
+from edgar_warehouse.rules import files
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
+store = Artifacts()
+folder = Path("company-composition").resolve()
+folder.mkdir()
+blueprints = files.ROOT / "sources/sec.submissions.company"
+date = "2026-10-04T00:00:00Z"
+context = {"cik":1,"sync_run_id":"capture","raw_object_id":"0"*64,"load_mode":"default"}
+def read(name, template, payload, context):
+    raw = store.put_bytes((folder / (name+".json")).as_uri(), json.dumps(payload).encode())
+    context = dict(context)
+    if "raw_object_id" in context: context["raw_object_id"] = raw["sha256"]
+    bound = store.put(folder.as_uri(),{"version":1,"input":raw,"values":context})
+    rules = store.put(folder.as_uri(), files.load(blueprints / template))
+    manifest = store.put(folder.as_uri(),{"version":2,"contract":rules,"artifacts":[{"input":raw,"context":bound}]})
+    task = {"input":manifest,"output":(folder / (name+"-reading.json")).as_uri(),"checks":["source.output"]}
+    receipt = source_read.execute(task,store)
+    assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+    return receipt
+main = read("main","source.yaml",{"name":"Example","filings":{"recent":{
+    "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
+    "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
+    {**context,"recent_limit":None,"last_synced_at":date})
+pages = read("pages","pagination.yaml",{"accessionNumber":["p1","p2"],"form":["20-F","10-K"]},context)
+catalog_context = {"sync_run_id":"catalog","last_synced_at":date,"source_name":"exchange"}
+exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"data":[[1,"B"],[1,"A"]]},catalog_context)
+tickers = read("catalog-tickers","catalog.yaml",{"0":{"cik_str":1,"ticker":"A"},"1":{"cik_str":1,"ticker":"C"}},
+    {**catalog_context,"source_name":"tickers"})
+refs = {"main":main,"pages":pages,"catalog_exchange":exchange,"catalog_tickers":tickers}
+rules = files.load(blueprints / "combine.yaml")
+for spec in [*rules["combine"]["groups"].values(),*rules["combine"]["tables"].values()]:
+    spec["checks"] = {key:{"APPROVED_COMPANY_CAPTURE_RUN":"capture","APPROVED_CATALOG_CAPTURE_RUN":"catalog"}[value]
+        for key,value in spec["checks"].items()}
+manifest = store.put(folder.as_uri(),{"version":1,"contract":store.put(folder.as_uri(),rules),"readings":refs})
+task = {"input":manifest,"output":(folder / "combined.json").as_uri(),"checks":["source.combined"]}
+combined = source_combine.execute(task,store)
+assert source_combine.execute(task,store) == combined
+assert source_combine.verify({**task,"candidate":combined},store) == ({"source.combined":True},[])
+artifact = store.json(combined)["artifacts"][0]
+assert store.json(artifact["input"])["readings"] == refs
+row = artifact["tables"]["company"][0]
+assert row["forms"] == ["10-K","20-F","8-K"]
+assert row["tickers"] == ["A","B","C"]
+assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
+prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
+    "keys":{"table":"company","dataset":"sec.submissions.company.v1","policy":"0"*64,
+        "consumer":"trial","batch_id":"composition","as_of":date}}
+prepared = mdm_prepare.execute(prepare,store)
+assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prepared":True},[])
+batch = store.json(prepared)["batches"][0]
+assert json.loads((folder / "mdm" / batch["input"]["path"]).read_bytes()) == row
+print("installed Company raw combination and preparation passed")
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'installed Company raw combination and preparation passed'
