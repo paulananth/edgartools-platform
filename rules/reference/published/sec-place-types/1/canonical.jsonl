@@ -1,0 +1,4 @@
+{"code":"CANADIAN","crosswalk":[],"definition":"","invalid_reason":null,"label":"CANADIAN","labels":[["en","preferred","CANADIAN"]],"level":null,"parent_code":null,"status":"valid","valid_from":null,"valid_to":null}
+{"code":"FOREIGN","crosswalk":[],"definition":"","invalid_reason":null,"label":"FOREIGN","labels":[["en","preferred","FOREIGN"]],"level":null,"parent_code":null,"status":"valid","valid_from":null,"valid_to":null}
+{"code":"UNKNOWN","crosswalk":[],"definition":"","invalid_reason":null,"label":"UNKNOWN","labels":[["en","preferred","UNKNOWN"]],"level":null,"parent_code":null,"status":"valid","valid_from":null,"valid_to":null}
+{"code":"US","crosswalk":[],"definition":"","invalid_reason":null,"label":"US","labels":[["en","preferred","US"]],"level":null,"parent_code":null,"status":"valid","valid_from":null,"valid_to":null}

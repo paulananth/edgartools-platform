@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -214,27 +215,44 @@ def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -
     return source(source_name, root)["mdm"][source_code]["contract"]
 
 
+# The policy's sections kept in one file each under `merge/`, loaded when the
+# file exists and written back by `write_policy` (GoF consult, profiling ticket
+# 02: the relationship types, then the reference pins, each grew this by hand).
+POLICY_FILES = {
+    # The relationship types MDM masters (profiling ticket 04): data, not code.
+    "relationships": "relationships.yaml",
+    # The reference data the rules read, pinned by RDM version and sha256
+    # (profiling ticket 02).
+    "reference_pins": "reference-pins.yaml",
+}
+
+
 def policy(root: Path | None = None) -> dict:
-    """The Mastering Policy: `merge/policy.yaml`, one file per kind,
-    `merge/relationships.yaml` (the relationship types) and every reference
-    table, so the policy's digest also covers the tables its rules read (an
-    edit to `reference/sec-place-codes.yaml` is a new policy)."""
+    """The Mastering Policy: `merge/policy.yaml`, one file per kind, and the
+    sections in POLICY_FILES: the relationship types and the pins of the
+    reference data its rules read (each an RDM code set version and its
+    sha256), so the policy's digest covers that data (a new version is a new
+    pin, so a new policy). Until profiling ticket 02 the tables themselves were
+    embedded, as `reference`."""
     root = root or ROOT
     body = load(root / "merge" / "policy.yaml")
     body["kinds"] = {path.stem: load(path) for path in sorted((root / "merge" / "kinds").glob("*.yaml"))}
-    body["reference"] = {path.stem: load(path) for path in sorted((root / "reference").glob("*.yaml"))}
-    # The relationship types MDM masters (profiling ticket 04): data, not code.
-    relationship_types = root / "merge" / "relationships.yaml"
-    if relationship_types.exists():
-        body["relationships"] = load(relationship_types)
+    for key, name in POLICY_FILES.items():
+        if (root / "merge" / name).exists():
+            body[key] = load(root / "merge" / name)
     return body
 
 
 def write_policy(body: dict, root: Path) -> None:
     """Export the one stored policy into the existing authoring layout: the
-    reverse of `policy()`, so kinds and reference tables go back to their own
-    files."""
-    split = {"kinds": root / "merge" / "kinds", "reference": root / "reference"}
+    reverse of `policy()`, so kinds and each POLICY_FILES section go back to
+    their own files. A policy stored before profiling ticket 02 embedded its
+    reference tables (`reference`); those go back to `reference/<name>.yaml`,
+    and only such a body checks that folder (today it also holds tables the
+    policy no longer embeds)."""
+    split = {"kinds": root / "merge" / "kinds"}
+    if "reference" in body:
+        split["reference"] = root / "reference"
     for key, folder in split.items():
         parts = body.get(key, {})
         if not isinstance(parts, dict) or any(not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) for name in parts):
@@ -243,16 +261,28 @@ def write_policy(body: dict, root: Path) -> None:
             raise RulesFileError(f"Output folder has {key} absent from this version; use an empty export folder")
     (root / "merge").mkdir(parents=True, exist_ok=True)
     (root / "merge" / "policy.yaml").write_text(
-        dumps({k: v for k, v in body.items() if k not in split and k != "relationships"}), encoding="utf-8")
-    types_file = root / "merge" / "relationships.yaml"
-    if "relationships" in body:
-        types_file.write_text(dumps(body["relationships"]), encoding="utf-8")
-    elif types_file.exists():
-        raise RulesFileError("Output folder has relationship types absent from this version; use an empty export folder")
+        dumps({k: v for k, v in body.items() if k not in split and k not in POLICY_FILES}), encoding="utf-8")
+    for key, name in POLICY_FILES.items():
+        path = root / "merge" / name
+        if key in body:
+            path.write_text(dumps(body[key]), encoding="utf-8")
+        elif path.exists():
+            raise RulesFileError(f"Output folder has {key} absent from this version; use an empty export folder")
     for key, folder in split.items():
         folder.mkdir(parents=True, exist_ok=True)
         for name, value in body.get(key, {}).items():
             (folder / f"{name}.yaml").write_text(dumps(value), encoding="utf-8")
+    # The pinned versions' published files, so the export reads on its own.
+    for pin in (body.get("reference_pins") or {}).values():
+        relative = Path("reference") / "published" / pin["code_set"] / str(pin["version"])
+        if (root / relative).resolve() == (ROOT / relative).resolve():
+            continue
+        if not (ROOT / relative / "canonical.jsonl").exists():
+            raise RulesFileError(f"The pinned reference data {pin['code_set']} {pin['version']} is not published here")
+        (root / relative).mkdir(parents=True, exist_ok=True)
+        for name in ("canonical.jsonl", "pin.json"):
+            if (ROOT / relative / name).exists():
+                shutil.copyfile(ROOT / relative / name, root / relative / name)
 
 
 def pending_proofs(root: Path | None = None) -> dict:
@@ -298,6 +328,29 @@ def approve_rule(rule_id: str, *, by: str, words: str, at: str, root: Path | Non
 def reference(name: str, root: Path | None = None) -> dict:
     """A reference table rules and readers share: `reference/<name>.yaml`."""
     return load((root or ROOT) / "reference" / f"{name}.yaml")
+
+
+def pinned_reference(name: str, root: Path | None = None) -> list[dict]:
+    """The codes of the reference data the Mastering Policy pins under `name`:
+    its published canonical form, refused unless its sha256 is the pin. Each
+    code carries its `labels` and `crosswalk` as lists ([to_set, to_version,
+    to_code, match_type]), as RDM publishes them (docs/specs/rdm/spec.md §4)."""
+    import hashlib
+    import json
+
+    root = root or ROOT
+    pins = root / "merge" / "reference-pins.yaml"
+    if not pins.exists():
+        raise RulesFileError(f"{root} has no merge/reference-pins.yaml: install rules from this build "
+                             "(the policy pins its reference data since profiling ticket 02)")
+    pin = load(pins).get(name)
+    if pin is None:
+        raise RulesFileError(f"The Mastering Policy pins no reference data named {name}")
+    path = root / "reference" / "published" / pin["code_set"] / str(pin["version"]) / "canonical.jsonl"
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != pin["sha256"]:
+        raise RulesFileError(f"Reference data {pin['code_set']} {pin['version']} differs from its pinned sha256")
+    return [json.loads(line) for line in data.decode("utf-8").splitlines()]
 
 
 def _write_plain(body: dict, path: Path) -> None:
