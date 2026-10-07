@@ -37,3 +37,10 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 - [x] Qualify full reporting-exceptions XML: 6,351,397 records, 1,933,382,825 expanded bytes, zero typed value differences, canonical hash/count/CRC/EOF, 1579.60s (26m20s); saved full report (2026-10-06 21:22 ET).
 
 - [x] Wire direct count equality into relationships and reporting-exceptions XML templates; 54 affected tests pass in 2.51s, independent Spec/Standards review passes, and deliberate assertion removal makes shipped-template regression fail (2026-10-06 21:26 ET). Level 1 and native qualification hashing remain pending while scan 2655 is live.
+
+- [x] Push count-equality continuation and create PR #842 at cffaf679; all five suites and aggregate gate passed in CI 37557207219 (2026-10-06 21:32 ET). Subsequent runtime changes require a new full gate.
+- [x] Replace production GLEIF JSON parsing with member-configured native reading, retaining full-source canonical/domain digests and zero-based callbacks; 596 MDM/framing tests passed in 17.93s, including empty members, all-member exact reports, larger authorized record limits and original callback exception identities (2026-10-06 21:36 ET).
+- [x] Retain historical JSON parser only as an independent qualification oracle outside production; executable runtime search finds no `_json_records` or `ijson` in gleif_source; audit tests import frozen oracle (2026-10-06 21:36 ET).
+- [x] Require native binding in MDM extras and update lockfile; dependency image sync excludes the crate and keeps prebuilt-wheel installation; isolated actual manifest/lock/README context without crates passed exact dependency-sync dry run (2026-10-06 21:36 ET). This is dependency-plan proof, not a complete Docker image build.
+- [ ] Verify complete configured JSON runtime reports against all three independent authenticated full-corpus hashes, with actual native-extension and source files pinned before/after; initial trial stopped deliberately after review found an exception-identity gap, no completion receipt claimed.
+- [ ] Independent final runtime review, commit/push and full CI on the replacement head.
