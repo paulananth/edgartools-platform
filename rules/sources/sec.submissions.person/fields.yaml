@@ -1,0 +1,29 @@
+# Native mapped values; no source activation.
+source: sec.submissions.person
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 1
+  assertions:
+  - test:
+      test:
+        path: .
+        kind: object
+    reason: Mapped input must be an object
+  tables:
+    mapped:
+      each: .
+      columns:
+        fields:
+          object:
+            fields:
+              legal_name:
+                value:
+                  path: name
+                  path_mode: literal
+                  type: text
+                  null_if_blank: true
+        matching:
+          object:
+            fields: {}

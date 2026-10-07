@@ -221,6 +221,17 @@ failures stop the run. Record shape failures retain their declared deferral.
 Installed fixture publication/recovery and bounded captured parity are
 separate from full semantic corpus and complete Company population proof.
 
+For the generic record mapping bridge, optional top-level `input_fields`
+declares the JSON input view as 1–128 distinct ASCII root identifiers, each
+at most 128 characters. Only existing declared roots enter serialization;
+missing roots stay missing. Selected values retain their types and must be
+JSON values. This lets unrelated foreign metadata, such as Parquet timestamps,
+remain outside field parsing without coercing it to text. Validate the full
+reading and check that every mapped value path is covered by the declared
+roots. The Company `fields.yaml` recipe demonstrates that checked boundary.
+This option affects the record bridge; artifact `source.read` already consumes
+serialized input and continues reading its declared paths directly.
+
 For `mdm.prepare`, declare `record_column: record` in the unit's keys when the
 selected table holds complete records in a column. Every selected value must
 be an object. Preparation writes those exact objects as JSON Lines; its

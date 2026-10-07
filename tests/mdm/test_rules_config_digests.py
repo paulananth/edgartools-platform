@@ -130,6 +130,13 @@ GLEIF_BEFORE = {
 COMPANY = policy_layers.company_part(company_source.POLICY)
 
 SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9be4"
+# Native mapped-value reading requires approval of new source digests. Removing
+# only the new reading retains the complete historical contract protection.
+SEC_CONFIGURED_FIELDS = {
+    "sec.submissions.company": "f01b9d7077376cc4adc3a5bae8f82a294992ed76c7f729d58b5f43198ed1259e",
+    "sec.submissions.person": "9ab5f191e7f18f58c1be5cedda3841d86c577f6074f9904a14c4f3eb1d875605",
+}
+PERSON_BEFORE_CONFIGURED_FIELDS = "a740357f911d531ae72a995409d5630b1eeced83c5c8b8078f5d806d8563dd9a"
 
 
 def test_the_company_configuration_is_unchanged():
@@ -139,8 +146,10 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
-    assert digest(company_source.CONTRACT) == SEC_READING_V7
-    v6 = {**company_source.CONTRACT, "adapter": {**company_source.CONTRACT["adapter"],
+    assert digest(company_source.CONTRACT) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
+    contract = _without_configured_reading(company_source.CONTRACT)
+    assert digest(contract) == SEC_READING_V7
+    v6 = {**contract, "adapter": {**contract["adapter"],
                                                   "version": "sec-company-landing-v6"}}
     assert digest(v6) == WITH_QUALITY["contract"]
     assert digest(_without_quality(v6)) == BEFORE["contract"]
@@ -255,3 +264,9 @@ def test_an_unknown_gleif_member_is_refused():
 def test_every_rules_file_round_trips_exactly(path):
     value = files.load(files.ROOT / path)
     assert canonical(files.loads(files.dumps(value))) == canonical(value)
+
+
+def test_person_configured_fields_preserve_the_previous_contract_digest():
+    contract = files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1")
+    assert digest(contract) == SEC_CONFIGURED_FIELDS["sec.submissions.person"]
+    assert digest(_without_configured_reading(contract)) == PERSON_BEFORE_CONFIGURED_FIELDS

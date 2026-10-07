@@ -6,6 +6,7 @@ unrelated projections cannot change their failure order.
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
@@ -27,6 +28,16 @@ def project_record(row: dict, reading: dict, *, column: str) -> dict:
     _engine(json.dumps(body, sort_keys=True, ensure_ascii=False, allow_nan=False))
     tables["mapped"]["columns"] = {column: tables["mapped"]["columns"][column]}
     key = json.dumps(body, sort_keys=True, ensure_ascii=False, allow_nan=False)
+    inputs = body.get("input_fields")
+    if "input_fields" in body:
+        if (not isinstance(inputs, list) or not 1 <= len(inputs) <= 128
+                or any(not isinstance(name, str) or len(name) > 128
+                       or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) for name in inputs)
+                or len(set(inputs)) != len(inputs)):
+            raise SourceRejected("contract", "input_fields requires 1..128 distinct root identifiers")
+        # Declare the JSON projection boundary: foreign metadata outside this
+        # list never becomes parsed content. Selected values are never coerced.
+        row = {name: row[name] for name in inputs if name in row}
     result = _engine(key).read(json.dumps(row, ensure_ascii=False, allow_nan=False).encode())
     rows = result.tables.get("mapped", [])
     if result.deferred or len(rows) != 1 or set(rows[0]) != {column} or not isinstance(rows[0][column], dict):
