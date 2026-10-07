@@ -957,7 +957,8 @@ print("six installed GLEIF member contracts passed")
     assert result.stdout.strip() == 'six installed GLEIF member contracts passed'
 
 
-def test_company_combination_blueprint_runs_from_installed_bundle(installed):
+@pytest.mark.parametrize("with_census", [False, True])
+def test_company_combination_blueprint_runs_from_installed_bundle(installed, with_census):
     """Installed raw readings compose/prepare without retained Company loaders."""
     python, root = installed
     result = _run(python, '-c', '''
@@ -967,7 +968,8 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 store = Artifacts()
-folder = Path("company-composition").resolve()
+with_census = WITH_CENSUS
+folder = Path("company-composition-census" if with_census else "company-composition").resolve()
 folder.mkdir()
 blueprints = files.ROOT / "sources/sec.submissions.company"
 date = "2026-10-04T00:00:00Z"
@@ -983,7 +985,7 @@ def read(name, template, payload, context):
     receipt = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
     return receipt
-main = read("main","source.yaml",{"name":"Example","filings":{"recent":{
+main = read("main","census-main.yaml" if with_census else "source.yaml",{"name":"Example","filings":{"recent":{
     "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
     "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
     {**context,"recent_limit":None,"last_synced_at":date})
@@ -993,9 +995,27 @@ exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"da
 tickers = read("catalog-tickers","catalog.yaml",{"0":{"cik_str":1,"ticker":"A"},"1":{"cik_str":1,"ticker":"C"}},
     {**catalog_context,"source_name":"tickers"})
 refs = {"main":main,"pages":pages,"catalog_exchange":exchange,"catalog_tickers":tickers}
-rules = files.load(blueprints / "combine.yaml")
+rules = files.load(blueprints / ("combine-census.yaml" if with_census else "combine.yaml"))
+if with_census:
+    census = {"version":"sec-gleif-name-census-v1","sec":{"filers":1},
+        "gleif":{"file_content":"GLEIF_FULL_PUBLISHED"},
+        "normalizers":{"sec":"normalize_text@sec-legal-form-kept-v1","gleif":"normalize_text@legal-form-kept-v1"},
+        "entries":{"EXAMPLE":{"cik_count":1,"lei_count":1,"ciks":["0000000001"],"leis":[["L1","2026-09-11"]]}},
+        "cascade":{"version":"sec-gleif-cascade-v1","assignments":{"0000000001":{"lei":"L1","pass":"P1"}}}}
+    raw = store.put(folder.as_uri(),census)
+    def bind(value):
+        if isinstance(value,str): return raw["sha256"] if value == "0"*64 else value
+        if isinstance(value,list): return [bind(item) for item in value]
+        if isinstance(value,dict): return {key:bind(item) for key,item in value.items()}
+        return value
+    config = bind(files.load(blueprints / "census.yaml"))
+    scope = store.put(folder.as_uri(),{"version":1,"contract":store.put(folder.as_uri(),config),"artifacts":[raw]})
+    task = {"input":scope,"output":(folder / "census-reading.json").as_uri(),"checks":["source.output"]}
+    refs["census"] = source_read.execute(task,store)
+    assert source_read.verify({**task,"candidate":refs["census"]},store) == ({"source.output":True},[])
+    rules = bind(rules)
 for spec in [*rules["combine"]["groups"].values(),*rules["combine"]["tables"].values()]:
-    spec["checks"] = {key:{"APPROVED_COMPANY_CAPTURE_RUN":"capture","APPROVED_CATALOG_CAPTURE_RUN":"catalog"}[value]
+    spec["checks"] = {key:{"APPROVED_COMPANY_CAPTURE_RUN":"capture","APPROVED_CATALOG_CAPTURE_RUN":"catalog"}.get(value,value)
         for key,value in spec["checks"].items()}
 manifest = store.put(folder.as_uri(),{"version":1,"contract":store.put(folder.as_uri(),rules),"readings":refs})
 task = {"input":manifest,"output":(folder / "combined.json").as_uri(),"checks":["source.combined"]}
@@ -1008,6 +1028,10 @@ row = artifact["tables"]["company"][0]
 assert row["forms"] == ["10-K","20-F","8-K"]
 assert row["tickers"] == ["A","B","C"]
 assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
+if with_census:
+    expected = {"census":raw["sha256"],"version":census["version"],"key":"EXAMPLE",**census["entries"]["EXAMPLE"],
+        "cascade":{"census":raw["sha256"],"version":census["cascade"]["version"],"lei":"L1","pass":"P1"}}
+    assert row["name_census"] == expected and "_name_key" not in row
 prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
     "keys":{"table":"company","dataset":"sec.submissions.company.v1","policy":"0"*64,
         "consumer":"trial","batch_id":"composition","as_of":date}}
@@ -1016,6 +1040,6 @@ assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prep
 batch = store.json(prepared)["batches"][0]
 assert json.loads((folder / "mdm" / batch["input"]["path"]).read_bytes()) == row
 print("installed Company raw combination and preparation passed")
-''', cwd=root)
+'''.replace('WITH_CENSUS', repr(with_census)), cwd=root)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'installed Company raw combination and preparation passed'

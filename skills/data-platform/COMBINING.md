@@ -74,7 +74,8 @@ frozen units.
   ascending and stable. An empty list retains reading artifact and row
   order. `collect` returns a list; `distinct: true` keeps the first occurrence
   of each exact JSON value after sorting. `first`/`last` select a single
-  value; they require `distinct: false`.
+  value; they require `distinct: false`. `one` also requires exactly one
+  selected value per key; duplicate rows refuse even when identical.
 - `collect_flat` requires list values and concatenates exactly one level.
   Nested lists and objects remain typed values. Distinct comparison uses exact
   canonical JSON, so false, integer zero and floating zero remain distinct.
@@ -90,9 +91,17 @@ frozen units.
   mixed types or structured values refuse. Sorting is natural within that
   type, so prefix form names sort as `S-8`, then `S-8 POS`.
 - Joins preserve the base row and use the declared base key. `on_missing:
-  empty` produces `[]` for either collection mode or null for first/last; `error` refuses
+  empty` produces `[]` for either collection mode or null for first/last/one; `error` refuses
   an unmatched key (including null). Existing fields require `replace: true`
   to overwrite; with false, a collision rejects the combination.
+- Optional join `path` declares 1–8 identifier fields from the output root
+  to the destination leaf. Joins run in increasing path depth, so parents
+  exist before children regardless of canonical JSON key order. Equal-depth
+  joins retain contract order. Intermediate objects are copied before edits;
+  null parents become objects, scalar parents refuse. Leaf collisions obey
+  `replace`. `on_missing: skip` leaves the row untouched for an absent answer.
+- Optional output-table `drop` removes at most 64 distinct named columns after
+  all joins. Missing columns refuse. Use it to remove declared helper keys.
 - Bounds: 1–8 named readings, at most 32 groups, 1–16 output tables and
   at most 32 joins per output. Each reading is at most 32 MiB, all readings
   together at most 64 MiB, and input **and** output rows each respect
@@ -197,3 +206,22 @@ address becomes null. Capture checks run before any row filtering or key skip.
 This composition is an input to the remaining census/classification/provenance
 qualification. Keep the active Company route until the installed empty-store
 6,414 Company / 3,052 CIK+LEI population and replay/recovery gates pass.
+
+## Company census evidence
+
+Bind the approved canonical census SHA into `combine-census.yaml` and use
+its matching reading contract `census.yaml`; replace capture/catalog run
+placeholders with the approved runs. Supply the full main/page/catalog
+readings used by `combine.yaml`, with main captures read through
+`census-main.yaml`, plus a reading named `census`. Both census groups use
+`one` and pin each row's census digest. Name evidence joins by the configured
+SEC name key; optional cascade evidence joins by integer CIK under
+`name_census.cascade`. Missing name evidence yields null, while a cascade
+answer can create a cascade-only object. The helper name key is dropped
+before MDM preparation.
+
+Compare complete prepared rows with the retained census helper, including
+missing/empty evidence and cascade-only cases. Authenticate the full census
+input even when its tables are empty. Approval of its construction, complete
+mastering provenance, installed population, replay and recovery must be
+proved before retiring active semantic consumers.

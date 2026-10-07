@@ -11,6 +11,7 @@ from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
+from edgar_warehouse.control_contract import reference
 from . import source_stream, source_readings
 
 OUTPUT_BYTES = 128 * 1024**2
@@ -31,7 +32,9 @@ def _documents(envelope: dict, artifacts):
         raise ValueError("Source input names version 1 or 2, contract and artifacts")
     contract = files.loads(artifacts.verified(manifest["contract"], max_bytes=1024**2).decode("utf-8"))
     execution = contract.get("execution")
-    if (not isinstance(execution, dict) or set(execution) != {"profile", "workers", "max_artifacts"}
+    required = {"profile", "workers", "max_artifacts"}
+    if (not isinstance(execution, dict) or not required <= set(execution)
+            or set(execution) - required - {"input_sha256s"}
             or execution["profile"] != "source.read"
             or any(type(execution[key]) is not int or not 1 <= execution[key] <= 2
                    for key in ("workers", "max_artifacts"))):
@@ -39,6 +42,18 @@ def _documents(envelope: dict, artifacts):
     inputs = manifest["artifacts"]
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= execution["max_artifacts"]:
         raise ValueError("Source input exceeds the contract's bounded artifact count")
+    if "input_sha256s" in execution:
+        pins = execution["input_sha256s"]
+        if not isinstance(pins,list) or len(pins) != len(inputs):
+            raise ValueError("Source input_sha256s pins every artifact in order")
+        for pin,entry in zip(pins,inputs):
+            reference({"uri":"approved-input", "sha256":pin})
+            if manifest["version"] == 2:
+                if not isinstance(entry,dict) or set(entry) != {"input","context"}:
+                    raise ValueError("Version-2 artifact names input and context receipts")
+                entry = entry["input"]
+            if reference(entry)["sha256"] != pin:
+                raise ValueError("Source input differs from approved artifact hash")
     return manifest, contract, execution, inputs
 
 

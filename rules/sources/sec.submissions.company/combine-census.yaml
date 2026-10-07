@@ -1,0 +1,115 @@
+# Bind approved Company/catalog run IDs and the canonical census digest.
+# Both census groups read a separately authenticated configured reading.
+# Cascade evidence is attached only when an assignment exists.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 100000
+  groups:
+    forms:
+      source:
+      - main
+      - pages
+      table: filings
+      key: cik
+      value: form
+      mode: collect
+      order_by: []
+      distinct: true
+      skip_null_values: true
+      skip_empty_text: true
+      sort_values: true
+      checks:
+        sync_run_id: APPROVED_COMPANY_CAPTURE_RUN
+      where: {}
+    tickers:
+      source:
+      - catalog_exchange
+      - catalog_tickers
+      table: tickers
+      key: cik
+      value: ticker
+      mode: collect
+      order_by:
+      - source_rank
+      - ticker
+      distinct: true
+      skip_null_values: true
+      skip_empty_text: true
+      checks:
+        last_sync_run_id: APPROVED_CATALOG_CAPTURE_RUN
+      where: {}
+    address:
+      source: main
+      table: addresses
+      key: cik
+      value: business_address
+      mode: last
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks:
+        last_sync_run_id: APPROVED_COMPANY_CAPTURE_RUN
+      where: {}
+    census_names:
+      source: census
+      table: names
+      key: name_key
+      value: name_evidence
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks:
+        census_digest: "0000000000000000000000000000000000000000000000000000000000000000"
+      where: {}
+    census_cascade:
+      source: census
+      table: cascade
+      key: cik
+      value: cascade_evidence
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks:
+        census_digest: "0000000000000000000000000000000000000000000000000000000000000000"
+      where: {}
+  tables:
+    company:
+      source: main
+      table: company
+      checks:
+        last_sync_run_id: APPROVED_COMPANY_CAPTURE_RUN
+      where: {}
+      joins:
+        forms:
+          group: forms
+          key: cik
+          on_missing: empty
+          replace: false
+        tickers:
+          group: tickers
+          key: cik
+          on_missing: empty
+          replace: false
+        business_address:
+          group: address
+          key: cik
+          on_missing: empty
+          replace: false
+        name_census:
+          group: census_names
+          key: _name_key
+          on_missing: empty
+          replace: false
+        cascade_evidence:
+          group: census_cascade
+          key: cik
+          on_missing: skip
+          replace: false
+          path:
+          - name_census
+          - cascade
+      drop:
+      - _name_key

@@ -1,0 +1,82 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-repex-golden-copy.json.zip",
+    "sha256": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831"
+  },
+  "member": "reporting_exceptions",
+  "format": "json",
+  "publisher_metadata": {
+    "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/.planning/workstreams/gleif-member-contracts/repex-publisher-metadata.json",
+    "sha256": "54e6031c17fb105785eb219b09384ebe6b0b221fbf31087c1a40f5c62d512d82"
+  },
+  "independent_full_parity_report": {
+    "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/.planning/workstreams/gleif-member-contracts/full-reporting-exceptions-json-parity.json",
+    "sha256": "6b5a7257ea6bee7ad8b163c01d620bb6df5e1e02c653946c5455c17dfead660d"
+  },
+  "runtime_implementation": [
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/scripts/qualification/qualify_gleif_runtime.py",
+      "sha256": "7a209bf5f38a179e24b6a57988f9dfb2f0e27df204e95fe6cd19541a5b19a9de"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/gleif_source.py",
+      "sha256": "a4c6d548f36eae6a8332ae14036e3fc64260f04d9aabeaa88f5aef3dbd9b7c0f"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/files.py",
+      "sha256": "87898c61aa6b1ffe2432b97bcd1ce05f4880b2f88e626c23fb42ef105e342278"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/store.py",
+      "sha256": "53cc68796257299f2e0b94a86d67422971de169a99a84de20d95f4d6c3730651"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/evidence.py",
+      "sha256": "319e47cc010432da81665bfaad37e760fc99c07d60185c1076308cb4f9a46d03"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/source_engine.py",
+      "sha256": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/steps.py",
+      "sha256": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810"
+    },
+    {
+      "path": "/private/tmp/codex-header-site-20261007/source_contract/source_contract.abi3.so",
+      "sha256": "61a1654ac0d244e32f6b8b66599b3ef97004896964c05065d807ec2e90a598a1"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/rules/sources/gleif/reporting-exceptions-json.yaml",
+      "sha256": "79ab5adc0940dd6874fd06ffbe42814d134a7b3173888c4a80de91629bb7b639"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/.planning/workstreams/gleif-member-contracts/full-reporting-exceptions-json-parity.json",
+      "sha256": "6b5a7257ea6bee7ad8b163c01d620bb6df5e1e02c653946c5455c17dfead660d"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/.planning/workstreams/gleif-member-contracts/repex-publisher-metadata.json",
+      "sha256": "54e6031c17fb105785eb219b09384ebe6b0b221fbf31087c1a40f5c62d512d82"
+    }
+  ],
+  "metadata": {
+    "format": "json.zip",
+    "cdf_version": "REPEX_2.1",
+    "content_date": "2026-09-11T16:00:00+00:00",
+    "file_content": "GLEIF_FULL_PUBLISHED",
+    "delta_start": null,
+    "record_count": 6351397
+  },
+  "receipt": {
+    "adapter_version": "gleif-native-record-v1",
+    "raw_evidence_hash": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831",
+    "canonical_source_hash": "618f34c21b4364e844acdd6b2087ed83dbd2a2437568707f46511c312cb058cb",
+    "record_count": 6351397,
+    "domain_content_hash": "825be19b88a1743bdf5a674f6c244919ca557473a465cef2cb678c9d8a0ae2bc",
+    "compressed_bytes": 63719264,
+    "expanded_bytes": 1554543947
+  },
+  "callback_count": 6351397,
+  "seconds": 512.7008878779598,
+  "scope": "complete configured runtime attestation matches pinned independent full corpus; actual native extension hashed before/after; not installed mastering qualification"
+}

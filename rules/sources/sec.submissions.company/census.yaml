@@ -1,0 +1,166 @@
+# Creator blueprint: export the authenticated census using Artifacts.put,
+# then bind its canonical SHA-256 everywhere the 64-zero placeholder occurs.
+# The execution pin authenticates the complete input, including empty tables.
+# Reusing a proven census is not proof of configured whole-source construction.
+source: sec.submissions.company
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+  input_sha256s:
+  - "0000000000000000000000000000000000000000000000000000000000000000"
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  require:
+  - entries
+  - sec
+  - gleif
+  - normalizers
+  - version
+  assertions:
+  - test:
+      equal:
+        left:
+          value:
+            path: version
+            from: document
+        right:
+          const:
+            value: sec-gleif-name-census-v1
+    reason: approved census version differs
+  - test:
+      equal:
+        left:
+          value:
+            path: normalizers.sec
+            from: document
+        right:
+          const:
+            value: normalize_text@sec-legal-form-kept-v1
+    reason: approved census sec normalizer differs
+  - test:
+      equal:
+        left:
+          value:
+            path: normalizers.gleif
+            from: document
+        right:
+          const:
+            value: normalize_text@legal-form-kept-v1
+    reason: approved census gleif normalizer differs
+  - test:
+      equal:
+        left:
+          value:
+            path: gleif.file_content
+            from: document
+        right:
+          const:
+            value: GLEIF_FULL_PUBLISHED
+    reason: approved census gleif.file_content differs
+  - test:
+      choose:
+        condition:
+          test:
+            path: cascade.assignments
+            kind: missing
+            from: document
+        then:
+          equal:
+            left:
+              const:
+                value: 1
+            right:
+              const:
+                value: 1
+        else:
+          equal:
+            left:
+              value:
+                path: cascade.version
+                from: document
+            right:
+              const:
+                value: sec-gleif-cascade-v1
+    reason: approved cascade version differs
+  tables:
+    names:
+      each:
+        entries:
+          path: entries
+          key_field: map_key
+          value_field: entry
+          on_invalid: reject
+      columns:
+        census_digest:
+          const:
+            value: "0000000000000000000000000000000000000000000000000000000000000000"
+        name_key:
+          text:
+            path: map_key
+            trim: false
+        name_evidence:
+          object:
+            base:
+              value:
+                path: entry
+            fields:
+              census:
+                const:
+                  value: "0000000000000000000000000000000000000000000000000000000000000000"
+              version:
+                value:
+                  path: version
+                  from: document
+              key:
+                text:
+                  path: map_key
+                  trim: false
+      select:
+        choose:
+          condition:
+            test:
+              path: map_key
+              kind: truthy
+          then:
+            test:
+              path: entry
+              kind: not_null
+          else:
+            const:
+              value: null
+    cascade:
+      each:
+        entries:
+          path: cascade.assignments
+          key_field: map_key
+          value_field: entry
+          on_invalid: empty
+      columns:
+        census_digest:
+          const:
+            value: "0000000000000000000000000000000000000000000000000000000000000000"
+        cik:
+          integer:
+            path: map_key
+            on_invalid: error
+        cascade_evidence:
+          object:
+            base:
+              value:
+                path: entry
+            fields:
+              census:
+                const:
+                  value: "0000000000000000000000000000000000000000000000000000000000000000"
+              version:
+                value:
+                  path: cascade.version
+                  from: document
+      select:
+        test:
+          path: entry
+          kind: not_null
