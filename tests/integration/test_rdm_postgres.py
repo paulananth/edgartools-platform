@@ -10,6 +10,7 @@ supersedes the current one, and the diff names what moved.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import subprocess
 import time
@@ -33,9 +34,9 @@ def docker(*args):
     return subprocess.run(["docker", *args], text=True, capture_output=True, check=True).stdout.strip()
 
 
-@pytest.fixture(scope="module")
-def rdm():
-    """An empty `rdm` database on PG16, migrated from zero by its owner."""
+@contextlib.contextmanager
+def server():
+    """A PG16 server with an empty `rdm` database (and a `not_rdm` one) and the runtime login."""
     docker("image", "inspect", IMAGE)
     name = f"rdm-test-{uuid4().hex[:10]}"
     docker("run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::5432", "-e", "POSTGRES_PASSWORD=test", IMAGE)
@@ -48,21 +49,32 @@ def rdm():
             engines.append(value)
             return value
 
-        server = engine("postgres")
+        admin = engine("postgres")
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             try:
-                with server.connect() as conn:
+                with admin.connect() as conn:
                     conn.execute(text("SELECT 1"))
                 break
             except DBAPIError:
                 time.sleep(0.1)
         else:
             pytest.fail("PostgreSQL did not become ready")
-        with server.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             conn.exec_driver_sql("CREATE ROLE rdm_runtime LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
             conn.exec_driver_sql("CREATE DATABASE rdm")
             conn.exec_driver_sql("CREATE DATABASE not_rdm")
+        yield engine
+    finally:
+        for value in engines:
+            value.dispose()
+        docker("stop", name)
+
+
+@pytest.fixture(scope="module")
+def rdm():
+    """An empty `rdm` database on PG16, migrated from zero by its owner."""
+    with server() as engine:
         owner = engine("rdm")
         with pytest.raises(Blocked, match="not initialized"):
             migrate(owner, runtime_role="rdm_runtime", existing_only=True)
@@ -73,10 +85,6 @@ def rdm():
         installed = migrate(owner, runtime_role="rdm_runtime")
         assert migrate(owner, runtime_role="rdm_runtime", existing_only=True) == installed  # a rerun installs nothing
         yield RDM(engine("rdm", "rdm_runtime")), owner
-    finally:
-        for value in engines:
-            value.dispose()
-        docker("stop", name)
 
 
 def _import(rdm):

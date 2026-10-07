@@ -1,6 +1,6 @@
 # Agent context: MDM, RDM, relationships and silver, for agents
 
-Status: draft for operator approval (profiling ticket 01a). Research:
+Status: approved by the operator ("approved and already merged 825", 2026-10-05); MDM part built in ticket 05 (#837), RDM part in ticket 05's RDM part. Research:
 `.scratch/profiling/research/01-classify-and-profile.md` section 10. Plan
 decisions 22–25.
 
@@ -23,7 +23,7 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
 |---|---|---|---|
 | `mdm.entity_context` | MDM | live master entity (any kind) | `entity_id`, `kind`, `name` (the surviving name), `status`, `canonical_id`, `identifiers` (jsonb: namespace → values that decide identity), `cross_references` (jsonb: namespace → values its records carry, lookup only, kept apart so an agent never reads one as identity), `fields` (jsonb: surviving values, each with its winning source), `sources` (jsonb: source code → record keys), `valid_from`, `valid_to`, `batch_id`, `published_at` |
 | `mdm.relationship_context` | MDM | period of a live relationship (any type) | `relationship_id`, `type`, `from_entity_id`, `from_kind`, `from_name`, `to_entity_id`, `to_kind`, `to_name`, `role`, `scope`, `derived`, `period`, `valid_from`, `valid_to`, `valid_from_basis`, `valid_to_basis`, `last_seen`, `sources` (jsonb: each source code and record key that states it), `batch_id` |
-| `rdm.code_context` | RDM | code in the published version of each code set | `code_set`, `code`, `label`, `definition`, `synonyms`, `path`, `label_path`, `level`, `depth`, `version`, `sha256`, `valid_from`, `valid_to`, `status` |
+| `rdm.code_context` | RDM | code of every version ever published (current, superseded or retired) | `code_set`, `code_set_name`, `code`, `label`, `definition`, `synonyms`, `path`, `label_path`, `level`, `depth`, `parent_code`, `crosswalk`, `version`, `sha256`, `valid_from`, `valid_to` (the version's), `version_status`, `code_status`, `code_valid_from`, `code_valid_to` (the code's business dates), `invalid_reason`, `approved_by`, `approved_at`, `published_at` |
 | `silver.table_context` | silver | silver table | `table_name`, `grain`, `key`, `links` (column → master kind), `time_columns`, `load_mode`, `definition`, `spec_ref` |
 
 **How `mdm.relationship_context` reads a relationship (ticket 04, built 2026-10-06).**
@@ -78,7 +78,9 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
 - `--as-of <time>`: what was true in the business at that time. MDM masters
   with an `as_of` per batch (`effects->>'as_of'`); the command takes the latest
   generation whose `as_of` is at or before that time. RDM uses the version whose
-  `valid_from`..`valid_to` covers it.
+  `valid_from`..`valid_to` covers it, for both flags; `--as-at` shows that
+  version as it stood then (not yet replaced or retired), and `--as-of` also
+  checks the code's own business dates (`code_valid_from`..`code_valid_to`).
 
 ## 3. The command
 
@@ -102,7 +104,9 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
   reconsidered later.
 - It reads through the existing environment variables (`MDM_DATABASE_URL`),
   as the application role, which may only read tables, and in read-only
-  transactions. It never prints a database address or a secret: a driver
+  transactions. A subject that is no master kind and not `relationship` is a
+  code set, read from RDM through `RDM_DATABASE_URL` (its restricted runtime
+  login), also in read-only transactions. It never prints a database address or a secret: a driver
   error is reported by its type only.
 
 ### 3.1 The answer (JSON, at most 8 KB)
@@ -139,7 +143,23 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
   relationship answers carry `trust` for MDM's latest generation; an entity
   read `--as-at` or `--as-of` says which parts are current
   (`trust.current_parts`).
-- One list per answer pages: `fields`, `related` or `matches`. A string over
+- **A code answer, as built (ticket 05, RDM part):** `name` (the label),
+  `kind` `code`, `code_set`, `key`, `definition`, `code_set_definition`,
+  `path` (the label path), `path_codes`, `level`, `depth`, `parent_code`,
+  `code_status`, `code_valid_from`, `code_valid_to`, `synonyms` (the first 20, with `synonyms_count` when more), `crosswalk` (the codes of other sets it maps to, with
+  match types), `meaning` (the version's meaning hints), and `trust`
+  (`version`, `sha256`, `valid_from`, `valid_to`, the version's `status`,
+  `approved_by`, `approved_at`). `--as-of` reads the version valid then;
+  `--as-at` the newest published by then. `rdm.code_context` holds every code
+  of every version ever published; `rdm.code_search` searches one
+  version's labels and synonyms (full-text, then `ILIKE`, with `%` and `_`
+  matching themselves); with `--as-of` or `--as-at` it searches the version of
+  that time. A search answer lists `matches` (`name`, `code`, `path`,
+  `matched_by`) and carries the same `trust`. `--detail full` adds the code
+  set's `used_in` (where its values live); `--hops` and `--type` are refused
+  for a code set. A code set's id never takes a kind's name or
+  `relationship`, which the command reads from MDM.
+- One list per answer pages: `fields`, `related`, `matches` or `crosswalk`. A string over
   1,000 characters is clipped, and the answer says `clipped`.
 - Over 8 KB, the answer is cut at a whole list item, `truncated` is true and
   `next_page` gives the token.

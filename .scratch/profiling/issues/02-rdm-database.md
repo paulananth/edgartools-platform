@@ -25,7 +25,7 @@ Type: task. Phase: B. Blocked by: 01a, Codex retirement merged. Map: [map](../ma
 - [x] Spec status line says approved (#825); the spec records the unique index, the `type` crosswalk, the canonical form's crosswalk rows, the commands and the semantic layer 2026-10-07 07:10 ET
 - [x] Tests on a populated version (all 309 codes): migrate from zero, publish, immutability, cycle refusal, supersede, diff (9 RDM tests pass on local PG16; affected unit/mdm tests pass, the 15 architecture failures are the same on main: no `jq` on this machine) 2026-10-07 07:10 ET
 - [x] Agent-friendly: `rdm list`, `rdm describe` (bounded 8 KB), `rdm draft --file`, usage and hint tables; data-profiling SKILL.md says how an agent drafts a code set 2026-10-07 07:10 ET
-- [ ] ~~Lookup and search of codes (`rdm.code_context`, `edgar-warehouse context <code set>`)~~ deferred to [05](05-agent-context-views-and-command.md), its RDM part (added 2026-10-07 07:10 ET)
+- [ ] ~~Lookup and search of codes (`rdm.code_context`, `edgar-warehouse context <code set>`)~~ deferred to [05](05-agent-context-views-and-command.md), its RDM part, built there (added 2026-10-07 07:10 ET)
 - [ ] MDM pins version + sha256: separate operator approval, with mastering counts embed vs pin (added 2026-10-07 06:47 ET)
 - [ ] Contract-embedded tables gain the pin: handoff to Codex (spec §7) (added 2026-10-07 06:47 ET)
 - [ ] YAML removed only after the pin's counts match (spec §7)

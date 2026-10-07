@@ -45,7 +45,7 @@ def test_the_limit_is_counted_in_bytes_and_cut_at_a_whole_item():
     assert first["truncated"] and first["next_page"] == f"p{len(first['items'])}"
     assert first["next_step"] == f"cmd --page {first['next_page']}"
     assert first["items"] == items[: len(first["items"])]
-    rest = context.fit(answer_with(items), "items", context._offset(first["next_page"]), "cmd")
+    rest = context.fit(answer_with(items), "items", context.page_offset(first["next_page"]), "cmd")
     assert rest["items"][0] == items[len(first["items"])]
     with pytest.raises(context.ContextError):
         context.fit(answer_with(items), "items", 41, "cmd")
@@ -59,13 +59,13 @@ def test_a_long_value_is_clipped_and_says_so():
 @pytest.mark.parametrize("page", ["2", "page2", "p-1", "p1234567"])
 def test_a_bad_page_token_says_what_to_pass(page):
     with pytest.raises(context.ContextError) as error:
-        context._offset(page)
+        context.page_offset(page)
     assert "next_page" in error.value.command
 
 
 def test_a_time_needs_a_zone():
     with pytest.raises(context.ContextError) as error:
-        context._time("2026-01-31", "--as-of", "edgar-warehouse context company x")
+        context.parse_time("2026-01-31", "--as-of", "edgar-warehouse context company x")
     assert error.value.command == "edgar-warehouse context company x --as-of 2026-01-31T00:00:00+00:00"
 
 

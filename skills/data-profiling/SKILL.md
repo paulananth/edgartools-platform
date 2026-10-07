@@ -74,6 +74,10 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 - **Kinds:** pass the master kinds that already exist (from the operator, or
   `edgar-warehouse context <kind> --search "<words>"` on a few of the part's
   names) so a matching part is not proposed as new.
+- **Code sets:** before proposing a code list as new reference data, look for
+  it: `edgar-warehouse rdm list`, then
+  `edgar-warehouse context <code set> --search "<a label>"` on a few of its
+  values.
 
 ## An id from a name: only when no id exists
 
