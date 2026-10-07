@@ -783,3 +783,66 @@ read:
     mdm_app.dispose()
     mdm_reader.dispose()
     assert records == 2, names
+
+
+def test_all_gleif_member_contracts_read_from_installed_bundle(installed):
+    """Packaged templates must execute without checkout or fixture imports."""
+    python, root = installed
+    result = _run(python, '-c', '''
+import io, json, zipfile
+from pathlib import Path
+from xml.etree import ElementTree as ET
+from edgar_warehouse.rules import files
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.workers import source_read
+store = Artifacts()
+lei = "5493001KJTIIGC8Y1R12"
+date = "2026-09-11T16:00:00+00:00"
+for member in ["level1", "relationships", "reporting-exceptions"]:
+    for format in ["json", "xml"]:
+        folder = Path(member + "-" + format).resolve()
+        folder.mkdir()
+        rules = files.load(files.ROOT / "sources" / "gleif" / f"{member}-{format}.yaml")
+        rules["read"]["references"]["approved_scope"] = {lei:{"selected":True}}
+        row = {"LEI":{"$":lei}}
+        if member == "relationships":
+            row = {"RelationshipRecord":{"Relationship":{"StartNode":{"NodeID":{"$":lei}},
+                "EndNode":{"NodeID":{"$":lei}}}}}
+        if format == "json":
+            wrapper = {"level1":"records", "relationships":"relations", "reporting-exceptions":"exceptions"}[member]
+            body = json.dumps({wrapper:[row]}).encode()
+        else:
+            spec = rules["read"]["stream"]["xml"]
+            refs = rules["read"]["stream"]["header_read"]["references"]
+            refs.update(content_dates={date:{"valid":True}}, record_counts={"1":{"valid":True}},
+                file_content={"GLEIF_FULL_PUBLISHED":{"valid":True,"requires_delta":False}}, delta_starts={})
+            def element(parent, name): return ET.SubElement(parent, "{" + spec["namespace"] + "}" + name)
+            document = ET.Element("{" + spec["namespace"] + "}" + spec["root"])
+            header = element(document, spec["header"])
+            for name,text in [("ContentDate",date),("FileContent","GLEIF_FULL_PUBLISHED"),("RecordCount","1")]:
+                element(header,name).text = text
+            container = element(document,spec["container"])
+            def fields(parent, value):
+                for key,item in value.items():
+                    if key == "$": parent.text = item
+                    else: fields(element(parent,key),item)
+            fields(element(container,spec["record"]), row["RelationshipRecord"] if member == "relationships" else row)
+            body = ET.tostring(document,encoding="utf-8",xml_declaration=True)
+        zipped = io.BytesIO()
+        with zipfile.ZipFile(zipped,"w",compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("captured."+format,body)
+        raw = store.put_bytes((folder / "captured.zip").as_uri(),zipped.getvalue())
+        contract = store.put_bytes((folder / "contract.yaml").as_uri(),json.dumps(rules).encode())
+        context = store.put(folder.as_uri(),{"version":1,"input":raw,"values":{"publication_count":1}})
+        manifest = store.put(folder.as_uri(),{"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
+        task = {"input":manifest,"output":(folder / "reading.json").as_uri(),"checks":["source.output"]}
+        receipt = source_read.execute(task,store)
+        assert source_read.execute(task,store) == receipt
+        assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+        artifact = store.json(receipt)["artifacts"][0]
+        rows = [row for part in artifact["partitions"] for row in store.json(part["receipt"])["tables"][member.replace("-","_")]]
+        assert artifact["record_count"] == 1 and rows == [{"record":row,"source_index":1}]
+print("six installed GLEIF member contracts passed")
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'six installed GLEIF member contracts passed'

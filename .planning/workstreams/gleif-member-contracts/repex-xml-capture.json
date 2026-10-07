@@ -1,0 +1,17 @@
+{
+  "url": "https://goldencopy.gleif.org/storage/golden-copy-files/2026/09/11/1275224/20260911-1600-gleif-goldencopy-repex-golden-copy.xml.zip",
+  "archive": "/private/tmp/codex-gleif-xml-20261006/20260911-1600-gleif-goldencopy-repex-golden-copy.xml.zip",
+  "bytes": 68923825,
+  "sha256": "0f69624405732bdd0b76576eeb7957084c82cc7edf081404baad66351533d6ea",
+  "publisher": {
+    "type": "repex",
+    "format": "xml",
+    "record_count": 6351397,
+    "size": 68923825,
+    "size_human_readable": "65.73 MB",
+    "delta_type": "GoldenCopy",
+    "url": "https://goldencopy.gleif.org/storage/golden-copy-files/2026/09/11/1275224/20260911-1600-gleif-goldencopy-repex-golden-copy.xml.zip",
+    "cdf_version": "REPEX_2.1"
+  },
+  "publish_date": "2026-09-11 16:00:00"
+}

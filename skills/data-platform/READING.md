@@ -724,3 +724,42 @@ privately until every input reaches valid EOF, ZIP CRC and count checks. Retry
 and independent verification use the same configured source boundary. Complete
 captured XML parity, installed mastering and active GLEIF consumer replacement
 remain required before the old XML parser can be removed.
+
+## Three GLEIF member templates
+
+The bundled `sources/gleif/` folder contains `level1`, `relationships` and
+`reporting-exceptions` templates for both `json` and `xml`. Read them through
+`rules.files.load` from the installed `rules.files.ROOT`; copy and pin the
+result before submitting `source.read`. They are qualification templates,
+not activated source Rules. Their selection preserves complete source
+records and original one-based ordinals. Both relationship endpoints must
+belong to the approved scope. Scope selection makes no identity or binding
+decision and does not replace the later MDM checks.
+
+Populate the XML `header_read.references` from authenticated publication
+metadata: `content_dates` and `delta_starts` key normalized UTC ISO instants
+(`+00:00`, seconds or six fractional digits); `record_counts` keys the exact
+decimal header text; `file_content` keys the publication mode and supplies
+`valid: true` plus boolean `requires_delta`. Other reference cells supply
+`valid: true`. Full publication requires absent/empty `DeltaStart`; delta
+publication requires its pinned predecessor time. Empty header references
+refuse the source. Duplicate, malformed or mismatching fields fail before any
+record can be published. Header date comparison accepts equivalent timezone
+spellings by using the existing `date` expression.
+
+Bind `publication_count` to each exact input receipt using the version-2
+source input manifest. Pin the same publisher count in the header reference;
+the worker compares the complete framed count at EOF before publication.
+The creator must derive both pins from the same publication. The current
+interpreter checks each independently; it does not compare the header's count
+directly to the context count. Do not claim that a contract containing
+inconsistent pins is intrinsically rejected. Also keep API `publish_date`
+separate from XML `ContentDate`: captured members can have different content
+timestamps within one publication slot. Pin authenticated capture-header
+evidence explicitly when the download API does not supply that field.
+JSON has no XML header: its CDF version, content time, mode and predecessor
+evidence must come from the authenticated publisher manifest. A count observed
+by a decoder is structural evidence and cannot substitute for that metadata.
+Read the format's source structures as captured; XML and JSON may represent
+singleton lists or attributes differently, so do not infer cross-format raw
+record equality from their common member name.
