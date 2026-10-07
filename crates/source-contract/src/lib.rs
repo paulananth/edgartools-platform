@@ -18,6 +18,7 @@
 
 mod formats;
 pub mod json_sequence;
+pub mod xml_sequence;
 mod integer;
 mod reference;
 mod value;

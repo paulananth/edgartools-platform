@@ -689,3 +689,38 @@ The complete archive framing parity result and the captured-sample performance
 measurement do not by themselves prove installed configured projection,
 producer publication, XML parity or complete Company mastering. Complete those
 checks before replacing the active GLEIF runtime or activating source Rules.
+
+## Configured XML record framing
+
+For a large XML envelope, declare `read.stream.framing: xml_records`.
+`read.format: json` describes the normalized record presented to the existing
+table interpreter. The stream declares `xml` with exactly `namespace`, `root`,
+`header`, `container`, `record` and nullable `record_wrapper`. Envelope elements
+and records must use the declared namespace. The header precedes the single
+record container; repeated/misplaced elements and incomplete EOF refuse.
+
+Declare `header_read` as a separate ordinary JSON read block with the same
+context declaration as the record read. Its configured assertions run before
+the first record, including an empty container. Header deferrals refuse the
+source. Use input-bound context and pinned reference cells for publication
+metadata; the framer supplies no source-specific metadata policy. Generate the
+one-based ordinal context internally as for JSON framing. The optional
+`expected_records_context` checks the full source count after EOF.
+
+XML framing uses the same compressed/expanded bytes, record/depth/count,
+partition and private spool bounds as JSON framing. Omit the JSON-only
+`wrapper`, `min_integer` and `record_encoding` fields. Normalized records use
+compact Python JSON byte accounting. Attributes retain expanded namespace
+names (`@{URI}local`); children in the declared namespace use local names;
+foreign children retain `{URI}local`. Repeated children become lists and
+leading stripped text becomes `$`; tail text is ignored. Namespace scopes,
+XML line endings, attribute whitespace and character references are normalized.
+DTD, undeclared entities, invalid XML names/characters, processing instructions
+inside captured nodes and malformed declarations refuse the source.
+
+`SourceEngine.stream_xml_records` projects normalized records in Rust and
+receives a separate configured header engine. The worker stages all partitions
+privately until every input reaches valid EOF, ZIP CRC and count checks. Retry
+and independent verification use the same configured source boundary. Complete
+captured XML parity, installed mastering and active GLEIF consumer replacement
+remain required before the old XML parser can be removed.
