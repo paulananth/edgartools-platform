@@ -549,6 +549,7 @@ def _brief_link(link: dict) -> dict:
         item["role"] = body["capacity"]
     if body.get("derived"):
         item["derived"] = True
+    item["basis"] = "calculated" if body.get("derived") else "stated"
     return item
 
 

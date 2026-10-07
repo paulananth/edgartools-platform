@@ -98,9 +98,13 @@ _Avoid_: BlackRock, Vanguard, or SSGA as that registrant; a 13F issuer spelling 
 One fund product under a Fund Company, identified by its SEC series id. It holds Securities. An ETF series is still a Fund Series.
 _Avoid_: The traded share, the investment adviser
 
-**MANAGES_FUND**:
-The relationship from the investment adviser to the Fund Series it manages. BlackRock, Vanguard, and SSGA are advisers. N-CEN names them on the series.
-_Avoid_: ISSUED_BY, the Fund Company, the ETF share
+**INVESTMENT_ADVISER_TO**:
+The relationship from an investment adviser to a fund it advises, as Form ADV and N-CEN name the role, with its discretion: discretionary (the adviser decides) or non-discretionary (the client decides). BlackRock, Vanguard, and SSGA are advisers.
+_Avoid_: IS_FUND-MANAGED_BY (the fund's manager), ownership, ISSUED_BY, the ETF share
+
+**Discretion**:
+Who decides about assets: an adviser with discretion decides; without it, the client does (Form ADV Item 5.F). A 13F holding states the manager's investment discretion and voting authority. Discretion is not ownership.
+_Avoid_: Beneficial ownership, control
 
 **Branch Identity**:
 The identity of a separately identified branch establishment linked to its head office, including where the branch is not a separate legal person.
@@ -111,7 +115,7 @@ A government body represented in its own right, distinct from a legally incorpor
 _Avoid_: Government ownership as an identity kind, International Organization
 
 **Market/Venue**:
-A trading market or venue distinct from the organization operating it. Operating and segment venues relate through a venue hierarchy.
+A trading market or venue distinct from the organization operating it: HAS_MARKET_OPERATOR links it to its market operator, and IS_SEGMENT_OF_EXCHANGE a market segment to its exchange.
 _Avoid_: Operator Company, corporate ownership hierarchy
 
 **International Organization**:
@@ -119,32 +123,36 @@ An organization accepted as that kind from its source category, distinct from a 
 _Avoid_: Company, Government Entity, a new identity for every registry category
 
 **Holdings**:
-The relationship from a Person, a Company, or a Fund Series to a Security it holds, for one reported period and capacity. The 13F manager is the reporting holder.
-_Avoid_: ISSUED_BY, MANAGES_FUND, employment, beneficial ownership inferred from the filing alone
+The relationship (HOLDS) from a Person, a Company, or a Fund Series to a Security it holds, for one reported period, as filed: a 13F manager's holding carries its investment discretion and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
+_Avoid_: ISSUED_BY, INVESTMENT_ADVISER_TO, employment, beneficial ownership inferred from a 13F alone
 
 **AUDITED_BY**:
 The relationship from a Company to the Company that audits it for one engagement.
 _Avoid_: A permanent auditor field, the Audit Firm profile itself
 
 **EMPLOYED_BY**:
-The relationship from a Person to a Company for a reported office and dates.
-_Avoid_: A holding, treating the person and the employer as one identity
+The relationship from a Person to a Company as a director, an officer (with the title) or an employee, for reported dates.
+_Avoid_: A holding, ownership (BENEFICIAL_OWNER_OF), treating the person and the employer as one identity
 
 **IS_INTERNATIONAL_BRANCH_OF**:
 The relationship from a Branch to its accepted head office. GLEIF relationship records are the evidence.
 _Avoid_: A subsidiary Company, the head office itself
 
-**Ownership Parent**:
-The relationship from a Company to a Company that owns it. Several owners are allowed. Exhibit 21 and Schedules 13D and 13G are evidence. This is not accounting consolidation.
-_Avoid_: Accounting Direct Parent, a GLEIF accounting parent, a similar name as proof of ownership
+**IS_SUBSIDIARY_OF**:
+The relationship from an entity to the registrant that lists it as a subsidiary (Exhibit 21). Not accounting consolidation.
+_Avoid_: IS_DIRECTLY_CONSOLIDATED_BY, a similar name as proof of ownership
 
-**Accounting Direct Parent**:
-The one direct accounting-consolidating parent of a Company, in one scope and time. GLEIF relationship records are the evidence. A missing parent is not proof of no parent.
-_Avoid_: Ownership Parent, SEC beneficial ownership, Calculated Ultimate Parent
+**BENEFICIAL_OWNER_OF**:
+The relationship from an owner to an issuer whose securities it beneficially owns, with the percent as filed (Schedules 13D and 13G, Forms 3/4/5). Who owns, not who decides.
+_Avoid_: Discretion, HOLDS by a 13F manager, IS_SUBSIDIARY_OF
+
+**IS_DIRECTLY_CONSOLIDATED_BY**:
+The one direct accounting parent of an entity, which consolidates its accounts (IFRS 10 / ASC 810), in one scope and time, as GLEIF names it; the one direct-parent type for any source. A missing parent is not proof of no parent.
+_Avoid_: IS_SUBSIDIARY_OF, beneficial ownership, the ultimate parent
 
 **GLEIF Fund Link**:
-A fund-structure relationship as GLEIF states it: IS_FUND-MANAGED_BY, IS_SUBFUND_OF, or IS_FEEDER_TO. It keeps GLEIF's direction. It does not replace MANAGES_FUND from Form ADV or N-CEN.
-_Avoid_: MANAGES_FUND, Holdings, reversing the edge to match an SEC filing
+A fund-structure relationship as GLEIF states it: IS_FUND-MANAGED_BY (the fund's manager), IS_SUBFUND_OF, or IS_FEEDER_TO. It keeps GLEIF's direction. It does not replace INVESTMENT_ADVISER_TO from Form ADV or N-CEN.
+_Avoid_: INVESTMENT_ADVISER_TO, Holdings, reversing the edge to match an SEC filing
 
 **Source Record Binding**:
 The evidence-backed assignment of one source record to the Company Identity, Person Identity, or other accepted identity that it describes.
@@ -230,13 +238,17 @@ _Avoid_: A limit without a reason, an unpinned batch, a gate that replaces a Mas
 The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result
 
-**Reported Ultimate Parent**:
-The ultimate-parent relationship asserted by a source for its stated hierarchy scope and time.
-_Avoid_: Calculated Ultimate Parent, ownership and accounting consolidation treated as interchangeable
+**IS_ULTIMATELY_CONSOLIDATED_BY**:
+The top of an entity's consolidation chain: the entity that consolidates it and that no other entity consolidates, as GLEIF names it. Its basis is stated (a source says it) or calculated (MDM walked the direct parents, keeping the path); both sit side by side.
+_Avoid_: Ownership, an ultimate parent from an incomplete or cyclic chain
 
-**Calculated Ultimate Parent**:
-The terminal parent derived from accepted hierarchy edges for a specified scope, time and derivation rule, with the supporting path retained.
-_Avoid_: Reported Ultimate Parent, a result from an incomplete or cyclic hierarchy
+**Basis**:
+Whether a relationship is stated (a source says it) or calculated (MDM derived it).
+_Avoid_: A calculated link read as a source's statement
+
+**SUCCESSOR_ENTITY**:
+The relationship from an entity that ceased in a corporate action to the entity that took it over, with the event type and its effective date, as GLEIF names it.
+_Avoid_: A parent, merging the two entities into one
 
 ### Data classes, reference data and agent context
 

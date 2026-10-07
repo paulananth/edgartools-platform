@@ -16,75 +16,70 @@
 #                     overlapping parents are both held back for a steward
 #   ultimate_parent   for a hierarchy: derive each record's ultimate parent with
 #                     this algorithm (accounting-chain-v1)
+#   ultimate_type     the type the derived ultimate parent is written as (its
+#                     basis is calculated, beside the stated ones)
+#
+# Every name is the source's or the standard's own term (operator, 2026-10-07:
+# "All relationships must be named as close as reality"; each name approved one
+# by one, profiling ticket 04b). A link's properties (a percent, discretion,
+# investment discretion, voting authority, a corporate action's event type)
+# are carried on its periods.
 #
 # Before this file the same table was held in code; a policy registered without
 # this section still uses it (relationships.TYPES_V0), so the two must agree.
-version: relationship-types-v1
+version: relationship-types-v2
 types:
-  AUDITED_BY:
-    from: [company]
-    to: [company]
-    to_profile: audit_firm
-  ISSUED_BY:
-    from: [security]
+  # Consolidation (GLEIF's relationship file names; IFRS 10 / ASC 810).
+  IS_DIRECTLY_CONSOLIDATED_BY:
+    from: [company, fund_structure, government, international_organization]
     to: [company, fund_structure, government, international_organization]
-  EMPLOYED_BY:
-    from: [person]
-    to: [company]
-    capacities: [director, employee, officer]
-  CONTROLS:
-    from: [person]
-    to: [company]
-    capacities: [control_person, owner, ten_percent_owner]
-  HOLDS:
-    from: [company, fund_structure, person]
-    to: [security]
-  MANAGES_FUND:
-    from: [company, person]
-    to: [company, fund_structure]
-    from_profile: adviser
-    to_profile: fund
-  OWNERSHIP_PARENT:
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+    ultimate_parent: accounting-chain-v1
+    ultimate_type: IS_ULTIMATELY_CONSOLIDATED_BY
+  IS_ULTIMATELY_CONSOLIDATED_BY:
+    from: [company, fund_structure, government, international_organization]
+    to: [company, fund_structure, government, international_organization]
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+  # Corporate actions (GLEIF's SuccessorEntity).
+  SUCCESSOR_ENTITY:
+    from: [company, fund_structure, government, international_organization]
+    to: [company, fund_structure, government, international_organization]
+  # Ownership (Exhibit 21; Schedules 13D/13G and Forms 3/4/5).
+  IS_SUBSIDIARY_OF:
     from: [company, fund_structure, government, international_organization]
     to: [company, fund_structure, government, international_organization]
     hierarchy: true
     cycles: review
-  ACCOUNTING_PARENT:
-    from: [company, fund_structure, government, international_organization]
+  BENEFICIAL_OWNER_OF:
+    from: [company, fund_structure, government, international_organization, person]
     to: [company, fund_structure, government, international_organization]
-    hierarchy: true
-    cycles: invalid
-    one_parent: true
-    ultimate_parent: accounting-chain-v1
-  IS_DIRECTLY_CONSOLIDATED_BY:
-    from: [company]
+    capacities: [five_percent_owner, ten_percent_owner]
+  # People (Forms 3/4/5 role flags).
+  EMPLOYED_BY:
+    from: [person]
     to: [company]
-    hierarchy: true
-    cycles: invalid
-    one_parent: true
-    ultimate_parent: accounting-chain-v1
-  IS_ULTIMATELY_CONSOLIDATED_BY:
-    from: [company]
-    to: [company]
-    hierarchy: true
-    cycles: invalid
-    one_parent: true
-  REPORTED_ULTIMATE_PARENT:
-    from: [company, fund_structure, government, international_organization]
+    capacities: [director, employee, officer]
+  # Securities (13F, Forms 3/4/5).
+  HOLDS:
+    from: [company, fund_structure, person]
+    to: [security]
+  ISSUED_BY:
+    from: [security]
     to: [company, fund_structure, government, international_organization]
-  IS_INTERNATIONAL_BRANCH_OF:
-    from: [branch]
-    to: [company, fund_structure, government, international_organization]
-    hierarchy: true
-    cycles: invalid
-  VENUE_OPERATOR:
-    from: [venue]
-    to: [company, fund_structure, government, international_organization]
-  VENUE_SEGMENT_OF:
-    from: [venue]
-    to: [venue]
-    hierarchy: true
-    cycles: invalid
+  # Funds (Form ADV and N-CEN; GLEIF's relationship file names).
+  INVESTMENT_ADVISER_TO:
+    from: [company, person]
+    to: [company, fund_structure]
+    from_profile: adviser
+    to_profile: fund
+  IS_FUND-MANAGED_BY:
+    from: [company, fund_structure]
+    to: [company, person]
+    from_profile: fund
   IS_SUBFUND_OF:
     from: [company, fund_structure]
     to: [company, fund_structure]
@@ -99,7 +94,23 @@ types:
     to_profile: fund
     hierarchy: true
     cycles: invalid
-  IS_FUND-MANAGED_BY:
-    from: [company, fund_structure]
-    to: [company, person]
-    from_profile: fund
+  # Branches (GLEIF).
+  IS_INTERNATIONAL_BRANCH_OF:
+    from: [branch]
+    to: [company, fund_structure, government, international_organization]
+    hierarchy: true
+    cycles: invalid
+  # Audit (XBRL cover page; the audit report).
+  AUDITED_BY:
+    from: [company]
+    to: [company]
+    to_profile: audit_firm
+  # Trading venues (ISO 10383; MiFID II's market operator).
+  HAS_MARKET_OPERATOR:
+    from: [venue]
+    to: [company, fund_structure, government, international_organization]
+  IS_SEGMENT_OF_EXCHANGE:
+    from: [venue]
+    to: [venue]
+    hierarchy: true
+    cycles: invalid

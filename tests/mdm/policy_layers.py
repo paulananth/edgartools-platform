@@ -36,6 +36,18 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
+def without_real_names(policy: dict) -> dict:
+    """Profiling ticket 04b (operator, 2026-10-07: "All relationships must be
+    named as close as reality"; each name approved one by one): the
+    relationship types under their sources' own names. Peeled, the types are
+    the table profiling ticket 04 moved into the policy."""
+    from edgar_warehouse.mdm.clean import relationships
+
+    body = _copy(policy)
+    body["relationships"] = {"version": "relationship-types-v1", "types": _copy(relationships.TYPES_V0)}
+    return body
+
+
 def without_reference_pins(policy: dict) -> dict:
     """Profiling ticket 02 (operator, 2026-10-07 08:01 ET: "Ticket 02's last
     step needs your approval. Approved"): the policy pins its reference data
@@ -106,7 +118,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_real_names, without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:

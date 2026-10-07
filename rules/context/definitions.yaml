@@ -31,20 +31,33 @@ kinds:
   venue: >-
     A trading market or venue, apart from the organization that operates it.
 relationships:
-  AUDITED_BY: The company's accounts are audited by the other company, an audit firm.
+  IS_DIRECTLY_CONSOLIDATED_BY: >-
+    The entity's accounts are consolidated, under accounting standards (IFRS 10 / ASC 810), by this
+    direct parent; one per scope and time. Basis stated (a source says it).
+  IS_ULTIMATELY_CONSOLIDATED_BY: >-
+    The top of the entity's consolidation chain: the entity that consolidates it and that no other
+    entity consolidates. Basis stated (a source says it) or calculated (MDM walked the direct parents,
+    with the path); the two sit side by side, so a disagreement shows.
+  SUCCESSOR_ENTITY: >-
+    The entity that took over this one when it ceased in a corporate action (a merger, an absorption,
+    a demerger), with the event type and its effective date.
+  IS_SUBSIDIARY_OF: The entity is listed as a subsidiary of the registrant.
+  BENEFICIAL_OWNER_OF: >-
+    The owner beneficially owns the issuer's securities, as a ten percent owner (Forms 3/4/5, Section 16)
+    or a five percent owner (Schedules 13D/13G, Section 13(d)), with the percent as filed. Who owns, not
+    who decides: an adviser's discretion is on INVESTMENT_ADVISER_TO.
+  EMPLOYED_BY: The person works for the company as a director, an officer (with the title) or an employee.
+  HOLDS: >-
+    The entity holds the security, as filed: a 13F manager's holding carries its investment discretion
+    and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
   ISSUED_BY: The security is issued by this entity.
-  EMPLOYED_BY: The person works for the company in the capacity shown (director, officer, employee).
-  CONTROLS: The person owns or controls the company in the capacity shown (owner, ten percent owner, control person).
-  HOLDS: The entity holds the security.
-  MANAGES_FUND: The adviser manages the fund.
-  OWNERSHIP_PARENT: The entity is owned by the other entity (an ownership parent; chains may loop and are reviewed).
-  ACCOUNTING_PARENT: The entity's accounts are consolidated by the other entity (its direct accounting parent).
-  IS_DIRECTLY_CONSOLIDATED_BY: The company is consolidated by the other company, its direct parent, as the source states it.
-  IS_ULTIMATELY_CONSOLIDATED_BY: The company's ultimate consolidating parent, as the source states it.
-  REPORTED_ULTIMATE_PARENT: The ultimate parent a source reports for the entity, kept as reported.
-  IS_INTERNATIONAL_BRANCH_OF: The branch belongs to this head office.
-  VENUE_OPERATOR: The venue is operated by this entity.
-  VENUE_SEGMENT_OF: The venue is a segment of the other venue.
-  IS_SUBFUND_OF: The fund is a subfund of the other fund (an umbrella).
+  INVESTMENT_ADVISER_TO: >-
+    The adviser is the fund's investment adviser, with discretion: discretionary (the adviser decides)
+    or non-discretionary (the client decides).
+  IS_FUND-MANAGED_BY: The fund is managed by this fund management entity (its fund manager).
+  IS_SUBFUND_OF: The fund is a sub-fund of the other fund (an umbrella).
   IS_FEEDER_TO: The fund feeds its money into the other fund (a master fund).
-  IS_FUND-MANAGED_BY: The fund is managed by this company or person.
+  IS_INTERNATIONAL_BRANCH_OF: The branch belongs to this head office.
+  AUDITED_BY: The company's statements were audited by the other company, an audit firm, for one engagement.
+  HAS_MARKET_OPERATOR: The trading venue's business is managed and operated by this entity, its market operator.
+  IS_SEGMENT_OF_EXCHANGE: The trading venue is a market segment of the other venue, its exchange.

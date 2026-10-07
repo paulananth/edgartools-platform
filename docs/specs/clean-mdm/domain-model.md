@@ -67,7 +67,7 @@ Source validity and system-recorded time are separate.
 | Calculated ultimate parent | Supported legal identities | Derived from accepted direct-parent edges at an explicit watermark under a versioned algorithm; retain full path and unavailable/cycle states |
 | `EMPLOYED_BY` / insider association | Person to Company | Source-reported office/role and valid dates; holdings do not imply employment |
 | Holdings | Accepted Person, Company, or Fund Structure to Security | Source form, owner/manager capacity, reporting period, units and quantities; 13F manager is not automatically beneficial owner |
-| `MANAGES_FUND` | Company/Person with Adviser profile to Company/Fund Structure with Fund profile | SEC ADV assertion; retain reporting adviser, filing and fund grain |
+| `INVESTMENT_ADVISER_TO` (was `MANAGES_FUND`, profiling ticket 04b) | Company/Person with Adviser profile to Company/Fund Structure with Fund profile | SEC ADV and N-CEN assertion, with discretion (discretionary or non-discretionary); retain reporting adviser, filing and fund grain |
 | GLEIF fund relationships | Typed accepted fund/manager endpoints | Keep `IS_FUND-MANAGED_BY`, `IS_SUBFUND_OF`, `IS_FEEDER_TO` direction and meaning; do not reverse ADV edges as substitutes |
 | `IS_INTERNATIONAL_BRANCH_OF` | Branch to accepted head-office identity | Source direction and dates; missing head office remains deferred |
 | Venue operator / venue hierarchy | Market/Venue to accepted operator / Market/Venue | MIC semantics and dated mapping; not legal ownership |
