@@ -129,3 +129,11 @@ def test_relationship_refusal_precedes_later_matching_shape_failure():
         with pytest.raises(adapters.UnsupportedRecord) as failure:
             adapters.normalize(row,source_code='gleif.level1.v1',contract=body,publication=publication)
         assert failure.value.reason=='unsupported_relationship_type'
+
+
+def test_unused_mapping_expressions_are_validated_before_fields_projection():
+    configured=copy.deepcopy(files.source('gleif')['mdm']['gleif.level1.v1']['contract']['adapter'])
+    configured['reading']['read']['tables']['mapped']['columns']['matching']={'unknown_primitive':{}}
+    with pytest.raises(source_engine.SourceRejected) as failure:
+        adapters._fields(raw(),configured)
+    assert failure.value.code=='contract'

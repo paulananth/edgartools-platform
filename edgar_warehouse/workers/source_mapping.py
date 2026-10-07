@@ -22,6 +22,9 @@ def project_record(row: dict, reading: dict, *, column: str) -> dict:
     tables = body.get("read", {}).get("tables", {})
     if set(tables) != {"mapped"} or column not in tables["mapped"].get("columns", {}):
         raise SourceRejected("contract", "record mapping requires one mapped table and the declared column")
+    # Validate every declared expression, even in columns not evaluated now.
+    # Full compilation is cached by immutable content; runtime remains selective.
+    _engine(json.dumps(body, sort_keys=True, ensure_ascii=False, allow_nan=False))
     tables["mapped"]["columns"] = {column: tables["mapped"]["columns"][column]}
     key = json.dumps(body, sort_keys=True, ensure_ascii=False, allow_nan=False)
     result = _engine(key).read(json.dumps(row, ensure_ascii=False, allow_nan=False).encode())

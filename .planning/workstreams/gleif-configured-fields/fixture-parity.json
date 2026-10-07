@@ -1,7 +1,7 @@
 {
   "verified_at": "2026-10-07T22:28:57.260299+00:00",
-  "native_cases": 31,
-  "projection_cases": 38,
+  "native_cases": 139,
+  "projection_cases": 39,
   "projection_seconds": 1.58,
   "pins": {
     "crates/source-contract/src/lib.rs": "dcd49855105fdcb66dabf3ac12a7cd7e96a29f4146e9d64afca6e6832ea98fe0",
@@ -9,17 +9,20 @@
     "crates/source-contract/src/join.rs": "3d9ecfedccd9a9ef6ced973a2a29569364896dd0681e1af554c90f35727b60d1",
     "crates/source-contract/src/text_transform.rs": "bca0627b90b9ab0bb9d11a2ef22d3e912cad01ab38897e606601925c6d7548f8",
     "crates/source-contract/tests/join.rs": "da3e886187d7e4b07a62b8b84fb6fa98124be38d5634ec20737442450ba74280",
-    "tests/engine/test_gleif_configured_fields.py": "d4656cee30619df0274c01b1f7c2323504e6702de7c13a1db3ce3abfab79b2fa",
+    "tests/engine/test_gleif_configured_fields.py": "21fa04d7fb1ec75c1034ce127f683402eef4c792540ce52c87c94ad74b6bd962",
     "rules/sources/gleif/level1-fields.yaml": "03506caffa276d91f6ecc9bc1a4f9bd69938dee7d3b427fbac94b31d040a3387",
     "rules/sources/gleif/relationships-fields.yaml": "9461cc9fd811856afa75926c27e518aa6cf911aa5c0a4346e984d8a5864802ec",
     "rules/sources/gleif/reporting-exceptions-fields.yaml": "9461cc9fd811856afa75926c27e518aa6cf911aa5c0a4346e984d8a5864802ec",
     "/private/tmp/codex-gleif-fields-literal-site-20261007/source_contract/source_contract.abi3.so": "637cc7dce53939a3c04b582b6918005ef6b6fce5541d2b309ed078ecd14e1e64",
-    "/private/tmp/codex-gleif-fields-literal-final-native-20261007.log": "a933d77f92ccaace684e5eba59a81e5220b760fbdfe16a79b726d39c42925fbe"
+    "/private/tmp/codex-gleif-fields-literal-final-native-20261007.log": "a933d77f92ccaace684e5eba59a81e5220b760fbdfe16a79b726d39c42925fbe",
+    "edgar_warehouse/workers/source_mapping.py": "1ed52353a72e2a5016fe5e0b2dc9a114cc438d426d05b1eae7db5a0f0b6bada5",
+    "edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
+    "/private/tmp/codex-gleif-fields-all-native-20261007.log": "ad11cb1842e4b737088807da31255dab05bab09d4fe13b0ac640cf5ad645d73d"
   },
   "captured_records_qualified": false,
   "active_mdm_wired": true,
   "installed_population_qualified": false,
   "full_goal_complete": false,
-  "affected_cases": 145,
-  "affected_seconds": 2.63
+  "affected_cases": 146,
+  "affected_seconds": 6.04
 }
