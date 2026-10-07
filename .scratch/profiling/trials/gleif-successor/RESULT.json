@@ -1,0 +1,194 @@
+{
+ "source": "GLEIF Golden Copy 2026-09-11 16:00, Level 1 (local capture)",
+ "counts": {
+  "records_with_successor": 51913,
+  "successor_leis": 34855,
+  "successors_named_only": 17913,
+  "outcome_assertion": 43520,
+  "links": 27667,
+  "links_first_seen": 5597,
+  "outcome_deferred": 8393,
+  "links_dated": 22070
+ },
+ "links_by_event_type": {
+  "MERGERS_AND_ACQUISITIONS": 19247,
+  "deferred:unsupported_identity_kind": 8318,
+  "no completed event": 5597,
+  "ABSORPTION": 2214,
+  "DEMERGER": 275,
+  "CHANGE_LEGAL_FORM": 150,
+  "BREAKUP": 89,
+  "deferred:invalid_lei_checksum": 75,
+  "DISSOLUTION": 75,
+  "CHANGE_LEGAL_ADDRESS": 8,
+  "SPINOFF": 6,
+  "LIQUIDATION": 4,
+  "ACQUISITION_BRANCH": 2
+ },
+ "examples": [
+  {
+   "lei": "029200098C3K8BI2D551",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "549300NIVXF92ZIOVW61"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": null,
+     "properties": {
+      "source_event_type": null,
+      "source_event_status": null
+     }
+    }
+   ],
+   "shows": [
+    "no completed event naming it"
+   ]
+  },
+  {
+   "lei": "029200738G7T8AI6H992",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "029200328C3N9YI2D660"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2020-04-17T11:33:58Z",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED"
+     }
+    }
+   ],
+   "shows": [
+    "one dated successor"
+   ]
+  },
+  {
+   "lei": "05SSS4SLZOFBX4WLVU11",
+   "successors": [
+    {
+     "SuccessorEntityName": {
+      "$": "John Hancock Variable Insurance Trust - Global Trust"
+     }
+    }
+   ],
+   "links": [],
+   "shows": [
+    "a successor named only"
+   ]
+  },
+  {
+   "lei": "097900BFCC0000009483",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "549300JB1P61FUTPEZ75"
+     }
+    },
+    {
+     "SuccessorEntityName": {
+      "@xml:lang": "sk",
+      "$": "VÚB Operating Leasing, a.s."
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2022-01-01T00:00:00+01:00",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED"
+     }
+    }
+   ],
+   "shows": [
+    "several successors",
+    "a successor named only"
+   ]
+  },
+  {
+   "lei": "254900HFWF3T7WOCKE43",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "8KUMV9EIJ75IBFMLFD23"
+     }
+    },
+    {
+     "SuccessorLEI": {
+      "$": "8KUMV9EIJ75IBFMLFD23"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2024-10-01T00:00:00.000Z",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED"
+     }
+    },
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2024-10-01T00:00:00.000Z",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED"
+     }
+    }
+   ],
+   "shows": [
+    "several successors"
+   ]
+  },
+  {
+   "lei": "549300CBMOS9A9CKJ326",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "5493004Q7PHLGS83ND55"
+     }
+    },
+    {
+     "SuccessorLEI": {
+      "$": "5493004Q7PHLGS83ND55"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": null,
+     "properties": {
+      "source_event_type": null,
+      "source_event_status": null
+     }
+    },
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": null,
+     "properties": {
+      "source_event_type": null,
+      "source_event_status": null
+     }
+    }
+   ],
+   "shows": [
+    "several successors",
+    "no completed event naming it"
+   ]
+  }
+ ],
+ "seconds": 374
+}

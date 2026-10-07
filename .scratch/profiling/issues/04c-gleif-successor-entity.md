@@ -41,10 +41,11 @@ Of 3,428,477 Level 1 records:
 ## Checklist
 
 - [x] Scan the Golden Copy for the successor fields (evidence above) 2026-10-07 13:05 ET
-- [ ] GoF consult on the relationship mapping in `adapters.normalize`
-- [ ] Contract language: `each` (one link per list item, paths `item.`…) and `find` (the first item of another list whose fields match; a path through a nested list matches any element), in `adapters.normalize`; REFERENCE.md says it; mapdoc and catalog list the paths
-- [ ] `rules/sources/gleif/source.yaml`, `gleif.level1.v1`: `SUCCESSOR_ENTITY` per successor LEI, `valid_from` the completed event's effective date, `source_event_type`, `source_event_status`
-- [ ] Test on captured records (5–10 real successors, one with several, one name-only, one with no completed event); the GLEIF contract digest, with a peel layer, for the operator's approval
-- [ ] Mapping Document regenerated (`rules mapdoc write --only gleif`), `rules mapdoc check` passes
-- [ ] PG16: a successor link ends the ceased entity's parent link through the full path
+- [x] GoF consult on the relationship mapping in `adapters.normalize`: no refactor; put `each`/`find` into what the paths read (a scope per link, `_scopes`), not into each read; the loop body becomes `_link`; refuse a name that hides a record field 2026-10-07 13:21 ET
+- [x] Contract language: `each` (one link per list item, paths `item.`…) and `find` (the first item of another list whose fields match; a path through a nested list matches any element), in `adapters.normalize`; REFERENCE.md says it; the Mapping Document lists the paths (catalog already says a source carries relationships) (tests/mdm/test_clean_relationship_lists.py; a mapping without them keeps its assertion id, test_clean_link_start) 2026-10-07 13:21 ET
+- [x] `rules/sources/gleif/source.yaml`, `gleif.level1.v1`: `SUCCESSOR_ENTITY` per successor LEI, `valid_from` the completed event's effective date, `source_event_type`, `source_event_status` (tests/mdm/test_clean_gleif_source.py) 2026-10-07 13:21 ET
+- [x] Test on captured records: every one of the 51,913 Golden Copy records naming a successor, through the real GLEIF reader (`.scratch/profiling/trials/gleif-successor/RESULT.json`, 374 s): 43,520 read, 8,393 wait as other kinds (8,318 funds, branches and other categories; 75 invalid LEI checksums); 27,667 links, exactly one per successor LEI on every record read; 22,070 dated by a completed event (MERGERS_AND_ACQUISITIONS 19,247, ABSORPTION 2,214, DEMERGER 275, CHANGE_LEGAL_FORM 150, BREAKUP 89, DISSOLUTION 75, others 20), 5,597 with no completed event naming the successor (start when first seen); successors named only make none 2026-10-07 13:21 ET
+- [ ] The GLEIF Level 1 contract digest c7655ed6… (peel back to 74b8b1f4…), for the operator's approval
+- [x] Mapping Document regenerated (`rules mapdoc write --only gleif`), `rules mapdoc check` passes 2026-10-07 13:21 ET
+- [x] PG16: a successor link ends the ceased entity's parent link through the full path, and its calculated ultimate parent, on the event date, citing the succession (tests/integration/test_fresh_mastering_postgres.py; 1,222 unit and MDM tests and the GLEIF integration tests pass; the bundle tests need cargo, run by CI) 2026-10-07 13:21 ET
 - [ ] Review (Standards, Spec, GoF), PR, CI, merge on word
