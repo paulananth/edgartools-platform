@@ -58,7 +58,7 @@ names = ["Électricité Holdings Corporation /DE/", "THE A&B L.L.C.", "Wayfair I
 raw = store.put_bytes((root / "names.json").as_uri(), json.dumps({"names":[{"name":name} for name in names]}).encode())
 proof = {}
 for source, first in [("sec.submissions.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELECTRICITE HLDGS CORP DE")]:
-    config = files.load(files.ROOT / source / "name-key.yaml")
+    config = files.load(files.ROOT / "sources" / source / "name-key.yaml")
     contract = store.put(root.as_uri(), config)
     manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw}]})
     task = {"input":manifest,"output":(root / (source + ".json")).as_uri(),"checks":["source.output"]}

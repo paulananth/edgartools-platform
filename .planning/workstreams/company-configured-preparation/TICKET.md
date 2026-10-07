@@ -21,7 +21,10 @@ Continue the full self-sustaining skill / bundled Rules creator / parsing / MDM 
 - [x] Verify #843 and #844 merged and create dedicated `codex/company-mastering-retirement-20261007` branch at b0b40646; live GitHub state and clean checkout verified (2026-10-07 07:06 ET).
 - [x] Measure existing text configuration against retained SEC name keys: three of four concrete cases differ (accent, legal-form spelling/punctuation, state suffix); WAYFAIR LLC stays distinct from WAYFAIR INC (2026-10-07 07:06 ET).
 - [x] Add bounded generic text transformations, compiled once per contract, without provider-specific callbacks or loader dependencies; seven native cases and 106 affected Python cases passed, independent Spec/Standards/GoF review closed regex-work and aggregate-compilation findings (2026-10-07 07:20 ET).
-- [ ] Bundle configured SEC/GLEIF name-key recipes and prove exact retained-normalizer parity on captured names, Unicode cases and deliberate configuration faults.
+- [x] Bundle configured SEC/GLEIF name-key recipes and prove exact retained-normalizer parity: final native binary matches 1,181 names from 1,000 receipt-pinned SEC captures and all 1,112,064 Unicode scalars in both modes, with an observable state-suffix fault; report `captured-name-key-parity.json`, 147.546s (2026-10-07 07:23 ET). Full GLEIF captured-name/census population remains a separate requirement.
 - [ ] Wire receipt-bound census evidence into configured Company preparation; full classification, mastering population/replay/recovery and legacy removal remain required above.
 - [ ] Verify affected native/Python tests, independently review and publish a separate PR with full CI.
 - [ ] Verify both name-key recipes from a committed installed bundle outside checkout, with raw-input reading and independent source.output verification.
+
+- [x] Complete final native suite (124 passed), affected Python suite (106 passed), strict Rules contract loading and independent Spec/Standards/GoF review; final binary independently passed nine recipe tests and six resource-bound probes (2026-10-07 07:23 ET).
+- [ ] Correct installed test's omitted `sources/` path and rerun; ce3b3572 installed both recipes successfully, but the first test failed before reading at 90.35s.
