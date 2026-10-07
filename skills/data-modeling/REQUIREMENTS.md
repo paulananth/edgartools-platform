@@ -1,6 +1,6 @@
 # Data modeling requirements
 
-Decided from [the runtime account](../../docs/research/claude-codex-runtimes-2026-10-06.md), `CONTEXT.md`, `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`, and the profiling specs. This note is the boundary. The skill that follows it does not add a second one.
+Decided from `docs/research/claude-codex-runtimes-2026-10-06.md`, `CONTEXT.md`, `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`, and the profiling specs. This note is the boundary. The skill that follows it does not add a second one.
 
 ## Scope
 
@@ -11,7 +11,7 @@ In scope:
 - The part's class, using the five classes data-profiling already measures: master data, reference data, relationship, transaction data, or metadata. The tests and the evidence stay in [data-profiling](../data-profiling/SKILL.md). Modeling reads `findings.yaml`. It does not remeasure the files.
 - For a master part, which kind in `KINDS` it is (`company`, `person`, `security`, `fund_structure`, `branch`, `government`, `international_organization`, `venue`). A profile (Adviser, Audit Firm, Fund) hangs on one of those kinds. It is not a kind. The words are in `CONTEXT.md`.
 - Which identifiers are identity and which are cross-references. Data-onboarding already states the join rule: only `cik` and `lei` join two records into one. A cross-reference is lookup only and is never a join key (PR #835, `c170c534`).
-- Whether a hierarchy is a reference hierarchy (codes inside one code set) or a master-data hierarchy (relationships between masters). That split is in [the RDM spec](../../docs/specs/rdm/spec.md) and in data-profiling's hierarchy findings.
+- Whether a hierarchy is a reference hierarchy (codes inside one code set) or a master-data hierarchy (relationships between masters). That split is in `docs/specs/rdm/spec.md` and in data-profiling's hierarchy findings.
 - The relationship's type, the kinds at its ends, its role, and its scope, using `CONTEXT.md` and `rules/merge/relationships.yaml`. A type the policy does not name is a question, not a new name.
 - For a transaction or reference part that MDM does not own, the silver table spec data-profiling already wrote. That spec is advice. Modeling does not build the table.
 
@@ -36,6 +36,6 @@ Use it after approved findings exist, or to stop and say that they do not. Do no
 
 ## Open questions
 
-1. [The RDM spec](../../docs/specs/rdm/spec.md) is still a draft for operator approval (profiling 01a, PR #825). A recommendation may follow that draft. RDM is not an approved store, and no command writes a code set.
-2. `rdm.code_context` and `silver.table_context` are specified in [the agent-context spec](../../docs/specs/agent-context/spec.md) and are not what the context command reads yet. `edgar_warehouse/context.py` says they join the command in a later phase. Modeling reads the specs and the findings. It does not claim the command returns those views.
+1. `docs/specs/rdm/spec.md` is still a draft for operator approval (profiling 01a, PR #825). A recommendation may follow that draft. RDM is not an approved store, and no command writes a code set.
+2. `rdm.code_context` and `silver.table_context` are specified in `docs/specs/agent-context/spec.md` and are not what the context command reads yet. `edgar_warehouse/context.py` says they join the command in a later phase. Modeling reads the specs and the findings. It does not claim the command returns those views.
 3. Claude's name-matching trial is on `claude/profiling-07b-name-matching` in another worktree. It is not on `main`. Similar names are not identity.

@@ -5,7 +5,7 @@ description: Decide where one profiled part sits in MDM, reference data, or silv
 
 # Data modeling
 
-The boundary is [REQUIREMENTS.md](REQUIREMENTS.md). Read it before deciding. History of the two runtimes is in [the runtime account](../../docs/research/claude-codex-runtimes-2026-10-06.md).
+The boundary is [REQUIREMENTS.md](REQUIREMENTS.md). Read it before deciding. History of the two runtimes is in `docs/research/claude-codex-runtimes-2026-10-06.md`.
 
 This skill decides structure. It does not measure the files and it does not write a contract.
 
@@ -31,7 +31,7 @@ This skill decides structure. It does not measure the files and it does not writ
 
 1. **Name the part.** If the operator has not said which part, ask that and stop.
 2. **Read the approved findings** for that part: `class`, `record_key`, `identifiers`, `relationships`, `hierarchies`, and `silver`. If the findings are missing or not approved, hand off to data-profiling. Do not profile the files here.
-3. **Read the language that already exists.** `CONTEXT.md` for identities and profiles. `rules/merge/relationships.yaml` for relationship types. [The RDM spec](../../docs/specs/rdm/spec.md) for a code set, remembering it is still a draft. Do not invent a type or a kind name.
+3. **Read the language that already exists.** `CONTEXT.md` for identities and profiles. `rules/merge/relationships.yaml` for relationship types. `docs/specs/rdm/spec.md` for a code set, remembering it is still a draft. Do not invent a type or a kind name.
 4. **Look up what MDM already holds,** and only for that question:
 
    ```bash
