@@ -1,25 +1,27 @@
 # GLEIF member contracts and complete parser retirement
 
-Continue the original full self-sustaining skills / Rules creator / parsing / MDM / custom orchestration goal. PRs #833 and #834 are merged. Codex owns this branch and worktree. Local qualification only; preserve the active runtime until complete replacement evidence exists.
+Continue the original full self-sustaining skills / Rules creator / parsing / MDM / custom orchestration goal. PRs #833, #834 and #841 are merged. Codex continues from merged main e6b541b3 on `codex/gleif-runtime-retirement-20261006` in the same protected worktree. Local qualification only; preserve the active runtime until complete replacement evidence exists.
 
 - [ ] Bundle configured contracts for Level 1, relationships and reporting exceptions, both JSON and XML, approved scope and authenticated publication metadata.
 - [ ] Qualify complete captured member bytes, counts, canonical hashes, ZIP CRC and EOF; compare selected configured outputs against historical results.
-- [ ] Qualify installed XML publication refusal and recovery with restricted PostgreSQL 16.
+- [x] Qualify installed XML publication refusal and recovery with restricted PostgreSQL 16; e4ca3ea8 installed trial passed, 26 deselected, no skips, 179.19s: bad header wrote no artifacts/master rows; restored same input retried the same run on attempt 2 through independent verification and mastering (2026-10-06 21:18 ET).
 - [ ] Replace active GLEIF runtime consumers and remove legacy parsing imports and implementations after complete equivalence.
 - [ ] Replace remaining Company landing/preparation/provenance/census/cascade routes with configured reading and mastering.
 - [ ] Prove installed empty-store 6,414 Company / 3,052 CIK+LEI population, unchanged replay and recovery.
 - [ ] Reconcile Claude/Codex trackers and retire remaining parser/adapter/fixture/capture code according to parent issue 20 L3-L8.
 - [ ] Independent review, affected tests, full CI and reviewable PRs.
+- [x] Merge PR #841 on the operator's explicit request; installed recovery and full CI 37556203441 passed on exact head e4ca3ea8, GitHub confirms merge e6b541b373d114a6a10a3bc8dd84151cf26c0d38 (2026-10-06 21:21 ET).
 - [x] Compare complete cached relationships and reporting-exceptions JSON against independent ijson decoding; verified 487,721 / 6,351,397 records, exact types/key order, canonical hashes, ZIP CRC and EOF in stored full reports (2026-10-06 20:50 ET).
 - [x] Download matching 20260911-1600 XML archives after operator approval; verify all three publisher compressed sizes and store SHA-256 capture receipts and exact publisher API metadata (2026-10-06 20:51 ET).
 - [x] Correct captured JSON wrapper names and independently fix fixtures; affected member/header/archive fault tests passed 53 cases in 2.18s (2026-10-06 20:55 ET).
 - [ ] Qualify full downloaded XML with separately pinned capture ContentDate; first attempts correctly refused because API publication slot differs from all three member ContentDates.
 - [ ] Add generic direct header/context count equality so a malformed creator contract cannot pin inconsistent counts; independent review reproduced header4/context3/actual3 acceptance.
-- [ ] Qualify installed count-bound XML refusal and same-run missing-artifact recovery through restricted PG16 Rules/Bookkeeping/MDM, with zero master writes on failure and complete verified retry.
+- [x] Qualify installed count-bound XML refusal and same-run missing-artifact recovery through restricted PG16 Rules/Bookkeeping/MDM, with zero master writes on failure and complete verified retry; installed e4ca3ea8 trial passed in 179.19s, no skips (2026-10-06 21:18 ET).
 - [x] Qualify full relationships XML: 487,721 records, 961,511,828 expanded bytes, exact scalar/list/canonical projection parity, metadata/count/CRC/EOF, 648.57s; stored full report (2026-10-06 21:06 ET).
 - [x] Implement generic typed `equal` and regress mismatched header/reference/context counts for all three members; 116 native tests, 63 focused cases and 441 engine cases pass on isolated native build (2026-10-06 21:10 ET).
 - [ ] Wire direct count equality into the bundled XML templates after the pinned full corpus jobs finish; their template hashes must remain stable during scans.
 - [ ] Hash the actual native extension before/after future qualification runs; current helper hashes package initializer only. Supplemental installed extension integrity matches original RECORD but supplies no retroactive pre-scan binary check.
+- [x] Independent Spec/Standards/GoF review of typed equality and installed recovery: no remaining scoped blocker; full CI including five suites and aggregate gate passed in run 37556203441, then PR #841 merged (2026-10-06 21:21 ET). Full runtime retirement remains unchecked above.
 
 Verified foundation: full Level 1 JSON framing and configured selected-output comparison are recorded in the prior GLEIF workstream; merged #834 supplies XML framing through the native interpreter and private worker boundary. The full CI gate 37551604093 passed on 22c7e922. This is not complete GLEIF XML corpus or mastering qualification.
 
@@ -31,3 +33,7 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 
 - [x] Regress API-slot/content-date confusion and mid-scan implementation change; affected tests passed 57 cases in 3.30s (2026-10-06 20:59 ET).
 - [x] Push reviewable contracts/qualification change and create non-draft PR #841; live GitHub head c36199c7, CI 37554733174 running (2026-10-06 20:58 ET).
+
+- [x] Qualify full reporting-exceptions XML: 6,351,397 records, 1,933,382,825 expanded bytes, zero typed value differences, canonical hash/count/CRC/EOF, 1579.60s (26m20s); saved full report (2026-10-06 21:22 ET).
+
+- [x] Wire direct count equality into relationships and reporting-exceptions XML templates; 54 affected tests pass in 2.51s, independent Spec/Standards review passes, and deliberate assertion removal makes shipped-template regression fail (2026-10-06 21:26 ET). Level 1 and native qualification hashing remain pending while scan 2655 is live.

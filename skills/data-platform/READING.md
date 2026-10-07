@@ -766,10 +766,10 @@ spellings by using the existing `date` expression.
 Bind `publication_count` to each exact input receipt using the version-2
 source input manifest. Pin the same publisher count in the header reference;
 the worker compares the complete framed count at EOF before publication.
-The creator must derive both pins from the same publication. The current
-templates check each independently; they do not yet configure the generic
+The creator must derive both pins from the same publication. The relationships and reporting-exceptions XML templates configure the generic
 `equal` assertion above to compare header count directly to context count.
-Do not claim that those templates reject inconsistent pins. Also keep API `publish_date`
+Level 1 still checks the pins independently while its qualification scan
+requires a stable template; do not claim that it rejects inconsistent pins. Also keep API `publish_date`
 separate from XML `ContentDate`: captured members can have different content
 timestamps within one publication slot. Pin authenticated capture-header
 evidence explicitly when the download API does not supply that field.

@@ -118,6 +118,15 @@ read:
             on_missing: "null"
         reason: XML record count must match pinned publication metadata
       - test:
+          equal:
+            left:
+              integer:
+                path: RecordCount.$
+            right:
+              context:
+                name: publication_count
+        reason: Header count must equal the input-bound publication count
+      - test:
           choose:
             condition:
               lookup:
