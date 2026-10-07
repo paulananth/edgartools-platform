@@ -165,6 +165,62 @@ rather than silently rounding into a different record. Existing byte,
 nesting, UTF-8 and finite-number safety checks remain. This is a declared
 numeric boundary, not universal equivalence with Python's arbitrary integers.
 
+### Typed dictionary values
+
+For JSON mappings, `value` also accepts `type` (`text`, `integer`, `number`,
+`boolean`, `object`, `array`), `nullable` (default true), `trim`, and
+`null_if_blank` (both default false). Wrong types or forbidden nulls refuse
+with `value_type`; booleans never count as numbers. Blank/trim policies use
+Python whitespace, including U+001C–U+001F. Nonblank strings retain their
+original spelling unless trimming is declared.
+
+Declare `path_mode: literal` when each intermediate must be a JSON object.
+A scalar or list intermediate is missing; `$` is an ordinary dictionary key,
+not a scalar-text alias. Literal paths have no filters. Default `tree` mode
+keeps the established document path grammar. Explicit typed values under
+reserved `$`/`@` keys retain their actual types.
+
+### Joined text and nullable objects
+
+Use generic `join` for an ordered array of projected text:
+
+```yaml
+street2:
+  join:
+    path: Entity.LegalAddress.AdditionalAddressLine
+    path_mode: literal
+    item_path: $
+    item_type: object
+    separator: "\n"
+    trim: true
+    skip_empty: true
+    null_if_empty: true
+    max_items: 100000
+```
+
+`path`, `item_path`, `separator`, and `max_items` are required. Missing/null
+arrays return null; other non-array inputs or non-text projections refuse
+with `join_shape`. Optional `item_type` is `object` or `text`; it checks each
+raw item before projection. `from: document` selects the original document.
+`max_items` is 1–100,000 and counts raw entries before omission. The separator
+is at most 128 UTF-8 bytes; joined output is at most 1 MiB. Limit failures
+use `join_limit`. Empty output returns text unless `null_if_empty` is true.
+
+`object` accepts `omit_nulls: true` to omit declared null fields and
+`null_if_empty: true` to return null for an empty result. Both default false.
+Base fields retain their nulls; collision checks still precede omission.
+
+GLEIF's bundled `*-fields.yaml` recipes demonstrate these operations. Freeze
+the entire reading under the Dataset Contract's `adapter.reading` before
+qualification. The generic record mapper validates all expressions before
+selective evaluation, then evaluates fields and matching at their existing
+MDM normalization points. Compare exact assertions, quality, deferrals and
+failure order with the retained oracle; approve changed contract digests as
+new Rules versions before activation. Configuration and execution-limit
+failures stop the run. Record shape failures retain their declared deferral.
+Installed fixture publication/recovery and bounded captured parity are
+separate from full semantic corpus and complete Company population proof.
+
 For `mdm.prepare`, declare `record_column: record` in the unit's keys when the
 selected table holds complete records in a column. Every selected value must
 be an object. Preparation writes those exact objects as JSON Lines; its

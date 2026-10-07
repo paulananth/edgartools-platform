@@ -1,17 +1,23 @@
 //! Typed JSON evidence; no text flattening or domain interpretation.
 use std::collections::BTreeMap;
 use serde_yaml::Value;
-use crate::{check_path, lookup_value, setting, Found, Rejected, Val};
+use crate::{check_path, lookup_shape, lookup_literal, setting, Found, Rejected, Val};
 use crate::tree::{Child, El, ScalarKind};
 
 pub(crate) fn validate(args: &Value) -> Result<(), String> {
     let map = args.as_mapping().ok_or("value arguments must be a mapping")?;
-    if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "from"))) {
-        return Err("value names path and optional from only".into());
+    if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "from" | "type" | "nullable" | "trim" | "null_if_blank" | "path_mode"))) {
+        return Err("value has an unknown argument".into());
     }
     if args.get("from").is_some_and(|v| !matches!(v.as_str(), Some("document" | "item"))) {
         return Err("value from is document or item".into());
     }
+    if args.get("type").is_some_and(|v| !matches!(v.as_str(),Some("text" | "integer" | "number" | "boolean" | "object" | "array"))) { return Err("value type is text, integer, number, boolean, object or array".into()); }
+    for key in ["nullable", "trim", "null_if_blank"] {
+        if args.get(key).is_some_and(|v| v.as_bool().is_none()) { return Err("value policies are booleans".into()); }
+    }
+    if args.get("path_mode").is_some_and(|v| !matches!(v.as_str(),Some("tree"|"literal"))) { return Err("value path_mode is tree or literal".into()); }
+    if setting(args,"path_mode") == Some("literal") && setting(args,"path").is_some_and(|p| p.contains(['[',']'])) { return Err("literal paths have no filters".into()); }
     check_path(setting(args, "path").ok_or("value names no path")?)
 }
 
@@ -53,10 +59,31 @@ fn element(el: &El) -> Result<Val, Rejected> {
 }
 
 pub(crate) fn read(start: &El, args: &Value) -> Result<Val, Rejected> {
-    match lookup_value(start, setting(args, "path").unwrap(), true)? {
+    let found = if setting(args,"path_mode") == Some("literal") { lookup_literal(start,setting(args,"path").unwrap())? } else { lookup_shape(start,setting(args,"path").unwrap())? };
+    let value = match found {
         Found::Missing => Ok(Val::Null),
         Found::El(el) => element(el),
         Found::Text(text, kind, exact) => scalar(Some(&text), kind, exact),
         Found::List(items) => items.into_iter().map(element).collect::<Result<Vec<_>, _>>().map(Val::List),
-    }
+    }?;
+    let valid = match &value {
+        Val::Null => args["nullable"].as_bool() != Some(false),
+        _ if setting(args,"type").is_none() => true,
+        Val::Str(_) => setting(args,"type") == Some("text"),
+        Val::Int(_) | Val::UInt(_) => matches!(setting(args,"type"),Some("integer"|"number")),
+        Val::Float(_) => setting(args,"type") == Some("number"),
+        Val::Bool(_) => setting(args,"type") == Some("boolean"),
+        Val::Map(_) => setting(args,"type") == Some("object"),
+        Val::List(_) => setting(args,"type") == Some("array"),
+    };
+    if !valid { return Err(Rejected::new("value_type", "Value differs from declared type or null policy")); }
+    if let Val::Str(text) = value {
+        if args["trim"].as_bool() != Some(true) && args["null_if_blank"].as_bool() != Some(true) { return Ok(Val::Str(text)); }
+        let stripped = text.trim_matches(crate::text_transform::whitespace);
+        if args["null_if_blank"].as_bool() == Some(true) && stripped.is_empty() {
+            if args["nullable"].as_bool() == Some(false) { return Err(Rejected::new("value_type", "Blank value conflicts with nonnullable policy")); }
+            return Ok(Val::Null);
+        }
+        Ok(Val::Str(if args["trim"].as_bool() == Some(true) { stripped.to_owned() } else { text }))
+    } else { Ok(value) }
 }

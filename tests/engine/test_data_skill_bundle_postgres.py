@@ -1043,3 +1043,126 @@ print("installed Company raw combination and preparation passed")
 '''.replace('WITH_CENSUS', repr(with_census)), cwd=root)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'installed Company raw combination and preparation passed'
+
+
+def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(installed, databases, tmp_path):
+    """Restricted PG16, installed native GLEIF fields, exact replay and lost ACK.
+
+    Bounded fixture qualification; retained release semantics remain in use.
+    This does not qualify the full captured Company/GLEIF population.
+    """
+    from sqlalchemy import create_engine
+    from edgar_warehouse.mdm.clean.store import migrate, register_policy
+    from tests.support.fresh_mastering import cohort, FIXTURE, CHILD_LEI, PARENT_LEI
+    from tests.support.rules_authority import register_dataset
+
+    python, root = installed
+    name = f"gleif_installed_{uuid4().hex[:8]}"
+    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql(f"CREATE DATABASE {name}")
+    admin = create_engine(databases.admin.url.set(database=name))
+    app = create_engine(admin.url.set(username="clean_application", password="test"))
+    try:
+        migrate(admin, application_role="clean_application")
+        policy, contracts, readings = cohort()
+        gleif = {f"gleif.{member}.v1": files.mdm_contract("gleif", f"gleif.{member}.v1")
+                 for member in ("level1", "relationships", "reporting_exceptions")}
+        with admin.begin() as conn:
+            policy_digest = register_policy(conn, policy)
+            for code, body in {**contracts, **gleif}.items():
+                register_dataset(conn, code, str(uuid4()), body)
+        rows = [row for row in json.loads(FIXTURE.read_text())["gleif"]
+                if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
+        assert len(rows) == 2
+        done = _run(python, "-c", r'''
+import copy, hashlib, json, sys
+from pathlib import Path
+from uuid import uuid4
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
+from edgar_warehouse.rules import files, source_engine
+from edgar_warehouse.mdm.clean import adapters, gleif_source
+from edgar_warehouse.mdm.clean.evidence import decision
+from edgar_warehouse.mdm.clean.merge import MergeStage
+from edgar_warehouse.mdm.clean.publication import LocalContractSink
+from edgar_warehouse.mdm.clean.store import Store, digest
+from edgar_warehouse.workers import source_mapping
+body=json.load(sys.stdin)
+assert files.ROOT == files.BUNDLED
+source_engine.STEPS = {}
+engine=create_engine(body["dsn"])
+with engine.connect() as conn:
+    assert conn.scalar(text("SHOW server_version_num")) >= "160000"
+    assert conn.scalar(text("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")) is False
+for member in ("level1","relationships","reporting_exceptions"):
+    mapping=files.mdm_contract("gleif",f"gleif.{member}.v1")["adapter"]
+    recipe=files.load(files.ROOT/"sources/gleif"/f"{member.replace('_','-')}-fields.yaml")
+    assert digest(mapping["reading"]) == digest(recipe)
+    assert isinstance(source_mapping.project_record({},mapping["reading"],column="fields"),dict)
+contract=files.mdm_contract("gleif","gleif.level1.v1")
+retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
+assertions=[]
+for ordinal,row in enumerate(body["rows"]):
+    publication={"publication_key":"installed-gleif-fixture","revision":1,
+                 "artifact_sha256":digest(row),"member":"level1"}
+    kwargs={"member":"level1","source_code":"gleif.level1.v1","eligible_leis":body["leis"],
+            "publication":publication,"ordinal":ordinal}
+    actual=gleif_source.record_evidence(row,contract=contract,**kwargs)
+    assert actual[0]=="assertion" and digest(actual)==digest(gleif_source.record_evidence(row,contract=retained,**kwargs))
+    assertions.append(actual[1])
+store=Store(engine); stage=MergeStage(store); run=str(uuid4())
+command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-gleif-qualification",
+         "policy_digest":body["policy"],"expected_checkpoint":0,"checkpoint":1,
+         "as_of":body["as_of"],"assertions":[*body["readings"],*assertions]}
+first=stage.apply(**command)
+with engine.connect() as conn:
+    counts=dict(conn.execute(text("SELECT kind,count(*) FROM mdm.current_entity GROUP BY kind")).all())
+    assert counts=={"company":2,"person":2},counts
+    bindings=dict(conn.execute(text("SELECT subject,entity_id::text FROM mdm.stage_record")).all())
+assert all(bindings[row["subject"]] is None for row in assertions)
+companies=[row for row in body["readings"] if row["kind"]=="company"]
+decisions=[decision("bind",actor="steward",reason="offline fixture binding",at=body["as_of"],
+    subject=row["subject"],entity_id=bindings[sec["subject"]],evidence=[row["assertion_id"]])
+    for row,sec in zip(assertions,companies,strict=True)]
+second_command={**command,"batch_id":"installed-gleif-bindings","assertions":[],"decisions":decisions,
+                "expected_checkpoint":1,"checkpoint":2}
+second=stage.apply(**second_command)
+class LostAcknowledgement:
+    def __init__(self,sink): self.sink=sink
+    def publish(self,*args): self.sink.publish(*args); raise OSError("simulated lost acknowledgement")
+    def verify(self,*args): return self.sink.verify(*args)
+for consumer in body["consumers"]:
+    sink=LocalContractSink(Path("published")/consumer)
+    try: store.deliver_one(consumer,"installed",LostAcknowledgement(sink))
+    except OSError: pass
+    else: raise AssertionError("lost acknowledgement was not exercised")
+    assert not store.run_status(run)["publication_complete"]
+    while store.deliver_one(consumer,"installed",sink): pass
+    assert list(sink.directory.glob("*.json"))
+assert store.run_status(run)["publication_complete"]
+assert stage.apply(**command)["duplicate"] and stage.apply(**second_command)["duplicate"]
+with engine.connect() as conn:
+    assert conn.scalar(text("SELECT count(*) FROM mdm.batch"))==2
+    assert conn.scalar(text("SELECT count(*) FROM mdm.master_entity"))==4
+for sql in ("DELETE FROM mdm.source_reading","DELETE FROM mdm.master_entity","CREATE TABLE mdm.bypass(id int)"):
+    try:
+        with engine.begin() as conn: conn.execute(text(sql))
+    except DBAPIError as error: assert error.orig.pgcode=="42501"
+    else: raise AssertionError("restricted operation accepted")
+pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
+      for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
+                   files.ROOT/"sources/gleif/source.yaml"]}
+print(json.dumps({"pins":pins,"generation":second["generation"],"counts":counts,
+                  "installed_gleif_mapping":True,"publication_recovery":True,"full_population":False}))
+engine.dispose()
+''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
+                         "policy": policy_digest, "readings": readings, "rows": rows,
+                         "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
+                         "consumers": policy["required_consumers"]})
+        assert done.returncode == 0, done.stderr
+        proof = json.loads(done.stdout)
+        assert proof["installed_gleif_mapping"] and proof["publication_recovery"]
+        (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
+    finally:
+        admin.dispose()
+        app.dispose()

@@ -34,9 +34,12 @@ LIMIT = 1000
 
 def runtime_files() -> list[Path]:
     """The Merge Stage is part of what a run pins for this profile."""
-    from edgar_warehouse.mdm.clean import cli, merge, run, store
+    from edgar_warehouse.mdm.clean import adapters, cli, merge, run, store
+    from edgar_warehouse.rules import source_engine
+    from . import source_mapping
 
-    return [Path(m.__file__) for m in (cli, merge, run, store)]
+    return [*[Path(m.__file__) for m in (adapters, cli, merge, run, store, source_mapping)],
+            *source_engine.runtime_files()]
 
 
 def mdm_run(envelope: dict) -> str:

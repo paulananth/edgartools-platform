@@ -210,10 +210,25 @@ def classify_record(
     return verdict, labelled
 
 
+def _configured_values(row: dict, mapping: dict, column: str) -> dict:
+    from edgar_warehouse.rules.source_engine import SourceRejected
+    from edgar_warehouse.workers.source_mapping import project_record
+
+    try:
+        return project_record(row, mapping["reading"], column=column)
+    except SourceRejected as error:
+        if error.code in {"value_type", "join_shape"}:
+            raise UnsupportedRecord("invalid_field_shape") from None
+        # Configuration and execution failures stop the run, not a record.
+        raise
+
+
 def _fields(row: dict, mapping: dict) -> dict:
     """A row's mapped fields. Blank text is unknown, never a value: a source
     that sends "" has said nothing, and a blank must not win a field or show
     in the master (operator, 2026-09-24)."""
+    if "reading" in mapping:
+        return _configured_values(row, mapping, "fields")
     fields = {
         name: mapped_field(row, name, spec)
         for name, spec in mapping.get("fields", {}).items()
@@ -233,6 +248,8 @@ def _matching_values(row: dict, mapping: dict) -> dict:
     fields, so reading it grants no field a value (ticket 08). A value is one
     path, or an address's components, as `fields.address` reads them
     (GLEIF's headquarters address: ticket 22)."""
+    if "reading" in mapping:
+        return _configured_values(row, mapping, "matching")
     return {
         name: value(row, path) if isinstance(path, str) else mapped_field(row, "address", path)
         for name, path in (mapping.get("matching") or {}).items()

@@ -1,0 +1,23 @@
+# Native configured mapped values; not a source activation.
+source: gleif
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 1
+  assertions:
+  - test:
+      test:
+        path: .
+        kind: object
+    reason: Mapped input must be an object
+  tables:
+    mapped:
+      each: .
+      columns:
+        fields:
+          object:
+            fields: {}
+        matching:
+          object:
+            fields: {}

@@ -1,0 +1,16 @@
+{
+  "retained": {
+    "street": "Main",
+    "street2": "Suite\nWing"
+  },
+  "configured_candidate": {
+    "city": null,
+    "street": "Main",
+    "street2": "[{'$': ' Suite '}, {'$': '  '}, {'$': 'Wing'}]"
+  },
+  "gaps": [
+    "Joining projected text lines with a declared separator",
+    "Omitting null object fields while preserving nullable-empty address"
+  ],
+  "custom_callbacks": false
+}

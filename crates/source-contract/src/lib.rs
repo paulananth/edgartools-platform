@@ -22,6 +22,7 @@ pub mod xml_sequence;
 mod integer;
 mod reference;
 mod value;
+mod join;
 mod context;
 mod parallel;
 mod matrix;
@@ -101,7 +102,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 16] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal"];
+const PRIMITIVES: [&str; 17] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -551,6 +552,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
         }
         "test" => predicate::validate(args)?,
+        "join" => join::validate(args)?,
         "steps" => {
             for step in args.as_sequence().ok_or("steps must be a list")? {
                 validate_expr(step, steps)?;
@@ -605,8 +607,11 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
         }
         "object" => {
-            let args = args.as_mapping().filter(|m| !m.is_empty() && m.len() <= 2).ok_or("object names fields and optional base only")?;
-            if args.keys().any(|k| !matches!(k.as_str(),Some("fields" | "base"))) { return Err("object names fields and optional base only".into()); }
+            let args = args.as_mapping().filter(|m| !m.is_empty() && m.len() <= 4).ok_or("object requires fields with optional base and null policies")?;
+            if args.keys().any(|k| !matches!(k.as_str(),Some("fields" | "base" | "omit_nulls" | "null_if_empty"))) { return Err("object has an unknown argument".into()); }
+            for key in ["omit_nulls", "null_if_empty"] {
+                if args.get(Value::String(key.into())).is_some_and(|v| v.as_bool().is_none()) { return Err("object null policies are booleans".into()); }
+            }
             if let Some(base) = args.get(Value::String("base".into())) { validate_expr(base,steps)?; }
             let fields = args.get(Value::String("fields".into())).and_then(Value::as_mapping)
                 .filter(|m| m.len() <= 128).ok_or("object fields is a mapping of at most 128 entries")?;
@@ -874,14 +879,18 @@ fn lookup<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
 /// Existing text readers treat an empty array as absent. Integer conversion
 /// retains it as a structured value so its explicit invalid policy applies.
 fn lookup_value<'a>(start: &'a El, path: &str, keep_empty_arrays: bool) -> Result<Found<'a>, Rejected> {
-    lookup_inner(start, path, keep_empty_arrays, false)
+    lookup_inner(start, path, keep_empty_arrays, false, false)
 }
 
-fn lookup_shape<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
-    lookup_inner(start, path, true, true)
+pub(crate) fn lookup_shape<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
+    lookup_inner(start, path, true, true, false)
 }
 
-fn lookup_inner<'a>(start: &'a El, path: &str, keep_empty_arrays: bool, keep_null: bool) -> Result<Found<'a>, Rejected> {
+pub(crate) fn lookup_literal<'a>(start: &'a El, path: &str) -> Result<Found<'a>, Rejected> {
+    lookup_inner(start, path, true, true, true)
+}
+
+fn lookup_inner<'a>(start: &'a El, path: &str, keep_empty_arrays: bool, keep_null: bool, literal: bool) -> Result<Found<'a>, Rejected> {
     if path == "." {
         return Ok(Found::El(start));
     }
@@ -892,6 +901,7 @@ fn lookup_inner<'a>(start: &'a El, path: &str, keep_empty_arrays: bool, keep_nul
             None => (segment.as_str(), None),
         };
         current = match current {
+            Found::List(_) if literal => Found::Missing,
             Found::List(_) => {
                 return Err(Rejected::new(
                     "repeated_path",
@@ -899,10 +909,11 @@ fn lookup_inner<'a>(start: &'a El, path: &str, keep_empty_arrays: bool, keep_nul
                 ));
             }
             Found::Missing => Found::Missing,
-            Found::Text(_, _, _) if key == "$" => current,
+            Found::Text(_, _, _) if key == "$" && !literal => current,
             Found::Text(_, _, _) => Found::Missing,
-            Found::El(el) if key == "$" => el.text.clone().map_or(Found::Missing, |text| Found::Text(text, el.kind, el.exact_number.as_deref())),
-            Found::El(el) if key.starts_with('@') => el.attrs.get(key).cloned().map_or(Found::Missing, |text| Found::Text(text, ScalarKind::Text, None)),
+            Found::El(el) if literal && el.scalar => Found::Missing,
+            Found::El(el) if key == "$" && !(keep_null && el.children.contains_key(key)) => el.text.clone().map_or(Found::Missing, |text| Found::Text(text, el.kind, el.exact_number.as_deref())),
+            Found::El(el) if key.starts_with('@') && !(keep_null && el.children.contains_key(key)) => el.attrs.get(key).cloned().map_or(Found::Missing, |text| Found::Text(text, ScalarKind::Text, None)),
             Found::El(el) => {
                 let rows: Vec<&El> = match el.children.get(key) {
                     None => Vec::new(),
@@ -1057,11 +1068,13 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
                 if fields.contains_key(name.as_str().unwrap()) {
                     return Err(Rejected::new("object_field_conflict", "object fields collide with base"));
                 }
-                fields.insert(name.as_str().unwrap().to_string(), eval(engine, context, document, item, ordinal, expr)?);
+                let value = eval(engine, context, document, item, ordinal, expr)?;
+                if value != Val::Null || args["omit_nulls"].as_bool() != Some(true) { fields.insert(name.as_str().unwrap().to_string(), value); }
             }
-            Ok(Val::Map(fields))
+            if fields.is_empty() && args["null_if_empty"].as_bool() == Some(true) { Ok(Val::Null) } else { Ok(Val::Map(fields)) }
         }
         "value" => value::read(scope(document, item, args), args),
+        "join" => join::read(scope(document, item, args), args),
         "lookup" => {
             let key = eval(engine, context, document, item, ordinal, &args["key"])?;
             reference::read(&engine.read, args, &key)

@@ -1,0 +1,78 @@
+{
+  "results": [
+    {
+      "member": "level1",
+      "archive": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip",
+        "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+      },
+      "records": 1000,
+      "sample_digest": "3d4bdcd35cca5c1f030ec86ca9911d63308c77c03966573f2d3102d23f8c3c98",
+      "mapped_digest": "416bb1c7c01d9d7762fc1f84c7ba5e660f35e7ef10a77ca866c22f6f595defce",
+      "runtime_pins": {
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/scripts/qualification/qualify_gleif_fields.py": "7a2629ad4a9d1815565384947e0e4ce7adb77015754d0dbebd9fc81ae607ce52",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/files.py": "db85959f924c54c88a35195f8e5d6866a051eeb2b7cf31c103f20e710fd0b39f",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/workers/source_mapping.py": "1ed52353a72e2a5016fe5e0b2dc9a114cc438d426d05b1eae7db5a0f0b6bada5",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/rules/sources/gleif/level1-fields.yaml": "03506caffa276d91f6ecc9bc1a4f9bd69938dee7d3b427fbac94b31d040a3387",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/rules/sources/gleif/source.yaml": "41c9066a0626cf8f258200980e0426086f462778582bbedfb97af5300fc7962b",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/.planning/workstreams/company-census-evidence/gleif-runtime/level1-json-runtime-parity.json": "1336bc15824b6d8c87275079e76a33ed60d8067b18c0f31168768401ffe70eed",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+        "/private/tmp/codex-gleif-fields-literal-site-20261007/source_contract/source_contract.abi3.so": "637cc7dce53939a3c04b582b6918005ef6b6fce5541d2b309ed078ecd14e1e64"
+      },
+      "seconds": 8.720150297041982,
+      "scope": "authenticated archive, bounded prefix exact fields/matching/quality/assertion/refusal parity; current EOF and full semantic corpus not qualified"
+    },
+    {
+      "member": "relationships",
+      "archive": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-rr-golden-copy.json.zip",
+        "sha256": "089a2513d2b5d78fc6359c87ef4bc25a56ac7f58d6b3cb740b954e3ecd2bd0c3"
+      },
+      "records": 1000,
+      "sample_digest": "115cdac44d331931daee45d69f4aa4055617b0de56e45bc8ec3af3296e6b035d",
+      "mapped_digest": "88e0a8fd74e703effa98b76997d8b1d89e9e51319d09ce53d1c4f6859e8b9384",
+      "runtime_pins": {
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/scripts/qualification/qualify_gleif_fields.py": "7a2629ad4a9d1815565384947e0e4ce7adb77015754d0dbebd9fc81ae607ce52",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/files.py": "db85959f924c54c88a35195f8e5d6866a051eeb2b7cf31c103f20e710fd0b39f",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/workers/source_mapping.py": "1ed52353a72e2a5016fe5e0b2dc9a114cc438d426d05b1eae7db5a0f0b6bada5",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/rules/sources/gleif/relationships-fields.yaml": "9461cc9fd811856afa75926c27e518aa6cf911aa5c0a4346e984d8a5864802ec",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/rules/sources/gleif/source.yaml": "41c9066a0626cf8f258200980e0426086f462778582bbedfb97af5300fc7962b",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/.planning/workstreams/company-census-evidence/gleif-runtime/relationships-json-runtime-parity.json": "1687c002f05a1f28a23b6db56bcb469d3486a6a3b0f73913512bef381b38f11b",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+        "/private/tmp/codex-gleif-fields-literal-site-20261007/source_contract/source_contract.abi3.so": "637cc7dce53939a3c04b582b6918005ef6b6fce5541d2b309ed078ecd14e1e64"
+      },
+      "seconds": 0.8334087838884443,
+      "scope": "authenticated archive, bounded prefix exact fields/matching/quality/assertion/refusal parity; current EOF and full semantic corpus not qualified"
+    },
+    {
+      "member": "reporting_exceptions",
+      "archive": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-repex-golden-copy.json.zip",
+        "sha256": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831"
+      },
+      "records": 1000,
+      "sample_digest": "af7fe691eaeee142f47379654bdf821efbf84b1b15b20eaa0b2dc717711589d3",
+      "mapped_digest": "dad6b451d8132cce4a35521d699ba3e30766f3985f7113a5ba00e7be2abe11dd",
+      "runtime_pins": {
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/scripts/qualification/qualify_gleif_fields.py": "7a2629ad4a9d1815565384947e0e4ce7adb77015754d0dbebd9fc81ae607ce52",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/files.py": "db85959f924c54c88a35195f8e5d6866a051eeb2b7cf31c103f20e710fd0b39f",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/workers/source_mapping.py": "1ed52353a72e2a5016fe5e0b2dc9a114cc438d426d05b1eae7db5a0f0b6bada5",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/rules/sources/gleif/reporting-exceptions-fields.yaml": "9461cc9fd811856afa75926c27e518aa6cf911aa5c0a4346e984d8a5864802ec",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/rules/sources/gleif/source.yaml": "41c9066a0626cf8f258200980e0426086f462778582bbedfb97af5300fc7962b",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/.planning/workstreams/company-census-evidence/gleif-runtime/reporting_exceptions-json-runtime-parity.json": "fcebb23187ecc9719c01e3daef97c6c61f23ecc0a476fdd8c424061cc6b13711",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
+        "/private/tmp/edgartools-platform-codex-gleif-configured-fields-20261007/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+        "/private/tmp/codex-gleif-fields-literal-site-20261007/source_contract/source_contract.abi3.so": "637cc7dce53939a3c04b582b6918005ef6b6fce5541d2b309ed078ecd14e1e64"
+      },
+      "seconds": 0.9595638348255306,
+      "scope": "authenticated archive, bounded prefix exact fields/matching/quality/assertion/refusal parity; current EOF and full semantic corpus not qualified"
+    }
+  ],
+  "installed_population_qualified": false,
+  "full_goal_complete": false
+}
