@@ -1,6 +1,6 @@
 # Reference Data Management (RDM)
 
-Status: draft for operator approval (profiling ticket 01a). Research:
+Status: approved by the operator ("approved and already merged 825", 2026-10-05); built in profiling ticket 02. Research:
 `.scratch/profiling/research/01-classify-and-profile.md` sections 8, 9 and 13.
 Plan decisions 19–21, 24.
 
@@ -43,22 +43,37 @@ reads it, why it exists).
 | `code_label` | (`code_set`, `version`, `code`, `language`, `label`) | `kind` (`preferred`, `synonym`), `source` (steward, profiling, agent draft) |
 | `level` | (`code_set`, `version`, `depth`) | `name`, `definition` (stewards name the levels) |
 | `code_path` | (`code_set`, `version`, `code`) | `path` (text, delimiter-escaped codes, root first), `label_path` ("Finance > Depository > State banks"), `level`, `depth`. **Written once at publish**; never edited |
-| `crosswalk_row` | (`from_set`, `from_version`, `from_code`, `to_set`, `to_version`, `to_code`) | `match_type` (`exact`, `close`, `broad`, `narrow`; SKOS mapping), `evidence` |
+| `crosswalk_row` | (`from_set`, `from_version`, `from_code`, `to_set`, `to_version`, `to_code`) | `match_type` (`exact`, `close`, `broad`, `narrow`; SKOS mapping), `evidence`. `to_version` is `outside` for a code set RDM does not hold (an outside standard) |
+| `code_set_usage` | (`code_set`, `version`, `store`, `object`, `field`) | `store` (`mdm`, `silver`, `source`, `other`), `match` (`exact`, `upper_trimmed`), `note`: where the codes' values live and how to compare them |
+| `code_set_hint` | (`code_set`, `version`, `kind`, `ordinal`) | `kind` (`meaning`, `use_when`, `avoid_when`, `example_question`), `text`: hints for an agent in plain words |
+
+The last two are the semantic layer an agent reads before using a code set
+(operator, 2026-10-07: "make rdm be friendly to agents need semantic layer
+hints"). They are frozen with the version, like its codes, but are not in the
+canonical form: a consumer's values do not depend on them.
+`edgar-warehouse rdm describe <code_set>` returns them with the definition,
+the version and its pin, counts, the code sets it maps to and a few codes,
+in at most 8 KB.
 
 Integrity:
 - `parent_code` references a `code` in the same version (foreign key); a
-  publish refuses a cycle (recursive check with `CYCLE`).
+  publish refuses a cycle or a missing parent (it walks each code's parents
+  before writing any path).
 - Rows of a version are immutable once its status is `published`: a trigger
   refuses any update or delete; a change is a new version that `supersedes` it.
-- One `published` version per code set at any instant: `EXCLUDE USING gist
-  (code_set WITH =, tstzrange(valid_from, valid_to) WITH &&) WHERE (status =
-  'published')`, with `btree_gist`.
+- One `published` version per code set at any instant: a unique index on
+  the code set over published versions whose `valid_to` is empty, and
+  publishing closes the replaced version's `valid_to` at the new one's
+  `valid_from` (operator, 2026-10-07: chosen over the `btree_gist`
+  exclusion constraint, which not every PG16 build ships).
+- A version's content changes only while it is a draft; approval needs the
+  approver's name and exact words; nothing deletes a version.
 
 ### 2.2 Hierarchy storage
 
 - Drafts hold one `parent_code` per code: the only thing an editor changes.
 - Publishing computes `code_path` (`path`, `label_path`, `level`, `depth`)
-  with one recursive query and stores it on the immutable version. A Postgres
+  by walking each code's parents, and stores it on the immutable version. A Postgres
   generated column cannot do this (it cannot read other rows).
 - Subtree lookup: `path LIKE '<prefix>/%'` with a `text_pattern_ops` index.
 - `ltree` is optional, an index only, inside RDM. The published format never
@@ -72,7 +87,17 @@ Integrity:
 | review | the operator or a steward | reads the draft through `edgar-warehouse context` and the version diff (§5) |
 | approve | the operator only | records exact words and time (`approved_by`, `approved_words`, `approved_at`). Agents never approve |
 | publish | a command, after approval | computes `code_path` and `sha256`, sets `published`, closes the previous version's `valid_to`, writes the silver copy (§6) |
-| retire | the operator | sets `retired`; nothing deletes a published version |
+| retire | the operator | sets `retired` and closes `valid_to`; nothing deletes a published version |
+| verify | anyone | `rdm verify` recomputes a version's sha256 from its rows and compares it with the stored one |
+
+A published version must name, in `supersedes`, the newest version ever
+published (current or retired); the first names none. The database checks
+this too. Publishing writes the files (§6) before it commits.
+
+The agent records the operator's approval in their name and exact words, as
+the Rules agent does (operator, 2026-09-29, rules skill ticket 14); the
+database refuses an approval without both, or by the version's own drafter.
+Agents never approve on their own words.
 
 Hierarchy exceptions (plan decision 11): a near-exact hierarchy is accepted;
 its violating codes are kept with `status = invalid` and an `invalid_reason`,
@@ -82,8 +107,10 @@ without it, the code is marked "needs steward".
 ## 4. Canonical form and the pin
 
 The canonical form of a version is UTF-8 JSON Lines, sorted by code, one object
-per code with `code`, `label`, `parent_code`, `valid_from`, `valid_to`,
-`status`, and its labels sorted. `sha256` is taken over those bytes.
+per code with `code`, `label`, `definition`, `parent_code`, `valid_from`,
+`valid_to`, `status`, `invalid_reason`, the name of its `level`, its labels
+sorted and its crosswalk rows sorted. `sha256` is taken over those bytes, so a pin covers everything a
+consumer reads (a changed crosswalk is a new sha256).
 
 A consumer pins `{code_set, version, sha256}`:
 
@@ -109,13 +136,22 @@ Publishing and approval are the operator's. A version diff
 (`edgar-warehouse rdm diff <code_set> <from> <to>`, built in plan row 2) lists
 added, removed, relabelled and moved codes.
 
+Commands (`edgar-warehouse rdm`, JSON out): `init` and `migrate` (the schema
+owner, `RDM_MIGRATION_DATABASE_URL`); `list`, `describe`, `draft --file`,
+`import-reference`, `approve`, `publish --out`, `retire`, `verify` and `diff` (the runtime
+login, `RDM_DATABASE_URL`). Lookup and search of codes are
+`rdm.code_context` and `edgar-warehouse context` (agent-context spec, profiling
+ticket 05, RDM part).
+
 ## 6. Publishing to silver
 
 Each publish writes the version to silver as three tables keyed by
 (`code_set`, `version`): `rdm_code` (with `path`, `label_path`, `level`,
 `depth`), `rdm_code_label`, `rdm_crosswalk`. The silver writer is plan row 6;
 until it exists, the publish writes the same rows as canonical JSON Lines files
-beside the version for consumers to load.
+beside the version for consumers to load: `<out>/<code_set>/<version>/`
+holds `canonical.jsonl` (the pinned bytes), `rdm_code.jsonl`,
+`rdm_code_label.jsonl`, `rdm_crosswalk.jsonl` and `pin.json`.
 
 ## 7. Migration of the existing reference YAML (plan row 2)
 
@@ -149,4 +185,8 @@ Examples only; nothing above depends on them.
   industry code).
 - A reference hierarchy: industry division → major group → industry.
 - The existing `rules/reference/sec-place-codes.yaml` becomes the first code set
-  in plan row 2; its ISO 3166 codes become `exact` crosswalk rows.
+  in plan row 2: `place` is the label; its ISO 3166 codes become `exact`
+  crosswalk rows to `iso-3166` (`outside`); its `type` (US, CANADIAN, FOREIGN,
+  UNKNOWN) becomes a `broad` crosswalk row to a new 4-code set
+  `sec-place-types` (operator, 2026-10-07), so "FOREIGN" never becomes a place
+  code itself.
