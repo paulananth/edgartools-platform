@@ -76,7 +76,7 @@ MIC file is held locally) and Form ADV as published (no ADV file is held).
 | `AUDITED_BY` | Kept |
 | `ISSUED_BY` | Kept |
 | `IS_FUND-MANAGED_BY`, `IS_SUBFUND_OF`, `IS_FEEDER_TO`, `IS_INTERNATIONAL_BRANCH_OF` | Kept as GLEIF writes them |
-| `VENUE_OPERATOR` | `OPERATED_BY_LEGAL_ENTITY` (ISO 10383's legal entity of a MIC, with its LEI) |
+| `VENUE_OPERATOR` | `HAS_MARKET_OPERATOR`: the market operator (MiFID II's term, the entity that manages and operates the market's business), e.g. the Nasdaq exchange (XNAS) has market operator The Nasdaq Stock Market LLC; its LEI from ISO 10383. First approved as `OPERATED_BY_LEGAL_ENTITY`; the operator asked for the actual meaning ("15 why operated by legal entity can we have the actual meaning") and chose this, 2026-10-07 09:28 ET |
 | `VENUE_SEGMENT_OF` | `IS_SEGMENT_OF_EXCHANGE` (the operator rejected both first options, "Both don't make any sense make it better", then chose it: e.g. Nasdaq Global Select Market (XNGS) is a segment of the Nasdaq exchange (XNAS)) |
 
 ## Corporate actions (operator, 2026-10-07 08:37 ET: "It should also consider corporate actions"; then "SUCCEEDED_BY type (Recommended)")
