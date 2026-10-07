@@ -35,7 +35,7 @@ def test_ordered_pins_authenticate_reads_and_refuse_substitution_before_output(t
 
 
 @pytest.mark.parametrize('pins',[[],['0'*64],['0'*64,'G'*64],[False,'0'*64],['0'*65,'0'*64],None])
-def test_malformed_or_unapproved_pins_cannot_read_even_empty_source(tmp_path,pins):
+def test_malformed_or_unapproved_pins_refuse_before_output(tmp_path,pins):
     store=Artifacts()
     work,_,_=task(tmp_path,store,pins=['0'*64,'0'*64] if pins is None else pins)
     with pytest.raises(ValueError): source_read.execute(work,store)

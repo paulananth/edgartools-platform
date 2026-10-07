@@ -17,3 +17,7 @@ Qualification history: the first full-census run passed entry/combination compar
 
 - [x] Preserve and verify all six completed GLEIF runtime corpus reports and actual frozen implementation/native hashes: Level 1 3,428,477, relationships 487,721, reporting exceptions 6,351,397 in each format. JSON Level 1 32m57s, XML Level 1 72m50s, XML reporting exceptions 10m37s; installed mastering remains unqualified (2026-10-07 17:55 ET).
 - [x] Full native suite: 129 passed, zero ignored/failed, recorded in /private/tmp/codex-census-native-20261007.log (2026-10-07 17:53 ET).
+
+- [x] Rebase implementation onto live main ba2b9cc7 without conflicts; requalify full census and 1,000 captured names with all helper/native/oracle pins after rebase and cascade-shape assertion. Report: 18.977s; affected tests: 86 passed in 9.92s (2026-10-07 17:56 ET).
+- [x] Installed Company composition with/without census from committed 5c7b2d7d: 2 passed, 28 deselected, no skips, 75.93s. The final cascade-shape assertion was added afterward, so a fresh final installed snapshot remains required (2026-10-07 17:56 ET).
+- [ ] Fresh installed final snapshot, independent review and full CI remain pending. Both delegated reviewers unavailable due usage limits; focused manual GoF/spec review retained the interpreter/function design, found/fixed the malformed cascade shape and join ordering, and claims no independent review.

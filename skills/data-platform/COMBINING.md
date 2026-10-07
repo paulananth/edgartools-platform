@@ -155,7 +155,8 @@ It retains the original installed trials.
 The shipped Company blueprint has raw-JSON fixture qualification for main
 records, continuation pages, both ticker-catalog shapes and business-address
 conversion, followed by independently verified combination and MDM preparation.
-**Census joins, complete mastering provenance and full installed Company
+Census lookup/composition has exact fixture and pinned-census qualification.
+**Complete mastering provenance and full installed Company
 population/replay/recovery remain unqualified.**
 This profile does not authorize deletion of retained Company/GLEIF readers or
 activation of a source Rules version.

@@ -4,6 +4,7 @@ import json
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean.company_source import _census_evidence
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
@@ -70,17 +71,17 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
     result=source_combine.execute(task,store)
     assert source_combine.verify({**task,'candidate':result},store)==({'source.combined':True},[])
     actual=store.json(result)['artifacts'][0]['tables']['company']
-    assert actual==[expected] and '_name_key' not in actual[0]
+    assert digest(actual)==digest([expected]) and '_name_key' not in actual[0]
     assert store.json(store.json(result)['artifacts'][0]['input'])['readings']==refs
     prepare={'input':result,'output':(tmp_path/'prepared/manifest.json').as_uri(),'checks':['mdm.prepared'],
         'keys':{'table':'company','dataset':'sec.submissions.company.v1','policy':ZERO,'consumer':'trial','batch_id':'census','as_of':context['last_synced_at']}}
     prepared=mdm_prepare.execute(prepare,store)
     assert mdm_prepare.verify({**prepare,'candidate':prepared},store)==({'mdm.prepared':True},[])
     batch=store.json(prepared)['batches'][0]
-    assert json.loads((tmp_path/'prepared'/batch['input']['path']).read_bytes())==expected
+    assert digest(json.loads((tmp_path/'prepared'/batch['input']['path']).read_bytes()))==digest(expected)
 
 
-@pytest.mark.parametrize('fault',['version','normalizer','delta','cascade_version','reserved_metadata'])
+@pytest.mark.parametrize('fault',['version','normalizer','delta','cascade_version','reserved_metadata','scalar_cascade','array_cascade'])
 def test_malformed_census_refuses_before_output(tmp_path,fault):
     store=Artifacts()
     body=fixture_census()
@@ -88,16 +89,19 @@ def test_malformed_census_refuses_before_output(tmp_path,fault):
     elif fault=='normalizer': body['normalizers']['sec']='other'
     elif fault=='delta': body['gleif']['file_content']='GLEIF_DELTA_PUBLISHED'
     elif fault=='cascade_version': body['cascade']['version']='other'
+    elif fault=='scalar_cascade': body['cascade']['assignments']=False
+    elif fault=='array_cascade': body['cascade']['assignments']=[]
     else: body['entries']['EXAMPLE']['census']='untrusted'
     with pytest.raises(Exception) as failed: census_read(store,tmp_path,body)
     assert getattr(failed.value,'code',None) in ('assertion_failed','object_field_conflict')
     assert not (tmp_path/'census-reading.json').exists()
 
 
-def test_unbound_census_blueprint_and_substituted_digest_refuse(tmp_path):
+@pytest.mark.parametrize("case", ["both", "neither"])
+def test_unbound_census_blueprint_and_substituted_digest_refuse(tmp_path, case):
     store=Artifacts()
     with pytest.raises(ValueError,match='approved artifact hash'):
-        census_read(store,tmp_path,fixture_census(),config=files.load(ROOT/'census.yaml'))
+        census_read(store,tmp_path,fixture_census(case),config=files.load(ROOT/'census.yaml'))
     assert not (tmp_path/'census-reading.json').exists()
 
 

@@ -86,6 +86,15 @@ read:
               const:
                 value: sec-gleif-cascade-v1
     reason: approved cascade version differs
+  - test:
+      choose:
+        condition:
+          test: {path: cascade.assignments, kind: not_null, from: document}
+        then:
+          test: {path: cascade.assignments, kind: object, from: document}
+        else:
+          equal: {left: {const: {value: 1}}, right: {const: {value: 1}}}
+    reason: cascade assignments must be an object when present
   tables:
     names:
       each:
