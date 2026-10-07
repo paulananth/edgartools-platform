@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCOPE = (
     "skills/data-profiling",
     "skills/data-quality",
+    "skills/data-modeling",
     "docs/specs/rdm",
     "docs/specs/agent-context",
     "docs/specs/profiling",
