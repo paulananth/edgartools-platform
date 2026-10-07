@@ -28,6 +28,7 @@ mod matrix;
 mod iteration;
 mod predicate;
 mod json_text;
+mod text_transform;
 #[cfg(feature = "python")]
 mod python;
 mod tree;
@@ -113,6 +114,7 @@ pub struct Engine {
     read: Value,
     steps: Steps,
     limits: Limits,
+    text_recipes: std::collections::HashMap<Value, text_transform::Recipe>,
 }
 
 fn contract_error(detail: impl ToString) -> Rejected {
@@ -139,7 +141,30 @@ impl Engine {
             max_member_bytes: limit("max_member_bytes", max_bytes),
             max_records: limit("max_records", 10_000_000) as usize,
         };
-        Ok(Self { read, steps, limits })
+        // Walk expressions only: literal/reference data must never become code.
+        fn collect(expr: &Value, recipes: &mut std::collections::HashMap<Value, text_transform::Recipe>) -> Result<(), Rejected> {
+            if let Some(transforms) = expr.get("text").and_then(|args| args.get("transforms")) {
+                if !recipes.contains_key(transforms) {
+                    let mut operations = 0;
+                    let mut regexes = 0;
+                    for value in recipes.keys().chain(std::iter::once(transforms)) {
+                        if let Some(list) = value.as_sequence() {
+                            operations += list.len();
+                            regexes += list.iter().filter(|op| op.get("regex_replace").is_some()).count();
+                        }
+                    }
+                    if recipes.len() >= 128 || operations > 1024 || regexes > 32 {
+                        return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 32 regexes"));
+                    }
+                    recipes.insert(transforms.clone(), text_transform::Recipe::compile(transforms).map_err(contract_error)?);
+                }
+            }
+            for child in expression_children(expr) { collect(child, recipes)?; }
+            Ok(())
+        }
+        let mut text_recipes = std::collections::HashMap::new();
+        for expr in read_expressions(&read) { collect(expr, &mut text_recipes)?; }
+        Ok(Self { read, steps, limits, text_recipes })
     }
 
     pub fn read(&self, bytes: &[u8], lookups: &Lookups) -> Result<Reading, Rejected> {
@@ -986,6 +1011,10 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
                     "upper" => text.to_uppercase(), "lower" => text.to_lowercase(), _ => text,
                 }),
                 other => other,
+            };
+            let value = match (value, args.get("transforms")) {
+                (Val::Str(text), Some(transforms)) => Val::Str(engine.text_recipes[transforms].apply(text)?),
+                (other, _) => other,
             };
             let Val::Str(text) = &value else { return Ok(value) };
             let Some(null_if) = args.get("null_if").and_then(Value::as_sequence) else { return Ok(value) };

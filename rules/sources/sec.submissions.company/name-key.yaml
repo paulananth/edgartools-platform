@@ -1,0 +1,89 @@
+# Offline name-key recipe; no policy activation. Legal forms are kept.
+source: sec.submissions.company
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    names:
+      each: names
+      columns:
+        name:
+          value:
+            path: name
+        key:
+          text:
+            path: name
+            coerce: python
+            trim: false
+            default: ''
+            transforms:
+            - case: upper
+            - regex_replace:
+                pattern: '[\s\x1c-\x1f]*/[A-Z0-9 .]{1,6}/?[\s\x1c-\x1f]*$'
+                with: ''
+            - unicode: nfkd
+            - strip_combining: true
+            - case: upper
+            - replace:
+                from: '&'
+                to: ' AND '
+            - regex_replace:
+                pattern: '[^A-Z0-9]+'
+                with: ' '
+            - trim: true
+            - pad:
+                left: ' '
+                right: ' '
+            - replace:
+                from: ' L L C '
+                to: ' LLC '
+            - replace:
+                from: ' L L P '
+                to: ' LLP '
+            - replace:
+                from: ' L P '
+                to: ' LP '
+            - replace:
+                from: ' P L C '
+                to: ' PLC '
+            - replace:
+                from: ' N V '
+                to: ' NV '
+            - replace:
+                from: ' S A '
+                to: ' SA '
+            - replace:
+                from: ' A G '
+                to: ' AG '
+            - replace:
+                from: ' S E '
+                to: ' SE '
+            - replace:
+                from: ' B V '
+                to: ' BV '
+            - replace:
+                from: ' CORPORATION '
+                to: ' CORP '
+            - replace:
+                from: ' INCORPORATED '
+                to: ' INC '
+            - replace:
+                from: ' COMPANY '
+                to: ' CO '
+            - replace:
+                from: ' LIMITED '
+                to: ' LTD '
+            - replace:
+                from: ' HOLDINGS '
+                to: ' HLDGS '
+            - replace:
+                from: ' INTERNATIONAL '
+                to: ' INTL '
+            - trim: true
+            - remove_prefix: 'THE '

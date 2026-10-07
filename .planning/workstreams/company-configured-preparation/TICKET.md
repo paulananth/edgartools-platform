@@ -15,3 +15,13 @@ Continue the full self-sustaining skill / bundled Rules creator / parsing / MDM 
 - [x] Independently review the bounded composition blueprint: Spec and Standards/GoF report no scoped blockers; after extending to two separately authenticated continuation artifacts, all 10 blueprint cases pass (2026-10-07 06:41 ET).
 
 - [x] Push separate non-draft PR #844; live head d49cb65e and full CI 37609354821 running (2026-10-07 06:44 ET).
+
+## Census-key continuation from merged #844
+
+- [x] Verify #843 and #844 merged and create dedicated `codex/company-mastering-retirement-20261007` branch at b0b40646; live GitHub state and clean checkout verified (2026-10-07 07:06 ET).
+- [x] Measure existing text configuration against retained SEC name keys: three of four concrete cases differ (accent, legal-form spelling/punctuation, state suffix); WAYFAIR LLC stays distinct from WAYFAIR INC (2026-10-07 07:06 ET).
+- [x] Add bounded generic text transformations, compiled once per contract, without provider-specific callbacks or loader dependencies; seven native cases and 106 affected Python cases passed, independent Spec/Standards/GoF review closed regex-work and aggregate-compilation findings (2026-10-07 07:20 ET).
+- [ ] Bundle configured SEC/GLEIF name-key recipes and prove exact retained-normalizer parity on captured names, Unicode cases and deliberate configuration faults.
+- [ ] Wire receipt-bound census evidence into configured Company preparation; full classification, mastering population/replay/recovery and legacy removal remain required above.
+- [ ] Verify affected native/Python tests, independently review and publish a separate PR with full CI.
+- [ ] Verify both name-key recipes from a committed installed bundle outside checkout, with raw-input reading and independent source.output verification.
