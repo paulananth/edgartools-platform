@@ -112,3 +112,45 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
         with pytest.raises(DBAPIError) as denied, database.application.begin() as conn:
             conn.execute(text(sql))
         assert denied.value.orig.pgcode == "42501", (sql, denied.value.orig.pgcode)
+
+
+def test_a_gleif_successor_ends_the_parent_link_on_its_event_date(database):
+    """Profiling ticket 04c, through the full path on PG16: GLEIF names the
+    child's successor with a completed merger; the child's direct parent link,
+    and its calculated ultimate parent, end on that date, citing the succession."""
+    from tests.support.fresh_mastering import gleif_successor
+
+    policy, contracts, readings = cohort()
+    level1, link = gleif_cohort()
+    gleif = {f"gleif.{m}.v1": dataset_contract(m) for m in ("level1", "relationships")}
+    with database.admin.begin() as conn:
+        policy_digest = register_policy(conn, policy)
+        for code, contract in {**contracts, **gleif}.items():
+            register_dataset(conn, code, str(uuid4()), contract)
+    stage = MergeStage(Store(database.application))
+    command = {"batch_id": "entities", "run_id": str(uuid4()), "consumer": "local-qualification",
+               "policy_digest": policy_digest, "expected_checkpoint": 0, "checkpoint": 1, "as_of": AS_OF,
+               "assertions": [*readings, *level1]}
+    stage.apply(**command)
+    with database.application.connect() as conn:
+        bindings = dict(conn.execute(text("SELECT subject,entity_id::text FROM mdm.stage_record")).all())
+    apple, microsoft = (r for r in readings if r["kind"] == "company")
+    child, owner = level1
+    steward = [core.identity_and_binding(g, bindings[s["subject"]])[1] for g, s in ((child, apple), (owner, microsoft))]
+    stage.apply(**{**command, "batch_id": "links", "assertions": [link], "decisions": steward,
+                   "expected_checkpoint": 1, "checkpoint": 2})
+    succession = gleif_successor("2024-01-01T00:00:00+00:00")
+    assert [r["type"] for r in succession["relationships"]] == ["SUCCESSOR_ENTITY"]
+    stage.apply(**{**command, "batch_id": "succession", "assertions": [succession],
+                   "expected_checkpoint": 2, "checkpoint": 3})
+    with database.application.connect() as conn:
+        edges = {(e["type"], e.get("derived", False)): e for e in conn.execute(text(
+            "SELECT body FROM mdm.current_record WHERE object_type='relationship'")).scalars()}
+    successor = edges[("SUCCESSOR_ENTITY", False)]
+    assert (successor["source_id"], successor["target_id"]) == (
+        bindings[apple["subject"]], bindings[microsoft["subject"]])
+    assert successor["periods"][0]["valid_from_basis"] == "stated"
+    for key in (("IS_DIRECTLY_CONSOLIDATED_BY", False), ("IS_ULTIMATELY_CONSOLIDATED_BY", True)):
+        (period,) = edges[key]["periods"]
+        assert period["valid_to"] == "2024-01-01T00:00:00+00:00", key
+    assert edges[("IS_DIRECTLY_CONSOLIDATED_BY", False)]["periods"][0]["ended_by"] == successor["relationship_id"]

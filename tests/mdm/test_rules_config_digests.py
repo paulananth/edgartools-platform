@@ -175,6 +175,21 @@ WITH_LINK_START = {
 }
 
 
+# Profiling ticket 04c: GLEIF Level 1 states its successor entities (one
+# SUCCESSOR_ENTITY link per successor LEI, dated by the completed succession
+# event naming it, with the ceased entity's status); without that relationship
+# mapping the contract is the one above.
+WITH_SUCCESSOR = {
+    "level1": "5cbf17245e2b327b4931a4be63ce674f665545cb28b540be3ef8a8dae92746c7",
+}
+
+
+def _without_successor(contract: dict) -> dict:
+    if contract["adapter"]["native_member"] != "level1":
+        return contract
+    return {**contract, "adapter": {k: v for k, v in contract["adapter"].items() if k != "relationships"}}
+
+
 def _without_link_start(contract: dict) -> dict:
     adapter = dict(contract["adapter"])
     if adapter.get("relationships"):
@@ -193,6 +208,8 @@ def _without_invalid_lei(contract: dict) -> dict:
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_source.dataset_contract(member)
+    assert digest(contract) == WITH_SUCCESSOR.get(member, WITH_LINK_START.get(member, WITH_INVALID_LEI[member]))
+    contract = _without_successor(contract)
     assert digest(contract) == WITH_LINK_START.get(member, WITH_INVALID_LEI[member])
     contract = _without_link_start(contract)
     assert digest(contract) == WITH_INVALID_LEI[member]

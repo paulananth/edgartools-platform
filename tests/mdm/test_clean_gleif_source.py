@@ -643,3 +643,65 @@ def test_small_xml_record_limit_does_not_limit_authenticated_header():
     with pytest.raises(Conflict):
         inspect_archive(io.BytesIO(raw), member="level1", metadata=metadata(format="xml.zip"),
             expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2)
+
+
+def _event(status, kind, effective, *affected):
+    return {"@event_status": status, "LegalEntityEventType": {"$": kind},
+            "LegalEntityEventEffectiveDate": {"$": effective},
+            "AffectedFields": {"AffectedField": [
+                {"@field_xpath": "/lei:LEIData/lei:LEIRecords/lei:LEIRecord/lei:Entity/lei:SuccessorEntity/lei:SuccessorLEI",
+                 "$": lei} for lei in affected]}}
+
+
+def test_each_successor_lei_is_a_link_dated_by_its_completed_event():
+    """Profiling ticket 04c: GLEIF lists successors and events; one
+    SUCCESSOR_ENTITY link per successor LEI, dated by the completed event that
+    names it (shape and counts from the 2026-09-11 Golden Copy)."""
+    from edgar_warehouse.mdm.clean.evidence import subject_key
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
+
+    first, second = "549300JB1P61FUTPEZ75", "5493001KJTIIGC8Y1R12"
+    record = {
+        "LEI": {"$": "097900BFCC0000009483"},
+        "Entity": {
+            "EntityCategory": {"$": "GENERAL"},
+            "LegalName": {"$": "Ceased a.s."},
+            "EntityStatus": {"$": "INACTIVE"},
+            "SuccessorEntity": [
+                {"SuccessorLEI": {"$": first}},
+                {"SuccessorEntityName": {"@xml:lang": "sk", "$": "Named only, a.s."}},
+                {"SuccessorLEI": {"$": second}},
+            ],
+            "LegalEntityEvents": {"LegalEntityEvent": [
+                _event("WITHDRAWN_CANCELLED", "MERGERS_AND_ACQUISITIONS", "2021-06-01T00:00:00+01:00", first),
+                _event("COMPLETED", "MERGERS_AND_ACQUISITIONS", "2022-01-01T00:00:00+01:00", first),
+                _event("COMPLETED", "CHANGE_LEGAL_NAME", "2020-01-01T00:00:00+01:00"),
+                # Not a succession type: it names the second successor, but dates nothing.
+                _event("COMPLETED", "CHANGE_LEGAL_FORM", "2019-01-01T00:00:00+01:00", second),
+            ]},
+        },
+        "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}},
+    }
+    kind, evidence = record_evidence(
+        record, member="level1", contract=dataset_contract("level1"), source_code="gleif.level1.v1",
+        eligible_leis={"097900BFCC0000009483"},
+        publication={"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "level1"},
+        ordinal=0)
+    assert kind == "assertion"
+    links = evidence["relationships"]
+    assert [(r["type"], r["target_subject"]) for r in links] == [
+        ("SUCCESSOR_ENTITY", subject_key("gleif.level1.v1", lei)) for lei in (first, second)]
+    # The completed event names the first successor: a stated date and its type.
+    assert links[0]["valid_from"] == "2022-01-01T00:00:00+01:00"
+    assert links[0]["properties"] == {"source_event_type": "MERGERS_AND_ACQUISITIONS",
+                                      "source_event_status": "COMPLETED", "source_entity_status": "INACTIVE"}
+    # No completed event names the second: no date (MDM starts it when first seen).
+    assert links[1]["valid_from"] is None and links[1]["properties"] == {
+        "source_event_type": None, "source_event_status": None, "source_entity_status": "INACTIVE"}
+    record["Entity"].pop("SuccessorEntity")
+    _, evidence = record_evidence(
+        record, member="level1", contract=dataset_contract("level1"), source_code="gleif.level1.v1",
+        eligible_leis={"097900BFCC0000009483"},
+        publication={"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "level1"},
+        ordinal=0)
+    assert evidence["relationships"] == []

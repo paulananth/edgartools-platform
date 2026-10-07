@@ -1,0 +1,211 @@
+{
+ "source": "GLEIF Golden Copy 2026-09-11 16:00, Level 1 (local capture)",
+ "counts": {
+  "records_with_successor": 51913,
+  "successor_leis": 34855,
+  "successors_named_only": 17913,
+  "outcome_assertion": 43520,
+  "links": 27667,
+  "links_first_seen": 5833,
+  "outcome_deferred": 8393,
+  "links_dated": 21834,
+  "links_with_several_completed_events": 17,
+  "links_with_several_completed_events_on_different_dates": 7
+ },
+ "links_by_event_type": {
+  "MERGERS_AND_ACQUISITIONS": 19247,
+  "deferred:unsupported_identity_kind": 8318,
+  "no completed event": 5833,
+  "ABSORPTION": 2215,
+  "DEMERGER": 275,
+  "BREAKUP": 89,
+  "deferred:invalid_lei_checksum": 75,
+  "SPINOFF": 6,
+  "ACQUISITION_BRANCH": 2
+ },
+ "links_with_no_completed_event": {
+  "entity NULL; no event names it": 5597,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_FORM": 147,
+  "entity INACTIVE; COMPLETED DISSOLUTION": 74,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS": 7,
+  "entity INACTIVE; COMPLETED LIQUIDATION": 4,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS, COMPLETED CHANGE_LEGAL_FORM": 2,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS, COMPLETED CHANGE_LEGAL_FORM, COMPLETED CHANGE_LEGAL_NAME": 1,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS, COMPLETED DISSOLUTION": 1
+ },
+ "dates_that_do_not_parse": [],
+ "dates_that_do_not_parse_count": 0,
+ "examples": [
+  {
+   "lei": "029200098C3K8BI2D551",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "549300NIVXF92ZIOVW61"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": null,
+     "properties": {
+      "source_event_type": null,
+      "source_event_status": null,
+      "source_entity_status": "NULL"
+     }
+    }
+   ],
+   "shows": [
+    "no completed event naming it"
+   ]
+  },
+  {
+   "lei": "029200738G7T8AI6H992",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "029200328C3N9YI2D660"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2020-04-17T11:33:58Z",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
+     }
+    }
+   ],
+   "shows": [
+    "one dated successor"
+   ]
+  },
+  {
+   "lei": "05SSS4SLZOFBX4WLVU11",
+   "successors": [
+    {
+     "SuccessorEntityName": {
+      "$": "John Hancock Variable Insurance Trust - Global Trust"
+     }
+    }
+   ],
+   "links": [],
+   "shows": [
+    "a successor named only"
+   ]
+  },
+  {
+   "lei": "097900BFCC0000009483",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "549300JB1P61FUTPEZ75"
+     }
+    },
+    {
+     "SuccessorEntityName": {
+      "@xml:lang": "sk",
+      "$": "VÚB Operating Leasing, a.s."
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2022-01-01T00:00:00+01:00",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
+     }
+    }
+   ],
+   "shows": [
+    "several successors",
+    "a successor named only"
+   ]
+  },
+  {
+   "lei": "254900HFWF3T7WOCKE43",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "8KUMV9EIJ75IBFMLFD23"
+     }
+    },
+    {
+     "SuccessorLEI": {
+      "$": "8KUMV9EIJ75IBFMLFD23"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2024-10-01T00:00:00.000Z",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
+     }
+    },
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": "2024-10-01T00:00:00.000Z",
+     "properties": {
+      "source_event_type": "MERGERS_AND_ACQUISITIONS",
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
+     }
+    }
+   ],
+   "shows": [
+    "several successors"
+   ]
+  },
+  {
+   "lei": "315700HLFN2Y3RYC3988",
+   "successors": [
+    {
+     "SuccessorLEI": {
+      "$": "315700OK5Z9OLC1M4H40"
+     }
+    },
+    {
+     "SuccessorLEI": {
+      "$": "315700OK5Z9OLC1M4H40"
+     }
+    }
+   ],
+   "links": [
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": null,
+     "properties": {
+      "source_event_type": null,
+      "source_event_status": null,
+      "source_entity_status": "INACTIVE"
+     }
+    },
+    {
+     "type": "SUCCESSOR_ENTITY",
+     "valid_from": null,
+     "properties": {
+      "source_event_type": null,
+      "source_event_status": null,
+      "source_entity_status": "INACTIVE"
+     }
+    }
+   ],
+   "shows": [
+    "several successors",
+    "no completed event naming it"
+   ]
+  }
+ ],
+ "seconds": 342
+}

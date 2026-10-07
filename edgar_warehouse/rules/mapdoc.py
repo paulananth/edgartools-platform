@@ -232,6 +232,16 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
                                f"{at}.adapter.relationships"])
             fields.append([code, f"relationship {kinds}", "to", _text(relationship.get("target_key")),
                            f"Link to {_text(relationship.get('target_source'))}", f"{at}.adapter.relationships"])
+            if relationship.get("each"):  # one link per item of a list
+                fields.append([code, f"relationship {kinds}", "each", _text(relationship["each"]),
+                               "One link per item (item.)", f"{at}.adapter.relationships"])
+            for name, look in (relationship.get("find") or {}).items():  # the matching item of another list
+                # A value read from the record is marked apart from a fixed one.
+                where = "; ".join(f"{path} = " + (f"the value at {_text(want.get('path'))}" if isinstance(want, dict)
+                                                  else _text(want))
+                                  for path, want in (look.get("where") or {}).items())
+                fields.append([code, f"relationship {kinds}", name, _text(look.get("in")),
+                               f"The first item where {where} ({name}.)", f"{at}.adapter.relationships"])
         formats = adapter.get("identifier_formats") or {}
         for ident, path in (adapter.get("identifiers") or {}).items():
             identifiers.append([code, ident, _text(path), _text(formats.get(ident)),
