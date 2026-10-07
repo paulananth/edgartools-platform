@@ -14,3 +14,9 @@ Parent objective remains self-sustaining installed Rules creator, parsing/MDM or
 - [x] Qualify installed bundle native GLEIF mappings with restricted PG16 publication/read-back, lost-acknowledgement recovery, duplicate replay and permission denials: 1 case, 30 deselected, zero skips, 93.45s at be01b22e. Actual installed runtime/contract pins in installed-mapping-proof.json; fixture-only scope (2026-10-07 18:39 ET).
 - [x] Preserve old GLEIF digest gates by peeling only the added inline reading and separately pin all three changed contract hashes; full MDM plus projection suite passed 643 cases in 18.09s. New hashes are not activated (2026-10-07 18:39 ET).
 - [ ] Verify new installed regression committed in its own revision, final full CI and independent follow-up; record final evidence before making PR ready.
+
+- [x] Re-run installed regression from committed 04737abf: 1 passed, 30 deselected, zero skips in 84.15s; actual installed helper/native/contracts pinned in installed-mapping-proof.json. Both independent follow-up reviewers found no scoped blockers at 04737abf (2026-10-07 18:43 ET).
+- [x] Include new configured mapping helper, adapters, source-engine wrapper/steps/native binary in mdm.merge runtime fingerprint; five deliberate dependency faults change the fingerprint; all 44 field/runtime cases passed in 1.21s (2026-10-07 18:43 ET).
+- [ ] Verify runtime fingerprint addition with real restricted PG16 worker flow, independent follow-up and final CI.
+
+- [x] Verify mapping runtime fingerprint addition through actual restricted PG16 worker/mastering flow: 5 cases passed in 53.06s; independent standards reviewer confirmed correct dependency coverage with no scoped finding (2026-10-07 18:45 ET).

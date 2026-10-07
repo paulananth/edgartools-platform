@@ -137,3 +137,21 @@ def test_unused_mapping_expressions_are_validated_before_fields_projection():
     with pytest.raises(source_engine.SourceRejected) as failure:
         adapters._fields(raw(),configured)
     assert failure.value.code=='contract'
+
+
+@pytest.mark.parametrize('part',['adapter','mapping','engine','steps','native'])
+def test_mdm_worker_runtime_pins_configured_mapping_dependencies(part,monkeypatch):
+    from pathlib import Path
+    from edgar_warehouse.workers import mdm_merge,source_mapping
+    from edgar_warehouse.workers.__main__ import runtime
+    paths={'adapter':Path(adapters.__file__),'mapping':Path(source_mapping.__file__),
+           **dict(zip(('engine','steps','native'),source_engine.runtime_files(),strict=True))}
+    selected=paths[part]
+    assert selected in mdm_merge.runtime_files()
+    before=runtime(mdm_merge)
+    original=Path.read_bytes
+    def changed(path):
+        content=original(path)
+        return content+b'\n deliberate dependency fault' if path==selected else content
+    monkeypatch.setattr(Path,'read_bytes',changed)
+    assert runtime(mdm_merge)!=before
