@@ -1,0 +1,44 @@
+{
+ "after_first_pass": {
+  "companies_open": 6414,
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "identities": {
+   "company": 6414
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312
+  },
+  "relationships": {},
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  },
+  "waiting": {
+   "sec.submissions.company.v1:classification_deferred": 312
+  }
+ },
+ "bindings": "9216cc18292f1c683f4767dfb86ae89c14a72f7df050df08e3800ce1e305b85b",
+ "gleif_assertions": 3716,
+ "gleif_records": 3755,
+ "gleif_set_aside": {
+  "unsupported_identity_kind": 39
+ },
+ "place_map": {
+  "codes": 308,
+  "sha256": "b69397ed34e1f750b3d2cd1e285f22f365b4cd8cb4f4d309495da6009649c9a0"
+ },
+ "policy": "54dca66477a404d4eb12de99894094decabaaba4880a7dedd45760acb892062b",
+ "reference": "yaml",
+ "second_pass_changed_nothing": true,
+ "seconds": 448.6,
+ "ticket": "profiling 02, full mastering counts run"
+}

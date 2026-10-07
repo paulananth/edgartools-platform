@@ -20,7 +20,7 @@ Any data set can be profiled, classified into master, reference, relationship, t
 | 01a | [Specs: RDM, agent context, silver table spec, findings schema](issues/01a-specs.md) | A | 01 | done (#825) |
 | 01b | [data-profiling skill and trials A and B](issues/01b-data-profiling-skill-and-trials-a-and-b.md) | A | 01a | done (#831) |
 | 01c | [data-quality skill](issues/01c-data-quality-skill.md) | A | 01b | done (#832) |
-| 02 | [RDM database, publish, MDM pin, migrate reference YAML](issues/02-rdm-database.md) | B | 01a, Codex retirement merged | pin done (#845, #848); removing the YAML waits for the Codex handoff and a full counts run |
+| 02 | [RDM database, publish, MDM pin, migrate reference YAML](issues/02-rdm-database.md) | B | 01a, Codex retirement merged | pin done (#845, #848); counts run equal; removing the YAML waits for the Codex handoff |
 | 03 | [MDM cross-reference table](issues/03-mdm-cross-reference-table.md) | A | 01a | done (#835) |
 | 04 | [Relationship context view and onboarding](issues/04-relationship-context-view-and-onboarding.md) | A | 01a | done (#836) |
 | 04b | [Relationship types: real names; parents with a basis; corporate actions](issues/04b-parent-relationship-types.md) | A | 04 | done: #850, #851; both questions answered, no change |
