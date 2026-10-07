@@ -1,0 +1,21 @@
+{
+  "native_path": "/private/tmp/codex-installed-xml-final-20261006/bundle0/tools/edgartools-data/lib/python3.12/site-packages/source_contract/source_contract.abi3.so",
+  "sha256": "bbb291dc3746417b566cf1f5d97921f02e839147ef33195f4de2e885284b3b6e",
+  "bytes": 1958320,
+  "installer_record_sha256": "9c4293e0136dd79799cc74023223b0e4c63cdfe4062613b087491b2d61923604",
+  "installer_record_entry": [
+    "source_contract/source_contract.abi3.so",
+    "sha256=u7KR3DdGQXtWbPH12Xkh8C6DkUfvMxlfTeLohShLO24",
+    "1958320"
+  ],
+  "distribution_source": {
+    "url": "file:///private/tmp/edgartools-platform-codex-streamed-json-20261005",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "7d5496577d299310e05022499c85b27359642b90",
+      "requested_revision": "7d5496577d299310e05022499c85b27359642b90"
+    },
+    "subdirectory": "crates/source-contract"
+  },
+  "scope": "supplementary native extension integrity checked against original installer RECORD; original scan reports hash only the package initializer, not this binary; this does not add a retroactive pre-scan check"
+}

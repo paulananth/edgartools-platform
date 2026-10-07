@@ -1,0 +1,65 @@
+{
+  "members": [
+    {
+      "member": "lei2",
+      "publisher_metadata": {
+        "path": ".planning/workstreams/gleif-member-contracts/lei2-publisher-metadata.json",
+        "sha256": "f0c7e5a95be12faa0eb07efd5848641235d2ca6321078d56e0d973dcd9d5953d"
+      },
+      "full_parity_report": {
+        "path": ".planning/workstreams/gleif-configured-reading/full-level1-json-parity.json",
+        "sha256": "192b6b173569cfaa3eab0ea4d88da50a8c310a92bcef746e3716f2fd87899d68"
+      },
+      "archive": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip",
+        "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+      },
+      "publisher_count": 3428477,
+      "verified_full_count": 3428477,
+      "publisher_compressed_bytes": 927550946,
+      "captured_compressed_bytes": 927550946,
+      "cdf_version": "LEI_3.1"
+    },
+    {
+      "member": "rr",
+      "publisher_metadata": {
+        "path": ".planning/workstreams/gleif-member-contracts/rr-publisher-metadata.json",
+        "sha256": "b821b84b4db2a43f4c2487f1abd967a0934eee4e0b1063ce0546df8b092eac58"
+      },
+      "full_parity_report": {
+        "path": ".planning/workstreams/gleif-member-contracts/full-relationships-json-parity.json",
+        "sha256": "2310dd360dcc7cb23fde549ff057ae312003e7a3175092620d43988770145c79"
+      },
+      "archive": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-rr-golden-copy.json.zip",
+        "sha256": "089a2513d2b5d78fc6359c87ef4bc25a56ac7f58d6b3cb740b954e3ecd2bd0c3"
+      },
+      "publisher_count": 487721,
+      "verified_full_count": 487721,
+      "publisher_compressed_bytes": 34953042,
+      "captured_compressed_bytes": 34953042,
+      "cdf_version": "RR_2.1"
+    },
+    {
+      "member": "repex",
+      "publisher_metadata": {
+        "path": ".planning/workstreams/gleif-member-contracts/repex-publisher-metadata.json",
+        "sha256": "54e6031c17fb105785eb219b09384ebe6b0b221fbf31087c1a40f5c62d512d82"
+      },
+      "full_parity_report": {
+        "path": ".planning/workstreams/gleif-member-contracts/full-reporting-exceptions-json-parity.json",
+        "sha256": "6b5a7257ea6bee7ad8b163c01d620bb6df5e1e02c653946c5455c17dfead660d"
+      },
+      "archive": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-repex-golden-copy.json.zip",
+        "sha256": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831"
+      },
+      "publisher_count": 6351397,
+      "verified_full_count": 6351397,
+      "publisher_compressed_bytes": 63719264,
+      "captured_compressed_bytes": 63719264,
+      "cdf_version": "REPEX_2.1"
+    }
+  ],
+  "scope": "reconcile separately pinned publisher metadata with completed full JSON archive proofs; not a new scan or installed mastering qualification"
+}

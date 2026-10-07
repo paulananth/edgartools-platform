@@ -108,6 +108,22 @@ after parsing and before required paths or table iteration. `true` passes;
 `false` or null rejects the whole artifact with `assertion_failed` and the
 declared reason. Any other result rejects with `assertion_condition`.
 Use `test`, boolean context or boolean reference cells for an assertion result.
+`equal` returns a boolean from two expressions, without coercing their types:
+
+```yaml
+- test:
+    equal:
+      left: {integer: {path: RecordCount.$}}
+      right: {context: {name: publication_count}}
+  reason: Header count must equal the input-bound publication count
+```
+
+Both `left` and `right` are required and evaluate before comparison. Integer,
+float, text and boolean values remain distinct; null equals null. Lists compare
+in order and maps compare their typed fields without depending on key order.
+Use `value` or typed context for boolean values: the existing `const` boolean
+conversion produces text. Explicitly parse source counts with `integer` before
+comparing them to integer context. Nested calls still validate before reading.
 The existing `const` primitive renders boolean literals as text; such a value
 refuses with `assertion_condition`.
 Expressions, context names, references and custom steps are validated when
@@ -724,3 +740,42 @@ privately until every input reaches valid EOF, ZIP CRC and count checks. Retry
 and independent verification use the same configured source boundary. Complete
 captured XML parity, installed mastering and active GLEIF consumer replacement
 remain required before the old XML parser can be removed.
+
+## Three GLEIF member templates
+
+The bundled `sources/gleif/` folder contains `level1`, `relationships` and
+`reporting-exceptions` templates for both `json` and `xml`. Read them through
+`rules.files.load` from the installed `rules.files.ROOT`; copy and pin the
+result before submitting `source.read`. They are qualification templates,
+not activated source Rules. Their selection preserves complete source
+records and original one-based ordinals. Both relationship endpoints must
+belong to the approved scope. Scope selection makes no identity or binding
+decision and does not replace the later MDM checks.
+
+Populate the XML `header_read.references` from authenticated publication
+metadata: `content_dates` and `delta_starts` key normalized UTC ISO instants
+(`+00:00`, seconds or six fractional digits); `record_counts` keys the exact
+decimal header text; `file_content` keys the publication mode and supplies
+`valid: true` plus boolean `requires_delta`. Other reference cells supply
+`valid: true`. Full publication requires absent/empty `DeltaStart`; delta
+publication requires its pinned predecessor time. Empty header references
+refuse the source. Duplicate, malformed or mismatching fields fail before any
+record can be published. Header date comparison accepts equivalent timezone
+spellings by using the existing `date` expression.
+
+Bind `publication_count` to each exact input receipt using the version-2
+source input manifest. Pin the same publisher count in the header reference;
+the worker compares the complete framed count at EOF before publication.
+The creator must derive both pins from the same publication. The current
+templates check each independently; they do not yet configure the generic
+`equal` assertion above to compare header count directly to context count.
+Do not claim that those templates reject inconsistent pins. Also keep API `publish_date`
+separate from XML `ContentDate`: captured members can have different content
+timestamps within one publication slot. Pin authenticated capture-header
+evidence explicitly when the download API does not supply that field.
+JSON has no XML header: its CDF version, content time, mode and predecessor
+evidence must come from the authenticated publisher manifest. A count observed
+by a decoder is structural evidence and cannot substitute for that metadata.
+Read the format's source structures as captured; XML and JSON may represent
+singleton lists or attributes differently, so do not infer cross-format raw
+record equality from their common member name.

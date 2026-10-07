@@ -6,7 +6,8 @@ Continue the full self-sustaining Rules/parsing/MDM/custom orchestration goal on
 - [x] Wire XML framing through the native configured interpreter, Python facade and private worker publication boundary — 2026-10-06 07:03 ET, 389 non-installed engine cases pass including 11 XML worker cases; Spec independently confirmed empty invalid/deferred header and PI refusal publish no outputs.
 - [ ] Bundle contracts for all three GLEIF members and both formats, including approved scope and input-bound metadata; qualify full archive counts, hashes, CRC, EOF and selected records against historical results.
 - [x] Qualify installed XML parse→prepare→merge with restricted PostgreSQL 16 — 2026-10-06 07:06 ET, final implementation 7d549657 passed in 147.07 seconds, one case and no skips. All 111 native cases also passed. Rebase preserves the implementation files byte-for-byte.
-- [ ] Run the full CI gate before merging PR #834.
+- [x] Run the full CI gate before merging PR #834 — 2026-10-06 20:26 ET, CI 37551604093 passed all jobs on 22c7e922; PR #834 merged as 716cb999 at 20:26 ET.
+- [ ] Qualify installed XML publication refusal and recovery with restricted PostgreSQL 16 — continued in gleif-member-contracts/TICKET.md; the installed successful mastering trial above does not prove all failure/recovery modes.
 - [ ] Replace active GLEIF consumers; delete old parser implementations and dependencies after full proof.
 - [ ] Replace Company preparation/provenance/census/cascade routes and prove installed empty-store 6,414 Company / 3,052 CIK+LEI population plus unchanged replay and recovery.
 - [ ] Reconcile actual Claude/Codex completion trackers and retire remaining parser code, adapters and fixtures according to parent issue 20 L3-L8.
@@ -18,3 +19,5 @@ The initial generic native scanner is under review and is not a runtime replacem
 Installed XML parse→prepare→merge trial passed at e25200aa: one case, 24 deselected, no skips, 131.82 seconds on fresh PostgreSQL 16 with restricted roles. The subsequent incremental namespace-size correction requires qualification at its final committed head and full CI before the qualification part above is checked. Complete captured GLEIF XML parity and runtime adoption remain unfinished.
 
 PR #833 merged as 337e737e. On the operator merge instruction, #834 rebased cleanly onto main e4009a9c; final CI is required before merging #834. Full parent goal remains incomplete.
+
+Merged #834 after all CI checks passed. The original full goal remains active; remaining work continues on codex/gleif-member-contracts-20261006 from main 716cb999.

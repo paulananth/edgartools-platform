@@ -1,0 +1,50 @@
+{
+  "archive": {
+    "uri": "file:///private/tmp/codex-gleif-xml-20261006/20260911-1600-gleif-goldencopy-rr-golden-copy.xml.zip",
+    "sha256": "3ee6745265d2a1bfe675419bd556b6dbe7222fc955a07ca5eb8c43684cd9e8a4"
+  },
+  "member": "relationships",
+  "publisher": {
+    "type": "rr",
+    "format": "xml",
+    "record_count": 487721,
+    "size": 33077936,
+    "size_human_readable": "31.55 MB",
+    "delta_type": "GoldenCopy",
+    "url": "https://goldencopy.gleif.org/storage/golden-copy-files/2026/09/11/1275179/20260911-1600-gleif-goldencopy-rr-golden-copy.xml.zip",
+    "cdf_version": "RR_2.1"
+  },
+  "content_date": "2026-09-11T17:12:30+00:00",
+  "content_date_evidence": "explicit pinned capture header; API publication slot is a separate timestamp",
+  "publish_date": "2026-09-11 16:00:00",
+  "metadata_sha256": "e1a51ab4976d815f79e6bd12758c4f09610cd8876a279d1c02e80763d728e121",
+  "template_sha256": "746e6604cc67b5c310aa60614bc30e9c8a38a4e84b51f343c2f446aa5aba04ae",
+  "executed_rules_sha256": "fcdcde7192a6c712248273c7e6c423afdef1a08fa82e5f09ca864518c64c6367",
+  "implementation": [
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/scripts/qualification/qualify_json_archive_parity.py",
+      "sha256": "5fc867c802e420524b482bd496c29400bc5184242f13dc0f6c827d0f5a40935c"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/source_engine.py",
+      "sha256": "933c64a450cac96362c8e8f6fa36834e6bd4c9f3f9361524e519bd86bc257fa5"
+    },
+    {
+      "path": "/private/tmp/codex-installed-xml-final-20261006/bundle0/tools/edgartools-data/lib/python3.12/site-packages/source_contract/__init__.py",
+      "sha256": "ccfccd8ac64ccb238b4374a75491b6cd8066a8d55765eb9c45fd363e4d9c3dd6"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/scripts/qualification/qualify_xml_archive_parity.py",
+      "sha256": "973e3f191baf0f4a0820881fa30257047f04a808b3456885e95fa4ac7b78b0c0"
+    }
+  ],
+  "receipt": {
+    "record_count": 487721,
+    "expanded_bytes": 961511828
+  },
+  "canonical_source_hash": "fc9a87040f1124ccca5f0763e53f6234dc7802b945f0376b6227ceddd8aac4bf",
+  "typed_value_differences": 0,
+  "map_key_order": "configured value maps use sorted keys; XML source key order is not asserted",
+  "seconds": 648.5703346719965,
+  "scope": "complete authenticated XML configured header/all-record projection and independent decoder; not installed mastering qualification"
+}
