@@ -46,7 +46,7 @@ fn chars(iter: impl Iterator<Item=char>) -> Result<String, Rejected> {
     Ok(out)
 }
 // Python's str.strip includes four ASCII separators outside Unicode White_Space.
-fn whitespace(c: char) -> bool { c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c) }
+pub(crate) fn whitespace(c: char) -> bool { c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c) }
 
 impl Recipe {
     pub(crate) fn compile(value: &Value) -> Result<Self, String> {

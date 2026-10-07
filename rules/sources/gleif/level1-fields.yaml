@@ -1,0 +1,215 @@
+# Native configured mapped values; not a source activation.
+source: gleif
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 1
+  assertions:
+  - test:
+      test:
+        path: .
+        kind: object
+    reason: Mapped input must be an object
+  tables:
+    mapped:
+      each: .
+      columns:
+        fields:
+          object:
+            fields:
+              name:
+                value:
+                  path: Entity.LegalName.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              address:
+                object:
+                  fields:
+                    street:
+                      value:
+                        path: Entity.LegalAddress.FirstAddressLine.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    street2:
+                      join:
+                        path: Entity.LegalAddress.AdditionalAddressLine
+                        item_path: $
+                        item_type: object
+                        separator: '
+
+                          '
+                        trim: true
+                        skip_empty: true
+                        null_if_empty: true
+                        max_items: 100000
+                        path_mode: literal
+                    city:
+                      value:
+                        path: Entity.LegalAddress.City.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    region:
+                      value:
+                        path: Entity.LegalAddress.Region.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    postcode:
+                      value:
+                        path: Entity.LegalAddress.PostalCode.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    country:
+                      value:
+                        path: Entity.LegalAddress.Country.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                  omit_nulls: true
+                  null_if_empty: true
+              jurisdiction:
+                value:
+                  path: Entity.LegalJurisdiction.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_legal_form:
+                value:
+                  path: Entity.LegalForm.EntityLegalFormCode.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_entity_status:
+                value:
+                  path: Entity.EntityStatus.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_registration_status:
+                value:
+                  path: Registration.RegistrationStatus.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_initial_registration:
+                value:
+                  path: Registration.InitialRegistrationDate.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_last_update:
+                value:
+                  path: Registration.LastUpdateDate.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_next_renewal:
+                value:
+                  path: Registration.NextRenewalDate.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_managing_lou:
+                value:
+                  path: Registration.ManagingLOU.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_validation_source:
+                value:
+                  path: Registration.ValidationSources.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_registration_authority:
+                value:
+                  path: Entity.RegistrationAuthority.RegistrationAuthorityID.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_registration_authority_entity_id:
+                value:
+                  path: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+              gleif_entity_creation_date:
+                value:
+                  path: Entity.EntityCreationDate.$
+                  null_if_blank: true
+                  type: text
+                  path_mode: literal
+        matching:
+          object:
+            fields:
+              headquarters_postal_code:
+                value:
+                  path: Entity.HeadquartersAddress.PostalCode.$
+                  path_mode: literal
+              headquarters_country:
+                value:
+                  path: Entity.HeadquartersAddress.Country.$
+                  path_mode: literal
+              headquarters_address:
+                object:
+                  fields:
+                    street:
+                      value:
+                        path: Entity.HeadquartersAddress.FirstAddressLine.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    street2:
+                      join:
+                        path: Entity.HeadquartersAddress.AdditionalAddressLine
+                        item_path: $
+                        item_type: object
+                        separator: '
+
+                          '
+                        trim: true
+                        skip_empty: true
+                        null_if_empty: true
+                        max_items: 100000
+                        path_mode: literal
+                    city:
+                      value:
+                        path: Entity.HeadquartersAddress.City.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    region:
+                      value:
+                        path: Entity.HeadquartersAddress.Region.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    postcode:
+                      value:
+                        path: Entity.HeadquartersAddress.PostalCode.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                    country:
+                      value:
+                        path: Entity.HeadquartersAddress.Country.$
+                        type: text
+                        trim: true
+                        null_if_blank: true
+                        path_mode: literal
+                  omit_nulls: true
+                  null_if_empty: true
