@@ -7,8 +7,9 @@ agent can ask next. It names no identifier or relationship type, and no kind
 beyond MDM's own storage (companies keep their own versioned table): the kinds
 come from MDM, their meanings from `rules/context/definitions.yaml`.
 
-Reference data (`rdm.code_context`) and silver table specs join this command
-with phase B (tickets 02 and 06).
+A subject that is no master kind and not `relationship` is a code set: it is
+read from RDM (`edgar_warehouse/rdm/context.py`, `RDM_DATABASE_URL`). Silver
+table specs join this command with ticket 06.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import json
 import re
 import shlex
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 LIMIT_BYTES = 8192
@@ -42,14 +44,15 @@ class ContextError(Exception):
 def register(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "context",
-        help="Read MDM context for an agent: an entity or its relationships, as JSON of at most 8 KB",
+        help="Read context for an agent: an entity, its relationships, or a code, as JSON of at most 8 KB",
         description=(
-            "Look up a master entity by its id or by <namespace>:<value>, search names, or list an "
-            "entity's relationships. Read only. Answers are JSON of at most 8 KB; follow next_step."
+            "Look up a master entity by its id or by <namespace>:<value>, search names, list an "
+            "entity's relationships, or look up a code of a code set (or search its labels). Read only. "
+            "Answers are JSON of at most 8 KB; follow next_step."
         ),
     )
-    parser.add_argument("subject", help="A master kind (company, person, ...) or 'relationship'")
-    parser.add_argument("key", nargs="?", help="An entity id, or <namespace>:<value> for an identifier")
+    parser.add_argument("subject", help="A master kind (company, person, ...), 'relationship', or a code set")
+    parser.add_argument("key", nargs="?", help="An entity id, <namespace>:<value> for an identifier, or a code")
     parser.add_argument("--search", help="Words to find in names, in place of a key")
     parser.add_argument("--limit", type=int, default=5, help=f"How many search matches (1-{SEARCH_MAX})")
     parser.add_argument("--as-of", help="Business time: what was true then (ISO time with a zone)")
@@ -61,11 +64,41 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(handler=_handle)
 
 
+@dataclass(frozen=True)
+class Store:
+    """Where one kind of subject is read: its login's variable, whether that
+    login reads as MDM's application role, and how to check the store."""
+
+    name: str
+    variable: str
+    application_role: bool
+    check: str
+    reader: str  # module:class, imported only when used
+
+
+# One entry per store (GoF consult, ticket 05 RDM part): silver specs add one.
+STORES = {
+    "MDM": Store("MDM", "MDM_DATABASE_URL", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
+    "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm migrate", "edgar_warehouse.rdm.context:CodeContext"),
+}
+
+
+def store_for(subject: str) -> Store:
+    """A master kind or `relationship` is MDM's; any other subject is a code set."""
+    from edgar_warehouse.mdm.clean.evidence import KINDS
+
+    return STORES["MDM" if subject in KINDS or subject == "relationship" else "RDM"]
+
+
 def _handle(args: argparse.Namespace) -> int:
+    import importlib
+
+    store = store_for(args.subject)
     try:
-        engine = _engine()
+        engine = _engine(store, args.subject)
         try:
-            answer = Context(engine).answer(args)
+            module, name = store.reader.split(":")
+            answer = getattr(importlib.import_module(module), name)(engine).answer(args)
         finally:
             engine.dispose()
         code = 0
@@ -73,24 +106,31 @@ def _handle(args: argparse.Namespace) -> int:
         answer, code = {"error": str(error), "try": error.command}, 2
     except Exception as error:  # noqa: BLE001 - a driver message can carry the database address
         answer = {
-            "error": f"The MDM database could not be read ({type(error).__name__}).",
-            "try": "Check that MDM_DATABASE_URL is set and that MDM is migrated (edgar-warehouse mdm check-connectivity).",
+            "error": f"The {store.name} database could not be read ({type(error).__name__}).",
+            "try": f"Check that {store.variable} is set and that {store.name} is migrated ({store.check}).",
         }
         code = 1
     print(json.dumps(answer, ensure_ascii=False))
     return code
 
 
-def _engine():
+def _engine(store: Store = STORES["MDM"], subject: str | None = None):
     import os
 
     from sqlalchemy import event
 
     from edgar_warehouse.mdm.clean.cli import engine_from_env
 
-    if not os.environ.get("MDM_DATABASE_URL"):
-        raise ContextError("MDM_DATABASE_URL is not set.", "Set MDM_DATABASE_URL to a login that may read MDM, then run the command again.")
-    engine = engine_from_env("MDM_DATABASE_URL")
+    if not os.environ.get(store.variable):
+        if store.name == "RDM" and subject:  # a misspelled kind lands here too
+            from edgar_warehouse.mdm.clean.evidence import KINDS
+
+            raise ContextError(f"{subject!r} is not a master kind ({', '.join(sorted(KINDS))}) or 'relationship'; "
+                               f"as a code set it is read from RDM, and {store.variable} is not set.",
+                               f"Set {store.variable} to a login that may read RDM, or name a kind.")
+        raise ContextError(f"{store.variable} is not set.",
+                           f"Set {store.variable} to a login that may read {store.name}, then run the command again.")
+    engine = engine_from_env(store.variable, restricted=store.application_role)
 
     @event.listens_for(engine, "connect")
     def read_only(dbapi_connection, _):
@@ -107,7 +147,7 @@ def definitions() -> dict:
     return files.load(files.ROOT / "context" / "definitions.yaml")
 
 
-def _time(value: str, flag: str, command: str) -> datetime:
+def parse_time(value: str, flag: str, command: str) -> datetime:
     try:
         moment = datetime.fromisoformat(value)
     except ValueError:
@@ -117,7 +157,7 @@ def _time(value: str, flag: str, command: str) -> datetime:
     return moment.astimezone(UTC)
 
 
-def _offset(page: str | None) -> int:
+def page_offset(page: str | None) -> int:
     if page is None:
         return 0
     match = re.fullmatch(r"p(\d{1,6})", page)
@@ -146,7 +186,7 @@ def _size(answer: dict) -> int:
     return len(json.dumps(answer, ensure_ascii=False).encode("utf-8"))
 
 
-def fit(answer: dict, list_key: str, offset: int, command: str) -> dict:
+def fit(answer: dict, list_key: str, offset: int, command: str, view: str = "mdm.entity_context WHERE entity_id = '<id>'") -> dict:
     """Cut the answer's one long list at a whole item so it stays within 8 KB.
 
     `command` is the command that asks for the next page, without --page.
@@ -178,7 +218,7 @@ def fit(answer: dict, list_key: str, offset: int, command: str) -> dict:
     if _size(result) > LIMIT_BYTES or (low == 0 and rest):
         # A page with no item would point at itself: say so rather than loop.
         raise ContextError("The answer does not fit in 8 KB.",
-                           "Query the view instead, e.g. SELECT * FROM mdm.entity_context WHERE entity_id = '<id>'.")
+                           f"Query the view instead, e.g. SELECT * FROM {view}.")
     return result
 
 
@@ -257,10 +297,10 @@ class Context:
         from sqlalchemy import text
 
         if args.as_at:
-            moment, flag = _time(args.as_at, "--as-at", f"{PROG} {args.subject} {args.key}"), "--as-at"
+            moment, flag = parse_time(args.as_at, "--as-at", f"{PROG} {args.subject} {args.key}"), "--as-at"
             generation = conn.scalar(text("SELECT max(generation) FROM mdm.batch WHERE created_at <= :t"), {"t": moment})
         elif args.as_of:
-            moment, flag = _time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}"), "--as-of"
+            moment, flag = parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}"), "--as-of"
             generation = conn.scalar(text(
                 "SELECT max(generation) FROM mdm.batch WHERE (effects ->> 'as_of')::timestamptz <= :t"), {"t": moment})
         else:
@@ -350,7 +390,7 @@ class Context:
         answer["next_step"] = f"{PROG} relationship {canonical}" + (" --detail full" if not full else "")
         command = f"{PROG} {args.subject} {args.key}" + "".join(
             f" --{flag} {value}" for flag, value in (("as-of", args.as_of), ("as-at", args.as_at), ("detail", args.detail)) if value)
-        return fit(answer, "fields", _offset(args.page), command)
+        return fit(answer, "fields", page_offset(args.page), command)
 
     def search(self, args: argparse.Namespace) -> dict:
         from sqlalchemy import text
@@ -382,13 +422,13 @@ class Context:
             "next_step": (f"{PROG} {args.subject} <entity_id>" if matches
                           else f"No {args.subject} name matches. Try fewer words, or {PROG} {args.subject} <namespace>:<value>."),
         }
-        return fit(answer, "matches", _offset(args.page), f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}")
+        return fit(answer, "matches", page_offset(args.page), f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}")
 
     # -- Relationships -------------------------------------------------------
 
     @staticmethod
     def _at(args) -> datetime:
-        return _time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}") if args.as_of else datetime.now(UTC)
+        return parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}") if args.as_of else datetime.now(UTC)
 
     def _walk(self, conn, start: str, hops: int, at: datetime, relationship_type: str, cap: int):
         """The links around one entity, both directions, up to `hops` away.
@@ -480,7 +520,7 @@ class Context:
         }
         command = f"{PROG} relationship {args.key} --hops {args.hops}" + "".join(
             f" --{flag} {value}" for flag, value in (("type", args.relationship_type), ("as-of", args.as_of), ("detail", args.detail)) if value)
-        return fit(answer, "related", _offset(args.page), command)
+        return fit(answer, "related", page_offset(args.page), command)
 
 
 def _name(body: dict):

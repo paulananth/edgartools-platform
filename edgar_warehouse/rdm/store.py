@@ -123,13 +123,22 @@ class RDM:
         labels = [*labels, *({"code": r["code"], "label": r["label"], "kind": "preferred", "source": "code label"}
                              for r in codes if (r["code"], "en") not in named)]
         key = code_set["code_set"]
-        given = {"name": "", "definition": "", "authority": "", "steward": "", **code_set}
+        from edgar_warehouse.mdm.clean.evidence import KINDS
+
+        if key in KINDS or key == "relationship":  # `context <subject>` reads these from MDM
+            raise Blocked(f"{key!r} names a master kind or relationships; give the code set another id")
+        given = {**{k: "" for k in DRAFT_FIELDS["code_set"]}, **{k: v for k, v in code_set.items() if v is not None}}
         with self.engine.begin() as conn:
-            conn.execute(text("INSERT INTO rdm.code_set(code_set,name,definition,authority,steward) "
-                              "VALUES(:code_set,:name,:definition,:authority,:steward) ON CONFLICT DO NOTHING"), given)
             held = conn.execute(text("SELECT code_set,name,definition,authority,steward FROM rdm.code_set "
-                                     "WHERE code_set=:s"), {"s": key}).mappings().one()
-            if {k: given[k] for k in held} != dict(held) and set(code_set) != {"code_set"}:
+                                     "WHERE code_set=:s"), {"s": key}).mappings().first()
+            if held is None:
+                if not str(given["name"]).strip():
+                    raise Blocked(f"Code set {key} is new: give it a name in plain words")
+                if not conn.execute(text("INSERT INTO rdm.code_set(code_set,name,definition,authority,steward) "
+                                         "VALUES(:code_set,:name,:definition,:authority,:steward) ON CONFLICT DO NOTHING"),
+                                    given).rowcount:
+                    raise Blocked(f"Code set {key} was drafted by someone else just now; draft again")
+            elif set(code_set) != {"code_set"} and {k: given[k] for k in held} != dict(held):
                 raise Blocked(f"Code set {key} is already held with other words; a code set's words never change "
                               "(name only code_set, and put changed meaning in the version's hints)")
             conn.execute(text("INSERT INTO rdm.code_set_version(code_set,version,supersedes,created_by,evidence) "

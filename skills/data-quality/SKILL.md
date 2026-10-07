@@ -136,6 +136,11 @@ differs), and a fix with its evidence, or `needs_steward: true`.
   case, spaces and leading zeros are folded; or the parent most rows with the
   same code have. Show the steward each fix with its evidence; they approve
   or reject it.
+- A value meant to be a code of a published code set: look it up, or search
+  the code set's labels and synonyms, with
+  `edgar-warehouse context <code set> <code>` or
+  `edgar-warehouse context <code set> --search "<words>"`. A unique match is
+  evidence for a fix; several matches, or none, go to the steward.
 - Rows with no evidence go to the steward as they are.
 - The rows stay marked, never dropped. The engine has no hierarchy check yet:
   the check is new code, listed in the plan.

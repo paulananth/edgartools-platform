@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from edgar_warehouse.control_contract import Blocked, canonical
 
+MIGRATIONS = Path(__file__).parent / "migrations"
 CONTENT = ("code", "code_label", "level", "crosswalk_row", "code_set_usage", "code_set_hint")
 
 
@@ -18,7 +19,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     role what drafting, recording an approval and publishing need, and no more."""
     if engine.dialect.name != "postgresql":
         raise Blocked("RDM requires PostgreSQL 16")
-    paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
+    paths = sorted(MIGRATIONS.glob("[0-9]*.sql"))
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if (conn.scalar(text("SELECT current_database()")) != "rdm"
@@ -67,6 +68,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
         for table in CONTENT:  # a draft's content; the triggers refuse it after approval
             conn.exec_driver_sql(f"GRANT INSERT, UPDATE, DELETE ON rdm.{table} TO {runtime}")
         conn.exec_driver_sql(f"GRANT INSERT ON rdm.code_path TO {runtime}")
+        if conn.scalar(text("SELECT to_regprocedure('rdm.code_search(text,text,text,integer)') IS NOT NULL")):
+            conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION rdm.code_search(text,text,text,integer) TO {runtime}")
         tables = ["code_set", "code_set_version", "code_path", *CONTENT]
         if conn.scalar(text(
                 "SELECT has_schema_privilege(:r,'rdm','CREATE') "
