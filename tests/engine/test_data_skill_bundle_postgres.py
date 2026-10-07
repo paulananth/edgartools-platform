@@ -753,7 +753,8 @@ read:
         try:
             rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", run_id,
                             env={**env, **worker}, cwd=root)
-            assert rejected.returncode == 1 and "No such file" in rejected.stderr, rejected.stderr
+            assert rejected.returncode == 1 and "Artifact missing or unreadable" in rejected.stderr, rejected.stderr
+            assert filers["uri"] in rejected.stderr
             assert not (out / "reading.json").exists() and not (out / "reading.json.parts").exists()
             with mdm_reader.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
