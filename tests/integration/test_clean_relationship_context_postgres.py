@@ -8,6 +8,8 @@ stops the walk; the hop limit holds.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import text
 
 from tests.integration import test_clean_mdm_postgres as core
@@ -53,10 +55,13 @@ def test_relationships_come_back_named_with_their_dates_and_sources(database):
     assert first["from_entity_id"] == ids["a"] and first["period"] == 1 and first["valid_to"] is None
     assert first["valid_from"] is not None and first["scope"] == "consolidated" and not first["derived"]
     assert first["sources"] == [{"source_code": "fixture.primary", "record_key": "a"}]
-    # The engine derives each record's ultimate parent from the direct chain: flagged, with no dates.
+    assert first["valid_from_basis"] == "stated" and first["ended_by"] is None
+    # The engine derives each record's ultimate parent from the direct chain.
+    # This fixture's policy has no types section, so it runs accounting-chain-v1:
+    # calculated, with no dates (v2's history: test_fresh_mastering_postgres).
     derived = rows(database, "SELECT * FROM mdm.relationship_context WHERE derived")
     assert {(r["from_name"], r["to_name"]) for r in derived} == {("Company a", "Company c"), ("Company b", "Company c")}
-    assert all(r["valid_from"] is None and r["period"] is None for r in derived)
+    assert all(r["valid_from"] is None and r["period"] is None and r["basis"] == "calculated" for r in derived)
 
 
 def test_a_person_link_comes_back_with_its_role_and_observed_start(database):
@@ -124,7 +129,8 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
         # store goes around that, as the database owner.
         conn.execute(text("SET LOCAL session_replication_role = replica"))
         conn.execute(text("DELETE FROM mdm.migration WHERE name IN "
-                          "('006_relationship_context.sql', '007_entity_context.sql', '008_relationship_names.sql')"))
+                          "('006_relationship_context.sql', '007_entity_context.sql', '008_relationship_names.sql', "
+                          "'009_parent_history.sql')"))
         conn.execute(text("SET LOCAL session_replication_role = origin"))
         count = conn.scalar(text("SELECT count(*) FROM mdm.current_record"))
     migrate(database.admin, application_role="clean_application")
@@ -134,14 +140,22 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
         assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == count
 
 
-def test_a_populated_store_at_007_takes_008_and_each_link_says_its_basis(database):
-    """Profiling ticket 04b: the view's basis column, stated or calculated, on a store holding links."""
+def test_a_populated_store_at_007_takes_008_and_009_and_each_link_says_its_basis(database):
+    """Profiling ticket 04b: the view's basis column, stated or calculated, and
+    the succession that ended a period, on a store holding links."""
+    from edgar_warehouse.mdm.clean import store
     from edgar_warehouse.mdm.clean.store import migrate
 
     load(database, {"a": [(DIRECT, "b")]})
+    view_at_007 = (Path(store.__file__).parents[1] / "migrations" / "006_relationship_context.sql").read_text()
+    view_at_007 = view_at_007[view_at_007.index("CREATE VIEW mdm.relationship_context"):]
+    view_at_007 = view_at_007[:view_at_007.index(";") + 1]
     with database.admin.begin() as conn:
+        conn.execute(text("DROP VIEW mdm.relationship_context"))
+        conn.execute(text(view_at_007))
         conn.execute(text("SET LOCAL session_replication_role = replica"))
-        conn.execute(text("DELETE FROM mdm.migration WHERE name='008_relationship_names.sql'"))
+        conn.execute(text("DELETE FROM mdm.migration WHERE name IN ('008_relationship_names.sql', "
+                          "'009_parent_history.sql')"))
         conn.execute(text("SET LOCAL session_replication_role = origin"))
         count = conn.scalar(text("SELECT count(*) FROM mdm.current_record"))
     migrate(database.admin, application_role="clean_application")
@@ -152,3 +166,6 @@ def test_a_populated_store_at_007_takes_008_and_each_link_says_its_basis(databas
         assert conn.scalar(text("SELECT col_description('mdm.relationship_context'::regclass, "
                                 "(SELECT attnum FROM pg_attribute WHERE attrelid = 'mdm.relationship_context'::regclass "
                                 "AND attname = 'basis'))")).startswith("stated")
+        assert conn.scalar(text("SELECT col_description('mdm.relationship_context'::regclass, "
+                                "(SELECT attnum FROM pg_attribute WHERE attrelid = 'mdm.relationship_context'::regclass "
+                                "AND attname = 'ended_by'))")).startswith("The succession")

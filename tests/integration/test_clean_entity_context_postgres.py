@@ -224,3 +224,29 @@ def test_a_populated_store_at_006_takes_007_and_keeps_its_rows(database):
         "Company a", "Company b", "Company c"]
     with database.admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == count
+
+
+def test_a_calculated_ultimate_parent_answers_only_for_the_dates_its_chain_held(database):
+    """Profiling ticket 04b, part B: under accounting-chain-v2 the calculated
+    link has periods, so `--as-of` before its chain held leaves it out."""
+    from edgar_warehouse.mdm.clean.store import register_policy
+
+    ultimate = "IS_ULTIMATELY_CONSOLIDATED_BY"
+    hierarchy = {"from": ["company"], "to": ["company"], "hierarchy": True, "cycles": "invalid", "one_parent": True}
+    with database.admin.begin() as conn:
+        fields = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest = :d"), {"d": database.policy})
+        policy = register_policy(conn, {**fields, "relationships": {"version": "test", "types": {
+            DIRECT: {**hierarchy, "ultimate_parent": "accounting-chain-v2", "ultimate_type": ultimate},
+            ultimate: hierarchy}}})
+    a = company("a")
+    b = company("b", a)
+    pairs = [core.identity_and_binding(r) for r in (a, b)]
+    MergeStage(Store(database.application)).apply(
+        batch_id="work-1", run_id=str(uuid4()), policy_digest=policy, consumer="fixture",
+        expected_checkpoint=0, checkpoint=1, as_of=core.AS_OF,
+        assertions=[a, b], identities=[i for i, _ in pairs], decisions=[d for _, d in pairs])
+    child = pairs[1][0]["entity_id"]
+    now = ask(database, "relationship", child, relationship_type=ultimate, detail="full")["related"]
+    assert [(r["basis"], r["valid_from"], len(r["path"])) for r in now] == [("calculated", core.AT, 1)]
+    assert ask(database, "relationship", child, relationship_type=ultimate,
+               as_of="2025-06-01T00:00:00+00:00")["related"] == []

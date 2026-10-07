@@ -82,6 +82,14 @@ WITH_REAL_NAMES = {
     "policy": "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6",
 }
 
+# Profiling ticket 04b, part B: the calculated ultimate parent keeps its
+# history (accounting-chain-v2) and a successor entity ends parent links
+# (operator, 2026-10-07: "It should also consider corporate actions"); peeled,
+# the policy is the one above.
+WITH_PARENT_HISTORY = {
+    "policy": "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605",
+}
+
 # Profiling ticket 02 pins the reference data (RDM `sec-place-codes` version
 # 1 and its sha256) in place of the embedded table; the operator approved it
 # ("Ticket 02's last step needs your approval. Approved", 2026-10-07 08:01 ET).
@@ -127,7 +135,7 @@ SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_REAL_NAMES, WITH_REFERENCE_PINS, WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_PARENT_HISTORY, WITH_REAL_NAMES, WITH_REFERENCE_PINS, WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
