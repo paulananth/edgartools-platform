@@ -56,18 +56,20 @@ root = Path("name-key-proof").resolve()
 root.mkdir()
 names = ["Électricité Holdings Corporation /DE/", "THE A&B L.L.C.", "Wayfair Inc.", "WAYFAIR LLC"]
 raw = store.put_bytes((root / "names.json").as_uri(), json.dumps({"names":[{"name":name} for name in names]}).encode())
+context = store.put(root.as_uri(), {"version":1,"input":raw,"values":{}})
 proof = {}
 for source, first in [("sec.submissions.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELECTRICITE HLDGS CORP DE")]:
     config = files.load(files.ROOT / "sources" / source / "name-key.yaml")
     contract = store.put(root.as_uri(), config)
-    manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw}]})
+    manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
     task = {"input":manifest,"output":(root / (source + ".json")).as_uri(),"checks":["source.output"]}
     receipt = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
     reading = store.json(receipt)
     rows = reading["artifacts"][0]["tables"]["names"]
     assert [row["key"] for row in rows] == [first,"A AND B LLC","WAYFAIR INC","WAYFAIR LLC"]
-    assert reading["artifacts"][0]["input"] == raw and not reading["artifacts"][0]["deferred"]
+    assert reading["artifacts"][0]["input"] == raw and reading["artifacts"][0]["context"] == context
+    assert not reading["artifacts"][0]["deferred"]
     proof[source] = {"contract":contract,"input":manifest,"reading":receipt}
 print(json.dumps(proof))
 ''', cwd=root)
