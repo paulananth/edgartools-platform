@@ -24,8 +24,14 @@ pub struct Envelope {
 pub struct Limits {
     pub max_bytes: usize,
     pub max_record: usize,
+    pub max_header: usize,
     pub max_records: usize,
     pub max_depth: usize,
+}
+
+fn node_bound(stack: &[Frame], envelope: &Envelope, limits: Limits) -> usize {
+    if stack.len() >= 3 && stack[1].name == envelope.container { limits.max_record }
+    else { limits.max_header }
 }
 
 fn reject(detail: impl ToString) -> Rejected { Rejected::new("xml_stream", detail) }
@@ -168,7 +174,7 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
     if envelope.namespace.is_empty() || names.iter().any(|n| n.is_empty() || n.contains([':', '{', '}']))
         || names.iter().enumerate().any(|(i, n)| names[..i].contains(n))
         || envelope.record_wrapper.as_ref().is_some_and(|name| name.is_empty())
-        || limits.max_bytes == 0 || limits.max_record == 0 || limits.max_depth < 3 {
+        || limits.max_bytes == 0 || limits.max_record == 0 || limits.max_header == 0 || limits.max_depth < 3 {
         return Err(Rejected::new("contract", "invalid XML stream envelope or bounds"));
     }
     let total = Cell::new(0);
@@ -245,6 +251,9 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                     },
                     _ => {},
                 }
+                let maximum = if stack.len() >= 2 && stack[1].name == envelope.container {
+                    limits.max_record
+                } else { limits.max_header };
                 let mut values = Map::new();
                 let mut size = 2usize;
                 for (raw, value) in attributes {
@@ -253,7 +262,7 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                     size = size.saturating_add(serde_json::to_string(&key).unwrap().len())
                         .saturating_add(1).saturating_add(serde_json::to_string(&value).unwrap().len())
                         .saturating_add(usize::from(!values.is_empty()));
-                    if size > limits.max_record { return Err(reject("XML normalized attributes exceed byte bound")); }
+                    if size > maximum { return Err(reject("XML normalized attributes exceed byte bound")); }
                     if values.insert(key, Value::String(value)).is_some() {
                         return Err(reject("duplicate expanded XML attribute"));
                     }
@@ -267,26 +276,30 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                 let text = normalized(text.as_ref(), false)?;
                 if stack.len() <= 1 || (stack.len() == 2 && stack[1].name == envelope.container) {
                     if !text.chars().all(|c| matches!(c, ' ' | '\t' | '\r' | '\n')) { return Err(reject("unexpected XML envelope text")); }
-                } else if let Some(frame) = stack.last_mut() {
+                } else {
+                    let maximum = node_bound(&stack, envelope, limits);
+                    let frame = stack.last_mut().unwrap();
                     // Match an element's leading text; tail text is not a field.
-                    frame.leading_text(&text, limits.max_record)?;
+                    frame.leading_text(&text, maximum)?;
                 }
             },
             Event::CData(text) => {
                 if stack.len() < 2 || (stack.len() == 2 && stack[1].name == envelope.container) { return Err(reject("unexpected XML envelope CDATA")); }
                 let text = std::str::from_utf8(text.as_ref()).map_err(reject)?.replace("\r\n", "\n").replace('\r', "\n");
                 xml_chars(&text)?;
+                let maximum = node_bound(&stack, envelope, limits);
                 let frame = stack.last_mut().unwrap();
-                frame.leading_text(&text, limits.max_record)?;
+                frame.leading_text(&text, maximum)?;
             },
             Event::End(_) => {
+                let maximum = node_bound(&stack, envelope, limits);
                 let frame = stack.pop().ok_or_else(|| reject("unbalanced XML end tag"))?;
                 let key = if frame.namespace.as_deref() == Some(envelope.namespace.as_str()) { frame.name.clone() }
                     else { match &frame.namespace { Some(ns) => format!("{{{ns}}}{}", frame.name), None => frame.name.clone() } };
                 if stack.is_empty() { root_closed = true; }
                 else if stack.len() == 1 && frame.name == envelope.header {
-                    let value = frame.finish(limits.max_record)?;
-                    if encoded_len(&value, RecordEncoding::Python)? > limits.max_record { return Err(reject("XML header exceeds byte bound")); }
+                    let value = frame.finish(limits.max_header)?;
+                    if encoded_len(&value, RecordEncoding::Python)? > limits.max_header { return Err(reject("XML header exceeds byte bound")); }
                     header(value)?;
                     header_seen = true;
                     since_record.set(0);
@@ -297,7 +310,7 @@ where R: Read, H: FnMut(Value) -> Result<(), Rejected>, F: FnMut(Value, usize) -
                     consume(value, records)?;
                     records += 1;
                     since_record.set(0);
-                } else if stack.len() >= 2 { stack.last_mut().unwrap().child(key, frame.finish(limits.max_record)?, limits.max_record)?; }
+                } else if stack.len() >= 2 { stack.last_mut().unwrap().child(key, frame.finish(maximum)?, maximum)?; }
             },
             Event::Eof => break,
             Event::Comment(text) => { xml_chars(std::str::from_utf8(text.as_ref()).map_err(reject)?)?; },

@@ -6,7 +6,7 @@ fn envelope() -> Envelope {
     Envelope { namespace: "urn:feed".into(), root: "Data".into(), header: "Header".into(),
         container: "Records".into(), record: "Record".into(), record_wrapper: None }
 }
-fn limits() -> Limits { Limits { max_bytes: 100000, max_record: 10000, max_records: 100, max_depth: 64 } }
+fn limits() -> Limits { Limits { max_bytes: 100000, max_record: 10000, max_header: 10000, max_records: 100, max_depth: 64 } }
 fn document(records: &str) -> String {
     format!("<Data xmlns='urn:feed'><Header><Count>2</Count></Header><Records>{records}</Records></Data>")
 }
@@ -148,5 +148,24 @@ fn namespace_expansion_refuses_before_accumulating_the_remaining_record() {
         let source = Counted { source: xml.as_bytes(), read: &read };
         assert!(scan(source, &envelope(), Limits { max_record: 1024, ..limits() }, |_| Ok(()), |_, _| Ok(())).is_err());
         assert!(read.get() < 3000, "read {} of {} bytes before refusing expanded namespace keys", read.get(), xml.len());
+    }
+}
+
+#[test]
+fn independent_header_budget_preserves_record_budget() {
+    let xml = document("<Record/>");
+    let small = Limits { max_record: 2, max_header: 100, ..limits() };
+    let mut count = 0;
+    scan(xml.as_bytes(), &envelope(), small, |_| Ok(()), |row, _| {
+        assert_eq!(row, json!({})); count += 1; Ok(())
+    }).unwrap();
+    assert_eq!(count, 1);
+    assert!(scan(document("<Record><Value>large</Value></Record>").as_bytes(),
+        &envelope(), small, |_| Ok(()), |_, _| Ok(())).is_err());
+    for max_header in [0, 2] {
+        let mut seen = false;
+        assert!(scan(xml.as_bytes(), &envelope(), Limits { max_header, ..small },
+            |_| Ok(()), |_, _| { seen = true; Ok(()) }).is_err());
+        assert!(!seen);
     }
 }

@@ -1,7 +1,7 @@
 # One self-sustaining data skill
 
 Type: task (code and skill), several PRs
-Status: in progress (Codex owns continuation, PR #842; `.planning/workstreams/gleif-member-contracts/TICKET.md`; earlier completion history remains below)
+Status: in progress (Codex owns continuation, PRs #843 and #844; `.planning/workstreams/gleif-member-contracts/TICKET.md`; earlier completion history remains below)
 Blocked by: none; basic installed parse/master G3 is verified. Company/Person/GLEIF read blocks exist, but complete runtime retirement, corpus equivalence and whole installed population proof remain unfinished (20 L3–L8).
 Absorbs: 20 L3–L8 (Codex's list: SEC Company and GLEIF on the engine), 16, 17
 
@@ -63,18 +63,33 @@ Answers, 2026-10-03:
 - [ ] Three-axis `/code-review` for each later PR; CI green; merge on the operator's word
 - [ ] Memory `project_rules_skill.md` updated
 
-## Current Codex continuation (2026-10-06)
+## Current Codex continuation (2026-10-07)
 
 The ownership answer above records the earlier handoff. The operator subsequently
-directed Codex to continue; current implementation is on
-`codex/gleif-runtime-retirement-20261006`, PR #842. No Claude handoff is active.
-Merged #833/#834/#841 provide native framed/configured reading, all six GLEIF
-member templates, full JSON framing parity and installed XML refusal/recovery.
-Company catalog, address and pagination contracts also exist. These foundations
-do not close Company/Person/GLEIF retirement checklist items: `company_source.py`,
-GLEIF XML/semantic handling, Person fixture conversion and custom adapter mapping
-still have active consumers. PR #842 replaces production GLEIF JSON parsing;
-its whole-corpus runtime requalification and replacement-head CI remain separate
-proofs. The authoritative detailed checklist is
-`.planning/workstreams/gleif-member-contracts/TICKET.md`. The installed
-6,414 Company / 3,052 CIK+LEI / unchanged-replay proof is still unchecked.
+directed Codex to continue; no Claude handoff is active.
+
+- Merged #842 replaces production GLEIF JSON parsing. #843 on
+  `codex/gleif-xml-runtime-retirement-20261007` replaces XML record parsing and
+  preserves independent header/record bounds. Full CI 37608031153 passed:
+  565 unit, 258 architecture, 571 MDM, 279 integration plus one expected failure,
+  495 engine and 117 native tests; no prerequisite skips. The committed f380eacd
+  installed bundle's restricted PG16 refusal/recovery trial passed in 172.98s.
+  Complete replacement-runtime JSON/XML corpus scans are still running; no
+  success is claimed for unfinished members.
+- #844 on `codex/company-configured-preparation-20261007` bundles Company
+  main/page/catalog/address composition. Raw-fixture tests include two distinct
+  pagination artifacts; installed composition on d49cb65e passed outside
+  checkout in 126.77s. This is preparation/composition evidence, not census,
+  complete provenance or full Company mastering. Its own full CI is pending.
+- The Person raw read block exists. The fixture field conversion was already
+  removed in merged #816 (cc5b1332), and the retained complete assertion/provenance
+  digest remains unchanged. Person still uses generic adapter normalization;
+  full captured-corpus and replacement mapping qualification remain pending.
+
+The detailed continuation checklists are
+`.planning/workstreams/gleif-member-contracts/TICKET.md` and
+`.planning/workstreams/company-configured-preparation/TICKET.md`.
+`company_source.py`, GLEIF semantic evidence/release handling and custom adapter
+mapping retain active consumers. These foundations do not close parent issue
+20 L3-L8. The installed 6,414 Company / 3,052 CIK+LEI population and unchanged
+replay/recovery proof remains unchecked.

@@ -119,3 +119,11 @@ def test_xml_content_date_is_independent_of_api_publication_slot(tmp_path, membe
     assert result['publish_date'] == '2026-09-11 16:00:00'
     with pytest.raises(SourceRejected, match='content date'):
         xml.qualify(path, digest, member, metadata, content_date='2026-09-11T16:00:00+00:00')
+
+
+def test_qualification_evidence_hashes_actual_native_extension():
+    from edgar_warehouse.rules import source_engine
+    evidence = {item["path"]: item["sha256"] for item in parity.implementation_evidence()}
+    for path in source_engine.runtime_files():
+        assert evidence[str(path.resolve())] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert any(path.endswith((".so", ".pyd", ".dylib")) for path in evidence)

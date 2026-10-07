@@ -38,7 +38,7 @@ def test_header_reference_four_context_three_actual_three_refuses(tmp_path, memb
     assert not (tmp_path / 'reading.json.parts').exists()
 
 
-@pytest.mark.parametrize('member', ('relationships', 'reporting-exceptions'))
+@pytest.mark.parametrize('member', MEMBERS)
 def test_bundled_xml_contract_refuses_inconsistent_publication_count(tmp_path, member):
     # Exercise the shipped template directly, without adding an assertion in this test.
     rules, store = configured(member, 'xml'), Artifacts()

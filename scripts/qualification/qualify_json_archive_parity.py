@@ -22,9 +22,8 @@ from edgar_warehouse.rules.source_engine import stream_json_array
 
 
 def implementation_evidence():
-    import source_contract
     from edgar_warehouse.rules import source_engine
-    paths = [Path(__file__), Path(source_engine.__file__), Path(source_contract.__file__)]
+    paths = [Path(__file__), *source_engine.runtime_files()]
     return [{"path": str(path.resolve()), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in paths]
 
 
