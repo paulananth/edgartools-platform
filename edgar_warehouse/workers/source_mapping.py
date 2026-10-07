@@ -17,6 +17,20 @@ def _engine(body: str) -> SourceEngine:
     return SourceEngine(json.loads(body))
 
 
+def _require_json_value(value):
+    """Reject Python-only shapes that json.dumps would silently convert."""
+    if type(value) is dict:
+        if any(type(key) is not str for key in value):
+            raise TypeError("configured record dictionary keys must be strings")
+        for item in value.values():
+            _require_json_value(item)
+    elif type(value) is list:
+        for item in value:
+            _require_json_value(item)
+    elif value is not None and type(value) not in (str, bool, int, float):
+        raise TypeError("configured record values must belong to the JSON domain")
+
+
 def project_record(row: dict, reading: dict, *, column: str) -> dict:
     # Serialize a fresh subset: mutable Rules bodies never become cache keys.
     body = json.loads(json.dumps(reading, ensure_ascii=False, allow_nan=False))
@@ -38,6 +52,7 @@ def project_record(row: dict, reading: dict, *, column: str) -> dict:
         # Declare the JSON projection boundary: foreign metadata outside this
         # list never becomes parsed content. Selected values are never coerced.
         row = {name: row[name] for name in inputs if name in row}
+    _require_json_value(row)
     result = _engine(key).read(json.dumps(row, ensure_ascii=False, allow_nan=False).encode())
     rows = result.tables.get("mapped", [])
     if result.deferred or len(rows) != 1 or set(rows[0]) != {column} or not isinstance(rows[0][column], dict):

@@ -1,7 +1,7 @@
 {
   "captures": 1000,
   "source_comparisons": 2000,
-  "seconds": 35.109449055977166,
+  "seconds": 48.068154719192535,
   "outcomes": {
     "sec.submissions.company": {
       "classification_deferred": 935,
@@ -23,7 +23,7 @@
     "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
     "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/mdm/clean/classification.py": "71d5d96c67cdf35f8d3f9c77344488fd5525fa4c289deeb99dffdac08da4a767",
     "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/mdm/clean/quality.py": "b0f7aa03d7d0b3784d2a6721731441cf06a5e8262b9ba36b39b6a594332087e1",
-    "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/workers/source_mapping.py": "07c79e8e2e0653bc347806cdc6c8214b4f8adc3d00f208af5c6dfdfe3453f435",
+    "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/workers/source_mapping.py": "00f1b28ca1e8db31dc05dac19f20f20d91bc679b4b782ec0a0ca4081c464edd3",
     "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/rules/files.py": "db85959f924c54c88a35195f8e5d6866a051eeb2b7cf31c103f20e710fd0b39f",
     "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
     "/private/tmp/edgartools-platform-codex-sec-configured-fields-20261007/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",

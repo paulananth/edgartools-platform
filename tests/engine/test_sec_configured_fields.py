@@ -115,3 +115,11 @@ def test_declared_json_input_projection_preserves_missing_versus_explicit_null()
         'missing':{'test':{'path':'entity_name','kind':'missing'}}}}}
     assert project_record({},reading,column='fields')=={'missing':True}
     assert project_record({'entity_name':None},reading,column='fields')=={'missing':False}
+
+
+@pytest.mark.parametrize('value', [('company',), {1: 'company'}])
+def test_selected_python_only_values_are_rejected_without_json_coercion(value):
+    configured,_=contracts(SOURCES[0]);record=row(SOURCES[0])
+    record['name_census']=value
+    with pytest.raises(TypeError):
+        adapters._matching_values(record,configured['adapter'])

@@ -12,3 +12,5 @@ Parent: complete self-sustaining skill bundle/Rules creator, parsing and MDM orc
 - [x] Compare 1,000 authenticated SEC main captures for each source: 2,000 exact field/quality/assertion/refusal comparisons, 65 Company and 386 Person assertions; all other classification deferrals identical. Qualification passed in 33.855s; native/main/contract/helper/Rules/capture pins in captured-field-parity.json. Company main-derived scope excludes complete preparation (2026-10-07 19:03 ET).
 
 - [ ] Extend installed restricted PostgreSQL proof to regenerate Company/Person assertions from raw fixtures inside the installed bundle before publication, recovery and duplicate replay; host assertions serve only as an oracle.
+
+- [x] Fix independent standards review finding: selected tuples/non-string dictionary keys are refused before serialization; 698 MDM/projection cases passed in 19.36s and final 2,000 captured comparisons in 48.068s with refreshed helper pins. Reviewers confirmed zero remaining scoped blockers (2026-10-07 19:11 ET).
