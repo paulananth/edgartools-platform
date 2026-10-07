@@ -57,7 +57,13 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 - [ ] Qualify replacement XML runtime against all three complete captured corpora with actual native binary pinned before and after execution.
 
 - [x] Add reproducible full-runtime qualification CLI with pinned publisher/independent reports and actual native binary before/after; 10 JSON/XML valid and deliberate fault cases pass (2026-10-07 06:30 ET).
-- [ ] Install this committed XML replacement bundle outside checkout and verify refusal/recovery on fresh restricted PostgreSQL 16.
+- [x] Install XML replacement f380eacd outside checkout and verify refusal/recovery on fresh restricted PostgreSQL 16; one trial passed, 26 deselected, no skips in 172.98s; installed direct_url.json confirms the exact commit (2026-10-07 06:46 ET).
 - [ ] Rebase follow-up onto merged main, commit/push, independent final review and full CI on exact head.
 
-- [x] Include contract-loading, canonical-encoding and metadata-normalization helper files in qualification hashes; 10 qualification good/fault cases pass with explicit helper evidence checks. The first replacement trial was deliberately interrupted after review found the omission; no complete report claimed (2026-10-07 06:33 ET).
+- [x] Include contract-loading, canonical-encoding and metadata-normalization helper files in qualification hashes; 10 qualification good/fault cases pass with explicit helper evidence checks. The first replacement trial was deliberately interrupted after review found the omission; no complete report claimed (2026-10-07 06:31 ET).
+
+- [x] Full replacement CI 37608031153 passed on ce7d90ec: 565 unit, 258 architecture, 571 MDM, 279 integration plus one expected failure, 495 engine and 117 native tests; all suites and aggregate gate pass, no prerequisite skips (2026-10-07 06:46 ET). Corpus scans remain unfinished.
+- [ ] Complete source-runtime corpus scan session 30251, preserve its pinned code and actual native binary until terminal, and save completed authenticated reports; Level 1 JSON has passed 1.6 million records, no completed report yet.
+- [ ] Finish Company continuation #844 census/classification/provenance and full installed population/replay/recovery; separate blueprint composition proof does not close these original requirements.
+
+- [x] Reconcile current Person fixture state instead of repeating stale retirement claims: merged #816 removed its field conversion, and 19 raw-submissions/cohort tests preserve the full assertion/provenance digest (2026-10-07 06:48 ET). Adapter normalization and full captured-corpus mastering qualification remain pending.
