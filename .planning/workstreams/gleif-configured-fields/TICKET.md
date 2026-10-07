@@ -10,3 +10,7 @@ Parent objective remains self-sustaining installed Rules creator, parsing/MDM or
 - [ ] Retire remaining GLEIF semantic/attestation consumer module, whole-source census construction and Company preparation/provenance, Person/generic record mapping; prove installed empty 6,414 Company / 3,052 CIK+LEI population and unchanged replay/recovery, and reconcile parent L3–L8. No primitive or address fixture alone satisfies these requirements.
 
 - [x] Address independent standards finding: compile/validate all declared expressions before selective runtime evaluation; malformed unused matching expression regression plus 146 affected cases passed in 6.04s. Full native suite: 139 passed, zero failures/ignored. Repeated 3,000-record captured parity with final helper pins passed (2026-10-07 18:35 ET).
+
+- [x] Qualify installed bundle native GLEIF mappings with restricted PG16 publication/read-back, lost-acknowledgement recovery, duplicate replay and permission denials: 1 case, 30 deselected, zero skips, 93.45s at be01b22e. Actual installed runtime/contract pins in installed-mapping-proof.json; fixture-only scope (2026-10-07 18:39 ET).
+- [x] Preserve old GLEIF digest gates by peeling only the added inline reading and separately pin all three changed contract hashes; full MDM plus projection suite passed 643 cases in 18.09s. New hashes are not activated (2026-10-07 18:39 ET).
+- [ ] Verify new installed regression committed in its own revision, final full CI and independent follow-up; record final evidence before making PR ready.

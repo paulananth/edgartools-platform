@@ -184,6 +184,20 @@ WITH_SUCCESSOR = {
 }
 
 
+# PR #857 adds frozen native mapped-value reading. The new contract hashes
+# require separate operator approval for activation. Peeling only that added
+# reading preserves every earlier mapping/quality/relationship digest gate.
+WITH_CONFIGURED_READING = {
+    "level1": "f53c9c428b65440b18a4567d363c0075d372fa9db1d661dec5b415d974d73ffe",
+    "relationships": "b7493a71495dabcde680e31560a0d82393030ab0eb71334d6897ae98b0e0cc2e",
+    "reporting_exceptions": "77bb3a8d3e9f9103168946b9e565b9e17264628e1d77923a06ee4cecbe75688d",
+}
+
+
+def _without_configured_reading(contract: dict) -> dict:
+    return {**contract, "adapter": {k: v for k, v in contract["adapter"].items() if k != "reading"}}
+
+
 def _without_successor(contract: dict) -> dict:
     if contract["adapter"]["native_member"] != "level1":
         return contract
@@ -208,6 +222,8 @@ def _without_invalid_lei(contract: dict) -> dict:
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_source.dataset_contract(member)
+    assert digest(contract) == WITH_CONFIGURED_READING[member]
+    contract = _without_configured_reading(contract)
     assert digest(contract) == WITH_SUCCESSOR.get(member, WITH_LINK_START.get(member, WITH_INVALID_LEI[member]))
     contract = _without_successor(contract)
     assert digest(contract) == WITH_LINK_START.get(member, WITH_INVALID_LEI[member])
@@ -223,7 +239,8 @@ def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     assert [r["source_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    assert digest(gleif_source.dataset_contract("relationships")) == WITH_LINK_START["relationships"]
+    assert digest(gleif_source.dataset_contract("relationships")) == WITH_CONFIGURED_READING["relationships"]
+    assert digest(_without_configured_reading(gleif_source.dataset_contract("relationships"))) == WITH_LINK_START["relationships"]
 
 
 def test_an_unknown_gleif_member_is_refused():
