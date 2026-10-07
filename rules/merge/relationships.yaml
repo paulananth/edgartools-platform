@@ -15,9 +15,14 @@
 #   one_parent: true  for a hierarchy: one parent at a time per scope; two
 #                     overlapping parents are both held back for a steward
 #   ultimate_parent   for a hierarchy: derive each record's ultimate parent with
-#                     this algorithm (accounting-chain-v1)
+#                     this algorithm: accounting-chain-v2 keeps its history, a
+#                     period for each stretch its chain held (v1, the run date
+#                     only, is what earlier policies ran)
 #   ultimate_type     the type the derived ultimate parent is written as (its
 #                     basis is calculated, beside the stated ones)
+#   ends_parent_links a succession: on its date the ceased entity (its from
+#                     end) loses its parent links, and its children lose
+#                     theirs unless a source states them again after that date
 #
 # Every name is the source's or the standard's own term (operator, 2026-10-07:
 # "All relationships must be named as close as reality"; each name approved one
@@ -27,7 +32,7 @@
 #
 # Before this file the same table was held in code; a policy registered without
 # this section still uses it (relationships.TYPES_V0), so the two must agree.
-version: relationship-types-v2
+version: relationship-types-v3
 types:
   # Consolidation (GLEIF's relationship file names; IFRS 10 / ASC 810).
   IS_DIRECTLY_CONSOLIDATED_BY:
@@ -36,7 +41,7 @@ types:
     hierarchy: true
     cycles: invalid
     one_parent: true
-    ultimate_parent: accounting-chain-v1
+    ultimate_parent: accounting-chain-v2
     ultimate_type: IS_ULTIMATELY_CONSOLIDATED_BY
   IS_ULTIMATELY_CONSOLIDATED_BY:
     from: [company, fund_structure, government, international_organization]
@@ -48,6 +53,7 @@ types:
   SUCCESSOR_ENTITY:
     from: [company, fund_structure, government, international_organization]
     to: [company, fund_structure, government, international_organization]
+    ends_parent_links: true
   # Ownership (Exhibit 21; Schedules 13D/13G and Forms 3/4/5).
   IS_SUBSIDIARY_OF:
     from: [company, fund_structure, government, international_organization]

@@ -36,6 +36,19 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
+def without_parent_history(policy: dict) -> dict:
+    """Profiling ticket 04b, part B (operator, 2026-10-07: "It should also
+    consider corporate actions"): the calculated ultimate parent keeps its
+    history (accounting-chain-v2), and a successor entity ends parent links.
+    Peeled, the types are the ones part A named."""
+    body = _copy(policy)
+    types = body["relationships"]["types"]
+    types["IS_DIRECTLY_CONSOLIDATED_BY"]["ultimate_parent"] = "accounting-chain-v1"
+    types["SUCCESSOR_ENTITY"].pop("ends_parent_links")
+    body["relationships"]["version"] = "relationship-types-v2"
+    return body
+
+
 def without_real_names(policy: dict) -> dict:
     """Profiling ticket 04b (operator, 2026-10-07: "All relationships must be
     named as close as reality"; each name approved one by one): the
@@ -118,7 +131,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_real_names, without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_parent_history, without_real_names, without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:

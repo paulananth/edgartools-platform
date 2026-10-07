@@ -239,7 +239,7 @@ The evidence, decision, outcome and recovery history for mastering within the Ch
 _Avoid_: A second root-run authority, mutable log of only the latest result
 
 **IS_ULTIMATELY_CONSOLIDATED_BY**:
-The top of an entity's consolidation chain: the entity that consolidates it and that no other entity consolidates, as GLEIF names it. Its basis is stated (a source says it) or calculated (MDM walked the direct parents, keeping the path); both sit side by side.
+The top of an entity's consolidation chain: the entity that consolidates it and that no other entity consolidates, as GLEIF names it. Its basis is stated (a source says it) or calculated (MDM walked the direct parents, keeping the path); both sit side by side. A calculated one keeps its history: a new period each time a link in its chain starts or ends.
 _Avoid_: Ownership, an ultimate parent from an incomplete or cyclic chain
 
 **Basis**:
@@ -247,7 +247,7 @@ Whether a relationship is stated (a source says it) or calculated (MDM derived i
 _Avoid_: A calculated link read as a source's statement
 
 **SUCCESSOR_ENTITY**:
-The relationship from an entity that ceased in a corporate action to the entity that took it over, with the event type and its effective date, as GLEIF names it.
+The relationship from an entity that ceased in a corporate action to the entity that took it over, with the event type and its effective date, as GLEIF names it. On that date the ceased entity's parent links end, and its children's links end unless a source states them again after it; each ended period names the succession.
 _Avoid_: A parent, merging the two entities into one
 
 ### Data classes, reference data and agent context

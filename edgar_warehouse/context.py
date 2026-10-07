@@ -434,8 +434,9 @@ class Context:
         """The links around one entity, both directions, up to `hops` away.
 
         One query per hop finds the links through the link-start and link-end
-        indexes. A stated link counts when one of its periods holds at `at`; a
-        derived one always counts. Returns (links, count, cut).
+        indexes. A stated link counts when one of its periods holds at `at`; so
+        does a calculated one with periods, and one without (an earlier
+        algorithm) always counts. Returns (links, count, cut).
         """
         from sqlalchemy import text
 
@@ -449,7 +450,13 @@ class Context:
                     WHERE object_type = 'relationship'
                       AND (body ->> 'source_id' = ANY(:ids) OR body ->> 'target_id' = ANY(:ids))
                       AND coalesce(body -> 'retired', 'false'::jsonb) = 'false'::jsonb
-                      AND (coalesce((body ->> 'derived')::boolean, false) OR mdm.relationship_holds(body, :at))
+                      AND (mdm.relationship_holds(body, :at)
+                           OR (coalesce((body ->> 'derived')::boolean, false)
+                               AND (body -> 'periods' IS NULL OR EXISTS (
+                                   SELECT 1 FROM jsonb_array_elements(body -> 'periods') p(period)
+                                    WHERE (p.period ->> 'valid_from')::timestamptz <= :at
+                                      AND (p.period ->> 'valid_to' IS NULL
+                                           OR (p.period ->> 'valid_to')::timestamptz > :at)))))
                       AND (:t = '' OR body ->> 'type' = :t)
                     ORDER BY object_id LIMIT :cap"""),
                 {"ids": frontier, "at": at, "t": relationship_type, "cap": cap - len(links) + 1}).all()
@@ -559,7 +566,9 @@ def _full_link(link: dict) -> dict:
             "from": link["from"], "to": link["to"], "scope": body.get("scope"),
             "valid_from": period.get("valid_from"), "valid_to": period.get("valid_to"),
             "valid_from_basis": period.get("valid_from_basis"), "last_seen": body.get("last_seen"),
-            "sources": link.get("sources", [])}
+            "sources": link.get("sources", []),
+            # A succession that ended it; the chain a calculated link walked.
+            **{key: period[key] for key in ("ended_by", "path") if period.get(key)}}
 
 
 def _latest(conn) -> dict:

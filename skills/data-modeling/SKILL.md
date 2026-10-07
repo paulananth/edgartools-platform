@@ -140,6 +140,9 @@ master file is reference data plus a master attribute that holds its codes.
   is derived.
 - **Dates:** each period has `valid_from` and `valid_to`; say what each comes
   from (stated, first seen, last seen).
+- **Events that end links:** if the data holds a succession (one entity
+  ceased and another took it over), declare it as a type with
+  `ends_parent_links`, so the ceased entity's parent links end on its date.
 - **Onboarded together or separately:** the findings' `onboard` says which.
 
 ### 6. A transaction part: its silver table

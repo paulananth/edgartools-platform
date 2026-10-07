@@ -44,11 +44,13 @@ TYPES_V0 = {
 }
 # The keys a type may carry, and the ultimate-parent algorithms this code runs.
 _TYPE_KEYS = {"from", "to", "from_profile", "to_profile", "capacities", "hierarchy", "cycles", "one_parent",
-              "ultimate_parent", "ultimate_type"}
+              "ultimate_parent", "ultimate_type", "ends_parent_links"}
 # The type a derived ultimate parent is written as when its hierarchy names
 # none: what every policy before profiling ticket 04b wrote.
 CALCULATED_V0 = "CALCULATED_ULTIMATE_PARENT"
-ULTIMATE_PARENT_ALGORITHMS = {"accounting-chain-v1"}
+# v1 walks the chain at the run date only; v2 keeps its history, a period for
+# each stretch of time its chain held (profiling ticket 04b, part B).
+ULTIMATE_PARENT_ALGORITHMS = {"accounting-chain-v1", "accounting-chain-v2"}
 CYCLES = {"invalid", "review"}
 
 
@@ -89,6 +91,8 @@ def check_types(section: dict) -> None:
             raise Conflict(f"Relationship type {name}: unknown ultimate-parent algorithm {spec['ultimate_parent']}")
         if "ultimate_type" in spec and ("ultimate_parent" not in spec or spec["ultimate_type"] not in section["types"]):
             raise Conflict(f"Relationship type {name}: ultimate_type names a declared type, beside ultimate_parent")
+        if "ends_parent_links" in spec and (spec["ends_parent_links"] is not True or spec.get("hierarchy")):
+            raise Conflict(f"Relationship type {name}: ends_parent_links is true, on a link that is no parent")
 
 
 MIN = datetime.min.replace(tzinfo=UTC)
@@ -243,13 +247,25 @@ def project(
                        missing=[end for end, entity in (("source", source), ("target", dest))
                                 if entity.get("status") != "accepted"])
                 continue
+            seen = record.get("source_meta", {}).get("effective_at")
             if sighting:
                 period = {"valid_from": sighting}
             else:
-                if not reported.get("valid_from"):
+                period = {k: v for k, v in reported.items() if k not in NOT_PERIOD}
+                # A date the source gives is stated; with none, the link starts
+                # when it was first seen (profiling ticket 04b, part B).
+                if {period.get("valid_from_basis"), period.get("valid_to_basis")} - BASES - {None}:
+                    review("unknown_date_basis", **context)
+                    continue
+                if period.get("valid_from"):
+                    period.setdefault("valid_from_basis", "stated")
+                elif seen:
+                    period.update(valid_from=seen, valid_from_basis="observed")
+                else:
                     review("unknown_relationship_start", **context)
                     continue
-                period = {k: v for k, v in reported.items() if k not in NOT_PERIOD}
+                if period.get("valid_to"):
+                    period.setdefault("valid_to_basis", "stated")
                 if interval(period)[0] >= interval(period)[1]:
                     review("invalid_relationship_interval", **context)
                     continue
@@ -287,9 +303,18 @@ def project(
                     {"on": sighting, "basis": reported.get("basis", "observed"),
                      "held": reported.get("held", True), "title": reported.get("title"),
                      "assertion_id": record["assertion_id"], "subject": subject})
+            elif period.get("valid_from_basis") == "observed":
+                # A start first seen is the earliest sighting, not one period
+                # per publication that repeats the link.
+                rest = {k: v for k, v in period.items() if k != "valid_from"}
+                same = next((p for p in value["periods"] if p.get("valid_from_basis") == "observed"
+                             and {k: v for k, v in p.items() if k != "valid_from"} == rest), None)
+                if same is None:
+                    value["periods"].append(period)
+                elif instant(period["valid_from"]) < instant(same["valid_from"]):
+                    same["valid_from"] = period["valid_from"]
             elif period not in value["periods"]:
                 value["periods"].append(period)
-            seen = record.get("source_meta", {}).get("effective_at")
             # Absence never closes a link (design 2): readers compare when it
             # was last stated with the latest publication.
             if seen and (value["last_seen"] is None or instant(seen) > instant(value["last_seen"])):
@@ -312,6 +337,7 @@ def project(
         # Only drops, and nothing ever held: no link.
         if not e["periods"]:
             del edges[key]
+    _end_at_succession(edges, types, review)
     invalid = set()
     grouped = defaultdict(list)
     for key, e in edges.items():
@@ -382,14 +408,59 @@ def project(
     return sorted(result, key=lambda e: e["relationship_id"]), reviews
 
 
+def _end_at_succession(edges: dict, types: dict, review) -> None:
+    """A succession (a type with `ends_parent_links`, e.g. a successor entity)
+    ends the ceased entity's parent links on its date, and its children's
+    links unless a source stated them again after that date. The end cites
+    the succession. A parent period that starts on or after it is left out
+    and goes to a steward (operator, 2026-10-07: "It should also consider corporate actions")."""
+    ceased = {}
+    for key, e in sorted(edges.items()):
+        if not (types.get(e["type"]) or {}).get("ends_parent_links") or not e["periods"]:
+            continue
+        first = min(e["periods"], key=lambda p: interval(p)[0])
+        if e["source_id"] not in ceased or interval(first)[0] < interval(ceased[e["source_id"]][0])[0]:
+            ceased[e["source_id"]] = (first, key)
+    for key, e in list(edges.items()):
+        if not ceased or not (types.get(e["type"]) or {}).get("hierarchy"):
+            continue
+        for end in ("source_id", "target_id"):
+            if e[end] not in ceased:
+                continue
+            succession, by = ceased[e[end]]
+            on = interval(succession)[0]
+            if end == "target_id" and e["last_seen"] and instant(e["last_seen"]) > on:
+                continue
+            kept = []
+            for period in e["periods"]:
+                start, stop = interval(period)
+                if start >= on:
+                    review("parent_link_after_succession", relationship_id=key, successor_link=by,
+                           entities=sorted({e["source_id"], e["target_id"]}))
+                elif stop > on:
+                    kept.append({**period, "valid_to": succession["valid_from"],
+                                 "valid_to_basis": succession.get("valid_from_basis", "stated"),
+                                 "ended_by": by})
+                else:
+                    kept.append(period)
+            e["periods"] = kept
+        if not e["periods"]:
+            del edges[key]
+
+
 def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> list[dict]:
     """Calculated ultimate parents, for each hierarchy whose type names an
-    algorithm (accounting-chain-v1 is the one this code runs): each record's
-    current parent chain walked to its end, with the full asserted path."""
+    algorithm: accounting-chain-v1 walks each record's current parent chain
+    to its end, with the full asserted path; accounting-chain-v2 keeps the
+    history (`_ultimate_parent_history`)."""
     result = []
     now = instant(as_of)
     for (kind, scope), group in grouped.items():
-        if (types.get(kind) or {}).get("ultimate_parent") != "accounting-chain-v1":
+        algorithm = (types.get(kind) or {}).get("ultimate_parent")
+        if algorithm == "accounting-chain-v2":
+            result += _ultimate_parent_history(types[kind], scope, group, invalid)
+            continue
+        if algorithm != "accounting-chain-v1":
             continue
         eligible = {
             e["source_id"]: e
@@ -425,4 +496,55 @@ def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> l
             }
             derived["relationship_id"] = digest(derived)
             result.append(derived)
+    return result
+
+
+def _ultimate_parent_history(spec: dict, scope: str, group: list, invalid: set) -> list[dict]:
+    """Each record's ultimate parent through time: the parent chain walked at
+    every date a link in it, or a disputed one, starts or ends (a stated date
+    to come included, as the stated links hold it). One relationship per
+    record and top; a new period whenever the chain changes, each with the
+    path walked. Its id leaves out the run date, so a later run keeps it."""
+    links = [e for key, e in group if key not in invalid]
+    disputed = [e for key, e in group if key in invalid]
+    text = {}
+    for e in links + disputed:
+        for field, at in zip(("valid_from", "valid_to"), interval(e)):
+            if at < MAX:
+                text.setdefault(at, e.get(field))
+    cuts = sorted(text)
+    found = {}
+    for i, lo in enumerate(cuts):
+        hi = cuts[i + 1] if i + 1 < len(cuts) else MAX
+        holds = [e for e in links if interval(e)[0] <= lo < interval(e)[1]]
+        parents = {e["source_id"]: e for e in holds}
+        for source in sorted(parents):
+            path, node, seen = [], source, set()
+            while node in parents and node not in seen:
+                seen.add(node)
+                path.append(parents[node]["relationship_id"])
+                node = parents[node]["target_id"]
+            # A disputed outgoing parent leaves the ultimate parent unknown.
+            if node in seen or any(e["source_id"] == node and interval(e)[0] <= lo < interval(e)[1]
+                                   for e in disputed):
+                continue
+            periods = found.setdefault((source, node), [])
+            if periods and periods[-1][1] == lo and periods[-1][2] == path:
+                periods[-1] = (periods[-1][0], hi, path)
+            else:
+                periods.append((lo, hi, path))
+    result = []
+    for (source, top), periods in sorted(found.items()):
+        derived = {
+            "type": spec.get("ultimate_type", CALCULATED_V0),
+            "source_id": source,
+            "target_id": top,
+            "scope": scope,
+            "derived": True,
+            "algorithm": "accounting-chain-v2",
+        }
+        derived["relationship_id"] = digest(derived)
+        derived["periods"] = [{"valid_from": text[lo], "valid_to": text.get(hi), "path": path}
+                              for lo, hi, path in periods]
+        result.append(derived)
     return result

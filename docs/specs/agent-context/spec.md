@@ -31,8 +31,14 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   each with its own `valid_from` and `valid_to`.
 - `role` is a person's capacity in the link (director, owner); it is empty for
   other links. `scope` is the family the source states it in.
-- A link MDM calculates (an ultimate parent walked from the stated parents) is
-  one row with `derived` true and no dates.
+- A link MDM calculates (an ultimate parent walked from the stated parents) has
+  `derived` true and basis `calculated`, and one row per stretch of time its
+  chain held (accounting-chain-v2). Under an earlier policy (v1) it is one row
+  with no dates.
+- `valid_from_basis` and `valid_to_basis` say where a date came from: stated
+  (the source gave it, such as a corporate action's effective date) or
+  observed (first seen). `ended_by` names the succession (e.g.
+  `SUCCESSOR_ENTITY`) whose date ended a period.
 - Retired links are left out. A link can be stated by several records, so the
   stating records are a list (`sources`), not one source code and record key.
 - What a type means (the kinds at its ends, whether it is a hierarchy) is in

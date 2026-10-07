@@ -551,8 +551,11 @@ class TestTheCompanyPolicy:
         # validation 06a added GLEIF's relationship file to the sources;
         # profiling ticket 04 moved the relationship types into the policy;
         # profiling ticket 02 pinned the reference data in place of the table;
-        # profiling ticket 04b named the relationship types as their sources do.
+        # profiling ticket 04b named the relationship types as their sources do,
+        # then gave the calculated ultimate parent its history and let a
+        # successor entity end parent links.
         assert policy_layers.digests(policy_layers.company_part(POLICY)) == [
+            "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605",
             "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6",
             "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4",
             "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",

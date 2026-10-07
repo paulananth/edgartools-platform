@@ -75,6 +75,13 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
         assert direct[0]["type"] == "IS_DIRECTLY_CONSOLIDATED_BY"
         assert sorted(e["type"] for e in edges) == ["IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"]
         assert [e["type"] for e in edges if e.get("derived")] == ["IS_ULTIMATELY_CONSOLIDATED_BY"]
+        # GLEIF states the period's start, so its basis is stated; the
+        # calculated ultimate parent keeps its history (profiling 04b, part B).
+        assert all(p["valid_from_basis"] == "stated" for p in direct[0]["periods"])
+        (calculated,) = [e for e in edges if e.get("derived")]
+        assert calculated["algorithm"] == "accounting-chain-v2" and "as_of" not in calculated
+        assert [(p["valid_from"], p["path"]) for p in calculated["periods"]] == [
+            (direct[0]["periods"][0]["valid_from"], [direct[0]["relationship_id"]])]
         assert {(e["source_id"], e["target_id"]) for e in edges} == {
             (bindings[apple["subject"]], bindings[microsoft["subject"]])}
     reader = ContractReader(database.application)
