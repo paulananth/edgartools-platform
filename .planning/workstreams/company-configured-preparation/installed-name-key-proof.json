@@ -1,0 +1,117 @@
+{
+  "installed_commit": "02d8d3b54e3a98baa227f7745797ec5ab3c69f72",
+  "installed_metadata": {
+    "url": "file:///private/tmp/edgartools-platform-codex-company-preparation-20261007",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "02d8d3b54e3a98baa227f7745797ec5ab3c69f72",
+      "requested_revision": "02d8d3b54e3a98baa227f7745797ec5ab3c69f72"
+    },
+    "subdirectory": "packages/data-skill"
+  },
+  "pytest_node": "tests/engine/test_data_skill_bundle_postgres.py::test_name_key_recipes_run_from_installed_bundle",
+  "passed": 1,
+  "deselected": 28,
+  "skips": 0,
+  "elapsed_seconds": 80.27,
+  "outside_checkout": true,
+  "isolated_python": true,
+  "custom_steps_disabled": true,
+  "verified_input_and_context_receipts": true,
+  "independent_source_output_verification": true,
+  "artifacts_hashed_after_verification": {
+    "sec.submissions.company": {
+      "output": "/private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/sec.submissions.company.json",
+      "output_sha256": "6acab25f40b13a173302ce7e39f85240d4c0451b6defe481a91b405fe61904ef",
+      "reading": {
+        "artifacts": [
+          {
+            "context": {
+              "sha256": "6033668b1281a61c848f945826400ff8327e69f38af9938bd74a147961033309",
+              "uri": "file:///private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/6033668b1281a61c848f945826400ff8327e69f38af9938bd74a147961033309.json"
+            },
+            "deferred": [],
+            "input": {
+              "sha256": "1153d88ee04e6898435788f2d68f602da14bb9b9db967fa061b75a14f58dfeea",
+              "uri": "file:///private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/names.json"
+            },
+            "tables": {
+              "names": [
+                {
+                  "key": "ELECTRICITE HLDGS CORP",
+                  "name": "\u00c9lectricit\u00e9 Holdings Corporation /DE/"
+                },
+                {
+                  "key": "A AND B LLC",
+                  "name": "THE A&B L.L.C."
+                },
+                {
+                  "key": "WAYFAIR INC",
+                  "name": "Wayfair Inc."
+                },
+                {
+                  "key": "WAYFAIR LLC",
+                  "name": "WAYFAIR LLC"
+                }
+              ]
+            }
+          }
+        ],
+        "contract": {
+          "sha256": "21b5411366adaee3fbdfb2a8a7943014cb369e19a7d0e4fe076d0ebf6c2e9b85",
+          "uri": "file:///private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/21b5411366adaee3fbdfb2a8a7943014cb369e19a7d0e4fe076d0ebf6c2e9b85.json"
+        },
+        "version": 1
+      },
+      "bundled_contract_sha256": "ffdc1ae081e9ff4ae96403d06cae4ad760d93a672dfaa17a8e28e494ea8c6a9c"
+    },
+    "gleif": {
+      "output": "/private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/gleif.json",
+      "output_sha256": "5df5fd3e09cec0f64306bb54b7ae1f6268dfd50a4480449045b6a1fae70c68ce",
+      "reading": {
+        "artifacts": [
+          {
+            "context": {
+              "sha256": "6033668b1281a61c848f945826400ff8327e69f38af9938bd74a147961033309",
+              "uri": "file:///private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/6033668b1281a61c848f945826400ff8327e69f38af9938bd74a147961033309.json"
+            },
+            "deferred": [],
+            "input": {
+              "sha256": "1153d88ee04e6898435788f2d68f602da14bb9b9db967fa061b75a14f58dfeea",
+              "uri": "file:///private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/names.json"
+            },
+            "tables": {
+              "names": [
+                {
+                  "key": "ELECTRICITE HLDGS CORP DE",
+                  "name": "\u00c9lectricit\u00e9 Holdings Corporation /DE/"
+                },
+                {
+                  "key": "A AND B LLC",
+                  "name": "THE A&B L.L.C."
+                },
+                {
+                  "key": "WAYFAIR INC",
+                  "name": "Wayfair Inc."
+                },
+                {
+                  "key": "WAYFAIR LLC",
+                  "name": "WAYFAIR LLC"
+                }
+              ]
+            }
+          }
+        ],
+        "contract": {
+          "sha256": "e1a51498cdec82259270b71b05c3ee2f1ee36a89769f4043aebb6b71bb63e703",
+          "uri": "file:///private/tmp/codex-installed-name-key-context-20261007/bundle0/name-key-proof/e1a51498cdec82259270b71b05c3ee2f1ee36a89769f4043aebb6b71bb63e703.json"
+        },
+        "version": 1
+      },
+      "bundled_contract_sha256": "75dffde9e56a2b63b45c85e339b662294fa7dc79e61a74c514e164cb426354d2"
+    }
+  },
+  "full_company_mastering": false,
+  "census_population_qualified": false,
+  "replay_recovery_qualified": false
+}

@@ -24,7 +24,7 @@ Continue the full self-sustaining skill / bundled Rules creator / parsing / MDM 
 - [x] Bundle configured SEC/GLEIF name-key recipes and prove exact retained-normalizer parity: final native binary matches 1,181 names from 1,000 receipt-pinned SEC captures and all 1,112,064 Unicode scalars in both modes, with an observable state-suffix fault; report `captured-name-key-parity.json`, 147.546s (2026-10-07 07:23 ET). Full GLEIF captured-name/census population remains a separate requirement.
 - [ ] Wire receipt-bound census evidence into configured Company preparation; full classification, mastering population/replay/recovery and legacy removal remain required above.
 - [ ] Verify affected native/Python tests, independently review and publish a separate PR with full CI.
-- [ ] Verify both name-key recipes from a committed installed bundle outside checkout, with raw-input reading and independent source.output verification.
+- [x] Verify both name-key recipes from committed 02d8d3b5 installed bundle outside checkout: one pytest case passed, 28 deselected, no skips in 80.27s; exact keys, input/context receipts, independent source.output verification and disabled custom registry; `installed-name-key-proof.json` records actual artifacts and installed metadata (2026-10-07 07:29 ET).
 
 - [x] Complete final native suite (124 passed), affected Python suite (106 passed), strict Rules contract loading and independent Spec/Standards/GoF review; final binary independently passed nine recipe tests and six resource-bound probes (2026-10-07 07:23 ET).
-- [ ] Correct installed test's omitted `sources/` path and rerun; ce3b3572 installed both recipes successfully, but the first test failed before reading at 90.35s.
+- [x] Correct installed test's omitted `sources/` path and required version-2 context receipt; first two setup runs refused at 90.35s and 89.67s, corrected normal installation/test passed at 80.27s (2026-10-07 07:29 ET).
