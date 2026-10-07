@@ -122,3 +122,12 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
         actual=store.json(result)['artifacts'][0]['tables']['company'][0]
         expected=_census_evidence(fixture_census(),actual,raw['sha256'])
         assert actual['name_census'] != expected
+
+
+def test_census_main_inherits_company_reading_and_canonical_name_recipe():
+    """Fail when either upstream blueprint changes without updating this copy."""
+    source = files.source('sec.submissions.company')
+    census = deepcopy(files.load(ROOT/'census-main.yaml'))
+    recipe = census['read']['tables']['company']['columns'].pop('_name_key')
+    assert census == {key: source[key] for key in ('source', 'execution', 'read')}
+    assert recipe == files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
