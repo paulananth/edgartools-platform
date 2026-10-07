@@ -100,7 +100,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 15] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test"];
+const PRIMITIVES: [&str; 16] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -314,6 +314,11 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
             if let Some(child) = args.get(key) { children.push(child); }
         }
     }
+    if let Some(args) = expr.get("equal") {
+        for key in ["left", "right"] {
+            if let Some(child) = args.get(key) { children.push(child); }
+        }
+    }
     children
 }
 
@@ -509,6 +514,16 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
         return Err(format!("primitive {name} is not known"));
     }
     match name {
+        "equal" => {
+            let map = args.as_mapping().filter(|m| m.len() == 2)
+                .ok_or("equal requires left and right expressions")?;
+            if map.keys().any(|k| !matches!(k.as_str(), Some("left" | "right"))) {
+                return Err("equal requires only left and right expressions".into());
+            }
+            for key in ["left", "right"] {
+                validate_expr(args.get(key).ok_or("equal requires left and right expressions")?, steps)?;
+            }
+        }
         "test" => predicate::validate(args)?,
         "steps" => {
             for step in args.as_sequence().ok_or("steps must be a list")? {
@@ -951,6 +966,11 @@ fn falsey(value: &Val) -> bool {
 fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
+        "equal" => {
+            let left = eval(engine, context, document, item, ordinal, &args["left"])?;
+            let right = eval(engine, context, document, item, ordinal, &args["right"])?;
+            Ok(Val::Bool(left == right))
+        }
         "ordinal" => Ok(Val::Int(ordinal)),
         "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),
         "context" => Ok(context.get(setting(args, "name").unwrap()).unwrap().clone()),

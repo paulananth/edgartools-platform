@@ -15,6 +15,11 @@ Continue the original full self-sustaining skills / Rules creator / parsing / MD
 - [x] Correct captured JSON wrapper names and independently fix fixtures; affected member/header/archive fault tests passed 53 cases in 2.18s (2026-10-06 20:55 ET).
 - [ ] Qualify full downloaded XML with separately pinned capture ContentDate; first attempts correctly refused because API publication slot differs from all three member ContentDates.
 - [ ] Add generic direct header/context count equality so a malformed creator contract cannot pin inconsistent counts; independent review reproduced header4/context3/actual3 acceptance.
+- [ ] Qualify installed count-bound XML refusal and same-run missing-artifact recovery through restricted PG16 Rules/Bookkeeping/MDM, with zero master writes on failure and complete verified retry.
+- [x] Qualify full relationships XML: 487,721 records, 961,511,828 expanded bytes, exact scalar/list/canonical projection parity, metadata/count/CRC/EOF, 648.57s; stored full report (2026-10-06 21:06 ET).
+- [x] Implement generic typed `equal` and regress mismatched header/reference/context counts for all three members; 116 native tests, 63 focused cases and 441 engine cases pass on isolated native build (2026-10-06 21:10 ET).
+- [ ] Wire direct count equality into the bundled XML templates after the pinned full corpus jobs finish; their template hashes must remain stable during scans.
+- [ ] Hash the actual native extension before/after future qualification runs; current helper hashes package initializer only. Supplemental installed extension integrity matches original RECORD but supplies no retroactive pre-scan binary check.
 
 Verified foundation: full Level 1 JSON framing and configured selected-output comparison are recorded in the prior GLEIF workstream; merged #834 supplies XML framing through the native interpreter and private worker boundary. The full CI gate 37551604093 passed on 22c7e922. This is not complete GLEIF XML corpus or mastering qualification.
 

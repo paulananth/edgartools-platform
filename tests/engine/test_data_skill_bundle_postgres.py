@@ -428,7 +428,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records", "xml-streamed-recovery"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -442,6 +442,9 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
 
     custom_trial = trial_mode == "custom-step"
     combined_trial = trial_mode == "combined-records"
+    recovery_trial = trial_mode == "xml-streamed-recovery"
+    xml_trial = trial_mode in ("xml-streamed-records", "xml-streamed-recovery")
+    streamed_trial = trial_mode == "streamed-records" or xml_trial
     profiles = ("source.read", *(("source.combine",) if combined_trial else ()), "mdm.prepare", "mdm.merge")
     python, root = installed
     store = Artifacts()
@@ -480,7 +483,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
-    if trial_mode in ("streamed-records", "xml-streamed-records"):
+    if streamed_trial:
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "json", "limits": {"max_bytes": 4096, "max_records": 10}, "tables": {
                 "filers": {"each": ".", "columns": {"cik": {"text": {"path": "cik"}},
@@ -491,7 +494,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                        "ordinal_context": None, "partition_bytes": 4096, "partition_records": 1,
                        "max_partitions": 10, "max_spool_bytes": 65536, "max_output_rows": 10}}}
         filer_bytes = json.dumps({"records": [json.loads(line) for line in FILERS.splitlines()]}).encode()
-        if trial_mode == "xml-streamed-records":
+        if xml_trial:
             from xml.sax.saxutils import escape
             for column in spec["read"]["tables"]["filers"]["columns"].values():
                 column["text"]["path"] += ".$"
@@ -508,6 +511,15 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             rows = [json.loads(line) for line in FILERS.splitlines()]
             records = "".join(f"<Record><cik>{escape(row['cik'])}</cik><name>{escape(row['name'])}</name></Record>" for row in rows)
             filer_bytes = f"<Data xmlns='urn:filers'><Header><Count>2</Count></Header><Records>{records}</Records></Data>".encode()
+            if recovery_trial:
+                context = {"publication_count": {"type": "integer"}}
+                spec["read"]["context"] = context
+                stream["header_read"]["context"] = copy.deepcopy(context)
+                stream["expected_records_context"] = "publication_count"
+                stream["header_read"]["assertions"].append({"test": {"equal": {
+                    "left": {"integer": {"path": "Count.$"}},
+                    "right": {"context": {"name": "publication_count"}}}},
+                    "reason": "Header count must equal the input-bound publication count"})
         contract_bytes = json.dumps(spec).encode()
     if trial_mode == "choice-records":
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
@@ -639,6 +651,9 @@ read:
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
     read_manifest = {"version": 1, "contract": contract, "artifacts": [filers]}
+    if recovery_trial:
+        bound = store.put(tmp_path.as_uri(), {"version": 1, "input": filers, "values": {"publication_count": 2}})
+        read_manifest = {"version": 2, "contract": contract, "artifacts": [{"input": filers, "context": bound}]}
     if trial_mode == "artifact-context":
         entries = []
         for values in ({"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}):
@@ -697,12 +712,69 @@ read:
         assert done.returncode == 0, done.stderr
         return done.stdout
 
+    if recovery_trial:
+        # An immutable malformed capture remains a failed run; correcting an
+        # input creates a new run rather than changing its pinned manifest.
+        bad_raw = store.put_bytes((tmp_path / "bad-filers.xml").as_uri(),
+                                  filer_bytes.replace(b"<Count>2</Count>", b"<Count>3</Count>"))
+        bad_context = store.put(tmp_path.as_uri(), {"version": 1, "input": bad_raw,
+                                                  "values": {"publication_count": 2}})
+        bad_read = store.put(tmp_path.as_uri(), {**read_manifest,
+            "artifacts": [{"input": bad_raw, "context": bad_context}]})
+        bad_units_body = copy.deepcopy(unit_body)
+        bad_out = tmp_path / "refused"
+        bad_units_body["steps"]["read"][0].update(input=bad_read, output=(bad_out / "reading.json").as_uri())
+        bad_units_body["steps"]["prepare"][0]["output"] = (bad_out / "mdm/manifest.json").as_uri()
+        bad_units_body["steps"]["merge"][0]["output"] = (bad_out / "merged.json").as_uri()
+        bad_units = store.put(tmp_path.as_uri(), bad_units_body)
+        bad_run = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
+            "--input-manifest", bad_units["uri"], "--input-sha256", bad_units["sha256"]))["run"]["run_id"]
+        rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", bad_run,
+                        env={**env, **worker}, cwd=root)
+        assert rejected.returncode == 1 and "pinned-count" in rejected.stderr, rejected.stderr
+        for downstream in ("mdm.prepare", "mdm.merge"):
+            cli("workers", "work", downstream, bad_run, **worker)
+        assert not (bad_out / "reading.json").exists() and not (bad_out / "reading.json.parts").exists()
+        assert not (bad_out / "mdm/manifest.json").exists() and not (bad_out / "merged.json").exists()
+        failed_state = json.loads(cli("bookkeeping", "status", bad_run))
+        assert failed_state["counts"].get("verified", 0) == 0
+        with mdm_reader.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
+            assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == 0
+
     run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
+    if recovery_trial:
+        from urllib.parse import unquote, urlparse
+        from pathlib import Path
+        captured = Path(unquote(urlparse(filers["uri"]).path))
+        unavailable = tmp_path / "temporarily-unavailable.xml"
+        captured.rename(unavailable)
+        try:
+            rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", run_id,
+                            env={**env, **worker}, cwd=root)
+            assert rejected.returncode == 1 and "No such file" in rejected.stderr, rejected.stderr
+            assert not (out / "reading.json").exists() and not (out / "reading.json.parts").exists()
+            with mdm_reader.connect() as conn:
+                assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
+        finally:
+            unavailable.rename(captured)
     for profile in profiles:
-        cli("workers", "work", profile, run_id, **worker)
+        if recovery_trial and profile == "source.read":
+            deadline = time.monotonic() + 10
+            while True:
+                cli("workers", "work", profile, run_id, **worker)
+                if (out / "reading.json").exists(): break
+                if time.monotonic() >= deadline: pytest.fail("Source retry did not become claimable")
+                time.sleep(0.01)
+        else:
+            cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
-    if trial_mode in ("streamed-records", "xml-streamed-records"):
+    if recovery_trial:
+        recovered = json.loads(cli("bookkeeping", "status", run_id))
+        read_item = next(item for item in recovered["items"] if item["step"] == "read")
+        assert read_item["state"] == "verified" and read_item["attempts"] == 2
+    if streamed_trial:
         reading = json.loads((out / "reading.json").read_bytes())
         assert reading["version"] == 2
         assert len(reading["artifacts"][0]["partitions"]) == 2

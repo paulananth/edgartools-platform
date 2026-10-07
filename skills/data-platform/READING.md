@@ -108,6 +108,22 @@ after parsing and before required paths or table iteration. `true` passes;
 `false` or null rejects the whole artifact with `assertion_failed` and the
 declared reason. Any other result rejects with `assertion_condition`.
 Use `test`, boolean context or boolean reference cells for an assertion result.
+`equal` returns a boolean from two expressions, without coercing their types:
+
+```yaml
+- test:
+    equal:
+      left: {integer: {path: RecordCount.$}}
+      right: {context: {name: publication_count}}
+  reason: Header count must equal the input-bound publication count
+```
+
+Both `left` and `right` are required and evaluate before comparison. Integer,
+float, text and boolean values remain distinct; null equals null. Lists compare
+in order and maps compare their typed fields without depending on key order.
+Use `value` or typed context for boolean values: the existing `const` boolean
+conversion produces text. Explicitly parse source counts with `integer` before
+comparing them to integer context. Nested calls still validate before reading.
 The existing `const` primitive renders boolean literals as text; such a value
 refuses with `assertion_condition`.
 Expressions, context names, references and custom steps are validated when
@@ -751,9 +767,9 @@ Bind `publication_count` to each exact input receipt using the version-2
 source input manifest. Pin the same publisher count in the header reference;
 the worker compares the complete framed count at EOF before publication.
 The creator must derive both pins from the same publication. The current
-interpreter checks each independently; it does not compare the header's count
-directly to the context count. Do not claim that a contract containing
-inconsistent pins is intrinsically rejected. Also keep API `publish_date`
+templates check each independently; they do not yet configure the generic
+`equal` assertion above to compare header count directly to context count.
+Do not claim that those templates reject inconsistent pins. Also keep API `publish_date`
 separate from XML `ContentDate`: captured members can have different content
 timestamps within one publication slot. Pin authenticated capture-header
 evidence explicitly when the download API does not supply that field.
