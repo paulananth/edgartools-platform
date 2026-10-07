@@ -265,7 +265,7 @@ From [ticket 04](../../../.scratch/person-consumer-contract/issues/04-decide-per
 | `name_variants[]` | every name seen: value, source, last observed | retained **on the projection** so any seen name is searchable without a join |
 | identifiers | `owner_cik`s, `OwnerID`s — each with source, validity | cross-references; a Person holds any number |
 | kind evidence | rule id, version, step (C-J) | separate from source category and asserted legal form |
-| `roles[]` | one row per (Company/firm identity, capacity, title period): `start_date`, `end_date`, `date_basis`, `last_observed`, `sources[]`; `CONTROLS` rows carry the ADV ownership band | **derived from the same assertions as the relationship edges, under the same rule version, in the same batch** |
+| `roles[]` | one row per (Company/firm identity, capacity, title period): `start_date`, `end_date`, `date_basis`, `last_observed`, `sources[]`; `BENEFICIAL_OWNER_OF` rows carry the percent as filed (`CONTROLS` until profiling ticket 04b) | **derived from the same assertions as the relationship edges, under the same rule version, in the same batch** |
 | `profiles[]` | `{kind: 'adviser', profile_id, crd, status, valid_from, valid_to}` | same-ID profile membership (`domain-model.md:62`); the profile owns its content |
 | `last_observed` | max over roles and identifier assertions | freshness |
 
@@ -297,9 +297,9 @@ about one relationship and is not carried forward.
 | Type | Endpoints | Capacities | Evidence | Status |
 | --- | --- | --- | --- | --- |
 | `EMPLOYED_BY` | Person → Company | `director`, `officer`, `employee` | Form 3/4/5 flags + `officer_title`; DEF 14A `exec_role`; 8-K Item 5.02 | publishes |
-| `CONTROLS` | Person → Company | `ten_percent_owner`, `owner` (with ADV band), `control_person` | Form 3/4/5 `is_ten_percent_owner`; ADV `Ownership Code` / `Control Person` | publishes |
+| `BENEFICIAL_OWNER_OF` (replaces `CONTROLS`, profiling ticket 04b) | Person → Company | `ten_percent_owner`, `five_percent_owner` | Form 3/4/5 `is_ten_percent_owner`; Schedules 13D/13G | publishes. ADV owners and control persons are named from Form ADV when its reader exists (ticket 07); who decides is the adviser link's discretion, not ownership |
 | Holdings | Person → Security | beneficial owner / reporting person; reporting period, units, direct/indirect, derivative fields | Form 3/4/5 transaction tables | **deferred** |
-| `MANAGES_FUND` | Person (adviser profile) → Fund Structure | — | ADV | **deferred** |
+| `INVESTMENT_ADVISER_TO` (was `MANAGES_FUND`) | Person (adviser profile) → Fund Structure | — | ADV | **deferred** |
 
 Split by **meaning**, not by source: a 10% holder is not an employee, and Clean
 MDM already separates ownership from employment at the entity level
@@ -387,7 +387,7 @@ Legacy closed `IS_INSIDER` only when properties differed
   identity is held as a deferred record (migration 027) naming the endpoint and
   the reason, and publishes from history the first time that endpoint is
   accepted with its consumer enabled. Covers unaccepted issuer Companies,
-  unaccepted ADV firms, holdings and `MANAGES_FUND`. Legacy dropped these
+  unaccepted ADV firms, holdings and `INVESTMENT_ADVISER_TO` (then `MANAGES_FUND`). Legacy dropped these
   silently (`pipeline.py:1890`).
 - **Steward decisions** carry actor and reason; `save_batch` rejects a
   decision without them (foundation).
@@ -625,7 +625,7 @@ Plus the foundation's own gates, inherited.
 | Ticket 21 (8-K labelling to n ≥ 381) | **done** — research 21 cleared 8-K at n = 659 |
 | [Ticket 25](../../../.scratch/person-consumer-contract/issues/25-fix-person-name-normalizer-defects.md) normalizer repairs | **done** — `person-name@v2` (`edgar_warehouse/domain/policy/person_name.py`); Tier B activation must use it |
 | Security identity + consumer | blocks holdings |
-| Fund Structure identity + consumer | blocks `MANAGES_FUND` |
+| Fund Structure identity + consumer | blocks `INVESTMENT_ADVISER_TO` |
 
 ## Open items
 

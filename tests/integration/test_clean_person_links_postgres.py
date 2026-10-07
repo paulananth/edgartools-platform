@@ -103,3 +103,24 @@ def test_a_populated_store_at_003_takes_004(database):
     assert insiders(database) == before != []
     with database.admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == count
+
+
+def test_under_the_real_names_a_ten_percent_owner_is_a_beneficial_owner_and_an_insider(database):
+    """Profiling ticket 04b: CONTROLS is gone; Forms 3/4/5's ten percent owner is
+    BENEFICIAL_OWNER_OF, and mdm.is_insider shows it beside the director."""
+    from edgar_warehouse.mdm.clean.store import register_policy
+    from edgar_warehouse.rules import files
+
+    with database.admin.begin() as conn:
+        database.policy = register_policy(conn, {
+            "version": 1, "required_consumers": ["export", "graph"], "automatic_rules": [],
+            "fields": {"company": {"name": {"sources": ["fixture.primary", "fixture.secondary"]},
+                                   "address": {"sources": ["fixture.primary", "fixture.secondary"]}}},
+            "relationships": files.policy()["relationships"]})
+    person, issuer, (person_id, company_id) = setup(database)
+    apply(database, 2, assertions=[filing(1, person, issuer, sighting(D1, "director"),
+                                          sighting(D1, "ten_percent_owner", kind="BENEFICIAL_OWNER_OF"))])
+    assert insiders(database) == sorted([
+        (person_id, company_id, "BENEFICIAL_OWNER_OF", "ten_percent_owner"),
+        (person_id, company_id, "EMPLOYED_BY", "director"),
+    ])

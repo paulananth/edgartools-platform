@@ -122,6 +122,10 @@ master file is reference data plus a master attribute that holds its codes.
 
 ### 5. A relationship: its type
 
+- **Name it as reality does:** the term the source or the standard uses,
+  never an invented one; variation (stated or calculated, an event type, a
+  threshold) goes on the link, not into a new name. A rename is the
+  operator's, one name at a time.
 - **Look for an existing type first,** in both directions: a type whose ends
   are swapped and whose meaning is the same is its inverse. Two types for one
   fact (one per source, or one per direction) make every reader ask both; name
@@ -207,12 +211,16 @@ Examples only; nothing above depends on them.
   `FOREIGN` would make "FOREIGN" a valid state code, so `type` became its own
   code set, `sec-place-types`, with a `broad` crosswalk row from each place
   code; the ISO 3166 codes are `exact` rows to `iso-3166` (`outside`).
-- **Inverse types:** `MANAGES_FUND` (Form ADV, adviser to fund) and
-  `IS_FUND-MANAGED_BY` (GLEIF's term, fund to manager) state one fact in
-  opposite directions.
-- **Overlapping types:** `ACCOUNTING_PARENT` and `IS_DIRECTLY_CONSOLIDATED_BY`
-  both name a direct accounting parent; `IS_ULTIMATELY_CONSOLIDATED_BY` and
-  `REPORTED_ULTIMATE_PARENT` both name a stated ultimate parent.
-- **A name that needs its definition:** `EMPLOYED_BY` also holds directors,
-  and `CONTROLS` also holds owners. The definitions say so as capacities; the
-  type names alone do not.
+- **Real names (profiling ticket 04b):** the review of 2026-10-07 found
+  `ACCOUNTING_PARENT` beside `IS_DIRECTLY_CONSOLIDATED_BY`, and
+  `REPORTED_ULTIMATE_PARENT` beside `IS_ULTIMATELY_CONSOLIDATED_BY`: invented
+  names for what GLEIF's relationship file already names. The operator kept
+  GLEIF's two names, each link marked stated or calculated, and approved every
+  other name one by one from its source: `BENEFICIAL_OWNER_OF` (13D/13G, Forms
+  3/4/5), `IS_SUBSIDIARY_OF` (Exhibit 21), `INVESTMENT_ADVISER_TO` (Form ADV,
+  N-CEN) beside GLEIF's `IS_FUND-MANAGED_BY` (a fund's manager, a different
+  role), `HAS_MARKET_OPERATOR` (MiFID II's market operator),
+  `SUCCESSOR_ENTITY` (GLEIF).
+- **Who decides is not who owns:** an adviser's discretion (discretionary or
+  non-discretionary, Form ADV Item 5.F) is on its link; ownership is
+  `BENEFICIAL_OWNER_OF`.

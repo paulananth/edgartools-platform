@@ -49,6 +49,7 @@ MIGRATIONS: tuple[str, ...] = (
     "005_cross_reference.sql",
     "006_relationship_context.sql",
     "007_entity_context.sql",
+    "008_relationship_names.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond

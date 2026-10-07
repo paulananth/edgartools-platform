@@ -44,7 +44,10 @@ TYPES_V0 = {
 }
 # The keys a type may carry, and the ultimate-parent algorithms this code runs.
 _TYPE_KEYS = {"from", "to", "from_profile", "to_profile", "capacities", "hierarchy", "cycles", "one_parent",
-              "ultimate_parent"}
+              "ultimate_parent", "ultimate_type"}
+# The type a derived ultimate parent is written as when its hierarchy names
+# none: what every policy before profiling ticket 04b wrote.
+CALCULATED_V0 = "CALCULATED_ULTIMATE_PARENT"
 ULTIMATE_PARENT_ALGORITHMS = {"accounting-chain-v1"}
 CYCLES = {"invalid", "review"}
 
@@ -84,6 +87,8 @@ def check_types(section: dict) -> None:
             raise Conflict(f"Relationship type {name}: cycles, one_parent and ultimate_parent go only on a hierarchy")
         if "ultimate_parent" in spec and spec["ultimate_parent"] not in ULTIMATE_PARENT_ALGORITHMS:
             raise Conflict(f"Relationship type {name}: unknown ultimate-parent algorithm {spec['ultimate_parent']}")
+        if "ultimate_type" in spec and ("ultimate_parent" not in spec or spec["ultimate_type"] not in section["types"]):
+            raise Conflict(f"Relationship type {name}: ultimate_type names a declared type, beside ultimate_parent")
 
 
 MIN = datetime.min.replace(tzinfo=UTC)
@@ -406,11 +411,14 @@ def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> l
             if node in seen:
                 continue
             derived = {
-                "type": "CALCULATED_ULTIMATE_PARENT",
+                # Written as the type the policy names, beside the stated
+                # links of that type (profiling ticket 04b: basis calculated).
+                "type": types[kind].get("ultimate_type", CALCULATED_V0),
                 "source_id": source,
                 "target_id": node,
                 "scope": scope,
                 "derived": True,
+                "basis": "calculated",
                 "algorithm": "accounting-chain-v1",
                 "as_of": as_of,
                 "path": path,

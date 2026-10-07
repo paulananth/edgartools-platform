@@ -52,8 +52,25 @@ BEFORE = {
 }
 
 
-def test_the_rules_file_declares_exactly_the_table_the_code_held():
-    assert files.policy()["relationships"]["types"] == BEFORE
+# The types under their sources' own names (profiling ticket 04b; each name
+# approved by the operator one by one, 2026-10-07).
+REAL_NAMES = {
+    "IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY", "SUCCESSOR_ENTITY", "IS_SUBSIDIARY_OF",
+    "BENEFICIAL_OWNER_OF", "EMPLOYED_BY", "HOLDS", "ISSUED_BY", "INVESTMENT_ADVISER_TO", "IS_FUND-MANAGED_BY",
+    "IS_SUBFUND_OF", "IS_FEEDER_TO", "IS_INTERNATIONAL_BRANCH_OF", "AUDITED_BY", "HAS_MARKET_OPERATOR",
+    "IS_SEGMENT_OF_EXCHANGE",
+}
+
+
+def test_the_rules_file_names_every_type_as_its_source_does():
+    types = files.policy()["relationships"]["types"]
+    assert set(types) == REAL_NAMES
+    # Every type the old table had either keeps its name and rules, or is gone.
+    for name, spec in BEFORE.items():
+        if name in types and name not in ("IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"):
+            assert types[name] == spec, name
+    # The direct parent derives its ultimate parent as the stated type's name.
+    assert types["IS_DIRECTLY_CONSOLIDATED_BY"]["ultimate_type"] == "IS_ULTIMATELY_CONSOLIDATED_BY"
 
 
 def test_a_policy_without_the_section_keeps_that_table():
@@ -70,6 +87,9 @@ def test_a_policy_without_the_section_keeps_that_table():
     ({"hierarchy": True, "cycles": "invalid", "ultimate_parent": "guess-v9"}, "algorithm"),
     ({"one_parent": True}, "only on a hierarchy"),
     ({"colour": "red"}, "unknown key"),
+    ({"hierarchy": True, "cycles": "invalid", "ultimate_parent": "accounting-chain-v1", "ultimate_type": "NOT_A_TYPE"},
+     "ultimate_type"),
+    ({"hierarchy": True, "cycles": "invalid", "ultimate_type": "IS_ULTIMATELY_CONSOLIDATED_BY"}, "ultimate_type"),
 ])
 def test_a_type_that_could_not_run_is_refused(change, words):
     body = files.policy()

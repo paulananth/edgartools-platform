@@ -104,16 +104,19 @@ on a date. The parent model follows them:
 - [x] Ruling recorded, with the definitions shown to the operator 2026-10-07 08:36 ET
 - [x] Each name reviewed against the source's own terms and approved one by one (table above) 2026-10-07 09:08 ET
 - [x] Every other relationship name reviewed the same way and approved one by one (table above) 2026-10-07 09:24 ET
-- [ ] `rules/merge/relationships.yaml` and `rules/context/definitions.yaml`: every approved name; the removed names gone; attributes: `basis`, `discretion`, `investment_discretion`, `voting_authority`, `percent`, capacities as approved
-- [ ] `CONTEXT.md`: the glossary uses the approved names (Ownership Parent, Accounting Direct Parent, Reported and Calculated Ultimate Parent, MANAGES_FUND entries rewritten)
-- [ ] GoF consult (relationships.py types and derivation, relationships.yaml, the relationship view)
-- [ ] `rules/merge/relationships.yaml`: `IS_DIRECTLY_CONSOLIDATED_BY` for any legal kind (hierarchy, cycles invalid, one parent, derives the ultimate parent) and `IS_ULTIMATELY_CONSOLIDATED_BY` (stated or calculated); `ACCOUNTING_PARENT` and `REPORTED_ULTIMATE_PARENT` removed; `rules/context/definitions.yaml` and `CONTEXT.md` say the definitions above
-- [ ] A relationship carries its `basis` (`stated` or `calculated`); `mdm.relationship_context` and `context relationship` show it
-- [ ] The derivation writes `IS_ULTIMATELY_CONSOLIDATED_BY` with basis `calculated` (no more `CALCULATED_ULTIMATE_PARENT`)
-- [ ] The new Mastering Policy digest, with a peel layer and the evidence (relationship tests on PG16), for the operator's approval
-- [ ] `SUCCESSOR_ENTITY`: the type (ceased entity → successor, not a hierarchy parent), its definition; on its date the ceased entity's parent links end, and its children's links end unless restated
-- [ ] Parent periods take a stated effective date when the source gives one (`valid_from_basis` / `valid_to_basis` stated), else first or last seen
-- [ ] The calculated ultimate parent has periods: recomputed at every change in its chain, so `--as-of` answers any date
+- [x] (PR A) `rules/merge/relationships.yaml` and `rules/context/definitions.yaml`: every approved name, the removed names gone, the capacities as approved; the other attributes (`discretion`, `investment_discretion`, `voting_authority`, `percent`, event type) ride on a link's periods, filled by each source's reader 2026-10-07 09:43 ET
+- [x] (PR A) `CONTEXT.md`: the glossary uses the approved names (Ownership Parent, Accounting Direct Parent, Reported and Calculated Ultimate Parent, MANAGES_FUND entries rewritten); the data-modeling skill and the clean-mdm and person specs follow 2026-10-07 09:43 ET
+- [x] GoF consult: the types are already data (#836); one new key, `ultimate_type`, names the type a derived ultimate parent is written as (older policies keep `CALCULATED_ULTIMATE_PARENT`); no restructuring 2026-10-07 09:43 ET
+- [x] Split in two PRs, merged one by one: A (names, basis, views) and B (the calculated ultimate parent's history; `SUCCESSOR_ENTITY` ending links) 2026-10-07 09:43 ET
+- [x] Threshold (operator: "Capacities ten/five percent (Recommended)"): `BENEFICIAL_OWNER_OF` capacities `ten_percent_owner` (Forms 3/4/5, Section 16) and `five_percent_owner` (13D/13G, Section 13(d)) 2026-10-07 09:43 ET
+- [x] (PR A, 2026-10-07 09:43 ET) `rules/merge/relationships.yaml`: `IS_DIRECTLY_CONSOLIDATED_BY` for any legal kind (hierarchy, cycles invalid, one parent, derives the ultimate parent) and `IS_ULTIMATELY_CONSOLIDATED_BY` (stated or calculated); `ACCOUNTING_PARENT` and `REPORTED_ULTIMATE_PARENT` removed; `rules/context/definitions.yaml` and `CONTEXT.md` say the definitions above (tests/mdm/test_clean_relationship_types.py)
+- [x] (PR A) A relationship carries its `basis` (`stated` or `calculated`); `mdm.relationship_context` (MDM migration 008, tested on a populated store at 007) and `context relationship` show it 2026-10-07 09:43 ET
+- [x] (PR A) The derivation writes `IS_ULTIMATELY_CONSOLIDATED_BY` with basis `calculated` (fresh mastering test on PG16) 2026-10-07 09:43 ET
+- [x] (PR A) `mdm.is_insider` reads the ten percent owner from `BENEFICIAL_OWNER_OF` (and from `CONTROLS` for links an earlier policy mastered) (person-link test on PG16) 2026-10-07 09:43 ET
+- [ ] (PR A) The new Mastering Policy digest (Company part bf682fa4…), with a peel layer back to 05875917… and the evidence (relationship tests on PG16), for the operator's approval
+- [ ] (PR B; the type and its definition are declared in PR A) `SUCCESSOR_ENTITY`: on its date the ceased entity's parent links end, and its children's links end unless restated
+- [ ] (PR B) Parent periods take a stated effective date when the source gives one (`valid_from_basis` / `valid_to_basis` stated), else first or last seen
+- [ ] (PR B) The calculated ultimate parent has periods: recomputed at every change in its chain, so `--as-of` answers any date
 - [ ] GLEIF's `SuccessorEntity`, event type and effective date mapped to `SUCCESSOR_ENTITY` (Codex's path: handoff, or the operator's word)
 - [ ] ~~Corporate action events in silver~~ deferred to [06](06-silver-writer.md): they are transaction data, written by the silver writer; a parent period cites its event once they exist (added 2026-10-07 08:38 ET)
 - [ ] Review (Standards, Spec, GoF), PR, CI, merge on word

@@ -124,7 +124,7 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
         # store goes around that, as the database owner.
         conn.execute(text("SET LOCAL session_replication_role = replica"))
         conn.execute(text("DELETE FROM mdm.migration WHERE name IN "
-                          "('006_relationship_context.sql', '007_entity_context.sql')"))
+                          "('006_relationship_context.sql', '007_entity_context.sql', '008_relationship_names.sql')"))
         conn.execute(text("SET LOCAL session_replication_role = origin"))
         count = conn.scalar(text("SELECT count(*) FROM mdm.current_record"))
     migrate(database.admin, application_role="clean_application")
@@ -132,3 +132,23 @@ def test_a_populated_store_at_005_takes_006_and_keeps_its_rows(database):
         {"from_name": "Company a", "to_name": "Company b"}]
     with database.admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == count
+
+
+def test_a_populated_store_at_007_takes_008_and_each_link_says_its_basis(database):
+    """Profiling ticket 04b: the view's basis column, stated or calculated, on a store holding links."""
+    from edgar_warehouse.mdm.clean.store import migrate
+
+    load(database, {"a": [(DIRECT, "b")]})
+    with database.admin.begin() as conn:
+        conn.execute(text("SET LOCAL session_replication_role = replica"))
+        conn.execute(text("DELETE FROM mdm.migration WHERE name='008_relationship_names.sql'"))
+        conn.execute(text("SET LOCAL session_replication_role = origin"))
+        count = conn.scalar(text("SELECT count(*) FROM mdm.current_record"))
+    migrate(database.admin, application_role="clean_application")
+    found = {(r["derived"], r["basis"]) for r in rows(database, "SELECT derived, basis FROM mdm.relationship_context")}
+    assert (False, "stated") in found and found <= {(False, "stated"), (True, "calculated")}
+    with database.admin.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == count
+        assert conn.scalar(text("SELECT col_description('mdm.relationship_context'::regclass, "
+                                "(SELECT attnum FROM pg_attribute WHERE attrelid = 'mdm.relationship_context'::regclass "
+                                "AND attname = 'basis'))")).startswith("stated")
