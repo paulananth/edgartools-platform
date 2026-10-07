@@ -1,0 +1,15 @@
+{
+  "implementation_revision": "df6e32320e62c84265e451f123edaf2e19e054ac",
+  "run_id": 37698204328,
+  "conclusion": "success",
+  "unit": 572,
+  "architecture": 258,
+  "mdm": 604,
+  "integration": 295,
+  "expected_integration_xfail": 1,
+  "engine": 600,
+  "native": 139,
+  "prerequisite_skips": 0,
+  "scope": "full CI at final implementation revision; remaining semantic consumer retirement and full Company population/recovery are unqualified",
+  "log_sha256": "78e712d6ff34631f9c95584fc32167690eb98ca5c3e02e151c29a17bc4a43f85"
+}
