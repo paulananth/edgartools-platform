@@ -356,6 +356,46 @@ case changes must be declared for both the value and null tokens when needed.
 Unicode compatibility is qualified for the source's inputs; this is not a
 claim of Python compatibility across every Unicode version.
 
+### Ordered text transformations
+
+When a join key requires Unicode decomposition or replacements, use
+`text.transforms` before considering a custom step. It runs after ordinary
+trim/case conversion and before `null_if`, in the order written. Non-text
+defaults pass through unchanged. Set `trim: false` when the recipe owns trimming.
+
+Operations are single-key mappings:
+
+- `unicode: nfkd`: compatibility decomposition using pinned Unicode 15.0 tables.
+- `strip_combining: true`: remove characters with nonzero canonical combining class.
+- `case: upper`: native Unicode uppercase.
+- `trim: true`: strip Unicode whitespace and Python's ASCII U+001C–U+001F separators.
+- `replace: {from: "&", to: " AND "}`: literal non-overlapping replacement.
+- `regex_replace: {pattern: "[^A-Z0-9]+", with: " "}`: Rust regex replacement;
+  replacement text is literal, including `$`. Lookaround and backreferences are refused.
+- `pad: {left: " ", right: " "}`: append declared surrounding text.
+- `remove_prefix: "THE "`: remove one exact leading prefix.
+
+Bounds: 1–64 operations; each argument at most 4,096 UTF-8 bytes;
+regex compilation and DFA caches each capped at 1 MiB, nesting at 32;
+input and every intermediate text at most 1 MiB. Across a contract, at most
+128 distinct recipes, 1,024 operations and 32 regexes. Each regex replacement charges
+the remaining search window before finding its next match, with an 8 MiB
+cumulative window budget; repeated searches refuse with `text_transform_work_limit`.
+This conservative budget can also refuse many matches in long benign strings.
+Growth refuses with
+`text_transform_limit`. Contracts compile regexes once, including expressions
+in unselected branches. Literal reference rows and defaults remain data.
+
+For Company/LEI Name Census keys, start with the bundled
+`sec.submissions.company/name-key.yaml` and `gleif/name-key.yaml`. They keep
+legal forms and unify their spelling. The SEC recipe removes the trailing
+state suffix before normalizing. Run the recipes on authenticated captured
+current/former names; compare exact retained keys and prove a deliberate
+recipe fault changes them. Record capture, contract, oracle and actual native
+binary hashes. Recipe parity completes the name-key step only; census population,
+classification, provenance, installed mastering/replay/recovery and active
+consumer replacement remain independent requirements.
+
 Bounds: at most 16 reference tables, 10,000 keyed rows per table, 32 columns
 per row and 100,000 cells in total. Names/keys are nonempty text of at most
 128 UTF-8 bytes; text cells are at most 4,096 bytes. Structured, tagged,
