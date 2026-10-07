@@ -61,13 +61,15 @@ def sec_legal_form_key(name: Any) -> str:
 
 # EDGAR state and country codes (SEC `stateOfIncorporation`, address
 # `stateOrCountry` and `countryCode`) as GLEIF writes a jurisdiction. The table
-# is reference data in `rules/reference/sec-place-codes.yaml`: SEC's whole list
-# (309 codes), with the ISO codes company mastering ticket 08 built from
-# bronze. The policy body carries the same file, so its digest pins it.
+# is reference data: RDM code set `sec-place-codes`, SEC's whole list (309
+# codes) with the ISO codes company mastering ticket 08 built from bronze, as
+# `exact` crosswalk rows to `iso-3166`. The policy pins its version and sha256
+# (profiling ticket 02), so its digest covers it.
 _EDGAR_ISO = {
-    code: row["iso"]
-    for code, row in rules_files.reference("sec-place-codes")["codes"].items()
-    if row["iso"]
+    row["code"]: target
+    for row in rules_files.pinned_reference("sec-place-codes")
+    for to_set, _version, target, match_type in row["crosswalk"]
+    if to_set == "iso-3166" and match_type == "exact"
 }
 # SEC codes these as states; GLEIF may write them as countries.
 _US_TERRITORIES = frozenset({"PR", "GU", "VI", "MP", "AS"})

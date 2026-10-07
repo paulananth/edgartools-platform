@@ -1,0 +1,10 @@
+# The reference data the Mastering Policy's rules read, pinned by version and
+# sha256 (profiling ticket 02; operator, 2026-10-07 08:01 ET: "Ticket 02's last
+# step needs your approval. Approved"). Each pin names an RDM code set version
+# whose published canonical form is `rules/reference/published/<code set>/<version>/canonical.jsonl`;
+# a reader refuses it unless its sha256 is the pin. A new version is a new pin,
+# so a new policy and the operator's approval, as an edit to the embedded table was.
+sec-place-codes:
+  code_set: sec-place-codes
+  version: '1'
+  sha256: 36270dc9e924128f1338ecee2fd4684f2c13b35303e634f49fabae9213759f00

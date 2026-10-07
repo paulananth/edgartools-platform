@@ -549,8 +549,10 @@ class TestTheCompanyPolicy:
         # policy is unchanged.
         # Ticket 25 switched the two name matching rules on; platform
         # validation 06a added GLEIF's relationship file to the sources;
-        # profiling ticket 04 moved the relationship types into the policy.
+        # profiling ticket 04 moved the relationship types into the policy;
+        # profiling ticket 02 pinned the reference data in place of the table.
         assert policy_layers.digests(policy_layers.company_part(POLICY)) == [
+            "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4",
             "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",
             "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5",
             "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
