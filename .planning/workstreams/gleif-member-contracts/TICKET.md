@@ -22,4 +22,7 @@ Capture inventory: three pinned GLEIF JSON ZIP members exist in the local resear
 
 The operator subsequently approved direct GLEIF XML downloads. Archives and sidecars are at `/private/tmp/codex-gleif-xml-20261006`; publisher metadata and download receipts are recorded here. Publication slot is 16:00, while actual XML ContentDates are Level 1 16:07:44Z, relationships 17:12:30Z, exceptions 16:56:35Z. These observed capture dates must not be presented as API-supplied dates. XML qualification compares canonical typed map values (configured maps sort keys), preserving list/source order; it does not claim source XML key-order parity. Current framing proof is not installed full mastering or runtime retirement.
 
-- [ ] Install committed bundle and execute all six GLEIF templates outside checkout, with independent worker verification.
+- [x] Install c36199c7 bundle and execute all six GLEIF templates outside checkout, with independent worker verification; one installed test passed, 25 deselected, no skips in 111.71s (2026-10-06 20:58 ET).
+
+- [x] Regress API-slot/content-date confusion and mid-scan implementation change; affected tests passed 57 cases in 3.30s (2026-10-06 20:59 ET).
+- [x] Push reviewable contracts/qualification change and create non-draft PR #841; live GitHub head c36199c7, CI 37554733174 running (2026-10-06 20:58 ET).

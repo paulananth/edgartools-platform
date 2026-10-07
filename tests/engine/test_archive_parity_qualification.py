@@ -91,3 +91,31 @@ def test_full_xml_parity_uses_publisher_header_and_independent_decoder(tmp_path,
     with pytest.raises(SourceRejected, match='record count'):
         xml.qualify(path, hashlib.sha256(path.read_bytes()).hexdigest(), member, metadata,
                     content_date='2026-09-11T16:00:00+00:00')
+
+
+def test_implementation_change_during_json_scan_refuses_report(tmp_path, monkeypatch):
+    path, digest = archive(tmp_path)
+    observations = iter([[{'sha256':'before'}], [{'sha256':'after'}]])
+    monkeypatch.setattr(parity, 'implementation_evidence', lambda: next(observations))
+    with pytest.raises(ValueError, match='implementation changed'):
+        parity.qualify(path, digest, 'records')
+
+
+@pytest.mark.parametrize('member', ['level1', 'relationships', 'reporting-exceptions'])
+def test_xml_content_date_is_independent_of_api_publication_slot(tmp_path, member):
+    from scripts.qualification import qualify_xml_archive_parity as xml
+    from tests.engine.test_gleif_reading_contracts import configured, archive as xml_archive
+    path = tmp_path / 'different-content-time.zip'
+    path.write_bytes(xml_archive(configured(member, 'xml'), member, 'xml',
+        header_changes={'ContentDate':'2026-09-11T16:07:44Z'}))
+    kind, cdf = {'level1':('lei2','LEI_3.1'), 'relationships':('rr','RR_2.1'),
+                 'reporting-exceptions':('repex','REPEX_2.1')}[member]
+    metadata = {'data':{'publish_date':'2026-09-11 16:00:00', 'full_file':{'xml':{
+        'type':kind, 'format':'xml', 'delta_type':'GoldenCopy', 'cdf_version':cdf,
+        'record_count':3, 'size':path.stat().st_size}}}}
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    result = xml.qualify(path, digest, member, metadata, content_date='2026-09-11T16:07:44+00:00')
+    assert result['content_date'] == '2026-09-11T16:07:44+00:00'
+    assert result['publish_date'] == '2026-09-11 16:00:00'
+    with pytest.raises(SourceRejected, match='content date'):
+        xml.qualify(path, digest, member, metadata, content_date='2026-09-11T16:00:00+00:00')
