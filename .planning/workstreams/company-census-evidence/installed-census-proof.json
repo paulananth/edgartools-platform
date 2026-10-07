@@ -1,0 +1,17 @@
+{
+  "bundled": "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules",
+  "pins": {
+    "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
+    "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/source_contract/source_contract.abi3.so": "46655917ce07a66d82ed2049b238a7c60564c79d3a0a7259d9f9b92eff5840e8",
+    "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/census.yaml": "b75bd96273693c9014c0570bb3846c375fc1f9c37d863aafd5b1773f2f3f31aa",
+    "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/census-main.yaml": "3c0c5b418309ee64a4f32ed8225b1231b33055d63e24099b2264d3fc23e76281",
+    "/private/tmp/codex-installed-census-final-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/combine-census.yaml": "8621ce4b23311170e499ede353bed74b78bdf151e1c1572d2a9720080866ff34"
+  },
+  "tested_revision": "18c8af173f82b071d413668808b7afb2ecbf97ab",
+  "cases": 2,
+  "deselected": 28,
+  "prerequisite_skips": 0,
+  "scope": "Installed raw Company main/pages/catalog/census read/combine/prepare; no retained loaders imported. Not full population or restricted-role mastering qualification.",
+  "elapsed_seconds": 73.85
+}

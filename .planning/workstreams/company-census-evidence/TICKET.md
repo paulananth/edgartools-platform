@@ -20,4 +20,8 @@ Qualification history: the first full-census run passed entry/combination compar
 
 - [x] Rebase implementation onto live main ba2b9cc7 without conflicts; requalify full census and 1,000 captured names with all helper/native/oracle pins after rebase and cascade-shape assertion. Report: 18.977s; affected tests: 86 passed in 9.92s (2026-10-07 17:56 ET).
 - [x] Installed Company composition with/without census from committed 5c7b2d7d: 2 passed, 28 deselected, no skips, 75.93s. The final cascade-shape assertion was added afterward, so a fresh final installed snapshot remains required (2026-10-07 17:56 ET).
-- [ ] Fresh installed final snapshot, independent review and full CI remain pending. Both delegated reviewers unavailable due usage limits; focused manual GoF/spec review retained the interpreter/function design, found/fixed the malformed cascade shape and join ordering, and claims no independent review.
+- [ ] Fresh installed final snapshot, independent review and full CI remain pending. The standards reviewer failed due its usage limit; no specification review result was returned; focused manual GoF/spec review retained the interpreter/function design, found/fixed the malformed cascade shape and join ordering, and claims no independent review.
+
+- [x] Publish draft PR #854 at 18c8af17; full CI run 37692990492 started and all five jobs retained (2026-10-07 17:58 ET).
+- [x] Fresh final installed snapshot 18c8af17: 2 composition cases passed, 28 deselected, zero skips, 73.85s; isolated installed native/recipe hashes recorded and shipped recipes match checkout. This verifies raw Company/census composition and preparation, not installed full mastering (2026-10-07 18:00 ET).
+- [x] Strengthen fixture comparisons to canonical typed digests: 19 census cases passed in 4.94s, in addition to 86 affected cases (2026-10-07 17:58 ET).
