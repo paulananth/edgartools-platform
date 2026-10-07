@@ -59,3 +59,5 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 - [x] Add reproducible full-runtime qualification CLI with pinned publisher/independent reports and actual native binary before/after; 10 JSON/XML valid and deliberate fault cases pass (2026-10-07 06:30 ET).
 - [ ] Install this committed XML replacement bundle outside checkout and verify refusal/recovery on fresh restricted PostgreSQL 16.
 - [ ] Rebase follow-up onto merged main, commit/push, independent final review and full CI on exact head.
+
+- [x] Include contract-loading, canonical-encoding and metadata-normalization helper files in qualification hashes; 10 qualification good/fault cases pass with explicit helper evidence checks. The first replacement trial was deliberately interrupted after review found the omission; no complete report claimed (2026-10-07 06:33 ET).

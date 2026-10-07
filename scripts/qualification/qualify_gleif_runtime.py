@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from edgar_warehouse.mdm.clean import gleif_source
+from edgar_warehouse.mdm.clean import gleif_source, evidence as evidence_module, store as store_module
 from edgar_warehouse.rules import source_engine, files
 
 MEMBERS = {"level1": "lei2", "relationships": "rr", "reporting_exceptions": "repex"}
@@ -50,7 +50,8 @@ def qualify(member, format_name, parity_path, parity_sha256, publisher_path, pub
     metadata = {"format": format_name + ".zip", "cdf_version": publisher["cdf_version"],
                 "content_date": content_date, "file_content": "GLEIF_FULL_PUBLISHED",
                 "delta_start": None, "record_count": publisher["record_count"]}
-    runtime = [Path(__file__), Path(gleif_source.__file__), *source_engine.runtime_files(),
+    runtime = [Path(__file__), Path(gleif_source.__file__), Path(files.__file__),
+               Path(store_module.__file__), Path(evidence_module.__file__), *source_engine.runtime_files(),
                files.ROOT / "sources" / "gleif" / f"{member.replace('_', '-')}-{format_name}.yaml",
                parity_path, publisher_path]
 
