@@ -74,6 +74,14 @@ WITH_RELATIONSHIP_TYPES = {
     "policy": "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",
 }
 
+# Profiling ticket 02 pins the reference data (RDM `sec-place-codes` version
+# 1 and its sha256) in place of the embedded table; the operator approved it
+# ("Ticket 02's last step needs your approval. Approved", 2026-10-07 08:01 ET).
+# Peeled, the table is embedded again and the policy is the one above.
+WITH_REFERENCE_PINS = {
+    "policy": "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4",
+}
+
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -111,7 +119,7 @@ SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_REFERENCE_PINS, WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.

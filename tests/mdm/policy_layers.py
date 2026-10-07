@@ -36,6 +36,18 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
+def without_reference_pins(policy: dict) -> dict:
+    """Profiling ticket 02 (operator, 2026-10-07 08:01 ET: "Ticket 02's last
+    step needs your approval. Approved"): the policy pins its reference data
+    (an RDM code set version and its sha256) instead of embedding the tables.
+    Peeled, the tables are embedded again, as before."""
+    from edgar_warehouse.rules import files
+
+    body = {k: v for k, v in _copy(policy).items() if k != "reference_pins"}
+    body["reference"] = {path.stem: files.load(path) for path in sorted((files.ROOT / "reference").glob("*.yaml"))}
+    return body
+
+
 def without_relationship_types(policy: dict) -> dict:
     """Profiling ticket 04 (operator, 2026-10-06: "Types as data"): the
     relationship types, moved from code into the policy (`relationships`). A
@@ -94,7 +106,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:

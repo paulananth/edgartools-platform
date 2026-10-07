@@ -10,12 +10,14 @@ from __future__ import annotations
 import csv
 import hashlib
 import re
+import shutil
 from pathlib import Path
 
 import pytest
 
 import edgar
 from edgar_warehouse.mdm.clean.names import (
+    _EDGAR_ISO,
     _US_TERRITORIES,
     edgar_jurisdiction,
     jurisdictions_agree,
@@ -94,8 +96,42 @@ def test_every_us_territory_in_the_table_is_a_territory():
     assert set(_US_TERRITORIES) <= set(us.values())
 
 
-def test_the_policy_exports_its_tables_back_to_their_own_files(tmp_path):
-    files.write_policy(files.policy(), tmp_path)
-    assert files.reference("sec-place-codes", tmp_path)["codes"] == TABLE
-    assert "reference" not in files.load(tmp_path / "merge" / "policy.yaml")
-    assert digest(files.policy(tmp_path)) == digest(files.policy())
+def test_the_policy_exports_its_pins_and_an_older_policy_its_tables(tmp_path):
+    files.write_policy(files.policy(), tmp_path / "now")
+    assert files.load(tmp_path / "now" / "merge" / "reference-pins.yaml") == files.policy()["reference_pins"]
+    assert "reference_pins" not in files.load(tmp_path / "now" / "merge" / "policy.yaml")
+    assert digest(files.policy(tmp_path / "now")) == digest(files.policy())
+    assert files.pinned_reference("sec-place-codes", tmp_path / "now") == files.pinned_reference("sec-place-codes")
+    with pytest.raises(files.RulesFileError, match="no merge/reference-pins.yaml"):
+        files.pinned_reference("sec-place-codes", tmp_path / "older")
+    # A policy stored before profiling ticket 02 embedded the table: it still
+    # exports it back to its own file.
+    older = {k: v for k, v in files.policy().items() if k != "reference_pins"}
+    older["reference"] = {"sec-place-codes": files.reference("sec-place-codes")}
+    files.write_policy(older, tmp_path / "older")
+    assert files.reference("sec-place-codes", tmp_path / "older")["codes"] == TABLE
+    # The policy exports into a checkout, where the table's file stays for
+    # the quality check that pins it.
+    shutil.copytree(files.ROOT, tmp_path / "checkout")
+    files.write_policy(files.policy(), tmp_path / "checkout")
+    assert digest(files.policy(tmp_path / "checkout")) == digest(files.policy())
+
+
+def test_the_pinned_version_is_the_table(tmp_path):
+    """The published RDM version the policy pins holds the table's every code,
+    place, ISO code and type, and names.py reads the same ISO codes from it."""
+    rows = files.pinned_reference("sec-place-codes")
+    rebuilt = {}
+    for row in rows:
+        targets = {(x[0], x[3]): x[2] for x in row["crosswalk"]}
+        rebuilt[row["code"]] = {"place": row["label"], "type": targets[("sec-place-types", "broad")],
+                                "iso": targets.get(("iso-3166", "exact"))}
+    assert rebuilt == TABLE
+    assert _EDGAR_ISO == {code: row["iso"] for code, row in TABLE.items() if row["iso"]}
+    # A changed byte is refused.
+    copy = tmp_path / "rules"
+    shutil.copytree(files.ROOT, copy)
+    published = copy / "reference" / "published" / "sec-place-codes" / "1" / "canonical.jsonl"
+    published.write_bytes(published.read_bytes().replace(b"DELAWARE", b"DELAWARR"))
+    with pytest.raises(files.RulesFileError, match="differs from its pinned sha256"):
+        files.pinned_reference("sec-place-codes", copy)

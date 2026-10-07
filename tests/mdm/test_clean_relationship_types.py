@@ -90,7 +90,7 @@ def test_the_types_round_trip_through_an_export(tmp_path):
     files.write_policy(body, tmp_path)
     assert files.policy(tmp_path)["relationships"] == body["relationships"]
     older = {k: v for k, v in body.items() if k != "relationships"}
-    with pytest.raises(files.RulesFileError, match="relationship types absent"):
+    with pytest.raises(files.RulesFileError, match="relationships absent"):
         files.write_policy(older, tmp_path)
 
 

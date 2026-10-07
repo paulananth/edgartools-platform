@@ -5,6 +5,7 @@ Type: task. Phase: B. Blocked by: 01a, Codex retirement merged. Map: [map](../ma
 ## Rulings
 
 - 2026-10-07 06:39 ET: operator invoked "/implement ticket 02", starting this phase B ticket before Codex's old-parser retirement merged.
+- 2026-10-07 08:01 ET: operator, to "Ticket 02's last step needs your approval": "Ticket 02's last step needs your approval. Approved". Taken as authority to publish `sec-place-codes` 1 (and `sec-place-types` 1) and switch the policy to the pin, on the condition the evidence holds; the PR shows the digests and the evidence, so the merge word is the informed approval.
 - 2026-10-07: operator asked whether RDM is friendly to agents, then "make rdm be friendly to agents need semantic layer hints": added `rdm list`, `rdm describe`, `rdm draft --file`, and two tables frozen with each version, `code_set_usage` (where the codes' values live, how to compare them) and `code_set_hint` (meaning, use_when, avoid_when, example_question).
 - 2026-10-07 06:47 ET: operator said "approved" to the data model, as shown:
   - the seven RDM tables from the spec (§2.1) (two more, `code_set_usage` and `code_set_hint`, came with the semantic-layer ruling above);
@@ -15,7 +16,7 @@ Type: task. Phase: B. Blocked by: 01a, Codex retirement merged. Map: [map](../ma
 
 ## Checklist
 
-- [ ] ~~Re-read main for Codex's final design~~ deferred to the policy pin switch: Codex's retirement has not merged (PR #834 open); this PR touches none of Codex's paths (added 2026-10-07 06:47 ET)
+- [ ] ~~Re-read main for Codex's final design~~ deferred again, to the Codex handoff below: Codex's retirement has still not merged (PR #834 open); the pin switch touches none of Codex's paths and leaves the YAML its `quality.yaml` pins byte-identical (added 2026-10-07 06:47 ET; checked 2026-10-07 08:16 ET)
 - [x] Data model shown with the data-modeling skill's lens and approved by the operator ("approved") 2026-10-07 06:47 ET
 - [x] GoF consult: copy the migration loop; no shared runner (each store's changes were its own roles and grants) 2026-10-07 06:45 ET
 - [x] rdm migrations from zero: tables, comments on everything, immutability after publish, approval needs name and words, one current published version (`tests/integration/test_rdm_postgres.py` on PG16) 2026-10-07 07:10 ET
@@ -26,8 +27,12 @@ Type: task. Phase: B. Blocked by: 01a, Codex retirement merged. Map: [map](../ma
 - [x] Tests on a populated version (all 309 codes): migrate from zero, publish, immutability, cycle refusal, supersede, diff (9 RDM tests pass on local PG16; affected unit/mdm tests pass, the 15 architecture failures are the same on main: no `jq` on this machine) 2026-10-07 07:10 ET
 - [x] Agent-friendly: `rdm list`, `rdm describe` (bounded 8 KB), `rdm draft --file`, usage and hint tables; data-profiling SKILL.md says how an agent drafts a code set 2026-10-07 07:10 ET
 - [ ] ~~Lookup and search of codes (`rdm.code_context`, `edgar-warehouse context <code set>`)~~ deferred to [05](05-agent-context-views-and-command.md), its RDM part, built there (added 2026-10-07 07:10 ET)
-- [ ] MDM pins version + sha256: separate operator approval, with mastering counts embed vs pin (added 2026-10-07 06:47 ET)
+- [x] MDM pins version + sha256: `sec-place-codes` 1 published through the real path (import, approve in the operator's words, publish) on a disposable PG16 (`.scratch/profiling/trials/rdm-pin/publish.py`), sha256 36270dc9…; files in `rules/reference/published/`; the policy carries `reference_pins` (`rules/merge/reference-pins.yaml`) in place of the table; `names._EDGAR_ISO` reads the pin and equals the YAML's map over all 309 codes (308 with an ISO code); Company policy digest 1e38238f… → 05875917…, and peeling the pin layer gives 1e38238f… back exactly (added 2026-10-07 06:47 ET) 2026-10-07 08:16 ET
+- [x] Place-code map equal and fixture outcomes unchanged (not a full counts run): every place-code consumer (matching, cascade, quality, company source) reads one map, equal value for value; the 45 PG16 mastering tests that use it (name matching, binding correction, stage record, fresh mastering) pass on the pin with the same fixed outcomes main's CI holds on the table; the 193 policy and place-code tests pass. A full-population run was not made: 1.4 GB of free disk, and the last large run filled it 2026-10-07 08:16 ET
 - [ ] Contract-embedded tables gain the pin: handoff to Codex (spec §7) (added 2026-10-07 06:47 ET)
-- [ ] YAML removed only after the pin's counts match (spec §7)
+- [ ] ~~`in_reference@1` reads the pinned version (spec §7)~~ deferred to the Codex handoff: the check's table and sha256 are arguments in Codex's `rules/sources/sec.submissions.company/quality.yaml`, so it still reads the YAML, which stays byte-identical (added 2026-10-07 08:24 ET)
+- [ ] YAML removed only after a full mastering counts run shows the same counts with the pin, and after `in_reference@1` reads the pin (spec §7)
 - [x] Review (Standards, Spec, GoF): GoF no findings; fixed: the database checks a publish supersedes the newest published version; level names are in the pin; a failed import writes nothing; draft fields are checked (a misspelled one is refused); a code set's words never change; the drafter cannot approve; `describe` stays within 8 KB; publishes of one set are serialised; files are written before the commit and `--out` is required; `rdm retire` and `rdm verify`; tighter grants; spec wording. A wrong sha256 written by hand is caught by `rdm verify`, not by the database (it cannot compute the canonical form) (10 RDM tests pass) 2026-10-07 07:16 ET
-- [ ] PR, CI, merge on word
+- [x] PR #845 (RDM database), CI green, merged on the operator's word as 7cfadf4c 2026-10-07 07:33 ET
+- [x] Pin switch review (Standards, Spec, GoF): GoF's one table of the policy's single-file sections (`POLICY_FILES`); fixed: an exported policy carries its pinned versions' files and reads on its own, an older rules folder gets a plain error, an export into a checkout is no longer refused, the ticket separates map equality from a counts run and defers `in_reference@1` to the Codex handoff (152 policy tests, 419 affected tests pass) 2026-10-07 08:21 ET
+- [ ] Pin switch: PR #848, CI, merge on word (the merge word is the informed approval of digest 05875917…)
