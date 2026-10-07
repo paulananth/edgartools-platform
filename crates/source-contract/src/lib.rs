@@ -18,6 +18,7 @@
 
 mod formats;
 pub mod json_sequence;
+pub mod xml_sequence;
 mod integer;
 mod reference;
 mod value;
@@ -27,6 +28,7 @@ mod matrix;
 mod iteration;
 mod predicate;
 mod json_text;
+mod text_transform;
 #[cfg(feature = "python")]
 mod python;
 mod tree;
@@ -99,7 +101,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 15] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test"];
+const PRIMITIVES: [&str; 16] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -112,6 +114,7 @@ pub struct Engine {
     read: Value,
     steps: Steps,
     limits: Limits,
+    text_recipes: std::collections::HashMap<Value, text_transform::Recipe>,
 }
 
 fn contract_error(detail: impl ToString) -> Rejected {
@@ -138,7 +141,30 @@ impl Engine {
             max_member_bytes: limit("max_member_bytes", max_bytes),
             max_records: limit("max_records", 10_000_000) as usize,
         };
-        Ok(Self { read, steps, limits })
+        // Walk expressions only: literal/reference data must never become code.
+        fn collect(expr: &Value, recipes: &mut std::collections::HashMap<Value, text_transform::Recipe>) -> Result<(), Rejected> {
+            if let Some(transforms) = expr.get("text").and_then(|args| args.get("transforms")) {
+                if !recipes.contains_key(transforms) {
+                    let mut operations = 0;
+                    let mut regexes = 0;
+                    for value in recipes.keys().chain(std::iter::once(transforms)) {
+                        if let Some(list) = value.as_sequence() {
+                            operations += list.len();
+                            regexes += list.iter().filter(|op| op.get("regex_replace").is_some()).count();
+                        }
+                    }
+                    if recipes.len() >= 128 || operations > 1024 || regexes > 32 {
+                        return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 32 regexes"));
+                    }
+                    recipes.insert(transforms.clone(), text_transform::Recipe::compile(transforms).map_err(contract_error)?);
+                }
+            }
+            for child in expression_children(expr) { collect(child, recipes)?; }
+            Ok(())
+        }
+        let mut text_recipes = std::collections::HashMap::new();
+        for expr in read_expressions(&read) { collect(expr, &mut text_recipes)?; }
+        Ok(Self { read, steps, limits, text_recipes })
     }
 
     pub fn read(&self, bytes: &[u8], lookups: &Lookups) -> Result<Reading, Rejected> {
@@ -310,6 +336,11 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
     }
     if let Some(args) = expr.get("choose") {
         for key in ["condition", "then", "else"] {
+            if let Some(child) = args.get(key) { children.push(child); }
+        }
+    }
+    if let Some(args) = expr.get("equal") {
+        for key in ["left", "right"] {
             if let Some(child) = args.get(key) { children.push(child); }
         }
     }
@@ -508,6 +539,16 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
         return Err(format!("primitive {name} is not known"));
     }
     match name {
+        "equal" => {
+            let map = args.as_mapping().filter(|m| m.len() == 2)
+                .ok_or("equal requires left and right expressions")?;
+            if map.keys().any(|k| !matches!(k.as_str(), Some("left" | "right"))) {
+                return Err("equal requires only left and right expressions".into());
+            }
+            for key in ["left", "right"] {
+                validate_expr(args.get(key).ok_or("equal requires left and right expressions")?, steps)?;
+            }
+        }
         "test" => predicate::validate(args)?,
         "steps" => {
             for step in args.as_sequence().ok_or("steps must be a list")? {
@@ -950,6 +991,11 @@ fn falsey(value: &Val) -> bool {
 fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
+        "equal" => {
+            let left = eval(engine, context, document, item, ordinal, &args["left"])?;
+            let right = eval(engine, context, document, item, ordinal, &args["right"])?;
+            Ok(Val::Bool(left == right))
+        }
         "ordinal" => Ok(Val::Int(ordinal)),
         "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),
         "context" => Ok(context.get(setting(args, "name").unwrap()).unwrap().clone()),
@@ -965,6 +1011,10 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
                     "upper" => text.to_uppercase(), "lower" => text.to_lowercase(), _ => text,
                 }),
                 other => other,
+            };
+            let value = match (value, args.get("transforms")) {
+                (Val::Str(text), Some(transforms)) => Val::Str(engine.text_recipes[transforms].apply(text)?),
+                (other, _) => other,
             };
             let Val::Str(text) = &value else { return Ok(value) };
             let Some(null_if) = args.get("null_if").and_then(Value::as_sequence) else { return Ok(value) };

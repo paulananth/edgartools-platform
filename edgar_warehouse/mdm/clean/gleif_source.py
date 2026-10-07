@@ -8,12 +8,10 @@ import tempfile
 import zipfile
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import IO, BinaryIO
-
-import ijson
-from lxml import etree
+from typing import BinaryIO
 
 from edgar_warehouse.rules import files as rules_files
+from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
 from .adapters import (
     UnsupportedRecord,
@@ -30,23 +28,6 @@ FORMATS = {
     "level1": ("LEI_3.1", "records"),
     "relationships": ("RR_2.1", "relations"),
     "reporting_exceptions": ("REPEX_2.1", "exceptions"),
-}
-XML = {
-    "level1": ("leidata", "LEIData", "LEIHeader", "LEIRecords", "LEIRecord"),
-    "relationships": (
-        "rr",
-        "RelationshipData",
-        "Header",
-        "RelationshipRecords",
-        "RelationshipRecord",
-    ),
-    "reporting_exceptions": (
-        "repex",
-        "ReportingExceptionData",
-        "Header",
-        "ReportingExceptions",
-        "Exception",
-    ),
 }
 # REPEX 2.1 retains the deprecated values for historical source compatibility.
 # See GLEIF's Reporting Exceptions 2.1 ExceptionReasonEnum.
@@ -86,156 +67,6 @@ def validate_metadata(member: str, metadata: dict) -> None:
     raise Conflict("Unsupported GLEIF publication mode or predecessor time")
 
 
-class _BoundedReader:
-    def __init__(self, stream: IO[bytes], maximum: int, record_limit: int):
-        self.stream, self.maximum, self.record_limit = stream, maximum, record_limit
-        self.total = self.since_record = 0
-
-    def read(self, size: int = -1) -> bytes:
-        if size < 0:
-            raise Conflict("Unbounded native source read")
-        raw = self.stream.read(min(size, 65536))
-        self.total += len(raw)
-        self.since_record += len(raw)
-        if self.total > self.maximum or self.since_record > self.record_limit + 65536:
-            raise Conflict("GLEIF expanded file or record exceeds bound")
-        return raw
-
-
-def _json_records(stream: _BoundedReader, wrapper: str):
-    events = iter(ijson.basic_parse(stream, use_float=True))
-
-    def expect(event, value=None):
-        if next(events) != (event, value):
-            raise Conflict("Unexpected GLEIF JSON structure")
-
-    def value(first, depth=0):
-        if depth > 64:
-            raise Conflict("GLEIF nesting exceeds bound")
-        event, item = first
-        if event == "start_map":
-            result = {}
-            while (entry := next(events))[0] != "end_map":
-                if entry[0] != "map_key" or entry[1] in result:
-                    raise Conflict("Duplicate or invalid GLEIF JSON key")
-                result[entry[1]] = value(next(events), depth + 1)
-            return result
-        if event == "start_array":
-            items = []
-            while (entry := next(events))[0] != "end_array":
-                items.append(value(entry, depth + 1))
-            return items
-        if event not in {"string", "number", "boolean", "null"}:
-            raise Conflict("Invalid GLEIF JSON value")
-        return item
-
-    expect("start_map")
-    expect("map_key", wrapper)
-    expect("start_array")
-    while (entry := next(events))[0] != "end_array":
-        if entry[0] != "start_map":
-            raise Conflict("Native GLEIF record must be an object")
-        record = value(entry)
-        stream.since_record = 0
-        yield record
-    expect("end_map")
-    if next(events, None) is not None:
-        raise Conflict("Trailing GLEIF JSON data")
-
-
-def _xml_value(node, namespace):
-    result = {"@" + key: val for key, val in node.attrib.items()}
-    for child in node:
-        if not isinstance(child.tag, str):
-            raise Conflict("GLEIF XML entities are unsupported")
-        key = child.tag.removeprefix("{" + namespace + "}")
-        value = _xml_value(child, namespace)
-        if key in result:
-            if not isinstance(result[key], list):
-                result[key] = [result[key]]
-            result[key].append(value)
-        else:
-            result[key] = value
-    if node.text and node.text.strip():
-        result["$"] = node.text.strip()
-    return result
-
-
-def _xml_records(stream, member, metadata):
-    namespace, root_name, header_name, container, record_name = XML[member]
-    namespace = f"http://www.gleif.org/data/schema/{namespace}/2016"
-    tags = [
-        f"{{{namespace}}}{n}" for n in (root_name, header_name, container, record_name)
-    ]
-    parser = etree.XMLPullParser(
-        events=("start", "end"),
-        resolve_entities=False,
-        load_dtd=False,
-        no_network=True,
-        huge_tree=False,
-        remove_comments=True,
-    )
-    root = None
-    header_seen = container_seen = False
-    while raw := stream.read(65536):
-        parser.feed(raw)
-        for event, node in parser.read_events():
-            if root is None:
-                root = node
-                if node.tag != tags[0] or node.getroottree().docinfo.doctype:
-                    raise Conflict("Invalid GLEIF XML root/namespace or DTD")
-            if event == "start" and node.getparent() is root:
-                if node.tag == tags[1]:
-                    if header_seen or container_seen:
-                        raise Conflict("Duplicate/misplaced GLEIF XML header")
-                elif node.tag == tags[2]:
-                    if not header_seen or container_seen:
-                        raise Conflict("Invalid GLEIF XML record container")
-                    container_seen = True
-                else:
-                    raise Conflict("Unexpected GLEIF XML top-level element")
-            if event != "end":
-                continue
-            if node.tag == tags[1] and node.getparent() is root:
-                header = _xml_value(node, namespace)
-                expected = {
-                    "ContentDate": metadata["content_date"],
-                    "FileContent": metadata["file_content"],
-                    "RecordCount": str(metadata["record_count"]),
-                    "DeltaStart": metadata.get("delta_start"),
-                }
-                for key, wanted in expected.items():
-                    if not isinstance(header.get(key, {}), dict):
-                        raise Conflict("Duplicate GLEIF XML header field")
-                    actual = header.get(key, {}).get("$")
-                    if key in {"ContentDate", "DeltaStart"} and actual and wanted:
-                        actual, wanted = instant(actual), instant(wanted)
-                    if actual != wanted:
-                        raise Conflict(
-                            "GLEIF XML header disagrees with pinned metadata"
-                        )
-                header_seen = True
-                node.clear()
-                stream.since_record = 0
-            elif node.getparent() is not None and node.getparent().tag == tags[2]:
-                if node.tag != tags[3]:
-                    raise Conflict("Unexpected GLEIF XML record")
-                value = _xml_value(node, namespace)
-                # Native JSON RR uses one additional wrapper; normalize both.
-                yield (
-                    {"RelationshipRecord": value}
-                    if member == "relationships"
-                    else value
-                )
-                stream.since_record = 0
-                node.clear()
-                while node.getprevious() is not None:
-                    del node.getparent()[0]
-    parser.close()
-    if not header_seen or not container_seen:
-        raise Conflict("Incomplete GLEIF XML header/container")
-
-
 def inspect_archive(
     stream: BinaryIO,
     *,
@@ -256,6 +87,7 @@ def inspect_archive(
     validate_metadata(member, metadata)
     sha, size, count = hashlib.sha256(), 0, 0
     content = hashlib.sha256()
+    consumer_error = None
     with tempfile.TemporaryFile() as snapshot:
         while raw := stream.read(1024**2):
             size += len(raw)
@@ -274,13 +106,8 @@ def inspect_archive(
                 if files[0].file_size > max_expanded:
                     raise Conflict("GLEIF expanded size exceeds bound")
                 with archive.open(files[0]) as source:
-                    bounded = _BoundedReader(source, max_expanded, max_record)
-                    records = (
-                        _json_records(bounded, FORMATS[member][1])
-                        if metadata["format"] == "json.zip"
-                        else _xml_records(bounded, member, metadata)
-                    )
-                    for row in records:
+                    def consume(row, ordinal):
+                        nonlocal count, consumer_error
                         encoded = canonical(row).encode()
                         if len(encoded) > max_record:
                             raise Conflict("GLEIF record exceeds bound")
@@ -288,21 +115,85 @@ def inspect_archive(
                         if count >= metadata["record_count"]:
                             raise Conflict("GLEIF record count mismatch")
                         if on_record:
-                            on_record(row, count)
+                            try:
+                                on_record(row, ordinal)
+                            except BaseException as error:
+                                consumer_error = error
+                                raise
                         count += 1
-                    if (
-                        count != metadata["record_count"]
-                        or bounded.total != files[0].file_size
-                    ):
+
+                    # Full-source attestation and the Name Census need all
+                    # records. This copied reading grants no mastering scope.
+                    format_name = metadata["format"].split(".")[0]
+                    contract = rules_files.load(
+                        rules_files.ROOT / "sources" / "gleif"
+                        / f"{member.replace('_', '-')}-{format_name}.yaml"
+                    )
+                    read = contract["read"]
+                    framing = read.pop("stream")
+                    table = member
+                    read["tables"][table].pop("select")
+                    read["limits"]["max_bytes"] = max(1, max_record)
+                    engine = SourceEngine(contract)
+
+                    def consume_reading(reading, ordinal):
+                        rows = reading.tables[table]
+                        if reading.deferred or len(rows) != 1:
+                            raise Conflict("GLEIF source attestation must read every record")
+                        row = rows[0]
+                        if row["source_index"] != ordinal + 1:
+                            raise Conflict("GLEIF source ordinal mismatch")
+                        consume(row["record"], ordinal)
+
+                    context = {"publication_count": metadata["record_count"]}
+                    arguments = dict(
+                        max_bytes=max_expanded, max_record=max(1, max_record),
+                        max_records=min(metadata["record_count"], framing["max_records"]),
+                        max_depth=framing["max_depth"], context=context,
+                        ordinal_context=framing["ordinal_context"],
+                        on_reading=consume_reading,
+                    )
+                    try:
+                        if format_name == "json":
+                            receipt = engine.stream_json_array(
+                                source, wrapper=framing["wrapper"],
+                                min_integer=framing["min_integer"],
+                                record_encoding=framing["record_encoding"], **arguments,
+                            )
+                        else:
+                            header = framing["header_read"]
+                            max_header = max(1, max_record) + 65536
+                            header["limits"]["max_bytes"] = max_header
+                            predecessor = metadata.get("delta_start")
+                            header["references"] = {
+                                "content_dates": {instant(metadata["content_date"]).isoformat(): {"valid": True}},
+                                "record_counts": {str(metadata["record_count"]): {"valid": True}},
+                                "file_content": {metadata["file_content"]: {
+                                    "valid": True, "requires_delta": predecessor is not None}},
+                                "delta_starts": {instant(predecessor).isoformat(): {"valid": True}}
+                                    if predecessor is not None else {},
+                            }
+                            receipt = engine.stream_xml_records(
+                                source, envelope=framing["xml"], max_header=max_header,
+                                header_engine=SourceEngine({"read": header}), **arguments,
+                            )
+                    except SourceRejected:
+                        if consumer_error is not None:
+                            raise consumer_error
+                        raise
+                    expanded = receipt["expanded_bytes"]
+                    if count != metadata["record_count"] or expanded != files[0].file_size:
                         raise Conflict("GLEIF record count or expanded length mismatch")
+
         except (
             zipfile.BadZipFile,
-            ijson.JSONError,
-            etree.XMLSyntaxError,
+            SourceRejected,
             StopIteration,
             ValueError,
         ) as exc:
-            raise Conflict(f"Invalid GLEIF archive: {exc}") from exc
+            if isinstance(exc, SourceRejected) and exc is consumer_error:
+                raise
+            raise Conflict(f"Invalid GLEIF archive, header or bound: {exc}") from exc
     return {
         "adapter_version": VERSION,
         "raw_evidence_hash": sha.hexdigest(),
@@ -315,7 +206,7 @@ def inspect_archive(
             f"{VERSION}\n{member}\n{content.hexdigest()}".encode()
         ).hexdigest(),
         "compressed_bytes": size,
-        "expanded_bytes": bounded.total,
+        "expanded_bytes": expanded,
     }
 
 

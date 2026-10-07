@@ -10,7 +10,7 @@ import struct
 from pathlib import Path
 
 from edgar_warehouse.control_contract import canonical, digest
-from edgar_warehouse.mdm.clean.gleif_source import _BoundedReader, _json_records
+from scripts.qualification.legacy_gleif_json_oracle import _BoundedReader, _json_records
 from edgar_warehouse.rules.source_engine import stream_json_array
 
 

@@ -148,6 +148,42 @@ impl PyEngine {
         let reading = py.allow_threads(|| self.inner.read_with_context(data, &sets, &context)).map_err(rejected)?;
         reading_to_py(py, &reading)
     }
+
+    #[pyo3(signature = (stream, envelope, header_engine, on_reading, *, max_bytes, max_record, max_records, max_depth=64, max_header=None, context="{}", ordinal_context=None))]
+    fn scan_xml_records(&self, py: Python<'_>, stream: Py<PyAny>, envelope: &str, header_engine: &PyEngine,
+                        on_reading: Py<PyAny>, max_bytes: usize, max_record: usize, max_records: usize,
+                        max_depth: usize, max_header: Option<usize>, context: &str, ordinal_context: Option<String>) -> PyResult<(usize, usize)> {
+        if envelope.len() > 4096 { return Err(rejected(Rejected::new("contract", "XML envelope exceeds bound"))); }
+        let envelope: crate::xml_sequence::Envelope = serde_json::from_str(envelope)
+            .map_err(|error| rejected(Rejected::new("contract", error)))?;
+        self.inner.validate_json_projection().map_err(rejected)?;
+        header_engine.inner.validate_json_projection().map_err(rejected)?;
+        let mut values = crate::context::from_json(context).map_err(rejected)?;
+        if let Some(name) = &ordinal_context {
+            if values.contains_key(name) { return Err(rejected(Rejected::new("invalid_context", "stream ordinal context is generated, never supplied"))); }
+            values.insert(name.clone(), Val::Int(1));
+        }
+        self.inner.validate_context(&values).map_err(rejected)?;
+        header_engine.inner.validate_context(&values).map_err(rejected)?;
+        let header_context = values.clone();
+        let header = &header_engine.inner;
+        let limits = crate::xml_sequence::Limits { max_bytes, max_record, max_header: max_header.unwrap_or(max_record), max_records, max_depth };
+        let result = py.allow_threads(|| crate::xml_sequence::scan(PythonReader(stream), &envelope, limits, |value| {
+            let reading = header.read_json_value(value, &Lookups::new(), &header_context)?;
+            if !reading.deferred.is_empty() { return Err(Rejected::new("xml_header", "XML header assertions must pass, not defer")); }
+            Ok(())
+        }, |record, ordinal| {
+            if let Some(name) = &ordinal_context {
+                let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
+                    .ok_or_else(|| Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
+                values.insert(name.clone(), Val::Int(position));
+            }
+            let reading = self.inner.read_json_value(record, &Lookups::new(), &values)?;
+            Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
+                .map_err(|error| Rejected::new("stream_consumer", error))
+        })).map_err(rejected)?;
+        Ok((result.records, result.bytes))
+    }
 }
 
 fn reading_to_py(py: Python<'_>, reading: &crate::Reading) -> PyResult<PyObject> {

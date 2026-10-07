@@ -108,6 +108,22 @@ after parsing and before required paths or table iteration. `true` passes;
 `false` or null rejects the whole artifact with `assertion_failed` and the
 declared reason. Any other result rejects with `assertion_condition`.
 Use `test`, boolean context or boolean reference cells for an assertion result.
+`equal` returns a boolean from two expressions, without coercing their types:
+
+```yaml
+- test:
+    equal:
+      left: {integer: {path: RecordCount.$}}
+      right: {context: {name: publication_count}}
+  reason: Header count must equal the input-bound publication count
+```
+
+Both `left` and `right` are required and evaluate before comparison. Integer,
+float, text and boolean values remain distinct; null equals null. Lists compare
+in order and maps compare their typed fields without depending on key order.
+Use `value` or typed context for boolean values: the existing `const` boolean
+conversion produces text. Explicitly parse source counts with `integer` before
+comparing them to integer context. Nested calls still validate before reading.
 The existing `const` primitive renders boolean literals as text; such a value
 refuses with `assertion_condition`.
 Expressions, context names, references and custom steps are validated when
@@ -339,6 +355,46 @@ Unicode case conversion. Conversion follows trimming and precedes `null_if`;
 case changes must be declared for both the value and null tokens when needed.
 Unicode compatibility is qualified for the source's inputs; this is not a
 claim of Python compatibility across every Unicode version.
+
+### Ordered text transformations
+
+When a join key requires Unicode decomposition or replacements, use
+`text.transforms` before considering a custom step. It runs after ordinary
+trim/case conversion and before `null_if`, in the order written. Non-text
+defaults pass through unchanged. Set `trim: false` when the recipe owns trimming.
+
+Operations are single-key mappings:
+
+- `unicode: nfkd`: compatibility decomposition using pinned Unicode 15.0 tables.
+- `strip_combining: true`: remove characters with nonzero canonical combining class.
+- `case: upper`: native Unicode uppercase.
+- `trim: true`: strip Unicode whitespace and Python's ASCII U+001C–U+001F separators.
+- `replace: {from: "&", to: " AND "}`: literal non-overlapping replacement.
+- `regex_replace: {pattern: "[^A-Z0-9]+", with: " "}`: Rust regex replacement;
+  replacement text is literal, including `$`. Lookaround and backreferences are refused.
+- `pad: {left: " ", right: " "}`: append declared surrounding text.
+- `remove_prefix: "THE "`: remove one exact leading prefix.
+
+Bounds: 1–64 operations; each argument at most 4,096 UTF-8 bytes;
+regex compilation and DFA caches each capped at 1 MiB, nesting at 32;
+input and every intermediate text at most 1 MiB. Across a contract, at most
+128 distinct recipes, 1,024 operations and 32 regexes. Each regex replacement charges
+the remaining search window before finding its next match, with an 8 MiB
+cumulative window budget; repeated searches refuse with `text_transform_work_limit`.
+This conservative budget can also refuse many matches in long benign strings.
+Growth refuses with
+`text_transform_limit`. Contracts compile regexes once, including expressions
+in unselected branches. Literal reference rows and defaults remain data.
+
+For Company/LEI Name Census keys, start with the bundled
+`sec.submissions.company/name-key.yaml` and `gleif/name-key.yaml`. They keep
+legal forms and unify their spelling. The SEC recipe removes the trailing
+state suffix before normalizing. Run the recipes on authenticated captured
+current/former names; compare exact retained keys and prove a deliberate
+recipe fault changes them. Record capture, contract, oracle and actual native
+binary hashes. Recipe parity completes the name-key step only; census population,
+classification, provenance, installed mastering/replay/recovery and active
+consumer replacement remain independent requirements.
 
 Bounds: at most 16 reference tables, 10,000 keyed rows per table, 32 columns
 per row and 100,000 cells in total. Names/keys are nonempty text of at most
@@ -689,3 +745,81 @@ The complete archive framing parity result and the captured-sample performance
 measurement do not by themselves prove installed configured projection,
 producer publication, XML parity or complete Company mastering. Complete those
 checks before replacing the active GLEIF runtime or activating source Rules.
+
+## Configured XML record framing
+
+For a large XML envelope, declare `read.stream.framing: xml_records`.
+`read.format: json` describes the normalized record presented to the existing
+table interpreter. The stream declares `xml` with exactly `namespace`, `root`,
+`header`, `container`, `record` and nullable `record_wrapper`. Envelope elements
+and records must use the declared namespace. The header precedes the single
+record container; repeated/misplaced elements and incomplete EOF refuse.
+
+Declare `header_read` as a separate ordinary JSON read block with the same
+context declaration as the record read. Its configured assertions run before
+the first record, including an empty container. Header deferrals refuse the
+source. Use input-bound context and pinned reference cells for publication
+metadata; the framer supplies no source-specific metadata policy. Generate the
+one-based ordinal context internally as for JSON framing. The optional
+`expected_records_context` checks the full source count after EOF.
+
+XML framing uses the same compressed/expanded bytes, record/depth/count,
+partition and private spool bounds as JSON framing. Omit the JSON-only
+`wrapper`, `min_integer` and `record_encoding` fields. Normalized records use
+compact Python JSON byte accounting. XML may declare `read.stream.max_header`
+(1..32 MiB) separately for normalized header/envelope nodes; omission defaults
+to `max_record`. Match `header_read.limits.max_bytes` to the intended header
+projection bound. Increasing `max_header` never increases normalized record
+limits or the raw per-record buffering allowance (`max_record` + 65,536 bytes).
+Attributes retain expanded namespace
+names (`@{URI}local`); children in the declared namespace use local names;
+foreign children retain `{URI}local`. Repeated children become lists and
+leading stripped text becomes `$`; tail text is ignored. Namespace scopes,
+XML line endings, attribute whitespace and character references are normalized.
+DTD, undeclared entities, invalid XML names/characters, processing instructions
+inside captured nodes and malformed declarations refuse the source.
+
+`SourceEngine.stream_xml_records` projects normalized records in Rust and
+receives a separate configured header engine. The worker stages all partitions
+privately until every input reaches valid EOF, ZIP CRC and count checks. Retry
+and independent verification use the same configured source boundary. Complete
+captured XML parity, installed mastering and active GLEIF consumer replacement
+remain required before the old XML parser can be removed.
+
+## Three GLEIF member templates
+
+The bundled `sources/gleif/` folder contains `level1`, `relationships` and
+`reporting-exceptions` templates for both `json` and `xml`. Read them through
+`rules.files.load` from the installed `rules.files.ROOT`; copy and pin the
+result before submitting `source.read`. They are qualification templates,
+not activated source Rules. Their selection preserves complete source
+records and original one-based ordinals. Both relationship endpoints must
+belong to the approved scope. Scope selection makes no identity or binding
+decision and does not replace the later MDM checks.
+
+Populate the XML `header_read.references` from authenticated publication
+metadata: `content_dates` and `delta_starts` key normalized UTC ISO instants
+(`+00:00`, seconds or six fractional digits); `record_counts` keys the exact
+decimal header text; `file_content` keys the publication mode and supplies
+`valid: true` plus boolean `requires_delta`. Other reference cells supply
+`valid: true`. Full publication requires absent/empty `DeltaStart`; delta
+publication requires its pinned predecessor time. Empty header references
+refuse the source. Duplicate, malformed or mismatching fields fail before any
+record can be published. Header date comparison accepts equivalent timezone
+spellings by using the existing `date` expression.
+
+Bind `publication_count` to each exact input receipt using the version-2
+source input manifest. Pin the same publisher count in the header reference;
+the worker compares the complete framed count at EOF before publication.
+The creator must derive both pins from the same publication. All three XML member templates configure the generic `equal` assertion
+above to compare header count directly to context count; independently pinned
+header references must also agree with the authenticated publication metadata. Also keep API `publish_date`
+separate from XML `ContentDate`: captured members can have different content
+timestamps within one publication slot. Pin authenticated capture-header
+evidence explicitly when the download API does not supply that field.
+JSON has no XML header: its CDF version, content time, mode and predecessor
+evidence must come from the authenticated publisher manifest. A count observed
+by a decoder is structural evidence and cannot substitute for that metadata.
+Read the format's source structures as captured; XML and JSON may represent
+singleton lists or attributes differently, so do not infer cross-format raw
+record equality from their common member name.

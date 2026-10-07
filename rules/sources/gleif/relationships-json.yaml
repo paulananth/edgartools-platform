@@ -1,0 +1,68 @@
+# Qualification template: pin approved scope and captured publication metadata before use.
+source: gleif.relationships
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 100
+  context:
+    source_index:
+      type: integer
+    publication_count:
+      type: integer
+  references:
+    approved_scope: {}
+  tables:
+    relationships:
+      each: .
+      select:
+        choose:
+          condition:
+            lookup:
+              reference: approved_scope
+              column: selected
+              key:
+                text:
+                  path: RelationshipRecord.Relationship.StartNode.NodeID.$
+                  coerce: python
+              on_missing: "null"
+          then:
+            lookup:
+              reference: approved_scope
+              column: selected
+              key:
+                text:
+                  path: RelationshipRecord.Relationship.EndNode.NodeID.$
+                  coerce: python
+              on_missing: "null"
+          else:
+            const:
+              value: null
+      columns:
+        record:
+          value:
+            path: .
+        source_index:
+          context:
+            name: source_index
+  stream:
+    wrapper: relations
+    container: zip
+    max_input_bytes: 1073741824
+    max_bytes: 17179869184
+    max_record: 1048576
+    max_records: 10000000
+    max_depth: 64
+    min_integer: -9223372036854775807
+    record_encoding: python
+    ordinal_context: source_index
+    expected_records_context: publication_count
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 4096
+    max_spool_bytes: 1073741824
+    max_output_rows: 100000

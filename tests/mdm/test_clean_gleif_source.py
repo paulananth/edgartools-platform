@@ -556,3 +556,90 @@ def test_a_deletion_flag_on_level1_and_relationships(in_scope):
             row, member=member, contract=dataset_contract(member), source_code=f"gleif.{member}.v1",
             eligible_leis=scope, ordinal=0, publication={**publication, "member": member})
         assert result["reason"] == expected, member
+
+
+@pytest.mark.parametrize("member,cdf,wrapper", [
+    ("level1", "LEI_3.1", "records"),
+    ("relationships", "RR_2.1", "relations"),
+    ("reporting_exceptions", "REPEX_2.1", "exceptions"),
+])
+@pytest.mark.parametrize("empty", [False, True])
+def test_configured_json_preserves_full_source_attestation(member, cdf, wrapper, empty):
+    from edgar_warehouse.mdm.clean.gleif_source import VERSION
+    from edgar_warehouse.mdm.clean.store import canonical
+
+    # Neither record belongs to an approved mastering cohort. Attestation still
+    # covers every raw record, including unmapped fields, types and list order.
+    records = [] if empty else [
+        {"LEI": {"$": "outside"}, "unmapped": [False, None, -0.0, 1e-5, "é🦀"]},
+        {"nested": {"z": 2**63 - 1, "a": [{"v": 1.25}]}, "number": -(2**63 - 1)},
+    ]
+    payload = json.dumps({wrapper: records}, ensure_ascii=False).encode()
+    raw = archive_bytes(payload)
+    seen = []
+    report = inspect_archive(
+        io.BytesIO(raw), member=member,
+        metadata=metadata(len(records), cdf_version=cdf),
+        expected_sha256=hashlib.sha256(raw).hexdigest(),
+        on_record=lambda row, n: seen.append((n, row)),
+    )
+    expected = hashlib.sha256(b"".join(canonical(row).encode() + b"\n" for row in records)).hexdigest()
+    assert seen == list(enumerate(records))
+    assert report == {
+        "adapter_version": VERSION,
+        "raw_evidence_hash": hashlib.sha256(raw).hexdigest(),
+        "canonical_source_hash": expected,
+        "record_count": len(records),
+        "domain_content_hash": hashlib.sha256(f"{VERSION}\n{member}\n{expected}".encode()).hexdigest(),
+        "compressed_bytes": len(raw),
+        "expanded_bytes": len(payload),
+    }
+
+
+def test_configured_json_preserves_explicit_larger_record_bound():
+    record = {"text": "x" * 1_100_000}
+    raw = archive_bytes(json.dumps({"records": [record]}).encode())
+    seen = []
+    report = inspect_archive(
+        io.BytesIO(raw), member="level1", metadata=metadata(),
+        expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2 * 1024**2,
+        on_record=lambda row, n: seen.append(row),
+    )
+    assert report["record_count"] == 1 and seen == [record]
+
+
+@pytest.mark.parametrize("kind", ["runtime", "source_rejected", "interrupt"])
+def test_configured_json_preserves_consumer_failure_identity(kind):
+    raw = archive_bytes(b'{"records":[{}]}')
+    from edgar_warehouse.rules.source_engine import SourceRejected
+    failure = {
+        "runtime": RuntimeError("consumer_unavailable"),
+        "source_rejected": SourceRejected("consumer_retry", "consumer_unavailable"),
+        "interrupt": KeyboardInterrupt(),
+    }[kind]
+    def fail(row, ordinal):
+        raise failure
+    with pytest.raises(type(failure)) as caught:
+        inspect_archive(
+            io.BytesIO(raw), member="level1", metadata=metadata(),
+            expected_sha256=hashlib.sha256(raw).hexdigest(), on_record=fail,
+        )
+    assert caught.value is failure
+
+
+def test_small_xml_record_limit_does_not_limit_authenticated_header():
+    xml = b"""<LEIData xmlns="http://www.gleif.org/data/schema/leidata/2016">
+      <LEIHeader><ContentDate>2026-09-11T16:00:00Z</ContentDate>
+      <FileContent>GLEIF_FULL_PUBLISHED</FileContent><RecordCount>1</RecordCount></LEIHeader>
+      <LEIRecords><LEIRecord/></LEIRecords></LEIData>"""
+    raw = archive_bytes(xml, "source.xml")
+    seen = []
+    report = inspect_archive(io.BytesIO(raw), member="level1", metadata=metadata(format="xml.zip"),
+        expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2,
+        on_record=lambda row, ordinal: seen.append((row, ordinal)))
+    assert seen == [({}, 0)]
+    assert report["record_count"] == 1
+    raw = archive_bytes(xml.replace(b"<LEIRecord/>", b"<LEIRecord><LEI>large</LEI></LEIRecord>"), "source.xml")
+    with pytest.raises(Conflict):
+        inspect_archive(io.BytesIO(raw), member="level1", metadata=metadata(format="xml.zip"),
+            expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2)

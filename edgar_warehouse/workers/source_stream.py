@@ -29,22 +29,50 @@ def _policy(contract):
               "max_depth": 64, "partition_bytes": 8 * 1024**2,
               "partition_records": 100_000, "max_partitions": 4096,
               "max_spool_bytes": 1024**3, "max_output_rows": 10_000_000}
-    required = {*maxima, "wrapper", "container", "min_integer", "record_encoding", "ordinal_context"}
+    framing = spec.get("framing", "json_array") if isinstance(spec, dict) else None
+    if framing not in ("json_array", "xml_records"):
+        raise ValueError("Unknown configured stream framing")
+    required = {*maxima, "container", "ordinal_context"}
+    required |= ({"wrapper", "min_integer", "record_encoding"} if framing == "json_array"
+                 else {"framing", "xml", "header_read"})
     if (not isinstance(spec, dict) or not required <= set(spec)
-            or set(spec) - required - {"expected_records_context"}):
+            or set(spec) - required - {"expected_records_context", "framing"} -
+                ({"max_header"} if framing == "xml_records" else set())):
         raise ValueError("read.stream must declare every framing, partition and spool bound")
     for key, maximum in maxima.items():
         minimum = 0 if key == "max_records" else 1
         if type(spec[key]) is not int or not minimum <= spec[key] <= maximum:
             raise ValueError(f"read.stream {key} is outside its bounded range")
     if (read.get("format") != "json" or "container" in read
-            or spec["container"] not in ("none", "zip")
-            or not isinstance(spec["wrapper"], str) or not spec["wrapper"]
+            or spec["container"] not in ("none", "zip")):
+        raise ValueError("read.stream requires JSON record projection and explicit framing policy")
+    if framing == "json_array" and (not isinstance(spec["wrapper"], str) or not spec["wrapper"]
             or len(spec["wrapper"].encode()) > 128
             or type(spec["min_integer"]) is not int
             or not -(2**63) <= spec["min_integer"] <= 2**63 - 1
             or spec["record_encoding"] not in ("native", "python")):
-        raise ValueError("read.stream requires JSON record projection and explicit framing policy")
+        raise ValueError("JSON array stream requires explicit numeric and wrapper policy")
+    header_engine = None
+    if framing == "xml_records":
+        if "max_header" in spec and (type(spec["max_header"]) is not int
+                or not 1 <= spec["max_header"] <= 32 * 1024**2):
+            raise ValueError("read.stream max_header is outside its bounded range")
+        xml = spec.get("xml")
+        fields = {"namespace", "root", "header", "container", "record", "record_wrapper"}
+        if (not isinstance(xml, dict) or set(xml) != fields
+                or any(not isinstance(xml[name], str) or not 1 <= len(xml[name].encode()) <= 512
+                       for name in fields - {"record_wrapper"})
+                or (xml["record_wrapper"] is not None and
+                    (not isinstance(xml["record_wrapper"], str) or not 1 <= len(xml["record_wrapper"].encode()) <= 128))):
+            raise ValueError("XML stream requires a bounded explicit envelope")
+        header_read = spec.get("header_read")
+        if (not isinstance(header_read, dict) or header_read.get("format") != "json"
+                or "container" in header_read or "stream" in header_read
+                or header_read.get("context", {}) != read.get("context", {})):
+            raise ValueError("XML header uses configured JSON assertions with the same context")
+        header_engine = source_engine.SourceEngine({"read": header_read})
+    elif "xml" in spec or "header_read" in spec:
+        raise ValueError("XML envelope/header policy requires XML framing")
     ordinal = spec["ordinal_context"]
     if ordinal is not None:
         declared = read.get("context", {}).get(ordinal) if isinstance(ordinal, str) else None
@@ -65,12 +93,12 @@ def _policy(contract):
     del projection["read"]["stream"]
     engine = source_engine.SourceEngine(projection)
     source_readings.table_names(list(read["tables"]))
-    return spec, engine
+    return spec, engine, header_engine
 
 
 def output(envelope, artifacts, documents, context_for, *, publish, max_index_bytes):
     manifest, contract, execution, inputs = documents
-    spec, engine = _policy(contract)
+    spec, engine, header_engine = _policy(contract)
     if execution["workers"] != 1:
         raise ValueError("Streamed source.read uses one worker to bound private spool storage")
     # A single private spool bounds disk across all inputs, including failures.
@@ -151,10 +179,16 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                     if members[0].file_size > spec["max_bytes"]:
                         raise ValueError("Stream ZIP member exceeds expanded byte bound")
                     stream = stack.enter_context(archive.open(members[0]))
-                scan = engine.stream_json_array(stream, wrapper=spec["wrapper"], on_reading=project,
-                    context=context, ordinal_context=ordinal,
-                    **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",
-                                                  "min_integer", "record_encoding")})
+                if header_engine is None:
+                    scan = engine.stream_json_array(stream, wrapper=spec["wrapper"], on_reading=project,
+                        context=context, ordinal_context=ordinal,
+                        **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",
+                                                      "min_integer", "record_encoding")})
+                else:
+                    scan = engine.stream_xml_records(stream, envelope=spec["xml"], header_engine=header_engine,
+                        on_reading=project, context=context, ordinal_context=ordinal,
+                        max_header=spec.get("max_header"),
+                        **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth")})
                 if expected_count is not None and scan["record_count"] != expected_count:
                     raise ValueError("Stream record count differs from pinned context")
                 if spec["container"] == "zip" and scan["expanded_bytes"] != members[0].file_size:

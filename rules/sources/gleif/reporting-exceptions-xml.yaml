@@ -1,0 +1,143 @@
+# Qualification template: populate header references from authenticated publisher metadata.
+# Empty references refuse; this template does not activate Rules or prove a publication.
+source: gleif.reporting_exceptions
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 100
+  context:
+    source_index:
+      type: integer
+    publication_count:
+      type: integer
+  references:
+    approved_scope: {}
+  tables:
+    reporting_exceptions:
+      each: .
+      select:
+        lookup:
+          reference: approved_scope
+          column: selected
+          key:
+            text:
+              path: LEI.$
+              coerce: python
+          on_missing: "null"
+      columns:
+        record:
+          value:
+            path: .
+        source_index:
+          context:
+            name: source_index
+  stream:
+    container: zip
+    max_input_bytes: 1073741824
+    max_bytes: 17179869184
+    max_record: 1048576
+    max_header: 1048576
+    max_records: 10000000
+    max_depth: 64
+    ordinal_context: source_index
+    expected_records_context: publication_count
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 4096
+    max_spool_bytes: 1073741824
+    max_output_rows: 100000
+    framing: xml_records
+    xml:
+      namespace: http://www.gleif.org/data/schema/repex/2016
+      root: ReportingExceptionData
+      header: Header
+      container: ReportingExceptions
+      record: Exception
+      record_wrapper: null
+    header_read:
+      format: json
+      limits:
+        max_bytes: 1048576
+        max_records: 1
+      context:
+        source_index:
+          type: integer
+        publication_count:
+          type: integer
+      references:
+        content_dates: {}
+        file_content: {}
+        record_counts: {}
+        delta_starts: {}
+      assertions:
+      - test:
+          lookup:
+            reference: content_dates
+            column: valid
+            key:
+              date:
+                path: ContentDate.$
+            on_missing: "null"
+        reason: XML content date must match pinned publication metadata
+      - test:
+          lookup:
+            reference: file_content
+            column: valid
+            key:
+              text:
+                path: FileContent.$
+                trim: false
+            on_missing: "null"
+        reason: XML publication mode must match pinned metadata
+      - test:
+          lookup:
+            reference: record_counts
+            column: valid
+            key:
+              text:
+                path: RecordCount.$
+                trim: false
+            on_missing: "null"
+        reason: XML record count must match pinned publication metadata
+      - test:
+          equal:
+            left:
+              integer:
+                path: RecordCount.$
+            right:
+              context:
+                name: publication_count
+        reason: Header count must equal the input-bound publication count
+      - test:
+          choose:
+            condition:
+              lookup:
+                reference: file_content
+                column: requires_delta
+                key:
+                  text:
+                    path: FileContent.$
+                    trim: false
+                on_missing: "null"
+            then:
+              lookup:
+                reference: delta_starts
+                column: valid
+                key:
+                  date:
+                    path: DeltaStart.$
+                on_missing: "null"
+            else:
+              test:
+                path: DeltaStart.$
+                kind: missing
+        reason: XML predecessor time must match pinned metadata
+      tables:
+        header:
+          each: no_selected_header_records
+          columns: {}

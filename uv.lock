@@ -823,6 +823,7 @@ mdm = [
     { name = "openpyxl" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
+    { name = "source-contract" },
     { name = "splink" },
     { name = "sqladmin" },
     { name = "sqlalchemy" },
@@ -836,6 +837,7 @@ mdm-runtime = [
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "snowflake-connector-python" },
+    { name = "source-contract" },
     { name = "sqlalchemy" },
 ]
 s3 = [
@@ -888,6 +890,8 @@ requires-dist = [
     { name = "snowflake-connector-python", marker = "extra == 'mdm-runtime'", specifier = ">=3.7" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=3.7" },
     { name = "source-contract", marker = "extra == 'engine'", directory = "crates/source-contract" },
+    { name = "source-contract", marker = "extra == 'mdm'", directory = "crates/source-contract" },
+    { name = "source-contract", marker = "extra == 'mdm-runtime'", directory = "crates/source-contract" },
     { name = "spacy", specifier = ">=3.8.14" },
     { name = "splink", marker = "extra == 'mdm'", specifier = ">=3.9.0" },
     { name = "sqladmin", marker = "extra == 'mdm'", specifier = ">=0.16.0" },

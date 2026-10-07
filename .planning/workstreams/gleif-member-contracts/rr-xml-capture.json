@@ -1,0 +1,17 @@
+{
+  "url": "https://goldencopy.gleif.org/storage/golden-copy-files/2026/09/11/1275179/20260911-1600-gleif-goldencopy-rr-golden-copy.xml.zip",
+  "archive": "/private/tmp/codex-gleif-xml-20261006/20260911-1600-gleif-goldencopy-rr-golden-copy.xml.zip",
+  "bytes": 33077936,
+  "sha256": "3ee6745265d2a1bfe675419bd556b6dbe7222fc955a07ca5eb8c43684cd9e8a4",
+  "publisher": {
+    "type": "rr",
+    "format": "xml",
+    "record_count": 487721,
+    "size": 33077936,
+    "size_human_readable": "31.55 MB",
+    "delta_type": "GoldenCopy",
+    "url": "https://goldencopy.gleif.org/storage/golden-copy-files/2026/09/11/1275179/20260911-1600-gleif-goldencopy-rr-golden-copy.xml.zip",
+    "cdf_version": "RR_2.1"
+  },
+  "publish_date": "2026-09-11 16:00:00"
+}

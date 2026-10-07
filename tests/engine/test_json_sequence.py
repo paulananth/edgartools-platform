@@ -6,7 +6,7 @@ import math
 import pytest
 
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean.gleif_source import _BoundedReader, _json_records
+from scripts.qualification.legacy_gleif_json_oracle import _BoundedReader, _json_records
 from edgar_warehouse.rules.source_engine import SourceRejected, stream_json_array
 from scripts.qualification.audit_json_sequence import audit, audit_record_bounds, ordered
 

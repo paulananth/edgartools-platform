@@ -1,0 +1,16 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-repex-golden-copy.json.zip",
+    "sha256": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831"
+  },
+  "wrapper": "exceptions",
+  "receipt": {
+    "record_count": 6351397,
+    "expanded_bytes": 1554543947
+  },
+  "canonical_source_hash": "618f34c21b4364e844acdd6b2087ed83dbd2a2437568707f46511c312cb058cb",
+  "typed_order_differences": 0,
+  "expected_records": null,
+  "seconds": 453.9649858120829,
+  "scope": "complete authenticated cached JSON framing and independent decoder comparison; publisher count is proved only when separately supplied"
+}

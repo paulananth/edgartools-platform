@@ -85,8 +85,8 @@ jobs:
         run: uv run pytest tests/integration/ -v --tb=short
 
   # ── The configured source engine: Rust behind Python (mastering to-do 15) ──
-  # Only this job builds the binding (the `engine` extra), so the others do
-  # not compile Rust. The runner image ships cargo.
+  # MDM extras also build the binding because archive consumers now use the
+  # configured reader. This job exercises its dedicated acceptance suite.
   engine:
     name: Engine (Rust behind Python)
     runs-on: ubuntu-latest

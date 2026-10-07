@@ -1,8 +1,8 @@
 # One self-sustaining data skill
 
 Type: task (code and skill), several PRs
-Status: in progress (Codex takeover, PRs #806 and #807; `.planning/workstreams/data-skill-completion/TICKET.md`)
-Blocked by: none; basic installed parse/master G3 is verified, complete corpus equivalence still needs Company/Person/GLEIF read blocks (20 L3–L6)
+Status: in progress (Codex owns continuation, PRs #843 and #844; `.planning/workstreams/gleif-member-contracts/TICKET.md`; earlier completion history remains below)
+Blocked by: none; basic installed parse/master G3 is verified. Company/Person/GLEIF read blocks exist, but complete runtime retirement, corpus equivalence and whole installed population proof remain unfinished (20 L3–L8).
 Absorbs: 20 L3–L8 (Codex's list: SEC Company and GLEIF on the engine), 16, 17
 
 ## Request
@@ -59,6 +59,37 @@ Answers, 2026-10-03:
   - **Standards, fixed:** `skill install` stopped half-way on a refusal and could overwrite a changed copy (now checks all targets first, and keeps a digest of what it installed); the rules fallback could pick a stray `site-packages/rules` and let `mapdoc write`, `unload` and `approve --rule` write into the installed package (now the bundled copy wins and refuses writes, naming `EDGAR_RULES_ROOT`); `doctor` crashed on a malformed address and had no timeout; a pipe ends a command; one doc pointed at a deleted script.
   - **Spec, fixed:** `doctor` now checks written choices (`workers work|verify`), nested flags, checkout-only spellings and every relative link; G2 saves through the bundle; the parse run reads the copied rules folder; the installed console script itself runs `doctor`.
   - **Noted, not done:** `doctor` reads argparse internals (`_actions`); `NOT_BUILT` lists the two unbuilt rules commands in code.
-- [ ] Bundle PR: CI green; merge on the operator's word
+- [x] Bundle continuation PRs #806 and #807: live GitHub confirms all five suites and aggregate gate passed and both merged as 56dce424 / 2ea1a980 on 2026-10-03 17:27 ET; reverified 2026-10-06 21:40 ET. This closes those PRs, not the remaining source/full-population gates.
 - [ ] Three-axis `/code-review` for each later PR; CI green; merge on the operator's word
 - [ ] Memory `project_rules_skill.md` updated
+
+## Current Codex continuation (2026-10-07)
+
+The ownership answer above records the earlier handoff. The operator subsequently
+directed Codex to continue; no Claude handoff is active.
+
+- Merged #842 replaces production GLEIF JSON parsing. #843 on
+  `codex/gleif-xml-runtime-retirement-20261007` replaces XML record parsing and
+  preserves independent header/record bounds. Full CI 37608031153 passed:
+  565 unit, 258 architecture, 571 MDM, 279 integration plus one expected failure,
+  495 engine and 117 native tests; no prerequisite skips. The committed f380eacd
+  installed bundle's restricted PG16 refusal/recovery trial passed in 172.98s.
+  Complete replacement-runtime JSON/XML corpus scans are still running; no
+  success is claimed for unfinished members.
+- #844 on `codex/company-configured-preparation-20261007` bundles Company
+  main/page/catalog/address composition. Raw-fixture tests include two distinct
+  pagination artifacts; installed composition on d49cb65e passed outside
+  checkout in 126.77s. This is preparation/composition evidence, not census,
+  complete provenance or full Company mastering. Its own full CI is pending.
+- The Person raw read block exists. The fixture field conversion was already
+  removed in merged #816 (cc5b1332), and the retained complete assertion/provenance
+  digest remains unchanged. Person still uses generic adapter normalization;
+  full captured-corpus and replacement mapping qualification remain pending.
+
+The detailed continuation checklists are
+`.planning/workstreams/gleif-member-contracts/TICKET.md` and
+`.planning/workstreams/company-configured-preparation/TICKET.md`.
+`company_source.py`, GLEIF semantic evidence/release handling and custom adapter
+mapping retain active consumers. These foundations do not close parent issue
+20 L3-L8. The installed 6,414 Company / 3,052 CIK+LEI population and unchanged
+replay/recovery proof remains unchecked.

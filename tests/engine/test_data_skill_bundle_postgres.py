@@ -41,6 +41,42 @@ WHEELS = {
 DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
 
 
+def test_name_key_recipes_run_from_installed_bundle(installed):
+    python, root = installed
+    result = _run(python, "-c", '''
+import hashlib, json
+from pathlib import Path
+from edgar_warehouse.rules import files, source_engine
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.workers import source_read
+assert files.ROOT == files.BUNDLED and files.ROOT.is_dir()
+source_engine.STEPS = {}
+store = Artifacts()
+root = Path("name-key-proof").resolve()
+root.mkdir()
+names = ["Électricité Holdings Corporation /DE/", "THE A&B L.L.C.", "Wayfair Inc.", "WAYFAIR LLC"]
+raw = store.put_bytes((root / "names.json").as_uri(), json.dumps({"names":[{"name":name} for name in names]}).encode())
+context = store.put(root.as_uri(), {"version":1,"input":raw,"values":{}})
+proof = {}
+for source, first in [("sec.submissions.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELECTRICITE HLDGS CORP DE")]:
+    config = files.load(files.ROOT / "sources" / source / "name-key.yaml")
+    contract = store.put(root.as_uri(), config)
+    manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
+    task = {"input":manifest,"output":(root / (source + ".json")).as_uri(),"checks":["source.output"]}
+    receipt = source_read.execute(task,store)
+    assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+    reading = store.json(receipt)
+    rows = reading["artifacts"][0]["tables"]["names"]
+    assert [row["key"] for row in rows] == [first,"A AND B LLC","WAYFAIR INC","WAYFAIR LLC"]
+    assert reading["artifacts"][0]["input"] == raw and reading["artifacts"][0]["context"] == context
+    assert not reading["artifacts"][0]["deferred"]
+    proof[source] = {"contract":contract,"input":manifest,"reading":receipt}
+print(json.dumps(proof))
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert set(json.loads(result.stdout)) == {"sec.submissions.company", "gleif"}
+
+
 @pytest.fixture(scope="module")
 def installed(tmp_path_factory):
     """The install command data-platform's Setup writes, word for word, from this commit."""
@@ -428,7 +464,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records"])
+@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records", "xml-streamed-recovery"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -442,6 +478,9 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
 
     custom_trial = trial_mode == "custom-step"
     combined_trial = trial_mode == "combined-records"
+    recovery_trial = trial_mode == "xml-streamed-recovery"
+    xml_trial = trial_mode in ("xml-streamed-records", "xml-streamed-recovery")
+    streamed_trial = trial_mode == "streamed-records" or xml_trial
     profiles = ("source.read", *(("source.combine",) if combined_trial else ()), "mdm.prepare", "mdm.merge")
     python, root = installed
     store = Artifacts()
@@ -480,7 +519,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
-    if trial_mode == "streamed-records":
+    if streamed_trial:
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "json", "limits": {"max_bytes": 4096, "max_records": 10}, "tables": {
                 "filers": {"each": ".", "columns": {"cik": {"text": {"path": "cik"}},
@@ -490,8 +529,34 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                        "min_integer": -9223372036854775808, "record_encoding": "python",
                        "ordinal_context": None, "partition_bytes": 4096, "partition_records": 1,
                        "max_partitions": 10, "max_spool_bytes": 65536, "max_output_rows": 10}}}
-        contract_bytes = json.dumps(spec).encode()
         filer_bytes = json.dumps({"records": [json.loads(line) for line in FILERS.splitlines()]}).encode()
+        if xml_trial:
+            from xml.sax.saxutils import escape
+            for column in spec["read"]["tables"]["filers"]["columns"].values():
+                column["text"]["path"] += ".$"
+            stream = spec["read"]["stream"]
+            for name in ("wrapper", "min_integer", "record_encoding"):
+                del stream[name]
+            stream.update(framing="xml_records", xml={"namespace": "urn:filers", "root": "Data",
+                "header": "Header", "container": "Records", "record": "Record", "record_wrapper": None},
+                header_read={"format": "json", "limits": {"max_bytes": 1024, "max_records": 1},
+                    "references": {"counts": {"2": {"valid": True}}},
+                    "assertions": [{"test": {"lookup": {"reference": "counts", "column": "valid",
+                        "key": {"text": {"path": "Count.$"}}, "on_missing": "null"}}, "reason": "pinned-count"}],
+                    "tables": {"header": {"each": "no_rows", "columns": {}}}})
+            rows = [json.loads(line) for line in FILERS.splitlines()]
+            records = "".join(f"<Record><cik>{escape(row['cik'])}</cik><name>{escape(row['name'])}</name></Record>" for row in rows)
+            filer_bytes = f"<Data xmlns='urn:filers'><Header><Count>2</Count></Header><Records>{records}</Records></Data>".encode()
+            if recovery_trial:
+                context = {"publication_count": {"type": "integer"}}
+                spec["read"]["context"] = context
+                stream["header_read"]["context"] = copy.deepcopy(context)
+                stream["expected_records_context"] = "publication_count"
+                stream["header_read"]["assertions"].append({"test": {"equal": {
+                    "left": {"integer": {"path": "Count.$"}},
+                    "right": {"context": {"name": "publication_count"}}}},
+                    "reason": "Header count must equal the input-bound publication count"})
+        contract_bytes = json.dumps(spec).encode()
     if trial_mode == "choice-records":
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "jsonl", "limits": {"max_bytes": 1048576, "max_records": 10}, "tables": {
@@ -622,6 +687,9 @@ read:
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
     read_manifest = {"version": 1, "contract": contract, "artifacts": [filers]}
+    if recovery_trial:
+        bound = store.put(tmp_path.as_uri(), {"version": 1, "input": filers, "values": {"publication_count": 2}})
+        read_manifest = {"version": 2, "contract": contract, "artifacts": [{"input": filers, "context": bound}]}
     if trial_mode == "artifact-context":
         entries = []
         for values in ({"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}):
@@ -680,12 +748,70 @@ read:
         assert done.returncode == 0, done.stderr
         return done.stdout
 
+    if recovery_trial:
+        # An immutable malformed capture remains a failed run; correcting an
+        # input creates a new run rather than changing its pinned manifest.
+        bad_raw = store.put_bytes((tmp_path / "bad-filers.xml").as_uri(),
+                                  filer_bytes.replace(b"<Count>2</Count>", b"<Count>3</Count>"))
+        bad_context = store.put(tmp_path.as_uri(), {"version": 1, "input": bad_raw,
+                                                  "values": {"publication_count": 2}})
+        bad_read = store.put(tmp_path.as_uri(), {**read_manifest,
+            "artifacts": [{"input": bad_raw, "context": bad_context}]})
+        bad_units_body = copy.deepcopy(unit_body)
+        bad_out = tmp_path / "refused"
+        bad_units_body["steps"]["read"][0].update(input=bad_read, output=(bad_out / "reading.json").as_uri())
+        bad_units_body["steps"]["prepare"][0]["output"] = (bad_out / "mdm/manifest.json").as_uri()
+        bad_units_body["steps"]["merge"][0]["output"] = (bad_out / "merged.json").as_uri()
+        bad_units = store.put(tmp_path.as_uri(), bad_units_body)
+        bad_run = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
+            "--input-manifest", bad_units["uri"], "--input-sha256", bad_units["sha256"]))["run"]["run_id"]
+        rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", bad_run,
+                        env={**env, **worker}, cwd=root)
+        assert rejected.returncode == 1 and "pinned-count" in rejected.stderr, rejected.stderr
+        for downstream in ("mdm.prepare", "mdm.merge"):
+            cli("workers", "work", downstream, bad_run, **worker)
+        assert not (bad_out / "reading.json").exists() and not (bad_out / "reading.json.parts").exists()
+        assert not (bad_out / "mdm/manifest.json").exists() and not (bad_out / "merged.json").exists()
+        failed_state = json.loads(cli("bookkeeping", "status", bad_run))
+        assert failed_state["counts"].get("verified", 0) == 0
+        with mdm_reader.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
+            assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == 0
+
     run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
+    if recovery_trial:
+        from urllib.parse import unquote, urlparse
+        from pathlib import Path
+        captured = Path(unquote(urlparse(filers["uri"]).path))
+        unavailable = tmp_path / "temporarily-unavailable.xml"
+        captured.rename(unavailable)
+        try:
+            rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", run_id,
+                            env={**env, **worker}, cwd=root)
+            assert rejected.returncode == 1 and "Artifact missing or unreadable" in rejected.stderr, rejected.stderr
+            assert filers["uri"] in rejected.stderr
+            assert not (out / "reading.json").exists() and not (out / "reading.json.parts").exists()
+            with mdm_reader.connect() as conn:
+                assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
+        finally:
+            unavailable.rename(captured)
     for profile in profiles:
-        cli("workers", "work", profile, run_id, **worker)
+        if recovery_trial and profile == "source.read":
+            deadline = time.monotonic() + 10
+            while True:
+                cli("workers", "work", profile, run_id, **worker)
+                if (out / "reading.json").exists(): break
+                if time.monotonic() >= deadline: pytest.fail("Source retry did not become claimable")
+                time.sleep(0.01)
+        else:
+            cli("workers", "work", profile, run_id, **worker)
         cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
-    if trial_mode == "streamed-records":
+    if recovery_trial:
+        recovered = json.loads(cli("bookkeeping", "status", run_id))
+        read_item = next(item for item in recovered["items"] if item["step"] == "read")
+        assert read_item["state"] == "verified" and read_item["attempts"] == 2
+    if streamed_trial:
         reading = json.loads((out / "reading.json").read_bytes())
         assert reading["version"] == 2
         assert len(reading["artifacts"][0]["partitions"]) == 2
@@ -766,3 +892,130 @@ read:
     mdm_app.dispose()
     mdm_reader.dispose()
     assert records == 2, names
+
+
+def test_all_gleif_member_contracts_read_from_installed_bundle(installed):
+    """Packaged templates must execute without checkout or fixture imports."""
+    python, root = installed
+    result = _run(python, '-c', '''
+import io, json, zipfile
+from pathlib import Path
+from xml.etree import ElementTree as ET
+from edgar_warehouse.rules import files
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.workers import source_read
+store = Artifacts()
+lei = "5493001KJTIIGC8Y1R12"
+date = "2026-09-11T16:00:00+00:00"
+for member in ["level1", "relationships", "reporting-exceptions"]:
+    for format in ["json", "xml"]:
+        folder = Path(member + "-" + format).resolve()
+        folder.mkdir()
+        rules = files.load(files.ROOT / "sources" / "gleif" / f"{member}-{format}.yaml")
+        rules["read"]["references"]["approved_scope"] = {lei:{"selected":True}}
+        row = {"LEI":{"$":lei}}
+        if member == "relationships":
+            row = {"RelationshipRecord":{"Relationship":{"StartNode":{"NodeID":{"$":lei}},
+                "EndNode":{"NodeID":{"$":lei}}}}}
+        if format == "json":
+            wrapper = {"level1":"records", "relationships":"relations", "reporting-exceptions":"exceptions"}[member]
+            body = json.dumps({wrapper:[row]}).encode()
+        else:
+            spec = rules["read"]["stream"]["xml"]
+            refs = rules["read"]["stream"]["header_read"]["references"]
+            refs.update(content_dates={date:{"valid":True}}, record_counts={"1":{"valid":True}},
+                file_content={"GLEIF_FULL_PUBLISHED":{"valid":True,"requires_delta":False}}, delta_starts={})
+            def element(parent, name): return ET.SubElement(parent, "{" + spec["namespace"] + "}" + name)
+            document = ET.Element("{" + spec["namespace"] + "}" + spec["root"])
+            header = element(document, spec["header"])
+            for name,text in [("ContentDate",date),("FileContent","GLEIF_FULL_PUBLISHED"),("RecordCount","1")]:
+                element(header,name).text = text
+            container = element(document,spec["container"])
+            def fields(parent, value):
+                for key,item in value.items():
+                    if key == "$": parent.text = item
+                    else: fields(element(parent,key),item)
+            fields(element(container,spec["record"]), row["RelationshipRecord"] if member == "relationships" else row)
+            body = ET.tostring(document,encoding="utf-8",xml_declaration=True)
+        zipped = io.BytesIO()
+        with zipfile.ZipFile(zipped,"w",compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("captured."+format,body)
+        raw = store.put_bytes((folder / "captured.zip").as_uri(),zipped.getvalue())
+        contract = store.put_bytes((folder / "contract.yaml").as_uri(),json.dumps(rules).encode())
+        context = store.put(folder.as_uri(),{"version":1,"input":raw,"values":{"publication_count":1}})
+        manifest = store.put(folder.as_uri(),{"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
+        task = {"input":manifest,"output":(folder / "reading.json").as_uri(),"checks":["source.output"]}
+        receipt = source_read.execute(task,store)
+        assert source_read.execute(task,store) == receipt
+        assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+        artifact = store.json(receipt)["artifacts"][0]
+        rows = [row for part in artifact["partitions"] for row in store.json(part["receipt"])["tables"][member.replace("-","_")]]
+        assert artifact["record_count"] == 1 and rows == [{"record":row,"source_index":1}]
+print("six installed GLEIF member contracts passed")
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'six installed GLEIF member contracts passed'
+
+
+def test_company_combination_blueprint_runs_from_installed_bundle(installed):
+    """Installed raw readings compose/prepare without retained Company loaders."""
+    python, root = installed
+    result = _run(python, '-c', '''
+import json
+from pathlib import Path
+from edgar_warehouse.rules import files
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
+store = Artifacts()
+folder = Path("company-composition").resolve()
+folder.mkdir()
+blueprints = files.ROOT / "sources/sec.submissions.company"
+date = "2026-10-04T00:00:00Z"
+context = {"cik":1,"sync_run_id":"capture","raw_object_id":"0"*64,"load_mode":"default"}
+def read(name, template, payload, context):
+    raw = store.put_bytes((folder / (name+".json")).as_uri(), json.dumps(payload).encode())
+    context = dict(context)
+    if "raw_object_id" in context: context["raw_object_id"] = raw["sha256"]
+    bound = store.put(folder.as_uri(),{"version":1,"input":raw,"values":context})
+    rules = store.put(folder.as_uri(), files.load(blueprints / template))
+    manifest = store.put(folder.as_uri(),{"version":2,"contract":rules,"artifacts":[{"input":raw,"context":bound}]})
+    task = {"input":manifest,"output":(folder / (name+"-reading.json")).as_uri(),"checks":["source.output"]}
+    receipt = source_read.execute(task,store)
+    assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+    return receipt
+main = read("main","source.yaml",{"name":"Example","filings":{"recent":{
+    "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
+    "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
+    {**context,"recent_limit":None,"last_synced_at":date})
+pages = read("pages","pagination.yaml",{"accessionNumber":["p1","p2"],"form":["20-F","10-K"]},context)
+catalog_context = {"sync_run_id":"catalog","last_synced_at":date,"source_name":"exchange"}
+exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"data":[[1,"B"],[1,"A"]]},catalog_context)
+tickers = read("catalog-tickers","catalog.yaml",{"0":{"cik_str":1,"ticker":"A"},"1":{"cik_str":1,"ticker":"C"}},
+    {**catalog_context,"source_name":"tickers"})
+refs = {"main":main,"pages":pages,"catalog_exchange":exchange,"catalog_tickers":tickers}
+rules = files.load(blueprints / "combine.yaml")
+for spec in [*rules["combine"]["groups"].values(),*rules["combine"]["tables"].values()]:
+    spec["checks"] = {key:{"APPROVED_COMPANY_CAPTURE_RUN":"capture","APPROVED_CATALOG_CAPTURE_RUN":"catalog"}[value]
+        for key,value in spec["checks"].items()}
+manifest = store.put(folder.as_uri(),{"version":1,"contract":store.put(folder.as_uri(),rules),"readings":refs})
+task = {"input":manifest,"output":(folder / "combined.json").as_uri(),"checks":["source.combined"]}
+combined = source_combine.execute(task,store)
+assert source_combine.execute(task,store) == combined
+assert source_combine.verify({**task,"candidate":combined},store) == ({"source.combined":True},[])
+artifact = store.json(combined)["artifacts"][0]
+assert store.json(artifact["input"])["readings"] == refs
+row = artifact["tables"]["company"][0]
+assert row["forms"] == ["10-K","20-F","8-K"]
+assert row["tickers"] == ["A","B","C"]
+assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
+prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
+    "keys":{"table":"company","dataset":"sec.submissions.company.v1","policy":"0"*64,
+        "consumer":"trial","batch_id":"composition","as_of":date}}
+prepared = mdm_prepare.execute(prepare,store)
+assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prepared":True},[])
+batch = store.json(prepared)["batches"][0]
+assert json.loads((folder / "mdm" / batch["input"]["path"]).read_bytes()) == row
+print("installed Company raw combination and preparation passed")
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'installed Company raw combination and preparation passed'

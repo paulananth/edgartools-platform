@@ -74,6 +74,51 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 - **Kinds:** pass the master kinds that already exist (from the operator, or
   `edgar-warehouse context <kind> --search "<words>"` on a few of the part's
   names) so a matching part is not proposed as new.
+- **Code sets:** before proposing a code list as new reference data, look for
+  it: `edgar-warehouse rdm list`, then
+  `edgar-warehouse context <code set> --search "<a label>"` on a few of its
+  values.
+
+## An id from a name: only when no id exists
+
+Ids and cross-reference ids always come first. Only for records that carry
+none, in either source, is an id made from the name. A fixed precision bar
+does not make a name safe: names one token apart are often different entities
+(a share class, a series number, a legal form). So learn from the data first:
+
+```
+uv run --with duckdb --with pyyaml python match_names.py \
+  --left <file> --left-key <col> --left-name <col> [--left-variants <col>] \
+  --right <file> --right-key <col> --right-name <col> [--right-variants <col>] \
+  [--same <left col>=<right col>] [--attribute <left col>=<right col> ...] [--personal] --out <folder>
+```
+
+- **Compare exactly:** token pairs that tell records with different keys apart.
+  The id keeps them.
+- **May fold:** variants seen on one entity (its other names, or a pair a
+  shared id proves) and never apart. `name_id@1` does not fold them; the
+  report counts how many records would pair one to one with them folded, as
+  evidence for a later format version. A rename is not a variant: check the
+  examples before proposing a fold.
+- **Name alone cannot decide:** pairs seen both ways. A supporting attribute
+  (one that agrees on proved pairs and separates near-homonyms) must decide;
+  without one the records stay apart.
+- **The id** (`name_id@1`): the name's tokens, every one kept, hashed. It is
+  the engine's cross-reference format of the same name, so it goes into the
+  MDM cross-reference table through the contract, with no code:
+  `cross_references: {name_id: <name path>}` and
+  `cross_reference_formats: {name_id: name_id@1}`. Like every cross-reference
+  it is lookup only: `mdm.cross_reference_lookup('name_id', <id>)` finds the
+  records of any source with that name; it never joins records.
+- The report shows how many records it would pair one to one across the two
+  sources, how many names are held twice (those pair nothing), and, on pairs a
+  shared id proves, where the name id agrees and where it contradicts.
+- Pass `--personal` when the names are people's, so examples keep their shape
+  only.
+
+Propose `name_id` only for a source whose records carry no id the other
+sources share. Bring the operator the pairings and contradictions; never
+present a name pairing where an id exists.
 
 ## How to work
 
@@ -98,6 +143,46 @@ uv run --with duckdb --with pyyaml python profile_data.py approve \
    relationships), and prefills its steps. The `quality` items and
    `invalid_rows.jsonl` go to the [data-quality](../data-quality/SKILL.md)
    skill.
+
+## Reference data: a draft code set in RDM
+
+A part classed reference data becomes a code set version in RDM
+(`docs/specs/rdm/spec.md`). Agents draft; only the operator approves.
+
+1. **Look first:** `edgar-warehouse rdm list`, then
+   `edgar-warehouse rdm describe <code set>` for what a code set means, where
+   its values live and how to compare them. A code set that already exists
+   gets a new version that names the current one in `supersedes`, never a
+   second code set.
+2. **Write the draft file** (JSON or YAML) from the approved findings:
+   `{code_set: {code_set, name, definition, authority, steward}, version,
+   created_by, evidence, supersedes, codes, labels, levels, crosswalk}`.
+   - `codes`: each code with its `label`. A reference hierarchy gives each
+     code one `parent_code`. An invalid row stays, with `status: invalid` and
+     its `invalid_reason`.
+   - `labels`: one `preferred` label per language, plus any `synonym`s.
+   - `levels`: the names stewards gave each depth.
+   - `crosswalk`: a code mapped to another code set, with `match_type`
+     `exact`, `close`, `broad` or `narrow`. A standard RDM does not hold
+     has `to_version: outside`.
+   - `usage`: where the codes' values live (`store` mdm, silver, source or
+     other; `object`; `field`) and how a value is compared (`exact` or
+     `upper_trimmed`). Take it from the findings' columns that hold the codes.
+   - `hints`: plain words for the next agent: `meaning`, `use_when`,
+     `avoid_when`, `example_question`. Write only what the evidence shows.
+   - `created_by`: the agent and this skill. `evidence`: the findings file.
+3. **Draft:** `edgar-warehouse rdm draft --file <draft file>`.
+4. **Ask for approval.** Show the operator the draft and
+   `edgar-warehouse rdm diff <code set> <current> <draft>`. Record their
+   approval only in their words:
+   `edgar-warehouse rdm approve <code set> <version> --by "<operator>" --words "<their exact words>"`.
+5. **Publish:** `edgar-warehouse rdm publish <code set> <version> --out <folder>`.
+   `pin.json` there holds `{code_set, version, sha256}`, which a consumer pins.
+
+A table kept as a map of code to fields drafts with
+`edgar-warehouse rdm import-reference <name> --label <field> --crosswalk <field>=<code set>@<version>:<match type>`.
+Every field must find a place (the label or a crosswalk), and the draft must
+rebuild the table exactly, or nothing is written.
 
 ## Reading the findings
 
