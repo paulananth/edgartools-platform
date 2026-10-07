@@ -344,38 +344,10 @@ def normalize(
         )
     relationships = []
     for spec in mapping.get("relationships", []):
-        relationship_type = spec.get("type")
-        if "type_field" in spec:
-            relationship_type = spec["type_values"].get(value(row, spec["type_field"]))
-            if not relationship_type:
-                raise UnsupportedRecord("unsupported_relationship_type")
-        try:
-            target = record_key(row, spec["target_key"])
-            # A link may start at another record (a GLEIF relationship record
-            # starts at its child's Level 1 record), as it ends at one.
-            start = (
-                {"source_subject": subject_key(spec["source_source"], record_key(row, spec["source_key"]))}
-                if spec.get("source_key")
-                else {}
-            )
-        except ValueError:
-            continue
-        relationships.append(
-            {
-                **start,
-                "type": relationship_type,
-                "target_subject": subject_key(spec["target_source"], target),
-                "scope": spec.get("scope", ""),
-                "valid_from": value(row, spec["valid_from"]),
-                "valid_to": value(row, spec["valid_to"])
-                if spec.get("valid_to")
-                else None,
-                "properties": {
-                    name: value(row, path)
-                    for name, path in spec.get("properties", {}).items()
-                },
-            }
-        )
+        for scope in _scopes(row, spec):
+            link = _link(scope, spec)
+            if link:
+                relationships.append(link)
     provenance = {
         "artifact_sha256": publication["artifact_sha256"],
         "member": publication["member"],
@@ -424,3 +396,83 @@ def normalize(
         mapping_version=mapping_version,
         provenance=provenance,
     )
+
+
+def _as_list(node) -> list:
+    """A source list as a list: a lone item is a list of one, nothing is none."""
+    if node is None:
+        return []
+    return node if isinstance(node, list) else [node]
+
+
+def _reached(node, parts: list[str]):
+    """Every value a path reaches, stepping into each element of a list."""
+    if isinstance(node, list):
+        for element in node:
+            yield from _reached(element, parts)
+    elif not parts:
+        yield node
+    elif isinstance(node, dict):
+        yield from _reached(node.get(parts[0]), parts[1:])
+
+
+def _scopes(row: dict, spec: dict):
+    """What one relationship mapping's paths read (profiling ticket 04c).
+
+    With `each`, one scope per item of that list, the item under `item.`; with
+    none, the record alone. Each `find` adds, under its name, the first item of
+    another list whose `where` paths all match: a constant, or `{path: ...}`
+    read from the scope. A `where` path through a nested list matches when any
+    element does. No match leaves the name empty, so its paths read nothing.
+    """
+    names = ({"item"} if "each" in spec else set()) | set(spec.get("find", {}))
+    if names & set(row):
+        raise Conflict(f"A relationship mapping's names {sorted(names & set(row))} hide the record's own fields")
+    for item in _as_list(value(row, spec["each"])) if "each" in spec else [None]:
+        scope = {**row, "item": item} if "each" in spec else dict(row)
+        for name, look in spec.get("find", {}).items():
+            wanted = {
+                path: value(scope, want["path"]) if isinstance(want, dict) else want
+                for path, want in look["where"].items()
+            }
+            scope[name] = next(
+                (
+                    candidate
+                    for candidate in _as_list(value(scope, look["in"]))
+                    if all(
+                        want is not None and want in _reached(candidate, path.split("."))
+                        for path, want in wanted.items()
+                    )
+                ),
+                None,
+            )
+        yield scope
+
+
+def _link(scope: dict, spec: dict) -> dict | None:
+    """One link a mapping states, read from its scope; none without its ends."""
+    relationship_type = spec.get("type")
+    if "type_field" in spec:
+        relationship_type = spec["type_values"].get(value(scope, spec["type_field"]))
+        if not relationship_type:
+            raise UnsupportedRecord("unsupported_relationship_type")
+    try:
+        target = record_key(scope, spec["target_key"])
+        # A link may start at another record (a GLEIF relationship record
+        # starts at its child's Level 1 record), as it ends at one.
+        start = (
+            {"source_subject": subject_key(spec["source_source"], record_key(scope, spec["source_key"]))}
+            if spec.get("source_key")
+            else {}
+        )
+    except ValueError:
+        return None
+    return {
+        **start,
+        "type": relationship_type,
+        "target_subject": subject_key(spec["target_source"], target),
+        "scope": spec.get("scope", ""),
+        "valid_from": value(scope, spec["valid_from"]),
+        "valid_to": value(scope, spec["valid_to"]) if spec.get("valid_to") else None,
+        "properties": {name: value(scope, path) for name, path in spec.get("properties", {}).items()},
+    }

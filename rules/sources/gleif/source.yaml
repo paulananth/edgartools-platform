@@ -106,6 +106,27 @@ mdm:
               region: Entity.HeadquartersAddress.Region.$
               postcode: Entity.HeadquartersAddress.PostalCode.$
               country: Entity.HeadquartersAddress.Country.$
+        relationships:
+        # GLEIF's SuccessorEntity (profiling ticket 04c): one link per
+        # successor LEI (a demerger lists several; a successor named only, with
+        # no LEI, makes none), dated by the completed event that names it.
+        # Without one, MDM starts the link when it was first seen.
+        - type: SUCCESSOR_ENTITY
+          each: Entity.SuccessorEntity
+          target_key:
+          - item.SuccessorLEI.$
+          target_source: gleif.level1.v1
+          find:
+            event:
+              in: Entity.LegalEntityEvents.LegalEntityEvent
+              where:
+                '@event_status': COMPLETED
+                AffectedFields.AffectedField.$: {path: item.SuccessorLEI.$}
+          valid_from: event.LegalEntityEventEffectiveDate.$
+          scope: GLEIF corporate action
+          properties:
+            source_event_type: event.LegalEntityEventType.$
+            source_event_status: event.@event_status
   gleif.relationships.v1:
     contract:
       provider: GLEIF

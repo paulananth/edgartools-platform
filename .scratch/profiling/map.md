@@ -23,7 +23,8 @@ Any data set can be profiled, classified into master, reference, relationship, t
 | 02 | [RDM database, publish, MDM pin, migrate reference YAML](issues/02-rdm-database.md) | B | 01a, Codex retirement merged | open |
 | 03 | [MDM cross-reference table](issues/03-mdm-cross-reference-table.md) | A | 01a | done (#835) |
 | 04 | [Relationship context view and onboarding](issues/04-relationship-context-view-and-onboarding.md) | A | 01a | done (#836) |
-| 04b | [Relationship types: real names; parents with a basis; corporate actions](issues/04b-parent-relationship-types.md) | A | 04 | open: ruled 2026-10-07 |
+| 04b | [Relationship types: real names; parents with a basis; corporate actions](issues/04b-parent-relationship-types.md) | A | 04 | done: #850, #851 (two questions open) |
+| 04c | [GLEIF's successor entity, read from its lists](issues/04c-gleif-successor-entity.md) | A | 04b | open: approved 2026-10-07 |
 | 05 | [Agent context views and command](issues/05-agent-context-views-and-command.md) | A (MDM) / B (RDM) | 03, 04 (02 for RDM) | MDM part done (#837); RDM and silver in phase B |
 | 06 | [Silver writer (rules-skill ticket 05)](issues/06-silver-writer.md) | B | 01a, Codex retirement merged | open |
 | 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open |
