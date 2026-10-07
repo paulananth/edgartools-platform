@@ -1,8 +1,8 @@
 # One self-sustaining data skill
 
 Type: task (code and skill), several PRs
-Status: in progress (Codex takeover, PRs #806 and #807; `.planning/workstreams/data-skill-completion/TICKET.md`)
-Blocked by: none; basic installed parse/master G3 is verified, complete corpus equivalence still needs Company/Person/GLEIF read blocks (20 L3–L6)
+Status: in progress (Codex owns continuation, PR #842; `.planning/workstreams/gleif-member-contracts/TICKET.md`; earlier completion history remains below)
+Blocked by: none; basic installed parse/master G3 is verified. Company/Person/GLEIF read blocks exist, but complete runtime retirement, corpus equivalence and whole installed population proof remain unfinished (20 L3–L8).
 Absorbs: 20 L3–L8 (Codex's list: SEC Company and GLEIF on the engine), 16, 17
 
 ## Request
@@ -59,6 +59,22 @@ Answers, 2026-10-03:
   - **Standards, fixed:** `skill install` stopped half-way on a refusal and could overwrite a changed copy (now checks all targets first, and keeps a digest of what it installed); the rules fallback could pick a stray `site-packages/rules` and let `mapdoc write`, `unload` and `approve --rule` write into the installed package (now the bundled copy wins and refuses writes, naming `EDGAR_RULES_ROOT`); `doctor` crashed on a malformed address and had no timeout; a pipe ends a command; one doc pointed at a deleted script.
   - **Spec, fixed:** `doctor` now checks written choices (`workers work|verify`), nested flags, checkout-only spellings and every relative link; G2 saves through the bundle; the parse run reads the copied rules folder; the installed console script itself runs `doctor`.
   - **Noted, not done:** `doctor` reads argparse internals (`_actions`); `NOT_BUILT` lists the two unbuilt rules commands in code.
-- [ ] Bundle PR: CI green; merge on the operator's word
+- [x] Bundle continuation PRs #806 and #807: live GitHub confirms all five suites and aggregate gate passed and both merged as 56dce424 / 2ea1a980 on 2026-10-03 17:27 ET; reverified 2026-10-06 21:40 ET. This closes those PRs, not the remaining source/full-population gates.
 - [ ] Three-axis `/code-review` for each later PR; CI green; merge on the operator's word
 - [ ] Memory `project_rules_skill.md` updated
+
+## Current Codex continuation (2026-10-06)
+
+The ownership answer above records the earlier handoff. The operator subsequently
+directed Codex to continue; current implementation is on
+`codex/gleif-runtime-retirement-20261006`, PR #842. No Claude handoff is active.
+Merged #833/#834/#841 provide native framed/configured reading, all six GLEIF
+member templates, full JSON framing parity and installed XML refusal/recovery.
+Company catalog, address and pagination contracts also exist. These foundations
+do not close Company/Person/GLEIF retirement checklist items: `company_source.py`,
+GLEIF XML/semantic handling, Person fixture conversion and custom adapter mapping
+still have active consumers. PR #842 replaces production GLEIF JSON parsing;
+its whole-corpus runtime requalification and replacement-head CI remain separate
+proofs. The authoritative detailed checklist is
+`.planning/workstreams/gleif-member-contracts/TICKET.md`. The installed
+6,414 Company / 3,052 CIK+LEI / unchanged-replay proof is still unchecked.

@@ -1,0 +1,61 @@
+{
+  "archive": {
+    "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-rr-golden-copy.json.zip",
+    "sha256": "089a2513d2b5d78fc6359c87ef4bc25a56ac7f58d6b3cb740b954e3ecd2bd0c3"
+  },
+  "member": "relationships",
+  "publisher_metadata": {
+    "path": ".planning/workstreams/gleif-member-contracts/rr-publisher-metadata.json",
+    "sha256": "b821b84b4db2a43f4c2487f1abd967a0934eee4e0b1063ce0546df8b092eac58"
+  },
+  "independent_full_parity_report": {
+    "path": ".planning/workstreams/gleif-member-contracts/full-relationships-json-parity.json",
+    "sha256": "2310dd360dcc7cb23fde549ff057ae312003e7a3175092620d43988770145c79"
+  },
+  "runtime_implementation": [
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/gleif_source.py",
+      "sha256": "0d11cc07dfd9a9d81f4dc26e8c143469e385ad4c6598b644dcafeb42c976c3ca"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/source_engine.py",
+      "sha256": "933c64a450cac96362c8e8f6fa36834e6bd4c9f3f9361524e519bd86bc257fa5"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/rules/steps.py",
+      "sha256": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810"
+    },
+    {
+      "path": "/private/tmp/codex-equality-site-20261006/source_contract/source_contract.abi3.so",
+      "sha256": "e62faebd7582ad3b019851bdcfb58092c839b679514e46a9acf143962cf88e49"
+    },
+    {
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/rules/sources/gleif/relationships-json.yaml",
+      "sha256": "3c73519d671caddeb0a467f83d61981a625c914ba93cfc4e22480c1996bdeebc"
+    },
+    {
+      "path": "/private/tmp/qualify-configured-gleif-runtime.py",
+      "sha256": "f53400edb895cdb546b9efe421b999a52558a18775db601f727200dda5a2baf5"
+    }
+  ],
+  "metadata": {
+    "format": "json.zip",
+    "cdf_version": "RR_2.1",
+    "content_date": "2026-09-11T16:00:00+00:00",
+    "file_content": "GLEIF_FULL_PUBLISHED",
+    "delta_start": null,
+    "record_count": 487721
+  },
+  "receipt": {
+    "adapter_version": "gleif-native-record-v1",
+    "raw_evidence_hash": "089a2513d2b5d78fc6359c87ef4bc25a56ac7f58d6b3cb740b954e3ecd2bd0c3",
+    "canonical_source_hash": "95eb10725919f8d6fe4d426ccc9154881dc8ff51ad1bf4dcbfa5f952d72e75bc",
+    "record_count": 487721,
+    "domain_content_hash": "270e5188f9f0a10ae7e5f3cd4ae58fc13cc5b04833e5d5d6bbd014d68b17f5f4",
+    "compressed_bytes": 34953042,
+    "expanded_bytes": 1120235207
+  },
+  "callback_count": 487721,
+  "seconds": 158.97045555501245,
+  "scope": "complete configured JSON runtime attestation matches independent full corpus canonical evidence; actual native extension hashed before/after; not installed mastering qualification"
+}

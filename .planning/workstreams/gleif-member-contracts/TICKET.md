@@ -44,3 +44,6 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 - [x] Require native binding in MDM extras and update lockfile; dependency image sync excludes the crate and keeps prebuilt-wheel installation; isolated actual manifest/lock/README context without crates passed exact dependency-sync dry run (2026-10-06 21:36 ET). This is dependency-plan proof, not a complete Docker image build.
 - [ ] Verify complete configured JSON runtime reports against all three independent authenticated full-corpus hashes, with actual native-extension and source files pinned before/after; initial trial stopped deliberately after review found an exception-identity gap, no completion receipt claimed.
 - [ ] Independent final runtime review, commit/push and full CI on the replacement head.
+
+- [x] Qualify complete configured relationships JSON runtime: 487,721 records, 1,120,235,207 expanded bytes and canonical hash equal to independent full corpus proof; 158.97s, exact callback ordinals, raw/publisher count/size/CRC/EOF and actual native-extension/runtime hashes unchanged before/after; stored full report (2026-10-06 21:40 ET).
+- [x] Reconcile issue 21 and initial completion audit with live merged #806/#807 checks and current read contracts; preserve unfinished retirement and 6,414/3,052 installed-population gates (2026-10-06 21:40 ET).
