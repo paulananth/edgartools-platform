@@ -48,8 +48,8 @@ relationships:
     who decides: an adviser's discretion is on INVESTMENT_ADVISER_TO.
   EMPLOYED_BY: The person works for the company as a director, an officer (with the title) or an employee.
   HOLDS: >-
-    The entity holds the security, on the basis filed: investment discretion (a 13F manager, with its
-    investment discretion and voting authority) or beneficial ownership.
+    The entity holds the security, as filed: a 13F manager's holding carries its investment discretion
+    and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
   ISSUED_BY: The security is issued by this entity.
   INVESTMENT_ADVISER_TO: >-
     The adviser is the fund's investment adviser, with discretion: discretionary (the adviser decides)

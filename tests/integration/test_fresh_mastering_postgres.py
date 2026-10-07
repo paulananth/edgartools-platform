@@ -74,7 +74,7 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
         assert direct[0]["target_id"] == bindings[microsoft["subject"]]
         assert direct[0]["type"] == "IS_DIRECTLY_CONSOLIDATED_BY"
         assert sorted(e["type"] for e in edges) == ["IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"]
-        assert [e["basis"] for e in edges if e.get("derived")] == ["calculated"]
+        assert [e["type"] for e in edges if e.get("derived")] == ["IS_ULTIMATELY_CONSOLIDATED_BY"]
         assert {(e["source_id"], e["target_id"]) for e in edges} == {
             (bindings[apple["subject"]], bindings[microsoft["subject"]])}
     reader = ContractReader(database.application)

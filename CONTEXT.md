@@ -123,7 +123,7 @@ An organization accepted as that kind from its source category, distinct from a 
 _Avoid_: Company, Government Entity, a new identity for every registry category
 
 **Holdings**:
-The relationship (HOLDS) from a Person, a Company, or a Fund Series to a Security it holds, for one reported period, on the basis filed: investment discretion (the 13F manager, with its investment discretion and voting authority) or beneficial ownership.
+The relationship (HOLDS) from a Person, a Company, or a Fund Series to a Security it holds, for one reported period, as filed: a 13F manager's holding carries its investment discretion and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
 _Avoid_: ISSUED_BY, INVESTMENT_ADVISER_TO, employment, beneficial ownership inferred from a 13F alone
 
 **AUDITED_BY**:

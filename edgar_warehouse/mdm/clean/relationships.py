@@ -412,13 +412,13 @@ def _ultimate_parents(grouped: dict, invalid: set, types: dict, as_of: str) -> l
                 continue
             derived = {
                 # Written as the type the policy names, beside the stated
-                # links of that type (profiling ticket 04b: basis calculated).
+                # links of that type; `derived` is its basis, calculated
+                # (profiling ticket 04b), so older policies' ids stay as they were.
                 "type": types[kind].get("ultimate_type", CALCULATED_V0),
                 "source_id": source,
                 "target_id": node,
                 "scope": scope,
                 "derived": True,
-                "basis": "calculated",
                 "algorithm": "accounting-chain-v1",
                 "as_of": as_of,
                 "path": path,

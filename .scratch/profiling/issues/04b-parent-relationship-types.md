@@ -70,7 +70,7 @@ MIC file is held locally) and Form ADV as published (no ADV file is held).
 |---|---|
 | `EMPLOYED_BY` | Kept, for director, officer (with title) and employee. The ten percent owner leaves it for `BENEFICIAL_OWNER_OF` ("I like employed_by and something devoting ownership") |
 | `CONTROLS` | Removed. An adviser's link to what it manages carries discretion, discretionary or non-discretionary (Form ADV Item 5.F), and a 13F holding the manager's investment discretion and voting authority as filed: who decides. Who owns is a separate link (`BENEFICIAL_OWNER_OF`, `HOLDS`). ("Is discretionary vs non-discretionary is how who owns", then "Yes, as shown") |
-| `HOLDS` | Kept (SEC's word for both reports); each link says its basis: `investment_discretion` (13F) or `beneficial_ownership` (Forms 3/4/5) |
+| `HOLDS` | Kept (SEC's word for both reports); each link says what it reports: a 13F holding its investment discretion and voting authority, a Forms 3/4/5 holding its direct or indirect ownership (`directOrIndirectOwnership`), the filings' own fields. (Review, 2026-10-07: not a key named `basis`, which already means stated or calculated, and observed or stated for a date.) |
 | `OWNERSHIP_PARENT` | Split: `IS_SUBSIDIARY_OF` (Exhibit 21: subsidiary → registrant) and `BENEFICIAL_OWNER_OF` (Schedules 13D/13G and Forms 3/4/5: beneficial owner → issuer, with the percent) |
 | `MANAGES_FUND` | Removed. Two roles, two names ("if it is a fund use fund manager, if adviser use investment adviser"): `IS_FUND-MANAGED_BY` (GLEIF's name, fund → its fund manager, for any source) and `INVESTMENT_ADVISER_TO` (Form ADV and N-CEN's role: adviser → fund, with discretion) |
 | `AUDITED_BY` | Kept |
@@ -119,4 +119,6 @@ on a date. The parent model follows them:
 - [ ] (PR B) The calculated ultimate parent has periods: recomputed at every change in its chain, so `--as-of` answers any date
 - [ ] GLEIF's `SuccessorEntity`, event type and effective date mapped to `SUCCESSOR_ENTITY` (Codex's path: handoff, or the operator's word)
 - [ ] ~~Corporate action events in silver~~ deferred to [06](06-silver-writer.md): they are transaction data, written by the silver writer; a parent period cites its event once they exist (added 2026-10-07 08:38 ET)
-- [ ] Review (Standards, Spec, GoF), PR, CI, merge on word
+- [x] PR A review (Standards, Spec, GoF): every name matches its approval, none invented; GoF no refactor; fixed: basis read only from `derived` (older policies' ids unchanged), HOLDS carries the filings' own fields instead of a second meaning of `basis`, the insider view says a ten percent owner may be an entity (12 PG16 and 29 unit tests pass) 2026-10-07 11:34 ET
+- [ ] PR A: push, PR (digest explained), CI, merge on word
+- [ ] PR B: review, PR, CI, merge on word
