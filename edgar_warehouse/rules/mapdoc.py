@@ -236,7 +236,9 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
                 fields.append([code, f"relationship {kinds}", "each", _text(relationship["each"]),
                                "One link per item (item.)", f"{at}.adapter.relationships"])
             for name, look in (relationship.get("find") or {}).items():  # the matching item of another list
-                where = "; ".join(f"{path} = {_text(want.get('path') if isinstance(want, dict) else want)}"
+                # A value read from the record is marked apart from a fixed one.
+                where = "; ".join(f"{path} = " + (f"the value at {_text(want.get('path'))}" if isinstance(want, dict)
+                                                  else _text(want))
                                   for path, want in (look.get("where") or {}).items())
                 fields.append([code, f"relationship {kinds}", name, _text(look.get("in")),
                                f"The first item where {where} ({name}.)", f"{at}.adapter.relationships"])

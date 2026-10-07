@@ -416,32 +416,44 @@ def _reached(node, parts: list[str]):
         yield from _reached(node.get(parts[0]), parts[1:])
 
 
+class MappingError(Exception):
+    """A mapping that cannot run as written. Not a ValueError, so it stops the
+    run instead of setting records aside as source defects."""
+
+
 def _scopes(row: dict, spec: dict):
     """What one relationship mapping's paths read (profiling ticket 04c).
 
     With `each`, one scope per item of that list, the item under `item.`; with
     none, the record alone. Each `find` adds, under its name, the first item of
     another list whose `where` paths all match: a constant, or `{path: ...}`
-    read from the scope. A `where` path through a nested list matches when any
-    element does. No match leaves the name empty, so its paths read nothing.
+    read from the scope; a list of constants matches any of them. A `where`
+    path through a nested list matches when any element does. No match leaves
+    the name empty, so its paths read nothing.
     """
     names = ({"item"} if "each" in spec else set()) | set(spec.get("find", {}))
     if names & set(row):
-        raise Conflict(f"A relationship mapping's names {sorted(names & set(row))} hide the record's own fields")
+        raise MappingError(f"A relationship mapping's names {sorted(names & set(row))} hide the record's own fields")
+    for name, lookup in spec.get("find", {}).items():
+        if not isinstance(lookup, dict) or not lookup.get("in") or not lookup.get("where"):
+            raise MappingError(f"A relationship mapping's find {name!r} names its list (in) and conditions (where)")
     for item in _as_list(value(row, spec["each"])) if "each" in spec else [None]:
         scope = {**row, "item": item} if "each" in spec else dict(row)
-        for name, look in spec.get("find", {}).items():
-            wanted = {
-                path: value(scope, want["path"]) if isinstance(want, dict) else want
-                for path, want in look["where"].items()
-            }
+        for name, lookup in spec.get("find", {}).items():
+            accepted = {}
+            for path, condition in lookup["where"].items():
+                if isinstance(condition, dict):
+                    condition = value(scope, condition["path"])
+                accepted[path] = set(condition) if isinstance(condition, list) else {condition} - {None}
             scope[name] = next(
                 (
                     candidate
-                    for candidate in _as_list(value(scope, look["in"]))
+                    for candidate in _as_list(value(scope, lookup["in"]))
                     if all(
-                        want is not None and want in _reached(candidate, path.split("."))
-                        for path, want in wanted.items()
+                        accepted[path].intersection(
+                            v for v in _reached(candidate, path.split(".")) if not isinstance(v, (dict, list))
+                        )
+                        for path in accepted
                     )
                 ),
                 None,

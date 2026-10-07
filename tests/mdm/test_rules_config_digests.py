@@ -176,10 +176,11 @@ WITH_LINK_START = {
 
 
 # Profiling ticket 04c: GLEIF Level 1 states its successor entities (one
-# SUCCESSOR_ENTITY link per successor LEI, dated by the completed event naming
-# it); without that relationship mapping the contract is the one above.
+# SUCCESSOR_ENTITY link per successor LEI, dated by the completed succession
+# event naming it, with the ceased entity's status); without that relationship
+# mapping the contract is the one above.
 WITH_SUCCESSOR = {
-    "level1": "c7655ed6d5e0f7bba51d12fe16c8946027ddf29209a4f6f59463ba99af2e887f",
+    "level1": "5cbf17245e2b327b4931a4be63ce674f665545cb28b540be3ef8a8dae92746c7",
 }
 
 

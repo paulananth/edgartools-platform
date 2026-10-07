@@ -38,6 +38,21 @@ Of 3,428,477 Level 1 records:
   item of another list (the completed event naming the successor, for a
   stated date and the event type). The operator: "Approved" (2026-10-07 13:07 ET).
 
+### After the review (operator, 2026-10-07, asked with the trial's counts)
+
+- "Succession types (Recommended)": only a completed `MERGERS_AND_ACQUISITIONS`,
+  `ABSORPTION`, `DEMERGER`, `BREAKUP`, `SPINOFF` or `ACQUISITION_BRANCH` event
+  dates a successor link. Other completed events naming the successor
+  (`CHANGE_LEGAL_FORM`, `DISSOLUTION`, `CHANGE_LEGAL_ADDRESS`, `LIQUIDATION`)
+  date nothing; the link stays (GLEIF states the successor), starting when
+  first seen.
+- "Link, first seen (Recommended)": a successor with no event at all (5,597,
+  all with entity status NULL) is still a link, starting when first seen
+  (basis observed); its parent links end on that first-seen date.
+- Decided without asking (minor): when several completed succession events
+  name one successor (17 links; 7 with different dates), the first in GLEIF's
+  order dates it.
+
 ## Checklist
 
 - [x] Scan the Golden Copy for the successor fields (evidence above) 2026-10-07 13:05 ET
@@ -45,7 +60,10 @@ Of 3,428,477 Level 1 records:
 - [x] Contract language: `each` (one link per list item, paths `item.`…) and `find` (the first item of another list whose fields match; a path through a nested list matches any element), in `adapters.normalize`; REFERENCE.md says it; the Mapping Document lists the paths (catalog already says a source carries relationships) (tests/mdm/test_clean_relationship_lists.py; a mapping without them keeps its assertion id, test_clean_link_start) 2026-10-07 13:21 ET
 - [x] `rules/sources/gleif/source.yaml`, `gleif.level1.v1`: `SUCCESSOR_ENTITY` per successor LEI, `valid_from` the completed event's effective date, `source_event_type`, `source_event_status` (tests/mdm/test_clean_gleif_source.py) 2026-10-07 13:21 ET
 - [x] Test on captured records: every one of the 51,913 Golden Copy records naming a successor, through the real GLEIF reader (`.scratch/profiling/trials/gleif-successor/RESULT.json`, 374 s): 43,520 read, 8,393 wait as other kinds (8,318 funds, branches and other categories; 75 invalid LEI checksums); 27,667 links, exactly one per successor LEI on every record read; 22,070 dated by a completed event (MERGERS_AND_ACQUISITIONS 19,247, ABSORPTION 2,214, DEMERGER 275, CHANGE_LEGAL_FORM 150, BREAKUP 89, DISSOLUTION 75, others 20), 5,597 with no completed event naming the successor (start when first seen); successors named only make none 2026-10-07 13:21 ET
-- [ ] The GLEIF Level 1 contract digest c7655ed6… (peel back to 74b8b1f4…), for the operator's approval
+- [x] The operator's two rulings applied (above): `where` takes a list of values (any of them); GLEIF's `find` names the succession types; trial rerun: 27,667 links, 21,834 dated (MERGERS_AND_ACQUISITIONS 19,247, ABSORPTION 2,215, DEMERGER 275, BREAKUP 89, SPINOFF 6, ACQUISITION_BRANCH 2), 5,833 start when first seen (5,597 with no event; 236 with only other completed events), every date parses with MDM's own reader, 0 failures (RESULT.json) 2026-10-07 13:56 ET
+- [x] Review fixes: a mapping that cannot run (a `find` without `in`/`where`, a name hiding a record field) raises `MappingError`, not a ValueError, so it stops the run instead of setting records aside; the ceased entity's status is carried (`source_entity_status`, as 04b says "with its entity status"); the Mapping Document marks a value read from the record apart from a fixed one (tests/mdm/test_clean_relationship_lists.py) 2026-10-07 13:56 ET
+- [ ] The GLEIF Level 1 contract digest 5cbf1724… (peel back to 74b8b1f4…), for the operator's approval
 - [x] Mapping Document regenerated (`rules mapdoc write --only gleif`), `rules mapdoc check` passes 2026-10-07 13:21 ET
 - [x] PG16: a successor link ends the ceased entity's parent link through the full path, and its calculated ultimate parent, on the event date, citing the succession (tests/integration/test_fresh_mastering_postgres.py; 1,222 unit and MDM tests and the GLEIF integration tests pass; the bundle tests need cargo, run by CI) 2026-10-07 13:21 ET
-- [ ] Review (Standards, Spec, GoF), PR, CI, merge on word
+- [x] Review (Standards, Spec, GoF): GoF leave it (it follows the consult); Standards and Spec findings fixed or put to the operator (above) 2026-10-07 13:56 ET
+- [ ] PR, CI, merge on word

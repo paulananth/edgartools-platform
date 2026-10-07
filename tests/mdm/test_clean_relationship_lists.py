@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from edgar_warehouse.mdm.clean.adapters import normalize, subject_key
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.clean.adapters import MappingError, normalize, subject_key
 
 PUBLICATION = {"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "m"}
 LINK = {
@@ -58,6 +57,19 @@ def test_find_without_each_reads_the_record_itself():
     assert found["valid_from"] == "2"
 
 
-def test_a_name_that_would_hide_a_field_of_the_record_is_refused():
-    with pytest.raises(Conflict, match="hide the record's own fields"):
+def test_a_list_of_values_matches_any_of_them():
+    link = {**LINK, "find": {"event": {"in": "events", "where": {
+        "kind": ["MERGER", "SPLIT"], "touched.id": {"path": "item.id"}}}}}
+    links = read({"successors": [{"id": "A"}, {"id": "B"}], "events": [
+        {"kind": "RENAME", "date": "1", "touched": [{"id": "A"}]},
+        {"kind": "SPLIT", "date": "2", "touched": [{"id": "A"}]}]}, link)
+    assert [found["valid_from"] for found in links] == ["2", None]
+
+
+def test_a_mapping_that_cannot_run_stops_the_run_and_is_no_source_defect():
+    # Not a ValueError: a reader that sets aside source defects does not catch it.
+    assert not issubclass(MappingError, ValueError)
+    with pytest.raises(MappingError, match="hide the record's own fields"):
         read({"item": "a field of the record", "successors": [{"id": "A"}]})
+    with pytest.raises(MappingError, match="names its list"):
+        read({"successors": [{"id": "A"}]}, {**LINK, "find": {"event": {"in": "events"}}})

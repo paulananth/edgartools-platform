@@ -17,11 +17,13 @@ from pathlib import Path
 
 import ijson
 
+from edgar_warehouse.mdm.clean.evidence import instant
 from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
 
 contract = dataset_contract("level1")
 publication = {"publication_key": "gleif-20260911-1600", "revision": 1, "artifact_sha256": "0" * 64, "member": "level1"}
 counts, kinds, examples = collections.Counter(), collections.Counter(), []
+without_event, bad_dates = collections.Counter(), []
 started = time.time()
 archive = zipfile.ZipFile(sys.argv[1])
 with archive.open(archive.namelist()[0]) as f:
@@ -42,10 +44,31 @@ with archive.open(archive.namelist()[0]) as f:
             continue
         links = evidence["relationships"]
         counts["links"] += len(links)
-        for link in links:
+        events = (record["Entity"].get("LegalEntityEvents") or {}).get("LegalEntityEvent") or []
+        events = events if isinstance(events, list) else [events]
+        leis = [s["SuccessorLEI"]["$"] for s in successors if (s.get("SuccessorLEI") or {}).get("$")]
+        for link, lei in zip(links, leis):
+            def affected(event):
+                fields = (event.get("AffectedFields") or {}).get("AffectedField") or []
+                return {f.get("$") for f in (fields if isinstance(fields, list) else [fields]) if isinstance(f, dict)}
+            naming = [e for e in events if lei in affected(e)]
+            completed = [e for e in naming if e.get("@event_status") == "COMPLETED"]
+            if len(completed) > 1:
+                counts["links_with_several_completed_events"] += 1
+                if len({(e.get("LegalEntityEventEffectiveDate") or {}).get("$") for e in completed}) > 1:
+                    counts["links_with_several_completed_events_on_different_dates"] += 1
             dated = link["valid_from"] is not None
             counts["links_dated" if dated else "links_first_seen"] += 1
             kinds[link["properties"]["source_event_type"] or "no completed event"] += 1
+            if dated:
+                try:
+                    instant(link["valid_from"])
+                except (ValueError, TypeError):
+                    bad_dates.append(link["valid_from"])
+            else:
+                other = sorted({f"{e.get('@event_status')} {(e.get('LegalEntityEventType') or {}).get('$')}"
+                                for e in naming}) or ["no event names it"]
+                without_event[f"entity {link['properties']['source_entity_status']}; " + ", ".join(other)] += 1
         if len(links) != with_lei:
             counts["records_links_differ_from_leis"] += 1
         shape = (len(successors) > 1, with_lei < len(successors), any(link["valid_from"] is None for link in links))
@@ -58,7 +81,11 @@ for e in examples:
     e["shows"] = [w for w, on in (("several successors", several), ("a successor named only", named_only),
                                   ("no completed event naming it", undated)) if on] or ["one dated successor"]
 result = {"source": "GLEIF Golden Copy 2026-09-11 16:00, Level 1 (local capture)", "counts": counts,
-          "links_by_event_type": dict(kinds.most_common()), "examples": examples,
+          "links_by_event_type": dict(kinds.most_common()),
+          "links_with_no_completed_event": dict(without_event.most_common()),
+          "dates_that_do_not_parse": bad_dates[:20], "dates_that_do_not_parse_count": len(bad_dates),
+          "examples": examples,
           "seconds": round(time.time() - started)}
 (Path(__file__).parent / "RESULT.json").write_text(json.dumps(result, indent=1, ensure_ascii=False) + "\n")
-print(json.dumps({"counts": counts, "links_by_event_type": dict(kinds.most_common())}, indent=1))
+print(json.dumps({k: result[k] for k in ("counts", "links_by_event_type", "links_with_no_completed_event",
+                                         "dates_that_do_not_parse_count")}, indent=1))

@@ -6,25 +6,35 @@
   "successors_named_only": 17913,
   "outcome_assertion": 43520,
   "links": 27667,
-  "links_first_seen": 5597,
+  "links_first_seen": 5833,
   "outcome_deferred": 8393,
-  "links_dated": 22070
+  "links_dated": 21834,
+  "links_with_several_completed_events": 17,
+  "links_with_several_completed_events_on_different_dates": 7
  },
  "links_by_event_type": {
   "MERGERS_AND_ACQUISITIONS": 19247,
   "deferred:unsupported_identity_kind": 8318,
-  "no completed event": 5597,
-  "ABSORPTION": 2214,
+  "no completed event": 5833,
+  "ABSORPTION": 2215,
   "DEMERGER": 275,
-  "CHANGE_LEGAL_FORM": 150,
   "BREAKUP": 89,
   "deferred:invalid_lei_checksum": 75,
-  "DISSOLUTION": 75,
-  "CHANGE_LEGAL_ADDRESS": 8,
   "SPINOFF": 6,
-  "LIQUIDATION": 4,
   "ACQUISITION_BRANCH": 2
  },
+ "links_with_no_completed_event": {
+  "entity NULL; no event names it": 5597,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_FORM": 147,
+  "entity INACTIVE; COMPLETED DISSOLUTION": 74,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS": 7,
+  "entity INACTIVE; COMPLETED LIQUIDATION": 4,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS, COMPLETED CHANGE_LEGAL_FORM": 2,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS, COMPLETED CHANGE_LEGAL_FORM, COMPLETED CHANGE_LEGAL_NAME": 1,
+  "entity INACTIVE; COMPLETED CHANGE_LEGAL_ADDRESS, COMPLETED DISSOLUTION": 1
+ },
+ "dates_that_do_not_parse": [],
+ "dates_that_do_not_parse_count": 0,
  "examples": [
   {
    "lei": "029200098C3K8BI2D551",
@@ -41,7 +51,8 @@
      "valid_from": null,
      "properties": {
       "source_event_type": null,
-      "source_event_status": null
+      "source_event_status": null,
+      "source_entity_status": "NULL"
      }
     }
    ],
@@ -64,7 +75,8 @@
      "valid_from": "2020-04-17T11:33:58Z",
      "properties": {
       "source_event_type": "MERGERS_AND_ACQUISITIONS",
-      "source_event_status": "COMPLETED"
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
      }
     }
    ],
@@ -107,7 +119,8 @@
      "valid_from": "2022-01-01T00:00:00+01:00",
      "properties": {
       "source_event_type": "MERGERS_AND_ACQUISITIONS",
-      "source_event_status": "COMPLETED"
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
      }
     }
    ],
@@ -136,7 +149,8 @@
      "valid_from": "2024-10-01T00:00:00.000Z",
      "properties": {
       "source_event_type": "MERGERS_AND_ACQUISITIONS",
-      "source_event_status": "COMPLETED"
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
      }
     },
     {
@@ -144,7 +158,8 @@
      "valid_from": "2024-10-01T00:00:00.000Z",
      "properties": {
       "source_event_type": "MERGERS_AND_ACQUISITIONS",
-      "source_event_status": "COMPLETED"
+      "source_event_status": "COMPLETED",
+      "source_entity_status": "INACTIVE"
      }
     }
    ],
@@ -153,16 +168,16 @@
    ]
   },
   {
-   "lei": "549300CBMOS9A9CKJ326",
+   "lei": "315700HLFN2Y3RYC3988",
    "successors": [
     {
      "SuccessorLEI": {
-      "$": "5493004Q7PHLGS83ND55"
+      "$": "315700OK5Z9OLC1M4H40"
      }
     },
     {
      "SuccessorLEI": {
-      "$": "5493004Q7PHLGS83ND55"
+      "$": "315700OK5Z9OLC1M4H40"
      }
     }
    ],
@@ -172,7 +187,8 @@
      "valid_from": null,
      "properties": {
       "source_event_type": null,
-      "source_event_status": null
+      "source_event_status": null,
+      "source_entity_status": "INACTIVE"
      }
     },
     {
@@ -180,7 +196,8 @@
      "valid_from": null,
      "properties": {
       "source_event_type": null,
-      "source_event_status": null
+      "source_event_status": null,
+      "source_entity_status": "INACTIVE"
      }
     }
    ],
@@ -190,5 +207,5 @@
    ]
   }
  ],
- "seconds": 374
+ "seconds": 342
 }
