@@ -24,7 +24,7 @@ check (data-quality), or approve anything.
 | Approve findings or a code set version, or write words the operator did not say | Ask one question, then wait |
 | Guess a class, a key, a link or a meaning | Leave it unknown and name the failing tests from the findings |
 | Add a kind, or treat a profile as a kind | A missing kind is an operator ruling |
-| Join records on a cross-reference, or merge on similar names | Identity comes only from the namespaces a kind's Identifier Contract declares |
+| Join records on a cross-reference, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
 | Write rules, contracts, quality files, or a code set version | Hand off; drafts in RDM go through data-profiling's RDM steps |
 | Request anything from a provider's live service | Use the captured files and this repo |
@@ -81,9 +81,11 @@ master file is reference data plus a master attribute that holds its codes.
 
 ### 3. Identity or cross-reference
 
-- **Identity:** only the namespaces the kind's Identifier Contract declares
-  (`rules/merge/kinds/<kind>.yaml`, `identifiers`). Two records with the same
-  identity value are one entity.
+- **Identity:** the namespaces the kind's Identifier Contract declares
+  (`rules/merge/kinds/<kind>.yaml`, `identifiers`): two records with the same
+  value are one entity. Records of two sources also join through the matching
+  rules the operator switched on (`rules/merge/policy.yaml`,
+  `automatic_rules`). Nothing else joins records.
 - **Cross-reference:** every other identifier the part carries. It goes into
   the MDM cross-reference table through the contract (`cross_references`), for
   lookup only, and never joins records, even when two records share it.
@@ -146,9 +148,13 @@ build the table.
 ### 7. Time
 
 Keep two times apart: **business time** (`--as-of`: when it was true) and
-**recorded time** (`--as-at`: when the platform knew it). Say which columns
-carry each, for every part. A code set version is valid from its publish
-until it is replaced; a code's own dates are business time.
+**recorded time** (`--as-at`: when the platform knew it). For every part, say
+which columns carry each (the findings' `time.as_of` and `time.as_at`), and
+for a transaction part also its `event_time` (when the event happened) and,
+for a time series, its `series` (key, time column, step). Each code set
+version has its own `valid_from`; publishing the next one closes its
+`valid_to` at the new one's `valid_from`. A code's own dates are business
+time.
 
 ## Workflow
 
@@ -177,8 +183,8 @@ Asked to review the model, check:
   same meaning in `rules/context/definitions.yaml`.
 - **Inverse types without a note:** two types for one fact in opposite
   directions, which the definitions do not say are inverses.
-- **Names that hide their contents:** a type whose capacities its name does
-  not describe.
+- **Names that need their definition:** a type whose capacities its name
+  alone does not describe.
 - **Reference data outside RDM:** code lists a kind's fields or a contract
   carry with no code set behind them.
 - **Code sets that cannot be checked:** a crosswalk to a code set RDM does not
@@ -191,8 +197,11 @@ operator's.
 
 Examples only; nothing above depends on them.
 
-- **Identity:** a company's identity namespaces today are `cik` and `lei`
-  (`rules/merge/kinds/company.yaml`); an EIN is a cross-reference, lookup only.
+- **Identity:** the company kind's Identifier Contract declares `cik`
+  (`rules/merge/kinds/company.yaml`); its records join GLEIF's through the
+  matching rules switched on in the policy. An EIN mapped by a contract's
+  `cross_references` would be a cross-reference, lookup only (no contract maps
+  one today).
 - **A grouping as a crosswalk:** the EDGAR place codes (`DE`, `X1`, `XX`)
   carry a `type` (US, CANADIAN, FOREIGN, UNKNOWN). Parent codes `US` and
   `FOREIGN` would make "FOREIGN" a valid state code, so `type` became its own
@@ -204,5 +213,6 @@ Examples only; nothing above depends on them.
 - **Overlapping types:** `ACCOUNTING_PARENT` and `IS_DIRECTLY_CONSOLIDATED_BY`
   both name a direct accounting parent; `IS_ULTIMATELY_CONSOLIDATED_BY` and
   `REPORTED_ULTIMATE_PARENT` both name a stated ultimate parent.
-- **A name hiding its contents:** `EMPLOYED_BY` holds directors, and
-  `CONTROLS` holds owners.
+- **A name that needs its definition:** `EMPLOYED_BY` also holds directors,
+  and `CONTROLS` also holds owners. The definitions say so as capacities; the
+  type names alone do not.
