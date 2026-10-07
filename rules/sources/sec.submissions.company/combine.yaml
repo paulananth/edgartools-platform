@@ -1,0 +1,58 @@
+# Creator blueprint: replace the two approved run-ID pins before submission.
+# Main and every derived continuation share one authenticated capture run.
+# The ticker catalogs share their separately authenticated catalog run.
+# If verified capture completeness proves no continuation pages, change the
+# forms source list to [main]; do not invent an empty pagination capture.
+# Local reading/composition qualification only; census/provenance mastering
+# gates remain mandatory before activating a replacement Company route.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 100000
+  groups:
+    forms:
+      source: [main, pages]
+      table: filings
+      key: cik
+      value: form
+      mode: collect
+      order_by: []
+      distinct: true
+      skip_null_values: true
+      skip_empty_text: true
+      sort_values: true
+      checks: {sync_run_id: APPROVED_COMPANY_CAPTURE_RUN}
+      where: {}
+    tickers:
+      source: [catalog_exchange, catalog_tickers]
+      table: tickers
+      key: cik
+      value: ticker
+      mode: collect
+      order_by: [source_rank, ticker]
+      distinct: true
+      skip_null_values: true
+      skip_empty_text: true
+      checks: {last_sync_run_id: APPROVED_CATALOG_CAPTURE_RUN}
+      where: {}
+    address:
+      source: main
+      table: addresses
+      key: cik
+      value: business_address
+      mode: last
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {last_sync_run_id: APPROVED_COMPANY_CAPTURE_RUN}
+      where: {}
+  tables:
+    company:
+      source: main
+      table: company
+      checks: {last_sync_run_id: APPROVED_COMPANY_CAPTURE_RUN}
+      where: {}
+      joins:
+        forms: {group: forms, key: cik, on_missing: empty, replace: false}
+        tickers: {group: tickers, key: cik, on_missing: empty, replace: false}
+        business_address: {group: address, key: cik, on_missing: empty, replace: false}

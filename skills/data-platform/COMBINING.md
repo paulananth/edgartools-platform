@@ -143,10 +143,11 @@ orders/deduplicates their aliases, combines them with the primary rows, then
 prepares and merges them with independent verifiers and destination fencing.
 It retains the original installed trials.
 
-Company comparison tests qualify form/ticker collection and address selection
-against the retained functions, including capture mismatch refusals. The
-address values are explicit fixture inputs: **raw address derivation, census
-joins, complete provenance and full Company mastering remain unqualified**.
+The shipped Company blueprint has raw-JSON fixture qualification for main
+records, continuation pages, both ticker-catalog shapes and business-address
+conversion, followed by independently verified combination and MDM preparation.
+**Census joins, complete mastering provenance and full installed Company
+population/replay/recovery remain unqualified.**
 This profile does not authorize deletion of retained Company/GLEIF readers or
 activation of a source Rules version.
 
@@ -162,3 +163,37 @@ and null retain their existing policies. The default is false. Flattened
 input elements still count toward the declared budget before this exclusion
 or deduplication. Use this with ranked catalog ticker collections to preserve
 the landing rule that excludes empty ticker text without changing source ranks.
+
+## Company preparation blueprint
+
+Use the bundled `sources/sec.submissions.company/combine.yaml` with readings
+from the bundled main `source.yaml`, `pagination.yaml` and `catalog.yaml`.
+The four reading names are `main`, `pages`, `catalog_exchange` and
+`catalog_tickers`. Preserve every input's independently verified reading
+receipt. Both catalog captures must belong to the approved catalog run; main
+and all derived pages must belong to the approved Company capture run.
+
+1. From authenticated capture manifests, replace every
+   `APPROVED_COMPANY_CAPTURE_RUN` and `APPROVED_CATALOG_CAPTURE_RUN` check value
+   in a copy of the blueprint. Pin the resulting JSON combination contract.
+   Finish when every check equals its approved manifest run ID, and the
+   immutable contract receipt is recorded in the creator's frozen unit.
+2. If main-derived capture completeness proves zero continuation pages, set
+   the forms group's source list to `[main]` and omit `pages` from readings.
+   Otherwise include every required page through its verified reading receipt.
+   Finish when the immutable capture scope accounts for every main-derived
+   page; never substitute a fabricated empty page for missing capture evidence.
+3. Run the configured read → combine → prepare steps and their independent
+   verifiers as above. Finish this composition step only when all three
+   receipts verify, the combined scope pins all four reading roles (or the
+   verified no-pages variant), and prepared rows reproduce the same collections.
+
+The blueprint preserves naturally sorted distinct filing forms, catalog
+tickers ordered by `(source_rank, ticker)` across both captures, and the last
+configured business address per CIK. Empty ticker/form text and null values
+are excluded explicitly. Missing collections become `[]`; a missing business
+address becomes null. Capture checks run before any row filtering or key skip.
+
+This composition is an input to the remaining census/classification/provenance
+qualification. Keep the active Company route until the installed empty-store
+6,414 Company / 3,052 CIK+LEI population and replay/recovery gates pass.
