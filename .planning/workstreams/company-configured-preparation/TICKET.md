@@ -10,6 +10,8 @@ Continue the full self-sustaining skill / bundled Rules creator / parsing / MDM 
 - [ ] Independent review, affected tests, installed qualification and full CI; separate reviewable PR.
 - [ ] Reconcile parent issue 20 L3-L8 and original full goal, preserving all unfinished work.
 
-- [ ] Verify the bundled Company blueprint outside checkout through installed raw reading, combination and preparation; this is composition qualification, not population/mastering proof.
+- [x] Verify the bundled Company blueprint outside checkout from committed d49cb65e through installed raw reading, combination and preparation; one test passed, 27 deselected, no skips in 126.77s (2m07s), stored actual artifact hashes/combined receipt (2026-10-07 06:44 ET). This is composition qualification, not population/mastering proof.
 
 - [x] Independently review the bounded composition blueprint: Spec and Standards/GoF report no scoped blockers; after extending to two separately authenticated continuation artifacts, all 10 blueprint cases pass (2026-10-07 06:41 ET).
+
+- [x] Push separate non-draft PR #844; live head d49cb65e and full CI 37609354821 running (2026-10-07 06:44 ET).

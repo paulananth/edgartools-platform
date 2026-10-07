@@ -1,0 +1,112 @@
+{
+  "commit": "d49cb65e4e0ac4bd813060083688f6abaacb02a2",
+  "test": "tests/engine/test_data_skill_bundle_postgres.py::test_company_combination_blueprint_runs_from_installed_bundle",
+  "result": {
+    "passed": 1,
+    "deselected": 27,
+    "skipped": 0,
+    "seconds": 126.77
+  },
+  "installation": "uv tool install from committed git ref; four wheels; Python -I outside checkout",
+  "artifacts": [
+    {
+      "path": "/private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/main-reading.json",
+      "sha256": "5efdaa0f42c81659d46db2a3d36273dc95379388a622009790f06598d29a3f1c"
+    },
+    {
+      "path": "/private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/pages-reading.json",
+      "sha256": "10e5a38a7ab535a10fb07435de799965eb60686b873537a9c3bc98b01b1a5734"
+    },
+    {
+      "path": "/private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/catalog-exchange-reading.json",
+      "sha256": "a3afd1ce049b4972810739d817943403758784301bb617a499875701df34b854"
+    },
+    {
+      "path": "/private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/catalog-tickers-reading.json",
+      "sha256": "a9b406d48c85c30584b1b6f8cd43e9ff572e7d427ddad390172679ec77818893"
+    },
+    {
+      "path": "/private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/combined.json",
+      "sha256": "c09a5f7d4189c0021643125b7f376d9246341a06b6b54091fa47e83d0a0a5df9"
+    },
+    {
+      "path": "/private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/mdm/manifest.json",
+      "sha256": "34f9bf4a5214855b89ebc4cda423814328df67caf142723ba7dee71028ef1360"
+    }
+  ],
+  "combined_reading": {
+    "artifacts": [
+      {
+        "deferred": [],
+        "input": {
+          "sha256": "595e818630b3f594c9a8b13b7db624a521d0de3960023f33963ed2025f804a6a",
+          "uri": "file:///private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/combine-inputs/595e818630b3f594c9a8b13b7db624a521d0de3960023f33963ed2025f804a6a.json"
+        },
+        "tables": {
+          "company": [
+            {
+              "business_address": {
+                "city": null,
+                "country": "GB",
+                "postal_code": null,
+                "region": null,
+                "street": "Raw",
+                "street2": null
+              },
+              "category": null,
+              "cik": 1,
+              "description": null,
+              "ein": null,
+              "entity_name": "Example",
+              "entity_type": null,
+              "fiscal_year_end": null,
+              "forms": [
+                "10-K",
+                "20-F",
+                "8-K"
+              ],
+              "last_sync_run_id": "capture",
+              "last_synced_at": "2026-10-04T00:00:00Z",
+              "load_mode": "default",
+              "raw_object_id": "097b878325f9f865e02e231a862f321dc53cd5dada66ab9f1237a07462224239",
+              "sic": null,
+              "sic_description": null,
+              "state_of_incorporation": null,
+              "state_of_incorporation_desc": null,
+              "sync_run_id": "capture",
+              "tickers": [
+                "A",
+                "B",
+                "C"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "contract": {
+      "sha256": "873bd119875e011a306b1f1e68c98b5a1bff9a1194f069c09cae3efa5a34a37f",
+      "uri": "file:///private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/873bd119875e011a306b1f1e68c98b5a1bff9a1194f069c09cae3efa5a34a37f.json"
+    },
+    "readings": {
+      "catalog_exchange": {
+        "sha256": "a3afd1ce049b4972810739d817943403758784301bb617a499875701df34b854",
+        "uri": "file:///private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/catalog-exchange-reading.json"
+      },
+      "catalog_tickers": {
+        "sha256": "a9b406d48c85c30584b1b6f8cd43e9ff572e7d427ddad390172679ec77818893",
+        "uri": "file:///private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/catalog-tickers-reading.json"
+      },
+      "main": {
+        "sha256": "5efdaa0f42c81659d46db2a3d36273dc95379388a622009790f06598d29a3f1c",
+        "uri": "file:///private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/main-reading.json"
+      },
+      "pages": {
+        "sha256": "10e5a38a7ab535a10fb07435de799965eb60686b873537a9c3bc98b01b1a5734",
+        "uri": "file:///private/tmp/codex-installed-company-combine-20261007/bundle0/company-composition/pages-reading.json"
+      }
+    },
+    "version": 1
+  },
+  "scope": "installed raw fixture main, one continuation page and both catalog shapes; worker/verifier functions and preparation replay; not Rules-submitted mastering, full capture completeness, census, provenance policy, population or recovery proof"
+}
