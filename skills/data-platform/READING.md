@@ -199,7 +199,7 @@ record:
             row: {ordinal: {}}
 ```
 
-Put this expression under a table's `columns`. `object` names `fields` only;
+Put this expression under a table's `columns`. `object` requires `fields`;
 fields is a mapping of at most 128 entries with nonempty text names of at
 most 128 UTF-8 bytes. An empty mapping produces an empty object. Each field
 is one supported expression; it evaluates in the same document, item,
@@ -217,6 +217,21 @@ full preparation; compare those operations and assertion identities before
 retiring the retained reader. The installed object-records trial assembles
 the two raw Person fixture records from explicit fields and verifies them
 through preparation and the actual Person MDM contract.
+
+Optional `base` is an expression returning one JSON object. Its fields and
+exact types are retained; declared `fields` add metadata. A non-object base
+refuses with `object_base`, and a field collision refuses with
+`object_field_conflict`. There is no implicit overwrite. All expressions in
+`base` participate in validation and feature/context inventory, including
+unselected branches.
+
+```yaml
+name_evidence:
+  object:
+    base: {value: {path: entry}}
+    fields:
+      census: {const: {value: APPROVED_CANONICAL_CENSUS_SHA256}}
+```
 
 ## Parallel arrays
 
@@ -662,6 +677,19 @@ values in captured key order. Default invalid-object behavior is `reject`;
 `empty` explicitly returns no rows for missing, scalar or array input. Input
 entry count includes values later excluded by selection.
 
+`each.entries` exposes both a literal key and its typed value:
+
+```yaml
+each:
+  entries: {path: entries, key_field: map_key, value_field: entry}
+```
+
+The two fields must be distinct ASCII identifiers of 1–64 characters. Keys
+such as `a.b`, `@id` or `$` remain literal values in `map_key`; `entry`
+retains arrays, objects, booleans, numbers and null. Captured key order and
+raw-count limits are preserved. `on_invalid: empty` is explicit; the default
+refuses a missing or non-object input.
+
 Choose a layout through `each.choose` with `condition`, `then` and `else`.
 The condition is an ordinary expression evaluated against the document;
 branches are iteration calls or paths. Boolean true selects `then`, false or
@@ -823,3 +851,25 @@ by a decoder is structural evidence and cannot substitute for that metadata.
 Read the format's source structures as captured; XML and JSON may represent
 singleton lists or attributes differently, so do not infer cross-format raw
 record equality from their common member name.
+
+## Reuse an authenticated census
+
+For census reuse, import the approved JSON through `Artifacts.put` so its
+artifact SHA matches the canonical census digest used in evidence. Bind that
+SHA to every placeholder in `sources/sec.submissions.company/census.yaml`
+before freezing the contract. Optional `execution.input_sha256s` pins every
+input artifact in manifest order (one or two lowercase SHA-256 values).
+Both source.read worker and verifier check these pins before reading or
+publishing, including when the source yields no rows. The standalone native
+engine does not enforce execution pins.
+
+Read Company captures through `census-main.yaml`, then combine with
+`combine-census.yaml` as described in COMBINING.md. Census version,
+normalizers, FULL publication and optional cascade version must match the
+contract; unexpected reserved metadata collisions refuse. Constants are
+scalar values; use scalar assertions for metadata fields and `test`/`equal`
+for typed boolean conditions.
+
+This reuses approved global counts. Constructing the complete census,
+qualifying its current source population and proving installed mastering
+remain separate completion requirements.

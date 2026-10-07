@@ -331,6 +331,7 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
     if let Some(fields) = expr.get("object").and_then(|args| args.get("fields")).and_then(Value::as_mapping) {
         children.extend(fields.values());
     }
+    if let Some(base) = expr.get("object").and_then(|args| args.get("base")) { children.push(base); }
     if let Some(values) = expr.get("coalesce").and_then(|args| args.get("values")).and_then(Value::as_sequence) {
         children.extend(values);
     }
@@ -604,7 +605,9 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
         }
         "object" => {
-            let args = args.as_mapping().filter(|m| m.len() == 1).ok_or("object names fields only")?;
+            let args = args.as_mapping().filter(|m| !m.is_empty() && m.len() <= 2).ok_or("object names fields and optional base only")?;
+            if args.keys().any(|k| !matches!(k.as_str(),Some("fields" | "base"))) { return Err("object names fields and optional base only".into()); }
+            if let Some(base) = args.get(Value::String("base".into())) { validate_expr(base,steps)?; }
             let fields = args.get(Value::String("fields".into())).and_then(Value::as_mapping)
                 .filter(|m| m.len() <= 128).ok_or("object fields is a mapping of at most 128 entries")?;
             for (name, expr) in fields {
@@ -1043,8 +1046,17 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
             eval(engine, context, document, item, ordinal, &args[branch])
         }
         "object" => {
-            let mut fields = BTreeMap::new();
+            let mut fields = match args.get("base") {
+                Some(base) => match eval(engine,context,document,item,ordinal,base)? {
+                    Val::Map(fields) => fields,
+                    _ => return Err(Rejected::new("object_base", "object base must be an object")),
+                },
+                None => BTreeMap::new(),
+            };
             for (name, expr) in args["fields"].as_mapping().unwrap() {
+                if fields.contains_key(name.as_str().unwrap()) {
+                    return Err(Rejected::new("object_field_conflict", "object fields collide with base"));
+                }
                 fields.insert(name.as_str().unwrap().to_string(), eval(engine, context, document, item, ordinal, expr)?);
             }
             Ok(Val::Map(fields))

@@ -68,8 +68,8 @@ def _contract(body, inputs):
         _selection(spec, inputs)
         if not _name(spec["key"]) or not (_name(spec["value"]) or spec["value"] == "."):
             raise ValueError("Group key/value are column names; value may be the whole row (.)")
-        if spec["mode"] not in ("collect", "collect_flat", "first", "last"):
-            raise ValueError("Group mode is collect, collect_flat, first or last")
+        if spec["mode"] not in ("collect", "collect_flat", "first", "last", "one"):
+            raise ValueError("Group mode is collect, collect_flat, first, last or one")
         if not isinstance(spec["order_by"], list) or len(spec["order_by"]) > 8 or not all(_name(k) for k in spec["order_by"]):
             raise ValueError("Group order_by names at most eight columns")
         if type(spec["distinct"]) is not bool or type(spec["skip_null_values"]) is not bool or (spec["mode"] not in COLLECTION_MODES and spec["distinct"]):
@@ -82,14 +82,22 @@ def _contract(body, inputs):
     if not tables:
         raise ValueError("Combination requires an output table")
     for spec in tables.values():
-        if not isinstance(spec, dict) or set(spec) != {"source", "table", "checks", "where", "joins"}:
+        required = {"source", "table", "checks", "where", "joins"}
+        if not isinstance(spec, dict) or not required <= set(spec) or set(spec) - required - {"drop"}:
             raise ValueError("Output table requires source, table, checks, where and joins")
         _selection(spec, inputs)
+        if "drop" in spec and (not isinstance(spec['drop'],list) or len(spec['drop']) > 64
+                or any(not _name(name) for name in spec['drop']) or len(set(spec['drop'])) != len(spec['drop'])):
+            raise ValueError("Output drop names at most 64 distinct columns")
         for join in _mapping(spec["joins"], 32, "Joins").values():
-            if not isinstance(join, dict) or set(join) != {"group", "key", "on_missing", "replace"}:
+            required = {"group", "key", "on_missing", "replace"}
+            if not isinstance(join, dict) or not required <= set(join) or set(join) - required - {"path"}:
                 raise ValueError("Join requires group, key, on_missing and replace")
-            if not _name(join["group"]) or join["group"] not in groups or not _name(join["key"]) or join["on_missing"] not in ("empty", "error") or type(join["replace"]) is not bool:
+            if not _name(join["group"]) or join["group"] not in groups or not _name(join["key"]) or join["on_missing"] not in ("empty", "error", "skip") or type(join["replace"]) is not bool:
                 raise ValueError("Join declares a group, key, empty/error policy and boolean replace")
+            if 'path' in join and (not isinstance(join['path'],list) or not 1 <= len(join['path']) <= 8
+                    or any(not _name(name) for name in join['path'])):
+                raise ValueError("Join path names 1..8 nested object fields")
     return plan
 
 
@@ -167,6 +175,8 @@ def _group(spec, inputs, maximum=MAX_ROWS):
                            or any(type(item) is not type(values[0]) for item in values)):
                 raise ValueError('sort_values requires one exact scalar type and no nulls')
             values.sort()
+        if spec['mode'] == 'one' and len(values) != 1:
+            raise ValueError("Group one requires exactly one value per key")
         result[key] = values if spec["mode"] in COLLECTION_MODES else values[0 if spec["mode"] == "first" else -1]
     return result
 
@@ -203,6 +213,22 @@ def _encode(body):
             raise ValueError("Combined reading exceeds output byte budget; partition inputs")
         buffer.write(data)
     return buffer.getvalue()
+
+
+def _join_field(output, field, join, value):
+    """Copy only the modified path; input/group rows remain immutable."""
+    path = join.get('path', [field])
+    parent = output
+    for part in path[:-1]:
+        child = parent.get(part)
+        if child is not None and not isinstance(child,dict):
+            raise ValueError('Nested join parent must be an object or null')
+        parent[part] = dict(child or {})
+        parent = parent[part]
+    leaf = path[-1]
+    if leaf in parent and not join['replace']:
+        raise ValueError(f'Join would overwrite column {leaf}; declare replace explicitly')
+    parent[leaf] = value
 
 
 def _documents(envelope, artifacts):
@@ -251,17 +277,24 @@ def _documents(envelope, artifacts):
         result = []
         for row in _rows(spec, inputs):
             output = dict(row)
-            for field, join in spec["joins"].items():
-                if field in output and not join["replace"]:
-                    raise ValueError(f"Join would overwrite column {field}; declare replace explicitly")
+            for field, join in sorted(spec["joins"].items(), key=lambda item: len(item[1].get("path", [item[0]]))):
+                if 'path' not in join and join['on_missing'] != 'skip' and field in output and not join['replace']:
+                    raise ValueError(f'Join would overwrite column {field}; declare replace explicitly')
                 key = _key(_column(row, join["key"]))
                 group = groups[join["group"]]
                 if key not in group:
                     if join["on_missing"] == "error":
                         raise ValueError(f"No combination group match for {field}")
-                    output[field] = [] if plan["groups"][join["group"]]["mode"] in COLLECTION_MODES else None
+                    if join['on_missing'] == 'skip':
+                        continue
+                    value = [] if plan["groups"][join["group"]]["mode"] in COLLECTION_MODES else None
                 else:
-                    output[field] = group[key]
+                    value = group[key]
+                _join_field(output,field,join,value)
+            for column in spec.get('drop', []):
+                if column not in output:
+                    raise ValueError(f'Drop names missing output column {column}')
+                del output[column]
             result.append(output)
             count += 1
             if count > plan["max_rows"]:

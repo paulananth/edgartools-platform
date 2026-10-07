@@ -11,10 +11,20 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
     match name.as_str() {
         Some("parallel") => parallel::validate(each, format),
         Some("matrix") => matrix::validate(each, format),
-        Some("objects") => {
+        Some("objects" | "entries") => {
             if format != "json" { return Err("each.objects requires JSON".into()); }
             let map = args.as_mapping().ok_or("objects arguments must be a mapping")?;
-            if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "on_invalid"))) { return Err("objects has an unknown argument".into()); }
+            let entries = name.as_str() == Some("entries");
+            if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "on_invalid")) && !(entries && matches!(k.as_str(), Some("key_field" | "value_field")))) { return Err("objects/entries has an unknown argument".into()); }
+            if entries {
+                for key in ["key_field", "value_field"] {
+                    if !setting(args,key).is_some_and(|name| !name.is_empty() && name.len() <= 64
+                        && name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))) {
+                        return Err("entries requires distinct key_field/value_field identifiers of 1..64 ASCII characters".into());
+                    }
+                }
+                if args["key_field"] == args["value_field"] { return Err("entries key_field/value_field must differ".into()); }
+            }
             crate::check_path(setting(args, "path").ok_or("objects requires path")?)?;
             if args.get("on_invalid").is_some_and(|v| !matches!(v.as_str(), Some("empty" | "reject"))) { return Err("objects on_invalid is empty or reject".into()); }
             Ok(())
@@ -40,7 +50,7 @@ pub(crate) fn expressions(each: &Value) -> Vec<&Value> {
 }
 
 pub(crate) fn needs_order(each: &Value) -> bool {
-    each.get("objects").is_some() || each.get("matrix").and_then(|a| a.get("headers_coerce")).and_then(Value::as_str) == Some("python")
+    each.get("objects").is_some() || each.get("entries").is_some() || each.get("matrix").and_then(|a| a.get("headers_coerce")).and_then(Value::as_str) == Some("python")
         || each.get("choose").is_some_and(|args| ["then", "else"].iter().any(|k| args.get(*k).is_some_and(needs_order)))
 }
 
@@ -62,7 +72,8 @@ pub(crate) fn rows(engine: &Engine, context: &Row, document: &El, each: &Value, 
         };
         return rows(engine, context, document, &args[branch], maximum, take);
     }
-    let args = &each["objects"];
+    let entries = each.get("entries");
+    let args = entries.unwrap_or(&each["objects"]);
     let object = match crate::lookup_value(document, setting(args, "path").unwrap(), true)? {
         crate::Found::El(el) if !el.scalar && !el.array => el,
         _ if setting(args, "on_invalid") == Some("empty") => return Ok((Vec::new(), 0)),
@@ -79,7 +90,14 @@ pub(crate) fn rows(engine: &Engine, context: &Row, document: &El, each: &Value, 
             }
         } else if key == "$" { El::scalar(object.text.clone()) }
         else { El::scalar(object.attrs.get(key).cloned()) };
-        result.push(el);
+        if entries.is_some() {
+            let key_field = setting(args,"key_field").unwrap();
+            let value_field = setting(args,"value_field").unwrap();
+            let mut row = El { json_keys: Some(vec![key_field.into(),value_field.into()]), ..El::default() };
+            row.add_child(key_field.into(),El::scalar(Some(key.clone())));
+            row.add_child(value_field.into(),el);
+            result.push(row);
+        } else { result.push(el); }
     }
     Ok((result, keys.len()))
 }

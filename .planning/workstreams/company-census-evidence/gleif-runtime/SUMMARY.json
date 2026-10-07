@@ -1,0 +1,54 @@
+{
+  "qualified_revision": "3d3a7cb2",
+  "scope": "Six complete configured runtime attestations against independent full corpus reports; historical native binary and implementation pinned; not installed mastering qualification",
+  "reports": [
+    {
+      "report": "level1-json-runtime-parity.json",
+      "sha256": "1336bc15824b6d8c87275079e76a33ed60d8067b18c0f31168768401ffe70eed",
+      "member": "level1",
+      "format": "json",
+      "records": 3428477,
+      "seconds": 1976.6850125198252
+    },
+    {
+      "report": "level1-xml-runtime-parity.json",
+      "sha256": "b33d6e477b8bce00ad90f366de22845b5a64768a58faec650e8dea3f3559af39",
+      "member": "level1",
+      "format": "xml",
+      "records": 3428477,
+      "seconds": 4369.559565237025
+    },
+    {
+      "report": "relationships-json-runtime-parity.json",
+      "sha256": "1687c002f05a1f28a23b6db56bcb469d3486a6a3b0f73913512bef381b38f11b",
+      "member": "relationships",
+      "format": "json",
+      "records": 487721,
+      "seconds": 149.6876819850877
+    },
+    {
+      "report": "relationships-xml-runtime-parity.json",
+      "sha256": "1de181f08b93395ac36475311149dc5bb202a6af5c000d4985dcd9b5dab94991",
+      "member": "relationships",
+      "format": "xml",
+      "records": 487721,
+      "seconds": 457.44959875009954
+    },
+    {
+      "report": "reporting_exceptions-json-runtime-parity.json",
+      "sha256": "fcebb23187ecc9719c01e3daef97c6c61f23ecc0a476fdd8c424061cc6b13711",
+      "member": "reporting_exceptions",
+      "format": "json",
+      "records": 6351397,
+      "seconds": 512.7008878779598
+    },
+    {
+      "report": "reporting_exceptions-xml-runtime-parity.json",
+      "sha256": "a9cd63ebf5f43893702c2617a7782148ba51d18d05857fe88f0960fc8adce095",
+      "member": "reporting_exceptions",
+      "format": "xml",
+      "records": 6351397,
+      "seconds": 637.0648792358115
+    }
+  ]
+}
