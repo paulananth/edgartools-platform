@@ -90,9 +90,11 @@ on a date. The parent model follows them:
 2. **The calculated ultimate parent keeps its history:** a new period each
    time any link in its chain changes, so `--as-of` gives the ultimate parent
    on any date (today it is computed for one instant only).
-3. **The events are transaction data** (merger, acquisition, spin-off,
+3. ~~**The events are transaction data** (merger, acquisition, spin-off,
    reorganisation, name change), in silver, linked to the entities; a parent
-   period cites its event as evidence.
+   period cites its event as evidence.~~ Out of scope (operator, 2026-10-07
+   15:28 ET: "Out of scope"; see the map): the successor link carries its
+   succession's date and event type.
 4. **`SUCCESSOR_ENTITY`** (named above): a new relationship type, the entity that ceased → the
    entity that took it over, with the effective date and basis. It is not a
    parent: the ceased entity's own parent links end on that date, and its
@@ -118,7 +120,7 @@ on a date. The parent model follows them:
 - [x] (PR B) Parent periods take a stated effective date when the source gives one (`valid_from_basis` / `valid_to_basis` stated), else first seen (observed); last seen stays `last_seen`, since silence ends no link (design 2) (unit tests; GLEIF link stated on PG16) 2026-10-07 11:54 ET
 - [x] (PR B) The calculated ultimate parent has periods: recomputed at every change in its chain, so `--as-of` answers any date. New algorithm `accounting-chain-v2` (v1 unchanged for earlier policies); its id leaves out the run date, so a later run keeps it; MDM migration 009 adds `ended_by` to `mdm.relationship_context` and says each date's basis for any link; `context relationship --as-of` reads the periods (PG16: fresh mastering, 007→009 upgrade, context as-of) 2026-10-07 11:54 ET
 - [ ] ~~GLEIF's `SuccessorEntity`, event type and effective date mapped to `SUCCESSOR_ENTITY`~~ moved to [04c](04c-gleif-successor-entity.md): it is configuration, done by Claude (operator, 2026-10-07: "It's configuration why are you saying code"), after a small contract-language addition the operator approved
-- [ ] ~~Corporate action events in silver~~ deferred to [06](06-silver-writer.md): they are transaction data, written by the silver writer; a parent period cites its event once they exist (added 2026-10-07 08:38 ET)
+- [ ] ~~Corporate action events in silver~~ out of scope (operator, 2026-10-07 15:28 ET: "Out of scope", after "Why do I care about corporate actions history"); first deferred to [06](06-silver-writer.md), not carried there (added 2026-10-07 08:38 ET)
 - [x] PR A review (Standards, Spec, GoF): every name matches its approval, none invented; GoF no refactor; fixed: basis read only from `derived` (older policies' ids unchanged), HOLDS carries the filings' own fields instead of a second meaning of `basis`, the insider view says a ten percent owner may be an entity (12 PG16 and 29 unit tests pass) 2026-10-07 11:34 ET
 - [x] PR A: push, PR #850 (digest explained), CI green, merged on the operator's word 2026-10-07 11:50 ET
 - [x] (PR B) The new Mastering Policy digest (Company part c608d93a…), with the peel layer `without_parent_history` back to bf682fa4…, explained in PR #851; approved by the operator's word "Merge" 2026-10-07 12:26 ET
