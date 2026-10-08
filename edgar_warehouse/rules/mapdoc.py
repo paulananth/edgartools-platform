@@ -54,6 +54,7 @@ QUALITY_WORDS = {
     "placeholder@1": "The value is not a placeholder: {values}",
     "registered_agent_address@1": "The address is not a registered agent's: {markers}",
     "in_reference@1": "The value is in the reference table {table}",
+    "in_hierarchy@1": "The value's parent in the reference hierarchy {table} is {field}",
 }
 ON_FAIL_WORDS = {
     "exception": "Exception: the record never merges and never stops the run; fix or ignore it",

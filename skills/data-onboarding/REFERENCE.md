@@ -261,6 +261,7 @@ Checks:
 | `lei_check_digit@1` | | the value is an LEI whose check digits pass (mod 97) |
 | `placeholder@1` | `values` | the value, letters and digits only, is not one of `values` and not all zeros |
 | `registered_agent_address@1` | `markers` | no marker is in the address's street lines |
+| `in_hierarchy@1` | `table`, `sha256`, `field` (the path of the record's parent code) | the value or its parent is empty, the value is not a code of `table`, or the record's parent is the parent `table` gives the code (a pinned RDM version with a hierarchy); a code at the top with a parent given fails |
 | `in_reference@1` | `table`, `sha256` | the value is empty or a code of the reference data the Mastering Policy pins as `table` (`merge/reference-pins.yaml`, a published RDM version); `sha256` must be that pin |
 
 Fixes (each keeps the original under `provenance.quality.fixes`):

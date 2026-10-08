@@ -131,6 +131,33 @@ def _reference_keys(table: str, sha256: str) -> frozenset:
     return frozenset(str(row["code"]).upper() for row in files.pinned_reference(table))
 
 
+def _in_hierarchy(value, args) -> bool:
+    """Passes unless the record's parent code (the path in `field`, read for this check) differs from
+    the parent the pinned code set gives its code: a child code under the wrong parent. An empty value,
+    an empty parent or a code not in the code set passes (in_reference@1 catches an unknown code;
+    present@1 on the parent catches a missing one). `field` arrives as the parent's value."""
+    parent = args.get("field")
+    if value is None or parent is None or not str(parent).strip():
+        return True
+    parents = _reference_parents(args["table"], args["sha256"])
+    code = str(value).strip().upper()
+    if code not in parents:
+        return True
+    expected = parents[code]
+    return expected is not None and str(parent).strip().upper() == expected
+
+
+@functools.lru_cache(maxsize=None)
+def _reference_parents(table: str, sha256: str) -> dict:
+    """Each code of the pinned code set with its parent code (None at the top), upper-cased."""
+    from edgar_warehouse.rules import files
+
+    if files.reference_pin(table)["sha256"] != sha256:
+        raise QualityError(f"Reference table {table} differs from its pinned sha256")
+    return {str(row["code"]).upper(): (str(row["parent_code"]).upper() if row.get("parent_code") else None)
+            for row in files.pinned_reference(table)}
+
+
 CHECKS = {
     "present@1": (_present, set()),
     "in_set@1": (_in_set, {"values"}),
@@ -139,6 +166,8 @@ CHECKS = {
     "placeholder@1": (_placeholder, {"values"}),
     "registered_agent_address@1": (_registered_agent, {"markers"}),
     "in_reference@1": (_in_reference, {"table", "sha256"}),
+    # A record's parent code agrees with the reference hierarchy (profiling 01d): `field` names the parent.
+    "in_hierarchy@1": (_in_hierarchy, {"table", "sha256", "field"}),
 }
 
 
@@ -286,7 +315,9 @@ def apply(block: dict, fields: dict, matching: dict | None) -> dict:
         for path in fix(record, args):
             result.setdefault("fixes", {})[item["id"]] = {"path": path, "original": original}
     for item in block.get("checks") or []:
-        if CHECKS[item["test"]][0](_get(record, item["value"]), item.get("args") or {}):
+        # A check's path arguments are read from the record (a second value, such as a parent code).
+        args = {k: _get(record, v) if k in _PATH_ARGS else v for k, v in (item.get("args") or {}).items()}
+        if CHECKS[item["test"]][0](_get(record, item["value"]), args):
             continue
         if item["on_fail"] == "exception":
             raise UnsupportedRecord(f"quality_{item['id']}", {"quality": {"check": item["id"], "version": block["version"]}})
