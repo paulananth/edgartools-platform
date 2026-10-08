@@ -204,7 +204,9 @@ that matter most:
 - **hierarchies:** `reference` hierarchies group codes in one code set (RDM);
   `master_data` hierarchies are relationships between master records (MDM).
   `invalid_rows` are rows that break the rule; each is marked in
-  `invalid_rows.jsonl` beside the findings, never dropped.
+  `invalid_rows.jsonl` beside the findings, never dropped. Each part's key
+  sample for `compare` (hashes only) is in `fingerprints.json` beside them;
+  keep it with the approved findings.
 - **silver:** the table spec for a part MDM does not own.
 
 ## Compare a new delivery
@@ -224,8 +226,10 @@ uv run --with duckdb --with pyyaml python profile_data.py compare \
 ```
 
 It refuses findings that are not approved. Key persistence (the same record
-keeping its key between deliveries) and snapshot-or-changes are measured only
-when two deliveries exist, so a single run reports them as unknown.
+keeping its key between deliveries), snapshot-or-changes and the refresh rate
+need two deliveries: a single run reports them as unknown, and `compare`
+measures them from each part's key sample (`deliveries` in `drift.yaml`).
+Versions per key are measured in one delivery when the key holds a time.
 
 ## Examples
 

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import yaml
 
 from . import hierarchy
+
+
+FINGERPRINTS = "fingerprints.json"
 
 
 def write(findings: dict, out: Path) -> tuple[Path, Path]:
@@ -18,9 +22,35 @@ def write(findings: dict, out: Path) -> tuple[Path, Path]:
     with (out / "invalid_rows.jsonl").open("w", encoding="utf-8") as handle:
         for row in marked:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    # Each part's key sample (thousands of hashes) goes beside the findings, never inside the file the
+    # operator approves; the findings keep how many keys it holds and the file's sha256.
+    samples = {p["part"]: p["fingerprint"]["keys"] for p in findings["parts"] if (p.get("fingerprint") or {}).get("keys")}
+    text = json.dumps(samples, sort_keys=True)
+    (out / FINGERPRINTS).write_text(text, encoding="utf-8")
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    findings["parts"] = [{**p, "fingerprint": {**{k: v for k, v in p["fingerprint"].items() if k != "keys"},
+                                               "sampled": len(samples.get(p["part"], {})),
+                                               "file": FINGERPRINTS, "file_sha256": digest}}
+                         if p.get("fingerprint") else p for p in findings["parts"]]
     data.write_text(yaml.safe_dump(findings, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
     report.write_text(markdown(findings), encoding="utf-8")
     return data, report
+
+
+def read_fingerprints(findings: dict, folder: Path) -> None:
+    """Put each part's key sample back from the fingerprints.json beside approved findings, refusing one
+    whose sha256 is not the one the findings recorded. Findings without one compare without samples."""
+    path = folder / FINGERPRINTS
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    samples, digest = json.loads(text), hashlib.sha256(text.encode()).hexdigest()
+    for p in findings["parts"]:
+        f = p.get("fingerprint")
+        if f and f.get("file") == FINGERPRINTS:
+            if f["file_sha256"] != digest:
+                raise SystemExit(f"{path} differs from the one the approved findings recorded")
+            f["keys"] = samples.get(p["part"], {})
 
 
 def markdown(f: dict) -> str:

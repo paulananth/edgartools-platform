@@ -46,8 +46,49 @@ def roles(con, part: str, columns: list[dict], key: list[str], personal: set[str
     event = others[0]["name"] if others else None
     return {"delivery": "unknown",
             "as_of": {"from": pair["from"] if pair else None, "to": pair["to"] if pair else None},
-            "as_at": recorded, "event_time": event, "versions_per_key": None,
+            "as_at": recorded, "event_time": event,
+            "versions_per_key": versions(con, part, key, [recorded, pair["from"] if pair else None, event]),
             "series": series(con, part, columns, key, temporal), "refresh": "unknown"}
+
+
+def versions(con, part: str, key: list[str], times: list[str | None]) -> dict | None:
+    """Rows per business key when the record key holds a time column (a key and the time it was recorded
+    or became valid): the middle and the 99th percentile. None when the key has no time column."""
+    stamp = next((t for t in times if t and t in key), None)
+    entity = [k for k in key if k != stamp]
+    if not stamp or not entity:
+        return None
+    group = ", ".join(map(sql_name, entity))
+    p50, p99 = con.execute(f"SELECT quantile_disc(n, 0.5), quantile_disc(n, 0.99) FROM "
+                           f"(SELECT count(*) n FROM {sql_name(part)} GROUP BY {group})").fetchone()
+    return {"p50": int(p50), "p99": int(p99)} if p50 is not None else None
+
+
+SAMPLE_PREFIX = "0"  # keys whose sha256 starts with this: about 1 in 16, the same keys in every delivery
+SAMPLE_CAP = 4096  # a part with at most this many rows has every key sampled
+
+
+def fingerprint(con, part: str, key: list[str], columns: list[dict], latest: str | None) -> dict:
+    """A small, repeatable sample of the part's keys as sha256 hashes, each with the sha256 of its row
+    (`columns`: the ones to hash, personal columns left out by the caller): two deliveries' samples hold
+    the same keys, so compare measures persistence, changes and the delivery kind from hashes only.
+    Never written for a key holding personal values, nor for a part read as a sample (the caller decides).
+    A number is hashed by its value (1 and 1.0 alike), so a type read differently changes nothing."""
+    def text(c: dict) -> str:
+        value = f"CAST({sql_name(c['name'])} AS DOUBLE)" if is_numeric(c) else sql_name(c["name"])
+        return f"coalesce(CAST({value} AS VARCHAR), '')"
+    by_name = {c["name"]: c for c in columns}
+    joined = lambda cols: "concat_ws(chr(31), " + ", ".join(text(c) for c in cols) + ")"
+    size = con.execute(f"SELECT count(*) FROM {sql_name(part)}").fetchone()[0]
+    prefix = "" if size <= SAMPLE_CAP else SAMPLE_PREFIX
+    rows = con.execute(f"""SELECT "__key_hash", "__row_hash" FROM (
+        SELECT sha256({joined([by_name[k] for k in key])}) "__key_hash",
+               sha256({joined(columns)}) "__row_hash" FROM {sql_name(part)})
+        WHERE starts_with("__key_hash", '{prefix}') ORDER BY 1 LIMIT {SAMPLE_CAP}""").fetchall()
+    newest = con.execute(f"SELECT CAST(max(TRY_CAST({sql_name(latest)} AS TIMESTAMP)) AS VARCHAR) "
+                         f"FROM {sql_name(part)}").fetchone()[0] if latest else None
+    return {"prefix": prefix, "keys": dict(rows), "capped": len(rows) == SAMPLE_CAP and size > SAMPLE_CAP,
+            "latest": newest, "latest_column": latest}
 
 
 def series(con, part: str, columns: list[dict], key: list[str], temporal: list[dict]) -> dict | None:

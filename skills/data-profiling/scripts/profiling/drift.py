@@ -17,7 +17,7 @@ KS_CHANGE = 0.1
 EPSILON = 1e-4  # a share of zero, so a value seen once on one side still counts
 
 
-def compare(approved: dict, new: dict) -> list[dict]:
+def compare(approved: dict, new: dict, measured: list[dict] | None = None) -> list[dict]:
     old_parts = {p["part"]: p for p in approved["parts"]}
     new_parts = {p["part"]: p for p in new["parts"]}
     items = []
@@ -70,6 +70,11 @@ def compare(approved: dict, new: dict) -> list[dict]:
             if added:
                 add("codes_new", name, f"{len(added)} codes not in the approved list: {', '.join(added[:10])}",
                     _codes_owner(cur), column)
+    for m in measured if measured is not None else deliveries(approved, new):
+        before = old_parts[m["part"]]["time"].get("delivery", "unknown")
+        if before != "unknown" and m["delivery"] != "unknown" and before != m["delivery"]:
+            add("delivery_changed", m["part"], f"{before} → {m['delivery']} (keys kept {m['persistence']})",
+                "refining-rules")
     old_links = {_link(r): r for r in approved["relationships"]}
     new_links = {_link(r): r for r in new["relationships"]}
     for key in sorted(old_links.keys() - new_links.keys()):
@@ -86,6 +91,61 @@ def compare(approved: dict, new: dict) -> list[dict]:
                                                 f"{before['depth']} → {h['depth']}", "rdm" if h["type"] == "reference"
                 else "refining-rules")
     return items
+
+
+# The research note's detection (section 5): a delivery keeping at least 98% of the last one's keys holds
+# every record each time; one keeping under 20% holds the changes only. Keeping none tells nothing: a feed
+# of new records only and a key renumbered each delivery look alike.
+SNAPSHOT = 0.98
+CHANGES = 0.2
+
+
+def deliveries(approved: dict, new: dict) -> list[dict]:
+    """What two deliveries of each part say together, from their key samples: the share of the approved
+    sample's keys still present (key persistence), of those kept the share whose row changed, the share of
+    the new sample that is new, the delivery kind, and the time between the two deliveries' latest record."""
+    old_parts = {p["part"]: p for p in approved["parts"]}
+    measured = []
+    for part in new["parts"]:
+        before, after = (old_parts.get(part["part"]) or {}).get("fingerprint"), part.get("fingerprint")
+        if not before or not after or not before.get("keys") or "keys" not in after:
+            continue  # no sample on one side (approved before samples were kept, or its file not beside it)
+        # A small part samples every key; a large one the keys with a hash prefix. Compare like with like.
+        prefix = max(before.get("prefix", ""), after.get("prefix", ""), key=len)
+        old = {k: v for k, v in before["keys"].items() if k.startswith(prefix)}
+        cur = {k: v for k, v in after["keys"].items() if k.startswith(prefix)}
+        # A capped sample's cut-off moves as a part grows: compare the keys both samples cover.
+        if before.get("capped") or after.get("capped"):
+            edge = min(max(old, default=""), max(cur, default=""))
+            old = {k: v for k, v in old.items() if k <= edge}
+            cur = {k: v for k, v in cur.items() if k <= edge}
+        if not old:
+            continue
+        kept = old.keys() & cur.keys()
+        persistence = round(len(kept) / len(old), 6)
+        changed = round(sum(old[k] != cur[k] for k in kept) / len(kept), 6) if kept else None
+        added = round(len(cur.keys() - old.keys()) / len(cur), 6) if cur else 0.0
+        if persistence >= SNAPSHOT:
+            kind = "snapshot"
+        elif kept and persistence < CHANGES:
+            kind = "changes"
+        else:
+            kind = "unknown"
+        measured.append({"part": part["part"], "keys_sampled": len(old), "persistence": persistence,
+                         "changed": changed, "added": added, "delivery": kind,
+                         "refresh": _gap(before.get("latest"), after.get("latest")),
+                         "capped": before["capped"] or after["capped"]})
+    return measured
+
+
+def _gap(before: str | None, after: str | None) -> str:
+    """The time between two deliveries' latest record, in days, or unknown."""
+    import datetime as dt
+
+    if not before or not after:
+        return "unknown"
+    days = (dt.datetime.fromisoformat(after) - dt.datetime.fromisoformat(before)).total_seconds() / 86400
+    return f"{days:.1f} days" if days > 0 else "unknown"
 
 
 def distribution_drift(old: dict | None, new: dict | None) -> str | None:
