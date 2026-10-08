@@ -96,6 +96,19 @@ def _compatible(f: dict, p: dict) -> bool:
         (is_integer(p) and is_text(f) and (f["shape"] or "").strip("9") == "")
 
 
+def _names(part: str, column: str) -> bool:
+    """The column's name holds the part's name (letters and digits only, any case)."""
+    squash = lambda s: "".join(ch for ch in s.lower() if ch.isalnum())
+    return bool(squash(part)) and squash(part) in squash(column)
+
+
+def _names_other(other: str, own: str, column: str) -> bool:
+    """The column names the other part, not only as a piece of its own part's name
+    (product_category_id names product_category, not product)."""
+    squash = lambda s: "".join(ch for ch in s.lower() if ch.isalnum())
+    return _names(other, column) and squash(other) not in squash(own)
+
+
 def name_similarity(f_part: str, f: str, p_part: str, p: str) -> float:
     """Rostin rule 7: similar column names (or the key's part named in the column)."""
     fw, pw = set(words(f)), set(words(p)) | set(words(p_part.rsplit(".", 1)[-1]))
@@ -161,6 +174,12 @@ def links(con, profiles: dict[str, list[dict]], keys: dict[str, list[list[str]]]
                 if measured["randomness"] < RANDOMNESS and named < 0.6:
                     continue
                 if dense_sequence(p) and named < 0.6 and measured["randomness"] < 0.9:
+                    continue
+                # A part's own counter key (1..n) named for its own part, inside another part's key
+                # (category ids 1..4 among product ids), is a coincidence of counting. A key named for
+                # the other part (an extension table's person_id → person) is a link.
+                if [f["name"]] in keys.get(f_part, []) and dense_sequence(f) \
+                        and _names(f_part, f["name"]) and not _names_other(p_part, f_part, f["name"]):
                     continue
                 f_unique = f["unique"] == 1.0 and f["fill"] == 1.0
                 found.append({

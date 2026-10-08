@@ -67,7 +67,7 @@ It writes `quality.yaml` (checked by the engine's own `check_quality`),
 | `code_list`: a small code list | `in_set@1` (a code not seen is flagged) | flag |
 | any item proposed as `blank`, with the values to blank | `blank_values@1` (a fix) | — |
 | `check_digit` with a mod 97-10 family on 20 characters | `lei_check_digit@1` | withhold |
-| any other `check_digit`, `link_not_found`, `hierarchy_invalid`, `no_natural_key` | none: new code, with what its check would test | — |
+| any other `check_digit`, `link_not_found`, `hierarchy_invalid`, `no_natural_key` | none: new code, with what its check would test (for `hierarchy_invalid`, see below) | — |
 
 An item whose column has no field in the map is listed as "no field mapped":
 map the column, or leave the item out and say why in the log.
@@ -142,8 +142,12 @@ differs), and a fix with its evidence, or `needs_steward: true`.
   `edgar-warehouse context <code set> --search "<words>"`. A unique match is
   evidence for a fix; several matches, or none, go to the steward.
 - Rows with no evidence go to the steward as they are.
-- The rows stay marked, never dropped. The engine has no hierarchy check yet:
-  the check is new code, listed in the plan.
+- The rows stay marked, never dropped. The plan does not write a hierarchy
+  check itself. Once the hierarchy's code set is published and pinned in RDM
+  and the record carries both the code and its parent, write `in_hierarchy@1`
+  by hand (`field`: the parent's path; with `present@1` on the parent when a
+  missing parent matters): it checks each record's parent code on every load,
+  a quality version for the operator's approval, as any check.
 
 ### write: the feed's quality.yaml
 

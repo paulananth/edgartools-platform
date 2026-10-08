@@ -71,7 +71,7 @@ The reason codes the code raises today:
 | A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never |
 
 A contract that lists no reason blocks on every one. The "yes" reasons are
-decided (native GLEIF operation; the operator for relationship types and
+decided (a source's native operation; the operator for relationship types and
 classification hold-backs): list
 each one a contract can raise. For any other reason, ask.
 
@@ -132,22 +132,22 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `record_key` | A list of paths that together identify one record. |
 | `record_key_format` | A named format from `FORMATS` (`sec_cik`, `lei`), checked and normalized. |
 | `kind` | Every record is this kind (from `KINDS`). |
-| `kind_field`, `kind_values` | The path holding the source's category, and the kind for each category the source accepts, e.g. `CORP: company`. |
+| `kind_field`, `kind_values` | The path holding the source's category, and the kind for each category the source accepts, e.g. `CORP: <kind>`. |
 | `probable_kind_values` | What a record in another category probably is. It sorts the record without making an identity. |
 | `classification` | Instead of a kind: the Mastering Policy rule that decides it: `kind`, `rule_id`, `version`. |
 | `identifiers` | `namespace: path`, e.g. `lei: firm.lei`. |
 | `identifier_formats` | `namespace: format`, from `FORMATS`. |
-| `cross_references` | `namespace: path`: an id kept so any document can be looked up by it, **never used to join records** (operator, 2026-09-26: "lookup only"). Matching and binding read `identifiers` only. Name it for what it is (`tax_id`, or `<source>_<id>` for a source's own copy of another register's id); registration refuses a namespace that is also one of `identifiers`, or one a binding rule matches on (`cik`, `lei`). An empty value is left out. An id of another kind of entity (a security's ticker on a company's record) goes on that kind's contract, not here. Look one up with `mdm.cross_reference_lookup(namespace, value)`; `mdm.cross_reference` lists them all. |
+| `cross_references` | `namespace: path`: an id kept so any document can be looked up by it, **never used to join records** (operator, 2026-09-26: "lookup only"). Matching and binding read `identifiers` only. Name it for what it is (`tax_id`, or `<source>_<id>` for a source's own copy of another register's id); registration refuses a namespace that is also one of `identifiers`, or one a binding rule matches on (the kind's merge rules name them). An empty value is left out. An id of another kind of entity goes on that kind's contract, not here. Look one up with `mdm.cross_reference_lookup(namespace, value)`; `mdm.cross_reference` lists them all. |
 | `cross_reference_formats` | `namespace: format`, from `FORMATS`, for a cross-reference. |
 | `name_id` (a cross-reference) | **Only when the records carry no id another source shares.** Map the name: `cross_references: {name_id: <name path>}`, `cross_reference_formats: {name_id: name_id@1}`. The format keeps every token of the name (a share class or series number stays), so one name gives one id in every source, and `mdm.cross_reference_lookup('name_id', <id>)` finds the records named so. Lookup only, like any cross-reference. Measure it first with the data-profiling skill's `match_names.py` (operator, 2026-10-06: "no id exists you just need to create a id using name"). |
-| `fields` | `mdm_field: path`. Use the names MDM already has for the kind (for Company, `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`; for a kind with no field list in code, its consumer spec, e.g. `docs/specs/person/consumer.md`). |
+| `fields` | `mdm_field: path`. Use the names MDM already has for the kind (its field list in code, or, for a kind with none, its consumer spec; see Examples). |
 | `fields.address` | `components:` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`, each a path. `street2` may be `lines: <path>`, where the path holds a list of `{"$": text}` lines. Only `address` takes components; every other field is one path. |
 | `field_shape` | `nullable_text`: every field is text or empty. |
-| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a GLEIF relationship record starts at its child's Level 1 record), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. The `type` must be declared in `rules/merge/relationships.yaml` (below). A path reads one value; for a list, `each: <path>` makes one link per item, its paths starting `item.` (an item with no target key makes no link), and `find: {<name>: {in: <path>, where: {<path>: <text>, a list of texts (any of them), or {path: <path>}}}}` adds the first item of another list whose `where` paths all match, read under `<name>.`; a `where` path through a nested list matches when any element does, and no match leaves `<name>.` paths empty. Neither name may be a field of the record; a mapping that breaks this, or a `find` without `in` and `where`, stops the run. |
+| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a relationship record that starts at another record of the same source), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. The `type` must be declared in `rules/merge/relationships.yaml` (below). A path reads one value; for a list, `each: <path>` makes one link per item, its paths starting `item.` (an item with no target key makes no link), and `find: {<name>: {in: <path>, where: {<path>: <text>, a list of texts (any of them), or {path: <path>}}}}` adds the first item of another list whose `where` paths all match, read under `<name>.`; a `where` path through a nested list matches when any element does, and no match leaves `<name>.` paths empty. Neither name may be a field of the record; a mapping that breaks this, or a `find` without `in` and `where`, stops the run. |
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
 | `provenance` | `name: path` kept with each record. Only values that stay the same across captures (the source's own record); capture hashes, run ids and sync times stay beside the record. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
-| `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. A value may also be a whole address, written as `fields.address` is (`components:`), for example GLEIF's headquarters address beside the legal address MDM shows. Data quality fixes and checks can read it (`matching.<name>`). |
+| `matching` | `name: path` values that the matching rules compare. They are kept with the record, outside its fields. A value may also be a whole address, written as `fields.address` is (`components:`), for example a second address kept for matching beside the one MDM shows. Data quality fixes and checks can read it (`matching.<name>`). |
 | `retain_deferred` | `true`: keep a record MDM cannot take yet, with its reason. |
 | `native_member` | For a source parsed by native code, the member this contract maps. |
 
@@ -191,7 +191,9 @@ type, and cite what it showed in your question to the operator.
 - `edgar-warehouse context relationship <entity id> --hops 2`: its links, both
   ways.
 - `--as-of <time>` reads what was true then; `--as-at <time>` what MDM had
-  recorded by then (entities only). Follow `next_step` in each answer.
+  recorded by then, for entities and for relationships (links as recorded
+  then, of those holding now; names as MDM holds them now, said in
+  `trust.current_parts`). Follow `next_step` in each answer.
 
 What each kind and relationship type means is in
 `rules/context/definitions.yaml`. A new kind or relationship type adds its
@@ -203,9 +205,8 @@ line there in the same PR; a test fails until it does.
 wins every field it fills) and holds the matching rules. One field may have
 its own rule, `fields.<name>`: it takes `defaults` and changes any part of
 it, such as `sources` (its own order), `clear_sources` (who may empty it),
-`max_age_days` or `allow_unknown_effective`. For example,
-`fields: {address: {sources: [gleif.level1.v1, sec.submissions.company.v1]}}`
-makes GLEIF win the address while SEC wins every other field. Its comments record
+`max_age_days` or `allow_unknown_effective`: one source may win one field
+while another wins the rest (Examples). Its comments record
 which of a source's values fills a field that two sources share. Adding a
 source to a kind's ranks, adding a field or adding a kind changes what MDM
 decides. Each one needs the operator's
@@ -258,9 +259,10 @@ Checks:
 | `present@1` | | the value is filled |
 | `in_set@1` | `values` | the value is empty or one of `values` |
 | `pattern@1` | `regex` | the value is empty or matches all of `regex` |
-| `lei_check_digit@1` | | the value is an LEI whose check digits pass (mod 97) |
+| `lei_check_digit@1` | | the value is a 20-character ISO 17442 identifier whose check digits pass (mod 97-10) |
 | `placeholder@1` | `values` | the value, letters and digits only, is not one of `values` and not all zeros |
 | `registered_agent_address@1` | `markers` | no marker is in the address's street lines |
+| `in_hierarchy@1` | `table`, `sha256`, `field` (the path of the record's parent code) | the value or its parent is empty, the value is not a code of `table`, or the record's parent is the parent `table` gives the code (a pinned RDM version with a hierarchy); a code at the top with a parent given fails |
 | `in_reference@1` | `table`, `sha256` | the value is empty or a code of the reference data the Mastering Policy pins as `table` (`merge/reference-pins.yaml`, a published RDM version); `sha256` must be that pin |
 
 Fixes (each keeps the original under `provenance.quality.fixes`):
@@ -268,7 +270,7 @@ Fixes (each keeps the original under `provenance.quality.fixes`):
 | Fix | Args | What it does |
 |---|---|---|
 | `blank_values@1` | `field`, `values` | a value in `values` becomes empty, so it reads as unknown |
-| `name_state_marker@1` | `name`, `target` | SEC's US state tag at the end of a name (`/DE`) fills an empty `target` |
+| `name_state_marker@1` | `name`, `target` | a state tag at the end of a name (`/XX`) fills an empty `target` |
 | `standardize_address@1` | `field`, `into` | writes a matching copy of the address to `into` (`matching.<name>`): upper case, USPS street words, no suite or floor, a 5-digit ZIP. The address MDM shows is not changed; it counts as a fix only when the copy differs |
 
 A fix that corrects a value (`blank_values@1`, `name_state_marker@1`) changes
@@ -315,7 +317,22 @@ same rules again changes nothing.
 A catalog server on a laptop: `docker compose -f
 infra/openmetadata/docker-compose.yml up -d`, then http://localhost:8585.
 
-## Worked examples
+## Examples (worked)
 
 Every file under `rules/sources/` is a worked example. Read them all before
 writing a new one.
+
+The examples above in plain words, from today's sources:
+
+- Fields: Company's are `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`;
+  Person's are in its consumer spec, `docs/specs/person/consumer.md`.
+- Joining identifiers: `cik` and `lei`; a ticker on a company's record belongs
+  to the security's contract.
+- A link starting at another record: a GLEIF relationship record starts at its
+  child's Level 1 record. A matching address: GLEIF's headquarters address
+  beside the legal address MDM shows.
+- One field's own sources: `fields: {address: {sources: [gleif.level1.v1,
+  sec.submissions.company.v1]}}` makes GLEIF win the address while SEC wins
+  every other field.
+- A native operation: GLEIF's. A state tag: SEC's `/DE`. An ISO 17442
+  identifier: the LEI.

@@ -7,14 +7,14 @@ Continue the full self-sustaining skill / bundled Rules creator / parsing / MDM 
 - [ ] Bind approved capture/catalog run IDs in an immutable creator-produced contract; placeholders must refuse ordinary captured rows.
 - [ ] Complete configured census/classification and receipt-bound provenance before replacing active Company preparation consumers.
 - [ ] Remove Company runtime landing/census/cascade/adapter dependency only after installed empty-store 6,414 Company / 3,052 CIK+LEI population, unchanged replay and recovery proof.
-- [ ] Independent review, affected tests, installed qualification and full CI; separate reviewable PR.
+- [x] Independent review, affected tests, installed qualification and full CI; separate reviewable PR #844 merged as `b0b406468079a62dfc1aad53245f8d31d203acb4`; scoped blueprint evidence is recorded below, and full population remains open (2026-10-08 06:43 ET).
 - [ ] Reconcile parent issue 20 L3-L8 and original full goal, preserving all unfinished work.
 
 - [x] Verify the bundled Company blueprint outside checkout from committed d49cb65e through installed raw reading, combination and preparation; one test passed, 27 deselected, no skips in 126.77s (2m07s), stored actual artifact hashes/combined receipt (2026-10-07 06:44 ET). This is composition qualification, not population/mastering proof.
 
 - [x] Independently review the bounded composition blueprint: Spec and Standards/GoF report no scoped blockers; after extending to two separately authenticated continuation artifacts, all 10 blueprint cases pass (2026-10-07 06:41 ET).
 
-- [x] Push separate non-draft PR #844; live head d49cb65e and full CI 37609354821 running (2026-10-07 06:44 ET).
+- [x] Push separate non-draft PR #844; reviewed head d49cb65e, subsequently merged as `b0b406468079a62dfc1aad53245f8d31d203acb4` after CI (2026-10-07 06:44 ET).
 
 ## Census-key continuation from merged #844
 
@@ -23,7 +23,7 @@ Continue the full self-sustaining skill / bundled Rules creator / parsing / MDM 
 - [x] Add bounded generic text transformations, compiled once per contract, without provider-specific callbacks or loader dependencies; seven native cases and 106 affected Python cases passed, independent Spec/Standards/GoF review closed regex-work and aggregate-compilation findings (2026-10-07 07:20 ET).
 - [x] Bundle configured SEC/GLEIF name-key recipes and prove exact retained-normalizer parity: final native binary matches 1,181 names from 1,000 receipt-pinned SEC captures and all 1,112,064 Unicode scalars in both modes, with an observable state-suffix fault; report `captured-name-key-parity.json`, 147.546s (2026-10-07 07:23 ET). Full GLEIF captured-name/census population remains a separate requirement.
 - [ ] Wire receipt-bound census evidence into configured Company preparation; full classification, mastering population/replay/recovery and legacy removal remain required above.
-- [ ] Verify affected native/Python tests, independently review and publish a separate PR with full CI.
+- [x] Verify affected native/Python tests, independently review and publish a separate PR with full CI; #846 merged as `3da078f81c2a4a3eec43e2f738c28cee5d8b7bf8`, final evidence in the checked lines below and `.planning/workstreams/company-census-evidence/TICKET.md:5` (2026-10-08 06:43 ET).
 - [x] Verify both name-key recipes from committed 02d8d3b5 installed bundle outside checkout: one pytest case passed, 28 deselected, no skips in 80.27s; exact keys, input/context receipts, independent source.output verification and disabled custom registry; `installed-name-key-proof.json` records actual artifacts and installed metadata (2026-10-07 07:29 ET).
 
 - [x] Complete final native suite (124 passed), affected Python suite (106 passed), strict Rules contract loading and independent Spec/Standards/GoF review; final binary independently passed nine recipe tests and six resource-bound probes (2026-10-07 07:23 ET).

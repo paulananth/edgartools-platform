@@ -53,9 +53,12 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   children) with one query per hop through the link-start and link-end
   indexes, up to `--hops` 3 and at most 1,000 links, and says so when it stops.
   `--as-of` picks the links that hold at a business time. `--as-at` (a past
-  recording) is not read for relationships yet: no index finds one entity's
-  links in the batch history, so the command names `--as-of` and the view
-  instead. A versioned relationship table would make it cheap.
+  recording) reads `mdm.relationship_version` (profiling ticket 05b): every
+  recorded state of every relationship, one row per change, written by a
+  trigger on `mdm.current_record`; the walk takes the versions open at the
+  generation `--as-at` picks, through their start and end indexes; the
+  business time stays now, as with no flag (the two times are kept apart).
+  Names are as MDM holds them now (`trust.current_parts`).
 
 **Where MDM context comes from (checked against the schema, 2026-10-05).**
 - MDM keeps history for every kind already: each committed batch stores its
@@ -146,9 +149,10 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
   type's `definitions`, and under `--detail full` each link's stating records
   (`sources`). A search answer lists `matches`
   (`name`, `kind`, `entity_id`, `status`, `matched_by`). Search and
-  relationship answers carry `trust` for MDM's latest generation; an entity
-  read `--as-at` or `--as-of` says which parts are current
-  (`trust.current_parts`).
+  relationship answers carry `trust` for MDM's latest generation, a
+  relationship answer `--as-at` for the generation it read; an entity read
+  `--as-at` or `--as-of`, and a relationship answer `--as-at`, say which parts
+  are current (`trust.current_parts`).
 - **A code answer, as built (ticket 05, RDM part):** `name` (the label),
   `kind` `code`, `code_set`, `key`, `definition`, `code_set_definition`,
   `path` (the label path), `path_codes`, `level`, `depth`, `parent_code`,

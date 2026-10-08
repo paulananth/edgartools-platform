@@ -19,7 +19,8 @@ from . import classify, codes, hierarchy, identifiers, inputs, keys, names, prof
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
-MB_PER_SECOND = 40  # records read by Python, for the time estimate before a long pass
+MB_PER_SECOND = 40
+SHORT_LABEL = 6  # words, on average: a code's label, not free text  # records read by Python, for the time estimate before a long pass
 
 
 _clock = [time.monotonic()]
@@ -102,7 +103,8 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     say("classified parts")
     _inherit(findings_parts, parts)
     by_name = {f["part"]: f for f in findings_parts}
-    hierarchies = _hierarchies(con, by_name, profiles, found_links)
+    not_levels: list[dict] = []
+    hierarchies = _hierarchies(con, by_name, profiles, found_links, not_levels)
     say(f"found {len(hierarchies)} hierarchies")
     relationships = _relationships(found_links + child, by_name)
     _mask_samples(hierarchies, by_name)
@@ -125,6 +127,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         "parts": findings_parts,
         "relationships": relationships,
         "hierarchies": hierarchies,
+        "dependencies_not_hierarchies": not_levels,
         "questions": _questions(findings_parts),
         "marked_rows": marked,  # written beside findings.yaml as invalid_rows.jsonl, never inside it
         "approval": {"status": "draft", "approved_by": None, "approved_words": None, "approved_at": None},
@@ -160,7 +163,10 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         column_findings.append({
             "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
-            "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"]})
+            "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
+            # A personal column's values are never written out, so it has no distribution.
+            "distribution": None if tagged["sensitivity"] != "none" else profile.distribution(
+                con, p, c, c["name"] in {x["column"] for x in code_list})})
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
             identifier_findings.append(_identifier(con, p, c, record_key))
     parent = parts[p].parent
@@ -183,6 +189,15 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
                                 / len(names), 3) if names else 0.0,
         "rows_pointing": max([_rows(profiles, l["from"]["part"]) for l in inbound] or [0]),
         "rows_pointed": max([_rows(profiles, l["to"]["part"]) for l in out] or [0]),
+        # Pointing at one smaller list of codes only: that list may be this one's coarser level
+        # (a hierarchy kept in separate level tables).
+        # It must itself look like a list of codes: its key has a short label, it has no measures.
+        "coarser_level": parent is None and len({l["to"]["part"] for l in out}) == 1 and all(
+            len(l["from"]["columns"]) == 1 and l["cardinality"] == "N:1"
+            and _rows(profiles, l["to"]["part"]) < (columns[0]["rows"] if columns else 0)
+            and _rows(profiles, l["to"]["part"]) <= classify.REFERENCE_ROWS for l in out)
+            and any(c["name"] in key_labels and c.get("tokens", 0) <= SHORT_LABEL for c in columns)
+            and not measures,
     }
     if not facts["in_degree"]:
         facts["rows_pointing"] = facts["rows"] - 1  # nothing points at it: "smaller than" cannot pass
@@ -206,6 +221,16 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         "columns": column_findings,
         "code_lists": code_list,
         "time": times,
+        # A key holding a personal value is never sampled, even hashed; a child part's key holds its parent's
+        # row number, which no other delivery shares, and a part read as a sample has a different sample each
+        # run: only fully read top-level parts are sampled. Personal columns stay out of the row hash.
+        "fingerprint": None if not record_key["found"] or parts[p].parent is not None
+        or parts[p].scan == "sampled" or any(
+            tags.get(k, {}).get("sensitivity", "none") != "none" for k in record_key["columns"])
+        else timing.fingerprint(con, p, record_key["columns"],
+                                [c for c in columns if not c["structure"]
+                                 and (c["name"] in record_key["columns"] or c["name"] not in personal)],
+                                times["as_at"] or times["event_time"]),
         "quality": quality.find(quality.Facts(
             con=con, part=p, columns=[c for c in columns if not c["structure"]],
             roles={f["name"]: f["role"] for f in column_findings}, personal=personal, key=record_key["columns"],
@@ -279,7 +304,7 @@ def _inherit(found: list[dict], parts) -> None:
                            "value": parent, "passed": True}]
 
 
-def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
+def _hierarchies(con, parts: dict, profiles, links, not_levels: list[dict]) -> list[dict]:
     found = []
     parent_columns = {(l["from"]["part"], l["from"]["columns"][0]) for l in links
                       if l["from"]["part"] == l["to"]["part"] and len(l["from"]["columns"]) == 1}
@@ -290,7 +315,7 @@ def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
         key_side = set(key) | {x["label_column"] for x in f["code_lists"] if [x["column"]] == key}
         code_columns = [c for c in profiles[p] if c["name"] in listed and (p, c["name"]) not in parent_columns
                         and (f["class"] == "reference" or c["name"] not in key_side)]
-        for h in hierarchy.by_dependency(con, p, code_columns, key):
+        for h in hierarchy.by_dependency(con, p, code_columns, key, not_levels, f["class"] == "reference"):
             h["type"] = "reference"
             found.append(h)
     for link in links:
@@ -309,7 +334,13 @@ def _hierarchies(con, parts: dict, profiles, links) -> list[dict]:
             for h in hierarchy.by_link_part(con, p, child, parent, role, f["record_key"]["columns"]):
                 h["type"] = "master_data"
                 found.append(h)
-    return found
+    levels = hierarchy.by_level_tables(con, parts, links)
+    # A list that names its coarser level holds that level's code too: the same hierarchy, found by
+    # dependency inside the list. The level tables say more (each level's own list), so they stand.
+    named_up = {(v["part"], v["column"]) for h in levels for v in h["via"]}
+    found = [h for h in found if not (h["evidence_kind"] in {"functional_dependency", "code_nesting"}
+                                      and any((h["part"], lv["column"]) in named_up for lv in h["levels"]))]
+    return found + levels
 
 
 def _child_first(ends: list[dict], key: list[str]) -> tuple[str, str]:

@@ -49,7 +49,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists | `record_key` |
 | links | Each column pointing at another part's key (inclusion ≥ 0.9), with cardinality and evidence | `relationships` |
 | classify | The five classes, each from named tests; "unknown" when the tests do not decide | `class`, `confidence`, `tests` |
-| hierarchies | Per source: parent columns, functional dependencies, code nesting | `hierarchies` |
+| hierarchies | Per source: parent columns, functional dependencies, code nesting, separate level tables (a list naming its coarser list); a yes/no flag, or a dependency that holds by coincidence (a near-constant parent, or child values seen once), is listed apart, never a hierarchy | `hierarchies`, `dependencies_not_hierarchies` |
 | time | As of (valid from/to), as at (record time), event time, time series | `time` |
 | sensitivity | none, personal, sensitive personal; samples masked | `sensitivity` |
 | quality | Defects found on the way, with exact rows and masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
@@ -204,7 +204,9 @@ that matter most:
 - **hierarchies:** `reference` hierarchies group codes in one code set (RDM);
   `master_data` hierarchies are relationships between master records (MDM).
   `invalid_rows` are rows that break the rule; each is marked in
-  `invalid_rows.jsonl` beside the findings, never dropped.
+  `invalid_rows.jsonl` beside the findings, never dropped. Each part's key
+  sample for `compare` (hashes only) is in `fingerprints.json` beside them;
+  keep it with the approved findings.
 - **silver:** the table spec for a part MDM does not own.
 
 ## Compare a new delivery
@@ -212,8 +214,11 @@ that matter most:
 refining-rules runs this before changing a live feed. It profiles the new
 delivery and lists each difference from the approved findings in `drift.yaml`:
 parts, columns, types, fill rates, sensitivity, keys, links, code counts,
-codes not in an approved code list, hierarchies and volume. Each item names the skill that handles it
-(data-quality, refining-rules or rdm).
+codes not in an approved code list, hierarchies, volume, and distributions
+(a code's value shares by population stability index, a number's or date's
+quantiles by Kolmogorov-Smirnov distance; findings approved before
+distributions were kept are compared without them). Each item names the skill
+that handles it (data-quality, refining-rules or rdm).
 
 ```
 uv run --with duckdb --with pyyaml python profile_data.py compare \
@@ -221,8 +226,10 @@ uv run --with duckdb --with pyyaml python profile_data.py compare \
 ```
 
 It refuses findings that are not approved. Key persistence (the same record
-keeping its key between deliveries) and snapshot-or-changes are measured only
-when two deliveries exist, so a single run reports them as unknown.
+keeping its key between deliveries), snapshot-or-changes and the refresh rate
+need two deliveries: a single run reports them as unknown, and `compare`
+measures them from each part's key sample (`deliveries` in `drift.yaml`).
+Versions per key are measured in one delivery when the key holds a time.
 
 ## Examples
 

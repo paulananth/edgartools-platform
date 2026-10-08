@@ -16,6 +16,8 @@ the repository, so nothing here can stand in for a missing file.
 """
 import json
 import copy
+import base64
+import hashlib
 import os
 import shutil
 import subprocess
@@ -1106,6 +1108,17 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                 publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
                              "revision":1,"artifact_sha256":digest(row),
                              "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
+        from io import BytesIO
+        from tests.mdm.test_clean_name_census import archive, metadata
+        from tests.support import retired_name_census
+        census_archive = archive(rows)
+        census_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
+                         for r in sec_records if r['source'] == 'sec.submissions.company']
+        census_arguments = {"filers": census_filers,
+                            "sec_population": {"capture_run_id": "installed-census", "filers": len(census_filers)},
+                            "gleif_metadata": metadata(len(rows)),
+                            "gleif_sha256": hashlib.sha256(census_archive).hexdigest()}
+        historical_census = retired_name_census.build(gleif_archive=BytesIO(census_archive), **census_arguments)
         done = _run(python, "-c", r'''
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -1189,6 +1202,39 @@ decisions=[decision("bind",actor="steward",reason="offline fixture binding",at=b
 second_command={**command,"batch_id":"installed-gleif-bindings","assertions":[],"decisions":decisions,
                 "expected_checkpoint":1,"checkpoint":2}
 second=stage.apply(**second_command)
+# Build a fresh census inside the installation and carry its exact evidence
+# through actual SEC normalization, Merge Stage and publication/recovery.
+import io, base64
+from edgar_warehouse.mdm.clean import name_census
+assert not any(hasattr(name_census,name) for name in ("_text","_other_names","sec_keys"))
+packed=base64.b64decode(body["census_archive"],validate=True)
+census_arguments=body["census_arguments"]
+assert hashlib.sha256(packed).hexdigest()==census_arguments["gleif_sha256"]
+census=name_census.build(gleif_archive=io.BytesIO(packed),**census_arguments)
+expected=body["historical_census"]
+assert census==expected
+census_assertions=[]
+for record in body["sec_records"]:
+    if record["source"]!="sec.submissions.company":continue
+    row=copy.deepcopy(record["row"])
+    row["name_census"]=name_census.entry(census,row["entity_name"],census_digest=digest(census))
+    old_row=copy.deepcopy(row)
+    old_row["name_census"]=body["historical_entries"][str(row["cik"])]
+    kwargs={"source_code":"sec.submissions.company.v1","contract":files.mdm_contract("sec.submissions.company","sec.submissions.company.v1"),
+            "policy":files.policy(),"publication":{"publication_key":f"installed-census/{row['cik']}","revision":2,
+            "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
+    actual=adapters.normalize(row,**kwargs)
+    assert digest(actual)==digest(adapters.normalize(old_row,**kwargs))
+    census_assertions.append(actual)
+census_command={**command,"batch_id":"installed-census-reading","assertions":census_assertions,
+                "expected_checkpoint":2,"checkpoint":3}
+census_result=stage.apply(**census_command)
+with engine.connect() as conn:
+    for assertion in census_assertions:
+        stored=conn.scalar(text("SELECT body FROM mdm.source_reading WHERE assertion_id=:id"),
+                           {"id":assertion["assertion_id"]})
+        assert digest(stored)==digest(assertion)
+        assert stored["provenance"]["matching"]["name_census"]["census"]==digest(census)
 class LostAcknowledgement:
     def __init__(self,sink): self.sink=sink
     def publish(self,*args): self.sink.publish(*args); raise OSError("simulated lost acknowledgement")
@@ -1203,8 +1249,9 @@ for consumer in body["consumers"]:
     assert list(sink.directory.glob("*.json"))
 assert store.run_status(run)["publication_complete"]
 assert stage.apply(**command)["duplicate"] and stage.apply(**second_command)["duplicate"]
+assert stage.apply(**census_command)["duplicate"]
 with engine.connect() as conn:
-    assert conn.scalar(text("SELECT count(*) FROM mdm.batch"))==2
+    assert conn.scalar(text("SELECT count(*) FROM mdm.batch"))==3
     assert conn.scalar(text("SELECT count(*) FROM mdm.master_entity"))==4
 for sql in ("DELETE FROM mdm.source_reading","DELETE FROM mdm.master_entity","CREATE TABLE mdm.bypass(id int)"):
     try:
@@ -1216,17 +1263,25 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    files.ROOT/"sources/gleif/source.yaml",
                    files.ROOT/"sources/sec.submissions.company/source.yaml",
                    files.ROOT/"sources/sec.submissions.person/source.yaml",Path(company_source.__file__),
-                   files.ROOT/"sources/sec.submissions.company/landed-address.yaml"]}
-print(json.dumps({"pins":pins,"generation":second["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_address_caller":True,"publication_recovery":True,"full_population":False}))
+                   files.ROOT/"sources/sec.submissions.company/landed-address.yaml",Path(name_census.__file__),
+                   files.ROOT/"sources/gleif/census-record.yaml",
+                   files.ROOT/"sources/gleif/census-identity.yaml",
+                   files.ROOT/"sources/gleif/census-update.yaml",
+                   files.ROOT/"sources/sec.submissions.company/census-filer.yaml"]}
+print(json.dumps({"pins":pins,"generation":census_result["generation"],"counts":counts,
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_address_caller":True,"installed_census_caller":True,"census_digest":digest(census),"publication_recovery":True,"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
-                         "landed_addresses": landed_addresses, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
+                         "landed_addresses": landed_addresses, "census_arguments": census_arguments,
+                         "historical_census": historical_census,
+                         "census_archive": base64.b64encode(census_archive).decode(),
+                         "historical_entries": {str(r['row']['cik']): retired_name_census.entry(historical_census,r['row']['entity_name'],census_digest=digest(historical_census))
+                                                for r in sec_records if r['source']=='sec.submissions.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_address_caller"] and proof["publication_recovery"]
+        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_address_caller"] and proof["installed_census_caller"] and proof["publication_recovery"]
         (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
     finally:
         admin.dispose()

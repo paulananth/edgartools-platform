@@ -1,5 +1,6 @@
 """A whole data-profiling run on the synthetic set: classes, links, hierarchies, masking."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -115,7 +116,8 @@ def test_compare_refuses_findings_that_are_not_approved(result, tmp_path):
 
 def test_no_working_copy_outlives_the_run(result):
     assert not (result["out"] / ".work").exists()
-    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml", "invalid_rows.jsonl"]
+    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml", "fingerprints.json",
+                                                                "invalid_rows.jsonl"]
 
 
 def test_inputs_carry_rows_and_sha256_and_silver_integers_are_wide(result):
@@ -173,3 +175,196 @@ def test_link_part_ends_put_the_keyed_end_first_whatever_the_link_order():
     assert run._child_first(ends, ["from_id", "kind"]) == ("from_id", "to_id")
     assert run._child_first(list(reversed(ends)), ["from_id", "kind"]) == ("from_id", "to_id")
     assert run._child_first(ends, ["kind"]) == ("to_id", "from_id")
+
+
+def test_findings_keep_each_columns_distribution_but_never_a_personal_ones(result):
+    visit, member = part(result, "visit"), part(result, "member")
+    amount = next(c for c in visit["columns"] if c["name"] == "amount")
+    assert amount["distribution"]["kind"] == "quantiles" and len(amount["distribution"]["points"]) == 21
+    assert amount["distribution"]["points"] == sorted(amount["distribution"]["points"])
+    group = next(c for c in member["columns"] if c["name"] == "grp_code")
+    shares = group["distribution"]
+    assert shares["kind"] == "categories" and abs(sum(shares["shares"].values()) + shares["other"] - 1) < 1e-3
+    assert all(c["distribution"] is None for c in member["columns"] if c["sensitivity"] != "none")
+
+
+def test_compare_reports_a_moved_distribution(result, tmp_path):
+    import shutil
+    findings = yaml.safe_load((result["out"] / "findings.yaml").read_text())
+    findings["approval"]["status"] = "approved"
+    approved = tmp_path / "approved.yaml"
+    approved.write_text(yaml.safe_dump(findings, sort_keys=False))
+    changed = tmp_path / "set"
+    shutil.copytree(result["folder"], changed)
+    # Every amount tripled; nine members in ten moved to one group.
+    lines = (changed / "visit.csv").read_text().splitlines()
+    rows = [line.split(",") for line in lines[1:]]
+    (changed / "visit.csv").write_text("\n".join([lines[0]] + [",".join(r[:3] + [f"{float(r[3]) * 3:.2f}"]) for r in rows]) + "\n")
+    lines = (changed / "member.csv").read_text().splitlines()
+    rows = [line.split(",") for line in lines[1:]]
+    (changed / "member.csv").write_text("\n".join([lines[0]] + [",".join(r[:4] + ["G01" if n % 10 else r[4]] + r[5:]) for n, r in enumerate(rows)]) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={changed}", "--out", str(out)]) == 0
+    moved = {(d["part"], d["column"]): d for d in yaml.safe_load((out / "drift.yaml").read_text())["drift"]
+             if d["drift"] == "distribution_changed"}
+    assert "Kolmogorov-Smirnov" in moved[("visit", "amount")]["detail"]
+    assert "significant" in moved[("member", "grp_code")]["detail"]
+    assert ("visit", "visited_on") not in moved  # unchanged dates do not drift
+
+
+def test_psi_and_ks_measure_how_far_a_distribution_moved():
+    from profiling import drift
+
+    same = {"a": 0.5, "b": 0.5}
+    assert drift.psi(same, 0.0, same, 0.0) == 0
+    assert drift.psi({"a": 0.9, "b": 0.1}, 0, {"a": 0.1, "b": 0.9}, 0) > drift.PSI_SIGNIFICANT
+    assert drift.distribution_drift({"kind": "categories", "shares": {"a": 0.5, "b": 0.5}, "other": 0},
+                                    {"kind": "categories", "shares": {"a": 0.52, "b": 0.48}, "other": 0}) is None
+    line = [float(i) for i in range(21)]
+    assert drift.ks(line, line) == 0
+    assert abs(drift.ks(line, [v + 10 for v in line]) - 0.5) < 0.01  # half the values lie beyond the other's top
+    assert drift.distribution_drift({"kind": "quantiles", "points": line}, {"kind": "quantiles", "points": [5.0] * 21})
+    assert drift.distribution_drift(None, {"kind": "quantiles", "points": line}) is None  # approved before it was kept
+
+
+def test_a_long_code_list_does_not_drift_when_values_only_swap_out_of_the_listed_top():
+    from profiling import drift
+
+    # 1,000 nearly equal values: each side lists a different top 200, the rest in other.
+    old = {"kind": "categories", "shares": {f"v{i}": 0.001 for i in range(200)}, "other": 0.8}
+    new = {"kind": "categories", "shares": {f"v{i}": 0.001 for i in range(100, 300)}, "other": 0.8}
+    assert drift.distribution_drift(old, new) is None
+    # A complete list: a value that vanished is a real shift.
+    gone = drift.psi({"a": 0.5, "b": 0.5}, 0.0, {"a": 1.0}, 0.0)
+    assert gone > drift.PSI_SIGNIFICANT
+    assert "measured differently" in drift.distribution_drift(old, {"kind": "quantiles", "points": [0.0] * 21})
+
+
+def test_ks_is_exact_at_a_jump():
+    from profiling import drift
+
+    # Half the values are 0 (a mass point), the rest spread from 0 to 10.
+    massed = [0.0] * 11 + [float(i) for i in range(1, 11)]
+    spread = [i / 2 for i in range(21)]
+    assert abs(drift.ks(massed, spread) - 0.5) < 0.06
+
+
+def test_a_zoned_time_is_measured_as_its_own_instant(tmp_path):
+    import duckdb
+    from profiling import profile
+
+    con = duckdb.connect()
+    con.execute("SET TimeZone = 'America/New_York'")
+    con.execute("CREATE TABLE t AS SELECT TIMESTAMPTZ '2024-01-01 00:00:00+00' + INTERVAL (i) DAY AS at FROM range(30) r(i)")
+    column = profile.columns(con, "t")[0]
+    assert profile.distribution(con, "t", column, False)["points"][0] == 1704067200.0
+
+
+def _approved(result, tmp_path):
+    import shutil
+    findings = yaml.safe_load((result["out"] / "findings.yaml").read_text())
+    findings["approval"]["status"] = "approved"
+    path = tmp_path / "approved.yaml"
+    path.write_text(yaml.safe_dump(findings, sort_keys=False))
+    shutil.copy(result["out"] / "fingerprints.json", tmp_path / "fingerprints.json")  # read beside the findings
+    return path
+
+
+def test_two_deliveries_measure_persistence_and_the_delivery_kind(result, tmp_path):
+    import shutil
+
+    visit = part(result, "visit")["fingerprint"]
+    assert visit["sampled"] == 3000 and visit["prefix"] == "" and "keys" not in visit  # every key, kept beside
+    assert len(json.loads((result["out"] / "fingerprints.json").read_text())["visit"]) == 3000
+    approved = _approved(result, tmp_path)
+    # The same full delivery again: a snapshot.
+    out = tmp_path / "same"
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={result['folder']}",
+                              "--out", str(out)]) == 0
+    same = {m["part"]: m for m in yaml.safe_load((out / "drift.yaml").read_text())["deliveries"]}
+    assert same["visit"]["persistence"] == 1.0 and same["visit"]["changed"] == 0.0
+    assert same["visit"]["delivery"] == "snapshot"
+    again = {p["part"]: p for p in yaml.safe_load((out / "findings.yaml").read_text())["parts"]}["visit"]
+    assert again["time"]["delivery"] == "snapshot" and again["record_key"]["evidence"]["persistence"] == 1.0
+    # Only the visits that changed, plus new ones: changes only.
+    changed = tmp_path / "set"
+    shutil.copytree(result["folder"], changed)
+    lines = (changed / "visit.csv").read_text().splitlines()
+    rows = [line.split(",") for line in lines[1:]]
+    kept = [r[:3] + [f"{float(r[3]) + 1:.2f}"] for r in rows[::10]]  # one visit in ten, amount corrected
+    fresh = [[str(5000 + n), r[1], r[2], r[3]] for n, r in enumerate(rows[:300])]
+    (changed / "visit.csv").write_text("\n".join([lines[0]] + [",".join(r) for r in kept + fresh]) + "\n")
+    out = tmp_path / "changes"
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={changed}",
+                              "--out", str(out)]) == 0
+    visits = {m["part"]: m for m in yaml.safe_load((out / "drift.yaml").read_text())["deliveries"]}["visit"]
+    assert visits["persistence"] < 0.5 and visits["changed"] == 1.0 and visits["delivery"] == "changes"
+
+
+def test_a_key_holding_a_personal_value_is_never_sampled(tmp_path):
+    import csv
+
+    folder = tmp_path / "set"
+    folder.mkdir()
+    with (folder / "people.csv").open("w", newline="") as f:
+        csv.writer(f).writerows([["email", "given_name", "city"],
+                                 *[[f"person{n}@example.com", f"Ann{n}", f"Town {n % 7}"] for n in range(400)]])
+    findings = run.profile_inputs({"set": str(folder)}, "people")
+    (people,) = findings["parts"]
+    assert people["record_key"]["columns"] == ["email"] and people["fingerprint"] is None
+
+
+def test_versions_per_key_when_the_key_holds_its_recording_time():
+    import duckdb
+    from profiling import timing
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE v AS SELECT 'E' || (i % 100) AS entity, TIMESTAMP '2026-01-01' + INTERVAL (i) HOUR AS "
+                "updated_at FROM range(300) r(i)")
+    assert timing.versions(con, "v", ["entity", "updated_at"], ["updated_at", None]) == {"p50": 3, "p99": 3}
+    assert timing.versions(con, "v", ["entity"], ["updated_at", None]) is None
+
+
+def test_deliveries_sampled_differently_compare_only_the_keys_both_sampled():
+    from profiling import drift
+
+    every = {f"{n % 16:x}{n}": "row" for n in range(64)}  # four keys start with each hex digit
+    part = lambda prefix, keys: {"part": "p", "time": {"delivery": "unknown"},
+                                 "fingerprint": {"prefix": prefix, "keys": keys, "capped": False, "latest": None}}
+    small = {"parts": [part("", every)]}
+    large = {"parts": [part("0", {k: v for k, v in every.items() if k.startswith("0")})]}
+    (m,) = drift.deliveries(small, large)
+    assert m["persistence"] == 1.0 and m["delivery"] == "snapshot" and m["keys_sampled"] == 4
+
+
+def test_a_growing_capped_part_is_still_a_snapshot_and_a_renumbered_key_tells_nothing():
+    import duckdb
+    from profiling import drift, profile, timing
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE s AS SELECT i AS id, 'v' || i AS k FROM range(200000) r(i)")  # a column named k
+    con.execute("CREATE TABLE g AS SELECT i AS id, 'v' || i AS k FROM range(240000) r(i)")
+    take = lambda t: {"part": "p", "time": {"delivery": "unknown"}, "fingerprint": timing.fingerprint(
+        con, t, ["id"], [c for c in profile.columns(con, t)], None)}
+    (m,) = drift.deliveries({"parts": [take("s")]}, {"parts": [take("g")]})
+    assert m["persistence"] == 1.0 and m["changed"] == 0.0 and m["delivery"] == "snapshot"
+    con.execute("CREATE TABLE r AS SELECT i + 1000000 AS id, 'v' || i AS k FROM range(200000) r(i)")
+    (m,) = drift.deliveries({"parts": [take("s")]}, {"parts": [take("r")]})
+    assert m["persistence"] == 0.0 and m["delivery"] == "unknown"
+
+
+def test_a_number_is_hashed_by_its_value():
+    import duckdb
+    from profiling import profile, timing
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE a AS SELECT CAST(i AS BIGINT) AS id, CAST(i * 2 AS BIGINT) AS n FROM range(50) r(i)")
+    con.execute("CREATE TABLE b AS SELECT CAST(i AS DOUBLE) AS id, CAST(i * 2 AS DOUBLE) AS n FROM range(50) r(i)")
+    hashes = [timing.fingerprint(con, t, ["id"], profile.columns(con, t), None)["keys"] for t in ("a", "b")]
+    assert hashes[0] == hashes[1]
+
+
+def test_a_part_read_as_a_sample_keeps_no_fingerprint(result):
+    findings = run.profile_inputs({"set": str(result["folder"])}, "small limit", limit=1000, sample=500)
+    sampled = [p for p in findings["parts"] if p["scan"] == "sampled"]
+    assert sampled and all(p["fingerprint"] is None for p in sampled)

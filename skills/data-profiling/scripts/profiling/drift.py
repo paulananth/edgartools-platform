@@ -7,9 +7,17 @@ from __future__ import annotations
 
 FILL_CHANGE = 0.05
 ROWS_CHANGE = 0.5
+# Population stability index of a code's value shares: under 0.1 stable, 0.1 to 0.25 a moderate shift,
+# over 0.25 a significant one. A common rule of thumb, not a sourced one; the research note (section 7)
+# proposes flagging over 0.2. Numbers and dates use KS on quantiles instead of PSI over deciles.
+PSI_MODERATE, PSI_SIGNIFICANT = 0.1, 0.25
+# Kolmogorov-Smirnov distance between two quantile curves of a number or date (read from 21 points,
+# so accurate to about 0.05): over 0.1 the distribution moved.
+KS_CHANGE = 0.1
+EPSILON = 1e-4  # a share of zero, so a value seen once on one side still counts
 
 
-def compare(approved: dict, new: dict) -> list[dict]:
+def compare(approved: dict, new: dict, measured: list[dict] | None = None) -> list[dict]:
     old_parts = {p["part"]: p for p in approved["parts"]}
     new_parts = {p["part"]: p for p in new["parts"]}
     items = []
@@ -45,6 +53,11 @@ def compare(approved: dict, new: dict) -> list[dict]:
                 add("fill_changed", name, f"{a['fill']} → {b['fill']}", "data-quality", col)
             if a["sensitivity"] != b["sensitivity"]:
                 add("sensitivity_changed", name, f"{a['sensitivity']} → {b['sensitivity']}", "refining-rules", col)
+            moved = distribution_drift(a.get("distribution"), b.get("distribution"))
+            if moved:
+                add("distribution_changed", name, moved,
+                    _codes_owner(cur) if (b.get("distribution") or {}).get("kind") == "categories" else "data-quality",
+                    col)
         old_codes = {c["column"]: c for c in old["code_lists"]}
         for code in cur["code_lists"]:
             before = old_codes.get(code["column"])
@@ -57,6 +70,11 @@ def compare(approved: dict, new: dict) -> list[dict]:
             if added:
                 add("codes_new", name, f"{len(added)} codes not in the approved list: {', '.join(added[:10])}",
                     _codes_owner(cur), column)
+    for m in measured if measured is not None else deliveries(approved, new):
+        before = old_parts[m["part"]]["time"].get("delivery", "unknown")
+        if before != "unknown" and m["delivery"] != "unknown" and before != m["delivery"]:
+            add("delivery_changed", m["part"], f"{before} → {m['delivery']} (keys kept {m['persistence']})",
+                "refining-rules")
     old_links = {_link(r): r for r in approved["relationships"]}
     new_links = {_link(r): r for r in new["relationships"]}
     for key in sorted(old_links.keys() - new_links.keys()):
@@ -73,6 +91,121 @@ def compare(approved: dict, new: dict) -> list[dict]:
                                                 f"{before['depth']} → {h['depth']}", "rdm" if h["type"] == "reference"
                 else "refining-rules")
     return items
+
+
+# The research note's detection (section 5): a delivery keeping at least 98% of the last one's keys holds
+# every record each time; one keeping under 20% holds the changes only. Keeping none tells nothing: a feed
+# of new records only and a key renumbered each delivery look alike.
+SNAPSHOT = 0.98
+CHANGES = 0.2
+
+
+def deliveries(approved: dict, new: dict) -> list[dict]:
+    """What two deliveries of each part say together, from their key samples: the share of the approved
+    sample's keys still present (key persistence), of those kept the share whose row changed, the share of
+    the new sample that is new, the delivery kind, and the time between the two deliveries' latest record."""
+    old_parts = {p["part"]: p for p in approved["parts"]}
+    measured = []
+    for part in new["parts"]:
+        before, after = (old_parts.get(part["part"]) or {}).get("fingerprint"), part.get("fingerprint")
+        if not before or not after or not before.get("keys") or "keys" not in after:
+            continue  # no sample on one side (approved before samples were kept, or its file not beside it)
+        # A small part samples every key; a large one the keys with a hash prefix. Compare like with like.
+        prefix = max(before.get("prefix", ""), after.get("prefix", ""), key=len)
+        old = {k: v for k, v in before["keys"].items() if k.startswith(prefix)}
+        cur = {k: v for k, v in after["keys"].items() if k.startswith(prefix)}
+        # A capped sample's cut-off moves as a part grows: compare the keys both samples cover.
+        if before.get("capped") or after.get("capped"):
+            edge = min(max(old, default=""), max(cur, default=""))
+            old = {k: v for k, v in old.items() if k <= edge}
+            cur = {k: v for k, v in cur.items() if k <= edge}
+        if not old:
+            continue
+        kept = old.keys() & cur.keys()
+        persistence = round(len(kept) / len(old), 6)
+        changed = round(sum(old[k] != cur[k] for k in kept) / len(kept), 6) if kept else None
+        added = round(len(cur.keys() - old.keys()) / len(cur), 6) if cur else 0.0
+        if persistence >= SNAPSHOT:
+            kind = "snapshot"
+        elif kept and persistence < CHANGES:
+            kind = "changes"
+        else:
+            kind = "unknown"
+        measured.append({"part": part["part"], "keys_sampled": len(old), "persistence": persistence,
+                         "changed": changed, "added": added, "delivery": kind,
+                         "refresh": _gap(before.get("latest"), after.get("latest")),
+                         "capped": before["capped"] or after["capped"]})
+    return measured
+
+
+def _gap(before: str | None, after: str | None) -> str:
+    """The time between two deliveries' latest record, in days, or unknown."""
+    import datetime as dt
+
+    if not before or not after:
+        return "unknown"
+    days = (dt.datetime.fromisoformat(after) - dt.datetime.fromisoformat(before)).total_seconds() / 86400
+    return f"{days:.1f} days" if days > 0 else "unknown"
+
+
+def distribution_drift(old: dict | None, new: dict | None) -> str | None:
+    """How far a column's distribution moved, when it moved enough to report; None otherwise
+    (or when either delivery has no distribution, as findings approved before it was kept)."""
+    if not old or not new:
+        return None
+    if old["kind"] != new["kind"]:
+        return f"measured differently: {old['kind']} → {new['kind']} (the column became, or stopped being, a code)"
+    if old["kind"] == "categories":
+        index = psi(old["shares"], old["other"], new["shares"], new["other"])
+        if index < PSI_MODERATE:
+            return None
+        level = "significant" if index > PSI_SIGNIFICANT else "moderate"
+        return f"population stability index {index:.3f} ({level} shift of the value shares)"
+    distance = ks(old["points"], new["points"])
+    return f"Kolmogorov-Smirnov distance {distance:.3f} between the quantiles" if distance > KS_CHANGE else None
+
+
+def psi(old: dict, old_other: float, new: dict, new_other: float) -> float:
+    """Population stability index over the listed values, the rest as one "other" value.
+
+    Each side lists only its commonest values. A value listed on one side only is
+    absent from the other only if that side's list is complete (its other is 0);
+    otherwise its share there is unknown, so it joins "other" on both sides."""
+    import math
+
+    values = {v for v in set(old) | set(new)
+              if (v in old or old_other == 0) and (v in new or new_other == 0)}
+    old_rest = max(0.0, 1 - sum(old.get(v, 0.0) for v in values))
+    new_rest = max(0.0, 1 - sum(new.get(v, 0.0) for v in values))
+    pairs = [(old.get(v, 0.0), new.get(v, 0.0)) for v in values] + [(old_rest, new_rest)]
+    total = 0.0
+    for a, b in pairs:
+        a, b = max(a, EPSILON), max(b, EPSILON)
+        total += (b - a) * math.log(b / a)
+    return round(total, 6)
+
+
+def ks(old: list[float], new: list[float]) -> float:
+    """The largest gap between two cumulative curves, each read from its evenly spaced quantiles.
+
+    Both curves are straight between their points and jump where a point repeats,
+    so the largest gap is at a point of either curve, on one side of it or the other."""
+    return round(max(abs(_cdf(old, v, below) - _cdf(new, v, below))
+                     for v in sorted(set(old) | set(new)) for below in (False, True)), 6)
+
+
+def _cdf(points: list[float], v: float, below: bool = False) -> float:
+    """The share of values at or below v (just below v when `below`), by straight lines between
+    quantile points; a repeated point is a jump."""
+    step = 1 / (len(points) - 1)
+    at = (lambda q: q < v) if below else (lambda q: q <= v)
+    if not at(points[0]):
+        return 0.0
+    if at(points[-1]):
+        return 1.0
+    i = max(j for j, q in enumerate(points) if at(q))  # the last point counted
+    low, high = points[i], points[i + 1]
+    return i * step + (step * (v - low) / (high - low) if high > low else 0.0)
 
 
 def _codes_owner(part: dict) -> str:

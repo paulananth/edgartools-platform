@@ -31,6 +31,7 @@ dataset:
 parts: [...]                    # §3, one per table, file or child table
 relationships: [...]            # §4
 hierarchies: [...]              # §5
+dependencies_not_hierarchies: [...] # §5, a flag or a coincidence, never a hierarchy
 questions: [...]                # §8, open questions for the operator, one at a time
 approval:                       # §9
   status: draft|approved
@@ -64,7 +65,12 @@ approval:                       # §9
   columns:
     - {name: <col>, type: <detected>, fill: <0..1>, distinct: <n>,
        unique: <0..1>, top: [<masked samples>], role: <key|identifier|name|code|measure|date|text|flag|other>,
-       sensitivity: none|personal|sensitive_personal}
+       sensitivity: none|personal|sensitive_personal,
+       distribution: <null | {kind: categories, shares: {<value>: <0..1>}, other: <0..1>}
+                     | {kind: quantiles, points: [21 numbers, 0% to 100% by 5%]}>}
+                                # for compare; a code's 200 commonest values, a number's or
+                                # date's quantiles (dates as epoch seconds); null for a personal
+                                # column, whose values are never written out
   code_lists:                   # columns whose values are a code set
     - {column: <col>, distinct: <n>, label_column: <col|null>, code_set: <existing RDM code set|null>,
        proposed_code_set: <name|null>}
@@ -73,7 +79,7 @@ approval:                       # §9
     as_of: {from: <col|null>, to: <col|null>}      # valid time
     as_at: <col|null>                               # record time
     event_time: <col|null>
-    versions_per_key: {p50: <n>, p99: <n>}
+    versions_per_key: {p50: <n>, p99: <n>}|null   # when the key holds its recording or valid-from time
     series: {key: [<cols>], time: <col>, step: <duration>, gaps: <n>}|null
     refresh: <duration|unknown>
   quality:                      # handed to data-quality
@@ -93,8 +99,31 @@ logical type a full read proves), `shape`, `shape_share` (masked shapes) and
 `sensitivity_signals`; on an identifier, `local_counter`; on a record key,
 `alternatives` (other unique keys) and, for a sampled part, `evidence.full_pass`.
 A column's `role` may also be `link` (it points at another part's key).
-`persistence` and `delivery` stay null and `unknown` until `compare` sees a
-second delivery.
+`persistence`, `delivery` and `refresh` stay null and `unknown` until
+`compare` sees a second delivery (ticket 01d). For that, a fully read
+top-level part with a found key keeps a `fingerprint`: `{prefix, capped,
+latest, latest_column, sampled, file, file_sha256}`; its sample, `{<sha256 of
+the key>: <sha256 of the row>}` per part, is written beside the findings in
+`fingerprints.json` (never inside the file the operator approves), and
+`compare` reads it back from beside the approved findings, refusing one whose
+sha256 differs. The sample holds the keys whose hash starts with `prefix` (every key of a part of at most 4,096 rows;
+about one in sixteen above, at most 4,096), so two deliveries sample the same
+keys. It keeps hashes only; a short key can still be found again by hashing
+every candidate, so a key holding a personal value is never sampled, and
+personal columns stay out of the row hash. A number is hashed by its value. A
+part read as a sample keeps none (its sample differs each run). `compare`
+writes, per part, `deliveries` in `drift.yaml`: `persistence` (the share of the
+approved sample's keys still present, over the keys both samples cover when
+one is capped), `changed` (of those kept, the share whose row changed; the
+research note's attribute stability is 1 minus it), `added` (the share of the
+new sample that is new), `delivery` (`snapshot` from 98% kept; `changes` under
+20% kept, with at least one kept; else `unknown`, as the research note's
+section 5; keeping none cannot tell new records only from a renumbered key)
+and `refresh` (days between the two deliveries' latest record or event time:
+one gap; more deliveries give the usual one). The new findings carry them;
+once approved findings carry a measured kind, a later change of kind is a
+drift item. `versions_per_key` counts rows per business key when the record
+key holds the recording, valid-from or event time.
 
 A record key designed on a name (research note 02; operator, 2026-10-05:
 "Same record: durable key") also writes `basis` (the name column) and, in its
@@ -137,6 +166,34 @@ normalized name, and a rename is kept as an alias.
   invalid_rows: <n>             # rows that break the rule; each marked in invalid_rows.jsonl (§5.1)
   valid_dates: {from: <col|null>, to: <col|null>}
 ```
+
+A functional dependency between code columns is a level only when it is not a
+coincidence (ticket 01d): it must explain at least half of what always
+guessing the parent's commonest value gets wrong (a lift of at least 0.5), and
+at least half the rows must carry a child value seen on two or more rows (a
+list of codes, one row per code, is exempt). One that fails is listed in
+`dependencies_not_hierarchies` as `{part, child, parent, reason: coincidence,
+held, baseline, lift, supported}` and is never a hierarchy (a flag set on
+almost every row; a value seen on one row only); the child gets no coarser
+parent in its place. A yes/no flag (boolean, or two values reading as yes and
+no) is never a level either (operator, 2026-10-08: "Flag is not a level
+(Recommended)"): a code determining it is listed with `reason: flag`, and the
+code's search goes on to a real parent. A two-valued category with names of its
+own is still a level.
+
+Level tables (`evidence_kind: level_tables`, ticket 01d): reference parts kept
+apart, each naming one row of the next coarser part by a single column (a
+subcategory list naming its category list). A reference part may point at one
+smaller part as its coarser level, and only when it is itself a list of codes
+(its key has a short label; it has no measures). Each level names one parent
+list (a list naming two lists, or one twice, is no chain). Each level's
+`column` is `<part>.<key>`, the key the finer level names; `via` lists each
+`{part, column}` that names the level above; `holds` is the share of the finer
+levels' rows that name a row above, accepted at 0.99 as any hierarchy; a row
+naming no row above is an orphan, marked like any invalid row (codes compared
+as numbers when one side is a number). The same hierarchy found again by
+dependency inside a list (the list carries its parent's code) is left out: the
+level tables stand.
 
 ### 5.1 Marked rows: `invalid_rows.jsonl`
 
@@ -190,7 +247,11 @@ mastering; a row whose entity is not mastered yet keeps an empty MDM id.
 `compare` reads an approved `findings.yaml` and a new delivery, and writes
 `drift.yaml`: new and missing columns, type changes, fill-rate changes beyond
 a threshold, new code values, broken keys and inclusions, hierarchy rule
-changes, and distribution shifts (KS or chi-square, PSI). Each drift item
+changes, and distribution shifts (`distribution_changed`: the population
+stability index of a code's value shares, reported from 0.1 and called
+significant over 0.25; the Kolmogorov-Smirnov distance between a number's or
+date's quantile curves, reported over 0.1; chi-square is not used, since on a
+large delivery any difference is significant). Each drift item
 names the skill that handles it: data-quality, refining-rules or RDM.
 
 ## 8. Questions
