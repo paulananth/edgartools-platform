@@ -165,9 +165,9 @@ def test_level_tables_form_a_reference_hierarchy(tmp_path):
 
     write("division.csv", ["division_code", "division_label"], [[f"D{d}", f"Division {d}"] for d in range(1, 11)])
     write("group.csv", ["group_code", "group_label", "division_code"],
-          [[f"G{g:02d}", f"Group {g}", f"D{g % 10 + 1}"] for g in range(1, 41)] + [["G99", "Group 99", "D99"]])
+          [[f"G{g:03d}", f"Group {g}", f"D{g % 10 + 1}"] for g in range(1, 151)] + [["G999", "Group 999", "D99"]])
     write("product.csv", ["product_id", "product_name", "group_code", "price"],
-          [[f"P{n:05d}", f"Product {n} {rng.choice(['red', 'blue', 'large', 'small'])}", f"G{rng.randint(1, 40):02d}",
+          [[f"P{n:05d}", f"Product {n} {rng.choice(['red', 'blue', 'large', 'small'])}", f"G{rng.randint(1, 150):03d}",
             round(rng.uniform(1, 90), 2)] for n in range(1, 1501)])
     write("sale.csv", ["sale_id", "product_id", "sold_on", "qty"],
           [[n, f"P{rng.randint(1, 1500):05d}", f"2025-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
@@ -198,3 +198,44 @@ def test_a_counter_key_inside_another_counter_key_is_no_link(tmp_path):
              for r in run.profile_inputs({"set": str(folder)}, "counters")["relationships"]}
     assert ("thing", "kind_id", "kind") in links
     assert not any(a == "kind" for a, _, _ in links)  # kind ids 1..4 are not thing ids
+
+
+def test_level_tables_need_one_parent_per_level_and_a_list_of_codes(tmp_path):
+    import csv
+
+    from profiling import run
+
+    folder = tmp_path / "set"
+    folder.mkdir()
+
+    def write(name, header, rows):
+        with (folder / name).open("w", newline="") as f:
+            csv.writer(f).writerows([header, *rows])
+
+    # A list naming one parent list twice: no chain, and no crash.
+    write("region.csv", ["region_code", "region_label"], [[f"R{r}", f"Region {r}"] for r in range(1, 11)])
+    write("area.csv", ["area_code", "area_label", "home_region_code", "sales_region_code"],
+          [[f"A{a:03d}", f"Area {a}", f"R{a % 10 + 1}", f"R{(a + 3) % 10 + 1}"] for a in range(1, 151)])
+    # Free-text notes pointing at a smaller part are not a list of codes.
+    write("visit.csv", ["visit_code", "visit_label"], [[f"V{v:03d}", f"Visit {v}"] for v in range(1, 301)])
+    write("note.csv", ["note_code", "note_text", "visit_code"],
+          [[f"N{n:04d}", f"note {n} about the visit, written at length by the person who saw it", f"V{n % 300 + 1:03d}"]
+           for n in range(1, 2001)])
+    findings = run.profile_inputs({"set": str(folder)}, "branches")
+    assert not [h for h in findings["hierarchies"] if h["evidence_kind"] == "level_tables"]
+    assert {p["part"]: p["class"] for p in findings["parts"]}["note"] != "reference"
+
+
+def test_a_key_named_for_the_other_part_still_links(tmp_path):
+    import csv
+
+    from profiling import run
+
+    folder = tmp_path / "set"
+    folder.mkdir()
+    with (folder / "person.csv").open("w", newline="") as f:
+        csv.writer(f).writerows([["id", "full_name"], *[[i, f"Person number {i} of the set"] for i in range(1, 301)]])
+    with (folder / "person_detail.csv").open("w", newline="") as f:
+        csv.writer(f).writerows([["person_id", "shoe_size"], *[[i, 30 + i % 15] for i in range(1, 301)]])
+    links = {(r["from"]["part"], r["to"]["part"]) for r in run.profile_inputs({"set": str(folder)}, "x")["relationships"]}
+    assert ("person_detail", "person") in links

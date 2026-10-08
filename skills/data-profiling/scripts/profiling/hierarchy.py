@@ -51,6 +51,15 @@ def is_flag(profile: dict) -> bool:
     return profile["distinct"] == 2 and {str(t["value"]).strip().upper() for t in profile["top"]} <= FLAG_VALUES
 
 
+def _hierarchy(name: str, part: str, kind: str, levels: list[dict], rule: str, holds: float, marked: list[dict], *,
+               depth: int, shape: str = "balanced", orphans: int = 0, cycles: int = 0, type: str | None = None,
+               **extra) -> dict:
+    """One hierarchy record, as every finder writes it (findings §5)."""
+    return {"hierarchy": name, "type": type, "part": part, "evidence_kind": kind, **extra, "levels": levels,
+            "rule": rule, "holds": holds, "depth": depth, "shape": shape, "orphans": orphans, "cycles": cycles,
+            "invalid_rows": len(marked), "valid_dates": {"from": None, "to": None}, "marked": marked}
+
+
 def _equivalent(con, part: str, columns: list[dict]) -> list[dict]:
     """Keep one column of each set that names the same thing one to one (code and its labels)."""
     kept: list[dict] = []
@@ -153,10 +162,7 @@ def _record(con, part: str, columns: list[str], holds: float, kind: str, record_
             if tuple(m["key"].values()) not in seen:  # a row breaking two levels is one invalid row
                 seen.add(tuple(m["key"].values()))
                 marked.append(m)
-    return {"hierarchy": name, "type": None, "part": part,
-            "evidence_kind": kind, "levels": levels, "rule": rule, "holds": holds, "depth": len(columns),
-            "shape": "balanced", "orphans": 0, "cycles": 0, "invalid_rows": len(marked),
-            "valid_dates": {"from": None, "to": None}, "marked": marked}
+    return _hierarchy(name, part, kind, levels, rule, holds, marked, depth=len(columns))
 
 
 def _off_parent(marking: "_Marking", child: str, parent: str) -> list[dict]:
@@ -192,13 +198,11 @@ def by_parent_column(con, part: str, child: str, key: str, record_key: list[str]
     marked += marking.rows(f"{in_cycle} AND CAST({c} AS VARCHAR) <> CAST({k} AS VARCHAR)", [cycles], key, child,
                            "on a cycle of parents")
     orphans = sum(1 for m in marked if m["reason"] == "parent not found")
-    return {"hierarchy": name, "type": None, "part": part, "evidence_kind": "parent_column",
-            "levels": [{"depth": d, "name": None, "column": None, "samples": []} for d in range(1, depth + 1)],
-            "rule": f"{child} names the parent row's {key}",
-            "holds": round(1 - len(marked) / rows, 6) if rows else 0,
-            "depth": depth, "shape": "balanced" if len(leaf_depths) <= 1 else "ragged", "orphans": orphans,
-            "cycles": len(cycles), "invalid_rows": len(marked), "valid_dates": {"from": None, "to": None},
-            "marked": marked}
+    return _hierarchy(name, part, "parent_column",
+                      [{"depth": d, "name": None, "column": None, "samples": []} for d in range(1, depth + 1)],
+                      f"{child} names the parent row's {key}", round(1 - len(marked) / rows, 6) if rows else 0,
+                      marked, depth=depth, shape="balanced" if len(leaf_depths) <= 1 else "ragged",
+                      orphans=orphans, cycles=len(cycles))
 
 
 class _Marking:
@@ -241,20 +245,27 @@ def by_level_tables(con, parts: dict, links: list[dict]) -> list[dict]:
     pointed_at = {l["to"]["part"] for ls in up.values() for l in ls}
     for leaf in sorted(p for p in up if p not in pointed_at):
         chain, steps = [leaf], []
+        # One parent per level: a list naming two lists (or one list twice) is not a chain of levels.
         while chain[-1] in up and len(up[chain[-1]]) == 1 and up[chain[-1]][0]["to"]["part"] not in chain:
             step = up[chain[-1]][0]
             steps.append(step)
             chain.append(step["to"]["part"])
-        found.append(_level_record(con, parts, chain, steps))
+        if len(chain) < 2:
+            continue
+        record = _level_record(con, parts, chain, steps)
+        if record["holds"] >= HOLDS:  # near-exact, as every hierarchy
+            found.append(record)
     return found
 
 
 def _level_record(con, parts: dict, chain: list[str], steps: list[dict]) -> dict:
     """The hierarchy record of a chain of level tables, finest first."""
     name = " > ".join(reversed(chain))
+    # Each level's key: the column the finer level names (the top's from its step), else the record key.
+    named = {s["to"]["part"]: s["to"]["columns"][0] for s in steps}
     levels = []
     for depth, part in enumerate(reversed(chain), 1):
-        key = parts[part]["record_key"]["columns"][0]
+        key = named.get(part) or parts[part]["record_key"]["columns"][0]
         samples = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({sql_name(key)} AS VARCHAR) FROM {sql_name(part)} "
                                              f"WHERE {sql_name(key)} IS NOT NULL ORDER BY 1 LIMIT 3").fetchall()]
         levels.append({"depth": depth, "name": None, "column": f"{part}.{key}", "samples": samples})
@@ -262,26 +273,35 @@ def _level_record(con, parts: dict, chain: list[str], steps: list[dict]) -> dict
     for step in steps:
         child, parent = step["from"], step["to"]
         marking = _Marking(con, child["part"], name, parts[child["part"]]["record_key"]["columns"])
-        marked += _orphans(marking, child["columns"][0], parent["columns"][0], parent_part=parent["part"])
+        marked += _orphans(marking, child["columns"][0], parent["columns"][0], parent_part=parent["part"],
+                           as_number=_numeric(con, child["part"], child["columns"][0])
+                           != _numeric(con, parent["part"], parent["columns"][0]))
     unparented = sum(con.execute(f"SELECT count(*) FROM {sql_name(s['from']['part'])} "
                                  f"WHERE {sql_name(s['from']['columns'][0])} IS NULL").fetchone()[0] for s in steps)
-    return {"hierarchy": name, "type": "reference", "part": chain[0], "evidence_kind": "level_tables",
-            "levels": levels,
-            "rule": "; ".join(f"each {s['from']['part']} row names one {s['to']['part']} row by "
-                              f"{s['from']['columns'][0]}" for s in steps),
-            "holds": min(s["inclusion"] for s in steps), "depth": len(chain),
-            "shape": "balanced" if not unparented else "ragged", "orphans": len(marked), "cycles": 0,
-            "invalid_rows": len(marked), "valid_dates": {"from": None, "to": None}, "marked": marked}
+    rows = sum(con.execute(f"SELECT count(*) FROM {sql_name(s['from']['part'])}").fetchone()[0] for s in steps)
+    return _hierarchy(name, chain[0], "level_tables", levels,
+                      "; ".join(f"each {s['from']['part']} row names one {s['to']['part']} row by "
+                                f"{s['from']['columns'][0]}" for s in steps),
+                      round(1 - len(marked) / rows, 6) if rows else 0.0, marked, depth=len(chain),
+                      shape="balanced" if not unparented else "ragged", orphans=len(marked), type="reference",
+                      via=[{"part": s["from"]["part"], "column": s["from"]["columns"][0]} for s in steps])
+
+
+def _numeric(con, part: str, column: str) -> bool:
+    kind = {r[0]: r[1] for r in con.execute(f"DESCRIBE {sql_name(part)}").fetchall()}[column]
+    return kind in {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "DOUBLE", "FLOAT"} or kind.startswith("DECIMAL")
 
 
 def _orphans(marking: _Marking, child: str, key: str, orphan: str | None = None,
-             parent_part: str | None = None) -> list[dict]:
+             parent_part: str | None = None, as_number: bool = False) -> list[dict]:
     """A parent value not found as a key. The fix is a key it equals once case, spaces and leading zeros
     are folded, when exactly one key does; otherwise a steward decides."""
     t, c, k = sql_name(marking.part), sql_name(child), sql_name(key)
     above = sql_name(parent_part) if parent_part else t  # the part whose key the value names
-    orphan = orphan or (f"{c} IS NOT NULL AND CAST({c} AS VARCHAR) NOT IN "
-                        f"(SELECT CAST({k} AS VARCHAR) FROM {above} WHERE {k} IS NOT NULL)")
+    # Codes compared as the link compared them: as numbers when one side is a number ("0012" is 12).
+    cast = "TRY_CAST({x} AS DOUBLE)" if as_number else "CAST({x} AS VARCHAR)"
+    orphan = orphan or (f"{c} IS NOT NULL AND {cast.format(x=c)} NOT IN "
+                        f"(SELECT {cast.format(x=k)} FROM {above} WHERE {k} IS NOT NULL)")
     folded = "regexp_replace(upper(trim(CAST({x} AS VARCHAR))), '^0+(.)', '\\1')"
     matches = dict(marking.con.execute(
         f"SELECT o, any_value(k) FROM (SELECT DISTINCT CAST({c} AS VARCHAR) o FROM {t} WHERE {orphan}) "
@@ -323,11 +343,11 @@ def by_link_part(con, link: str, child: str, parent: str, role: str | None,
         itself = f"CAST({sql_name(child)} AS VARCHAR) = CAST({sql_name(parent)} AS VARCHAR)"
         marked += marking.rows(f"{in_role} AND {node} AND {itself}", looped, child, parent, "names itself as its parent")
         marked += marking.rows(f"{in_role} AND {node} AND NOT ({itself})", looped, child, parent, "on a cycle of parents")
-        found.append({"hierarchy": name, "type": None, "part": link, "evidence_kind": "parent_column", "role": value,
-                      "levels": [{"depth": d, "name": None, "column": None, "samples": []} for d in range(1, depth + 1)],
-                      "rule": f"{child} has one {parent} per role", "holds": holds, "depth": depth,
-                      "shape": "balanced" if len(leaf_depths) <= 1 else "ragged", "orphans": 0, "cycles": len(cycles),
-                      "invalid_rows": len(marked), "valid_dates": {"from": None, "to": None}, "marked": marked})
+        found.append(_hierarchy(name, link, "parent_column",
+                                [{"depth": d, "name": None, "column": None, "samples": []} for d in range(1, depth + 1)],
+                                f"{child} has one {parent} per role", holds, marked, depth=depth,
+                                shape="balanced" if len(leaf_depths) <= 1 else "ragged", cycles=len(cycles),
+                                role=value))
     return found
 
 

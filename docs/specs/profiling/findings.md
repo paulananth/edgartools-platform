@@ -160,11 +160,17 @@ own is still a level.
 
 Level tables (`evidence_kind: level_tables`, ticket 01d): reference parts kept
 apart, each naming one row of the next coarser part by a single column (a
-subcategory list naming its category list). A reference part may point at its
-coarser level only. Each level's `column` is `<part>.<key>`; `holds` is the
-weakest link's inclusion; a row naming no row above is an orphan, marked like
-any invalid row. The same hierarchy found again by dependency inside a list
-(the list carries its parent's code) is left out: the level tables stand.
+subcategory list naming its category list). A reference part may point at one
+smaller part as its coarser level, and only when it is itself a list of codes
+(its key has a short label; it has no measures). Each level names one parent
+list (a list naming two lists, or one twice, is no chain). Each level's
+`column` is `<part>.<key>`, the key the finer level names; `via` lists each
+`{part, column}` that names the level above; `holds` is the share of the finer
+levels' rows that name a row above, accepted at 0.99 as any hierarchy; a row
+naming no row above is an orphan, marked like any invalid row (codes compared
+as numbers when one side is a number). The same hierarchy found again by
+dependency inside a list (the list carries its parent's code) is left out: the
+level tables stand.
 
 ### 5.1 Marked rows: `invalid_rows.jsonl`
 
