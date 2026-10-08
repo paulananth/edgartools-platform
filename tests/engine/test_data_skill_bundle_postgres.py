@@ -972,6 +972,13 @@ with_census = WITH_CENSUS
 folder = Path("company-composition-census" if with_census else "company-composition").resolve()
 folder.mkdir()
 blueprints = files.ROOT / "sources/sec.submissions.company"
+from edgar_warehouse.workers.source_mapping import project_record
+from edgar_warehouse.mdm.clean import company_source
+assert not hasattr(company_source,"business_address")
+landed={"street1":"  Raw  ","street2":None,"city":"City","zip_code":"12345",
+        "state_or_country":" de ","country_code":None}
+assert project_record(landed,files.load(blueprints/"landed-address.yaml"),column="fields")=={
+    "street":"  Raw  ","street2":None,"city":"City","postal_code":"12345","region":" de ","country":"US"}
 date = "2026-10-04T00:00:00Z"
 context = {"cik":1,"sync_run_id":"capture","raw_object_id":"0"*64,"load_mode":"default"}
 def read(name, template, payload, context):
@@ -1052,7 +1059,7 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
     This does not qualify the full captured Company/GLEIF population.
     """
     from sqlalchemy import create_engine
-    from edgar_warehouse.mdm.clean.store import migrate, register_policy
+    from edgar_warehouse.mdm.clean.store import migrate, register_policy, digest
     from tests.support.fresh_mastering import cohort, FIXTURE, CHILD_LEI, PARENT_LEI
     from tests.support.rules_authority import register_dataset
 
@@ -1081,6 +1088,24 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
             {"source": "sec.submissions.person", "row": json.loads(line)}
             for line in FIXTURE.with_name("person_raw.jsonl").read_text().splitlines() if line.strip()
         ]
+        from tests.support.retired_company_address import business_address
+        from edgar_warehouse.mdm.clean.adapters import normalize
+        landed_addresses=[]
+        for record in sec_records:
+            if record["source"]!="sec.submissions.company":continue
+            row=record["row"]
+            landed={"cik":row["cik"],"address_type":"business","last_sync_run_id":"installed-addresses",
+                    "street1":"  Source Street  ","street2":None,"city":"City","zip_code":"12345",
+                    "state_or_country":" de ","country_code":None}
+            landed_addresses.append(landed)
+            row["business_address"]=business_address(landed)
+        readings=[]
+        for record in sec_records:
+            row=record["row"];code=f"{record['source']}.v1"
+            readings.append(normalize(row,source_code=code,contract=contracts[code],policy=policy,
+                publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
+                             "revision":1,"artifact_sha256":digest(row),
+                             "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
         done = _run(python, "-c", r'''
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -1088,7 +1113,7 @@ from uuid import uuid4
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.mdm.clean import adapters, gleif_source
+from edgar_warehouse.mdm.clean import adapters, gleif_source, company_source
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
@@ -1106,6 +1131,19 @@ for member in ("level1","relationships","reporting_exceptions"):
     recipe=files.load(files.ROOT/"sources/gleif"/f"{member.replace('_','-')}-fields.yaml")
     assert digest(mapping["reading"]) == digest(recipe)
     assert isinstance(source_mapping.project_record({},mapping["reading"],column="fields"),dict)
+# Exercise the actual retained preparation/census caller, with the custom
+# derivation removed. Its configured address becomes the published SEC field.
+import pyarrow as pa
+import pyarrow.parquet as pq
+from io import BytesIO
+assert not hasattr(company_source,"business_address")
+stream=BytesIO()
+pq.write_table(pa.Table.from_pylist(body["landed_addresses"]),stream)
+landed=company_source._business_addresses({"run_id":"installed-addresses"},pq.ParquetFile(BytesIO(stream.getvalue())))
+for record in body["sec_records"]:
+    if record["source"]=="sec.submissions.company":
+        assert landed[record["row"]["cik"]]==record["row"]["business_address"]
+        record["row"]["business_address"]=landed[record["row"]["cik"]]
 # Rebuild SEC assertions from raw fixture documents inside the installation.
 # Host-built assertions are only an oracle, never publication input.
 sec_readings=[]
@@ -1177,17 +1215,18 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
       for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
                    files.ROOT/"sources/gleif/source.yaml",
                    files.ROOT/"sources/sec.submissions.company/source.yaml",
-                   files.ROOT/"sources/sec.submissions.person/source.yaml"]}
+                   files.ROOT/"sources/sec.submissions.person/source.yaml",Path(company_source.__file__),
+                   files.ROOT/"sources/sec.submissions.company/landed-address.yaml"]}
 print(json.dumps({"pins":pins,"generation":second["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"publication_recovery":True,"full_population":False}))
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_address_caller":True,"publication_recovery":True,"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
-                         "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
+                         "landed_addresses": landed_addresses, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["publication_recovery"]
+        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_address_caller"] and proof["publication_recovery"]
         (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
     finally:
         admin.dispose()
