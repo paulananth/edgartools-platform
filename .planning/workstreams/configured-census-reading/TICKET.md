@@ -12,7 +12,7 @@ full skills/parser goal remains incomplete until every remaining gate passes.
 - [x] Verify committed c3e35810 installed outside checkout with custom steps disabled, restricted PostgreSQL 16: actual census equality, normalized evidence read-back, three batches, lost ACK reconciliation, replay and denied DELETE/CREATE; 1 passed, zero skips, 111.42s. Runtime proof: installed-postgres-proof.json; fixture only. 2026-10-08 07:22 ET
 - [x] Run local MDM and engine tests after final fixes: 1,303 passed, zero skips, 156.93s; independent two-axis review has no scoped blocker (REVIEW.md). 2026-10-08 07:18 ET
 - [x] Commit implementation c3e35810; tracked captured parity and installed proof, local tests and independent reviews above. 2026-10-08 07:22 ET
-- [ ] Open PR and pass the full CI gate.
+- [x] Open non-draft PR #867 and pass full CI 37769659111 on 0cd391be: all five suites, native acceptance, shell lint and aggregate gate; exact summaries/timestamps in ci-proof.json, no prerequisite skips. 2026-10-08 07:28 ET
 - [x] Reconcile parent issue 20 and executable caller inventory against merged main 862a1e66 and the open #866 documentation PR; remaining paths are listed below. 2026-10-08 07:16 ET
 - [ ] Whole-source configured census construction, Company preparation/census/provenance retirement, GLEIF release/semantic retirement, record mapping retirement, full 6,414 Company / 3,052 CIK+LEI replay/recovery and configured capture remain required by the parent goal.
 
@@ -55,3 +55,15 @@ identity or whole-source qualification.
 No source digest is activated, no deployment is performed, and no SEC
 request is made by this change. Complete source-version approval and the
 remaining parent goal gates remain necessary.
+
+This census extraction slice is implemented and qualified. The unchecked
+parent-goal work above remains incomplete. Merge is not authorized by the
+current assignment; PR #867 remains open.
+
+CI cases: 572 Unit, 258 Architecture, 611 MDM, 295 Integration plus one
+existing expected failure, 723 Engine; 141 native checks separately.
+Compared with #866: MDM +4 bundled-recipe cases and Engine +74 census/recipe
+cases, native +2. No cases are deleted by this retirement slice. The gate
+completed in 264s from creation: 3s initial runner queue and 261s execution
+through the aggregate gate. This is qualification timing, not a speedup
+measurement on otherwise identical code.

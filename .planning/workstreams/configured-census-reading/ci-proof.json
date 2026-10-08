@@ -1,0 +1,67 @@
+{
+  "run_id": 37769659111,
+  "head_sha": "0cd391be16d5f04e9818846adcf455575d3e1305",
+  "conclusion": "success",
+  "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37769659111",
+  "created_at": "2026-10-08T11:22:55Z",
+  "run_started_at": "2026-10-08T11:22:55Z",
+  "updated_at": "2026-10-08T11:27:21Z",
+  "jobs": [
+    {
+      "id": 113285808227,
+      "name": "Engine (Rust behind Python)",
+      "conclusion": "success",
+      "started_at": "2026-10-08T11:22:58Z",
+      "completed_at": "2026-10-08T11:27:13Z",
+      "pytest_summaries": [
+        "2026-10-08T11:27:09.4622206Z ======================= 723 passed in 191.72s (0:03:11) ========================"
+      ],
+      "native_passed": 141
+    },
+    {
+      "id": 113285808559,
+      "name": "Unit tests",
+      "conclusion": "success",
+      "started_at": "2026-10-08T11:22:58Z",
+      "completed_at": "2026-10-08T11:24:28Z",
+      "pytest_summaries": [
+        "2026-10-08T11:24:11.6300559Z ============================= 572 passed in 18.21s =============================",
+        "2026-10-08T11:24:23.5758672Z ============================= 258 passed in 11.01s ============================="
+      ]
+    },
+    {
+      "id": 113285808588,
+      "name": "Shell script lint",
+      "conclusion": "success",
+      "started_at": "2026-10-08T11:22:58Z",
+      "completed_at": "2026-10-08T11:23:03Z"
+    },
+    {
+      "id": 113285808605,
+      "name": "MDM tests",
+      "conclusion": "success",
+      "started_at": "2026-10-08T11:22:58Z",
+      "completed_at": "2026-10-08T11:23:37Z",
+      "pytest_summaries": [
+        "2026-10-08T11:23:33.5541352Z ============================= 611 passed in 5.83s =============================="
+      ]
+    },
+    {
+      "id": 113285808633,
+      "name": "Integration tests (Postgres)",
+      "conclusion": "success",
+      "started_at": "2026-10-08T11:22:58Z",
+      "completed_at": "2026-10-08T11:26:41Z",
+      "pytest_summaries": [
+        "2026-10-08T11:26:37.9303096Z ================== 295 passed, 1 xfailed in 163.44s (0:02:43) =================="
+      ]
+    },
+    {
+      "id": 113287408145,
+      "name": "CI gate",
+      "conclusion": "success",
+      "started_at": "2026-10-08T11:27:15Z",
+      "completed_at": "2026-10-08T11:27:19Z"
+    }
+  ]
+}
