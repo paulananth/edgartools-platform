@@ -1,7 +1,7 @@
 """Profiling ticket 08: the rulings file the cold agent replays.
 
-Every operator ruling recorded in a ticket under `.scratch/` is harvested as
-written: the operator's exact words, the date, the ticket and line, and the
+Every operator ruling recorded in a ticket or map under `.scratch/` (not in
+trial logs or research notes, which hold answers) is harvested as written: the operator's exact words, the date, the ticket and line, and the
 sentence around it (the question it answered). Nothing is paraphrased or
 invented. The cold agent may only use a ruling from this file; a question it
 does not answer is recorded by the agent as "unanswered, would ask the
@@ -33,12 +33,19 @@ SAID = re.compile(r'["“][^"”\n]{1,400}["”]|^\s*[-|].*approv', re.I)
 
 
 def blocks(lines: list[str]):
-    """Each list item, table row or paragraph, with its line number and section heading."""
-    heading, start, block = "", 0, []
+    """Each list item, table row or paragraph, verbatim (its lines joined by newlines),
+    with its first line number and section heading. Fenced code is skipped."""
+    heading, start, block, fenced = "", 0, [], False
     for number, line in enumerate(lines + [""], 1):
-        new = not line.strip() or line.startswith("#") or re.match(r"\s{0,1}[-|*]\s|\d+\.\s", line)
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        new = (not line.strip() or line.startswith("#")
+               or re.match(r"\s{0,1}[-|*]\s|\s{0,1}\|-|\d+\.\s", line))
         if new and block:
-            yield start, heading, " ".join(part.strip() for part in block)
+            yield start, heading, "\n".join(block)
             block = []
         if line.startswith("#"):
             heading = line.lstrip("# ").strip()
@@ -50,20 +57,20 @@ def blocks(lines: list[str]):
 def main() -> None:
     rulings, seen = [], set()
     for path in sorted((ROOT / ".scratch").rglob("*.md")):
-        if HERE in path.parents:
+        # Trial logs and research notes hold answers and findings, not rulings.
+        if HERE in path.parents or {"trials", "research"} & set(path.relative_to(ROOT).parts):
             continue
         rel = str(path.relative_to(ROOT))
         for number, heading, text in blocks(path.read_text(errors="replace").splitlines()):
             dates = DATE.findall(text) or DATE.findall(heading)
             if not dates or not (WHO.search(text) or WHO.search(heading)) or not SAID.search(text):
                 continue
-            text = text[:1500]
             if text in seen:
                 continue
             seen.add(text)
-            rulings.append({"date": dates[0], "section": heading, "text": text, "ticket": rel, "line": number,
+            rulings.append({"first_date": dates[0], "section": heading, "text": text, "ticket": rel, "line": number,
                             "replayed": True})
-    rulings.sort(key=lambda r: (r["date"], r["ticket"], r["line"]))
+    rulings.sort(key=lambda r: (r["first_date"], r["ticket"], r["line"]))
     with (HERE / "rulings.jsonl").open("w") as f:
         for ruling in rulings:
             f.write(json.dumps(ruling, ensure_ascii=False) + "\n")

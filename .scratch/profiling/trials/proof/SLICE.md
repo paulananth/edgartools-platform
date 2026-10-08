@@ -12,6 +12,11 @@ from local copies only. Output: `~/.local/share/edgartools/clean-mdm/proving/p08
 | GLEIF reporting exceptions | 2,751 records of those LEIs | (above) | 67 s |
 | 13F information tables | 16 tables of 6 cohort filers, of the 999 on this machine | 72 MB | under a second |
 
+The GLEIF set is wider than the cohort README's "the 222 LEIs, plus their
+parents and successors": it also holds the LEIs the Name Census names for a
+cohort name (the name rules match against them), and any LEI one relationship
+away, in either direction. Successors are followed one level.
+
 Each GLEIF pass checks the archive's sha256, then streams it with a C JSON
 parser. The first try used the production verifier (`inspect_archive`),
 which hands each of the 3.4 million Level 1 records from the Rust engine to

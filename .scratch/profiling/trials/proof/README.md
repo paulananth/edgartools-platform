@@ -19,24 +19,34 @@ sandbox, on the 500-entity cohort ([../cohort](../cohort)), then writes
 
 Mastering starts from SEC Company records: a GLEIF record is bound only through
 an SEC Company (a name rule or a steward), so a GLEIF-only baseline masters
-nothing. Today's SEC reading into MDM is the part Codex's old-parser
-retirement is replacing:
+nothing. Today's SEC Company input is still the retained Company preparation
+(`company_source.prepare_company_bundle`, which reads landed Parquet), and
+Codex's old-parser retirement is about to retire it: its open item reads
+"retire Company preparation/census/provenance" (`.planning/workstreams/sec-configured-fields/TICKET.md`),
+and the SEC Company contract still says "pending census, catalog, pagination
+and full installed qualification". PR #858 (configured SEC field extraction)
+merged on 2026-10-07; it is one step of that work, not the end.
 
-- the landing path the earlier Proving Runs used (`SilverLandingStore`,
-  company mastering ticket 27) is deleted from main;
-- the configured path (`source.read` → `source.combine` → `mdm.prepare`) is
-  "locally qualified only", and the SEC Company target still waits on its
-  census, catalog and pagination integration (`rules/sources/sec.submissions.company/source.yaml`);
-- Codex's open PR #858 replaces the SEC Company and Person field extraction.
+So a baseline can be built today: the cohort's filers are already landed in
+ticket 27's work folder, and Company preparation still runs. But it would
+measure a path about to be removed, and it would have to be rebuilt once
+Company preparation is retired. The cold agent writes SEC source rules in the
+shape Codex is still settling. Steps 4 and 6 are one script, and step 7
+compares two of its reports, so after Codex merges, the comparison reruns
+cheaply. Only step 5, the cold agent, is long. The plan (decision 33) asks
+for its time to be estimated and stated before it starts.
 
-The cold agent writes SEC source rules in the same shape, so it waits for that
-design too. Steps 4 and 6 are one script, and step 7 compares two of its
-reports, so after Codex merges, the comparison reruns cheaply. Only step 5, the
-cold agent, is long. The plan (decision 33) asks for its time to be estimated
-and stated before it starts.
+## Before the cold agent starts
+
+The sandbox removes answers from the repository copy, but it is not a jail.
+The same login can still reach `~/.local/share/edgartools` (ticket 27's
+proving runs, the full captures), other local credentials, and the network
+through any client that ignores proxy variables. Before launch, the run must
+close these (a separate login or container with only the sandbox mounted), or
+DIFF.md must state the limit.
 
 ## 13F
 
 The 13F information tables are transaction data. They go to silver, which is
-ticket 06, so their rows wait for 06. The slice holds the 16 tables (75 MB)
+ticket 06, so their rows wait for 06. The slice holds the 16 tables (72 MB)
 that cohort filers filed, out of the 999 on this machine.
