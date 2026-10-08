@@ -79,7 +79,7 @@ approval:                       # §9
     as_of: {from: <col|null>, to: <col|null>}      # valid time
     as_at: <col|null>                               # record time
     event_time: <col|null>
-    versions_per_key: {p50: <n>, p99: <n>}
+    versions_per_key: {p50: <n>, p99: <n>}|null   # when the key holds its recording or valid-from time
     series: {key: [<cols>], time: <col>, step: <duration>, gaps: <n>}|null
     refresh: <duration|unknown>
   quality:                      # handed to data-quality
@@ -99,8 +99,20 @@ logical type a full read proves), `shape`, `shape_share` (masked shapes) and
 `sensitivity_signals`; on an identifier, `local_counter`; on a record key,
 `alternatives` (other unique keys) and, for a sampled part, `evidence.full_pass`.
 A column's `role` may also be `link` (it points at another part's key).
-`persistence` and `delivery` stay null and `unknown` until `compare` sees a
-second delivery.
+`persistence`, `delivery` and `refresh` stay null and `unknown` until
+`compare` sees a second delivery (ticket 01d). For that, a top-level part with
+a found key keeps a `fingerprint`: `{prefix, keys: {<sha256 of the key>: <sha256
+of the row>}, capped, latest, latest_column}`, the keys whose hash starts with
+`prefix` (every key of a part of at most 4,096 rows; about one in sixteen
+above, at most 4,096), so two deliveries sample the same keys without keeping
+any. A key holding a personal value is never sampled. `compare` writes, per
+part, `deliveries` in `drift.yaml`: `persistence` (the share of the approved
+sample's keys still present), `changed` (of those, the share whose row
+changed), `added` (the share of the new sample that is new), `delivery`
+(`snapshot` from 0.9 kept; `changes` under 0.5 kept with nearly all kept rows
+changed; else `unknown`) and `refresh` (days between the two deliveries'
+latest record or event time). The new findings carry them, and a change of
+delivery kind is a drift item.
 
 A record key designed on a name (research note 02; operator, 2026-10-05:
 "Same record: durable key") also writes `basis` (the name column) and, in its

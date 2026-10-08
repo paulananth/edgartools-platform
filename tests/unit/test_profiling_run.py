@@ -256,3 +256,77 @@ def test_a_zoned_time_is_measured_as_its_own_instant(tmp_path):
     con.execute("CREATE TABLE t AS SELECT TIMESTAMPTZ '2024-01-01 00:00:00+00' + INTERVAL (i) DAY AS at FROM range(30) r(i)")
     column = profile.columns(con, "t")[0]
     assert profile.distribution(con, "t", column, False)["points"][0] == 1704067200.0
+
+
+def _approved(result, tmp_path):
+    findings = yaml.safe_load((result["out"] / "findings.yaml").read_text())
+    findings["approval"]["status"] = "approved"
+    path = tmp_path / "approved.yaml"
+    path.write_text(yaml.safe_dump(findings, sort_keys=False))
+    return path
+
+
+def test_two_deliveries_measure_persistence_and_the_delivery_kind(result, tmp_path):
+    import shutil
+
+    visit = part(result, "visit")["fingerprint"]
+    assert len(visit["keys"]) == 3000 and visit["prefix"] == ""  # a small part: every key sampled
+    approved = _approved(result, tmp_path)
+    # The same full delivery again: a snapshot.
+    out = tmp_path / "same"
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={result['folder']}",
+                              "--out", str(out)]) == 0
+    same = {m["part"]: m for m in yaml.safe_load((out / "drift.yaml").read_text())["deliveries"]}
+    assert same["visit"]["persistence"] == 1.0 and same["visit"]["changed"] == 0.0
+    assert same["visit"]["delivery"] == "snapshot"
+    again = {p["part"]: p for p in yaml.safe_load((out / "findings.yaml").read_text())["parts"]}["visit"]
+    assert again["time"]["delivery"] == "snapshot" and again["record_key"]["evidence"]["persistence"] == 1.0
+    # Only the visits that changed, plus new ones: changes only.
+    changed = tmp_path / "set"
+    shutil.copytree(result["folder"], changed)
+    lines = (changed / "visit.csv").read_text().splitlines()
+    rows = [line.split(",") for line in lines[1:]]
+    kept = [r[:3] + [f"{float(r[3]) + 1:.2f}"] for r in rows[::10]]  # one visit in ten, amount corrected
+    fresh = [[str(5000 + n), r[1], r[2], r[3]] for n, r in enumerate(rows[:300])]
+    (changed / "visit.csv").write_text("\n".join([lines[0]] + [",".join(r) for r in kept + fresh]) + "\n")
+    out = tmp_path / "changes"
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={changed}",
+                              "--out", str(out)]) == 0
+    visits = {m["part"]: m for m in yaml.safe_load((out / "drift.yaml").read_text())["deliveries"]}["visit"]
+    assert visits["persistence"] < 0.5 and visits["changed"] == 1.0 and visits["delivery"] == "changes"
+
+
+def test_a_key_holding_a_personal_value_is_never_sampled(tmp_path):
+    import csv
+
+    folder = tmp_path / "set"
+    folder.mkdir()
+    with (folder / "people.csv").open("w", newline="") as f:
+        csv.writer(f).writerows([["email", "given_name", "city"],
+                                 *[[f"person{n}@example.com", f"Ann{n}", f"Town {n % 7}"] for n in range(400)]])
+    findings = run.profile_inputs({"set": str(folder)}, "people")
+    (people,) = findings["parts"]
+    assert people["record_key"]["columns"] == ["email"] and people["fingerprint"] is None
+
+
+def test_versions_per_key_when_the_key_holds_its_recording_time():
+    import duckdb
+    from profiling import timing
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE v AS SELECT 'E' || (i % 100) AS entity, TIMESTAMP '2026-01-01' + INTERVAL (i) HOUR AS "
+                "updated_at FROM range(300) r(i)")
+    assert timing.versions(con, "v", ["entity", "updated_at"], ["updated_at", None]) == {"p50": 3, "p99": 3}
+    assert timing.versions(con, "v", ["entity"], ["updated_at", None]) is None
+
+
+def test_deliveries_sampled_differently_compare_only_the_keys_both_sampled():
+    from profiling import drift
+
+    every = {f"{n % 16:x}{n}": "row" for n in range(64)}  # four keys start with each hex digit
+    part = lambda prefix, keys: {"part": "p", "time": {"delivery": "unknown"},
+                                 "fingerprint": {"prefix": prefix, "keys": keys, "capped": False, "latest": None}}
+    small = {"parts": [part("", every)]}
+    large = {"parts": [part("0", {k: v for k, v in every.items() if k.startswith("0")})]}
+    (m,) = drift.deliveries(small, large)
+    assert m["persistence"] == 1.0 and m["delivery"] == "snapshot" and m["keys_sampled"] == 4

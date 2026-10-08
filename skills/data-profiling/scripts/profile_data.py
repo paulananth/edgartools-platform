@@ -86,9 +86,15 @@ def main(argv: list[str] | None = None) -> int:
         with _work() as work:
             new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
                                      seed=args.seed, work=work)
+        measured = drift.deliveries(approved, new)
+        for m in measured:  # the new findings carry what the second delivery measured
+            part = next(p for p in new["parts"] if p["part"] == m["part"])
+            part["record_key"]["evidence"]["persistence"] = m["persistence"]
+            part["time"]["delivery"], part["time"]["refresh"] = m["delivery"], m["refresh"]
         report.write(new, args.out)
         items = drift.compare(approved, new)
-        (args.out / "drift.yaml").write_text(yaml.safe_dump({"approved": str(args.approved), "drift": items},
+        (args.out / "drift.yaml").write_text(yaml.safe_dump({"approved": str(args.approved), "drift": items,
+                                                             "deliveries": measured},
                                                             sort_keys=False, allow_unicode=True), encoding="utf-8")
         print(f"{len(items)} drift items in {args.out / 'drift.yaml'}")
         return 0

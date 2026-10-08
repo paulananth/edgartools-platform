@@ -224,8 +224,10 @@ uv run --with duckdb --with pyyaml python profile_data.py compare \
 ```
 
 It refuses findings that are not approved. Key persistence (the same record
-keeping its key between deliveries) and snapshot-or-changes are measured only
-when two deliveries exist, so a single run reports them as unknown.
+keeping its key between deliveries), snapshot-or-changes and the refresh rate
+need two deliveries: a single run reports them as unknown, and `compare`
+measures them from each part's key sample (`deliveries` in `drift.yaml`).
+Versions per key are measured in one delivery when the key holds a time.
 
 ## Examples
 

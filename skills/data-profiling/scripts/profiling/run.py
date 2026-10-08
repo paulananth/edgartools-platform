@@ -221,6 +221,11 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         "columns": column_findings,
         "code_lists": code_list,
         "time": times,
+        # A key holding a personal value is never sampled, even hashed; a child part's key holds its parent's
+        # row number, which no other delivery shares, so only top-level parts are sampled.
+        "fingerprint": None if not record_key["found"] or parts[p].parent is not None or any(
+            tags.get(k, {}).get("sensitivity", "none") != "none" for k in record_key["columns"])
+        else timing.fingerprint(con, p, record_key["columns"], names, times["as_at"] or times["event_time"]),
         "quality": quality.find(quality.Facts(
             con=con, part=p, columns=[c for c in columns if not c["structure"]],
             roles={f["name"]: f["role"] for f in column_findings}, personal=personal, key=record_key["columns"],
