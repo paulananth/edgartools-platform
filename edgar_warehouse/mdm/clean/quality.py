@@ -24,7 +24,6 @@ fixed, versioned list, as matching tests are: a new one is new code.
 from __future__ import annotations
 
 import functools
-import hashlib
 import re
 import unicodedata
 from collections import Counter
