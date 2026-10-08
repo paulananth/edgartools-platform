@@ -17,12 +17,13 @@ SCOPE = (
     "docs/specs/rdm",
     "docs/specs/agent-context",
     "docs/specs/profiling",
-    # The skills an agent onboards and refines feeds with (operator, 2026-10-08: "Skills must not
-    # hardcode anything"). data-platform's READING and COMBINING pages and the bookkeeping and
-    # change-journal skills still name today's sources; they join the scope once rewritten.
+    # Every skill an agent onboards, reads, combines, refines and runs feeds with (operator,
+    # 2026-10-08: "Skills must not hardcode anything").
     "skills/data-onboarding",
     "skills/refining-rules",
-    "skills/data-platform/SKILL.md",
+    "skills/data-platform",
+    "skills/bookkeeping",
+    "skills/change-journal",
 )
 # Sources, kinds and identifiers this repo happens to hold today. Lowercase
 # "person" stays allowed: "personal data" is generic.

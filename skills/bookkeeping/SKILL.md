@@ -77,10 +77,9 @@ settles them; ask only when the choice changes the intended work.
 
 Resolve `source` to an existing Rules document, accepting a provider name only
 when the repository identifies its source document unambiguously. Resolve
-`feed` only from an active `acquisition.feeds` declaration. The sole active
-acquisition binding is `--source sec.submissions.company --feed submissions`.
-GLEIF retains MDM contracts but has no active acquisition feed. Read documents
-through `edgar_warehouse.rules.files`.
+`feed` only from an active `acquisition.feeds` declaration; a source whose
+document declares no active feed has none to run, whatever MDM contracts it
+holds. Read documents through `edgar_warehouse.rules.files`.
 
 Resolve the binding deterministically before every feed-scoped mode:
 
@@ -123,11 +122,11 @@ runtime role. A profile no login was granted cannot report or verify anything.
 Control is also packaged alone: `packages/bookkeeping` (`edgar-bookkeeping`).
 
 `edgar-warehouse workers work|verify <profile> <run>` runs a worker
-or a verifier. The profiles built so far are `artifact.copy`, `jsonl.count`,
-`source.read`, `mdm.merge` and `mdm.publish` (`edgar-warehouse workers describe <profile>`).
-Company and Person have no worker yet: SEC Company and acquisition arrive in
-mastering to-do 20c, Person in 20d. Until then, report their execution as
-unsupported; never route them through an in-process callback.
+or a verifier. The profiles built are the keys of `PROFILES` in
+`edgar_warehouse/workers/__init__.py`; `edgar-warehouse workers describe <profile>`
+shows one. A step whose profile is not there has no worker yet: report its
+execution as unsupported and name the ticket that builds it; never route it
+through an in-process callback.
 
 ## Init and migrate modes
 

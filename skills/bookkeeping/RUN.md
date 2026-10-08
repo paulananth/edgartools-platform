@@ -3,7 +3,7 @@
 First read [INDEPENDENCE.md](INDEPENDENCE.md). `rules run` only submits; the
 work is done by workers in their own processes, checked by separate verifiers,
 and finished by `bookkeeping finalize`. A step whose worker profile has no
-worker yet (Company and Person until mastering to-do 20c and 20d) is a
+worker yet (no key in `PROFILES`, `edgar_warehouse/workers/__init__.py`) is a
 blocker to report, never a reason to run it some other way.
 
 Load the source/feed plan and validation evidence. Check their hashes against

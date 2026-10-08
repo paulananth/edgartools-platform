@@ -82,7 +82,7 @@ materialize the selected tables within their existing 32 MiB input budget,
 so a full archive needs configured selection before this boundary. Finish
 installed source/population proof before activating a streamed source.
 Direct `SourceEngine.read` rejects stream contracts so they cannot silently
-take the eager path. Active GLEIF JSON/XML retirement remains unfinished.
+take the eager path. A source's active parsing is retired only under its own ticket.
 
 ## Document assertions
 
@@ -132,12 +132,10 @@ Python JSON formatting policies inside assertions. Assertions run even when
 every table is empty and cannot defer records. The source worker writes no
 reading output on rejection; the existing parser and byte limits still apply.
 
-The Company main contract requires an object document and an object
-`addresses` member when present. A business member contributes a row only
-when it is an object. Its place lookup explicitly converts the selected SEC
-code with Python text semantics, preserving the historical mapping of
-nontext codes to unknown places. These are configuration choices, not
-defaults for other contracts.
+A contract may require an object document, require a member to be an object
+when present, take a row only from an object member, or convert a looked-up
+code with Python text semantics to keep a historical mapping of nontext codes.
+These are configuration choices of one contract, not defaults for others.
 
 ## Complete JSON records
 
@@ -210,7 +208,7 @@ use `join_limit`. Empty output returns text unless `null_if_empty` is true.
 `null_if_empty: true` to return null for an empty result. Both default false.
 Base fields retain their nulls; collision checks still precede omission.
 
-GLEIF's bundled `*-fields.yaml` recipes demonstrate these operations. Freeze
+A source's bundled `*-fields.yaml` recipes demonstrate these operations. Freeze
 the entire reading under the Dataset Contract's `adapter.reading` before
 qualification. The generic record mapper validates all expressions before
 selective evaluation, then evaluates fields and matching at their existing
@@ -219,7 +217,7 @@ failure order with the retained oracle; approve changed contract digests as
 new Rules versions before activation. Configuration and execution-limit
 failures stop the run. Record shape failures retain their declared deferral.
 Installed fixture publication/recovery and bounded captured parity are
-separate from full semantic corpus and complete Company population proof.
+separate from full semantic corpus and complete population proof.
 
 For the generic record mapping bridge, optional top-level `input_fields`
 declares the JSON input view as 1–128 distinct ASCII root identifiers, each
@@ -228,7 +226,7 @@ missing roots stay missing. Selected values retain their types and must be
 JSON values. This lets unrelated foreign metadata, such as Parquet timestamps,
 remain outside field parsing without coercing it to text. Validate the full
 reading and check that every mapped value path is covered by the declared
-roots. The Company `fields.yaml` recipe demonstrates that checked boundary.
+roots.
 This option affects the record bridge; artifact `source.read` already consumes
 serialized input and continues reading its declared paths directly.
 
@@ -244,10 +242,10 @@ large inputs explicitly; source reading has no MDM-specific budget.
 No field renaming or classification happens
 in this worker; MDM uses its registered Dataset Contract and pinned policy.
 
-The Person source read block preserves the complete submissions document,
-including unknown fields, structural evidence and nested filing history.
-It does not activate a Rules version. Company raw-column qualification does
-not yet replace its catalog/census joins, address derivation or full mastering.
+A source read block that preserves a complete document (unknown fields,
+structural evidence, nested history) does not activate a Rules version, and
+raw-column qualification does not by itself replace a source's joins, address
+derivation or full mastering.
 
 ## Constructed records
 
@@ -279,11 +277,11 @@ format handling as top-level calls. Literal const/default/reference data
 never enables a feature. Existing scalar `const` behavior is unchanged.
 
 Use `record_column: record` in `mdm.prepare` to send the constructed object
-unchanged. This does not supply Company catalog/census joins or qualify its
-full preparation; compare those operations and assertion identities before
-retiring the retained reader. The installed object-records trial assembles
-the two raw Person fixture records from explicit fields and verifies them
-through preparation and the actual Person MDM contract.
+unchanged. This does not supply a source's catalog or census joins or qualify
+its full preparation; compare those operations and assertion identities before
+retiring the retained reader. Prove it by assembling fixture records from
+explicit fields and verifying them through preparation and the kind's actual
+MDM contract.
 
 Optional `base` is an expression returning one JSON object. Its fields and
 exact types are retained; declared `fields` add metadata. A non-object base
@@ -412,7 +410,7 @@ read:
       DE: {iso: US-DE}
       XX: {iso: null}
   tables:
-    company:
+    entity:
       each: .
       columns:
         jurisdiction:
@@ -468,10 +466,8 @@ Growth refuses with
 `text_transform_limit`. Contracts compile regexes once, including expressions
 in unselected branches. Literal reference rows and defaults remain data.
 
-For Company/LEI Name Census keys, start with the bundled
-`sec.submissions.company/name-key.yaml` and `gleif/name-key.yaml`. They keep
-legal forms and unify their spelling. The SEC recipe removes the trailing
-state suffix before normalizing. Run the recipes on authenticated captured
+For Name Census keys, start with each source's bundled `name-key.yaml`
+(see Examples). Run the recipes on authenticated captured
 current/former names; compare exact retained keys and prove a deliberate
 recipe fault changes them. Record capture, contract, oracle and actual native
 binary hashes. Recipe parity completes the name-key step only; census population,
@@ -485,15 +481,15 @@ nonfinite and out-of-range integer cells are refused. Duplicate YAML keys
 are refused by the contract parser. These are small dimension tables, not
 large artifact joins or permission to raise source-worker budgets.
 
-All 309 SEC place codes and explicit lowercase/whitespace variants are
-compared to the retained jurisdiction converter. Complete Company address,
+Compare every code of a frozen reference, with explicit lowercase and
+whitespace variants, to the retained converter it replaces. Complete address,
 reference provenance and assertion equivalence remain source retirement gates.
 
 ## Qualification boundary
 
 The generic primitive and the installed worker protocol are tested
-independently. The partial filing projection case compares accession and
-form fields only. Company/Person classification, address interpretation,
+independently. A partial projection case compares only the fields it names.
+Classification, address interpretation,
 reference lookups, aggregation, full assertion IDs and source refusals need
 complete equivalence proof before retiring a source reader. See the current
 source-completion checklist; a passing primitive test is not that proof.
@@ -525,8 +521,8 @@ quoted string `"null"`) returns null instead; `on_invalid: error` keeps the
 failure. These two options require `kind: calendar`; instant behavior stays
 unchanged. Root document iteration is written `each: .`.
 
-SEC filing text/calendar qualification does not cover numeric flags,
-classification, Company or Person mastering, reference joins or complete
+Text and calendar qualification does not cover numeric flags,
+classification, mastering, reference joins or complete
 assertion/failure equivalence. The unused historical landing API and loader modules are retired from the runtime; frozen oracles under `tests/support` remain for qualification. Active MDM preparation, provenance and full population/recovery still need replacement and proof.
 
 `basic_suffix` defaults to `reject`. Calendar-only `basic_suffix: ignore`
@@ -566,7 +562,7 @@ repeating intermediate paths still fail closed. JSON syntax, nesting and
 finite-number checks remain the existing parser's checks, and the artifact
 retains its byte/record limits.
 
-This syntax qualifies filing content fields only. Artifact metadata, complete
+This syntax qualifies the content fields it reads only. Artifact metadata, complete
 classification and source/mastering equivalence remain required before reader
 or loader retirement.
 
@@ -632,10 +628,9 @@ both input and context hashes for record, batch and publication identity, so
 different context for the same captured bytes remains separate. Version-1
 source inputs remain valid for contracts without required context.
 
-The 18-column filing fixture and pinned comparison cover caller provenance
-and selected recent filing content. They do not complete Company/Person
-classification, paginated history, reference joins, GLEIF or complete malformed
-source equivalence. Keep the full retirement gates open until those pass.
+A fixture and its pinned comparison cover caller provenance and the content
+they select. They do not complete classification, paginated history,
+reference joins, other sources or complete malformed source equivalence. Keep the full retirement gates open until those pass.
 
 ## Fallback and conditional values
 
@@ -670,50 +665,38 @@ existing missing policy, and other types refuse. This order matters when a
 whitespace-only preferred value should resolve as unknown rather than select
 a fallback.
 
-The configured Company address comparison freezes SEC place rows into the
-contract. It preserves raw street/region text, derives country from the
-approved ISO reference, and keeps region only for subdivisions. This proves
+A configured address comparison can freeze place reference rows into the
+contract, preserve raw street and region text, derive country from the
+approved ISO reference and keep region only for subdivisions. This proves
 raw address derivation separately from census, complete provenance, pagination
-and full Company mastering; those remain required before parser retirement.
+and full mastering; those remain required before parser retirement.
 
-### Company main-document reading
+### A main document with continuation pages
 
-`rules/sources/sec.submissions.company/source.yaml` now declares a generic
-`source.read` block for its main submissions document. It emits `company`,
-`filings` and `addresses` tables. Company fields retain their captured types;
-filings use the qualified parallel-array, date, numeric and first-N rules;
-business addresses use the frozen SEC place reference rows.
+A source's `source.yaml` may declare a generic `source.read` block for its main
+document that emits one table per part (the record, its repeated items, its
+addresses). Fields keep their captured types; repeated items use the
+parallel-array, date, numeric and first-N rules; places use frozen reference rows.
 
 Use a version-2 source input manifest. Each artifact has `input` and `context`
-receipts. The context document binds its values to that exact input receipt:
-`cik` (integer), `sync_run_id`, `raw_object_id`, `load_mode`, `last_synced_at`
-(text), and `recent_limit` (integer or null). These are explicit caller facts;
-the worker verifies their binding and the native engine verifies their types.
-An input hash does not independently prove a supplied capture identifier or
-observation time: the acquisition/census provenance gates must prove those.
+receipts. The context document binds explicit caller facts (the record key,
+capture run, raw object id, load mode, sync time, any item limit) to that exact
+input receipt; the worker verifies their binding and the native engine their
+types. An input hash does not independently prove a supplied capture identifier
+or observation time: the acquisition or census provenance gates must prove those.
 
 Join the resulting tables with a declared `source.combine` contract, then use
-`mdm.prepare` to write immutable input batches. The current Company target
-still uses retained preparation until census, ticker catalog, pagination,
-classification/provenance and installed full-population replay are qualified.
-The read block alone is neither a source activation nor complete mastering.
+`mdm.prepare` to write immutable input batches. The read block alone is neither
+a source activation nor complete mastering.
 
-For a captured continuation page, use the packaged
-`rules/sources/sec.submissions.company/pagination.yaml` contract. It reads
-column arrays at the raw page root and emits all eighteen filing fields;
-it has no recent-limit context. Bind `cik`, `sync_run_id`, `raw_object_id`
-and `load_mode` to the page receipt. `raw_object_id` retains the caller's
-publication context; the independent `input` receipt identifies the exact
-page bytes. Do not invent a `filings` wrapper before configured reading.
-
-Capture all filenames declared by the pinned main document. Read pages in
-bounded pairs, combine up to seven page readings with the main reading,
-then combine the resulting per-Company form lists with `collect_flat` and
-`sort_values: true`. This preserves complete page scope through immutable
-reading receipts while keeping each work unit bounded. See
-[Combination](COMBINING.md) for list and element-budget semantics.
-Same-date S3 captures plus version/hash evidence prove captured bytes and
-declared page coverage; they do not prove Bookkeeping producer success.
+Read each captured continuation page with its own contract at the raw page
+root, bound to the page receipt, with no item-limit context. Do not invent a
+wrapper the page does not have. Capture every page the pinned main document
+names, read pages in bounded groups, combine them with the main reading, then
+combine the per-record lists with `collect_flat` and `sort_values: true`. See
+[Combination](COMBINING.md) for list and element-budget semantics. Same-date
+captures plus version and hash evidence prove captured bytes and declared page
+coverage; they do not prove Bookkeeping producer success.
 
 ## Header-driven JSON matrices
 
@@ -764,7 +747,7 @@ null selects `else`, and other types refuse. Both branches validate before
 reading; only the selected branch reads the document. Nesting is capped at
 eight calls. Context/reference/custom names in all conditions must resolve.
 
-`test: {path: ticker, kind: truthy}` returns a native boolean without text
+`test: {path: code, kind: truthy}` returns a native boolean without text
 coercion or materializing a subtree. Kinds are `truthy`, `missing`, `null`,
 `not_null`, `array`, `object` and `text`; optional `from: document` tests the original
 document. Null includes absent values; `missing` distinguishes absence from
@@ -780,17 +763,16 @@ later record check defers. Deferred/error locations keep source positions.
 Selection expressions see source positions. For permissive matrix iteration,
 non-array rows skipped by that iterator do not have a row position.
 
-The Company draft `catalog.yaml` declares both captured catalog layouts and
-legacy skip/fallback/text rules, using these generic calls. Receipt context
-supplies catalog run, source name and sync time. Group `ticker` by CIK with
-`order_by: [source_rank]`, `distinct: true`, `skip_empty_text: true` and a
-catalog-run row check. Keep the separate Company capture-run check on base
-rows. Both finite malformed-case and physical capture qualification must
-pass before adoption. Runtime custom ticker parsing is retired; its historical
-oracle is test-only. Byte/header/row/numeric/Unicode safety boundaries remain
-explicit, so finite parity does not imply universal arbitrary-input parity.
-No source activation, producer success or complete Company mastering follows
-from successful catalog reading.
+A catalog contract can declare every captured layout of a catalog and its
+legacy skip, fallback and text rules with these generic calls. Receipt context
+supplies catalog run, source name and sync time. Group a repeated value by the
+record key with `order_by: [source_rank]`, `distinct: true`,
+`skip_empty_text: true` and a catalog-run row check; keep the record's own
+capture-run check on base rows. Both finite malformed-case and physical capture
+qualification must pass before adoption. Byte, header, row, numeric and Unicode
+safety boundaries remain explicit, so finite parity does not imply universal
+arbitrary-input parity. No source activation, producer success or complete
+mastering follows from successful catalog reading.
 
 ## Large JSON array framing foundation
 
@@ -806,7 +788,7 @@ depth overflow, integer overflow and trailing data refuse the input.
 reads permit 65,536 additional bytes of buffering headroom, including
 whitespace. `max_bytes` bounds the whole expanded stream. Signed 64-bit
 integers are supported; an explicit `min_integer: -9223372036854775807`
-matches the historical GLEIF decoder's narrower negative boundary.
+matches a historical decoder's narrower negative boundary.
 Choose `record_encoding='python'` to apply the historical compact Python
 JSON byte limit. Default `native` measures native JSON spelling. These can
 accept different records at a tight float byte boundary even when their
@@ -820,26 +802,26 @@ an archive, then a separate expanded-byte cap while parsing its member.
 
 The configured worker mode is described under **Streamed JSON record
 projection** above. Its installed projection and partition verifier are
-qualified, including combining and preparation. Before GLEIF cutover,
-verify complete archive/member authentication and metadata and prove
+qualified, including combining and preparation. Before a streamed source's
+cutover, verify complete archive/member authentication and metadata and prove
 publication/replay through EOF. JSON framing tests do not qualify XML or
-retire active GLEIF parsing.
+retire a source's active parsing.
 
-## GLEIF Level 1 JSON qualification template
+## An approved scope in a streamed template
 
-The bundled `gleif/level1-json.yaml` template declares ZIP framing, explicit
-historical numeric/record limits, pinned publication count and a receipt-bound
-source ordinal. Populate `read.references.approved_scope` with the reviewed
-LEIs as `{LEI: {selected: true}}` before submission; the supplied empty map is
-a template, not an approved cohort. Source scope is a frozen reference table
-in the same contract receipt as selection. `record` retains typed source
-fields for MDM interpretation; `source_index` is one-based. Compare provenance
-with the historical zero-based ordinal explicitly before runtime adoption.
+A streamed template declares its framing, explicit numeric and record limits,
+a pinned publication count and a receipt-bound source ordinal. Populate its
+scope reference (`read.references.<scope>`) with the reviewed identifiers as
+`{<id>: {selected: true}}` before submission; an empty map is a template, not
+an approved cohort. Source scope is a frozen reference table in the same
+contract receipt as selection. `record` keeps typed source fields for MDM
+interpretation; `source_index` is one-based. Compare provenance with any
+historical zero-based ordinal explicitly before runtime adoption.
 
-The complete archive framing parity result and the captured-sample performance
-measurement do not by themselves prove installed configured projection,
-producer publication, XML parity or complete Company mastering. Complete those
-checks before replacing the active GLEIF runtime or activating source Rules.
+Archive framing parity and a captured-sample performance measurement do not
+by themselves prove installed configured projection, producer publication,
+XML parity or complete mastering. Complete those checks before replacing a
+source's active runtime or activating its Rules.
 
 ## Configured XML record framing
 
@@ -878,19 +860,18 @@ inside captured nodes and malformed declarations refuse the source.
 receives a separate configured header engine. The worker stages all partitions
 privately until every input reaches valid EOF, ZIP CRC and count checks. Retry
 and independent verification use the same configured source boundary. Complete
-captured XML parity, installed mastering and active GLEIF consumer replacement
-remain required before the old XML parser can be removed.
+captured XML parity, installed mastering and active consumer replacement
+remain required before an old XML parser can be removed.
 
-## Three GLEIF member templates
+## Member templates and publication headers
 
-The bundled `sources/gleif/` folder contains `level1`, `relationships` and
-`reporting-exceptions` templates for both `json` and `xml`. Read them through
-`rules.files.load` from the installed `rules.files.ROOT`; copy and pin the
-result before submitting `source.read`. They are qualification templates,
-not activated source Rules. Their selection preserves complete source
-records and original one-based ordinals. Both relationship endpoints must
-belong to the approved scope. Scope selection makes no identity or binding
-decision and does not replace the later MDM checks.
+A source folder may bundle one template per member and format. Read them
+through `rules.files.load` from the installed `rules.files.ROOT`; copy and pin
+the result before submitting `source.read`. They are qualification templates,
+not activated source Rules. Their selection keeps complete source records and
+original one-based ordinals. Both endpoints of a relationship must belong to
+the approved scope. Scope selection makes no identity or binding decision and
+does not replace the later MDM checks.
 
 Populate the XML `header_read.references` from authenticated publication
 metadata: `content_dates` and `delta_starts` key normalized UTC ISO instants
@@ -906,7 +887,7 @@ spellings by using the existing `date` expression.
 Bind `publication_count` to each exact input receipt using the version-2
 source input manifest. Pin the same publisher count in the header reference;
 the worker compares the complete framed count at EOF before publication.
-The creator must derive both pins from the same publication. All three XML member templates configure the generic `equal` assertion
+The creator must derive both pins from the same publication. Each XML member template configures the generic `equal` assertion
 above to compare header count directly to context count; independently pinned
 header references must also agree with the authenticated publication metadata. Also keep API `publish_date`
 separate from XML `ContentDate`: captured members can have different content
@@ -923,15 +904,14 @@ record equality from their common member name.
 
 For census reuse, import the approved JSON through `Artifacts.put` so its
 artifact SHA matches the canonical census digest used in evidence. Bind that
-SHA to every placeholder in `sources/sec.submissions.company/census.yaml`
-before freezing the contract. Optional `execution.input_sha256s` pins every
+SHA to every placeholder in the source's census contract before freezing it. Optional `execution.input_sha256s` pins every
 input artifact in manifest order (one or two lowercase SHA-256 values).
 Both source.read worker and verifier check these pins before reading or
 publishing, including when the source yields no rows. The standalone native
 engine does not enforce execution pins.
 
-Read Company captures through `census-main.yaml`, then combine with
-`combine-census.yaml` as described in COMBINING.md. Census version,
+Read the captures through the source's census main contract, then combine with
+its census combine contract as described in COMBINING.md. Census version,
 normalizers, FULL publication and optional cascade version must match the
 contract; unexpected reserved metadata collisions refuse. Constants are
 scalar values; use scalar assertions for metadata fields and `test`/`equal`
@@ -964,6 +944,123 @@ value before selection or `take`; an oversized array is refused even when
 nothing would be selected. `test.kind: text` tests the original JSON type
 without numeric or boolean coercion. Nested `choose` expressions can select
 an object's `$` text member or a scalar text value explicitly.
+
+Bundled census contracts use these primitives for census name extraction and
+canonical keys: they project eligibility and legal keys selectively and read
+registration only for a wanted legal key. Preserve the caller's column order.
+Empty falsey containers yield no names; truthy non-object containers refuse.
+Skipped records must not evaluate name counts or registration. Qualification
+disables custom steps and includes paired faults that prove refusal order.
+Holder aggregation and cascade decisions remain in the census implementation.
+Whole-source census construction, complete source provenance and installed
+population qualification are still required before removing that implementation.
+
+## Examples
+
+The sources this repository reads today, and where each rule above is applied.
+
+### Recipes and contracts
+
+- GLEIF's bundled `*-fields.yaml` recipes demonstrate the joined-text and
+  nullable-object operations; the SEC Company `fields.yaml` recipe demonstrates
+  the `input_fields` boundary.
+- The SEC Company main contract requires an object document and an object
+  `addresses` member when present; a business member gives a row only when it is
+  an object; its place lookup converts the selected SEC code with Python text
+  semantics, keeping the historical mapping of nontext codes to unknown places.
+- The Person source read block keeps the complete submissions document. Company
+  raw-column qualification does not yet replace its catalog and census joins,
+  address derivation or full mastering.
+- The installed object-records trial assembles the two raw Person fixture records
+  and verifies them through preparation and the actual Person MDM contract.
+- Name Census keys: `sec.submissions.company/name-key.yaml` and
+  `gleif/name-key.yaml` keep legal forms and unify their spelling; the SEC recipe
+  removes the trailing state suffix before normalizing.
+- All 309 SEC place codes and their lowercase and whitespace variants are
+  compared to the retained jurisdiction converter.
+- The partial filing projection case compares accession and form fields only.
+  The 18-column filing fixture covers caller provenance and selected recent
+  filing content.
+- The Company draft `catalog.yaml` groups `ticker` by CIK over both captured
+  catalog layouts; runtime custom ticker parsing is retired and its oracle is
+  test-only.
+- `min_integer: -9223372036854775807` matches the historical GLEIF decoder.
+- Active GLEIF JSON and XML retirement was unfinished when this was written.
+
+### The SEC Company main document
+
+`rules/sources/sec.submissions.company/source.yaml` now declares a generic
+`source.read` block for its main submissions document. It emits `company`,
+`filings` and `addresses` tables. Company fields retain their captured types;
+filings use the qualified parallel-array, date, numeric and first-N rules;
+business addresses use the frozen SEC place reference rows.
+
+Use a version-2 source input manifest. Each artifact has `input` and `context`
+receipts. The context document binds its values to that exact input receipt:
+`cik` (integer), `sync_run_id`, `raw_object_id`, `load_mode`, `last_synced_at`
+(text), and `recent_limit` (integer or null). These are explicit caller facts;
+the worker verifies their binding and the native engine verifies their types.
+An input hash does not independently prove a supplied capture identifier or
+observation time: the acquisition/census provenance gates must prove those.
+
+Join the resulting tables with a declared `source.combine` contract, then use
+`mdm.prepare` to write immutable input batches. The current Company target
+still uses retained preparation until census, ticker catalog, pagination,
+classification/provenance and installed full-population replay are qualified.
+The read block alone is neither a source activation nor complete mastering.
+
+For a captured continuation page, use the packaged
+`rules/sources/sec.submissions.company/pagination.yaml` contract. It reads
+column arrays at the raw page root and emits all eighteen filing fields;
+it has no recent-limit context. Bind `cik`, `sync_run_id`, `raw_object_id`
+and `load_mode` to the page receipt. `raw_object_id` retains the caller's
+publication context; the independent `input` receipt identifies the exact
+page bytes. Do not invent a `filings` wrapper before configured reading.
+
+Capture all filenames declared by the pinned main document. Read pages in
+bounded pairs, combine up to seven page readings with the main reading,
+then combine the resulting per-Company form lists with `collect_flat` and
+`sort_values: true`. This preserves complete page scope through immutable
+reading receipts while keeping each work unit bounded. See
+[Combination](COMBINING.md) for list and element-budget semantics.
+Same-date S3 captures plus version/hash evidence prove captured bytes and
+declared page coverage; they do not prove Bookkeeping producer success.
+
+
+### The GLEIF Level 1 JSON template
+
+The bundled `gleif/level1-json.yaml` template declares ZIP framing, explicit
+historical numeric/record limits, pinned publication count and a receipt-bound
+source ordinal. Populate `read.references.approved_scope` with the reviewed
+LEIs as `{LEI: {selected: true}}` before submission; the supplied empty map is
+a template, not an approved cohort. Source scope is a frozen reference table
+in the same contract receipt as selection. `record` retains typed source
+fields for MDM interpretation; `source_index` is one-based. Compare provenance
+with the historical zero-based ordinal explicitly before runtime adoption.
+
+The complete archive framing parity result and the captured-sample performance
+measurement do not by themselves prove installed configured projection,
+producer publication, XML parity or complete Company mastering. Complete those
+checks before replacing the active GLEIF runtime or activating source Rules.
+
+
+### The GLEIF member templates
+
+The bundled `sources/gleif/` folder contains `level1`, `relationships` and
+`reporting-exceptions` templates for both `json` and `xml`. Read them through
+`rules.files.load` from the installed `rules.files.ROOT`; copy and pin the
+result before submitting `source.read`. They are qualification templates,
+not activated source Rules. Their selection preserves complete source
+records and original one-based ordinals. Both relationship endpoints must
+belong to the approved scope. Scope selection makes no identity or binding
+decision and does not replace the later MDM checks.
+
+
+### Census contracts
+
+- Census reuse binds the census SHA into `sources/sec.submissions.company/census.yaml`;
+  Company captures are read through `census-main.yaml` and combined with
+  `combine-census.yaml`.
 
 The bundled `gleif/census-record.yaml` and
 `sec.submissions.company/census-filer.yaml` use these primitives for census
