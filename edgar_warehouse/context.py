@@ -375,9 +375,14 @@ class Context:
                 "status": body.get("status"),
             },
         }
-        if generation:
-            answer["trust"]["current_parts"] = ["cross_references", "sources"]
-            answer["trust"]["note"] = "Fields, identifiers and status are of that generation; cross-references and source records are as MDM holds them now."
+        if args.as_at:
+            answer["trust"]["current_parts"] = ["cross_references", "sources", "related_names"]
+            answer["trust"]["note"] = ("Fields, identifiers, status and related links are of that generation; cross-references, "
+                                       "source records and the related entities' names are as MDM holds them now.")
+        elif generation:
+            answer["trust"]["current_parts"] = ["cross_references", "sources", "related"]
+            answer["trust"]["note"] = ("Fields, identifiers and status are of that generation; cross-references, source records "
+                                       "and related links (held at that time) are as MDM holds them now.")
         if canonical != entity_id:
             answer["merged_from"] = entity_id
         answer["related"] = [_brief_link(link) for link in related]
@@ -425,11 +430,7 @@ class Context:
 
     @staticmethod
     def _at(args) -> datetime:
-        if args.as_of:
-            return parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}")
-        if getattr(args, "as_at", None):  # what was recorded by then, of what held then
-            return parse_time(args.as_at, "--as-at", f"{PROG} {args.subject} {args.key}")
-        return datetime.now(UTC)
+        return parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}") if args.as_of else datetime.now(UTC)
 
     def _walk(self, conn, start: str, hops: int, at: datetime, relationship_type: str, cap: int,
               generation: int | None = None):
@@ -496,8 +497,6 @@ class Context:
         return links, len(links), cut
 
     def relationships(self, args: argparse.Namespace) -> dict:
-        if args.as_of and args.as_at:
-            raise ContextError("Give --as-of or --as-at, not both.", f"{PROG} relationship {args.key or '<entity>'} --as-of <time>")
         if not args.key:
             raise ContextError("Name the entity: its id or <namespace>:<value>.", f"{PROG} relationship <entity_id>")
         if not 1 <= args.hops <= MAX_HOPS:
@@ -512,7 +511,8 @@ class Context:
             links, count, cut = self._walk(conn, entity_id, args.hops, at, args.relationship_type, WALK_CAP, generation)
             trust = _latest(conn, generation)
             if generation is not None:
-                trust["note"] = "Links as MDM had recorded them by --as-at; names are as MDM holds them now."
+                trust["current_parts"] = ["names"]
+                trust["note"] = "Links as MDM had recorded them by --as-at, of those holding now; names are as MDM holds them now."
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)

@@ -47,10 +47,12 @@ def test_every_change_is_one_version_and_an_unchanged_link_writes_none(database)
     # b -> a did not change in generation 2: one version only.
     b_to_a = [v for v in versions if v["source_id"] == ids["b"] and v["type"] == DIRECT]
     assert [(v["from_generation"], v["to_generation"]) for v in b_to_a] == [(1, None)]
-    # c -> b changed (retired, or its period closed): closed at generation 2.
+    # c -> b changed in generation 2: its first version closed there, the next
+    # one open (retired, or its period closed).
     c_to_b = [v for v in versions if (v["source_id"], v["target_id"], v["type"]) == (ids["c"], ids["b"], DIRECT)]
-    assert c_to_b[0]["from_generation"] == 1 and c_to_b[0]["to_generation"] == 2
+    assert [(v["from_generation"], v["to_generation"]) for v in c_to_b] == [(1, 2), (2, None)]
     assert c_to_b[0]["valid_to"] == c_to_b[1]["valid_from"]
+    assert c_to_b[1]["body"] != c_to_b[0]["body"]
 
 
 def test_as_at_reads_the_links_recorded_by_then(database):
@@ -59,7 +61,11 @@ def test_as_at_reads_the_links_recorded_by_then(database):
     assert parents(now, ids["c"]) == {"Company a"}
     then = ask(database, "relationship", ids["c"], as_at=first_recorded.isoformat())
     assert parents(then, ids["c"]) == {"Company b"}
-    assert then["trust"]["generation"] == 1 and "names are as MDM holds them now" in then["trust"]["note"]
+    assert then["trust"]["generation"] == 1 and then["trust"]["current_parts"] == ["names"]
+    # Two hops at that time reach a through b; now c reaches a directly.
+    deep = ask(database, "relationship", ids["c"], as_at=first_recorded.isoformat(), hops=2, relationship_type=DIRECT)
+    assert {(r["depth"], r["from"]["name"], r["to"]["name"]) for r in deep["related"] if not r.get("derived")} == {
+        (1, "Company c", "Company b"), (2, "Company b", "Company a")}
     # The entity lookup lists the same links at that time.
     entity = ask(database, "company", ids["c"], as_at=first_recorded.isoformat())
     assert {r["to"]["name"] for r in entity["related"] if r["type"] == DIRECT and not r.get("derived")

@@ -7,6 +7,11 @@
 -- by then. A trigger on mdm.current_record writes it, so the batch writer is
 -- unchanged; history committed before this migration is back-filled from the
 -- stored batches (mdm.batch.effects), in generation order.
+
+-- No batch may change a relationship between the back-fill's check and the
+-- trigger's creation (CREATE TRIGGER takes this lock anyway; take it first).
+LOCK TABLE mdm.current_record IN SHARE ROW EXCLUSIVE MODE;
+
 CREATE TABLE mdm.relationship_version (
     relationship_id text NOT NULL,
     from_generation bigint NOT NULL,
@@ -25,8 +30,6 @@ CREATE TABLE mdm.relationship_version (
 );
 
 CREATE UNIQUE INDEX relationship_version_open ON mdm.relationship_version (relationship_id) WHERE to_generation IS NULL;
-CREATE INDEX relationship_version_source ON mdm.relationship_version (source_id, from_generation);
-CREATE INDEX relationship_version_target ON mdm.relationship_version (target_id, from_generation);
 
 COMMENT ON TABLE mdm.relationship_version IS
     'Every recorded state of every relationship, one row per relationship per change. The row whose from_generation <= g < to_generation (to_generation empty: still current) is what MDM had recorded at generation g; a batch''s generation and created_at say when. mdm.current_record holds the latest; this table answers "what did MDM have by then" (--as-at). Business time is in the body''s periods.';
@@ -105,6 +108,12 @@ BEGIN
 END;
 $$;
 
+-- The walk's indexes, built once the history is in.
+CREATE INDEX relationship_version_source ON mdm.relationship_version (source_id, from_generation);
+CREATE INDEX relationship_version_target ON mdm.relationship_version (target_id, from_generation);
+
+-- Company versions are written by mdm.record_company_version, called from
+-- write_batch; relationship versions by this trigger.
 CREATE FUNCTION mdm.keep_relationship_version() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'mdm'

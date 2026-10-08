@@ -153,7 +153,7 @@ def test_as_at_and_as_of_read_the_version_of_that_time(database):
     entity = identity["entity_id"]
     assert ask(database, "company", entity)["name"] == "New name"
     earlier = ask(database, "company", entity, as_at=recorded["created_at"].isoformat())
-    assert earlier["name"] == "Old name" and earlier["trust"]["current_parts"] == ["cross_references", "sources"]
+    assert earlier["name"] == "Old name" and earlier["trust"]["current_parts"] == ["cross_references", "sources", "related_names"]
     assert ask(database, "company", entity, as_of="2026-04-01T00:00:00+00:00")["name"] == "Old name"
     assert ask(database, "company", entity, as_of="2026-07-01T00:00:00+00:00")["name"] == "New name"
     with pytest.raises(ContextError):
