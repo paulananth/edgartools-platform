@@ -28,6 +28,8 @@ completes this ticket or the parent goal.
 - [ ] Replace active census/preparation consumers only when their complete provenance, pagination, classification, catalog and recovery contracts are proven.
 - [ ] Retire obsolete production census/construction code after no active caller remains; retain independent test-only oracles until equivalent guarantees exist.
 - [ ] Update self-contained bundled skill instructions, examples and requirements audit; full affected/native/CI gates, independent reviews and reviewable PR.
+  - [x] Document member grammar, declared set bounds, worker version-3 receipts, raw/UTF-8 validation, immutable scope and qualified combine identity route; 91 affected/genericity checks passed in 3.78s. 2026-10-08 18:34 ET
+  - [ ] Qualify installed separate-process worker/verifier and full source construction before recording whole-source retirement.
 - [ ] Parent goal still requires remaining Company/GLEIF runtime, complete adapter record mapping and configured capture retirement; preserve sec_client until provider.capture is qualified.
 
 ## Evidence and design
@@ -105,10 +107,9 @@ initial refusal-order test assumed path details in an error; corrected it to
 assert stable value_type before objects_shape after restoring Registration.
 The independent historical oracle still refuses the same first malformed read.
 
-Next integration must authenticate lookup-set receipts independently from
-scalar context. source_stream currently passes context receipts but does not
-supply indexed lookup receipts, and source_readings.load materializes partitions
-within a fixed consumer budget. Full reduction must consume authenticated
+At the initial projection checkpoint, lookup receipts were the next integration
+gap. The receipt integration below closes that transport gap. source_readings.load
+still materializes partitions within a fixed consumer budget. Full reduction must consume authenticated
 partitions incrementally rather than enlarge those bounds or silently omit
 cascade/global addresses. Worker/verifier must reject provisional source prefixes
 and preserve immutable source population identity before any publication.
@@ -141,5 +142,12 @@ Live merge check: #866 merged 4392159e, #867 merged dec6c867, #874 generic skill
 methods merged 0899b238, #875 progress audit merged ec2f45ab, #876 generic
 READING/COMBINING/control skill methods merged 40741eed. origin/main refreshed
 to 40741eed. The progress audit retains the original 6,414/3,052 installed gate.
-This worktree still needs synchronization onto these merged changes, preserving
-its protected WIP; main's unrelated dirty checkout remains untouched.
+Synchronization completed 2026-10-08 18:34 ET: checkpoint 70c1c410 preserved, then the
+two owned commits rebased onto 40741eed as cf418c98 and 34b7dacc. The sole
+READING.md conflict preserves generic main wording and the empty iterator
+grammar; 265 affected/genericity checks passed in 71.12s. Main's unrelated
+dirty checkout remains untouched.
+
+Synchronization and checkpoint publication are recovery anchors only. This
+ticket remains incomplete; no active census caller or remaining parser was
+deleted, and no rules were activated or deployed.

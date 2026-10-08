@@ -632,6 +632,82 @@ A fixture and its pinned comparison cover caller provenance and the content
 they select. They do not complete classification, paginated history,
 reference joins, other sources or complete malformed source equivalence. Keep the full retirement gates open until those pass.
 
+## Indexed membership and scope receipts
+
+Use `member` when a record must be selected against a large, immutable set
+of exact text keys. Declare the set and its bounds in the reading contract:
+
+```yaml
+read:
+  format: json
+  lookup_sets:
+    scope: {max_values: 100000, max_bytes: 33554432, max_value_bytes: 16384}
+  tables:
+    rows:
+      each: '.'
+      select:
+        member: {lookup: scope, key: {value: {path: code}}}
+      columns:
+        code: {value: {path: code}}
+```
+
+The key is an ordinary expression, including an explicit text transform when
+needed. Membership is exact: no trimming, case change or type coercion. Null
+returns false; nontext keys refuse. The named set must be declared even in a
+branch that is never selected. Both branches validate, while evaluation stays
+lazy. This declaration also bounds supplied sets used by `in_lookup`; legacy
+undeclared eager membership retains its existing semantics.
+
+Declare at most 16 sets, with nonempty names of at most 128 UTF-8 bytes.
+Each set declares positive `max_values` (at most 1,000,000), `max_bytes`
+(at most 64 MiB), and `max_value_bytes` (at most 16,384). Supplied names must
+exactly match the declarations, including for empty input. Raw counts and
+UTF-8 bytes are bounded before duplicate removal; aggregate raw key bytes
+across sets must not exceed 64 MiB. The native reader freezes and indexes
+values once before callbacks. They belong in lookup receipts, not scalar
+context or oversized frozen reference tables.
+
+The `source.read` **worker input manifest** uses version 3 for these receipts;
+this is distinct from the pipeline's run manifest:
+
+```json
+{"version":3,"contract":{"uri":"s3://bucket/contract.yaml","sha256":"<hash>"},
+ "artifacts":[{"input":{"uri":"s3://bucket/captured.json","sha256":"<hash>"},
+               "context":{"uri":"s3://bucket/context.json","sha256":"<hash>"},
+               "lookups":{"uri":"s3://bucket/lookups.json","sha256":"<hash>"}}]}
+```
+
+Both context and lookup receipts are required. Use an empty `values` object
+in the context document when no context is declared. The lookup receipt names
+strict JSON of at most 64 MiB:
+
+```json
+{"version":1,"input":{"uri":"s3://bucket/captured.json","sha256":"<hash>"},
+ "sets":{"scope":["A","B"]}}
+```
+
+`input` must equal the captured receipt's complete URI and hash. `sets` must
+hold exactly the declared names, each with a text array. The worker validates
+these documents before opening source bytes; its verifier independently
+replays the reading with the same receipts. Output retains lookup evidence,
+even when selection yields no rows. JSON streaming supports these indexed
+sets; XML streaming currently refuses them explicitly. Eager configured reads
+retain their declared-format support.
+
+A consumer must bind lookup evidence into its output identity. The configured
+combiner supports this: its scope hashes the complete reading receipts, so
+identical rows under different lookup receipts remain distinct for downstream
+preparation and publication. Direct MDM preparation of a lookup-bearing
+reading refuses until its identity contract supports that evidence. Declare
+a combine step before preparation for this route; never discard the receipt.
+
+Construct the set from verified upstream population evidence and pin its
+receipt in the worklist. Authentication proves the supplied bytes and input
+binding; it does not prove that the set is complete or that a supplied count
+was derived correctly. Compare complete source populations and retain their
+provenance before retiring an active consumer. A sampled reading or successful
+EOF on a repackaged prefix does not qualify the original whole source.
+
 ## Fallback and conditional values
 
 `coalesce` selects a typed value without a custom step:

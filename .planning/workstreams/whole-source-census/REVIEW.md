@@ -50,3 +50,14 @@ bare repository, prevalidates all compared commits, and compares against the
 same freshly fetched main commit. Do not accept a guard's empty overlap list
 when Git comparison errors occur; process substitutions can hide those errors.
 Final guard result must be captured before any commit/push.
+
+## Synchronization and documentation — 2026-10-08 18:34 ET
+
+After #876 merged, the refreshed guard against 40741eed passed with validated
+foreign references and no Git comparison errors. The earlier ownership question
+is no longer a commit gate: the Claude worktree is clean and its changes match
+main. Checkpoint 70c1c410 preserved all WIP before rebasing; the owned two commits
+are now cf418c98 and 34b7dacc. The only conflict was the generic predicate example
+in READING.md. Kept main's code example and inserted the empty iteration grammar.
+265 affected plus genericity checks pass in 71.12s; indexed receipt documentation
+then passed 91 affected/genericity checks in 3.78s. No retirement completion claim.
