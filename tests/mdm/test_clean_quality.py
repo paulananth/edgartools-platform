@@ -130,7 +130,7 @@ class TestTheBlock:
 
     def test_a_reference_table_is_pinned_by_its_hash(self):
         item = {"id": "state_code_known", "test": "in_reference@1", "value": "fields.state",
-                "on_fail": "flag", "args": {"table": "sec-place-codes", "sha256": "0" * 64, "key": "codes"}}
+                "on_fail": "flag", "args": {"table": "sec-place-codes", "sha256": "0" * 64}}
         with pytest.raises(quality.QualityError, match="pinned sha256"):
             quality.apply(block(checks=[item]), {"state": "DE"}, {})
 

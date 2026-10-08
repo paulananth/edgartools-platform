@@ -72,8 +72,8 @@ def _normalizer(name: str):
 
 
 # The one code table `sec_codes` may name. Its content is
-# `rules/reference/sec-place-codes.yaml`, which the policy body carries, so
-# the policy's digest pins it: an edit to the table is a new policy.
+# the RDM code set `sec-place-codes`, whose version and sha256 the policy
+# pins, so the policy's digest covers it: a new version is a new policy.
 SEC_CODES = {"edgar-iso-v1": edgar_jurisdiction}
 
 

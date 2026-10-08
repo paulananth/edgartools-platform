@@ -5,6 +5,7 @@ import json
 import pytest
 
 from edgar_warehouse.rules import files
+from tests.support import place_codes
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.mdm.clean.names import edgar_jurisdiction
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -14,13 +15,13 @@ from edgar_warehouse.workers import source_read
 def contract():
     return {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
         "format": "jsonl", "limits": {"max_bytes": 1048576, "max_records": 2000},
-        "references": {"places": files.reference("sec-place-codes")["codes"]},
+        "references": {"places": place_codes.table()},
         "tables": {"rows": {"each": "record", "columns": {"jurisdiction": {"lookup": {
             "reference": "places", "column": "iso", "key": {"text": {"path": "code", "coerce": "python", "case": "upper"}}}}}}}}}
 
 
 def test_all_sec_place_codes_and_conversion_cases_match_retained_jurisdiction():
-    codes = files.reference("sec-place-codes")["codes"]
+    codes = place_codes.table()
     values = [v for code in codes for v in (code, code.lower(), f" \t{code.lower()}\n")]
     values += [None, "", "unknown", "XX", True, False, 1, 1.2, [], {}, ["DE"], "ｄｅ", "ß", "ﬀ"]
     result = SourceEngine(contract()).read(b"".join(json.dumps({"code": code}).encode() + b"\n" for code in values))

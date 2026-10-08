@@ -8,6 +8,7 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_address_loader
 from edgar_warehouse.mdm.clean.company_source import business_address
 from edgar_warehouse.rules import files
+from tests.support import place_codes
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import source_read, mdm_prepare
 
@@ -41,7 +42,7 @@ def test_raw_address_matches_retained_derivation(address):
 
 def test_every_frozen_sec_place_code_and_variants_match_retained_mapping():
     engine = SourceEngine(CONTRACT)
-    for code in files.reference('sec-place-codes')['codes']:
+    for code in place_codes.table():
         for field in ('stateOrCountry', 'countryCode'):
             for value in (code, code.lower(), f' {code.lower()} '):
                 payload = {'addresses': {'business': {field: value}}}

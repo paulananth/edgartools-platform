@@ -330,6 +330,20 @@ def reference(name: str, root: Path | None = None) -> dict:
     return load((root or ROOT) / "reference" / f"{name}.yaml")
 
 
+def reference_pin(name: str, root: Path | None = None) -> dict:
+    """The Mastering Policy's pin of the reference data named `name`:
+    `{code_set, version, sha256}` from `merge/reference-pins.yaml`."""
+    root = root or ROOT
+    pins = root / "merge" / "reference-pins.yaml"
+    if not pins.exists():
+        raise RulesFileError(f"{root} has no merge/reference-pins.yaml: install rules from this build "
+                             "(the policy pins its reference data since profiling ticket 02)")
+    pin = load(pins).get(name)
+    if pin is None:
+        raise RulesFileError(f"The Mastering Policy pins no reference data named {name}")
+    return pin
+
+
 def pinned_reference(name: str, root: Path | None = None) -> list[dict]:
     """The codes of the reference data the Mastering Policy pins under `name`:
     its published canonical form, refused unless its sha256 is the pin. Each
@@ -339,13 +353,7 @@ def pinned_reference(name: str, root: Path | None = None) -> list[dict]:
     import json
 
     root = root or ROOT
-    pins = root / "merge" / "reference-pins.yaml"
-    if not pins.exists():
-        raise RulesFileError(f"{root} has no merge/reference-pins.yaml: install rules from this build "
-                             "(the policy pins its reference data since profiling ticket 02)")
-    pin = load(pins).get(name)
-    if pin is None:
-        raise RulesFileError(f"The Mastering Policy pins no reference data named {name}")
+    pin = reference_pin(name, root)
     path = root / "reference" / "published" / pin["code_set"] / str(pin["version"]) / "canonical.jsonl"
     data = path.read_bytes()
     if hashlib.sha256(data).hexdigest() != pin["sha256"]:

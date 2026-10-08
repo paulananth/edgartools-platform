@@ -65,11 +65,13 @@ def without_reference_pins(policy: dict) -> dict:
     """Profiling ticket 02 (operator, 2026-10-07 08:01 ET: "Ticket 02's last
     step needs your approval. Approved"): the policy pins its reference data
     (an RDM code set version and its sha256) instead of embedding the tables.
-    Peeled, the tables are embedded again, as before."""
-    from edgar_warehouse.rules import files
+    Peeled, the tables are embedded again, as before. The table's YAML is
+    removed; it is rebuilt from the pinned version, which equals it code for
+    code (tests/mdm/test_sec_place_codes.py)."""
+    from tests.support import place_codes
 
     body = {k: v for k, v in _copy(policy).items() if k != "reference_pins"}
-    body["reference"] = {path.stem: files.load(path) for path in sorted((files.ROOT / "reference").glob("*.yaml"))}
+    body["reference"] = {"sec-place-codes": {"codes": place_codes.table()}}
     return body
 
 
