@@ -13,3 +13,7 @@ Parent goal: self-sustaining skills and Rules creator, parsing/MDM orchestration
 - [x] Address review findings identified and implementation corrected: missing extractor/worker pins added, and installed test now feeds actual _business_addresses output into SEC assertions/publication. Review agents hit their usage limit before final confirmation; final independent review remains open (2026-10-08 06:07 ET).
 
 - [x] Final independent specification and standards/GoF reviews at a0df7857 confirmed prior gaps fixed and zero remaining scoped blockers; installed collector publication evidence remains pending (2026-10-08 06:10 ET).
+
+- [x] Installed committed bundle a0df7857 exercised actual Parquet address collector; its native-derived addresses became published SEC assertions. Three installed cases passed, zero skips, 208.40s, including restricted PG16, lost-ACK retry, duplicate replay and denied writes. Four fixture entities; full population remains unqualified (2026-10-08 06:14 ET).
+
+- [x] Post-rebase scan found removed legacy sec-place-codes.yaml referenced by the new test; migrated that test to pinned_reference, preserving all code variants. Full affected suite/CI must confirm (2026-10-08 06:14 ET).

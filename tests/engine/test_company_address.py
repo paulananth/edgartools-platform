@@ -92,7 +92,8 @@ def test_landed_address_recipe_matches_every_pinned_place_and_json_value_shapes(
     base={'street1':'  Exact  ','street2':None,'city':'City','zip_code':'12345',
           'state_or_country':None,'country_code':None,
           'last_synced_at':datetime(2026,1,1,tzinfo=UTC)}
-    for code in files.reference('sec-place-codes')['codes']:
+    for record in files.pinned_reference('sec-place-codes'):
+        code=record['code']
         for field in ('state_or_country','country_code'):
             for value in (code,code.lower(),f' {code.lower()} '):
                 row={**base,field:value}
