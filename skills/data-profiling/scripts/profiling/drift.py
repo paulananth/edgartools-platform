@@ -8,7 +8,8 @@ from __future__ import annotations
 FILL_CHANGE = 0.05
 ROWS_CHANGE = 0.5
 # Population stability index of a code's value shares: under 0.1 stable, 0.1 to 0.25 a moderate shift,
-# over 0.25 a significant one (the research note's drift section).
+# over 0.25 a significant one. A common rule of thumb, not a sourced one; the research note (section 7)
+# proposes flagging over 0.2. Numbers and dates use KS on quantiles instead of PSI over deciles.
 PSI_MODERATE, PSI_SIGNIFICANT = 0.1, 0.25
 # Kolmogorov-Smirnov distance between two quantile curves of a number or date (read from 21 points,
 # so accurate to about 0.05): over 0.1 the distribution moved.
@@ -90,8 +91,10 @@ def compare(approved: dict, new: dict) -> list[dict]:
 def distribution_drift(old: dict | None, new: dict | None) -> str | None:
     """How far a column's distribution moved, when it moved enough to report; None otherwise
     (or when either delivery has no distribution, as findings approved before it was kept)."""
-    if not old or not new or old["kind"] != new["kind"]:
+    if not old or not new:
         return None
+    if old["kind"] != new["kind"]:
+        return f"measured differently: {old['kind']} → {new['kind']} (the column became, or stopped being, a code)"
     if old["kind"] == "categories":
         index = psi(old["shares"], old["other"], new["shares"], new["other"])
         if index < PSI_MODERATE:
@@ -103,11 +106,18 @@ def distribution_drift(old: dict | None, new: dict | None) -> str | None:
 
 
 def psi(old: dict, old_other: float, new: dict, new_other: float) -> float:
-    """Population stability index over the values either side lists, the rest as one "other" value."""
+    """Population stability index over the listed values, the rest as one "other" value.
+
+    Each side lists only its commonest values. A value listed on one side only is
+    absent from the other only if that side's list is complete (its other is 0);
+    otherwise its share there is unknown, so it joins "other" on both sides."""
     import math
 
-    values = set(old) | set(new)
-    pairs = [(old.get(v, 0.0), new.get(v, 0.0)) for v in values] + [(old_other, new_other)]
+    values = {v for v in set(old) | set(new)
+              if (v in old or old_other == 0) and (v in new or new_other == 0)}
+    old_rest = max(0.0, 1 - sum(old.get(v, 0.0) for v in values))
+    new_rest = max(0.0, 1 - sum(new.get(v, 0.0) for v in values))
+    pairs = [(old.get(v, 0.0), new.get(v, 0.0)) for v in values] + [(old_rest, new_rest)]
     total = 0.0
     for a, b in pairs:
         a, b = max(a, EPSILON), max(b, EPSILON)
@@ -116,18 +126,24 @@ def psi(old: dict, old_other: float, new: dict, new_other: float) -> float:
 
 
 def ks(old: list[float], new: list[float]) -> float:
-    """The largest gap between two cumulative curves, each read from its evenly spaced quantiles."""
-    return round(max(abs(_cdf(old, v) - _cdf(new, v)) for v in sorted(set(old) | set(new))), 6)
+    """The largest gap between two cumulative curves, each read from its evenly spaced quantiles.
+
+    Both curves are straight between their points and jump where a point repeats,
+    so the largest gap is at a point of either curve, on one side of it or the other."""
+    return round(max(abs(_cdf(old, v, below) - _cdf(new, v, below))
+                     for v in sorted(set(old) | set(new)) for below in (False, True)), 6)
 
 
-def _cdf(points: list[float], v: float) -> float:
-    """The share of values at or below v, by straight lines between quantile points."""
+def _cdf(points: list[float], v: float, below: bool = False) -> float:
+    """The share of values at or below v (just below v when `below`), by straight lines between
+    quantile points; a repeated point is a jump."""
     step = 1 / (len(points) - 1)
-    if v < points[0]:
+    at = (lambda q: q < v) if below else (lambda q: q <= v)
+    if not at(points[0]):
         return 0.0
-    if v >= points[-1]:
+    if at(points[-1]):
         return 1.0
-    i = max(j for j, q in enumerate(points) if q <= v)  # the last point at or below v (repeats count once)
+    i = max(j for j, q in enumerate(points) if at(q))  # the last point counted
     low, high = points[i], points[i + 1]
     return i * step + (step * (v - low) / (high - low) if high > low else 0.0)
 

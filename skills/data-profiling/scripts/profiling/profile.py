@@ -118,10 +118,13 @@ def distribution(con, part: str, profile: dict, code: bool) -> dict | None:
                 "other": round(max(0.0, 1 - sum(n for _, n in rows) / profile["non_null"]), 6)}
     if is_numeric(profile):
         value = f"CAST({c} AS DOUBLE)"
+    elif profile["type"] == "TIMESTAMP WITH TIME ZONE":
+        value = f"epoch({c})"  # its own instant, whatever the session's time zone
     elif is_temporal(profile):
         value = f"epoch(TRY_CAST({c} AS TIMESTAMP))"
     else:
         return None
     points = [i / QUANTILES for i in range(QUANTILES + 1)]
-    found = con.execute(f"SELECT quantile_cont({value}, {points}) FROM {t} WHERE {value} IS NOT NULL").fetchone()[0]
+    found = con.execute(f"SELECT quantile_cont({value}, {points}) FROM {t} "
+                        f"WHERE {value} IS NOT NULL AND isfinite({value})").fetchone()[0]
     return {"kind": "quantiles", "points": [round(float(q), 6) for q in found]} if found else None
