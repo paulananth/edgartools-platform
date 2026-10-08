@@ -30,7 +30,8 @@ from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
 from edgar_warehouse.mdm.clean.company_source import SOURCE_CODE, bronze_receipts, census_filers
 from edgar_warehouse.mdm.clean.evidence import deferred_record, validate_assertion
 from edgar_warehouse.mdm.clean.merge import check_company_sources
-from edgar_warehouse.mdm.clean.name_census import VERSION as CENSUS_VERSION, sec_keys
+from edgar_warehouse.mdm.clean.name_census import VERSION as CENSUS_VERSION
+from tests.support.retired_name_census import sec_keys
 from edgar_warehouse.mdm.clean.store import canonical
 from edgar_warehouse.rules import files
 from edgar_warehouse.serving.silver_landing_export import LandingExportBuffer

@@ -1,0 +1,292 @@
+# Selective identity and legal-key projection; callers preserve refusal order.
+source: gleif.level1
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 100000
+  tables:
+    mapped:
+      each: .
+      columns:
+        lei:
+          object:
+            fields:
+              value:
+                choose:
+                  condition:
+                    test:
+                      path: LEI
+                      kind: object
+                  then:
+                    choose:
+                      condition:
+                        test:
+                          path: LEI.$
+                          kind: text
+                      then:
+                        value:
+                          path: LEI.$
+                          type: text
+                          trim: true
+                          null_if_blank: true
+                      else:
+                        const:
+                          value: null
+                  else:
+                    choose:
+                      condition:
+                        test:
+                          path: LEI
+                          kind: text
+                      then:
+                        value:
+                          path: LEI
+                          type: text
+                          trim: true
+                          null_if_blank: true
+                      else:
+                        const:
+                          value: null
+        category:
+          object:
+            fields:
+              value:
+                choose:
+                  condition:
+                    test:
+                      path: Entity
+                      kind: object
+                  then:
+                    choose:
+                      condition:
+                        test:
+                          path: Entity.EntityCategory
+                          kind: object
+                      then:
+                        choose:
+                          condition:
+                            test:
+                              path: Entity.EntityCategory.$
+                              kind: text
+                          then:
+                            value:
+                              path: Entity.EntityCategory.$
+                              type: text
+                              trim: true
+                              null_if_blank: true
+                          else:
+                            const:
+                              value: null
+                      else:
+                        choose:
+                          condition:
+                            test:
+                              path: Entity.EntityCategory
+                              kind: text
+                          then:
+                            value:
+                              path: Entity.EntityCategory
+                              type: text
+                              trim: true
+                              null_if_blank: true
+                          else:
+                            const:
+                              value: null
+                  else:
+                    choose:
+                      condition:
+                        test:
+                          path: Entity
+                          kind: truthy
+                      then:
+                        value:
+                          path: Entity
+                          type: object
+                      else:
+                        const:
+                          value: null
+        key:
+          object:
+            fields:
+              value:
+                choose:
+                  condition:
+                    test:
+                      path: Entity
+                      kind: object
+                  then:
+                    choose:
+                      condition:
+                        test:
+                          path: Entity.LegalName
+                          kind: object
+                      then:
+                        choose:
+                          condition:
+                            test:
+                              path: Entity.LegalName.$
+                              kind: text
+                          then:
+                            text:
+                              path: Entity.LegalName.$
+                              coerce: python
+                              trim: false
+                              default: ''
+                              transforms:
+                              - unicode: nfkd
+                              - strip_combining: true
+                              - case: upper
+                              - replace:
+                                  from: '&'
+                                  to: ' AND '
+                              - regex_replace:
+                                  pattern: '[^A-Z0-9]+'
+                                  with: ' '
+                              - trim: true
+                              - pad:
+                                  left: ' '
+                                  right: ' '
+                              - replace:
+                                  from: ' L L C '
+                                  to: ' LLC '
+                              - replace:
+                                  from: ' L L P '
+                                  to: ' LLP '
+                              - replace:
+                                  from: ' L P '
+                                  to: ' LP '
+                              - replace:
+                                  from: ' P L C '
+                                  to: ' PLC '
+                              - replace:
+                                  from: ' N V '
+                                  to: ' NV '
+                              - replace:
+                                  from: ' S A '
+                                  to: ' SA '
+                              - replace:
+                                  from: ' A G '
+                                  to: ' AG '
+                              - replace:
+                                  from: ' S E '
+                                  to: ' SE '
+                              - replace:
+                                  from: ' B V '
+                                  to: ' BV '
+                              - replace:
+                                  from: ' CORPORATION '
+                                  to: ' CORP '
+                              - replace:
+                                  from: ' INCORPORATED '
+                                  to: ' INC '
+                              - replace:
+                                  from: ' COMPANY '
+                                  to: ' CO '
+                              - replace:
+                                  from: ' LIMITED '
+                                  to: ' LTD '
+                              - replace:
+                                  from: ' HOLDINGS '
+                                  to: ' HLDGS '
+                              - replace:
+                                  from: ' INTERNATIONAL '
+                                  to: ' INTL '
+                              - trim: true
+                              - remove_prefix: 'THE '
+                          else:
+                            const:
+                              value: ''
+                      else:
+                        choose:
+                          condition:
+                            test:
+                              path: Entity.LegalName
+                              kind: text
+                          then:
+                            text:
+                              path: Entity.LegalName
+                              coerce: python
+                              trim: false
+                              default: ''
+                              transforms:
+                              - unicode: nfkd
+                              - strip_combining: true
+                              - case: upper
+                              - replace:
+                                  from: '&'
+                                  to: ' AND '
+                              - regex_replace:
+                                  pattern: '[^A-Z0-9]+'
+                                  with: ' '
+                              - trim: true
+                              - pad:
+                                  left: ' '
+                                  right: ' '
+                              - replace:
+                                  from: ' L L C '
+                                  to: ' LLC '
+                              - replace:
+                                  from: ' L L P '
+                                  to: ' LLP '
+                              - replace:
+                                  from: ' L P '
+                                  to: ' LP '
+                              - replace:
+                                  from: ' P L C '
+                                  to: ' PLC '
+                              - replace:
+                                  from: ' N V '
+                                  to: ' NV '
+                              - replace:
+                                  from: ' S A '
+                                  to: ' SA '
+                              - replace:
+                                  from: ' A G '
+                                  to: ' AG '
+                              - replace:
+                                  from: ' S E '
+                                  to: ' SE '
+                              - replace:
+                                  from: ' B V '
+                                  to: ' BV '
+                              - replace:
+                                  from: ' CORPORATION '
+                                  to: ' CORP '
+                              - replace:
+                                  from: ' INCORPORATED '
+                                  to: ' INC '
+                              - replace:
+                                  from: ' COMPANY '
+                                  to: ' CO '
+                              - replace:
+                                  from: ' LIMITED '
+                                  to: ' LTD '
+                              - replace:
+                                  from: ' HOLDINGS '
+                                  to: ' HLDGS '
+                              - replace:
+                                  from: ' INTERNATIONAL '
+                                  to: ' INTL '
+                              - trim: true
+                              - remove_prefix: 'THE '
+                          else:
+                            const:
+                              value: ''
+                  else:
+                    choose:
+                      condition:
+                        test:
+                          path: Entity
+                          kind: truthy
+                      then:
+                        value:
+                          path: Entity
+                          type: object
+                      else:
+                        const:
+                          value: ''

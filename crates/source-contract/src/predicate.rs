@@ -10,8 +10,8 @@ pub(crate) fn validate(args: &Value) -> Result<(), String> {
     }
     let args = Value::Mapping(args.clone());
     check_path(setting(&args, "path").ok_or("test names no path")?)?;
-    if !matches!(setting(&args, "kind"), Some("truthy" | "null" | "not_null" | "missing" | "array" | "object")) {
-        return Err("test kind is truthy, null, not_null, missing, array or object".into());
+    if !matches!(setting(&args, "kind"), Some("truthy" | "null" | "not_null" | "missing" | "array" | "object" | "text")) {
+        return Err("test kind is truthy, null, not_null, missing, array, object or text".into());
     }
     if args.get("from").is_some_and(|v| !matches!(v.as_str(), Some("document" | "item"))) {
         return Err("test from is document or item".into());
@@ -37,6 +37,7 @@ pub(crate) fn read(start: &El, args: &Value) -> Result<Val, Rejected> {
         "null" => matches!(found, Found::Missing) || matches!(found, Found::El(el) if el.scalar && el.text.is_none()),
         "not_null" => !matches!(found, Found::Missing) && !matches!(found, Found::El(el) if el.scalar && el.text.is_none()),
         "missing" => matches!(found, Found::Missing),
+        "text" => matches!(found, Found::Text(_, ScalarKind::Text, _)) || matches!(found, Found::El(el) if el.scalar && el.kind == ScalarKind::Text && el.text.is_some()),
         "array" => matches!(found, Found::List(_)) || matches!(found, Found::El(el) if el.array),
         "object" => matches!(found, Found::El(el) if !el.scalar && !el.array),
         "truthy" => match found {

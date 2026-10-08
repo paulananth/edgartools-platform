@@ -25,7 +25,8 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.mdm.clean import company_source
 from edgar_warehouse.mdm.clean.activation import check_policy
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
-from edgar_warehouse.mdm.clean.name_census import VERSION, SEC_NORMALIZER, GLEIF_NORMALIZER, sec_keys, sec_legal_form_key
+from edgar_warehouse.mdm.clean.name_census import VERSION, SEC_NORMALIZER, GLEIF_NORMALIZER, sec_legal_form_key
+from tests.support.retired_name_census import sec_keys
 from edgar_warehouse.mdm.clean.store import canonical, digest
 
 IN, OUT = Path(sys.argv[1]), Path(sys.argv[2])

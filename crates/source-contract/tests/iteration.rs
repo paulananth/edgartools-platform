@@ -63,3 +63,36 @@ fn selection_and_iterator_conditions_validate_context_references_and_features() 
     let nonboolean=BASE.replace("select: {test: {path: '.', kind: object}}","select: {const: {value: yes}}");
     assert_eq!(read(&nonboolean,r#"{"x":{}}"#).unwrap_err().code,"select_condition");
 }
+
+#[test]
+fn values_iterates_singletons_and_arrays_without_coercion_and_enforces_source_bound() {
+    let body = "read:\n  format: json\n  limits: {max_records: 3}\n  tables:\n    rows:\n      each: {values: {path: v}}\n      columns:\n        v: {value: {path: '.'}}\n";
+    for (raw, expected) in [
+        (r#"{}"#, vec![]), (r#"{"v":[]}"#, vec![]),
+        (r#"{"v":null}"#, vec![Val::Null]),
+        (r#"{"v":false}"#, vec![Val::Bool(false)]),
+        (r#"{"v":18446744073709551615}"#, vec![Val::UInt(u64::MAX)]),
+        (r#"{"v":"abc"}"#, vec![Val::Str("abc".into())]),
+        (r#"{"v":[null,false,7]}"#, vec![Val::Null, Val::Bool(false), Val::Int(7)]),
+    ] {
+        let result = read(body, raw).unwrap();
+        assert_eq!(result.tables["rows"].iter().map(|row| row["v"].clone()).collect::<Vec<_>>(), expected, "{raw}");
+    }
+    let filtered = body.replace("columns:", "select: {test: {path: '.', kind: text}}\n      columns:");
+    assert_eq!(read(&filtered, r#"{"v":[0,1,2,3]}"#).unwrap_err().code, "limit_exceeded");
+    for bad in ["{values: {path: v, extra: true}}", "{values: {}}"] {
+        assert!(Engine::from_yaml(&body.replace("{values: {path: v}}", bad), Steps::new()).is_err());
+    }
+    assert!(Engine::from_yaml(&body.replace("format: json", "format: xml"), Steps::new()).is_err());
+}
+
+#[test]
+fn text_shape_never_accepts_numbers_booleans_containers_or_missing_values() {
+    let body = "read:\n  format: json\n  tables:\n    rows:\n      each: .\n      columns:\n        text: {test: {path: v, kind: text}}\n";
+    for (raw, expected) in [(r#"{}"#, false), (r#"{"v":null}"#, false),
+        (r#"{"v":false}"#, false), (r#"{"v":123}"#, false),
+        (r#"{"v":[]}"#, false), (r#"{"v":{}}"#, false),
+        (r#"{"v":""}"#, true), (r#"{"v":"123"}"#, true)] {
+        assert_eq!(read(body, raw).unwrap().tables["rows"][0]["text"], Val::Bool(expected));
+    }
+}

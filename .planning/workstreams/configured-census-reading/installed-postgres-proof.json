@@ -1,0 +1,38 @@
+{
+  "census_digest": "3d13ad553e0d960ac460111efc906d37a624dbc9305b2238fcd223d7b70a1a83",
+  "counts": {
+    "company": 2,
+    "person": 2
+  },
+  "full_population": false,
+  "generation": 3,
+  "installed_address_caller": true,
+  "installed_census_caller": true,
+  "installed_gleif_mapping": true,
+  "installed_sec_mapping": true,
+  "pins": {
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/gleif/census-identity.yaml": "65905089c1df13c80d0b0259afee47e8ddbd2fa958783b71356889aed65d15f9",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/gleif/census-record.yaml": "7e3ea82086473e751c87b61def833e1fb1ea9d913f7c8b4af8e9d20d75fbcb8d",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/gleif/census-update.yaml": "47bc89f82a4709a8a90bd29d2f8a46cde2de65d7f9312c5c9fff866dcf8e6284",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/gleif/source.yaml": "41c9066a0626cf8f258200980e0426086f462778582bbedfb97af5300fc7962b",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/census-filer.yaml": "0b3ba5f30d94b33469039ec296bacd2363bc303215ce9b957bde18ff6ebb4b42",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/landed-address.yaml": "2a6c372c604beb4774f3eef930f5779a5199b79ab77885de77ad89d11a163379",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/source.yaml": "8a602ac7907c4f1e1f6db829ce4f7ca5e3a98bd9cdae4a7b2efd058a60fe9cc6",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.person/source.yaml": "9d8be518e99fb9c1d62cda4ce2a1f6866bd054b5fa580b754181291f1ee461ec",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/mdm/clean/company_source.py": "62b8426f46aac0b2c3c2a3ade8628bb19669a696005e5c638c2e381a851fd5db",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/mdm/clean/name_census.py": "26910fbd57e3237c6264ebbdf387f5583caa517521d23f7e694390b9ab5c8dae",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/workers/source_mapping.py": "213f698f4bdb8113519b832cb196fcedafa7ccb97060cb25274279b78e4b3fe6",
+    "/private/tmp/codex-census-installed-test-20261008/bundle0/tools/edgartools-data/lib/python3.12/site-packages/source_contract/source_contract.abi3.so": "5a134b3f8c2e516761dc86957c64dff3d6afa120c7afb448d5e1afb7a40b09c6"
+  },
+  "publication_recovery": true,
+  "qualification": {
+    "code_commit": "c3e35810",
+    "prerequisite_skips": 0,
+    "pytest_passed": 1,
+    "scope": "installed two Company/two Person fixture, three batches, restricted PostgreSQL16; not full population",
+    "seconds": 111.42
+  }
+}
