@@ -1,8 +1,10 @@
-"""SEC's state and country codes are one reference table in `rules/`.
+"""SEC's state and country codes are one reference code set in `rules/`.
 
-`rules/reference/sec-place-codes.yaml` holds SEC's whole list of EDGAR codes,
-as edgartools ships it, with an ISO code for each. `names.edgar_jurisdiction`
-reads it (rules skill ticket 08).
+The RDM code set `sec-place-codes` version 1, published under
+`rules/reference/published/` and pinned by the Mastering Policy, holds SEC's
+whole list of EDGAR codes, as edgartools ships it, with an ISO code for each.
+`names.edgar_jurisdiction` reads it (rules skill ticket 08; profiling ticket 02
+moved it from `rules/reference/sec-place-codes.yaml`, now removed).
 """
 
 from __future__ import annotations
@@ -24,8 +26,9 @@ from edgar_warehouse.mdm.clean.names import (
 )
 from edgar_warehouse.mdm.clean.store import digest
 from edgar_warehouse.rules import files
+from tests.support import place_codes
 
-TABLE = files.reference("sec-place-codes")["codes"]
+TABLE = place_codes.table()
 
 # The 169 codes the table held before it moved (built in company mastering
 # ticket 08),
@@ -56,7 +59,7 @@ def test_the_table_is_secs_whole_list_as_edgartools_ships_it():
     shipped = Path(edgar.__file__).parent / "reference" / "data" / "place_codes.csv"
     assert hashlib.sha256(shipped.read_bytes()).hexdigest() == SHIPPED_SHA256, (
         "edgartools ships a different SEC code list: compare it with "
-        "rules/reference/sec-place-codes.yaml and update the table"
+        "the published sec-place-codes version and publish a new one"
     )
     with shipped.open(newline="") as handle:
         sec = {row["Code"]: (row["Place"], row["Type"]) for row in csv.DictReader(handle)}
@@ -107,26 +110,26 @@ def test_the_policy_exports_its_pins_and_an_older_policy_its_tables(tmp_path):
     # A policy stored before profiling ticket 02 embedded the table: it still
     # exports it back to its own file.
     older = {k: v for k, v in files.policy().items() if k != "reference_pins"}
-    older["reference"] = {"sec-place-codes": files.reference("sec-place-codes")}
+    older["reference"] = {"sec-place-codes": {"codes": TABLE}}
     files.write_policy(older, tmp_path / "older")
     assert files.reference("sec-place-codes", tmp_path / "older")["codes"] == TABLE
-    # The policy exports into a checkout, where the table's file stays for
-    # the quality check that pins it.
+    # The policy exports into a checkout, whose rules already hold the pins.
     shutil.copytree(files.ROOT, tmp_path / "checkout")
     files.write_policy(files.policy(), tmp_path / "checkout")
     assert digest(files.policy(tmp_path / "checkout")) == digest(files.policy())
 
 
+# The sha256 of the removed `rules/reference/sec-place-codes.yaml`'s `codes`
+# map (its digest), taken before it was removed: the published version
+# rebuilds it exactly.
+REMOVED_YAML_CODES_DIGEST = "00fbe2aea3066b70f3c32700c17c8d470337194c3e1f05105cc8a56a1f631aea"
+
+
 def test_the_pinned_version_is_the_table(tmp_path):
-    """The published RDM version the policy pins holds the table's every code,
-    place, ISO code and type, and names.py reads the same ISO codes from it."""
-    rows = files.pinned_reference("sec-place-codes")
-    rebuilt = {}
-    for row in rows:
-        targets = {(x[0], x[3]): x[2] for x in row["crosswalk"]}
-        rebuilt[row["code"]] = {"place": row["label"], "type": targets[("sec-place-types", "broad")],
-                                "iso": targets.get(("iso-3166", "exact"))}
-    assert rebuilt == TABLE
+    """The published RDM version the policy pins holds the removed YAML's every
+    code, place, ISO code and type, and names.py reads the same ISO codes from it."""
+    assert len(TABLE) == 309
+    assert digest(TABLE) == REMOVED_YAML_CODES_DIGEST
     assert _EDGAR_ISO == {code: row["iso"] for code, row in TABLE.items() if row["iso"]}
     # A changed byte is refused.
     copy = tmp_path / "rules"

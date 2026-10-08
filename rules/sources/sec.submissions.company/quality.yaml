@@ -72,5 +72,4 @@ quality:
       on_fail: flag
       args:
         table: sec-place-codes
-        sha256: 5a5a504286180523272d74fbbdc35078bb636bd4343309637041970c3e803a12
-        key: codes
+        sha256: 36270dc9e924128f1338ecee2fd4684f2c13b35303e634f49fabae9213759f00

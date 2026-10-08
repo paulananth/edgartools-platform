@@ -5,14 +5,14 @@ import pytest
 
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rdm import store, tables
-from edgar_warehouse.rules import files
+from tests.support import place_codes
 
 PLACES = [tables.Crosswalk.parse("iso=iso-3166@outside:exact"),
           tables.Crosswalk.parse("type=sec-place-types@1:broad")]
 
 
 def test_the_place_code_table_drafts_and_rebuilds_exactly():
-    table = files.reference("sec-place-codes")["codes"]
+    table = place_codes.table()
     found = tables.draft(table, label="place", crosswalks=PLACES, source="test")
     assert len(found["codes"]) == len(table) == 309
     assert [t["code"] for t in found["targets"]["sec-place-types"]] == ["CANADIAN", "FOREIGN", "UNKNOWN", "US"]

@@ -107,6 +107,15 @@ WITH_QUALITY = {
 }
 
 
+def _with_yaml_place_check(contract: dict) -> dict:
+    """The place-code check as it was: pinned to `rules/reference/sec-place-codes.yaml`
+    by that file's sha256, its keys under `codes`."""
+    checks = [{**c, "args": {**c["args"], "sha256": "5a5a504286180523272d74fbbdc35078bb636bd4343309637041970c3e803a12",
+                             "key": "codes"}} if c["id"] == "state_code_known" else c
+              for c in contract["quality"]["checks"]]
+    return {**contract, "quality": {**contract["quality"], "checks": checks}}
+
+
 def _without_quality(contract: dict) -> dict:
     """The contract without what ticket 22 added: its `quality`, its exception
     reasons, and GLEIF's headquarters address in matching."""
@@ -132,6 +141,10 @@ COMPANY = policy_layers.company_part(company_source.POLICY)
 SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9be4"
 # Native mapped-value reading requires approval of new source digests. Removing
 # only the new reading retains the complete historical contract protection.
+# Profiling ticket 02 (handoff C3): the place-code check reads the published
+# RDM version the policy pins; without that, the check pins the removed YAML
+# and the contract is the one below.
+WITH_PINNED_PLACE_CHECK = "472295c9222ac017ceeac3705693ea9ca94ebdcb151a78c8cc56e1f2bd39e7ba"
 SEC_CONFIGURED_FIELDS = {
     "sec.submissions.company": "f01b9d7077376cc4adc3a5bae8f82a294992ed76c7f729d58b5f43198ed1259e",
     "sec.submissions.person": "9ab5f191e7f18f58c1be5cedda3841d86c577f6074f9904a14c4f3eb1d875605",
@@ -146,8 +159,9 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
-    assert digest(company_source.CONTRACT) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
-    contract = _without_configured_reading(company_source.CONTRACT)
+    assert digest(company_source.CONTRACT) == WITH_PINNED_PLACE_CHECK
+    assert digest(_with_yaml_place_check(company_source.CONTRACT)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
+    contract = _without_configured_reading(_with_yaml_place_check(company_source.CONTRACT))
     assert digest(contract) == SEC_READING_V7
     v6 = {**contract, "adapter": {**contract["adapter"],
                                                   "version": "sec-company-landing-v6"}}

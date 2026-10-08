@@ -88,6 +88,18 @@ def rdm():
 
 
 def _import(rdm):
+    """Import SEC's place-code table as version 1. Its YAML is removed (profiling
+    ticket 02), so the table comes back from the published version, which equals
+    it code for code."""
+    from unittest import mock
+
+    from tests.support import place_codes
+
+    with mock.patch.object(files, "reference", lambda name, root=None: {"codes": place_codes.table()}):
+        return _import_table(rdm)
+
+
+def _import_table(rdm):
     return cli.import_reference(rdm, argparse.Namespace(
         name="sec-place-codes", key="codes", label="place", code_set=None, set_name="EDGAR state and country codes",
         version="1", created_by="claude/data-profiling (test)",

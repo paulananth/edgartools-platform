@@ -262,7 +262,7 @@ blocks; do not ask whether it does.
   only. Third-party pages are hints, not authority.
   - **For an SEC feed,** all of SEC's own documentation is on `sec.gov`. Use
     the repo instead: the existing SEC contract and its comments,
-    `docs/specs/`, `rules/reference/sec-place-codes.yaml` and the parsers in
+    `docs/specs/`, the published code sets in `rules/reference/published/` and the parsers in
     `edgar_warehouse/loaders/`.
 
 **Infer, for each record type:**

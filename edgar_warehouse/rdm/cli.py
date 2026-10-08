@@ -84,7 +84,9 @@ def draft_file(rdm, path: Path) -> dict:
 def import_reference(rdm, args) -> dict:
     """Draft a reference table (`rules/reference/<name>.yaml`) as a code set
     version, and each crosswalk target RDM holds as its own code set; then
-    check the draft rebuilds the table exactly."""
+    check the draft rebuilds the table exactly. Once published and pinned, the
+    table's YAML is removed (`sec-place-codes`, profiling ticket 02), so the
+    folder holds only tables not yet imported."""
     from edgar_warehouse.control_contract import Blocked
     from edgar_warehouse.rules import files
 

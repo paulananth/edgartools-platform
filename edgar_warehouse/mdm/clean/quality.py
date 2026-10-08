@@ -24,7 +24,6 @@ fixed, versioned list, as matching tests are: a new one is new code.
 from __future__ import annotations
 
 import functools
-import hashlib
 import re
 import unicodedata
 from collections import Counter
@@ -115,23 +114,21 @@ def _registered_agent(value, args) -> bool:
 def _in_reference(value, args) -> bool:
     if value is None:
         return True
-    return str(value).strip().upper() in _reference_keys(args["table"], args["sha256"], args.get("key") or "")
+    return str(value).strip().upper() in _reference_keys(args["table"], args["sha256"])
 
 
 @functools.lru_cache(maxsize=None)
-def _reference_keys(table: str, sha256: str, key: str) -> frozenset:
-    """The keys of a pinned reference table: its sha256 is in the args, so an
-    edit to the table is a new quality version, never a silent change. Read
-    once per process: the pin makes the result invariant."""
+def _reference_keys(table: str, sha256: str) -> frozenset:
+    """The codes of the reference data the Mastering Policy pins under `table`
+    (its published RDM version, profiling ticket 02). The check's sha256 must be
+    that pin, so a new version is a new quality version, never a silent change.
+    Read once per process: the pin makes the result invariant."""
     from edgar_warehouse.rules import files
 
-    path = files.ROOT / "reference" / f"{table}.yaml"
-    if hashlib.sha256(path.read_bytes()).hexdigest() != sha256:
+    pin = files.reference_pin(table)
+    if pin["sha256"] != sha256:
         raise QualityError(f"Reference table {table} differs from its pinned sha256")
-    body = files.load(path)
-    for part in key.split(".") if key else ():
-        body = body[part]
-    return frozenset(str(k).upper() for k in body)
+    return frozenset(str(row["code"]).upper() for row in files.pinned_reference(table))
 
 
 CHECKS = {
