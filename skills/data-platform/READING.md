@@ -766,7 +766,7 @@ eight calls. Context/reference/custom names in all conditions must resolve.
 
 `test: {path: ticker, kind: truthy}` returns a native boolean without text
 coercion or materializing a subtree. Kinds are `truthy`, `missing`, `null`,
-`not_null`, `array` and `object`; optional `from: document` tests the original
+`not_null`, `array`, `object` and `text`; optional `from: document` tests the original
 document. Null includes absent values; `missing` distinguishes absence from
 explicit null. Quote `'null'` in YAML so the kind is text. Truth follows the captured JSON type: zero, false, null and
 empty text/containers are false; whitespace text is true.
@@ -940,3 +940,41 @@ for typed boolean conditions.
 This reuses approved global counts. Constructing the complete census,
 qualifying its current source population and proving installed mastering
 remain separate completion requirements.
+
+## Typed values that may be single or repeated
+
+Use `each.values` for a JSON member that can hold one value or an array:
+
+```yaml
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 1000}
+  tables:
+    names:
+      each: {values: {path: names}}
+      select: {test: {path: '.', kind: text}}
+      columns:
+        name: {value: {path: '.', type: text, trim: true, null_if_blank: true}}
+```
+
+A missing member or empty array yields no rows. Null, numbers, booleans and
+objects are single values; selection chooses which types to retain. Arrays
+retain element order and exact types. The record bound counts every source
+value before selection or `take`; an oversized array is refused even when
+nothing would be selected. `test.kind: text` tests the original JSON type
+without numeric or boolean coercion. Nested `choose` expressions can select
+an object's `$` text member or a scalar text value explicitly.
+
+The bundled `gleif/census-record.yaml` and
+`sec.submissions.company/census-filer.yaml` use these primitives for census
+name extraction and canonical keys. `gleif/census-identity.yaml` projects
+eligibility and legal keys selectively; `gleif/census-update.yaml` reads
+registration only for a wanted legal key. Preserve the caller order: census
+category, LEI, legal key, wanted-key timestamp, other names; cascade LEI,
+category, mapped quality, names. Empty falsey containers yield no names;
+truthy non-object containers refuse. Skipped records must not evaluate name
+counts or registration. Qualification disables custom steps and includes
+paired faults that prove refusal order. Holder aggregation and
+cascade decisions remain in the census implementation. Whole-source census
+construction, complete source provenance and installed population qualification
+are still required before removing that implementation.

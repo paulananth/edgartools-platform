@@ -11,6 +11,12 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
     match name.as_str() {
         Some("parallel") => parallel::validate(each, format),
         Some("matrix") => matrix::validate(each, format),
+        Some("values") => {
+            if format != "json" { return Err("each.values requires JSON".into()); }
+            let map = args.as_mapping().ok_or("values arguments must be a mapping")?;
+            if map.len() != 1 || !map.contains_key(Value::String("path".into())) { return Err("values requires path only".into()); }
+            crate::check_path(setting(args, "path").ok_or("values requires path")?)
+        }
         Some("objects" | "entries") => {
             if format != "json" { return Err("each.objects requires JSON".into()); }
             let map = args.as_mapping().ok_or("objects arguments must be a mapping")?;
@@ -71,6 +77,31 @@ pub(crate) fn rows(engine: &Engine, context: &Row, document: &El, each: &Value, 
             _ => return Err(Rejected::new("choose_condition", "Iteration condition must be boolean or null")),
         };
         return rows(engine, context, document, &args[branch], maximum, take);
+    }
+    if let Some(args) = each.get("values") {
+        let path = setting(args, "path").unwrap();
+        let bounded = |items: &[El]| -> Result<(Vec<El>, usize), Rejected> {
+            if items.len() > maximum { return Err(Rejected::new("limit_exceeded", "Values exceed max_records")); }
+            Ok((items.iter().take(take).cloned().collect(), items.len()))
+        };
+        return match crate::lookup_shape(document, path)? {
+            crate::Found::Missing => Ok((Vec::new(), 0)),
+            crate::Found::List(items) => {
+                if items.len() > maximum { return Err(Rejected::new("limit_exceeded", "Values exceed max_records")); }
+                let count = items.len();
+                Ok((items.into_iter().take(take).cloned().collect(), count))
+            },
+            crate::Found::El(el) if el.array => match el.children.get("item") {
+                Some(Child::Many(items)) => bounded(items), _ => Ok((Vec::new(), 0)),
+            },
+            crate::Found::El(el) => bounded(std::slice::from_ref(el)),
+            crate::Found::Text(text, kind, exact) => {
+                let mut el = El::scalar(Some(text));
+                el.kind = kind;
+                el.exact_number = exact.map(str::to_owned);
+                bounded(std::slice::from_ref(&el))
+            },
+        };
     }
     let entries = each.get("entries");
     let args = entries.unwrap_or(&each["objects"]);

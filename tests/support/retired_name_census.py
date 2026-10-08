@@ -25,16 +25,14 @@ what changed, and would let a common name look unique.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import BinaryIO
 
-from . import cascade as cascaded
-from .adapters import UnsupportedRecord, mapped_values
-from .gleif_source import inspect_archive
-from .primitives import NORMALIZERS
-from edgar_warehouse.rules import files as rules_files
-from edgar_warehouse.workers.source_mapping import project_record, read_record
-
-from .store import Conflict
+from edgar_warehouse.mdm.clean import cascade as cascaded
+from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, mapped_values
+from edgar_warehouse.mdm.clean.gleif_source import inspect_archive
+from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
+from edgar_warehouse.mdm.clean.store import Conflict
 
 VERSION = "sec-gleif-name-census-v1"
 # The normalizers the census counts with, by the versions it records; a rule
@@ -47,29 +45,32 @@ legal_form_key = NORMALIZERS[GLEIF_NORMALIZER]
 CAP = 5
 
 
-GLEIF_READING = rules_files.load(rules_files.ROOT / "sources/gleif/census-record.yaml")
-GLEIF_IDENTITY = rules_files.load(rules_files.ROOT / "sources/gleif/census-identity.yaml")
-GLEIF_UPDATE = rules_files.load(rules_files.ROOT / "sources/gleif/census-update.yaml")
-SEC_READING = rules_files.load(rules_files.ROOT / "sources/sec.submissions.company/census-filer.yaml")
+def _text(node) -> str | None:
+    value = node.get("$") if isinstance(node, dict) else node
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _sec_population(filers):
+def _other_names(entity: dict) -> list[str]:
+    names = []
+    for container, item in (
+        ("OtherEntityNames", "OtherEntityName"),
+        ("TransliteratedOtherEntityNames", "TransliteratedOtherEntityName"),
+    ):
+        found = (entity.get(container) or {}).get(item) or []
+        for name in found if isinstance(found, list) else [found]:
+            if text := _text(name):
+                names.append(text)
+    return names
+
+
+def sec_keys(filers: Iterable[tuple[str, str | None, list[str]]]) -> dict[str, set]:
+    """Each name key and the CIKs whose current or former name carries it."""
     held: dict[str, set] = defaultdict(set)
-    wanted = set()
     for cik, name, former in filers:
-        reading = read_record({"name": name, "former": former}, SEC_READING)
-        for table in ("current", "former"):
-            for row in reading.tables[table]:
-                if key := row["key"]:
-                    held[key].add(cik)
-                    if table == "current":
-                        wanted.add(key)
-    return held, wanted
-
-
-def _gleif_other_keys(row):
-    reading = read_record(row, GLEIF_READING)
-    return [r["key"] for table in ("other", "transliterated") for r in reading.tables[table]]
+        for text in [name, *former]:
+            if key := sec_legal_form_key(text):
+                held[key].add(cik)
+    return held
 
 
 def cascade_entity(row: dict, cascade: dict, wanted: set):
@@ -77,18 +78,18 @@ def cascade_entity(row: dict, cascade: dict, wanted: set):
     the GLEIF contract and its data quality rule, with its legal and other
     names; None when it is not GENERAL or the quality rule makes it an
     exception. The census and the proof (`21-cascade.py`) both read here."""
-    lei = project_record(row, GLEIF_IDENTITY, column="lei")["value"]
-    if not lei or project_record(row, GLEIF_IDENTITY, column="category")["value"] != "GENERAL":
+    entity = row.get("Entity") or {}
+    lei = _text(row.get("LEI"))
+    if not lei or _text(entity.get("EntityCategory")) != "GENERAL":
         return None
     try:
         fields, matching, quality = mapped_values(row, cascade["gleif_contract"])
     except UnsupportedRecord:
         return None
-    key = project_record(row, GLEIF_IDENTITY, column="key")["value"]
-    other_keys = _gleif_other_keys(row)
+    names = [_text(entity.get("LegalName")), *_other_names(entity)]
     return cascaded.entity_of(
         cascaded.record(lei, fields, matching, quality, {"lei": lei}),
-        frozenset([key, *other_keys]) & wanted,
+        frozenset(legal_form_key(n) for n in names) & wanted,
         eligible=cascaded.eligible(fields, cascade["spec"]),
     )
 
@@ -119,7 +120,8 @@ def build(
         raise Conflict("The Name Census counts a full Golden Copy, never a delta")
     if sec_population.get("filers") != len(filers):
         raise Conflict("The Name Census SEC population disagrees with its filers")
-    by_key, wanted = _sec_population(filers)
+    by_key = sec_keys(filers)
+    wanted = {sec_legal_form_key(name) for _, name, _ in filers} - {""}
     legal: dict[str, dict[str, str]] = defaultdict(dict)
     other: dict[str, set] = defaultdict(set)
     passes = bool(cascade and cascade["spec"]["passes"])
@@ -129,16 +131,18 @@ def build(
         entities: list = []
 
     def on_record(row: dict, _ordinal: int) -> None:
-        if project_record(row, GLEIF_IDENTITY, column="category")["value"] == "BRANCH":
+        entity = row.get("Entity") or {}
+        if _text(entity.get("EntityCategory")) == "BRANCH":
             return
-        lei = project_record(row, GLEIF_IDENTITY, column="lei")["value"]
+        lei = _text(row.get("LEI"))
         if not lei:
             return
-        key = project_record(row, GLEIF_IDENTITY, column="key")["value"]
+        key = legal_form_key(_text(entity.get("LegalName")))
         if key in wanted:
-            last = project_record(row, GLEIF_UPDATE, column="updated")["value"]
+            last = _text((row.get("Registration") or {}).get("LastUpdateDate"))
             legal[key][lei] = last or ""
-        for other_key in _gleif_other_keys(row):
+        for name in _other_names(entity):
+            other_key = legal_form_key(name)
             if other_key in wanted and other_key != key:
                 other[other_key].add(lei)
         if passes and (found := cascade_entity(row, cascade, cascade_wanted)):
