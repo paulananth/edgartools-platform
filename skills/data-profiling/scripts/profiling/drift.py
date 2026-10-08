@@ -93,8 +93,11 @@ def compare(approved: dict, new: dict) -> list[dict]:
     return items
 
 
-SNAPSHOT = 0.9  # a delivery that keeps this share of the approved keys holds every record each time
-CHANGES = 0.5  # one that keeps under this share, and changed nearly all it kept, holds the changes only
+# The research note's detection (section 5): a delivery keeping at least 98% of the last one's keys holds
+# every record each time; one keeping under 20% holds the changes only. Keeping none tells nothing: a feed
+# of new records only and a key renumbered each delivery look alike.
+SNAPSHOT = 0.98
+CHANGES = 0.2
 
 
 def deliveries(approved: dict, new: dict) -> list[dict]:
@@ -111,6 +114,11 @@ def deliveries(approved: dict, new: dict) -> list[dict]:
         prefix = max(before.get("prefix", ""), after.get("prefix", ""), key=len)
         old = {k: v for k, v in before["keys"].items() if k.startswith(prefix)}
         cur = {k: v for k, v in after["keys"].items() if k.startswith(prefix)}
+        # A capped sample's cut-off moves as a part grows: compare the keys both samples cover.
+        if before.get("capped") or after.get("capped"):
+            edge = min(max(old, default=""), max(cur, default=""))
+            old = {k: v for k, v in old.items() if k <= edge}
+            cur = {k: v for k, v in cur.items() if k <= edge}
         if not old:
             continue
         kept = old.keys() & cur.keys()
@@ -119,7 +127,7 @@ def deliveries(approved: dict, new: dict) -> list[dict]:
         added = round(len(cur.keys() - old.keys()) / len(cur), 6) if cur else 0.0
         if persistence >= SNAPSHOT:
             kind = "snapshot"
-        elif persistence < CHANGES and (changed is None or changed >= SNAPSHOT):
+        elif kept and persistence < CHANGES:
             kind = "changes"
         else:
             kind = "unknown"

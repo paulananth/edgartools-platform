@@ -47,7 +47,7 @@ def roles(con, part: str, columns: list[dict], key: list[str], personal: set[str
     return {"delivery": "unknown",
             "as_of": {"from": pair["from"] if pair else None, "to": pair["to"] if pair else None},
             "as_at": recorded, "event_time": event,
-            "versions_per_key": versions(con, part, key, [recorded, pair["from"] if pair else None]),
+            "versions_per_key": versions(con, part, key, [recorded, pair["from"] if pair else None, event]),
             "series": series(con, part, columns, key, temporal), "refresh": "unknown"}
 
 
@@ -68,17 +68,23 @@ SAMPLE_PREFIX = "0"  # keys whose sha256 starts with this: about 1 in 16, the sa
 SAMPLE_CAP = 4096  # a part with at most this many rows has every key sampled
 
 
-def fingerprint(con, part: str, key: list[str], columns: list[str], latest: str | None) -> dict:
-    """A small, repeatable sample of the part's keys, each with the sha256 of its row: two deliveries'
-    samples hold the same keys, so compare measures persistence, changes and the delivery kind without
-    keeping any key. Never written for a key holding personal values (the caller decides)."""
-    joined = lambda cols: "concat_ws(chr(31), " + ", ".join(f"coalesce(CAST({sql_name(c)} AS VARCHAR), '')"
-                                                            for c in cols) + ")"
+def fingerprint(con, part: str, key: list[str], columns: list[dict], latest: str | None) -> dict:
+    """A small, repeatable sample of the part's keys as sha256 hashes, each with the sha256 of its row
+    (`columns`: the ones to hash, personal columns left out by the caller): two deliveries' samples hold
+    the same keys, so compare measures persistence, changes and the delivery kind from hashes only.
+    Never written for a key holding personal values, nor for a part read as a sample (the caller decides).
+    A number is hashed by its value (1 and 1.0 alike), so a type read differently changes nothing."""
+    def text(c: dict) -> str:
+        value = f"CAST({sql_name(c['name'])} AS DOUBLE)" if is_numeric(c) else sql_name(c["name"])
+        return f"coalesce(CAST({value} AS VARCHAR), '')"
+    by_name = {c["name"]: c for c in columns}
+    joined = lambda cols: "concat_ws(chr(31), " + ", ".join(text(c) for c in cols) + ")"
     size = con.execute(f"SELECT count(*) FROM {sql_name(part)}").fetchone()[0]
     prefix = "" if size <= SAMPLE_CAP else SAMPLE_PREFIX
-    rows = con.execute(f"""SELECT k, sha256({joined(columns)}) FROM (
-        SELECT sha256({joined(key)}) k, * FROM {sql_name(part)}) WHERE starts_with(k, '{prefix}')
-        ORDER BY k LIMIT {SAMPLE_CAP}""").fetchall()
+    rows = con.execute(f"""SELECT "__key_hash", "__row_hash" FROM (
+        SELECT sha256({joined([by_name[k] for k in key])}) "__key_hash",
+               sha256({joined(columns)}) "__row_hash" FROM {sql_name(part)})
+        WHERE starts_with("__key_hash", '{prefix}') ORDER BY 1 LIMIT {SAMPLE_CAP}""").fetchall()
     newest = con.execute(f"SELECT CAST(max(TRY_CAST({sql_name(latest)} AS TIMESTAMP)) AS VARCHAR) "
                          f"FROM {sql_name(part)}").fetchone()[0] if latest else None
     return {"prefix": prefix, "keys": dict(rows), "capped": len(rows) == SAMPLE_CAP and size > SAMPLE_CAP,

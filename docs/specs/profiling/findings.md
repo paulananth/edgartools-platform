@@ -100,19 +100,27 @@ logical type a full read proves), `shape`, `shape_share` (masked shapes) and
 `alternatives` (other unique keys) and, for a sampled part, `evidence.full_pass`.
 A column's `role` may also be `link` (it points at another part's key).
 `persistence`, `delivery` and `refresh` stay null and `unknown` until
-`compare` sees a second delivery (ticket 01d). For that, a top-level part with
-a found key keeps a `fingerprint`: `{prefix, keys: {<sha256 of the key>: <sha256
-of the row>}, capped, latest, latest_column}`, the keys whose hash starts with
-`prefix` (every key of a part of at most 4,096 rows; about one in sixteen
-above, at most 4,096), so two deliveries sample the same keys without keeping
-any. A key holding a personal value is never sampled. `compare` writes, per
-part, `deliveries` in `drift.yaml`: `persistence` (the share of the approved
-sample's keys still present), `changed` (of those, the share whose row
-changed), `added` (the share of the new sample that is new), `delivery`
-(`snapshot` from 0.9 kept; `changes` under 0.5 kept with nearly all kept rows
-changed; else `unknown`) and `refresh` (days between the two deliveries'
-latest record or event time). The new findings carry them, and a change of
-delivery kind is a drift item.
+`compare` sees a second delivery (ticket 01d). For that, a fully read
+top-level part with a found key keeps a `fingerprint`: `{prefix, keys: {<sha256
+of the key>: <sha256 of the row>}, capped, latest, latest_column}`, the keys
+whose hash starts with `prefix` (every key of a part of at most 4,096 rows;
+about one in sixteen above, at most 4,096), so two deliveries sample the same
+keys. It keeps hashes only; a short key can still be found again by hashing
+every candidate, so a key holding a personal value is never sampled, and
+personal columns stay out of the row hash. A number is hashed by its value. A
+part read as a sample keeps none (its sample differs each run). `compare`
+writes, per part, `deliveries` in `drift.yaml`: `persistence` (the share of the
+approved sample's keys still present, over the keys both samples cover when
+one is capped), `changed` (of those kept, the share whose row changed; the
+research note's attribute stability is 1 minus it), `added` (the share of the
+new sample that is new), `delivery` (`snapshot` from 98% kept; `changes` under
+20% kept, with at least one kept; else `unknown`, as the research note's
+section 5; keeping none cannot tell new records only from a renumbered key)
+and `refresh` (days between the two deliveries' latest record or event time:
+one gap; more deliveries give the usual one). The new findings carry them;
+once approved findings carry a measured kind, a later change of kind is a
+drift item. `versions_per_key` counts rows per business key when the record
+key holds the recording, valid-from or event time.
 
 A record key designed on a name (research note 02; operator, 2026-10-05:
 "Same record: durable key") also writes `basis` (the name column) and, in its

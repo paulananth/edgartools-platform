@@ -330,3 +330,36 @@ def test_deliveries_sampled_differently_compare_only_the_keys_both_sampled():
     large = {"parts": [part("0", {k: v for k, v in every.items() if k.startswith("0")})]}
     (m,) = drift.deliveries(small, large)
     assert m["persistence"] == 1.0 and m["delivery"] == "snapshot" and m["keys_sampled"] == 4
+
+
+def test_a_growing_capped_part_is_still_a_snapshot_and_a_renumbered_key_tells_nothing():
+    import duckdb
+    from profiling import drift, profile, timing
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE s AS SELECT i AS id, 'v' || i AS k FROM range(200000) r(i)")  # a column named k
+    con.execute("CREATE TABLE g AS SELECT i AS id, 'v' || i AS k FROM range(240000) r(i)")
+    take = lambda t: {"part": "p", "time": {"delivery": "unknown"}, "fingerprint": timing.fingerprint(
+        con, t, ["id"], [c for c in profile.columns(con, t)], None)}
+    (m,) = drift.deliveries({"parts": [take("s")]}, {"parts": [take("g")]})
+    assert m["persistence"] == 1.0 and m["changed"] == 0.0 and m["delivery"] == "snapshot"
+    con.execute("CREATE TABLE r AS SELECT i + 1000000 AS id, 'v' || i AS k FROM range(200000) r(i)")
+    (m,) = drift.deliveries({"parts": [take("s")]}, {"parts": [take("r")]})
+    assert m["persistence"] == 0.0 and m["delivery"] == "unknown"
+
+
+def test_a_number_is_hashed_by_its_value():
+    import duckdb
+    from profiling import profile, timing
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE a AS SELECT CAST(i AS BIGINT) AS id, CAST(i * 2 AS BIGINT) AS n FROM range(50) r(i)")
+    con.execute("CREATE TABLE b AS SELECT CAST(i AS DOUBLE) AS id, CAST(i * 2 AS DOUBLE) AS n FROM range(50) r(i)")
+    hashes = [timing.fingerprint(con, t, ["id"], profile.columns(con, t), None)["keys"] for t in ("a", "b")]
+    assert hashes[0] == hashes[1]
+
+
+def test_a_part_read_as_a_sample_keeps_no_fingerprint(result):
+    findings = run.profile_inputs({"set": str(result["folder"])}, "small limit", limit=1000, sample=500)
+    sampled = [p for p in findings["parts"] if p["scan"] == "sampled"]
+    assert sampled and all(p["fingerprint"] is None for p in sampled)
