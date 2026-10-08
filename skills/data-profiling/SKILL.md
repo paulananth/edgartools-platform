@@ -49,7 +49,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists | `record_key` |
 | links | Each column pointing at another part's key (inclusion ≥ 0.9), with cardinality and evidence | `relationships` |
 | classify | The five classes, each from named tests; "unknown" when the tests do not decide | `class`, `confidence`, `tests` |
-| hierarchies | Per source: parent columns, functional dependencies, code nesting | `hierarchies` |
+| hierarchies | Per source: parent columns, functional dependencies, code nesting; a dependency that holds by coincidence (a near-constant parent, or child values seen once) is listed apart, never a hierarchy | `hierarchies`, `coincidental_dependencies` |
 | time | As of (valid from/to), as at (record time), event time, time series | `time` |
 | sensitivity | none, personal, sensitive personal; samples masked | `sensitivity` |
 | quality | Defects found on the way, with exact rows and masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |

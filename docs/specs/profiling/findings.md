@@ -31,6 +31,7 @@ dataset:
 parts: [...]                    # §3, one per table, file or child table
 relationships: [...]            # §4
 hierarchies: [...]              # §5
+coincidental_dependencies: [...] # §5, dependencies that hold by coincidence, never hierarchies
 questions: [...]                # §8, open questions for the operator, one at a time
 approval:                       # §9
   status: draft|approved
@@ -137,6 +138,14 @@ normalized name, and a rename is kept as an alias.
   invalid_rows: <n>             # rows that break the rule; each marked in invalid_rows.jsonl (§5.1)
   valid_dates: {from: <col|null>, to: <col|null>}
 ```
+
+A functional dependency between code columns is a level only when it is not a
+coincidence (ticket 01d): it must predict the parent far better than always
+guessing the parent's commonest value (a lift of at least 0.9 over that guess),
+and at least half the rows must carry a child value seen on two or more rows.
+One that fails is listed in `coincidental_dependencies` as
+`{part, child, parent, held, baseline, lift, supported}` and is never a
+hierarchy (a flag set on almost every row; a value seen on one row only).
 
 ### 5.1 Marked rows: `invalid_rows.jsonl`
 

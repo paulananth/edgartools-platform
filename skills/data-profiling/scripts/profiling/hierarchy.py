@@ -8,6 +8,16 @@ Evidence kinds:
 
 A near-exact hierarchy (holds ≥ 0.99) is accepted; rows that break it are
 counted as invalid for data quality.
+
+A dependency can hold by coincidence. Two tests, on the data alone, tell it
+from a hierarchy:
+- beyond chance: a parent level nearly constant (a flag set on almost every
+  row) is "determined" by anything; the dependency must predict the parent
+  far better than always guessing its commonest value (lift ≥ 0.9);
+- support: a child value seen on one row only determines its parent
+  trivially; most rows (≥ 0.5) must carry a child value seen on two or more.
+A dependency failing either is reported as coincidental, with its evidence,
+never as a hierarchy.
 """
 
 from __future__ import annotations
@@ -17,6 +27,8 @@ from .inputs import PARENT, sql_name, sql_text
 
 HOLDS = 0.99
 MAX_DEPTH = 50
+LIFT = 0.9  # how much better than guessing the parent's commonest value
+SUPPORT = 0.5  # share of rows whose child value is seen on two or more rows
 
 
 def _equivalent(con, part: str, columns: list[dict]) -> list[dict]:
@@ -29,8 +41,30 @@ def _equivalent(con, part: str, columns: list[dict]) -> list[dict]:
     return kept
 
 
-def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str] | None = None) -> list[dict]:
-    """Chains of code columns, each level determining the next coarser one."""
+def chance(con, part: str, child: str, parent: str, held: float) -> dict:
+    """How far a dependency child → parent is from coincidence: the share of rows the parent's commonest
+    value covers (guessing it is right that often), the lift of the dependency over that guess, and the
+    share of rows whose child value is seen on two or more rows."""
+    t, c, p = sql_name(part), sql_name(child), sql_name(parent)
+    baseline, supported = con.execute(f"""
+        WITH b AS (SELECT {c} AS child, {p} AS parent FROM {t} WHERE {c} IS NOT NULL AND {p} IS NOT NULL),
+             n AS (SELECT count(*) AS total FROM b)
+        SELECT (SELECT max(k) FROM (SELECT count(*) k FROM b GROUP BY parent)) / any_value(n.total),
+               (SELECT sum(k) FROM (SELECT count(*) k FROM b GROUP BY child HAVING count(*) >= 2)) / any_value(n.total)
+        FROM n""").fetchone()
+    baseline, supported = float(baseline or 0), float(supported or 0)
+    lift = (held - baseline) / (1 - baseline) if baseline < 1 else 0.0
+    return {"held": held, "baseline": round(baseline, 6), "lift": round(lift, 6), "supported": round(supported, 6)}
+
+
+def coincidental(evidence: dict) -> bool:
+    return evidence["lift"] < LIFT or evidence["supported"] < SUPPORT
+
+
+def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str] | None = None,
+                  rejected: list[dict] | None = None) -> list[dict]:
+    """Chains of code columns, each level determining the next coarser one. A dependency that holds by
+    coincidence is not a level; it is appended to `rejected`, with its evidence."""
     levels = sorted(_equivalent(con, part, code_columns), key=lambda c: -c["distinct"])
     parent: dict[str, tuple[str, float]] = {}
     for i, child in enumerate(levels):
@@ -39,6 +73,12 @@ def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str
                 continue
             held = determines(con, part, child["name"], candidate["name"])
             if held >= HOLDS:
+                evidence = chance(con, part, child["name"], candidate["name"], held)
+                if coincidental(evidence):
+                    if rejected is not None:
+                        rejected.append({"part": part, "child": child["name"], "parent": candidate["name"],
+                                         **evidence})
+                    continue  # a coarser level may still be a real parent
                 parent[child["name"]] = (candidate["name"], held)
                 break  # the closest coarser level
     chains, used = [], set()

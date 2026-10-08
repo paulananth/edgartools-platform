@@ -83,3 +83,28 @@ def test_a_child_part_marks_its_rows_by_its_parent_row(con):
     con.executemany("INSERT INTO child VALUES (?, ?, ?, ?)", rows)
     h = hierarchy._record(con, "child", ["fine", "middle"], 0.99, "functional_dependency", ["parent_id", "line"])
     assert [m["key"] for m in h["marked"]] == [{"_parent_row": "9", "line": "bad"}]
+
+
+def test_a_dependency_that_holds_by_coincidence_is_not_a_hierarchy():
+    import duckdb
+    from profiling import hierarchy, profile
+
+    con = duckdb.connect()
+    # region → country is real; a flag set on 99% of rows is "determined" by anything; a building number
+    # seen on one row each determines its country trivially.
+    con.execute("""CREATE TABLE t AS SELECT
+        'R' || (i % 40) AS region, 'C' || (i % 40 % 8) AS country,
+        CASE WHEN i < 990 THEN 'Y' ELSE 'N' END AS flag,
+        CASE WHEN i < 990 THEN 'Q' || (i % 30) ELSE 'Q' || (i % 30) END AS quarter,
+        'B' || i AS building
+        FROM range(1000) r(i)""")
+    columns = {c["name"]: c for c in profile.columns(con, "t")}
+    rejected = []
+    found = hierarchy.by_dependency(con, "t", [columns["region"], columns["country"]], ["building"], rejected)
+    assert [h["levels"][-1]["column"] for h in found] == ["region"] and not rejected
+    rejected = []
+    assert hierarchy.by_dependency(con, "t", [columns["quarter"], columns["flag"]], ["building"], rejected) == []
+    (flag,) = rejected
+    assert (flag["child"], flag["parent"]) == ("quarter", "flag") and flag["lift"] < hierarchy.LIFT
+    evidence = hierarchy.chance(con, "t", "building", "country", 1.0)
+    assert evidence["supported"] == 0 and hierarchy.coincidental(evidence)

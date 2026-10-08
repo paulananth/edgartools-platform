@@ -51,6 +51,12 @@ def markdown(f: dict) -> str:
         lines.append(f"- **{h['hierarchy']}** ({h['type']}, {h['evidence_kind']}): {h['rule']}; holds {h['holds']}, "
                      f"depth {h['depth']}, {h['shape']}, orphans {h['orphans']}, cycles {h['cycles']}, "
                      f"invalid rows {h['invalid_rows']}.")
+    rejected = f.get("coincidental_dependencies") or []
+    if rejected:
+        lines += ["", "Dependencies that hold by coincidence, not hierarchies (lift over guessing the parent's "
+                      "commonest value below 0.9, or under half the rows with a child value seen twice):", ""]
+        lines += [f"- {d['part']}: {d['child']} → {d['parent']}: holds {d['held']}, lift {d['lift']}, "
+                  f"supported {d['supported']}" for d in rejected]
     lines += ["", "## Identifiers, sensitive columns and time", ""]
     for p in f["parts"]:
         ids = [f"{i['column']} ({i['proposal']}" + (f", {i['check_digit']}" if i["check_digit"] else "") + ")"
