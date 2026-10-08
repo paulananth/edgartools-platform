@@ -19,7 +19,8 @@ from . import classify, codes, hierarchy, identifiers, inputs, keys, names, prof
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
-MB_PER_SECOND = 40  # records read by Python, for the time estimate before a long pass
+MB_PER_SECOND = 40
+SHORT_LABEL = 6  # words, on average: a code's label, not free text  # records read by Python, for the time estimate before a long pass
 
 
 _clock = [time.monotonic()]
@@ -188,6 +189,15 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
                                 / len(names), 3) if names else 0.0,
         "rows_pointing": max([_rows(profiles, l["from"]["part"]) for l in inbound] or [0]),
         "rows_pointed": max([_rows(profiles, l["to"]["part"]) for l in out] or [0]),
+        # Pointing at one smaller list of codes only: that list may be this one's coarser level
+        # (a hierarchy kept in separate level tables).
+        # It must itself look like a list of codes: its key has a short label, it has no measures.
+        "coarser_level": parent is None and len({l["to"]["part"] for l in out}) == 1 and all(
+            len(l["from"]["columns"]) == 1 and l["cardinality"] == "N:1"
+            and _rows(profiles, l["to"]["part"]) < (columns[0]["rows"] if columns else 0)
+            and _rows(profiles, l["to"]["part"]) <= classify.REFERENCE_ROWS for l in out)
+            and any(c["name"] in key_labels and c.get("tokens", 0) <= SHORT_LABEL for c in columns)
+            and not measures,
     }
     if not facts["in_degree"]:
         facts["rows_pointing"] = facts["rows"] - 1  # nothing points at it: "smaller than" cannot pass
@@ -314,7 +324,13 @@ def _hierarchies(con, parts: dict, profiles, links, not_levels: list[dict]) -> l
             for h in hierarchy.by_link_part(con, p, child, parent, role, f["record_key"]["columns"]):
                 h["type"] = "master_data"
                 found.append(h)
-    return found
+    levels = hierarchy.by_level_tables(con, parts, links)
+    # A list that names its coarser level holds that level's code too: the same hierarchy, found by
+    # dependency inside the list. The level tables say more (each level's own list), so they stand.
+    named_up = {(v["part"], v["column"]) for h in levels for v in h["via"]}
+    found = [h for h in found if not (h["evidence_kind"] in {"functional_dependency", "code_nesting"}
+                                      and any((h["part"], lv["column"]) in named_up for lv in h["levels"]))]
+    return found + levels
 
 
 def _child_first(ends: list[dict], key: list[str]) -> tuple[str, str]:

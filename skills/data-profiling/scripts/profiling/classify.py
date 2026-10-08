@@ -3,7 +3,7 @@
 Each class is a list of named tests over one part's facts. Confidence is the
 share of its tests that pass; every test is reported with its value. A test
 marked required defines its class: a part that fails it cannot be in that class
-(a reference list points at nothing else; a link part's key is made of links).
+(a reference list points at nothing but its coarser level; a link part's key is made of links).
 A tie, or no class passing most of its tests, is "unknown": never a guess.
 """
 
@@ -30,7 +30,9 @@ TESTS: dict[str, list[Test]] = {
         ("has a unique key (required)", lambda f: f["key_found"], lambda f: f["key"]),
         ("other parts point at it", lambda f: f["in_degree"] >= 1, lambda f: f["in_degree"]),
         (f"at most {REFERENCE_ROWS} rows", lambda f: f["rows"] <= REFERENCE_ROWS, lambda f: f["rows"]),
-        ("points at no other part (required)", lambda f: f["out_degree"] == 0, lambda f: f["out_degree"]),
+        # A level table points at its coarser level only (a subcategory list at its category list).
+        ("points at no other part, or only at a smaller list as its coarser level (required)",
+         lambda f: f["out_degree"] == 0 or f.get("coarser_level", False), lambda f: f["out_degree"]),
         ("no name-like text besides labels", lambda f: f["name_like"] == 0, lambda f: f["name_like"]),
         ("codes with label columns", lambda f: f["labels"] >= 1, lambda f: f["labels"]),
         ("only codes, labels and dates", lambda f: f["attributes"] <= 1, lambda f: f["attributes"]),
