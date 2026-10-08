@@ -302,3 +302,27 @@ class TestExceptions:
 )
 def test_a_suite_is_left_out_but_a_street_that_starts_like_one_is_kept(line, standard):
     assert quality._standard_line(line) == standard
+
+
+def test_a_parent_code_must_agree_with_the_reference_hierarchy(monkeypatch):
+    from edgar_warehouse.rules import files
+
+    rows = [{"code": "TOP", "parent_code": None}, {"code": "MID", "parent_code": "TOP"},
+            {"code": "LEAF", "parent_code": "MID"}]
+    monkeypatch.setattr(files, "reference_pin", lambda name, root=None: {"sha256": "a" * 64})
+    monkeypatch.setattr(files, "pinned_reference", lambda name, root=None: rows)
+    quality._reference_parents.cache_clear()
+    item = {"id": "group_under_its_parent", "test": "in_hierarchy@1", "value": "fields.group",
+            "on_fail": "flag", "args": {"table": "test-groups", "sha256": "a" * 64, "field": "fields.parent_group"}}
+    block = {"version": "test-quality-v1", "checks": [item]}
+    quality.check_quality(block)
+    assert quality.apply(block, {"group": "leaf", "parent_group": " mid "}, {}) == {"version": "test-quality-v1"}
+    assert quality.apply(block, {"group": "LEAF", "parent_group": "TOP"}, {})["flags"] == ["group_under_its_parent"]
+    assert quality.apply(block, {"group": "TOP", "parent_group": "MID"}, {})["flags"] == ["group_under_its_parent"]
+    for fields in ({"group": "LEAF"}, {"group": "UNKNOWN", "parent_group": "TOP"}, {"parent_group": "TOP"}):
+        assert "flags" not in quality.apply(block, fields, {})
+    quality._reference_parents.cache_clear()
+    with pytest.raises(quality.QualityError, match="pinned sha256"):
+        quality.apply({**block, "checks": [{**item, "args": {**item["args"], "sha256": "0" * 64}}]},
+                      {"group": "LEAF", "parent_group": "MID"}, {})
+    quality._reference_parents.cache_clear()
