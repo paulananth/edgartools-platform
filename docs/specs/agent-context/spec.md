@@ -53,9 +53,11 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   children) with one query per hop through the link-start and link-end
   indexes, up to `--hops` 3 and at most 1,000 links, and says so when it stops.
   `--as-of` picks the links that hold at a business time. `--as-at` (a past
-  recording) is not read for relationships yet: no index finds one entity's
-  links in the batch history, so the command names `--as-of` and the view
-  instead. A versioned relationship table would make it cheap.
+  recording) reads `mdm.relationship_version` (profiling ticket 05b): every
+  recorded state of every relationship, one row per change, written by a
+  trigger on `mdm.current_record`; the walk takes the versions open at the
+  generation `--as-at` picks, through their start and end indexes, and keeps
+  the links that held at that time. Names are as MDM holds them now.
 
 **Where MDM context comes from (checked against the schema, 2026-10-05).**
 - MDM keeps history for every kind already: each committed batch stores its

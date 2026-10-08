@@ -175,9 +175,8 @@ def test_the_relationship_walk_goes_both_ways_up_to_the_hop_limit(database):
     assert ask(database, "relationship", ids["c"], as_of="2025-01-01T00:00:00+00:00", relationship_type=DIRECT)["related"] == []
     with pytest.raises(ContextError):
         ask(database, "relationship", ids["c"], hops=4)
-    with pytest.raises(ContextError) as as_at:
+    with pytest.raises(ContextError):  # before MDM recorded anything
         ask(database, "relationship", ids["c"], as_at="2026-01-01T00:00:00+00:00")
-    assert "--as-of" in as_at.value.command
     full = ask(database, "relationship", ids["b"], detail="full", relationship_type=DIRECT)
     assert all(r["scope"] == "consolidated" for r in full["related"] if not r.get("derived"))
     stated = [r for r in full["related"] if not r.get("derived")]

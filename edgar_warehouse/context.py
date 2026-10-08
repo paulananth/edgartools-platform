@@ -346,8 +346,8 @@ class Context:
                 {"s": subjects}).all()
             recorded_at = conn.scalar(text("SELECT created_at FROM mdm.batch WHERE generation = :g"),
                                       {"g": read["projection"]["generation"]})
-            related, related_count, cut = ([], 0, False) if args.as_at else self._walk(
-                conn, canonical, 1, self._at(args), "", RELATED_INLINE)
+            related, related_count, cut = self._walk(
+                conn, canonical, 1, self._at(args), "", RELATED_INLINE, generation if args.as_at else None)
         cross_references: dict[str, set] = {}
         sources: dict[str, list] = {}
         for source_code, record_key, crossed in records:
@@ -380,11 +380,8 @@ class Context:
             answer["trust"]["note"] = "Fields, identifiers and status are of that generation; cross-references and source records are as MDM holds them now."
         if canonical != entity_id:
             answer["merged_from"] = entity_id
-        if args.as_at:
-            answer["related_note"] = "Relationships are not read at a past recording time; ask without --as-at, or with --as-of."
-        else:
-            answer["related"] = [_brief_link(link) for link in related]
-            answer["related_count"] = f"{related_count}+" if cut else related_count
+        answer["related"] = [_brief_link(link) for link in related]
+        answer["related_count"] = f"{related_count}+" if cut else related_count
         answer["truncated"] = False
         answer["next_page"] = None
         answer["next_step"] = f"{PROG} relationship {canonical}" + (" --detail full" if not full else "")
@@ -428,27 +425,39 @@ class Context:
 
     @staticmethod
     def _at(args) -> datetime:
-        return parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}") if args.as_of else datetime.now(UTC)
+        if args.as_of:
+            return parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}")
+        if getattr(args, "as_at", None):  # what was recorded by then, of what held then
+            return parse_time(args.as_at, "--as-at", f"{PROG} {args.subject} {args.key}")
+        return datetime.now(UTC)
 
-    def _walk(self, conn, start: str, hops: int, at: datetime, relationship_type: str, cap: int):
+    def _walk(self, conn, start: str, hops: int, at: datetime, relationship_type: str, cap: int,
+              generation: int | None = None):
         """The links around one entity, both directions, up to `hops` away.
 
         One query per hop finds the links through the link-start and link-end
-        indexes. A stated link counts when one of its periods holds at `at`; so
-        does a calculated one with periods, and one without (an earlier
-        algorithm) always counts. Returns (links, count, cut).
+        indexes: of the current state, or, with `generation` (--as-at), of
+        the versions MDM had recorded at that generation
+        (`mdm.relationship_version`). A stated link counts when one of its
+        periods holds at `at`; so does a calculated one with periods, and one
+        without (an earlier algorithm) always counts. Returns (links, count, cut).
         """
         from sqlalchemy import text
 
+        links_at = ("""SELECT object_id, body FROM mdm.current_record
+                    WHERE object_type = 'relationship'
+                      AND (body ->> 'source_id' = ANY(:ids) OR body ->> 'target_id' = ANY(:ids))"""
+                    if generation is None else
+                    """SELECT relationship_id AS object_id, body FROM mdm.relationship_version
+                    WHERE from_generation <= :g AND (to_generation IS NULL OR to_generation > :g)
+                      AND (source_id = ANY(:ids) OR target_id = ANY(:ids))""")
         seen_entities, seen_links, links = {start}, set(), []
         frontier, cut = [start], False
         for depth in range(1, hops + 1):
             if not frontier:
                 break
             rows = conn.execute(text(
-                """SELECT object_id, body FROM mdm.current_record
-                    WHERE object_type = 'relationship'
-                      AND (body ->> 'source_id' = ANY(:ids) OR body ->> 'target_id' = ANY(:ids))
+                links_at + """
                       AND coalesce(body -> 'retired', 'false'::jsonb) = 'false'::jsonb
                       AND (mdm.relationship_holds(body, :at)
                            OR (coalesce((body ->> 'derived')::boolean, false)
@@ -459,7 +468,8 @@ class Context:
                                            OR (p.period ->> 'valid_to')::timestamptz > :at)))))
                       AND (:t = '' OR body ->> 'type' = :t)
                     ORDER BY object_id LIMIT :cap"""),
-                {"ids": frontier, "at": at, "t": relationship_type, "cap": cap - len(links) + 1}).all()
+                {"ids": frontier, "at": at, "t": relationship_type, "cap": cap - len(links) + 1,
+                 "g": generation}).all()
             following = []
             for relationship_id, body in rows:
                 if relationship_id in seen_links:
@@ -486,12 +496,8 @@ class Context:
         return links, len(links), cut
 
     def relationships(self, args: argparse.Namespace) -> dict:
-        if args.as_at:
-            raise ContextError(
-                "Relationships are not read at a past recording time yet. --as-of reads what held at a business "
-                "time; the view mdm.relationship_context lists every period.",
-                f"{PROG} relationship {args.key or '<entity>'} --as-of {args.as_at}",
-            )
+        if args.as_of and args.as_at:
+            raise ContextError("Give --as-of or --as-at, not both.", f"{PROG} relationship {args.key or '<entity>'} --as-of <time>")
         if not args.key:
             raise ContextError("Name the entity: its id or <namespace>:<value>.", f"{PROG} relationship <entity_id>")
         if not 1 <= args.hops <= MAX_HOPS:
@@ -502,8 +508,11 @@ class Context:
             names = self._names(conn, [entity_id])
             if entity_id not in names:
                 raise ContextError(f"No entity {entity_id} in MDM.", f"{PROG} company --search \"<name>\"")
-            links, count, cut = self._walk(conn, entity_id, args.hops, at, args.relationship_type, WALK_CAP)
-            trust = _latest(conn)
+            generation = self._generation(conn, args) if args.as_at else None
+            links, count, cut = self._walk(conn, entity_id, args.hops, at, args.relationship_type, WALK_CAP, generation)
+            trust = _latest(conn, generation)
+            if generation is not None:
+                trust["note"] = "Links as MDM had recorded them by --as-at; names are as MDM holds them now."
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)
@@ -526,7 +535,8 @@ class Context:
                           if cut else f"{PROG} <kind> <entity_id> for any entity listed"),
         }
         command = f"{PROG} relationship {args.key} --hops {args.hops}" + "".join(
-            f" --{flag} {value}" for flag, value in (("type", args.relationship_type), ("as-of", args.as_of), ("detail", args.detail)) if value)
+            f" --{flag} {value}" for flag, value in (("type", args.relationship_type), ("as-of", args.as_of),
+                                                     ("as-at", args.as_at), ("detail", args.detail)) if value)
         return fit(answer, "related", page_offset(args.page), command)
 
 
@@ -571,13 +581,13 @@ def _full_link(link: dict) -> dict:
             **{key: period[key] for key in ("ended_by", "path") if period.get(key)}}
 
 
-def _latest(conn) -> dict:
-    """The generation an answer over current state reads: MDM's latest batch."""
+def _latest(conn, generation: int | None = None) -> dict:
+    """The generation an answer reads: MDM's latest batch, or the one --as-at picked."""
     from sqlalchemy import text
 
     row = conn.execute(text(
         "SELECT generation, created_at, policy_digest, effects ->> 'as_of' FROM mdm.batch "
-        "ORDER BY generation DESC LIMIT 1")).first()
+        "WHERE CAST(:g AS bigint) IS NULL OR generation = :g ORDER BY generation DESC LIMIT 1"), {"g": generation}).first()
     if row is None:
         return {"generation": None}
     return {"generation": row[0], "recorded_at": row[1].isoformat(), "policy_digest": row[2], "as_of": row[3]}
