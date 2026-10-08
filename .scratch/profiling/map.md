@@ -30,7 +30,7 @@ Any data set can be profiled, classified into master, reference, relationship, t
 | 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open |
 | 07b | [Name-based matching](issues/07b-name-based-matching.md) | A | 03, 04 | done (#838) |
 | 07c | [Unstructured extraction](issues/07c-unstructured-extraction.md) | B | 07 | open |
-| 08 | [Recreation proof](issues/08-recreation-proof.md) | B | all above | open |
+| 08 | [Recreation proof](issues/08-recreation-proof.md) | B | all above | cohort (#859), slice, rulings file and sandbox done; baseline and cold agent wait for Codex's retirement (SEC reading into MDM); 13F rows wait for 06 |
 
 ## Decisions so far
 

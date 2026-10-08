@@ -1,0 +1,78 @@
+"""Profiling ticket 08: the rulings file the cold agent replays.
+
+Every operator ruling recorded in a ticket under `.scratch/` is harvested as
+written: the operator's exact words, the date, the ticket and line, and the
+sentence around it (the question it answered). Nothing is paraphrased or
+invented. The cold agent may only use a ruling from this file; a question it
+does not answer is recorded by the agent as "unanswered, would ask the
+operator" and listed in DIFF.md.
+
+Rulings are written in many styles (`(operator, 2026-10-07: "Out of scope")`,
+`The operator: "Approved" (2026-10-07 13:07 ET)`, a chosen option
+`"Succession types (Recommended)"`, a table of names each "approved"). So each list
+item, table row or paragraph is kept, whole and verbatim, with its section
+heading, when it or its heading carries a date and either names the
+operator or approves, chooses or rules, and quotes words or ticks a part. Over-
+inclusion is safe (each line is the record itself, with its ticket and line);
+a ruling written in no ticket is not in this file, and the agent asks.
+
+    uv run --no-sync python .scratch/profiling/trials/proof/rulings.py
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[4]
+HERE = Path(__file__).resolve().parent
+DATE = re.compile(r"20\d\d-\d\d-\d\d")
+WHO = re.compile(r"operator|\(Recommended\)|approv|ruling|chose|switched on", re.I)
+SAID = re.compile(r'["“][^"”\n]{1,400}["”]|^\s*[-|].*approv', re.I)
+
+
+def blocks(lines: list[str]):
+    """Each list item, table row or paragraph, with its line number and section heading."""
+    heading, start, block = "", 0, []
+    for number, line in enumerate(lines + [""], 1):
+        new = not line.strip() or line.startswith("#") or re.match(r"\s{0,1}[-|*]\s|\d+\.\s", line)
+        if new and block:
+            yield start, heading, " ".join(part.strip() for part in block)
+            block = []
+        if line.startswith("#"):
+            heading = line.lstrip("# ").strip()
+        elif line.strip():
+            start = number if not block else start
+            block.append(line)
+
+
+def main() -> None:
+    rulings, seen = [], set()
+    for path in sorted((ROOT / ".scratch").rglob("*.md")):
+        if HERE in path.parents:
+            continue
+        rel = str(path.relative_to(ROOT))
+        for number, heading, text in blocks(path.read_text(errors="replace").splitlines()):
+            dates = DATE.findall(text) or DATE.findall(heading)
+            if not dates or not (WHO.search(text) or WHO.search(heading)) or not SAID.search(text):
+                continue
+            text = text[:1500]
+            if text in seen:
+                continue
+            seen.add(text)
+            rulings.append({"date": dates[0], "section": heading, "text": text, "ticket": rel, "line": number,
+                            "replayed": True})
+    rulings.sort(key=lambda r: (r["date"], r["ticket"], r["line"]))
+    with (HERE / "rulings.jsonl").open("w") as f:
+        for ruling in rulings:
+            f.write(json.dumps(ruling, ensure_ascii=False) + "\n")
+    by_map = {}
+    for ruling in rulings:
+        name = ruling["ticket"].split("/")[1]
+        by_map[name] = by_map.get(name, 0) + 1
+    print(json.dumps({"rulings": len(rulings), "by_map": dict(sorted(by_map.items()))}, indent=1))
+
+
+if __name__ == "__main__":
+    main()
