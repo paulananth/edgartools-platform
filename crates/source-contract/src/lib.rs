@@ -21,6 +21,7 @@ pub mod json_sequence;
 pub mod xml_sequence;
 mod integer;
 mod reference;
+mod lookup_sets;
 mod value;
 mod join;
 mod context;
@@ -102,7 +103,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 17] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join"];
+const PRIMITIVES: [&str; 18] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -122,7 +123,25 @@ fn contract_error(detail: impl ToString) -> Rejected {
     Rejected::new("contract", detail)
 }
 
+/// An immutable indexed scope validated once for a stream, before any rows.
+/// Its borrowed sets cannot change while projection is in progress.
+pub struct LookupProjection<'a> {
+    engine: &'a Engine,
+    lookups: &'a Lookups,
+}
+
+impl LookupProjection<'_> {
+    pub fn read_json_value(&self, value: serde_json::Value, context: &Row) -> Result<Reading, Rejected> {
+        self.engine.project_json_value(value, self.lookups, context)
+    }
+}
+
 impl Engine {
+    pub fn prepare_json_projection<'a>(&'a self, lookups: &'a Lookups) -> Result<LookupProjection<'a>, Rejected> {
+        lookup_sets::check(&self.read, lookups)?;
+        self.validate_json_projection()?;
+        Ok(LookupProjection { engine: self, lookups })
+    }
     pub fn load(contract_yaml: &Path, steps: Steps) -> Result<Self, Rejected> {
         let text = fs::read_to_string(contract_yaml).map_err(contract_error)?;
         Self::from_yaml(&text, steps)
@@ -180,6 +199,7 @@ impl Engine {
     /// Caller facts never replace document fields or parsing configuration.
     pub fn read_with_context(&self, bytes: &[u8], lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
         context::check(&self.read, context)?;
+        lookup_sets::check(&self.read, lookups)?;
         if bytes.len() as u64 > self.limits.max_bytes {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
@@ -198,7 +218,11 @@ impl Engine {
     /// interpreter. Input size follows the worker's typed Python JSON policy.
     pub fn read_json_value(&self, value: serde_json::Value, lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
         context::check(&self.read, context)?;
-        self.validate_json_projection()?;
+        self.prepare_json_projection(lookups)?.read_json_value(value, context)
+    }
+
+    fn project_json_value(&self, value: serde_json::Value, lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
+        context::check(&self.read, context)?;
         if json_sequence::encoded_len(&value, json_sequence::RecordEncoding::Python)? as u64 > self.limits.max_bytes {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
@@ -215,7 +239,7 @@ impl Engine {
 
     fn read_document(&self, document: &El, lookups: &Lookups, context: &Row) -> Result<Reading, Rejected> {
         for assertion in self.read.get("assertions").and_then(Value::as_sequence).into_iter().flatten() {
-            match eval(self, context, &document, &document, 1, &assertion["test"])? {
+            match eval(self, context, lookups, &document, &document, 1, &assertion["test"])? {
                 Val::Bool(true) => {},
                 Val::Bool(false) | Val::Null => return Err(Rejected::new("assertion_failed", setting(assertion, "reason").unwrap())),
                 _ => return Err(Rejected::new("assertion_condition", "a document assertion must return boolean or null")),
@@ -236,7 +260,7 @@ impl Engine {
             let expanded;
             let (items, count) = if table.get("each").is_some_and(|each| each.is_mapping()) {
                 let count;
-                (expanded, count) = iteration::rows(self, context, &document, &table["each"], self.limits.max_records, context::take(table, context))?;
+                (expanded, count) = iteration::rows(self, context, lookups, &document, &table["each"], self.limits.max_records, context::take(table, context))?;
                 (expanded.iter().collect::<Vec<_>>(), count)
             } else {
                 let items = items_of(&document, setting(table, "each").unwrap_or("."))?;
@@ -251,14 +275,14 @@ impl Engine {
             let mut selected = 0;
             for (index, item) in items.into_iter().take(context::take(table, context)).enumerate() {
                 if let Some(select) = table.get("select") {
-                    match eval(self, context, &document, item, index as i64 + 1, select)? {
+                    match eval(self, context, lookups, &document, item, index as i64 + 1, select)? {
                         Val::Bool(true) => {}, Val::Bool(false) | Val::Null => continue,
                         _ => return Err(Rejected::new("select_condition", "Selection must be boolean or null")),
                     }
                 }
                 selected += 1;
                 let column_ordinal = if setting(table, "ordinal") == Some("selected") { selected } else { index as i64 + 1 };
-                let mut record = Record { column_ordinal, engine: self, context, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
+                let mut record = Record { column_ordinal, engine: self, context, lookups, document: &document, item, ordinal: index as i64 + 1, table, values: Row::new() };
                 if let Some(reason) = record.failed_check(lookups)? {
                     reading.deferred.push(Deferred { table: name.clone(), ordinal: record.ordinal, reason, raw: item.raw() });
                     continue;
@@ -324,7 +348,9 @@ impl Engine {
 /// Child calls only: literal const/default/reference data is never executable.
 pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
     let mut children = Vec::new();
-    if let Some(key) = expr.get("lookup").and_then(|args| args.get("key")) { children.push(key); }
+    for call in ["lookup", "member"] {
+        if let Some(key) = expr.get(call).and_then(|args| args.get("key")) { children.push(key); }
+    }
     if let Some(steps) = expr.get("steps").and_then(Value::as_sequence) { children.extend(steps); }
     if let Some(inputs) = expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping) {
         children.extend(inputs.values());
@@ -404,6 +430,7 @@ fn validate_coerce(args: &Value) -> Result<(), String> {
 /// Everything a contract names must exist now, not partway through a read.
 fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     context::validate(read)?;
+    lookup_sets::validate(read)?;
     reference::validate(read)?;
     let format = setting(read, "format").ok_or("read.format is missing")?;
     if !FORMATS.contains(&format) {
@@ -623,6 +650,10 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
         }
         "value" => value::validate(args)?,
+        "member" => {
+            lookup_sets::validate_call(args)?;
+            validate_expr(&args["key"], steps)?;
+        }
         "lookup" => {
             reference::validate_call(args)?;
             validate_expr(&args["key"], steps)?;
@@ -665,6 +696,7 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
 struct Record<'a> {
     engine: &'a Engine,
     context: &'a Row,
+    lookups: &'a Lookups,
     document: &'a El,
     item: &'a El,
     ordinal: i64,
@@ -679,7 +711,7 @@ impl Record<'_> {
             return Ok(value.clone());
         }
         let expr = self.table.get("columns").and_then(|c| c.get(name)).ok_or_else(|| contract_error(name))?;
-        let value = eval(self.engine, self.context, self.document, self.item, self.column_ordinal, expr)?;
+        let value = eval(self.engine, self.context, self.lookups, self.document, self.item, self.column_ordinal, expr)?;
         self.values.insert(name.to_string(), value.clone());
         Ok(value)
     }
@@ -1002,13 +1034,17 @@ fn falsey(value: &Val) -> bool {
     }
 }
 
-fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
+fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
         "equal" => {
-            let left = eval(engine, context, document, item, ordinal, &args["left"])?;
-            let right = eval(engine, context, document, item, ordinal, &args["right"])?;
+            let left = eval(engine, context, lookups, document, item, ordinal, &args["left"])?;
+            let right = eval(engine, context, lookups, document, item, ordinal, &args["right"])?;
             Ok(Val::Bool(left == right))
+        }
+        "member" => {
+            let key = eval(engine, context, lookups, document, item, ordinal, &args["key"])?;
+            lookup_sets::member(lookups, setting(args,"lookup").unwrap(), &key)
         }
         "ordinal" => Ok(Val::Int(ordinal)),
         "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),
@@ -1042,23 +1078,23 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
         }
         "coalesce" => {
             for expr in args["values"].as_sequence().unwrap() {
-                let value = eval(engine, context, document, item, ordinal, expr)?;
+                let value = eval(engine, context, lookups, document, item, ordinal, expr)?;
                 let skipped = if setting(args, "skip") == Some("null") { matches!(value, Val::Null) } else { falsey(&value) };
                 if !skipped { return Ok(value); }
             }
             Ok(Val::Null)
         }
         "choose" => {
-            let branch = match eval(engine, context, document, item, ordinal, &args["condition"])? {
+            let branch = match eval(engine, context, lookups, document, item, ordinal, &args["condition"])? {
                 Val::Bool(true) => "then",
                 Val::Bool(false) | Val::Null => "else",
                 _ => return Err(Rejected::new("choose_condition", "choose condition must be boolean or null")),
             };
-            eval(engine, context, document, item, ordinal, &args[branch])
+            eval(engine, context, lookups, document, item, ordinal, &args[branch])
         }
         "object" => {
             let mut fields = match args.get("base") {
-                Some(base) => match eval(engine,context,document,item,ordinal,base)? {
+                Some(base) => match eval(engine,context,lookups,document,item,ordinal,base)? {
                     Val::Map(fields) => fields,
                     _ => return Err(Rejected::new("object_base", "object base must be an object")),
                 },
@@ -1068,7 +1104,7 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
                 if fields.contains_key(name.as_str().unwrap()) {
                     return Err(Rejected::new("object_field_conflict", "object fields collide with base"));
                 }
-                let value = eval(engine, context, document, item, ordinal, expr)?;
+                let value = eval(engine, context, lookups, document, item, ordinal, expr)?;
                 if value != Val::Null || args["omit_nulls"].as_bool() != Some(true) { fields.insert(name.as_str().unwrap().to_string(), value); }
             }
             if fields.is_empty() && args["null_if_empty"].as_bool() == Some(true) { Ok(Val::Null) } else { Ok(Val::Map(fields)) }
@@ -1076,7 +1112,7 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
         "value" => value::read(scope(document, item, args), args),
         "join" => join::read(scope(document, item, args), args),
         "lookup" => {
-            let key = eval(engine, context, document, item, ordinal, &args["key"])?;
+            let key = eval(engine, context, lookups, document, item, ordinal, &args["key"])?;
             reference::read(&engine.read, args, &key)
         }
         "integer" => match lookup_value(scope(document, item, args), setting(args, "path").unwrap_or_default(), true)? {
@@ -1109,7 +1145,7 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
         "steps" => {
             let mut value = Val::Null;
             for step in args.as_sequence().into_iter().flatten() {
-                value = eval(engine, context, document, item, ordinal, step)?;
+                value = eval(engine, context, lookups, document, item, ordinal, step)?;
             }
             Ok(value)
         }
@@ -1118,7 +1154,7 @@ fn eval(engine: &Engine, context: &Row, document: &El, item: &El, ordinal: i64, 
             let function = engine.steps.get(step).ok_or_else(|| contract_error(format!("no value step {step}")))?;
             let mut input = Val::Null;
             for (_, expr) in args.get("inputs").and_then(Value::as_mapping).into_iter().flatten() {
-                input = eval(engine, context, document, item, ordinal, expr)?;
+                input = eval(engine, context, lookups, document, item, ordinal, expr)?;
             }
             function(&input).map_err(|e| Rejected::new("step_failed", format!("step {step}: {e}")))
         }

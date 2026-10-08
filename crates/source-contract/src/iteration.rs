@@ -1,6 +1,6 @@
 //! Bounded configurable row iteration; no source identities or loaders.
 use serde_yaml::Value;
-use crate::{eval, matrix, parallel, setting, validate_expr, Engine, Rejected, Row, Steps, Val};
+use crate::{eval, matrix, parallel, setting, validate_expr, Engine, Lookups, Rejected, Row, Steps, Val};
 use crate::tree::{Child, El};
 
 pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) -> Result<(), String> {
@@ -70,7 +70,7 @@ pub(crate) fn needs_order(each: &Value) -> bool {
         || each.get("choose").is_some_and(|args| ["then", "else"].iter().any(|k| args.get(*k).is_some_and(needs_order)))
 }
 
-pub(crate) fn rows(engine: &Engine, context: &Row, document: &El, each: &Value, maximum: usize, take: usize) -> Result<(Vec<El>, usize), Rejected> {
+pub(crate) fn rows(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, each: &Value, maximum: usize, take: usize) -> Result<(Vec<El>, usize), Rejected> {
     if let Some(path) = each.as_str() {
         let items = crate::items_of(document, path)?;
         if items.len() > maximum { return Err(Rejected::new("limit_exceeded", "Iteration exceeds max_records")); }
@@ -82,11 +82,11 @@ pub(crate) fn rows(engine: &Engine, context: &Row, document: &El, each: &Value, 
         return Ok((expanded.rows, expanded.count));
     }
     if let Some(args) = each.get("choose") {
-        let branch = match eval(engine, context, document, document, 1, &args["condition"])? {
+        let branch = match eval(engine, context, lookups, document, document, 1, &args["condition"])? {
             Val::Bool(true) => "then", Val::Bool(false) | Val::Null => "else",
             _ => return Err(Rejected::new("choose_condition", "Iteration condition must be boolean or null")),
         };
-        return rows(engine, context, document, &args[branch], maximum, take);
+        return rows(engine, context, lookups, document, &args[branch], maximum, take);
     }
     if let Some(args) = each.get("values") {
         let path = setting(args, "path").unwrap();
