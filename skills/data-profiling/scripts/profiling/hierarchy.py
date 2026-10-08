@@ -12,12 +12,17 @@ counted as invalid for data quality.
 A dependency can hold by coincidence. Two tests, on the data alone, tell it
 from a hierarchy:
 - beyond chance: a parent level nearly constant (a flag set on almost every
-  row) is "determined" by anything; the dependency must predict the parent
-  far better than always guessing its commonest value (lift ≥ 0.9);
+  row) is "determined" by anything; the dependency must explain at least half
+  of what always guessing the parent's commonest value gets wrong (lift ≥ 0.5;
+  a real but skewed level with a few dirty rows still passes, so its dirty
+  rows are marked);
 - support: a child value seen on one row only determines its parent
-  trivially; most rows (≥ 0.5) must carry a child value seen on two or more.
+  trivially; at least half the rows must carry a child value seen on two or
+  more. A list of codes (one row per code) is exempt: there each code has one
+  row by design.
 A dependency failing either is reported as coincidental, with its evidence,
-never as a hierarchy.
+never as a hierarchy, and the child gets no coarser parent in its place (that
+would skip a level).
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ from .inputs import PARENT, sql_name, sql_text
 
 HOLDS = 0.99
 MAX_DEPTH = 50
-LIFT = 0.9  # how much better than guessing the parent's commonest value
+LIFT = 0.5  # the share of guessing's misses the dependency explains
 SUPPORT = 0.5  # share of rows whose child value is seen on two or more rows
 
 
@@ -57,14 +62,15 @@ def chance(con, part: str, child: str, parent: str, held: float) -> dict:
     return {"held": held, "baseline": round(baseline, 6), "lift": round(lift, 6), "supported": round(supported, 6)}
 
 
-def coincidental(evidence: dict) -> bool:
-    return evidence["lift"] < LIFT or evidence["supported"] < SUPPORT
+def coincidental(evidence: dict, list_of_codes: bool = False) -> bool:
+    return evidence["lift"] < LIFT or (not list_of_codes and evidence["supported"] < SUPPORT)
 
 
 def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str] | None = None,
-                  rejected: list[dict] | None = None) -> list[dict]:
+                  rejected: list[dict] | None = None, list_of_codes: bool = False) -> list[dict]:
     """Chains of code columns, each level determining the next coarser one. A dependency that holds by
-    coincidence is not a level; it is appended to `rejected`, with its evidence."""
+    coincidence is not a level; it is appended to `rejected`, with its evidence. `list_of_codes`: the
+    part holds one row per code (reference data), so a code seen once is no sign of coincidence."""
     levels = sorted(_equivalent(con, part, code_columns), key=lambda c: -c["distinct"])
     parent: dict[str, tuple[str, float]] = {}
     for i, child in enumerate(levels):
@@ -74,11 +80,11 @@ def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str
             held = determines(con, part, child["name"], candidate["name"])
             if held >= HOLDS:
                 evidence = chance(con, part, child["name"], candidate["name"], held)
-                if coincidental(evidence):
+                if coincidental(evidence, list_of_codes):
                     if rejected is not None:
                         rejected.append({"part": part, "child": child["name"], "parent": candidate["name"],
                                          **evidence})
-                    continue  # a coarser level may still be a real parent
+                    break  # no coarser parent in its place: that would skip this level
                 parent[child["name"]] = (candidate["name"], held)
                 break  # the closest coarser level
     chains, used = [], set()

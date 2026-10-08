@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from . import hierarchy
+
 
 def write(findings: dict, out: Path) -> tuple[Path, Path]:
     out.mkdir(parents=True, exist_ok=True)
@@ -53,8 +55,9 @@ def markdown(f: dict) -> str:
                      f"invalid rows {h['invalid_rows']}.")
     rejected = f.get("coincidental_dependencies") or []
     if rejected:
-        lines += ["", "Dependencies that hold by coincidence, not hierarchies (lift over guessing the parent's "
-                      "commonest value below 0.9, or under half the rows with a child value seen twice):", ""]
+        lines += ["", f"Dependencies that hold by coincidence, not hierarchies (lift over guessing the parent's "
+                      f"commonest value below {hierarchy.LIFT}, or under {hierarchy.SUPPORT:.0%} of the rows with "
+                      f"a child value seen twice):", ""]
         lines += [f"- {d['part']}: {d['child']} → {d['parent']}: holds {d['held']}, lift {d['lift']}, "
                   f"supported {d['supported']}" for d in rejected]
     lines += ["", "## Identifiers, sensitive columns and time", ""]

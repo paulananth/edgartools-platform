@@ -292,7 +292,7 @@ def _hierarchies(con, parts: dict, profiles, links, coincidental: list[dict]) ->
         key_side = set(key) | {x["label_column"] for x in f["code_lists"] if [x["column"]] == key}
         code_columns = [c for c in profiles[p] if c["name"] in listed and (p, c["name"]) not in parent_columns
                         and (f["class"] == "reference" or c["name"] not in key_side)]
-        for h in hierarchy.by_dependency(con, p, code_columns, key, coincidental):
+        for h in hierarchy.by_dependency(con, p, code_columns, key, coincidental, f["class"] == "reference"):
             h["type"] = "reference"
             found.append(h)
     for link in links:

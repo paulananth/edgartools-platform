@@ -108,3 +108,22 @@ def test_a_dependency_that_holds_by_coincidence_is_not_a_hierarchy():
     assert (flag["child"], flag["parent"]) == ("quarter", "flag") and flag["lift"] < hierarchy.LIFT
     evidence = hierarchy.chance(con, "t", "building", "country", 1.0)
     assert evidence["supported"] == 0 and hierarchy.coincidental(evidence)
+
+
+def test_a_list_of_codes_keeps_its_finest_level_and_a_skewed_level_is_not_skipped():
+    import duckdb
+    from profiling import hierarchy, profile
+
+    con = duckdb.connect()
+    # One row per city: city → region → country, region skewed (most cities in R0), a few dirty rows.
+    con.execute("""CREATE TABLE geo AS SELECT 'C' || i AS city,
+        CASE WHEN i % 20 = 0 THEN 'R' || (i % 7 + 1) ELSE 'R0' END AS region,
+        CASE WHEN i % 20 = 0 THEN 'K' || ((i % 7 + 1) % 3 + 1) ELSE 'K0' END AS country
+        FROM range(2000) r(i)""")
+    con.execute("UPDATE geo SET country = 'K9' WHERE city IN ('C1', 'C2', 'C3')")  # dirty: region R0 is in K0
+    cols = {c["name"]: c for c in profile.columns(con, "geo")}
+    rejected = []
+    found = hierarchy.by_dependency(con, "geo", [cols["city"], cols["region"], cols["country"]], ["city"],
+                                    rejected, list_of_codes=True)
+    assert [l["column"] for l in found[0]["levels"]] == ["country", "region", "city"] and not rejected
+    assert found[0]["invalid_rows"] == 3  # the dirty rows of a skewed but real level are marked

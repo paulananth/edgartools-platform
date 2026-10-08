@@ -140,12 +140,13 @@ normalized name, and a rename is kept as an alias.
 ```
 
 A functional dependency between code columns is a level only when it is not a
-coincidence (ticket 01d): it must predict the parent far better than always
-guessing the parent's commonest value (a lift of at least 0.9 over that guess),
-and at least half the rows must carry a child value seen on two or more rows.
-One that fails is listed in `coincidental_dependencies` as
-`{part, child, parent, held, baseline, lift, supported}` and is never a
-hierarchy (a flag set on almost every row; a value seen on one row only).
+coincidence (ticket 01d): it must explain at least half of what always
+guessing the parent's commonest value gets wrong (a lift of at least 0.5), and
+at least half the rows must carry a child value seen on two or more rows (a
+list of codes, one row per code, is exempt). One that fails is listed in
+`coincidental_dependencies` as `{part, child, parent, held, baseline, lift,
+supported}` and is never a hierarchy (a flag set on almost every row; a value
+seen on one row only); the child gets no coarser parent in its place.
 
 ### 5.1 Marked rows: `invalid_rows.jsonl`
 
