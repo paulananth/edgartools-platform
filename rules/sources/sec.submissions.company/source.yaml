@@ -169,6 +169,133 @@ mdm:
       nonblocking_deferred_reasons:
       - quality_name_present
       adapter:
+        reading:
+          source: sec.submissions.company
+          read:
+            format: json
+            limits:
+              max_bytes: 33554432
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name:
+                          value:
+                            path: entity_name
+                            path_mode: literal
+                            type: text
+                            null_if_blank: true
+                        sic:
+                          value:
+                            path: sic
+                            path_mode: literal
+                            type: text
+                            null_if_blank: true
+                        sic_description:
+                          value:
+                            path: sic_description
+                            path_mode: literal
+                            type: text
+                            null_if_blank: true
+                        state_of_incorporation:
+                          value:
+                            path: state_of_incorporation
+                            path_mode: literal
+                            type: text
+                            null_if_blank: true
+                        fiscal_year_end:
+                          value:
+                            path: fiscal_year_end
+                            path_mode: literal
+                            type: text
+                            null_if_blank: true
+                        description:
+                          value:
+                            path: description
+                            path_mode: literal
+                            type: text
+                            null_if_blank: true
+                        address:
+                          object:
+                            fields:
+                              street:
+                                value:
+                                  path: business_address.street
+                                  path_mode: literal
+                                  type: text
+                                  trim: true
+                                  null_if_blank: true
+                              street2:
+                                value:
+                                  path: business_address.street2
+                                  path_mode: literal
+                                  type: text
+                                  trim: true
+                                  null_if_blank: true
+                              city:
+                                value:
+                                  path: business_address.city
+                                  path_mode: literal
+                                  type: text
+                                  trim: true
+                                  null_if_blank: true
+                              region:
+                                value:
+                                  path: business_address.region
+                                  path_mode: literal
+                                  type: text
+                                  trim: true
+                                  null_if_blank: true
+                              postcode:
+                                value:
+                                  path: business_address.postal_code
+                                  path_mode: literal
+                                  type: text
+                                  trim: true
+                                  null_if_blank: true
+                              country:
+                                value:
+                                  path: business_address.country
+                                  path_mode: literal
+                                  type: text
+                                  trim: true
+                                  null_if_blank: true
+                            omit_nulls: true
+                            null_if_empty: true
+                  matching:
+                    object:
+                      fields:
+                        business_postal_code:
+                          value:
+                            path: business_address.postal_code
+                            path_mode: literal
+                        business_country:
+                          value:
+                            path: business_address.country
+                            path_mode: literal
+                        name_census:
+                          value:
+                            path: name_census
+                            path_mode: literal
+          input_fields:
+          - business_address
+          - description
+          - entity_name
+          - fiscal_year_end
+          - name_census
+          - sic
+          - sic_description
+          - state_of_incorporation
         version: sec-company-landing-v7
         retain_deferred: true
         source_record_provenance: true

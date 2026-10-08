@@ -1,0 +1,18 @@
+# Replace SEC Company and Person mapped-value extraction
+
+Parent: complete self-sustaining skill bundle/Rules creator, parsing and MDM orchestration, and complete old-parser retirement. Based on merged PR #857 (220b8a49); rebased onto current main. Local qualification only; no deployment, activation or SEC requests.
+
+- [x] Create isolated branch/tree from 16b1c19c and inspect existing adapters/source definitions and history. GoF: existing native interpreter and plain functions support the same measured field shape; no new hierarchy (2026-10-07 18:54 ET).
+- [x] Bundle frozen native Company/Person field and matching recipes; 89 projection cases prove exact values/refusals, explicit null validation and missingness (2026-10-07 19:11 ET).
+- [x] Verify complete assertion IDs, quality, classification and identity deferrals: 694 MDM/projection cases plus final pinned 2,000 captured comparisons in 35.109s (2026-10-07 19:11 ET).
+- [x] Installed restricted PostgreSQL publication/recovery and independent review passed; PR #858 published. Full CI 37701102774 passed every job and aggregate on 2d7b2e2d: 572 unit, 258 architecture, 607 MDM, 295 integration + one expected xfail, 647 engine and 139 native; zero prerequisite skips. Evidence-only final commit requires its own CI before readiness (2026-10-07 19:20 ET).
+- [ ] Remove remaining legacy record mapping with frozen-version replay evidence; retire Company preparation/census/provenance and GLEIF release/semantic consumers; prove whole-source census and installed 6,414 Company / 3,052 CIK+LEI population/recovery; finish parent L3–L8. These remain required for full goal completion.
+
+- [x] Measure and resolve legacy census input boundary: unrelated Parquet-derived datetime metadata made whole-row JSON serialization fail. Declared input_fields excludes only unrelated roots, preserves selected types/missingness, validates bounds and covers all mapped paths; 125 affected cases passed in 8.06s (2026-10-07 19:01 ET).
+- [x] Compare 1,000 authenticated SEC main captures for each source: 2,000 exact field/quality/assertion/refusal comparisons, 65 Company and 386 Person assertions; all other classification deferrals identical. Qualification passed in 33.855s; native/main/contract/helper/Rules/capture pins in captured-field-parity.json. Company main-derived scope excludes complete preparation (2026-10-07 19:03 ET).
+
+- [x] Installed committed bundle 7b9784d3 regenerates Company/Person assertions from raw fixtures before restricted PostgreSQL 16 publication, lost-ACK recovery and duplicate replay; host assertions serve only as an oracle. Two installed cases passed, zero skips, 99.86s; actual runtime/contract pins in installed-mapping-proof.json (2026-10-07 19:14 ET).
+
+- [x] Fix independent standards review finding: selected tuples/non-string dictionary keys are refused before serialization; 698 MDM/projection cases passed in 19.36s and final 2,000 captured comparisons in 48.068s with refreshed helper pins. Reviewers confirmed zero remaining scoped blockers (2026-10-07 19:11 ET).
+
+- [x] Independent specification and standards/GoF reviews completed; one JSON coercion finding fixed and independently confirmed; PR #858 published draft with full CI pending (2026-10-07 19:14 ET).

@@ -1074,6 +1074,13 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
         rows = [row for row in json.loads(FIXTURE.read_text())["gleif"]
                 if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
         assert len(rows) == 2
+        sec_records = [
+            {"source": "sec.submissions.company", "row": row}
+            for row in json.loads(FIXTURE.read_text())["sec"] if row["entity_type"] == "operating"
+        ] + [
+            {"source": "sec.submissions.person", "row": json.loads(line)}
+            for line in FIXTURE.with_name("person_raw.jsonl").read_text().splitlines() if line.strip()
+        ]
         done = _run(python, "-c", r'''
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -1099,6 +1106,23 @@ for member in ("level1","relationships","reporting_exceptions"):
     recipe=files.load(files.ROOT/"sources/gleif"/f"{member.replace('_','-')}-fields.yaml")
     assert digest(mapping["reading"]) == digest(recipe)
     assert isinstance(source_mapping.project_record({},mapping["reading"],column="fields"),dict)
+# Rebuild SEC assertions from raw fixture documents inside the installation.
+# Host-built assertions are only an oracle, never publication input.
+sec_readings=[]
+for record in body["sec_records"]:
+    source=record["source"]; row=record["row"]; code=f"{source}.v1"
+    contract=files.mdm_contract(source,code)
+    recipe=files.load(files.ROOT/"sources"/source/"fields.yaml")
+    assert digest(contract["adapter"]["reading"])==digest(recipe)
+    retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
+    publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
+                 "revision":1,"artifact_sha256":digest(row),
+                 "member":"four_companies_v1.json","record_locator":str(row["cik"])}
+    kwargs={"source_code":code,"publication":publication,"policy":files.policy()}
+    actual=adapters.normalize(row,contract=contract,**kwargs)
+    assert digest(actual)==digest(adapters.normalize(row,contract=retained,**kwargs))
+    sec_readings.append(actual)
+assert digest(sec_readings)==digest(body["readings"])
 contract=files.mdm_contract("gleif","gleif.level1.v1")
 retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
 assertions=[]
@@ -1113,14 +1137,14 @@ for ordinal,row in enumerate(body["rows"]):
 store=Store(engine); stage=MergeStage(store); run=str(uuid4())
 command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-gleif-qualification",
          "policy_digest":body["policy"],"expected_checkpoint":0,"checkpoint":1,
-         "as_of":body["as_of"],"assertions":[*body["readings"],*assertions]}
+         "as_of":body["as_of"],"assertions":[*sec_readings,*assertions]}
 first=stage.apply(**command)
 with engine.connect() as conn:
     counts=dict(conn.execute(text("SELECT kind,count(*) FROM mdm.current_entity GROUP BY kind")).all())
     assert counts=={"company":2,"person":2},counts
     bindings=dict(conn.execute(text("SELECT subject,entity_id::text FROM mdm.stage_record")).all())
 assert all(bindings[row["subject"]] is None for row in assertions)
-companies=[row for row in body["readings"] if row["kind"]=="company"]
+companies=[row for row in sec_readings if row["kind"]=="company"]
 decisions=[decision("bind",actor="steward",reason="offline fixture binding",at=body["as_of"],
     subject=row["subject"],entity_id=bindings[sec["subject"]],evidence=[row["assertion_id"]])
     for row,sec in zip(assertions,companies,strict=True)]
@@ -1151,17 +1175,19 @@ for sql in ("DELETE FROM mdm.source_reading","DELETE FROM mdm.master_entity","CR
     else: raise AssertionError("restricted operation accepted")
 pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
       for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
-                   files.ROOT/"sources/gleif/source.yaml"]}
+                   files.ROOT/"sources/gleif/source.yaml",
+                   files.ROOT/"sources/sec.submissions.company/source.yaml",
+                   files.ROOT/"sources/sec.submissions.person/source.yaml"]}
 print(json.dumps({"pins":pins,"generation":second["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"publication_recovery":True,"full_population":False}))
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"publication_recovery":True,"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
-                         "policy": policy_digest, "readings": readings, "rows": rows,
+                         "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
                          "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["publication_recovery"]
+        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["publication_recovery"]
         (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
     finally:
         admin.dispose()

@@ -1,0 +1,21 @@
+{
+  "pins": {
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/source_contract/source_contract.abi3.so": "637cc7dce53939a3c04b582b6918005ef6b6fce5541d2b309ed078ecd14e1e64",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/workers/source_mapping.py": "00f1b28ca1e8db31dc05dac19f20f20d91bc679b4b782ec0a0ca4081c464edd3",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/mdm/clean/adapters.py": "847089f03d2af5afa44120b8532f9d1eff0375b6af1e75c9eb081a2da18a0ddb",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/gleif/source.yaml": "41c9066a0626cf8f258200980e0426086f462778582bbedfb97af5300fc7962b",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.company/source.yaml": "8a602ac7907c4f1e1f6db829ce4f7ca5e3a98bd9cdae4a7b2efd058a60fe9cc6",
+    "/private/tmp/codex-installed-sec-fields-20261007/bundle0/tools/edgartools-data/lib/python3.12/site-packages/edgar_warehouse/bundle_data/rules/sources/sec.submissions.person/source.yaml": "9d8be518e99fb9c1d62cda4ce2a1f6866bd054b5fa580b754181291f1ee461ec"
+  },
+  "generation": 2,
+  "counts": {
+    "company": 2,
+    "person": 2
+  },
+  "installed_gleif_mapping": true,
+  "installed_sec_mapping": true,
+  "publication_recovery": true,
+  "full_population": false
+}
