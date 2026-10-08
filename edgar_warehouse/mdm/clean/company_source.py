@@ -25,7 +25,7 @@ from edgar_warehouse.rules import files as rules_files
 from .evidence import instant
 from .matching import active_rules
 from .name_census import entry as census_entry
-from .names import edgar_jurisdiction
+from edgar_warehouse.workers.source_mapping import project_record
 from .store import Conflict, canonical, digest
 
 SOURCE_CODE = "sec.submissions.company.v1"
@@ -35,6 +35,7 @@ SOURCE_CODE = "sec.submissions.company.v1"
 # `rules/merge/`. The names below stay importable.
 CONTRACT = rules_files.mdm_contract("sec.submissions.company", SOURCE_CODE)
 FIELDS = CONTRACT["adapter"]["fields"]
+ADDRESS_READING = rules_files.load(rules_files.ROOT / "sources/sec.submissions.company/landed-address.yaml")
 POLICY = rules_files.policy()
 APPROVED_ACTIVATION = next(
     rule for rule in POLICY["automatic_rules"] if rule["rule_id"] == "sec-company-candidate"
@@ -151,24 +152,10 @@ def _business_addresses(landing: dict, parquet: pq.ParquetFile) -> dict[int, dic
                 raise Conflict("Address row belongs to a different capture run")
             if row["cik"] is None or row["address_type"] != "business":
                 continue
-            found[int(row["cik"])] = business_address(row)
+            found[int(row["cik"])] = project_record(row, ADDRESS_READING, column="fields")
     return found
 
 
-def business_address(row: dict) -> dict:
-    """One landed business address as the Company record carries it."""
-    place = edgar_jurisdiction(row["state_or_country"] or row.get("country_code"))
-    return {
-        "street": row["street1"] or None,
-        "street2": row["street2"] or None,
-        "city": row["city"] or None,
-        # A region only for a state or province: SEC writes a foreign country
-        # in the same field ("P7", the Netherlands), which is the country
-        # (ticket 18).
-        "region": (row["state_or_country"] or None) if place and "-" in place else None,
-        "postal_code": row["zip_code"] or None,
-        "country": place.split("-")[0] if place else None,
-    }
 
 
 @dataclass(frozen=True)

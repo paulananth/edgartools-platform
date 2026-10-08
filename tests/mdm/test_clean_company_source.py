@@ -17,13 +17,13 @@ from edgar_warehouse.mdm.clean.company_source import (
     POLICY,
     SOURCE_CODE,
     bronze_receipts,
-    business_address,
     census_filers,
     prepare_company_bundle,
     write_bronze_receipts,
     write_name_census,
 )
 from edgar_warehouse.mdm.clean.store import Conflict
+from tests.support.retired_company_address import business_address
 from tests.mdm.test_clean_activation import proof
 
 # Field and identity tests need an active rule; this synthetic proof belongs
@@ -711,7 +711,7 @@ class TestMatchingEvidenceIsPinned:
         assert "cascade" not in census and "address_member_sha256" not in census["sec"]
 
     def test_a_filer_is_read_for_the_cascade_through_the_sec_contract(self):
-        from edgar_warehouse.mdm.clean.company_source import business_address, cascade_filer
+        from edgar_warehouse.mdm.clean.company_source import cascade_filer
 
         row = {**source_row(320193, entity_name="APPLE INC"), "state_of_incorporation": "CA"}
         found = cascade_filer(row, business_address(address_row(320193)))

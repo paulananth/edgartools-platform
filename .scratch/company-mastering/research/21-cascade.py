@@ -41,7 +41,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from edgar_warehouse.mdm.clean import cascade
-from edgar_warehouse.mdm.clean.company_source import POLICY, business_address, cascade_filer
+from edgar_warehouse.mdm.clean.company_source import POLICY, cascade_filer
+from tests.support.retired_company_address import business_address
 from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
 from edgar_warehouse.mdm.clean.name_census import cascade_entity
 

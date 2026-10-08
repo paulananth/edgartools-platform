@@ -1,0 +1,24 @@
+{
+  "run": 37762135297,
+  "head": "96dd4997591e27872b571b59e2eb6ba6ae4a7e35",
+  "conclusion": "success",
+  "cases": {
+    "unit": 572,
+    "architecture": 258,
+    "mdm": 607,
+    "integration_passed": 295,
+    "integration_expected_xfail": 1,
+    "engine": 649,
+    "native": 139
+  },
+  "prerequisite_skips": 0,
+  "deliberate_fault": {
+    "test": "tests/mdm/test_clean_company_source.py::TestMatchingEvidenceIsPinned::test_the_business_address_and_census_entry_travel_with_the_record",
+    "isolated_runtime_recipe_country": "ZZ",
+    "expected_country": "US",
+    "caught_at": "prepared record address assertion",
+    "repository_mutated": false
+  },
+  "full_population": false,
+  "complete_retirement": false
+}

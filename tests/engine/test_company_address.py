@@ -6,7 +6,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_address_loader
-from edgar_warehouse.mdm.clean.company_source import business_address
+from tests.support.retired_company_address import business_address
 from edgar_warehouse.rules import files
 from tests.support import place_codes
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
@@ -83,3 +83,27 @@ def test_nontext_place_keys_refuse_without_destination_write(tmp_path):
     with pytest.raises(SourceRejected, match='lookup_key'):
         source_read.execute(work, store)
     assert not (tmp_path / 'output.json').exists()
+
+
+def test_landed_address_recipe_matches_every_pinned_place_and_json_value_shapes():
+    from datetime import datetime, UTC
+    from edgar_warehouse.workers.source_mapping import project_record
+    recipe=files.load(files.ROOT/'sources/sec.submissions.company/landed-address.yaml')
+    base={'street1':'  Exact  ','street2':None,'city':'City','zip_code':'12345',
+          'state_or_country':None,'country_code':None,
+          'last_synced_at':datetime(2026,1,1,tzinfo=UTC)}
+    for record in files.pinned_reference('sec-place-codes'):
+        code=record['code']
+        for field in ('state_or_country','country_code'):
+            for value in (code,code.lower(),f' {code.lower()} '):
+                row={**base,field:value}
+                assert project_record(row,recipe,column='fields')==business_address(row)
+    for value in (None,'',0,False,[],{},'unknown','\x1c de \x1f'):
+        for field in ('street1','street2','city','zip_code','state_or_country','country_code'):
+            row={**base,field:value}
+            assert project_record(row,recipe,column='fields')==business_address(row)
+
+
+def test_executable_address_derivation_is_retired():
+    from edgar_warehouse.mdm.clean import company_source
+    assert not hasattr(company_source,'business_address')

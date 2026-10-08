@@ -10,7 +10,7 @@ from edgar_warehouse.control_contract import digest
 from tests.support.retired_submission_loaders.bronze_submission_extractors import (
     stage_address_loader, stage_company_loader, stage_recent_filing_loader,
 )
-from edgar_warehouse.mdm.clean.company_source import business_address
+from tests.support.retired_company_address import business_address
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
