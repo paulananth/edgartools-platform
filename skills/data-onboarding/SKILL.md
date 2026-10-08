@@ -1,6 +1,6 @@
 ---
 name: data-onboarding
-description: Bring a NEW data feed or a NEW domain (for example Person) into Clean MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
+description: Bring a NEW data feed or a NEW domain (a kind with no merge rules yet) into Clean MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
 ---
 
 # Data Onboarding
@@ -10,7 +10,7 @@ description: Bring a NEW data feed or a NEW domain (for example Person) into Cle
 > and for the whole flow; this skill holds one step's detail.
 
 Brings something **new** into Clean MDM (and silver): a feed with no rules
-file yet, or a domain (a kind such as Person) with no merge rules yet.
+file yet, or a domain (a kind) with no merge rules yet.
 
 **Use the other skill when:**
 - the feed already has `rules/sources/<source>/source.yaml`, and you are
@@ -27,9 +27,9 @@ Read these before anything else. Breaking one is never the right call.
 |---|---|
 | Approve for the operator, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
 | Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
-| Request anything from `sec.gov`, including its documentation | Use the captured files and this repo |
+| Request anything from a provider the operator has ruled out, including its documentation (see Examples) | Use the captured files and this repo |
 | Read, print or paste a secret, password or token | Use the environment variables named here. If one is missing, ask the operator to set it outside the chat. |
-| Guess an identifier (a CIK, an LEI, any key) | Take it from the files |
+| Guess an identifier (any key or issued id) | Take it from the files |
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
@@ -168,16 +168,16 @@ never unload over the repo's `rules/`.
 ### identify: name the feed, and find out whether it is new
 
 1. Look at the files: their names, formats, sizes and first records. Name
-   the provider and the dataset, e.g. "ACME company registry, monthly CSV
-   extract". Ask: "These look like X. Is that right?"
+   the provider and the dataset (a provider, what the files hold, how often
+   and in what format). Ask: "These look like X. Is that right?"
 2. Search `rules/sources/` and the repo for the provider's and dataset's
    names. Leave out `.scratch/**/trials/`: those are earlier trials, not
    the repo's decisions.
    - **Its rules file exists, and you are changing what it already maps:**
      stop. This is **refining-rules**.
-   - **Its files already feed one kind (e.g. SEC submissions → Company), and
-     you are adding another kind from them (e.g. Person):** this is
-     onboarding. It gets its own folder and source code (see "Names").
+   - **Its files already feed one kind, and you are adding another kind from
+     them:** this is onboarding. It gets its own folder and source code (see
+     "Names").
    - **The repo names it** (a source code, a reader, a rank in the merge
      rules) **but it has no rules file:** carry on here, and keep every name
      the repo uses.
@@ -190,21 +190,17 @@ never unload over the repo's `rules/`.
      Database needs **init**.
 4. **Names.** When the repo does not fix a name, derive it from the names
    it already has, and never invent a new pattern:
-   - one folder per source, even when one reader reads several files (GLEIF
-     is one folder, `gleif`, for three files);
-   - one source code per file or record type, `<source>.<record type>.v1`
-     (e.g. `gleif.level1.v1`, `gleif.relationships.v1`);
+   - one folder per source, even when one reader reads several files;
+   - one source code per file or record type, `<source>.<record type>.v1`;
    - a second kind from the same files gets its own folder named for the
-     kind, the way the first one is, and its code is `<folder>.v1`. For
-     example, `sec.submissions.company` gives `sec.submissions.person` and
-     `sec.submissions.person.v1`;
+     kind, the way the first one is, and its code is `<folder>.v1`;
    - the capture family the repo already names for these files; if it names
      none, the folder name. Log it either way.
 5. **A new domain.** If the records are a kind with no merge rules yet (no
    `rules/merge/kinds/<kind>.yaml`), say so. The kind must be in `KINDS`
    (`edgar_warehouse/mdm/clean/evidence.py`); a kind that is not there
-   needs the operator's ruling. Its written requirements are the
-   requirements: e.g. `docs/specs/person/consumer.md` for Person.
+   needs the operator's ruling. Its written requirements (its spec under
+   `docs/specs/`) are the requirements.
 
 **Output:** a line in the log with the name, the source code(s), the family,
 and whether it is a new domain.
@@ -234,16 +230,13 @@ blocks; do not ask whether it does.
   (read only, at most 8 KB; [REFERENCE.md](REFERENCE.md), "Reading MDM's context").
   Check a kind's existing records, a relationship type's links, or a code set's
   codes before you map onto them.
-- `docs/specs/clean-mdm/`: start with `source-evidence.md` and
-  `company-policy.md`.
+- `docs/specs/clean-mdm/`: start with `source-evidence.md` and the policy
+  spec of the kind you map onto.
 - MDM kinds: `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`.
-- The fields MDM keeps for a kind:
-  - **Company:** the SEC contract's fields
-    (`FIELDS = CONTRACT["adapter"]["fields"]` in
-    `edgar_warehouse/mdm/clean/company_source.py`);
-  - **a kind with no field list in code (e.g. Person):** its consumer spec
-    (`docs/specs/person/consumer.md`, "The Person projection").
-  Use these names; a new field is a question for the operator.
+- The fields MDM keeps for a kind: `edgar-warehouse context <kind> --search`
+  shows a live record's fields; the kind's field list in code, or, for a kind
+  with none, its consumer spec's projection. Use these names; a new field is
+  a question for the operator.
 - `rules/merge/kinds/<kind>.yaml`. It ranks sources per kind
   (`defaults.sources`: the first one listed wins each field), and its
   comments record which value fills a shared field. Read them before you
@@ -255,37 +248,37 @@ blocks; do not ask whether it does.
   with `record_column`. For projected rows, map from the configured columns.
   Retained source readers are comparison oracles during retirement: compare
   types, rows, refusals, assertion identities and provenance against them.
-  Company catalog/census joins and GLEIF streaming remain unfinished; a raw
-  projection does not qualify those full pipelines.
-- The source's public documentation on the web, never `sec.gov`: field
-  definitions, identifiers, how often it publishes, full files or changes
-  only. Third-party pages are hints, not authority.
-  - **For an SEC feed,** all of SEC's own documentation is on `sec.gov`. Use
-    the repo instead: the existing SEC contract and its comments,
-    `docs/specs/`, the published code sets in `rules/reference/published/` and the parsers in
-    `edgar_warehouse/loaders/`.
+  What is still unfinished for each live source is in its ticket, not here;
+  a raw projection does not qualify a full pipeline.
+- The source's public documentation on the web: field definitions,
+  identifiers, how often it publishes, full files or changes only.
+  Third-party pages are hints, not authority. When the provider is ruled out
+  (Examples), use the repo instead: the existing contract and its comments,
+  `docs/specs/`, the published code sets in `rules/reference/published/` and
+  the parsers.
 
 **Infer, for each record type:**
 - **Kind:** from `KINDS`, or the field or rule that decides it.
-- **Record key:** its parts, in the order the source defines its unique key
-  (GLEIF: start, end, type). The order is part of each record's identity.
+- **Record key:** its parts, in the order the source defines its unique key.
+  The order is part of each record's identity.
 - **Identifiers:** each namespace and its format.
   - Ask about every identifier the source carries; never drop one silently.
   - Recommend keeping a cross-reference identifier as lookup-only, under its
-    own name (operator, 2026-09-26). The contract has no syntax for
-    lookup-only identifiers yet: say so, put it in the Mapping Document's
-    Notes, and log a ticket.
-  - Only `cik` and `lei` can join two records into one.
+    own name (operator, 2026-09-26): map it under `cross_references`
+    ([REFERENCE.md](REFERENCE.md)).
+  - Only an identifier a binding rule matches on joins two records into one;
+    a name joins only through a proven name rule (operator, 2026-10-08:
+    "Proven name rules may bind"), and a name id stays lookup only. Adding a
+    joining identifier is a merge-rule change for the operator.
   - An identifier another authority issues is named for who stated it
     (`sec_lei`), never for the issuer.
-- **Fields:** use the kind's names. A list-shaped field (e.g. Person's
-  `name_variants[]`) has no contract syntax yet: leave it out, say so, and
-  log a ticket.
+- **Fields:** use the kind's names. A list-shaped field has no contract
+  syntax yet: leave it out, say so, and log a ticket.
 - **Relationships:** type, the other end's key, the source it lives in,
   start and end. List every type the source carries. Label each mapped one's
   `scope` `<Provider> <relationship family>`.
-- **A value of another kind** (e.g. a ticker belongs to Security, not
-  Company) stays out of this kind; log it for that kind.
+- **A value of another kind** (an identifier of a different kind of entity)
+  stays out of this kind; log it for that kind.
 - **Provenance:** trace stays beside the record (operator, 2026-09-27).
   Capture hashes, run ids and sync times never go into `provenance`. Only
   the source's own record may, when the reader keeps it (`native_record`).
@@ -332,24 +325,22 @@ starting from its "Defaults".
   existing file.
 
 **A new domain** also needs `rules/merge/kinds/<kind>.yaml`. Copy the shape
-of `rules/merge/kinds/company.yaml`, and declare:
+of an existing kind's file, and declare:
 - `defaults.sources`: your source code;
-- **a classification rule**, if the files hold more than one kind (SEC
-  types people and firms alike as `other`). The contract names it under
-  `adapter.classification` (`kind`, `rule_id`, `version`), as the SEC
-  Company contract does. A rule written for another source cannot be
+- **a classification rule**, if the files hold more than one kind under one
+  source type. The contract names it under `adapter.classification` (`kind`,
+  `rule_id`, `version`). A rule written for another source cannot be
   reused as it is: the engine refuses a rule whose `source` differs, so
   port it under a new id, and its proof must be measured again on this
-  source. A step whose verdict is another kind (e.g. `company` in a Person
-  rule) becomes `verdict: deferred` with `probable_kind: <that kind>`, as
-  in `rules/merge/kinds/company.yaml`; otherwise it blocks the batch;
-- **a matching rule on an issued identifier** (e.g. `person-cik` on `cik`,
-  shaped like `company-cik`), with its Identifier Contract. Leave out
+  source. A step whose verdict is another kind becomes `verdict: deferred`
+  with `probable_kind: <that kind>`; otherwise it blocks the batch;
+- **a matching rule on an issued identifier**, shaped like an existing
+  kind's, with its Identifier Contract. Leave out
   `verification`: it is filled in when the operator approves the contract
   on its proving corpus;
 - `bars`, from the kind's written requirements;
 - `defaults.allow_unknown_effective: true` if records carry no effective
-  date (as SEC submissions do), as Company does.
+  date.
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written
@@ -418,9 +409,8 @@ contract's `nonblocking_deferred_reasons`.
      publication facts. This tests mapping and quality only; it does not
      prove installed parsing, leases, receipts or MDM commits.
    - Check the kind's merge rules accept the source. A source missing from
-     `defaults.sources` fails its whole batch. For Company, run
-     `merge.check_company_sources(files.policy(), assertions)`; for any
-     other kind, check `defaults.sources` by hand. Adding a source to an
+     `defaults.sources` fails its whole batch. Check `defaults.sources` (a
+     kind with its own check in code, run it; see Examples). Adding a source to an
      existing kind is a merge-rule change: log it for the operator.
    - **A new kind:** records are blocked with `classification_not_activated`
      until its classification rule is switched on. That is expected: the
@@ -442,9 +432,8 @@ contract's `nonblocking_deferred_reasons`.
    policy, with the new rules added to `automatic_rules` and each stamped
    `approved_by: proving-run` and `reason: "Proving Run only; not an
    approval"`, in the disposable database only. The body the operator later
-   approves differs only in those fields. Ticket 05's
-   `.scratch/company-mastering/research/05_proving_run.py`, `candidate()`,
-   does exactly this.
+   approves differs only in those fields (an earlier proving run does
+   exactly this; see Examples).
 
    Write it as a pytest file that uses the Clean MDM fixtures, and it gets
    its own disposable PostgreSQL 16:
@@ -456,14 +445,13 @@ contract's `nonblocking_deferred_reasons`.
    Run it with Docker (on macOS, Colima), and bound it:
    `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock timeout -s KILL 600 uv run --no-sync pytest -q -s <file>`.
    - **Expect:** under a minute to start the database. A few hundred
-     records should finish in under 5 minutes; ticket 27's 6,726 records
-     took about 25.
+     records should finish in under 5 minutes; several thousand take tens
+     of minutes. Say the estimate before a long run.
    - **If it hangs or is killed,** its container stays up. List it with
      `docker ps --filter name=clean-mdm-test-` and remove it with
      `docker rm -f <name>`. Never touch any other container.
-   A full example is `.scratch/company-mastering/research/27_proving_run.py`:
-   it registers the datasets and policy, applies the bundles, and runs a
-   second pass that must change nothing.
+   A full run registers the datasets and policy, applies the bundles, and
+   runs a second pass that must change nothing (Examples names one).
 3. **The inputs and the proof.**
    - **Input manifest:** a JSON list of `{"member", "sha256", "bytes"}`, one
      entry per captured file, sorted by `member`. Its sha256 is the
@@ -502,8 +490,7 @@ contract's `nonblocking_deferred_reasons`.
 **A new domain: the order of approvals.** Each step needs the one before it:
 1. Measure the classification rule's proof on this source.
    - **The sample:** records drawn at random from the files, each labelled
-     by hand against the kind's written definition, e.g. the Person spec's
-     rule. Record who labelled them.
+     by hand against the kind's written definition (its spec's rule). Record who labelled them.
    - **The bar:** `bars.classification` (`min_precision`,
      `one_sided_confidence`). With every record correct, the Wilson lower
      bound is `n / (n + z²)`, so the least sample is
@@ -547,3 +534,39 @@ Either way, write it in the log.
 | `rules check` | not built | Dry run by hand (**test**) | rules-skill ticket 03 |
 | Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | rules-skill ticket 04 |
 | General silver writer | not built | Onboard the MDM target only (**Two targets**) | rules-skill ticket 05 |
+
+## Examples (this repo's sources)
+
+These name today's sources only as examples; nothing above depends on them.
+
+- **A provider ruled out:** SEC (`sec.gov`): never request it, nor its
+  documentation. For an SEC feed, use the existing SEC contract and its
+  comments, `docs/specs/`, and the published code sets.
+- **Names:** GLEIF is one folder, `gleif`, for three files, with codes
+  `gleif.level1.v1` and `gleif.relationships.v1`. SEC submissions feed
+  Company (`sec.submissions.company`); Person from the same files is
+  `sec.submissions.person` and `sec.submissions.person.v1`.
+- **A record key's order:** GLEIF relationships: start, end, type.
+- **Fields:** Company's are `FIELDS = CONTRACT["adapter"]["fields"]` in
+  `edgar_warehouse/mdm/clean/company_source.py`; Person has none in code, so
+  its consumer spec (`docs/specs/person/consumer.md`, "The Person
+  projection") holds them. A list-shaped field: Person's `name_variants[]`.
+- **Another kind's value:** a ticker belongs to Security, not Company.
+- **Joining identifiers:** today `cik` and `lei`; the SEC-to-GLEIF name rules
+  (`sec-gleif-name-jurisdiction`, `sec-gleif-name-postal`) bind by name with
+  their proofs.
+- **Classification:** SEC types people and firms alike as `other`; the SEC
+  Company contract names its rule under `adapter.classification`; a
+  `company` verdict in a Person rule is deferred with `probable_kind`
+  (`rules/merge/kinds/company.yaml`). `person-cik` on `cik` is shaped like
+  `company-cik`. SEC submissions carry no effective date, so Company sets
+  `allow_unknown_effective`.
+- **Source checks in code:** for Company,
+  `merge.check_company_sources(files.policy(), assertions)`.
+- **Proving runs:** ticket 05's `.scratch/company-mastering/research/05_proving_run.py`
+  (`candidate()` stamps the copied policy); ticket 27's
+  `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
+  about 25 minutes, a second pass that changes nothing).
+- **Unfinished live pipelines:** Company catalog and census joins and GLEIF
+  streaming were unfinished when this was written (see Codex's retirement
+  tickets).

@@ -24,7 +24,7 @@ with merge rules.
 | Approve for the operator or a steward, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](../data-onboarding/APPROVE.md)) |
 | Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
 | Switch on a matching rule with no measured proof | A rule on an issued identifier is deterministic; any other rule needs a proof at its kind's bar |
-| Request anything from `sec.gov` | Use the captured files and this repo |
+| Request anything from a provider the operator has ruled out (data-onboarding, Examples) | Use the captured files and this repo |
 | Read, print or paste a secret | Use the environment variables named in data-onboarding. If one is missing, ask. |
 | Change what identifies a record inside one source code | A new source code (`….v2`) |
 | Rewrite a batch MDM already took | A new version applies to new batches only |
@@ -67,7 +67,12 @@ Every change runs: the change mode → **test** → **approve** →
 [data-profiling](../data-profiling/SKILL.md)'s **compare** against the feed's
 approved findings before changing anything. Each drift item names the skill
 that handles it; the ones for refining-rules are the proposed changes, taken
-one at a time with the modes below. A feed with no approved findings yet:
+one at a time with the modes below. Keep the approved findings'
+`fingerprints.json` beside them: from it, compare also reports, per part,
+whether the feed sends every record or changes only, how many keys persisted,
+and the time between deliveries (`deliveries` in `drift.yaml`); a change of
+delivery kind is a proposed change too (a full-file feed turned into changes
+only changes how records are retired). A feed with no approved findings yet:
 profile it with data-profiling first, and log it. After any change to a rules file, regenerate its Mapping
 Document (`rules mapdoc write --only <source or kind>`) and commit it with
 the change. `rules mapdoc check` and CI fail otherwise.
@@ -121,10 +126,9 @@ counts look wrong, or **compare** lists drift handled by data-quality:
      the explicit `mdm.prepare.record_column` objects. Preserve source types,
      unknown evidence and immutable input references. Use data-platform
      [READING.md](../data-platform/READING.md) for supported expressions.
-     Company raw columns alone omit catalog/census joins and full address/
-     pagination preparation; retained preparation remains an equivalence
-     oracle until those operations are qualified. GLEIF likewise retains its
-     archive/publication validation until bounded streaming is implemented.
+     Where a live source's configured reading does not yet cover its whole
+     preparation (its ticket says what is open), the retained preparation
+     stays an equivalence oracle until that part is qualified.
      Label diagnostic runs on retained preparation as such; they do not prove
      a configured replacement. Test grammar support before proposing custom
      code, and use data-platform Mode 6 only for a demonstrated grammar gap.
@@ -145,9 +149,8 @@ counts look wrong, or **compare** lists drift handled by data-quality:
        differs.
      - A standardising fix (the address one) touches most records. That is
        expected, not a defect.
-   - **Time:** a full pass reads every file and takes about 3 minutes per
-     1,000 SEC documents on a laptop. Try 200 first, then say how long the
-     full pass will take. `rules mapdoc write` can take 10 minutes.
+   - **Time:** measure a small pass first (a few hundred documents), then
+     say how long the full pass will take before starting it. `rules mapdoc write` can take 10 minutes.
    - A zero count is only meaningful if the check can fire. Feed it one
      made-up record that should trip it, and label that input.
    - Report up to 10 examples of each check and fix.
@@ -169,15 +172,14 @@ For example: a cascade pass, a name rule, or records waiting for review.
    must never join (parent and subsidiary, a registered agent's address,
    the same name in two places).
 3. **Measure it before it is switched on:**
-   - A rule on an issued identifier (`cik`, `lei`) is deterministic, and its
-     proof is its Identifier Contract.
+   - A rule on an issued identifier is deterministic, and its proof is its
+     Identifier Contract.
    - Any other rule needs a labelled sample of the links it adds, plus
-     adversarial pairs, measured at its kind's bar. The examples are
-     `.scratch/company-mastering/research/08-*` and `12-*`. Record the proof
-     in `pending-proofs.yaml`.
+     adversarial pairs, measured at its kind's bar (Examples). Record the
+     proof in `pending-proofs.yaml`.
 4. Show which records it moves. Use a proving run on a disposable
-   PostgreSQL 16 (`.scratch/company-mastering/research/27_proving_run.py`):
-   counts before and after, with examples.
+   PostgreSQL 16 (data-onboarding's test step): counts before and after,
+   with examples.
 5. Continue with **approve**, using "Switch one declared matching rule on"
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
@@ -198,3 +200,14 @@ mode.
 
 Use the table in data-onboarding's SKILL.md, "When a command is missing".
 Never invent a command.
+
+## Examples (this repo's sources)
+
+- A provider ruled out: `sec.gov`. A full pass over SEC submissions took
+  about 3 minutes per 1,000 documents on a laptop.
+- Configured reading not yet whole: Company raw columns omit the catalog and
+  census joins and full address and pagination preparation; GLEIF keeps its
+  archive and publication validation until bounded streaming is built.
+- Issued identifiers: `cik`, `lei`. Name-rule proofs:
+  `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:
+  `.scratch/company-mastering/research/27_proving_run.py`.

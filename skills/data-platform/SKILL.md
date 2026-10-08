@@ -14,7 +14,7 @@ needed, except to write a custom parsing step (Mode 6).
 
 The [data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops) apply
 to every mode here. In short: never approve or switch on for the operator;
-never approve without a test run; no request to `sec.gov`; never read or
+never approve without a test run; no request to a provider the operator ruled out; never read or
 print a secret; never guess an identifier; never invent a command; ask one
 question at a time, with your recommendation.
 
@@ -152,7 +152,9 @@ A lost acknowledgement is harmless: the worker resumes the same MDM run, and
 MDM never merges or publishes a batch twice. After a stop, use
 `edgar-warehouse bookkeeping resume <run_id>` and run the workers again.
 
-**Current source qualification:** Person has a configured complete-JSON read
+### Examples: current source qualification
+
+Person has a configured complete-JSON read
 block in `sec.submissions.person/source.yaml`. Its installed PostgreSQL 16
 trial proves read → prepare → merge with the actual Person Dataset Contract
 and policy, preserving two fixture records; a separate 1,000-capture comparison
@@ -192,7 +194,7 @@ is code reviewed in a PR.
 ### Trial evidence
 
 `tests/engine/test_custom_parsing_trial.py` compares the generic timestamp-to-integer
-step with GLEIF's existing release-sequence calculation, including negative
+step with an existing release-sequence calculation (one source's own), including negative
 epochs, offsets and microseconds. It first demonstrates that the configured
 `date` returns text and `number` cannot convert a timestamp. The installed-bundle
 test repeats parse → prepare → merge with the custom expression and a separate
