@@ -3,7 +3,9 @@
 Every operator ruling recorded in a ticket or map under `.scratch/` (not in
 trial logs or research notes, which hold answers) is harvested as written: the operator's exact words, the date, the ticket and line, and the
 sentence around it (the question it answered). Nothing is paraphrased or
-invented. The cold agent may only use a ruling from this file; a question it
+invented. Each entry is marked `"replayed": true` and `"valid_only_in":
+"sandbox"`: a replayed ruling approves nothing outside the sandbox (plan
+decision 29). The cold agent may only use a ruling from this file; a question it
 does not answer is recorded by the agent as "unanswered, would ask the
 operator" and listed in DIFF.md.
 
@@ -69,7 +71,7 @@ def main() -> None:
                 continue
             seen.add(text)
             rulings.append({"first_date": dates[0], "section": heading, "text": text, "ticket": rel, "line": number,
-                            "replayed": True})
+                            "replayed": True, "valid_only_in": "sandbox"})
     rulings.sort(key=lambda r: (r["first_date"], r["ticket"], r["line"]))
     with (HERE / "rulings.jsonl").open("w") as f:
         for ruling in rulings:
