@@ -9,9 +9,10 @@ full skills/parser goal remains incomplete until every remaining gate passes.
 - [x] Express GLEIF census identity, legal/other names and conditional registration reads in bundled Rules; old _text, _other_names and sec_keys exist only in test support, actual caller uses native Rules. 2026-10-08 07:16 ET
 - [x] Verify counts, branches, former/other names, timestamps, cascade and refusal order against the historical implementation: 97 targeted cases pass in 8.43s, including deliberate key corruption and paired malformed inputs. 2026-10-08 07:16 ET
 - [x] Qualify authenticated captured records and deliberate faults through the actual caller: 1,000 SEC captures plus 1,000 GLEIF records, 1,000 separately identified synthetic filers, exact historical census equality, 59.22s; runtime pins in captured-parity.json. Repackaged sampled EOF only. 2026-10-08 07:16 ET
-- [ ] Verify installed bundle and restricted PostgreSQL 16 publication/recovery boundaries.
+- [x] Verify committed c3e35810 installed outside checkout with custom steps disabled, restricted PostgreSQL 16: actual census equality, normalized evidence read-back, three batches, lost ACK reconciliation, replay and denied DELETE/CREATE; 1 passed, zero skips, 111.42s. Runtime proof: installed-postgres-proof.json; fixture only. 2026-10-08 07:22 ET
 - [x] Run local MDM and engine tests after final fixes: 1,303 passed, zero skips, 156.93s; independent two-axis review has no scoped blocker (REVIEW.md). 2026-10-08 07:18 ET
-- [ ] Commit, run full CI and open a PR.
+- [x] Commit implementation c3e35810; tracked captured parity and installed proof, local tests and independent reviews above. 2026-10-08 07:22 ET
+- [ ] Open PR and pass the full CI gate.
 - [x] Reconcile parent issue 20 and executable caller inventory against merged main 862a1e66 and the open #866 documentation PR; remaining paths are listed below. 2026-10-08 07:16 ET
 - [ ] Whole-source configured census construction, Company preparation/census/provenance retirement, GLEIF release/semantic retirement, record mapping retirement, full 6,414 Company / 3,052 CIK+LEI replay/recovery and configured capture remain required by the parent goal.
 
