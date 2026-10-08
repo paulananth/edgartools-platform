@@ -38,6 +38,7 @@ COMMENT ON COLUMN mdm.relationship_version.from_generation IS 'The generation of
 COMMENT ON COLUMN mdm.relationship_version.to_generation IS 'The generation of the batch that replaced it; empty while it is the current state.';
 COMMENT ON COLUMN mdm.relationship_version.valid_from IS 'Recording time this state started: its batch''s created_at.';
 COMMENT ON COLUMN mdm.relationship_version.valid_to IS 'Recording time it was replaced; empty while current.';
+COMMENT ON COLUMN mdm.relationship_version.batch_id IS 'The batch that recorded this state (mdm.batch).';
 COMMENT ON COLUMN mdm.relationship_version.source_id IS 'The entity the link starts from (body source_id), indexed for a walk at a past generation.';
 COMMENT ON COLUMN mdm.relationship_version.target_id IS 'The entity the link points to (body target_id), indexed likewise.';
 COMMENT ON COLUMN mdm.relationship_version.type IS 'The relationship type (body type).';
@@ -83,6 +84,9 @@ BEGIN
 END;
 $$;
 
+COMMENT ON FUNCTION mdm.record_relationship_version(text, jsonb, text) IS
+    'Record one relationship state committed by one batch in mdm.relationship_version: nothing when unchanged, the same generation''s row replaced, else the open row closed and a new one opened.';
+
 -- History before this migration: every relationship projection of every
 -- stored batch, in generation order.
 DO $$
@@ -123,6 +127,9 @@ BEGIN
     RETURN NULL;
 END;
 $$;
+
+COMMENT ON FUNCTION mdm.keep_relationship_version() IS
+    'Trigger on mdm.current_record: every relationship row written there is recorded in mdm.relationship_version.';
 
 CREATE TRIGGER keep_relationship_version AFTER INSERT OR UPDATE ON mdm.current_record
     FOR EACH ROW WHEN (NEW.object_type = 'relationship') EXECUTE FUNCTION mdm.keep_relationship_version();
