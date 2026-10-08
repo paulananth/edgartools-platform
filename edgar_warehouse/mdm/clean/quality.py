@@ -134,9 +134,10 @@ def _reference_keys(table: str, sha256: str) -> frozenset:
 def _in_hierarchy(value, args) -> bool:
     """Passes unless the record's parent code (the path in `field`, read for this check) differs from
     the parent the pinned code set gives its code: a child code under the wrong parent. An empty value,
-    an empty parent or a code not in the code set passes (in_reference@1 catches an unknown code)."""
+    an empty parent or a code not in the code set passes (in_reference@1 catches an unknown code;
+    present@1 on the parent catches a missing one). `field` arrives as the parent's value."""
     parent = args.get("field")
-    if value is None or parent is None:
+    if value is None or parent is None or not str(parent).strip():
         return True
     parents = _reference_parents(args["table"], args["sha256"])
     code = str(value).strip().upper()

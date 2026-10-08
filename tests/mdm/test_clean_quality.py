@@ -319,7 +319,8 @@ def test_a_parent_code_must_agree_with_the_reference_hierarchy(monkeypatch):
     assert quality.apply(block, {"group": "leaf", "parent_group": " mid "}, {}) == {"version": "test-quality-v1"}
     assert quality.apply(block, {"group": "LEAF", "parent_group": "TOP"}, {})["flags"] == ["group_under_its_parent"]
     assert quality.apply(block, {"group": "TOP", "parent_group": "MID"}, {})["flags"] == ["group_under_its_parent"]
-    for fields in ({"group": "LEAF"}, {"group": "UNKNOWN", "parent_group": "TOP"}, {"parent_group": "TOP"}):
+    for fields in ({"group": "LEAF"}, {"group": "UNKNOWN", "parent_group": "TOP"}, {"parent_group": "TOP"},
+                   {"group": "TOP", "parent_group": " "}):
         assert "flags" not in quality.apply(block, fields, {})
     quality._reference_parents.cache_clear()
     with pytest.raises(quality.QualityError, match="pinned sha256"):
