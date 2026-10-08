@@ -22,6 +22,8 @@ completes this ticket or the parent goal.
   - [x] Qualify actual captured-prefix worker output through exhausted incremental traversal; 1,000 records agree with the independent oracle, retry/replay pass, and runtime pins are unchanged. Final broader gate: 279 passed in 37.39s. 2026-10-08 18:47 ET
   - [x] Measure and remove repeated complete-index copying: baseline 2,048/4,096 partitions 101.90s/461.36s; revised repeatable harness 1.49s/2.14s, exact row/byte/identity accounting. Header pins the complete reading; only current-range metadata is copied. Synthetic resource proof only, single trial per size; see traversal reports. 2026-10-08 19:07 ET
   - [ ] Implement declared reduction state/output limits, holder-set subtraction, counts and last occurrence semantics; incremental traversal alone does not implement reduction.
+    - [x] Add generic source.combine reduction grammar and execute/verify route with independent input/state/output budgets; complete-set subtraction and single-table pair-scoped last occurrence verified by 343 affected checks and captured-prefix oracle. 2026-10-08 19:29 ET
+    - [x] Verify partition-boundary, duplicate, uncapped count, original identity, late corruption and resource refusal cases; 343 affected checks pass in 32.45s, including >100,000 rows and deliberate cross-table last refusal. Captured 1,000-record reduction parity passes; full population remains open. 2026-10-08 19:29 ET
 - [ ] Express complete source census construction in bundled Rules, with immutable source/context receipts and separate worker verification.
   - [x] Implement version-3 source.read input/context/lookup receipts, raw set bounds before source access, output evidence and consumer identity gate; 207 affected tests passed in 41.99s. 2026-10-08 18:27 ET
   - [x] Real configured census worker execute/retry/replay verification agrees with independent captured-prefix oracle on 1,000 records; worker_proof records receipt hashes and table counts. Separate-process and original-source EOF qualification remain false. 2026-10-08 18:27 ET
@@ -35,7 +37,7 @@ completes this ticket or the parent goal.
   - [x] Document member grammar, declared set bounds, worker version-3 receipts, raw/UTF-8 validation, immutable scope and qualified combine identity route; 91 affected/genericity checks passed in 3.78s. 2026-10-08 18:34 ET
   - [ ] Qualify installed separate-process worker/verifier and full source construction before recording whole-source retirement.
   - [x] Open scoped PR #878 and diagnose its first full CI: Unit caught a control-config import used only for a file pin; Engine caught changed version-2 rejection wording. Both repaired, with decoder-pin compatibility preserved; 314 affected/architecture-control checks passed in 55.31s. 2026-10-08 19:07 ET
-  - [ ] Pass the complete CI gate on the corrected PR checkpoint; this does not close the parent full-population/retirement gate.
+  - [x] Pass the complete CI gate on corrected checkpoint 54b8bcd0: run 37858636662 succeeded, all five suites plus aggregate gate. This does not close the parent full-population/retirement gate. 2026-10-08 19:23 ET
 - [ ] Parent goal still requires remaining Company/GLEIF runtime, complete adapter record mapping and configured capture retirement; preserve sec_client until provider.capture is qualified.
 
 ## Evidence and design
@@ -217,3 +219,30 @@ Reduction design must preserve last occurrence per (name key, holder), not a
 global latest record per holder. Global address counts count supported GENERAL
 records, including duplicates and ineligible/noncandidate records. Candidate
 record ordering/duplication must also remain until cascade parity is proven.
+
+## Bounded reduction checkpoint — 2026-10-08 19:29 ET
+
+The existing source.combine worker now accepts a pinned reduce contract in
+addition to its unchanged materialized combine grammar. Every supplied reading
+is exhausted with aggregate input bounds; state retains exact text key/member
+sets and last text per pair, with separate canonical payload and cardinality
+limits. Count mode retains duplicates. Other/transliterated tables union before
+complete legal-holder subtraction and sample capping. Output row/byte bounds
+refuse before writes. No domain-specific loader or new hierarchy is introduced.
+
+Independent review reproduced partition-dependent last values for table unions.
+The contract now explicitly refuses multi-table last until source ordinals can
+preserve order; single-table last and unordered membership unions remain valid.
+Review also added the artifact codec file pin and bounded sample selection;
+output cardinality refuses before sorting. Both reviewers report no scoped
+blocker; spec independently verified the refusal layouts and union behavior.
+
+Final affected gate: 343 passed in 32.45s. Captured qualification authenticates
+the unchanged original archive but reads only a repackaged 1,000-record prefix:
+990 synthetic wanted keys, 990 legal and 44 union-other output rows, independent
+whole-list oracle equality, worker verification and unchanged retry. Reduction
+execute/verify/retry takes 0.216s; setup
+6.130s. Whole-source EOF, upstream wanted/publication derivation, cascade,
+installed population and independent-process flags remain false. The complete
+census assembly and global address-frequency construction are still open.
+CI on 54b8bcd0 passed; these reduction changes require their own full CI gate.

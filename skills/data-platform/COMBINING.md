@@ -47,11 +47,58 @@ private prefix. Closing or abandoning an iterator is not successful EOF.
 Consumers must resolve deferrals and explicitly opt in to lookup receipts
 only when all those receipts participate in output identity.
 
-This interface supplies authenticated traversal, not aggregation semantics.
-The existing `source.combine` profile still materializes within the bounds
-below. Whole-population reductions require a configured reducer with explicit
-state/output limits and proof of complete traversal; increasing the existing
-combiner's limits is not a replacement for that implementation.
+The iterator supplies traversal. Use a declared reduction contract for
+complete-set aggregation. The existing `combine` contract below retains its
+original materializing row/byte limits.
+
+### Bounded complete-set reduction
+
+Use `execution: {profile: source.combine}` and `reduce` in place of `combine`.
+Pin the contract as JSON and use the same input manifest and verification check.
+Declare all limits: `max_rows` (1..40,000,000), `max_input_bytes`
+(1..16 GiB), `max_state_bytes` (1..256 MiB), `max_keys` and `max_members`
+(each 1..10,000,000), `max_output_rows` (1..100,000), and
+`max_output_bytes` (1..32 MiB). Choose measured limits for the approved scope.
+Input limits cover every supplied reading, artifact, partition and table,
+including unselected rows. State limits cover all groups together. State bytes
+measure canonical UTF-8 key/member/value payload; key/member counts separately
+bound Python object overhead. They are not an RSS measurement or disk spill.
+
+`groups` names 1..32 output tables. Each group requires one declared `source`,
+`table` (one name or an ordered list of 1..8 distinct names), `keys`
+(1..8 distinct text columns), `mode`, `count` (new output
+column), `sample` and `sample_limit` (0..1,000). Text keys are exact; missing,
+null and nontext values refuse. Normalize them in the reading contract.
+
+- `mode: count` counts every selected row, including duplicates; require
+  `sample: null` and `sample_limit: 0`.
+- `mode: members` requires `member`, a text column, and a distinct named
+  `sample` column. Count unique members per key. Optional `last` names a text
+  column retained from the last source occurrence of that specific key/member,
+  including empty text. It is neither a maximum nor a global member timestamp.
+  Optional `last_null` explicitly replaces null with the declared text; missing
+  columns and other nontext values still refuse.
+  Multiple tables share the same member set and traverse declared table order
+  within each artifact chunk. Duplicate membership across tables counts once.
+  `last` requires one table: unions lack original source ordinals, so a last
+  occurrence across tables could otherwise depend on partition boundaries.
+- Optional `exclude` names another member group with identical key columns
+  and no exclusion of its own. Subtract its complete member set after all
+  inputs finish. Counts remain uncapped; samples contain the lexically first
+  `sample_limit` surviving members. Sample objects retain the declared member
+  and optional last column names. Exclusion uses every member, not its sample.
+
+Output tables retain key columns plus the declared count/sample fields; keys
+and members sort lexically. Every supplied reading must authenticate and
+exhaust successfully, with no deferrals, before the worker writes its scope or
+result. A late corrupted partition invalidates all provisional reduction state.
+Original reading receipts participate in the combined scope identity, including
+their original input/context/lookup evidence. Verification reconstructs exact
+bytes through the pinned contract. Successful reduction does not prove upstream
+population completeness or downstream matching parity; qualify those separately
+before replacing an active caller.
+
+### Materialized collections and joins
 
 The contract is a JSON object with this shape (shown as YAML for review):
 

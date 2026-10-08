@@ -11,7 +11,7 @@ import zipfile
 
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.mdm.clean import name_census, names, primitives
-from edgar_warehouse.workers import source_mapping, source_read, source_readings, source_stream
+from edgar_warehouse.workers import source_combine, source_mapping, source_read, source_readings, source_stream
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 import tempfile
 from scripts.qualification import qualify_census_reading as captured
@@ -41,6 +41,7 @@ def main():
             Path(files.__file__), Path(name_census.__file__), Path(names.__file__),
             Path(primitives.__file__), Path(source_mapping.__file__),
             Path(source_read.__file__), *source_read.runtime_files(),
+            Path(source_combine.__file__), *source_combine.runtime_files(),
             *sorted((files.ROOT / "sources/gleif").glob("census-*.yaml")),
             *source_engine.runtime_files()]
     before = {str(p.resolve()): sha(p) for p in pins}
@@ -143,6 +144,43 @@ def main():
         expected_tables = {name:[r for tables in historical for r in tables[name]] for name in historical[0]}
         if actual_tables != expected_tables or artifact['record_count'] != args.limit or artifact['lookups'] != lookups_ref:
             raise ValueError('actual worker output/evidence differs')
+        reduction_started = time.perf_counter()
+        reduction_recipe = files.load(files.ROOT / 'sources/gleif/census-name-reduction.yaml')
+        reduction_contract = store.put(root.as_uri(), reduction_recipe)
+        reduction_manifest = store.put(root.as_uri(), {'version':1, 'contract':reduction_contract,
+                                                       'readings':{'names':candidate}})
+        reduction_work = {'input':reduction_manifest, 'output':(root/'reduced.json').as_uri(),
+                          'checks':['source.combined'], 'keys':{}}
+        reduced = source_combine.execute(reduction_work, store)
+        if (source_combine.verify({**reduction_work, 'candidate':reduced}, store) != ({'source.combined':True}, [])
+                or source_combine.execute(reduction_work, store) != reduced):
+            raise ValueError('reduction verification or retry differs')
+        # Independent straightforward whole-list oracle, intentionally not
+        # reusing generic reduction state or its exclusion/sample functions.
+        legal, other = {}, {}
+        for row in expected_tables['a_legal']:
+            legal.setdefault(row['key'], {})[row['lei']] = row['updated'] or ''
+        for table_name in ('b_other', 'c_transliterated'):
+            for row in expected_tables[table_name]:
+                other.setdefault(row['key'], set()).add(row['lei'])
+        expected_reduced = {'legal':[], 'other':[]}
+        for key, holders in sorted(legal.items()):
+            expected_reduced['legal'].append({'key':key, 'count':len(holders), 'holders':[
+                {'lei':lei, 'updated':holders[lei]} for lei in sorted(holders)[:5]]})
+        for key, holders in sorted(other.items()):
+            surviving = holders - set(legal.get(key, {}))
+            expected_reduced['other'].append({'key':key, 'count':len(surviving),
+                'holders':[{'lei':lei} for lei in sorted(surviving)[:5]]})
+        reduced_body = store.json(reduced)
+        if (reduced_body['artifacts'][0]['tables'] != expected_reduced
+                or reduced_body['readings'] != {'names':candidate}
+                or store.json(reduced_body['artifacts'][0]['input'])['readings'] != {'names':candidate}):
+            raise ValueError('configured reduction differs from independent complete-set oracle or original identity')
+        reduction_proof = {'output_sha256':reduced['sha256'], 'contract_sha256':reduction_contract['sha256'],
+                           'reading_sha256':candidate['sha256'], 'oracle_parity':True,
+                           'execute_verify_retry_seconds':time.perf_counter()-reduction_started,
+                           'table_rows':{name:len(rows) for name,rows in expected_reduced.items()},
+                           'separate_process_qualified':False, 'original_source_eof_qualified':False}
         worker_proof = {'input_sha256':source_ref['sha256'], 'context_sha256':context_ref['sha256'],
                         'lookups_sha256':lookups_ref['sha256'], 'manifest_sha256':manifest['sha256'],
                         'output_sha256':candidate['sha256'], 'record_count':artifact['record_count'],
@@ -154,7 +192,7 @@ def main():
     if before != {str(p.resolve()): sha(p) for p in pins}:
         raise ValueError('inputs/runtime changed during qualification')
     output = {'runtime_pins': before, 'records': args.limit, 'worker_execute_verify_retry_seconds':worker_seconds,
-              'worker_proof':worker_proof,
+              'worker_proof':worker_proof, 'reduction_proof':reduction_proof,
               'synthetic_wanted_keys': len(wanted), 'setup_seconds': setup_seconds,
               'native_projection_seconds': native_seconds,
               'oracle_extraction_seconds': oracle_seconds,

@@ -118,3 +118,34 @@ runtime/input pins, exact projection rows, retry and replay. All broader scope
 flags remain false. The remaining local architecture environment failures were
 missing jq and unwritable Darwin mktemp paths; external test-tool configuration
 resolved them without repository production or assertion changes.
+
+## Bounded complete-set reduction review — 2026-10-08 19:29 ET
+
+### Spec
+
+Initial independent review passed 25 new tests, then reproduced a generic
+union-order bug: one versus two partitions changed a last value across two
+tables. Fixed by rejecting last on table unions before reading. Reviewer ran
+three targeted cases and confirmed both layouts refuse and union subtraction
+passes. The bundled recipe unions aliases/transliterated members, subtracts
+complete legal membership, and reads timestamps from one ordered table.
+No scoped blocker remains. Complete population/cascade/installed gates remain
+open; this is not a full census construction or retirement claim.
+
+### Standards and GoF
+
+Add the artifact codec dependency pin without a forbidden control import.
+Check output cardinality before key sorting and use bounded heap selection for
+capped samples. All findings addressed; reviewer reports no scoped blocker.
+Keep plain functions, generic named contracts and existing worker registry.
+State payload bytes are not RSS; separate key/member cardinality bounds govern
+object overhead. Legacy combiner byte-limit monkeypatch regression remains
+independently failing after restoring dynamic default lookup.
+
+Parent verification: 343 affected/context/genericity/control checks passed in
+32.45s. Final hash-pinned captured-prefix worker/reducer qualifier passes exact
+independent-oracle rows, verification, unchanged retry and original scope
+identity. Runtime pins agree before/after; source EOF, separate processes,
+cascade and installed population remain unqualified. An earlier qualifier run
+correctly refused when runtime files changed during review repairs; no result
+from that refused run is counted.
