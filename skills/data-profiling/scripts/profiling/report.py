@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from . import hierarchy
+
 
 def write(findings: dict, out: Path) -> tuple[Path, Path]:
     out.mkdir(parents=True, exist_ok=True)
@@ -51,6 +53,13 @@ def markdown(f: dict) -> str:
         lines.append(f"- **{h['hierarchy']}** ({h['type']}, {h['evidence_kind']}): {h['rule']}; holds {h['holds']}, "
                      f"depth {h['depth']}, {h['shape']}, orphans {h['orphans']}, cycles {h['cycles']}, "
                      f"invalid rows {h['invalid_rows']}.")
+    rejected = f.get("dependencies_not_hierarchies") or []
+    if rejected:
+        lines += ["", f"Dependencies that are not hierarchies: a yes/no flag (never a level), or a coincidence "
+                      f"(lift over guessing the parent's commonest value below {hierarchy.LIFT}, or under "
+                      f"{hierarchy.SUPPORT:.0%} of the rows with a child value seen twice):", ""]
+        lines += [f"- {d['part']}: {d['child']} → {d['parent']} ({d['reason']}): holds {d['held']}, lift "
+                  f"{d['lift']}, supported {d['supported']}" for d in rejected]
     lines += ["", "## Identifiers, sensitive columns and time", ""]
     for p in f["parts"]:
         ids = [f"{i['column']} ({i['proposal']}" + (f", {i['check_digit']}" if i["check_digit"] else "") + ")"
