@@ -4,7 +4,9 @@ Evidence kinds:
 - functional_dependency: code columns where each value has one parent value;
 - code_nesting: a parent code is the leading part of its child codes;
 - parent_column: a column pointing at its own part's key (a self-link), or a
-  link part whose two ends point at the same part.
+  link part whose two ends point at the same part;
+- level_tables: lists of codes kept in separate parts, each pointing at the
+  next coarser list (a subcategory list naming its category).
 
 A near-exact hierarchy (holds ≥ 0.99) is accepted; rows that break it are
 counted as invalid for data quality.
@@ -225,14 +227,65 @@ class _Marking:
                                           params).fetchall()]
 
 
-def _orphans(marking: _Marking, child: str, key: str, orphan: str) -> list[dict]:
+def by_level_tables(con, parts: dict, links: list[dict]) -> list[dict]:
+    """Chains of reference parts, each naming one row of the next coarser part by a single column.
+    A chain of two or more parts is a hierarchy; its rows naming no row above are marked."""
+    up = {}
+    for l in links:
+        a, b = l["from"], l["to"]
+        if (a["part"] != b["part"] and len(a["columns"]) == 1 and l["cardinality"] == "N:1"
+                and parts[a["part"]]["class"] == "reference" and parts[b["part"]]["class"] == "reference"
+                and a["columns"] != parts[a["part"]]["record_key"]["columns"]):
+            up.setdefault(a["part"], []).append(l)
+    found = []
+    pointed_at = {l["to"]["part"] for ls in up.values() for l in ls}
+    for leaf in sorted(p for p in up if p not in pointed_at):
+        chain, steps = [leaf], []
+        while chain[-1] in up and len(up[chain[-1]]) == 1 and up[chain[-1]][0]["to"]["part"] not in chain:
+            step = up[chain[-1]][0]
+            steps.append(step)
+            chain.append(step["to"]["part"])
+        found.append(_level_record(con, parts, chain, steps))
+    return found
+
+
+def _level_record(con, parts: dict, chain: list[str], steps: list[dict]) -> dict:
+    """The hierarchy record of a chain of level tables, finest first."""
+    name = " > ".join(reversed(chain))
+    levels = []
+    for depth, part in enumerate(reversed(chain), 1):
+        key = parts[part]["record_key"]["columns"][0]
+        samples = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({sql_name(key)} AS VARCHAR) FROM {sql_name(part)} "
+                                             f"WHERE {sql_name(key)} IS NOT NULL ORDER BY 1 LIMIT 3").fetchall()]
+        levels.append({"depth": depth, "name": None, "column": f"{part}.{key}", "samples": samples})
+    marked = []
+    for step in steps:
+        child, parent = step["from"], step["to"]
+        marking = _Marking(con, child["part"], name, parts[child["part"]]["record_key"]["columns"])
+        marked += _orphans(marking, child["columns"][0], parent["columns"][0], parent_part=parent["part"])
+    unparented = sum(con.execute(f"SELECT count(*) FROM {sql_name(s['from']['part'])} "
+                                 f"WHERE {sql_name(s['from']['columns'][0])} IS NULL").fetchone()[0] for s in steps)
+    return {"hierarchy": name, "type": "reference", "part": chain[0], "evidence_kind": "level_tables",
+            "levels": levels,
+            "rule": "; ".join(f"each {s['from']['part']} row names one {s['to']['part']} row by "
+                              f"{s['from']['columns'][0]}" for s in steps),
+            "holds": min(s["inclusion"] for s in steps), "depth": len(chain),
+            "shape": "balanced" if not unparented else "ragged", "orphans": len(marked), "cycles": 0,
+            "invalid_rows": len(marked), "valid_dates": {"from": None, "to": None}, "marked": marked}
+
+
+def _orphans(marking: _Marking, child: str, key: str, orphan: str | None = None,
+             parent_part: str | None = None) -> list[dict]:
     """A parent value not found as a key. The fix is a key it equals once case, spaces and leading zeros
     are folded, when exactly one key does; otherwise a steward decides."""
     t, c, k = sql_name(marking.part), sql_name(child), sql_name(key)
+    above = sql_name(parent_part) if parent_part else t  # the part whose key the value names
+    orphan = orphan or (f"{c} IS NOT NULL AND CAST({c} AS VARCHAR) NOT IN "
+                        f"(SELECT CAST({k} AS VARCHAR) FROM {above} WHERE {k} IS NOT NULL)")
     folded = "regexp_replace(upper(trim(CAST({x} AS VARCHAR))), '^0+(.)', '\\1')"
     matches = dict(marking.con.execute(
         f"SELECT o, any_value(k) FROM (SELECT DISTINCT CAST({c} AS VARCHAR) o FROM {t} WHERE {orphan}) "
-        f"JOIN (SELECT CAST({k} AS VARCHAR) k FROM {t} WHERE {k} IS NOT NULL) "
+        f"JOIN (SELECT CAST({k} AS VARCHAR) k FROM {above} WHERE {k} IS NOT NULL) "
         f"ON {folded.format(x='o')} = {folded.format(x='k')} GROUP BY o HAVING count(DISTINCT k) = 1").fetchall())
     marked = marking.rows(orphan, [], child, key, "parent not found")
     for m in marked:

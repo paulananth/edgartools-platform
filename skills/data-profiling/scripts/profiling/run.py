@@ -188,6 +188,12 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
                                 / len(names), 3) if names else 0.0,
         "rows_pointing": max([_rows(profiles, l["from"]["part"]) for l in inbound] or [0]),
         "rows_pointed": max([_rows(profiles, l["to"]["part"]) for l in out] or [0]),
+        # Pointing at one smaller list of codes only: that list may be this one's coarser level
+        # (a hierarchy kept in separate level tables).
+        "coarser_level": parent is None and len({l["to"]["part"] for l in out}) == 1 and all(
+            len(l["from"]["columns"]) == 1 and l["cardinality"] == "N:1"
+            and _rows(profiles, l["to"]["part"]) < (columns[0]["rows"] if columns else 0)
+            and _rows(profiles, l["to"]["part"]) <= classify.REFERENCE_ROWS for l in out),
     }
     if not facts["in_degree"]:
         facts["rows_pointing"] = facts["rows"] - 1  # nothing points at it: "smaller than" cannot pass
@@ -314,7 +320,15 @@ def _hierarchies(con, parts: dict, profiles, links, not_levels: list[dict]) -> l
             for h in hierarchy.by_link_part(con, p, child, parent, role, f["record_key"]["columns"]):
                 h["type"] = "master_data"
                 found.append(h)
-    return found
+    levels = hierarchy.by_level_tables(con, parts, links)
+    # A list that names its coarser level holds that level's code too: the same hierarchy, found by
+    # dependency inside the list. The level tables say more (each level's own list), so they stand.
+    named_up = {(l["from"]["part"], l["from"]["columns"][0]) for l in links
+                if any(h["part"] == l["from"]["part"] or l["from"]["part"] in h["hierarchy"].split(" > ")
+                       for h in levels)}
+    found = [h for h in found if not (h["evidence_kind"] in {"functional_dependency", "code_nesting"}
+                                      and any((h["part"], lv["column"]) in named_up for lv in h["levels"]))]
+    return found + levels
 
 
 def _child_first(ends: list[dict], key: list[str]) -> tuple[str, str]:

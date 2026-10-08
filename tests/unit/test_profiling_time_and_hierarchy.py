@@ -147,3 +147,54 @@ def test_a_flag_is_never_a_level_and_the_code_finds_its_real_parent():
     assert [l["column"] for l in found[0]["levels"]] == ["place", "grp", "form"]
     (flag,) = rejected
     assert (flag["child"], flag["parent"], flag["reason"]) == ("grp", "numeric_flag", "flag")
+
+
+def test_level_tables_form_a_reference_hierarchy(tmp_path):
+    import csv
+    import random
+
+    from profiling import run
+
+    rng = random.Random(3)
+    folder = tmp_path / "set"
+    folder.mkdir()
+
+    def write(name, header, rows):
+        with (folder / name).open("w", newline="") as f:
+            csv.writer(f).writerows([header, *rows])
+
+    write("division.csv", ["division_code", "division_label"], [[f"D{d}", f"Division {d}"] for d in range(1, 11)])
+    write("group.csv", ["group_code", "group_label", "division_code"],
+          [[f"G{g:02d}", f"Group {g}", f"D{g % 10 + 1}"] for g in range(1, 41)] + [["G99", "Group 99", "D99"]])
+    write("product.csv", ["product_id", "product_name", "group_code", "price"],
+          [[f"P{n:05d}", f"Product {n} {rng.choice(['red', 'blue', 'large', 'small'])}", f"G{rng.randint(1, 40):02d}",
+            round(rng.uniform(1, 90), 2)] for n in range(1, 1501)])
+    write("sale.csv", ["sale_id", "product_id", "sold_on", "qty"],
+          [[n, f"P{rng.randint(1, 1500):05d}", f"2025-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
+            rng.randint(1, 9)] for n in range(1, 6001)])
+    findings = run.profile_inputs({"set": str(folder)}, "levels")
+    classes = {p["part"]: p["class"] for p in findings["parts"]}
+    assert classes["group"] == "reference" and classes["division"] == "reference"
+    (h,) = [h for h in findings["hierarchies"] if h["evidence_kind"] == "level_tables"]
+    assert h["hierarchy"] == "division > group" and h["type"] == "reference" and h["depth"] == 2
+    assert [l["column"] for l in h["levels"]] == ["division.division_code", "group.group_code"]
+    (orphan,) = [m for m in findings["marked_rows"] if m["hierarchy"] == h["hierarchy"]]
+    assert orphan["value"] == "D99" and orphan["fix"] is None and orphan["needs_steward"]  # no division D99
+
+
+def test_a_counter_key_inside_another_counter_key_is_no_link(tmp_path):
+    import csv
+
+    from profiling import run
+
+    folder = tmp_path / "set"
+    folder.mkdir()
+    with (folder / "kind.csv").open("w", newline="") as f:
+        csv.writer(f).writerows([["kind_id", "kind_label"], *[[k, f"Kind {k}"] for k in range(1, 5)]])
+    with (folder / "thing.csv").open("w", newline="") as f:
+        csv.writer(f).writerows([["thing_id", "thing_name", "kind_id"],
+                                 *[[t, f"Thing number {t} of many", t % 4 + 1] for t in range(1, 301)]])
+    links = {(r["from"]["part"], r["from"]["columns"][0], r["to"]["part"])
+             for r in run.profile_inputs({"set": str(folder)}, "counters")["relationships"]}
+    assert ("thing", "kind_id", "kind") in links
+    assert not any(a == "kind" for a, _, _ in links)  # kind ids 1..4 are not thing ids

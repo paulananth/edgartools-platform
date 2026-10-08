@@ -158,6 +158,14 @@ no) is never a level either (operator, 2026-10-08: "Flag is not a level
 code's search goes on to a real parent. A two-valued category with names of its
 own is still a level.
 
+Level tables (`evidence_kind: level_tables`, ticket 01d): reference parts kept
+apart, each naming one row of the next coarser part by a single column (a
+subcategory list naming its category list). A reference part may point at its
+coarser level only. Each level's `column` is `<part>.<key>`; `holds` is the
+weakest link's inclusion; a row naming no row above is an orphan, marked like
+any invalid row. The same hierarchy found again by dependency inside a list
+(the list carries its parent's code) is left out: the level tables stand.
+
 ### 5.1 Marked rows: `invalid_rows.jsonl`
 
 Beside `findings.yaml`, one JSON object per invalid row of every hierarchy,

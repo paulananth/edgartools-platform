@@ -162,6 +162,11 @@ def links(con, profiles: dict[str, list[dict]], keys: dict[str, list[list[str]]]
                     continue
                 if dense_sequence(p) and named < 0.6 and measured["randomness"] < 0.9:
                     continue
+                # A part's own counter key (1..n) inside another part's key (category ids 1..4 among
+                # product ids) is a coincidence of counting, unless the two keys have one name.
+                if [f["name"]] in keys.get(f_part, []) and dense_sequence(f) \
+                        and f["name"].lower() != p_name.lower():
+                    continue
                 f_unique = f["unique"] == 1.0 and f["fill"] == 1.0
                 found.append({
                     "from": {"part": f_part, "columns": [f["name"]]},
