@@ -126,6 +126,7 @@ What exists today:
 28. **Trial A** uses the SEC and GLEIF captures with a known answer key. **Trial B** uses a non-SEC public data set (a relational sample with customers, products, orders, a category hierarchy and code lists, as CSV files and as a SQLite or Postgres database), with an answer key written by hand first. Both trials must pass with no domain-specific change.
 29. **The recreation proof** regenerates today's MDM, RDM and relationships with the skills, in a sandbox, then writes a diff.
     - It uses full local copies of today's 3 sources, plus every other captured feed sliced to one coherent cohort: 500 fixed entities and 2 years, with the list stored in the repo. All copies are local; no live requests to any provider.
+      (Operator, 2026-10-07: "Cohort slice (Recommended)": the 3 sources are cut to the cohort too, like every other feed; only feeds on this machine, "Local feeds only (Recommended)".)
     - Recorded rulings are replayed, marked "replayed", and valid only in the sandbox.
     - The result is a `DIFF.md` where every difference is matched or explained.
 30. **Missing pieces are built before the proof** (see Build order).
