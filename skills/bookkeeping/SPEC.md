@@ -1,9 +1,8 @@
 # Fresh configured Bookkeeping
 
-Current acquisition status (2026-09-29): only
-`sec.submissions.company/submissions` is active. The local Company caller and
-bounded generated-work migration are described in
-the Company route (`docs/company-only-acquisition.md`). Branch names, feed suites,
+Current acquisition status: the active feeds are those a source document
+declares under `acquisition.feeds` (`edgar-warehouse plan resolve-feed`); see
+Examples for the state recorded on 2026-09-29. Branch names, feed suites,
 and test counts below record the earlier implementation state.
 
 Core branch: `codex/configured-bookkeeping` (PR #732). Stage work continues on
@@ -58,11 +57,10 @@ verifier or check callback, and no branch on a source or operation name.
 - **Events:** control emits only `work.verified`. Domain events go through the
   worker's own Journal intent.
 
-Workers built so far (`edgar_warehouse/workers`): `artifact.copy` and
-`jsonl.count`, `source.read`, `mdm.merge` and `mdm.publish`. The
-acquisition, source-evidence and Company capabilities this section used to
-list were in-process callbacks and are deleted; they return as workers in
-mastering to-do 20c (SEC Company and acquisition) and 20d (Person). Journal delivery uses the shared Change Journal adapter.
+Workers built are the keys of `PROFILES` in `edgar_warehouse/workers/__init__.py`.
+The acquisition, source-evidence and per-source capabilities this section used
+to list were in-process callbacks and are deleted; each returns as a worker
+under its own ticket. Journal delivery uses the shared Change Journal adapter.
 
 ## Rules ownership and lifecycle
 
@@ -123,7 +121,7 @@ not business records:
 {
   "version": 1,
   "units": [{
-    "keys": {"batch_id": "batch-1", "consumer": "mastering/company"},
+    "keys": {"batch_id": "batch-1", "consumer": "mastering/<kind>"},
     "input": {"uri": "s3://bucket/prepared/batch-1.json", "sha256": "<64 lowercase hex characters>"},
     "output": "s3://bucket/control/receipts/batch-1.json",
     "cursor": {"offset": 0}
@@ -155,7 +153,7 @@ name a unit in one of its declared prerequisites:
       "cursor": {"offset": 0}
     }],
     "merge": [{
-      "keys": {"batch_id": "batch-1", "consumer": "mastering/company"},
+      "keys": {"batch_id": "batch-1", "consumer": "mastering/<kind>"},
       "input": {"from": {"step": "archive", "key": "batch-1"}},
       "output": "s3://bucket/control/receipts/batch-1.json",
       "cursor": {"offset": 0}
@@ -297,14 +295,14 @@ Verification recorded during implementation:
   99.96 seconds, no skips. Covers invalid-proof/approval rejection, the operator
   CLI, transformed output chains, different stage counts, lost acknowledgements,
   corrupt prerequisite evidence, and real MDM merge/publication stage order.
-- Contract, CLI inventory, Rules files and existing SEC/GLEIF source suites:
+- Contract, CLI inventory, Rules files and every existing source's suites:
   168 passed in 25.23 seconds.
 - Existing complete Clean MDM PostgreSQL suite: 56 passed. After adding
   assessment authorization, its eight assessment tests passed again.
 - The complete unit/architecture follow-up passed 2,020 tests and 27 subtests
   in 188.28 seconds, with eight existing optional skips. This includes the
   corrected standalone CLI inventory classifications and version 2 contracts.
-- Targeted Rules files, CLI inventory and Company/GLEIF source regressions:
+- Targeted Rules files, CLI inventory and source regressions:
   149 passed in 23.79 seconds.
 - Wheel build and migration packaging succeeded; `git diff --check` passed.
 
@@ -314,11 +312,11 @@ operator find the root after a lost submission acknowledgement.
 
 Still required before the supplied plan is complete:
 
-1. Convert all existing warehouse orchestration, SEC discovery/parse, silver,
+1. Convert all existing warehouse orchestration, source discovery/parse, silver,
    legacy MDM and Clean MDM RunCoordinator callers. They currently retain
    their old control interfaces. The fresh runner is an additional path, not
    a completed replacement.
-2. Reconstruct SEC filing worklists and tracking scope from source-owned
+2. Reconstruct each source's document worklists and tracking scope from source-owned
    immutable manifests. Do not relocate source records into the five control
    tables or import old control checkpoints.
 3. Bind capture acquisition fences and parse/silver/gold operations to shared
@@ -328,7 +326,7 @@ Still required before the supplied plan is complete:
    chains. The business acquisition and transformation capabilities still
    need integration; the transformation used in acceptance is a test fixture.
 4. Finish the Rules proof evaluator and runner integration with Claude's
-   source engine; qualify SEC and GLEIF end to end, including native source
+   source engine; qualify each live source end to end, including native source
    continuity, alongside the unseen source and platform jobs.
    MDM dataset registration currently belongs to source documents; platform
    documents declaring their own MDM contracts still need an explicit handoff
@@ -337,3 +335,14 @@ Still required before the supplied plan is complete:
    prepare a reviewed AWS cutover. Retire the old database separately.
 
 No AWS rollout, legacy database reset or retirement is performed here.
+
+## Examples
+
+- Acquisition on 2026-09-29: only `sec.submissions.company/submissions` was
+  active. Its local caller and bounded generated-work migration are described
+  in `docs/company-only-acquisition.md`.
+- Workers on 2026-10-02: `artifact.copy`, `jsonl.count`, `source.read`,
+  `mdm.merge` and `mdm.publish`; the SEC Company and acquisition workers were
+  mastering to-do 20c, Person 20d.
+- A manifest consumer key: `"consumer": "mastering/company"`.
+- The live sources qualified end to end: SEC and GLEIF.

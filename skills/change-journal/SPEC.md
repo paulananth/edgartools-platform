@@ -1,10 +1,9 @@
 # Change Journal and Change Propagation
 
-Current acquisition status (2026-09-29):
-`sec.submissions.company/submissions` is the sole active feed. Its locally
-qualified caller is described in the Company route (`docs/company-only-acquisition.md`).
-Other SEC and GLEIF acquisition callers are retired; their historical audit
-stores remain separate.
+Current acquisition status: the active feeds are those a source document
+declares under `acquisition.feeds` (`edgar-warehouse plan resolve-feed`). Retired
+acquisition callers keep their historical audit stores separate. See Examples
+for the state recorded on 2026-09-29.
 
 Change Propagation is the canonical name for diff processing. Historical
 artifacts retain their original paths and terminology. Current ownership is:
@@ -192,7 +191,7 @@ control stores, with separate NOLOGIN owners and restricted runtime logins;
 it imports nothing and removes nothing. Original acquisition connection
 helpers reject a runtime with `CHANGE_JOURNAL_DATABASE_URL` configured.
 That marker also restricts the CLI to `rules`, `bookkeeping` and
-`change-journal`, and refuses ungated SEC transport. Legacy scheduled commands
+`change-journal`, and refuses ungated provider transport. Legacy scheduled commands
 cannot be run with the fresh connections; keep their original task revisions
 until their complete replacement feed qualifies.
 
@@ -240,3 +239,11 @@ fresh journal. Then use the existing application rollout to promote each
 qualified feed with matching retained validation evidence. Revoke old runtime
 access only after the new feed passes its live checks. Physical deletion
 remains separate and legacy audit retention is indefinite by default.
+
+## Examples
+
+- Acquisition on 2026-09-29: `sec.submissions.company/submissions` was the sole
+  active feed. Its locally qualified caller is described in
+  `docs/company-only-acquisition.md`. The other SEC and GLEIF acquisition
+  callers were retired.
+- Ungated provider transport refused by the marker: SEC transport.

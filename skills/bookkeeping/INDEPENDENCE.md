@@ -24,7 +24,7 @@ control coupling. Existing loaders may remain inside external worker processes.
 
 ## Status (mastering to-do 20a and 20b, 2026-10-02)
 
-The callback registry, the Company, MDM and source-input modules, the
+The callback registry, the per-source, MDM and source-input modules, the
 acquisition and source-evidence callbacks and the Journal branches on operation
 names are deleted. Control now hands out task envelopes and admits verifier
 reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
@@ -38,16 +38,16 @@ reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
 | 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, a candidate outside its intended output, forged or missing checks, conflicting reports, stale or missing fencing and unreported completion are refused (`test_admission_refuses_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). A run freezes each step's profile; only that profile's worker role claims and reports its work, only its verifier role verifies and completes it, never the login that reported it, and the verifier's runtime is pinned with the completion (`test_only_a_profiles_roles_*`, `test_a_verifier_runtime_*`) |
 | 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage, a changed runtime, resource checkpoints across runs, and a report whose lease lapsed before verification (the verifier re-takes it; no worker repeats it) are covered. A lease lapsing while a verifier runs refuses the late admission and a fresh verification completes the unit (`test_a_lease_lapsing_*`). Destination re-verification on resume waits for the first mutable destination, MDM (20e) |
 
-MDM has its workers (`mdm.merge`, `mdm.publish`, to-do 20e). Company and
-Person have none yet (to-do 20c and 20d, now to-do 21's read blocks). Report
-their execution as unsupported; never add a callback back into control.
+A kind or source whose step has no worker profile yet (no key in `PROFILES`,
+`edgar_warehouse/workers/__init__.py`) is reported unsupported, naming the
+ticket that builds it; never add a callback back into control.
 
 ## Audit and qualification
 
 Inspect actual construction and transitive imports, not only operation names:
 
 ```bash
-rg -n 'loaders|parsers|silver|mdm|company|Capability|registry|importlib|__import__' \
+rg -n 'loaders|parsers|silver|mdm|<each source or kind module name>|Capability|registry|importlib|__import__' \
   edgar_warehouse/bookkeeping skills/bookkeeping
 ```
 

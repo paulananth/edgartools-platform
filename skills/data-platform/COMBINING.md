@@ -27,8 +27,8 @@ combine:
   groups:
     forms:
       source: references
-      table: filings
-      key: cik
+      table: items
+      key: record_key
       value: form
       mode: collect
       order_by: [form]
@@ -37,13 +37,13 @@ combine:
       checks: {capture: approved-capture}
       where: {}
   tables:
-    companies:
+    records:
       source: primary
-      table: companies
+      table: records
       checks: {capture: approved-capture}
       where: {}
       joins:
-        forms: {group: forms, key: cik, on_missing: empty, replace: false}
+        forms: {group: forms, key: record_key, on_missing: empty, replace: false}
 ```
 
 All shown keys are required. Replace sample names, capture values and limits
@@ -152,6 +152,71 @@ orders/deduplicates their aliases, combines them with the primary rows, then
 prepares and merges them with independent verifiers and destination fencing.
 It retains the original installed trials.
 
+A shipped blueprint is qualified only for what its fixtures cover (main
+records, continuation pages, catalog shapes, address conversion, then
+independently verified combination and MDM preparation). **Complete mastering
+provenance and full installed population, replay and recovery stay unqualified
+until proved for that source.** This profile does not authorize deletion of a
+source's retained readers or activation of a source Rules version. Offline
+comparisons on captured samples exercise the workers and verifiers directly,
+not the installed full pipeline; record which qualification flags stay false.
+
+`skip_empty_text: true` is optional for `collect` and `collect_flat` groups.
+It excludes only the empty string. Whitespace, false, zero, empty lists/maps
+and null retain their existing policies. The default is false. Flattened
+input elements still count toward the declared budget before this exclusion
+or deduplication. Use this with ranked catalog collections to keep a landing
+rule that excludes empty text without changing source ranks.
+
+## Preparation blueprints
+
+A source may bundle a `combine.yaml` that joins its main reading, its
+continuation pages and its catalog readings (each from its own bundled reading
+contract). Preserve every input's independently verified reading receipt. Each
+capture must belong to its approved capture run.
+
+1. From authenticated capture manifests, replace every approved-run placeholder
+   check value in a copy of the blueprint. Pin the resulting JSON combination
+   contract. Finish when every check equals its approved manifest run ID, and the
+   immutable contract receipt is recorded in the creator's frozen unit.
+2. If main-derived capture completeness proves zero continuation pages, set
+   the group's source list to `[main]` and omit `pages` from readings.
+   Otherwise include every required page through its verified reading receipt.
+   Finish when the immutable capture scope accounts for every main-derived
+   page; never substitute a fabricated empty page for missing capture evidence.
+3. Run the configured read → combine → prepare steps and their independent
+   verifiers as above. Finish this composition step only when all three
+   receipts verify, the combined scope pins every reading role (or the
+   verified no-pages variant), and prepared rows reproduce the same collections.
+
+State what the blueprint keeps (sort order, distinctness, which value wins per
+key), which empty values it excludes, and what a missing collection becomes.
+Capture checks run before any row filtering or key skip. The composition is an
+input to the remaining census, classification and provenance qualification;
+keep the active route until the installed population and replay/recovery gates
+pass.
+
+## Census evidence
+
+Bind the approved canonical census SHA into the source's census combine
+contract and use its matching census reading contract; replace capture and
+catalog run placeholders with the approved runs. Supply the full readings the
+source's `combine.yaml` uses, plus a reading named `census`. Census groups use
+`one` and pin each row's census digest. Name evidence joins by the configured
+name key; optional cascade evidence joins by the record key. Missing name
+evidence yields null, while a cascade answer can create a cascade-only object.
+The helper name key is dropped before MDM preparation.
+
+Compare complete prepared rows with the retained census helper, including
+missing/empty evidence and cascade-only cases. Authenticate the full census
+input even when its tables are empty. Approval of its construction, complete
+mastering provenance, installed population, replay and recovery must be
+proved before retiring active semantic consumers.
+
+## Examples
+
+### Qualification on 2026-10-02
+
 The shipped Company blueprint has raw-JSON fixture qualification for main
 records, continuation pages, both ticker-catalog shapes and business-address
 conversion, followed by independently verified combination and MDM preparation.
@@ -167,14 +232,7 @@ captures (107,197 filing rows). This exercised source.read and source.combine
 workers/verifiers directly, not the installed full Company pipeline. Its
 `pagination_qualified` and `full_company_mastering` flags remain false.
 
-`skip_empty_text: true` is optional for `collect` and `collect_flat` groups.
-It excludes only the empty string. Whitespace, false, zero, empty lists/maps
-and null retain their existing policies. The default is false. Flattened
-input elements still count toward the declared budget before this exclusion
-or deduplication. Use this with ranked catalog ticker collections to preserve
-the landing rule that excludes empty ticker text without changing source ranks.
-
-## Company preparation blueprint
+### The SEC Company preparation blueprint
 
 Use the bundled `sources/sec.submissions.company/combine.yaml` with readings
 from the bundled main `source.yaml`, `pagination.yaml` and `catalog.yaml`.
@@ -208,7 +266,7 @@ This composition is an input to the remaining census/classification/provenance
 qualification. Keep the active Company route until the installed empty-store
 6,414 Company / 3,052 CIK+LEI population and replay/recovery gates pass.
 
-## Company census evidence
+### The SEC Company census evidence
 
 Bind the approved canonical census SHA into `combine-census.yaml` and use
 its matching reading contract `census.yaml`; replace capture/catalog run

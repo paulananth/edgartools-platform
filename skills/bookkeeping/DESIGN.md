@@ -18,9 +18,9 @@ not be a prerequisite for removing control coupling.
 
 | Current code | Coupling introduced by the integration | Proposed replacement |
 | --- | --- | --- |
-| CLI construction (`edgar_warehouse/bookkeeping/clean/cli.py`) | Imports Company implementations and constructs MDM/Journal integrations inside Bookkeeping configuration. | Compose the control process using control storage and transport only; workload processes own their destination clients. |
+| CLI construction (`edgar_warehouse/bookkeeping/clean/cli.py`) | Imports source-specific implementations and constructs MDM/Journal integrations inside Bookkeeping configuration. | Compose the control process using control storage and transport only; workload processes own their destination clients. |
 | Capability interface (`edgar_warehouse/bookkeeping/clean/config.py`) and runner (`edgar_warehouse/bookkeeping/clean/runner.py`) | Execute/reconcile/verify callbacks receive the entire Bookkeeping object, allowing SQL and artifact access through private internals. | Give external workers a frozen task envelope and narrowly scoped control client. |
-| Company capability (`edgar_warehouse/bookkeeping/clean/company.py`) | Source pagination, Company tables and Silver dependencies live in the control package. | Move behavior into a workload package/process with no access to Bookkeeping internals. |
+| A source's own capability module (see Examples) | Source pagination, the source's tables and Silver dependencies live in the control package. | Move behavior into a workload package/process with no access to Bookkeeping internals. |
 | Completion (`edgar_warehouse/bookkeeping/clean/engine.py`) | Control re-enters destination-specific verifier callbacks. | Consume authenticated verification reports through a generic envelope validator. |
 | Journal conversion (`edgar_warehouse/bookkeeping/clean/engine.py`) | Branches on acquisition and source-evidence operation names. | Emit generic control events. Domain workers emit domain events through their own durable delivery intents. |
 
@@ -112,7 +112,7 @@ requires new logical work; retrying unchanged work preserves its effect key.
    verified, update permitted checkpoints and enqueue its control event.
 
 Bookkeeping understands report structure and required check IDs, not what a
-Company row, LEI, publication or pagination page means. Domain checks live with
+source's row, identifier, publication or pagination page means. Domain checks live with
 the verifier. A report hash alone authenticates no issuer; admission requires
 the authenticated reporting channel and authorization bound to the frozen
 verifier profile. Persist that provenance with the report reference.
@@ -137,7 +137,7 @@ replay. There is no claim of a cross-database atomic transaction.
 An expansion worker returns a hashed generic child-work manifest. Bookkeeping
 validates permitted successor step, unique keys, bounded count, allowed output
 locations, dependency references and the sealed parent identity before inserting
-children atomically. It does not inspect SEC page names or generate CIKs.
+children atomically. It does not inspect a source's page names or generate its identifiers.
 The worker and verifier own those domain checks.
 
 The control outbox emits fixed lifecycle events with task identity and evidence
@@ -165,7 +165,7 @@ these existing safety contracts.
    checksummed PostgreSQL migrations. Keep business data outside control tables.
 2. Build a control-only package and entry point. Remove all domain imports,
    callback registry and operation-name branches from this new path.
-3. Move existing Company execution and verification behind external workers
+3. Move each existing source's execution and verification behind external workers
    without changing their interpretation. Demonstrate control independence
    before changing source parsing configuration.
 4. Qualify the protocol with artifact-copy and a second destination worker.
@@ -176,7 +176,7 @@ these existing safety contracts.
 
 Acceptance gates for implementation:
 
-- Import/dependency checks prove the control wheel excludes loaders, SEC/GLEIF,
+- Import/dependency checks prove the control wheel excludes loaders, source modules,
   Silver, MDM, `edgar`, PyArrow and parser libraries; control starts with those
   dependencies absent. Check runtime imports as well as source imports.
 - Two external workers exercise the same protocol without edits to Bookkeeping
@@ -186,14 +186,14 @@ Acceptance gates for implementation:
   and conflicting evidence. No prerequisite skips.
 - Lost acknowledgement, lease expiry, crash after destination commit and
   conflicting output each prove the specified recovery behavior independently.
-- Company pagination, individual classification, identity/publication and
+- Each source's pagination, classification, identity/publication and
   Journal authorization/outage/recovery tests retain their original assertions.
 - Existing configuration counterexamples remain covered in worker tests.
 
 ## Design review and cost
 
 The reviewed history includes the generic core (#732), stage worklists (#734),
-Journal/fencing (#738) and Company integration (#755). Their present interface
+Journal/fencing (#738) and the first source's integration (#755). Their present interface
 exposes control internals to several actual workloads; this is demonstrated
 coupling, not a hypothetical need for interchangeable parsers.
 
@@ -206,3 +206,11 @@ moving literal field paths alone does not.
 This document has been checked against current interfaces and failure paths.
 The acceptance gates above have not run: the protocol is not implemented.
 The 54 passing parsing experiments remain evidence about parsing behavior only.
+
+## Examples
+
+- The first source capability that lived in the control package was the SEC
+  Company one, `edgar_warehouse/bookkeeping/clean/company.py` (since deleted,
+  mastering to-do 20a and 20b). Its domain checks were Company rows, LEIs,
+  SEC page names and CIK generation; those belong to its worker and verifier.
+- The control wheel excludes the SEC and GLEIF loaders and `edgar`.
