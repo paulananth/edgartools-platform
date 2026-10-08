@@ -6,7 +6,7 @@ Operator assignment, 2026-10-08: "Codex: X1 (putting the pin beside the inline p
 - [x] X2: reconcile only the two stale GLEIF runtime completion lines against all six authenticated reports. Verified against live gh merges and authenticated saved reports (2026-10-08 06:44 ET).
 - [x] X3: reconcile cited merged PRs clause by clause; preserve incomplete retirement/population checkboxes. Verified against live gh merges and authenticated saved reports (2026-10-08 06:44 ET).
 - [x] J1: record the operator's decision on the Company name-rule ticket; verify agreement with Claude's merged decision. Verified against live gh merges and authenticated saved reports (2026-10-08 06:44 ET).
-- [ ] Verify affected contracts and tests, inspect the final diff, run the overlap guard, commit and create a reviewable PR.
+- [x] Verify affected contracts and tests, inspect the final diff, run the overlap guard, commit and create reviewable PR #866; 677 cases passed, independent review finding corrected, guards passed before commit/push and GitHub confirms non-draft PR at bd3e36aa (2026-10-08 06:46 ET).
 - [ ] Merge X1 only after the operator's merge instruction; this handoff does not complete parser retirement.
 
 Current main is 862a1e66. C3 already merged as #862 (4840c6ba): quality reads the published pin and the old reference YAML is gone. Do not restore that retired YAML to meet the handoff's older snapshot conditions.
