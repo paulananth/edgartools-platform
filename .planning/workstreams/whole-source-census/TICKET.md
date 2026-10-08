@@ -18,6 +18,10 @@ completes this ticket or the parent goal.
   - [x] Compare 1,000 hash-authenticated captured GLEIF prefix records and five trials against independent extraction and current configured callback baselines; exact rows agree. See captured-name-projection.json; original-source EOF and cascade remain unqualified. 2026-10-08 18:11 ET
   - [ ] Add GENERAL cascade field/quality projection and global address-frequency inputs before replacing active construction.
 - [ ] Implement generic bounded reduction/composition over authenticated complete source streams; preserve unique holders, duplicate-LEI last timestamp, capped samples, counts and exact evidence identity.
+  - [x] Add incremental authenticated inline/partition traversal with aggregate limits, original evidence, EOF accounting, empty schemas and isolated private metadata; 151 targeted/genericity tests passed in 17.26s, including consumer-mutation and >32 MiB loader-compatibility regressions. 2026-10-08 18:45 ET
+  - [x] Qualify actual captured-prefix worker output through exhausted incremental traversal; 1,000 records agree with the independent oracle, retry/replay pass, and runtime pins are unchanged. Final broader gate: 279 passed in 37.39s. 2026-10-08 18:47 ET
+  - [ ] Measure complete-index snapshot copying at large partition counts before full-source reduction; preserve isolation if optimizing metadata sharing.
+  - [ ] Implement declared reduction state/output limits, holder-set subtraction, counts and last occurrence semantics; incremental traversal alone does not implement reduction.
 - [ ] Express complete source census construction in bundled Rules, with immutable source/context receipts and separate worker verification.
   - [x] Implement version-3 source.read input/context/lookup receipts, raw set bounds before source access, output evidence and consumer identity gate; 207 affected tests passed in 41.99s. 2026-10-08 18:27 ET
   - [x] Real configured census worker execute/retry/replay verification agrees with independent captured-prefix oracle on 1,000 records; worker_proof records receipt hashes and table counts. Separate-process and original-source EOF qualification remain false. 2026-10-08 18:27 ET
@@ -34,7 +38,8 @@ completes this ticket or the parent goal.
 
 ## Evidence and design
 
-Base: bbc3daa3 (#867, CI 37770383925 passed). Main remains 862a1e66.
+Original base: bbc3daa3 (#867, CI 37770383925 passed). At ticket opening,
+main was 862a1e66; synchronization onto 40741eed is recorded below.
 Dedicated branch/worktree: codex/whole-source-census-20261008.
 Current combiner permits 100,000 rows, 64 MiB aggregate input and only
 collect/first/last/one modes. It cannot currently construct the whole GLEIF
@@ -151,3 +156,22 @@ dirty checkout remains untouched.
 Synchronization and checkpoint publication are recovery anchors only. This
 ticket remains incomplete; no active census caller or remaining parser was
 deleted, and no rules were activated or deployed.
+
+## Incremental traversal checkpoint — 2026-10-08 18:47 ET
+
+`iter_load` consumes authenticated partitions without retaining every projected
+row. Legacy `load` uses the same validation and keeps its original caller byte
+limit. New incremental traversal caps its index at 32 MiB, accounts aggregate
+bytes/rows, validates complete source ranges before content, and yields empty
+schemas for zero records. Returned evidence cannot mutate private future receipt
+selection. Later content corruption still invalidates a private prefix; a
+future reducer must exhaust before publication. This adds traversal, not the
+remaining aggregation or active-caller replacement.
+
+Fresh captured report: 1,000 records, 990 synthetic wanted keys, exact table
+counts 998/1/43; worker execute/verify/retry/incremental consumption 3.397055667s,
+setup 8.606674207s. Five-trial native median 0.743046181s, configured callback
+median 9.657779893s, decoded oracle median 0.073478324s. These replace the
+report file's prior runtime pins and timings; the historical checkpoint above
+remains dated evidence. Original EOF, cascade and installed population flags
+remain false. Native sources are unchanged since the 146-check native gate.

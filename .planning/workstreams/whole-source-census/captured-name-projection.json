@@ -1,6 +1,6 @@
 {
   "runtime_pins": {
-    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/scripts/qualification/qualify_census_names_stream.py": "8129d21b811bc0de0ac0101abd325d7a9b5378c56f86235edb79b2f29e8eed84",
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/scripts/qualification/qualify_census_names_stream.py": "76ff86394b770c93575c00e74c2ab17ea5de2b031f0529c8a1e6b56fef7bd018",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/scripts/qualification/qualify_census_reading.py": "b380a9f4d1910737548e8a2a417cd3c847b9eda3e5b0d2c890051e815f158c00",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/.planning/workstreams/company-census-evidence/gleif-runtime/level1-json-runtime-parity.json": "1336bc15824b6d8c87275079e76a33ed60d8067b18c0f31168768401ffe70eed",
     "/Users/aneenaananth/.local/share/edgartools/clean-mdm/research/gleif-20260911-1600/01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a",
@@ -18,7 +18,7 @@
     "/private/tmp/codex-whole-census-native-site-20261008/source_contract/source_contract.abi3.so": "92ff6897856613cdd5fa796c99e4668bd7e751fd4c8c4d6f5143bd86733772ed",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/bookkeeping/clean/artifacts.py": "4d343e841ea61a015c36cb75e7136735d296d14c211bf5e6f37557636a514c19",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/workers/source_stream.py": "cd0f50a5dd9a1514cd78ba088220bd6bc7f8f4c377350bb0876d2848bed89afa",
-    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/workers/source_readings.py": "90f4d4db12ae1874d62924f1c55c0b3593a96a851800638caf16910beaa65795",
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/workers/source_readings.py": "6a690b788bb750365b1d2d295b5cefcef3f35055a1c79dc25d94290716dc57f9",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/bookkeeping/clean/config.py": "b6e373f66e0b3df59faa7ad15fe42b8e12d00d88c145e94a66f75d88286734ef",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/control_contract.py": "c0bc2c794a2382041065fd7a8ec4c4ce6681fb4aaea1d4b78354729772a0d792",
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/rules/sources/gleif/census-identity.yaml": "65905089c1df13c80d0b0259afee47e8ddbd2fa958783b71356889aed65d15f9",
@@ -26,13 +26,13 @@
     "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/rules/sources/gleif/census-update.yaml": "47bc89f82a4709a8a90bd29d2f8a46cde2de65d7f9312c5c9fff866dcf8e6284"
   },
   "records": 1000,
-  "worker_execute_verify_retry_seconds": 6.356350836809725,
+  "worker_execute_verify_retry_seconds": 3.3970556668937206,
   "worker_proof": {
-    "input_sha256": "9a5fcb7a864cdde5da3ab760576e1fabe0844a8c44c7934d59d71c61c64e696c",
-    "context_sha256": "17996742a29ec7ce036584791b31f4329e8b0590971be91ea34a45f5fccf6feb",
-    "lookups_sha256": "a79606e655cf2075f45aa834fd4f0478040265be52b48447640daed0923cc75a",
-    "manifest_sha256": "41428593ec035fa960e9a67e5836b8879b786fc9b4a6650c6ad11e0edebb5521",
-    "output_sha256": "f2d57a1bfc1c33fa5c40ffcac2c8ceb1b737597abfdc3558dcac42693ce39d71",
+    "input_sha256": "2459b1a8c6d3032b9ced5e78e0e1631d3528d35074646e6d569c9929962a7e18",
+    "context_sha256": "9648a48af48c8f3d1207ff451e5cf5f01ab3f66e4b7d3acd336c403c8d09fb79",
+    "lookups_sha256": "fa6e3a6a4a045f717ed4f3eff7830c5ab1bc46ad36af37104124548961e1d858",
+    "manifest_sha256": "4a3629d657457ae803a5896c5a4e3e070c8980a683b52c8a1283771e7cbe2b4a",
+    "output_sha256": "0335bb5d5dce24af37da8f3b4ca98b854d8d3c84d3cdc87eec49612caa510ff8",
     "record_count": 1000,
     "table_rows": {
       "a_legal": 998,
@@ -41,34 +41,35 @@
     },
     "retry_unchanged": true,
     "replay_verification_passed": true,
+    "incremental_consumer_parity_passed": true,
     "separate_process_qualified": false
   },
   "synthetic_wanted_keys": 990,
-  "setup_seconds": 17.14689211593941,
+  "setup_seconds": 8.606674206908792,
   "native_projection_seconds": [
-    3.21769833099097,
-    1.6865005381405354,
-    1.956560821738094,
-    1.112886471208185,
-    1.4129129718057811
+    0.7430461812764406,
+    0.7276045237667859,
+    0.8192260386422276,
+    1.3016011789441109,
+    0.7101072603836656
   ],
   "oracle_extraction_seconds": [
-    0.26966236904263496,
-    0.22021768288686872,
-    0.09694763459265232,
-    0.1513629681430757,
-    0.08149463590234518
+    0.06238510413095355,
+    0.07347832433879375,
+    0.08700444316491485,
+    0.13019464584067464,
+    0.06478280201554298
   ],
   "current_configured_callback_seconds": [
-    17.11495093908161,
-    18.128258065786213,
-    15.298966347239912,
-    15.864977447781712,
-    16.663666273932904
+    9.657779892906547,
+    9.33159039216116,
+    10.213891657069325,
+    10.915180050302297,
+    9.56857712380588
   ],
-  "current_configured_callback_median_seconds": 16.663666273932904,
-  "native_median_seconds": 1.6865005381405354,
-  "oracle_median_seconds": 0.1513629681430757,
+  "current_configured_callback_median_seconds": 9.657779892906547,
+  "native_median_seconds": 0.7430461812764406,
+  "oracle_median_seconds": 0.07347832433879375,
   "scope": "exact captured-prefix rows; valid EOF only on repackaged sample; timings compare native framing/projection against already decoded oracle extraction",
   "whole_source_census_qualified": false,
   "cascade_qualified": false,

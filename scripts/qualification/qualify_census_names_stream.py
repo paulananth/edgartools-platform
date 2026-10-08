@@ -11,7 +11,7 @@ import zipfile
 
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.mdm.clean import name_census, names, primitives
-from edgar_warehouse.workers import source_mapping, source_read, source_stream
+from edgar_warehouse.workers import source_mapping, source_read, source_readings, source_stream
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 import tempfile
 from scripts.qualification import qualify_census_reading as captured
@@ -132,8 +132,12 @@ def main():
             raise ValueError('actual worker retry differs')
         artifact = store.json(candidate)['artifacts'][0]
         actual_tables = {name:[] for name in historical[0]}
-        for part in artifact['partitions']:
-            for name, values in store.json(part['receipt'])['tables'].items():
+        for index, artifact_index, chunk, size in source_readings.iter_load(
+                candidate, store, max_bytes=32*1024**2, max_rows=100000,
+                allow_lookup_receipts=True):
+            if artifact_index != 0 or chunk['input'] != source_ref or chunk['lookups'] != lookups_ref:
+                raise ValueError('incremental consumer source identity differs')
+            for name, values in chunk['tables'].items():
                 actual_tables[name].extend(values)
         expected_tables = {name:[r for tables in historical for r in tables[name]] for name in historical[0]}
         if actual_tables != expected_tables or artifact['record_count'] != args.limit or artifact['lookups'] != lookups_ref:
@@ -143,6 +147,7 @@ def main():
                         'output_sha256':candidate['sha256'], 'record_count':artifact['record_count'],
                         'table_rows':{name:len(values) for name,values in actual_tables.items()},
                         'retry_unchanged':True, 'replay_verification_passed':True,
+                        'incremental_consumer_parity_passed':True,
                         'separate_process_qualified':False}
     worker_seconds = time.perf_counter()-worker_started
     if before != {str(p.resolve()): sha(p) for p in pins}:

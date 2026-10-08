@@ -27,9 +27,9 @@ checks successfully. Preserve interpreter/functions; no GoF hierarchy warranted.
 Before commit/push, the mandatory overlap guard found Claude worktree
 `edgartools-platform-claude-skills-generic-2`, branch
 `claude/skills-generic-bookkeeping`, also changing
-`skills/data-platform/READING.md`. Operator ownership question is pending.
-No commit/push of this checkpoint has occurred. Existing 13cd3d23 remains
-the pushed head. The isolated Codex edits and evidence remain protected.
+`skills/data-platform/READING.md`. This was the historical checkpoint status:
+the ownership question was pending, and 13cd3d23 was the pushed head.
+The synchronization section below records resolution after refreshed evidence.
 
 ## Lookup integration review — 2026-10-08 18:27 ET
 
@@ -61,3 +61,34 @@ are now cf418c98 and 34b7dacc. The only conflict was the generic predicate examp
 in READING.md. Kept main's code example and inserted the empty iteration grammar.
 265 affected plus genericity checks pass in 71.12s; indexed receipt documentation
 then passed 91 affected/genericity checks in 3.78s. No retirement completion claim.
+
+## Incremental traversal review — 2026-10-08 18:45 ET
+
+The spec reviewer independently ran 11 initial traversal tests (5.60s) and
+found no scoped blocker. The standards reviewer reproduced a mutable-index
+defect: editing yielded future receipts could redirect suspended traversal.
+Fixed by isolating the private authenticated index from each yielded snapshot;
+regression tests mutate both returned index and chunk metadata. The reviewer
+reran the reproduction and confirmed original rows/evidence are retained.
+
+The standards reviewer also identified the new index cap unintentionally
+tightening legacy materialized loading. Restored the caller's existing limit
+for load; only iter_load uses the 32 MiB cap. An actual larger inline JSON
+regression proves compatibility. Final targeted/genericity gate: 151 passed
+in 17.26s. Both reviewers found no remaining scoped blocking finding.
+
+The full index is copied for each yielded partition. This keeps ownership
+isolation simple but has partition-count times index-size cost. Measure it
+before full-source qualification; it is recorded as unfinished rather than
+asserting bounded memory also proves acceptable runtime. Generators/plain
+functions remain justified by the GoF review; no hierarchy is added.
+
+Traversal prefixes remain provisional, and the iterator publishes nothing.
+The actual reducer must exhaust successfully before any write. Full configured
+reduction, cascade, complete upstream population, original EOF, installed
+population and executable-caller retirement remain incomplete.
+
+Final broader gate after both review fixes: 279 passed in 37.39s. Fresh
+captured qualification passes 1,000-record worker execute/retry/replay and
+incremental-consumer parity with identical before/after runtime pins. Original
+source EOF, separate processes, cascade and installed population remain false.

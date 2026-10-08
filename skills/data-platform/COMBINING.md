@@ -18,6 +18,36 @@ partitions do not create new source identities. Both forms supply tables and
 an empty `deferred` list. Unresolved
 reading deferrals block combination; resolve them explicitly before this step.
 
+### Incremental authenticated traversal
+
+For reductions that must traverse partitioned readings without retaining all
+decoded rows, the runtime supplies `source_readings.iter_load(receipt,
+artifacts, max_bytes=..., max_rows=...)`. It yields the authenticated index
+document, original artifact index, one artifact chunk and cumulative bytes.
+An inline reading yields one chunk per original artifact (one or two). A partitioned
+reading retains its input/context/lookup receipts and complete partition
+index on each chunk; its tables contain only that partition's rows. An empty
+source still yields its original identity and declared empty tables.
+Yielded metadata is isolated from private traversal: editing returned evidence
+cannot change a later authenticated receipt or declared schema.
+
+The incremental index is bounded to 32 MiB and each partition to 8 MiB.
+The materializing loader retains its caller's existing index limit. Explicit byte and
+row budgets apply across every table, deferral, partition and artifact.
+Complete contiguous range and EOF accounting are checked before traversing
+an artifact's content. Each partition's exact hash, byte count and schema are
+checked before its rows are yielded. Iteration must finish successfully before
+publishing anything: later corruption can invalidate an already yielded
+private prefix. Closing or abandoning an iterator is not successful EOF.
+Consumers must resolve deferrals and explicitly opt in to lookup receipts
+only when all those receipts participate in output identity.
+
+This interface supplies authenticated traversal, not aggregation semantics.
+The existing `source.combine` profile still materializes within the bounds
+below. Whole-population reductions require a configured reducer with explicit
+state/output limits and proof of complete traversal; increasing the existing
+combiner's limits is not a replacement for that implementation.
+
 The contract is a JSON object with this shape (shown as YAML for review):
 
 ```yaml
