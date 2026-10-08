@@ -1,0 +1,46 @@
+{
+  "scope": "synthetic repeated one-row partitions; metadata traversal cost only",
+  "trials_per_size": 1,
+  "results": [
+    {
+      "partitions": 128,
+      "index_bytes": 34089,
+      "aggregate_bytes": 42921,
+      "materialized_seconds": 0.06983832735568285,
+      "incremental_seconds": 0.07121376181021333,
+      "rows": 128
+    },
+    {
+      "partitions": 512,
+      "index_bytes": 135082,
+      "aggregate_bytes": 170410,
+      "materialized_seconds": 0.23161322623491287,
+      "incremental_seconds": 0.36793404584750533,
+      "rows": 512
+    },
+    {
+      "partitions": 2048,
+      "index_bytes": 540101,
+      "aggregate_bytes": 681413,
+      "materialized_seconds": 0.9466520179994404,
+      "incremental_seconds": 1.4878577357158065,
+      "rows": 2048
+    },
+    {
+      "partitions": 4096,
+      "index_bytes": 1080773,
+      "aggregate_bytes": 1363397,
+      "materialized_seconds": 2.0350196878425777,
+      "incremental_seconds": 2.1350564979948103,
+      "rows": 4096
+    }
+  ],
+  "runtime_sha256": {
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/scripts/qualification/qualify_reading_traversal.py": "4619daf505f84ff5253174522289c0ac1af800527cc9f54a42aa0feef87ac534",
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/workers/source_readings.py": "9387feff548fdaf12a8b1e2184caa474c6d8ef2edada239fb5f67328996e33a8",
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/bookkeeping/clean/artifacts.py": "4d343e841ea61a015c36cb75e7136735d296d14c211bf5e6f37557636a514c19",
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/control_contract.py": "c0bc2c794a2382041065fd7a8ec4c4ce6681fb4aaea1d4b78354729772a0d792",
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/bookkeeping/clean/config.py": "b6e373f66e0b3df59faa7ad15fe42b8e12d00d88c145e94a66f75d88286734ef"
+  },
+  "full_source_qualified": false
+}

@@ -20,7 +20,7 @@ completes this ticket or the parent goal.
 - [ ] Implement generic bounded reduction/composition over authenticated complete source streams; preserve unique holders, duplicate-LEI last timestamp, capped samples, counts and exact evidence identity.
   - [x] Add incremental authenticated inline/partition traversal with aggregate limits, original evidence, EOF accounting, empty schemas and isolated private metadata; 151 targeted/genericity tests passed in 17.26s, including consumer-mutation and >32 MiB loader-compatibility regressions. 2026-10-08 18:45 ET
   - [x] Qualify actual captured-prefix worker output through exhausted incremental traversal; 1,000 records agree with the independent oracle, retry/replay pass, and runtime pins are unchanged. Final broader gate: 279 passed in 37.39s. 2026-10-08 18:47 ET
-  - [ ] Measure complete-index snapshot copying at large partition counts before full-source reduction; preserve isolation if optimizing metadata sharing.
+  - [x] Measure and remove repeated complete-index copying: baseline 2,048/4,096 partitions 101.90s/461.36s; revised repeatable harness 1.49s/2.14s, exact row/byte/identity accounting. Header pins the complete reading; only current-range metadata is copied. Synthetic resource proof only, single trial per size; see traversal reports. 2026-10-08 19:07 ET
   - [ ] Implement declared reduction state/output limits, holder-set subtraction, counts and last occurrence semantics; incremental traversal alone does not implement reduction.
 - [ ] Express complete source census construction in bundled Rules, with immutable source/context receipts and separate worker verification.
   - [x] Implement version-3 source.read input/context/lookup receipts, raw set bounds before source access, output evidence and consumer identity gate; 207 affected tests passed in 41.99s. 2026-10-08 18:27 ET
@@ -34,6 +34,8 @@ completes this ticket or the parent goal.
 - [ ] Update self-contained bundled skill instructions, examples and requirements audit; full affected/native/CI gates, independent reviews and reviewable PR.
   - [x] Document member grammar, declared set bounds, worker version-3 receipts, raw/UTF-8 validation, immutable scope and qualified combine identity route; 91 affected/genericity checks passed in 3.78s. 2026-10-08 18:34 ET
   - [ ] Qualify installed separate-process worker/verifier and full source construction before recording whole-source retirement.
+  - [x] Open scoped PR #878 and diagnose its first full CI: Unit caught a control-config import used only for a file pin; Engine caught changed version-2 rejection wording. Both repaired, with decoder-pin compatibility preserved; 314 affected/architecture-control checks passed in 55.31s. 2026-10-08 19:07 ET
+  - [ ] Pass the complete CI gate on the corrected PR checkpoint; this does not close the parent full-population/retirement gate.
 - [ ] Parent goal still requires remaining Company/GLEIF runtime, complete adapter record mapping and configured capture retirement; preserve sec_client until provider.capture is qualified.
 
 ## Evidence and design
@@ -175,3 +177,43 @@ median 9.657779893s, decoded oracle median 0.073478324s. These replace the
 report file's prior runtime pins and timings; the historical checkpoint above
 remains dated evidence. Original EOF, cascade and installed population flags
 remain false. Native sources are unchanged since the 146-check native gate.
+
+## Traversal cost and CI repairs — 2026-10-08 19:07 ET
+
+The full-index ownership copy was measurably expensive: 128/512/2,048/4,096
+partitions took 0.740/7.952/101.899/461.362s. The header now carries version,
+original reading receipt and contract receipt. Each chunk retains original
+input/context/lookups and current partition range/receipt, not all future
+ranges. The original reading receipt binds the entire private index; returned
+metadata and caller receipts cannot redirect traversal. The committed harness
+qualifies 128/512/2,048/4,096 partitions at 0.071/0.368/1.488/2.135s with
+unchanged before/after runtime pins. Directory URI lengths differ slightly;
+single-trial timings are resource diagnostics, not controlled corpus speedups.
+The baseline report explicitly corrects its harness's late file hash using the
+preserved pre-edit e572cc55 module pin. Its full scan spent about 9.6 minutes
+in measured traversal; the worst case alone took 7 minutes 41 seconds.
+
+Fresh captured-prefix qualification on the corrected worker: 1,000 records,
+998/1/43 table rows, unchanged retry/replay and original reading/contract
+receipt checks. Native median 1.302395613s, configured callback 12.193870947s,
+decoded oracle 0.115450861s; setup 17.768483314s, actual worker and consumption
+3.815632756s. All whole-source/cascade/installed flags remain false.
+
+Initial CI 37855739568 failed only the architecture dependency assertion and
+version-2 error-message expectation; its MDM, PostgreSQL integration and shell
+jobs passed, as did 792 other engine cases. Preserve the runtime codec file pin
+without importing control internals; capture its actual package location once
+so changing a displayed artifact-module path does not relocate the dependency.
+Version-specific diagnostics are restored without relaxing receipt validation.
+
+Local architecture acceptance found missing jq on PATH, then seven dashboard
+tests unable to create Darwin temporary directories outside the sandbox. The
+existing real jq binary and an external mktemp wrapper selecting /private/tmp
+resolve those environment prerequisites. 251 architecture cases passed in the
+full run; all 10 dashboard cases then passed in 53.44s. No test or deployment
+script was relaxed, and no live Snowflake operation occurred.
+
+Reduction design must preserve last occurrence per (name key, holder), not a
+global latest record per holder. Global address counts count supported GENERAL
+records, including duplicates and ineligible/noncandidate records. Candidate
+record ordering/duplication must also remain until cascade parity is proven.

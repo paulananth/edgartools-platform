@@ -135,7 +135,8 @@ def main():
         for index, artifact_index, chunk, size in source_readings.iter_load(
                 candidate, store, max_bytes=32*1024**2, max_rows=100000,
                 allow_lookup_receipts=True):
-            if artifact_index != 0 or chunk['input'] != source_ref or chunk['lookups'] != lookups_ref:
+            if (index['reading'] != candidate or index['contract'] != rule_ref
+                    or artifact_index != 0 or chunk['input'] != source_ref or chunk['lookups'] != lookups_ref):
                 raise ValueError('incremental consumer source identity differs')
             for name, values in chunk['tables'].items():
                 actual_tables[name].extend(values)

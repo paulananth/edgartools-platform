@@ -85,7 +85,7 @@ def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
         if ordinal - 1 != artifact["record_count"]:
             raise ValueError("Partition record accounting differs from source EOF receipt")
         if not artifact["partitions"]:
-            yield index, {**artifact, "tables": {name: [] for name in names}, "deferred": []}, size
+            yield index, {**artifact, "tables": {name: [] for name in names}, "deferred": []}, size, None
         for part in artifact["partitions"]:
             if size + part["bytes"] > max_bytes:
                 raise ValueError("Partitioned reading exceeds consumer byte budget")
@@ -109,30 +109,45 @@ def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
             rows += len(chunk["deferred"])
             if rows > max_rows:
                 raise ValueError("Partitioned reading exceeds consumer row budget")
-            yield index, {**artifact, "tables": chunk["tables"], "deferred": chunk["deferred"]}, size
+            yield index, {**artifact, "tables": chunk["tables"], "deferred": chunk["deferred"]}, size, part
+
+
+def _event(body, ref, index, chunk, size, part=None):
+    # The original reading receipt binds the complete authenticated index.
+    # Returning that receipt and only the current range avoids copying every
+    # future partition for every yielded chunk, without exposing private state.
+    header = {"version": body["version"], "reading": copy.deepcopy(ref)}
+    if "contract" in body:
+        header["contract"] = copy.deepcopy(body["contract"])
+    metadata = {name: copy.deepcopy(value) for name, value in chunk.items()
+                if name not in ("partitions", "tables", "deferred")}
+    if body["version"] == 2:
+        metadata["partition"] = copy.deepcopy(part)
+    return header, index, {**metadata, "tables": chunk["tables"], "deferred": chunk["deferred"]}, size
 
 
 def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
-    """Yield (index document, artifact index, chunk, cumulative bytes).
+    """Yield (reading header, artifact index, chunk, cumulative bytes).
 
     Tables in a chunk contain only that partition's rows. Original input,
-    context, lookup and complete partition receipts stay attached; a partition
-    never becomes a new source identity. All byte/row budgets are aggregate.
+    context and lookup receipts stay attached. The header's original reading
+    receipt binds the complete index; each chunk carries only its current
+    partition range/receipt (None for an empty source). A partition never
+    becomes a new source identity. All byte/row budgets are aggregate.
     A yielded prefix is provisional: exhaust this iterator successfully before
     publishing any reduction. Stopping early proves no complete reading.
     """
     if (type(max_bytes) is not int or max_bytes < 1
             or type(max_rows) is not int or max_rows < 0):
         raise ValueError("Reading iteration requires explicit byte and row budgets")
-    body, size = _index(ref, artifacts, min(max_bytes, INDEX_BYTES), allow_lookup_receipts)
+    private_ref = copy.deepcopy(ref)
+    body, size = _index(private_ref, artifacts, min(max_bytes, INDEX_BYTES), allow_lookup_receipts)
+    if "contract" in body:
+        reference(body["contract"])
     if body["version"] == 2:
-        for index, chunk, size in _partition_chunks(
+        for index, chunk, size, part in _partition_chunks(
                 body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
-            # Consumers may mutate returned evidence while building a result.
-            # Never let those edits redirect suspended authenticated traversal.
-            snapshot = copy.deepcopy(body)
-            yield snapshot, index, {**snapshot["artifacts"][index],
-                                    "tables": chunk["tables"], "deferred": chunk["deferred"]}, size
+            yield _event(body, private_ref, index, chunk, size, part)
         return
     # Inline readings retain their small authenticated document boundary.
     if not isinstance(body.get("artifacts"), list) or not 1 <= len(body["artifacts"]) <= 2:
@@ -155,8 +170,9 @@ def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=Fals
         rows += len(artifact["deferred"])
         if rows > max_rows:
             raise ValueError("Inline reading exceeds consumer row budget")
-        snapshot = copy.deepcopy(body)
-        yield snapshot, index, snapshot["artifacts"][index], size
+        # Inline rows also come from private index data; isolate them together
+        # with the small evidence so editing this event cannot change the next.
+        yield _event(body, private_ref, index, copy.deepcopy(artifact), size)
 
 
 def load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
@@ -165,7 +181,7 @@ def load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
     if body["version"] == 1:
         return body, size
     normalized = []
-    for index, chunk, size in _partition_chunks(
+    for index, chunk, size, _ in _partition_chunks(
             body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
         if index == len(normalized):
             normalized.append({**chunk, "tables": {name: [] for name in chunk["tables"]}, "deferred": []})

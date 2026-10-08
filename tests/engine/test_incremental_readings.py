@@ -21,11 +21,12 @@ def test_incremental_rows_and_evidence_equal_materialized_reading(tmp_path):
     ref = stream(store, tmp_path / "source", count=1005)
     expected, expected_size = source_readings.load(ref, store, max_bytes=32 * 1024**2, max_rows=2000)
     rows, sizes = [], []
-    for index_document, index, artifact, size in chunks(ref, store):
+    for header, index, artifact, size in chunks(ref, store):
         assert index == 0
-        assert index_document == store.json(ref)
-        assert {k: v for k, v in artifact.items() if k not in ("tables", "deferred")} == {
-            k: v for k, v in expected["artifacts"][0].items() if k not in ("tables", "deferred")}
+        assert header == {"version": 2, "reading": ref, "contract": store.json(ref)["contract"]}
+        assert {k: v for k, v in artifact.items() if k not in ("tables", "deferred", "partition")} == {
+            k: v for k, v in expected["artifacts"][0].items() if k not in ("tables", "deferred", "partitions")}
+        assert artifact["partition"] in expected["artifacts"][0]["partitions"]
         assert len(artifact["tables"]["rows"]) <= 3
         rows.extend(artifact["tables"]["rows"])
         sizes.append(size)
@@ -62,18 +63,25 @@ def test_consumer_metadata_mutation_cannot_redirect_authenticated_traversal(tmp_
     ref = stream(store, tmp_path / "source")
     original = store.json(ref)
     iterator = chunks(ref, store)
-    body, _, chunk, _ = next(iterator)
+    header, _, chunk, _ = next(iterator)
     replacement = store.put(tmp_path.as_uri(), {
         "version": 1, "tables": {"rows": [{"n": 999, "index": 999}]}, "deferred": []})
-    mutable = body["artifacts"][0] if target == "index" else chunk
-    mutable["partitions"][1]["receipt"] = replacement
-    mutable["partitions"][1]["bytes"] = len(store.verified(replacement))
-    mutable["table_names"][:] = ["altered"]
-    mutable["input"]["sha256"] = "0" * 64
+    if target == "index":
+        header["reading"]["sha256"] = "0" * 64
+        header["contract"]["sha256"] = "0" * 64
+    else:
+        chunk["partition"]["receipt"] = replacement
+        chunk["partition"]["bytes"] = len(store.verified(replacement))
+        chunk["table_names"][:] = ["altered"]
+        chunk["input"]["sha256"] = "0" * 64
+    # Also test mutation through the caller's original reference.
+    original_ref = copy.deepcopy(ref)
+    ref["sha256"] = "0" * 64
     final = list(iterator)
     assert len(final) == 1
-    next_body, _, next_chunk, _ = final[0]
-    assert next_body == original
+    next_header, _, next_chunk, _ = final[0]
+    assert next_header == {"version": 2, "reading": original_ref, "contract": original["contract"]}
+    assert next_chunk["partition"] == original["artifacts"][0]["partitions"][1]
     assert next_chunk["input"] == original["artifacts"][0]["input"]
     assert next_chunk["tables"]["rows"] == [{"n": i, "index": i + 1} for i in range(3, 5)]
 
@@ -129,9 +137,11 @@ def test_empty_source_still_exposes_original_identity_and_schema(tmp_path):
     ref = stream(store, tmp_path / "source", count=0)
     events = list(chunks(ref, store, max_rows=0))
     assert len(events) == 1
-    body, index, artifact, size = events[0]
+    header, index, artifact, size = events[0]
     assert index == 0 and size == len(store.verified(ref))
-    assert artifact == {**body["artifacts"][0], "tables": {"rows": []}, "deferred": []}
+    assert header["reading"] == ref
+    assert artifact == {**{k: v for k, v in store.json(ref)["artifacts"][0].items() if k != "partitions"},
+                        "partition": None, "tables": {"rows": []}, "deferred": []}
 
 
 def test_lookup_receipts_require_consumer_identity_opt_in_and_survive_iteration(tmp_path):
@@ -152,7 +162,8 @@ def test_inline_iteration_has_explicit_schema_and_row_bounds(tmp_path):
     streamed = stream(store, tmp_path / "source")
     body, _ = source_readings.load(streamed, store, max_bytes=32 * 1024**2, max_rows=2000)
     inline = store.put(tmp_path.as_uri(), body)
-    assert [event[2] for event in chunks(inline, store)] == body["artifacts"]
+    assert [event[2] for event in chunks(inline, store)] == [
+        {k: v for k, v in artifact.items() if k != "partitions"} for artifact in body["artifacts"]]
     with pytest.raises(ValueError, match="row budget"):
         list(chunks(inline, store, max_rows=4))
     body["artifacts"][0]["tables"]["rows"] = [None]

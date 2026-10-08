@@ -22,12 +22,17 @@ reading deferrals block combination; resolve them explicitly before this step.
 
 For reductions that must traverse partitioned readings without retaining all
 decoded rows, the runtime supplies `source_readings.iter_load(receipt,
-artifacts, max_bytes=..., max_rows=...)`. It yields the authenticated index
-document, original artifact index, one artifact chunk and cumulative bytes.
+artifacts, max_bytes=..., max_rows=...)`. It yields a header, original artifact
+index, one artifact chunk and cumulative bytes. The header names `version`,
+the original `reading` receipt and, when present, its `contract` receipt.
 An inline reading yields one chunk per original artifact (one or two). A partitioned
-reading retains its input/context/lookup receipts and complete partition
-index on each chunk; its tables contain only that partition's rows. An empty
+reading retains its input/context/lookup receipts and current `partition`
+range/receipt on each chunk; its tables contain only that partition's rows.
+The header's reading receipt binds the complete index, including all partition
+receipts. Consumers must bind that original receipt into reduction identity.
+An empty
 source still yields its original identity and declared empty tables.
+Its partition marker is null; inline events have no partition marker.
 Yielded metadata is isolated from private traversal: editing returned evidence
 cannot change a later authenticated receipt or declared schema.
 

@@ -92,3 +92,29 @@ Final broader gate after both review fixes: 279 passed in 37.39s. Fresh
 captured qualification passes 1,000-record worker execute/retry/replay and
 incremental-consumer parity with identical before/after runtime pins. Original
 source EOF, separate processes, cascade and installed population remain false.
+
+## Measured traversal revision and full-CI findings — 2026-10-08 19:07 ET
+
+The ownership-copy cost measured 101.90s at 2,048 partitions and 461.36s at
+4,096. Revised the new event API before release: the header pins the complete
+original reading, while chunks copy only current-range and source evidence.
+Both independent reviewers inspected the revision and found no scoped blocker.
+Tests cover returned header/chunk and caller-reference mutations. The repeatable
+committed harness verifies row/byte/identity accounting and stable runtime pins,
+with 4,096 partitions taking 2.14s in one synthetic trial. This is not original
+archive EOF, worker production qualification, or a statistical speedup claim.
+
+Initial CI caught an architecture violation missed by focused tests: the worker
+imported control config solely to pin its dependency file. Removed the import
+and retained the file pin independently. A decoder-path regression then proved
+the dependency path must be captured at load time; repaired without weakening
+the test. CI also caught a changed version-2 error diagnostic; restored the
+version label while retaining exact version-3 shape checks. Final affected plus
+architecture-control/context gate: 314 passed in 55.31s. Full CI must rerun.
+
+Captured-prefix worker verification now also checks the incremental header's
+original reading and contract receipts. Fresh qualification passes unchanged
+runtime/input pins, exact projection rows, retry and replay. All broader scope
+flags remain false. The remaining local architecture environment failures were
+missing jq and unwritable Darwin mktemp paths; external test-tool configuration
+resolved them without repository production or assertion changes.

@@ -10,13 +10,15 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
-import edgar_warehouse.bookkeeping.clean.config as bookkeeping_config
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import reference
 from . import source_stream, source_readings, source_parquet
 
 OUTPUT_BYTES = 128 * 1024**2
+# Capture the actual loaded codec location; later wrapper metadata changes
+# do not relocate this dependency.
+ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
 
 
 def runtime_files() -> list[Path]:
@@ -24,7 +26,9 @@ def runtime_files() -> list[Path]:
     return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__),
             Path(source_stream.__file__), Path(source_readings.__file__),
             Path(source_parquet.__file__), *source_parquet.runtime_files(),
-            Path(bookkeeping_config.__file__), Path(control_contract.__file__)]
+            # Artifacts' codec dependency is pinned as bytes, without importing
+            # Bookkeeping control internals into the worker's execution surface.
+            ARTIFACT_CODEC_FILE, Path(control_contract.__file__)]
 
 
 def _documents(envelope: dict, artifacts):
@@ -71,7 +75,8 @@ def _entry(manifest, entry):
         return reference(entry)
     required = {"input", "context"} | ({"lookups"} if manifest["version"] == 3 else set())
     if not isinstance(entry, dict) or set(entry) != required:
-        raise ValueError("Source artifact names exact input/context and version-3 lookup receipts")
+        raise ValueError(f"Version-{manifest['version']} source artifact names exact input/context"
+                         + ("/lookup receipts" if manifest["version"] == 3 else " receipts"))
     for receipt in entry.values():
         reference(receipt)
     return entry["input"]
