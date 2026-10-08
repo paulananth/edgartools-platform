@@ -102,8 +102,8 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     say("classified parts")
     _inherit(findings_parts, parts)
     by_name = {f["part"]: f for f in findings_parts}
-    coincidental: list[dict] = []
-    hierarchies = _hierarchies(con, by_name, profiles, found_links, coincidental)
+    not_levels: list[dict] = []
+    hierarchies = _hierarchies(con, by_name, profiles, found_links, not_levels)
     say(f"found {len(hierarchies)} hierarchies")
     relationships = _relationships(found_links + child, by_name)
     _mask_samples(hierarchies, by_name)
@@ -126,7 +126,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         "parts": findings_parts,
         "relationships": relationships,
         "hierarchies": hierarchies,
-        "coincidental_dependencies": coincidental,
+        "dependencies_not_hierarchies": not_levels,
         "questions": _questions(findings_parts),
         "marked_rows": marked,  # written beside findings.yaml as invalid_rows.jsonl, never inside it
         "approval": {"status": "draft", "approved_by": None, "approved_words": None, "approved_at": None},
@@ -281,7 +281,7 @@ def _inherit(found: list[dict], parts) -> None:
                            "value": parent, "passed": True}]
 
 
-def _hierarchies(con, parts: dict, profiles, links, coincidental: list[dict]) -> list[dict]:
+def _hierarchies(con, parts: dict, profiles, links, not_levels: list[dict]) -> list[dict]:
     found = []
     parent_columns = {(l["from"]["part"], l["from"]["columns"][0]) for l in links
                       if l["from"]["part"] == l["to"]["part"] and len(l["from"]["columns"]) == 1}
@@ -292,7 +292,7 @@ def _hierarchies(con, parts: dict, profiles, links, coincidental: list[dict]) ->
         key_side = set(key) | {x["label_column"] for x in f["code_lists"] if [x["column"]] == key}
         code_columns = [c for c in profiles[p] if c["name"] in listed and (p, c["name"]) not in parent_columns
                         and (f["class"] == "reference" or c["name"] not in key_side)]
-        for h in hierarchy.by_dependency(con, p, code_columns, key, coincidental, f["class"] == "reference"):
+        for h in hierarchy.by_dependency(con, p, code_columns, key, not_levels, f["class"] == "reference"):
             h["type"] = "reference"
             found.append(h)
     for link in links:

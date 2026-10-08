@@ -127,3 +127,23 @@ def test_a_list_of_codes_keeps_its_finest_level_and_a_skewed_level_is_not_skippe
                                     rejected, list_of_codes=True)
     assert [l["column"] for l in found[0]["levels"]] == ["country", "region", "city"] and not rejected
     assert found[0]["invalid_rows"] == 3  # the dirty rows of a skewed but real level are marked
+
+
+def test_a_flag_is_never_a_level_and_the_code_finds_its_real_parent():
+    import duckdb
+    from profiling import hierarchy, profile
+
+    con = duckdb.connect()
+    # form → its group (a real level); the group decides a 0/1 flag (never a level); domestic/foreign is a level.
+    con.execute("""CREATE TABLE f AS SELECT 'F' || (i % 30) AS form, 'G' || (i % 30 % 6) AS grp,
+        CASE WHEN i % 30 % 2 = 0 THEN 1 ELSE 0 END AS numeric_flag,
+        CASE WHEN i % 30 % 6 < 3 THEN 'DOMESTIC' ELSE 'FOREIGN' END AS place
+        FROM range(3000) r(i)""")
+    cols = {c["name"]: c for c in profile.columns(con, "f")}
+    assert hierarchy.is_flag(cols["numeric_flag"]) and not hierarchy.is_flag(cols["place"])
+    rejected = []
+    found = hierarchy.by_dependency(con, "f", [cols["form"], cols["numeric_flag"], cols["grp"], cols["place"]],
+                                    ["form"], rejected)
+    assert [l["column"] for l in found[0]["levels"]] == ["place", "grp", "form"]
+    (flag,) = rejected
+    assert (flag["child"], flag["parent"], flag["reason"]) == ("grp", "numeric_flag", "flag")

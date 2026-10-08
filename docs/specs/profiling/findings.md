@@ -31,7 +31,7 @@ dataset:
 parts: [...]                    # §3, one per table, file or child table
 relationships: [...]            # §4
 hierarchies: [...]              # §5
-coincidental_dependencies: [...] # §5, dependencies that hold by coincidence, never hierarchies
+dependencies_not_hierarchies: [...] # §5, a flag or a coincidence, never a hierarchy
 questions: [...]                # §8, open questions for the operator, one at a time
 approval:                       # §9
   status: draft|approved
@@ -144,9 +144,14 @@ coincidence (ticket 01d): it must explain at least half of what always
 guessing the parent's commonest value gets wrong (a lift of at least 0.5), and
 at least half the rows must carry a child value seen on two or more rows (a
 list of codes, one row per code, is exempt). One that fails is listed in
-`coincidental_dependencies` as `{part, child, parent, held, baseline, lift,
-supported}` and is never a hierarchy (a flag set on almost every row; a value
-seen on one row only); the child gets no coarser parent in its place.
+`dependencies_not_hierarchies` as `{part, child, parent, reason: coincidence,
+held, baseline, lift, supported}` and is never a hierarchy (a flag set on
+almost every row; a value seen on one row only); the child gets no coarser
+parent in its place. A yes/no flag (boolean, or two values reading as yes and
+no) is never a level either (operator, 2026-10-08: "Flag is not a level
+(Recommended)"): a code determining it is listed with `reason: flag`, and the
+code's search goes on to a real parent. A two-valued category with names of its
+own is still a level.
 
 ### 5.1 Marked rows: `invalid_rows.jsonl`
 

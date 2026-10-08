@@ -23,6 +23,11 @@ from a hierarchy:
 A dependency failing either is reported as coincidental, with its evidence,
 never as a hierarchy, and the child gets no coarser parent in its place (that
 would skip a level).
+
+A yes/no flag is never a level (operator, 2026-10-08: "Flag is not a level
+(Recommended)"): a code that determines a flag is reported as a flag
+dependency, and the code's search goes on to a real parent. A two-valued
+category with names of its own (domestic and foreign) is still a level.
 """
 
 from __future__ import annotations
@@ -34,6 +39,14 @@ HOLDS = 0.99
 MAX_DEPTH = 50
 LIFT = 0.5  # the share of guessing's misses the dependency explains
 SUPPORT = 0.5  # share of rows whose child value is seen on two or more rows
+FLAG_VALUES = {"0", "1", "TRUE", "FALSE", "T", "F", "Y", "N", "YES", "NO"}
+
+
+def is_flag(profile: dict) -> bool:
+    """A yes/no column: boolean, or two values that read as yes and no."""
+    if profile["type"] == "BOOLEAN":
+        return True
+    return profile["distinct"] == 2 and {str(t["value"]).strip().upper() for t in profile["top"]} <= FLAG_VALUES
 
 
 def _equivalent(con, part: str, columns: list[dict]) -> list[dict]:
@@ -80,10 +93,15 @@ def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str
             held = determines(con, part, child["name"], candidate["name"])
             if held >= HOLDS:
                 evidence = chance(con, part, child["name"], candidate["name"], held)
+                if is_flag(candidate):
+                    if rejected is not None:
+                        rejected.append({"part": part, "child": child["name"], "parent": candidate["name"],
+                                         "reason": "flag", **evidence})
+                    continue  # a flag is not a level: the code's real parent may be coarser
                 if coincidental(evidence, list_of_codes):
                     if rejected is not None:
                         rejected.append({"part": part, "child": child["name"], "parent": candidate["name"],
-                                         **evidence})
+                                         "reason": "coincidence", **evidence})
                     break  # no coarser parent in its place: that would skip this level
                 parent[child["name"]] = (candidate["name"], held)
                 break  # the closest coarser level
