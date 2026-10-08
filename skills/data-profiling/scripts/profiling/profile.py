@@ -17,6 +17,8 @@ INTEGERS = {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UBIGINT", "U
 FLOATS = {"DOUBLE", "FLOAT"}
 TEMPORAL = {"DATE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE"}
 TOP = 5
+QUANTILES = 20  # a number's or date's distribution: 21 points, 0%, 5%, ..., 100%
+CATEGORIES = 200  # a code's distribution: the shares of its 200 commonest values, the rest as "other"
 
 
 def shape(expression: str) -> str:
@@ -98,3 +100,28 @@ def is_numeric(profile: dict) -> bool:
 
 def is_text(profile: dict) -> bool:
     return profile["type"] == "VARCHAR"
+
+
+def distribution(con, part: str, profile: dict, code: bool) -> dict | None:
+    """What a column's values look like, for compare to measure drift against:
+    a code's value shares (its commonest CATEGORIES values, the rest as other),
+    or a number's or date's quantiles (dates as epoch seconds). None for any other column."""
+    c, t = sql_name(profile["name"]), sql_name(part)
+    if not profile["non_null"] or profile["structure"]:
+        return None
+    if code:
+        text = f"CAST({c} AS VARCHAR)"
+        rows = con.execute(f"SELECT {text}, count(*) FROM {t} WHERE {c} IS NOT NULL "
+                           f"GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT {CATEGORIES}").fetchall()
+        shares = {v: round(n / profile["non_null"], 6) for v, n in rows}
+        return {"kind": "categories", "shares": shares,
+                "other": round(max(0.0, 1 - sum(n for _, n in rows) / profile["non_null"]), 6)}
+    if is_numeric(profile):
+        value = f"CAST({c} AS DOUBLE)"
+    elif is_temporal(profile):
+        value = f"epoch(TRY_CAST({c} AS TIMESTAMP))"
+    else:
+        return None
+    points = [i / QUANTILES for i in range(QUANTILES + 1)]
+    found = con.execute(f"SELECT quantile_cont({value}, {points}) FROM {t} WHERE {value} IS NOT NULL").fetchone()[0]
+    return {"kind": "quantiles", "points": [round(float(q), 6) for q in found]} if found else None

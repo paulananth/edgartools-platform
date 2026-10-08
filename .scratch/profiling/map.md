@@ -20,13 +20,14 @@ Any data set can be profiled, classified into master, reference, relationship, t
 | 01a | [Specs: RDM, agent context, silver table spec, findings schema](issues/01a-specs.md) | A | 01 | done (#825) |
 | 01b | [data-profiling skill and trials A and B](issues/01b-data-profiling-skill-and-trials-a-and-b.md) | A | 01a | done (#831) |
 | 01c | [data-quality skill](issues/01c-data-quality-skill.md) | A | 01b | done (#832) |
+| 01d | [Profiling follow-ups](issues/01d-profiling-follow-ups.md) | A | 01b, 01c | open |
 | 02 | [RDM database, publish, MDM pin, migrate reference YAML](issues/02-rdm-database.md) | B | 01a, Codex retirement merged | pin done (#845, #848); counts run equal; `in_reference@1` reads the pin and the YAML is removed (handoff C3); contract-embedded rows pinned (Codex #866) |
 | 03 | [MDM cross-reference table](issues/03-mdm-cross-reference-table.md) | A | 01a | done (#835) |
 | 04 | [Relationship context view and onboarding](issues/04-relationship-context-view-and-onboarding.md) | A | 01a | done (#836) |
 | 04b | [Relationship types: real names; parents with a basis; corporate actions](issues/04b-parent-relationship-types.md) | A | 04 | done: #850, #851; both questions answered, no change |
 | 04c | [GLEIF's successor entity, read from its lists](issues/04c-gleif-successor-entity.md) | A | 04b | done: #852 |
 | 05 | [Agent context views and command](issues/05-agent-context-views-and-command.md) | A (MDM) / B (RDM) | 03, 04 (02 for RDM) | MDM (#837) and RDM (#847) parts done; silver waits for 06 |
-| 05b | [Relationships at a past recording time (`--as-at`)](issues/05b-relationship-as-at.md) | A | 05 | open |
+| 05b | [Relationships at a past recording time (`--as-at`)](issues/05b-relationship-as-at.md) | A | 05 | done (#868) |
 | 06 | [Silver writer (rules-skill ticket 05)](issues/06-silver-writer.md) | B | 01a, Codex retirement merged | open |
 | 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open |
 | 07b | [Name-based matching](issues/07b-name-based-matching.md) | A | 03, 04 | done (#838) |

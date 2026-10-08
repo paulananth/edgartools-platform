@@ -30,5 +30,5 @@ make it cheap"). The operator, 2026-10-08: "Yes" (take relationship
 - [x] Spec §2 and ticket 05's deferral updated; no CONTEXT.md term changes 2026-10-08 10:21 ET
 - [x] Affected tests: 225 clean-MDM, fresh-mastering and context PG tests pass (1 expected failure); testmon over unit and mdm: 405 pass 2026-10-08 10:21 ET
 - [x] Three-axis review (Standards, Spec, GoF): GoF no findings (shared versioning helper only with a third versioned kind; a comment links the two write hooks); fixed from Spec: `--as-at` no longer sets the business time (two times kept apart), `trust.current_parts` on both answers, tests for `--hops 2` at `--as-at` and the closed-and-reopened version, spec §3.1; fixed from Standards: the migration locks `mdm.current_record` so no batch slips between the back-fill check and the trigger, walk indexes built after the back-fill, a duplicate check removed; 225 PG tests pass 2026-10-08 10:26 ET
-- [ ] PR, CI, merge on the operator's word
+- [x] PR, CI, merge on the operator's word: #868, CI green (the schema comments test failed once: the new table's batch_id and two functions had no comment; fixed), merged on the operator's word as 1539704d 2026-10-08 10:45 ET
 - [ ] `mdm migrate` for 010 in prod: blocked like 005–009 (no login), listed

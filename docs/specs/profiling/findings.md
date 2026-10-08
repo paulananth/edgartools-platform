@@ -64,7 +64,12 @@ approval:                       # §9
   columns:
     - {name: <col>, type: <detected>, fill: <0..1>, distinct: <n>,
        unique: <0..1>, top: [<masked samples>], role: <key|identifier|name|code|measure|date|text|flag|other>,
-       sensitivity: none|personal|sensitive_personal}
+       sensitivity: none|personal|sensitive_personal,
+       distribution: <null | {kind: categories, shares: {<value>: <0..1>}, other: <0..1>}
+                     | {kind: quantiles, points: [21 numbers, 0% to 100% by 5%]}>}
+                                # for compare; a code's 200 commonest values, a number's or
+                                # date's quantiles (dates as epoch seconds); null for a personal
+                                # column, whose values are never written out
   code_lists:                   # columns whose values are a code set
     - {column: <col>, distinct: <n>, label_column: <col|null>, code_set: <existing RDM code set|null>,
        proposed_code_set: <name|null>}
@@ -190,7 +195,11 @@ mastering; a row whose entity is not mastered yet keeps an empty MDM id.
 `compare` reads an approved `findings.yaml` and a new delivery, and writes
 `drift.yaml`: new and missing columns, type changes, fill-rate changes beyond
 a threshold, new code values, broken keys and inclusions, hierarchy rule
-changes, and distribution shifts (KS or chi-square, PSI). Each drift item
+changes, and distribution shifts (`distribution_changed`: the population
+stability index of a code's value shares, reported from 0.1 and called
+significant over 0.25; the Kolmogorov-Smirnov distance between a number's or
+date's quantile curves, reported over 0.1; chi-square is not used, since on a
+large delivery any difference is significant). Each drift item
 names the skill that handles it: data-quality, refining-rules or RDM.
 
 ## 8. Questions
