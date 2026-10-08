@@ -408,6 +408,11 @@ read:
         last_sync_run_id:
           context:
             name: sync_run_id
+  reference_pins:
+    places:
+      code_set: sec-place-codes
+      version: "1"
+      sha256: 36270dc9e924128f1338ecee2fd4684f2c13b35303e634f49fabae9213759f00
   references:
     places:
       AL:

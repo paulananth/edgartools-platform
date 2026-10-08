@@ -2,7 +2,7 @@
 
 Continue the original full self-sustaining skills / Rules creator / parsing / MDM / custom orchestration goal. PRs #833, #834 and #841 are merged. Codex continues from merged main e6b541b3 on `codex/gleif-runtime-retirement-20261006` in the same protected worktree. Local qualification only; preserve the active runtime until complete replacement evidence exists.
 
-- [ ] Bundle configured contracts for Level 1, relationships and reporting exceptions, both JSON and XML, approved scope and authenticated publication metadata.
+- [x] Bundle configured contracts for Level 1, relationships and reporting exceptions, both JSON and XML, approved scope and authenticated publication metadata; #841 `e6b541b373d114a6a10a3bc8dd84151cf26c0d38` and #843 `f8f7876ee8c5e39baae74313d8a9182ecc42cb49` ship six templates, context-bound count/header metadata and the installed six-template execution/verification test. Creator fills explicit approved-scope rows; this is not source activation (2026-10-08 06:43 ET).
 - [ ] Qualify complete captured member bytes, counts, canonical hashes, ZIP CRC and EOF; compare selected configured outputs against historical results.
 - [x] Qualify installed XML publication refusal and recovery with restricted PostgreSQL 16; e4ca3ea8 installed trial passed, 26 deselected, no skips, 179.19s: bad header wrote no artifacts/master rows; restored same input retried the same run on attempt 2 through independent verification and mastering (2026-10-06 21:18 ET).
 - [ ] Replace active GLEIF runtime consumers and remove legacy parsing imports and implementations after complete equivalence.
@@ -53,7 +53,7 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 - [x] Qualify full Level 1 XML framing: 3,428,477 records, 11,826,399,913 expanded bytes, zero typed differences, count/hash/CRC/EOF; 4539.76s (75m40s), stored report (2026-10-07 06:22 ET).
 - [x] Qualify complete reporting-exceptions configured JSON runtime: 6,351,397 records, canonical hash matches independent corpus; 433.04s (7m13s), stored report (2026-10-07 06:22 ET).
 - [x] Separate generic XML normalized header and record bounds, preserve strict record/raw caps, regress small-record compatibility and fail-closed worker publication; 117 native tests, 620 MDM/XML/archive tests, 58 member/stream tests pass on isolated new native wheel; independent Spec/Standards review finds no scoped blocker (2026-10-07 06:30 ET).
-- [ ] Retry Level 1 configured JSON runtime after snapshot creation failed with OSError 28; no successful runtime report exists for this member.
+- [x] Complete Level 1 configured JSON runtime after the historical OSError 28 failure; successor completion is recorded in `.planning/workstreams/company-census-evidence/TICKET.md:18` and its `gleif-runtime/SUMMARY.json`: Level 1 3,428,477, relationships 487,721, reporting exceptions 6,351,397 in each of JSON and XML. No failed run retried for this reconciliation (2026-10-08 06:43 ET).
 - [ ] Qualify replacement XML runtime against all three complete captured corpora with actual native binary pinned before and after execution.
 
 - [x] Add reproducible full-runtime qualification CLI with pinned publisher/independent reports and actual native binary before/after; 10 JSON/XML valid and deliberate fault cases pass (2026-10-07 06:30 ET).
@@ -63,7 +63,7 @@ The operator subsequently approved direct GLEIF XML downloads. Archives and side
 - [x] Include contract-loading, canonical-encoding and metadata-normalization helper files in qualification hashes; 10 qualification good/fault cases pass with explicit helper evidence checks. The first replacement trial was deliberately interrupted after review found the omission; no complete report claimed (2026-10-07 06:31 ET).
 
 - [x] Full replacement CI 37608031153 passed on ce7d90ec: 565 unit, 258 architecture, 571 MDM, 279 integration plus one expected failure, 495 engine and 117 native tests; all suites and aggregate gate pass, no prerequisite skips (2026-10-07 06:46 ET). Corpus scans remain unfinished.
-- [ ] Complete source-runtime corpus scan session 30251, preserve its pinned code and actual native binary until terminal, and save completed authenticated reports; Level 1 JSON has passed 1.6 million records, no completed report yet.
+- [x] Save and authenticate completed source-runtime corpus reports, superseding the historical session 30251 progress note; `.planning/workstreams/company-census-evidence/TICKET.md:18` and its `gleif-runtime/SUMMARY.json` record Level 1 3,428,477, relationships 487,721, reporting exceptions 6,351,397 in each of JSON and XML, frozen revision 3d3a7cb2 and native/runtime pins. This verifies saved terminal evidence, not a restarted scan (2026-10-08 06:43 ET).
 - [ ] Finish Company continuation #844 census/classification/provenance and full installed population/replay/recovery; separate blueprint composition proof does not close these original requirements.
 
 - [x] Reconcile current Person fixture state instead of repeating stale retirement claims: merged #816 removed its field conversion, and 19 raw-submissions/cohort tests preserve the full assertion/provenance digest (2026-10-07 06:48 ET). Adapter normalization and full captured-corpus mastering qualification remain pending.

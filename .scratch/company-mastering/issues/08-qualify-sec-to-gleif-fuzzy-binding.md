@@ -269,3 +269,16 @@ Recorded from the three-axis review (Standards, Spec, GoF).
   and the full Golden Copy bind the same 3,050 Companies as the research
   (0 differences). Read as silver lands the SEC address, 3,040 bind: the 10
   missing are exactly the `countryCode`-only filers, Shell among them.
+
+## J1 — Which function may bind a CIK to an LEI
+
+- [x] Record the operator's decision, 2026-10-08 06:19 ET: **"Proven name rules may bind (Recommended)"**. Codex verified agreement with Claude's merged `.scratch/profiling/issues/07b-name-based-matching.md:34` (#865, `862a1e66`) (2026-10-08 06:43 ET).
+
+`name_census_match@1` may bind through the Company rules
+`sec-gleif-name-jurisdiction` and `sec-gleif-name-postal` when the name is
+unique on both sides and a second fact agrees. Each rule is switched on only
+with its measured proof and the operator's approval; anything less goes to a
+steward. The profiling `name_id@1` is a lookup id in the cross-reference table
+and never binds a CIK to an LEI. This records the decision; neither function,
+merge rule, nor activation is changed by this handoff. The earlier approval
+in ticket 25 remains historical evidence and does not substitute for J1.

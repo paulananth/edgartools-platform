@@ -1,0 +1,77 @@
+{
+  "source_file_sha256_before": "8a602ac7907c4f1e1f6db829ce4f7ca5e3a98bd9cdae4a7b2efd058a60fe9cc6",
+  "source_file_sha256_after": "905402b4b03e6125a0a9bfebbf6b06e243a107365814c3dd82af27e4cd515fd1",
+  "source_document_digest_before": "7752b3e0186423a44297d31dcbdfdcbbc7bee60cb8fc435953de034286a2a585",
+  "source_document_digest_after": "ff8e348c079f20f941adc766ae0879e926f5ca9e872fee0d23b4d04c40a3d076",
+  "mdm_mapping_unchanged": true,
+  "inline_rows_unchanged": true,
+  "lookup_expressions_unchanged": true,
+  "pin": {
+    "places": {
+      "code_set": "sec-place-codes",
+      "version": "1",
+      "sha256": "36270dc9e924128f1338ecee2fd4684f2c13b35303e634f49fabae9213759f00"
+    }
+  },
+  "historical_references_to_old_source_bytes": [
+    "HEAD:.planning/workstreams/company-address-retirement/captured-address-parity.json",
+    "HEAD:.planning/workstreams/company-address-retirement/installed-address-proof.json",
+    "HEAD:.planning/workstreams/sec-configured-fields/captured-field-parity.json",
+    "HEAD:.planning/workstreams/sec-configured-fields/installed-mapping-proof.json"
+  ],
+  "six_report_hashes_verified": [
+    {
+      "report": "level1-json-runtime-parity.json",
+      "sha256": "1336bc15824b6d8c87275079e76a33ed60d8067b18c0f31168768401ffe70eed",
+      "member": "level1",
+      "format": "json",
+      "records": 3428477,
+      "seconds": 1976.6850125198252
+    },
+    {
+      "report": "level1-xml-runtime-parity.json",
+      "sha256": "b33d6e477b8bce00ad90f366de22845b5a64768a58faec650e8dea3f3559af39",
+      "member": "level1",
+      "format": "xml",
+      "records": 3428477,
+      "seconds": 4369.559565237025
+    },
+    {
+      "report": "relationships-json-runtime-parity.json",
+      "sha256": "1687c002f05a1f28a23b6db56bcb469d3486a6a3b0f73913512bef381b38f11b",
+      "member": "relationships",
+      "format": "json",
+      "records": 487721,
+      "seconds": 149.6876819850877
+    },
+    {
+      "report": "relationships-xml-runtime-parity.json",
+      "sha256": "1de181f08b93395ac36475311149dc5bb202a6af5c000d4985dcd9b5dab94991",
+      "member": "relationships",
+      "format": "xml",
+      "records": 487721,
+      "seconds": 457.44959875009954
+    },
+    {
+      "report": "reporting_exceptions-json-runtime-parity.json",
+      "sha256": "fcebb23187ecc9719c01e3daef97c6c61f23ecc0a476fdd8c424061cc6b13711",
+      "member": "reporting_exceptions",
+      "format": "json",
+      "records": 6351397,
+      "seconds": 512.7008878779598
+    },
+    {
+      "report": "reporting_exceptions-xml-runtime-parity.json",
+      "sha256": "a9cd63ebf5f43893702c2617a7782148ba51d18d05857fe88f0960fc8adce095",
+      "member": "reporting_exceptions",
+      "format": "xml",
+      "records": 6351397,
+      "seconds": 637.0648792358115
+    }
+  ],
+  "repository_digest_pin_update": "No maintained repository consumer pins the old source file bytes; four historical qualification artifacts retain their original hashes. Live Rules registries, frozen Bookkeeping runs and deployments were not inspected or changed.",
+  "affected_tests": {
+    "passed": 677,
+    "seconds": 66.39
+  }
+}
