@@ -101,9 +101,12 @@ logical type a full read proves), `shape`, `shape_share` (masked shapes) and
 A column's `role` may also be `link` (it points at another part's key).
 `persistence`, `delivery` and `refresh` stay null and `unknown` until
 `compare` sees a second delivery (ticket 01d). For that, a fully read
-top-level part with a found key keeps a `fingerprint`: `{prefix, keys: {<sha256
-of the key>: <sha256 of the row>}, capped, latest, latest_column}`, the keys
-whose hash starts with `prefix` (every key of a part of at most 4,096 rows;
+top-level part with a found key keeps a `fingerprint`: `{prefix, capped,
+latest, latest_column, sampled, file, file_sha256}`; its sample, `{<sha256 of
+the key>: <sha256 of the row>}` per part, is written beside the findings in
+`fingerprints.json` (never inside the file the operator approves), and
+`compare` reads it back from beside the approved findings, refusing one whose
+sha256 differs. The sample holds the keys whose hash starts with `prefix` (every key of a part of at most 4,096 rows;
 about one in sixteen above, at most 4,096), so two deliveries sample the same
 keys. It keeps hashes only; a short key can still be found again by hashing
 every candidate, so a key holding a personal value is never sampled, and

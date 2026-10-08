@@ -1,5 +1,6 @@
 """A whole data-profiling run on the synthetic set: classes, links, hierarchies, masking."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -115,7 +116,8 @@ def test_compare_refuses_findings_that_are_not_approved(result, tmp_path):
 
 def test_no_working_copy_outlives_the_run(result):
     assert not (result["out"] / ".work").exists()
-    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml", "invalid_rows.jsonl"]
+    assert sorted(p.name for p in result["out"].iterdir()) == ["REPORT.md", "findings.yaml", "fingerprints.json",
+                                                                "invalid_rows.jsonl"]
 
 
 def test_inputs_carry_rows_and_sha256_and_silver_integers_are_wide(result):
@@ -259,10 +261,12 @@ def test_a_zoned_time_is_measured_as_its_own_instant(tmp_path):
 
 
 def _approved(result, tmp_path):
+    import shutil
     findings = yaml.safe_load((result["out"] / "findings.yaml").read_text())
     findings["approval"]["status"] = "approved"
     path = tmp_path / "approved.yaml"
     path.write_text(yaml.safe_dump(findings, sort_keys=False))
+    shutil.copy(result["out"] / "fingerprints.json", tmp_path / "fingerprints.json")  # read beside the findings
     return path
 
 
@@ -270,7 +274,8 @@ def test_two_deliveries_measure_persistence_and_the_delivery_kind(result, tmp_pa
     import shutil
 
     visit = part(result, "visit")["fingerprint"]
-    assert len(visit["keys"]) == 3000 and visit["prefix"] == ""  # a small part: every key sampled
+    assert visit["sampled"] == 3000 and visit["prefix"] == "" and "keys" not in visit  # every key, kept beside
+    assert len(json.loads((result["out"] / "fingerprints.json").read_text())["visit"]) == 3000
     approved = _approved(result, tmp_path)
     # The same full delivery again: a snapshot.
     out = tmp_path / "same"

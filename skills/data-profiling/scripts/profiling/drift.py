@@ -17,7 +17,7 @@ KS_CHANGE = 0.1
 EPSILON = 1e-4  # a share of zero, so a value seen once on one side still counts
 
 
-def compare(approved: dict, new: dict) -> list[dict]:
+def compare(approved: dict, new: dict, measured: list[dict] | None = None) -> list[dict]:
     old_parts = {p["part"]: p for p in approved["parts"]}
     new_parts = {p["part"]: p for p in new["parts"]}
     items = []
@@ -70,7 +70,7 @@ def compare(approved: dict, new: dict) -> list[dict]:
             if added:
                 add("codes_new", name, f"{len(added)} codes not in the approved list: {', '.join(added[:10])}",
                     _codes_owner(cur), column)
-    for m in deliveries(approved, new):
+    for m in measured if measured is not None else deliveries(approved, new):
         before = old_parts[m["part"]]["time"].get("delivery", "unknown")
         if before != "unknown" and m["delivery"] != "unknown" and before != m["delivery"]:
             add("delivery_changed", m["part"], f"{before} → {m['delivery']} (keys kept {m['persistence']})",
@@ -108,8 +108,8 @@ def deliveries(approved: dict, new: dict) -> list[dict]:
     measured = []
     for part in new["parts"]:
         before, after = (old_parts.get(part["part"]) or {}).get("fingerprint"), part.get("fingerprint")
-        if not before or not after or not before["keys"]:
-            continue
+        if not before or not after or not before.get("keys") or "keys" not in after:
+            continue  # no sample on one side (approved before samples were kept, or its file not beside it)
         # A small part samples every key; a large one the keys with a hash prefix. Compare like with like.
         prefix = max(before.get("prefix", ""), after.get("prefix", ""), key=len)
         old = {k: v for k, v in before["keys"].items() if k.startswith(prefix)}
