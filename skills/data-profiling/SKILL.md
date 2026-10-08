@@ -212,8 +212,11 @@ that matter most:
 refining-rules runs this before changing a live feed. It profiles the new
 delivery and lists each difference from the approved findings in `drift.yaml`:
 parts, columns, types, fill rates, sensitivity, keys, links, code counts,
-codes not in an approved code list, hierarchies and volume. Each item names the skill that handles it
-(data-quality, refining-rules or rdm).
+codes not in an approved code list, hierarchies, volume, and distributions
+(a code's value shares by population stability index, a number's or date's
+quantiles by Kolmogorov-Smirnov distance; findings approved before
+distributions were kept are compared without them). Each item names the skill
+that handles it (data-quality, refining-rules or rdm).
 
 ```
 uv run --with duckdb --with pyyaml python profile_data.py compare \

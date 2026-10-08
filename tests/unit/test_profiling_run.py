@@ -173,3 +173,86 @@ def test_link_part_ends_put_the_keyed_end_first_whatever_the_link_order():
     assert run._child_first(ends, ["from_id", "kind"]) == ("from_id", "to_id")
     assert run._child_first(list(reversed(ends)), ["from_id", "kind"]) == ("from_id", "to_id")
     assert run._child_first(ends, ["kind"]) == ("to_id", "from_id")
+
+
+def test_findings_keep_each_columns_distribution_but_never_a_personal_ones(result):
+    visit, member = part(result, "visit"), part(result, "member")
+    amount = next(c for c in visit["columns"] if c["name"] == "amount")
+    assert amount["distribution"]["kind"] == "quantiles" and len(amount["distribution"]["points"]) == 21
+    assert amount["distribution"]["points"] == sorted(amount["distribution"]["points"])
+    group = next(c for c in member["columns"] if c["name"] == "grp_code")
+    shares = group["distribution"]
+    assert shares["kind"] == "categories" and abs(sum(shares["shares"].values()) + shares["other"] - 1) < 1e-3
+    assert all(c["distribution"] is None for c in member["columns"] if c["sensitivity"] != "none")
+
+
+def test_compare_reports_a_moved_distribution(result, tmp_path):
+    import shutil
+    findings = yaml.safe_load((result["out"] / "findings.yaml").read_text())
+    findings["approval"]["status"] = "approved"
+    approved = tmp_path / "approved.yaml"
+    approved.write_text(yaml.safe_dump(findings, sort_keys=False))
+    changed = tmp_path / "set"
+    shutil.copytree(result["folder"], changed)
+    # Every amount tripled; nine members in ten moved to one group.
+    lines = (changed / "visit.csv").read_text().splitlines()
+    rows = [line.split(",") for line in lines[1:]]
+    (changed / "visit.csv").write_text("\n".join([lines[0]] + [",".join(r[:3] + [f"{float(r[3]) * 3:.2f}"]) for r in rows]) + "\n")
+    lines = (changed / "member.csv").read_text().splitlines()
+    rows = [line.split(",") for line in lines[1:]]
+    (changed / "member.csv").write_text("\n".join([lines[0]] + [",".join(r[:4] + ["G01" if n % 10 else r[4]] + r[5:]) for n, r in enumerate(rows)]) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={changed}", "--out", str(out)]) == 0
+    moved = {(d["part"], d["column"]): d for d in yaml.safe_load((out / "drift.yaml").read_text())["drift"]
+             if d["drift"] == "distribution_changed"}
+    assert "Kolmogorov-Smirnov" in moved[("visit", "amount")]["detail"]
+    assert "significant" in moved[("member", "grp_code")]["detail"]
+    assert ("visit", "visited_on") not in moved  # unchanged dates do not drift
+
+
+def test_psi_and_ks_measure_how_far_a_distribution_moved():
+    from profiling import drift
+
+    same = {"a": 0.5, "b": 0.5}
+    assert drift.psi(same, 0.0, same, 0.0) == 0
+    assert drift.psi({"a": 0.9, "b": 0.1}, 0, {"a": 0.1, "b": 0.9}, 0) > drift.PSI_SIGNIFICANT
+    assert drift.distribution_drift({"kind": "categories", "shares": {"a": 0.5, "b": 0.5}, "other": 0},
+                                    {"kind": "categories", "shares": {"a": 0.52, "b": 0.48}, "other": 0}) is None
+    line = [float(i) for i in range(21)]
+    assert drift.ks(line, line) == 0
+    assert abs(drift.ks(line, [v + 10 for v in line]) - 0.5) < 0.01  # half the values lie beyond the other's top
+    assert drift.distribution_drift({"kind": "quantiles", "points": line}, {"kind": "quantiles", "points": [5.0] * 21})
+    assert drift.distribution_drift(None, {"kind": "quantiles", "points": line}) is None  # approved before it was kept
+
+
+def test_a_long_code_list_does_not_drift_when_values_only_swap_out_of_the_listed_top():
+    from profiling import drift
+
+    # 1,000 nearly equal values: each side lists a different top 200, the rest in other.
+    old = {"kind": "categories", "shares": {f"v{i}": 0.001 for i in range(200)}, "other": 0.8}
+    new = {"kind": "categories", "shares": {f"v{i}": 0.001 for i in range(100, 300)}, "other": 0.8}
+    assert drift.distribution_drift(old, new) is None
+    # A complete list: a value that vanished is a real shift.
+    gone = drift.psi({"a": 0.5, "b": 0.5}, 0.0, {"a": 1.0}, 0.0)
+    assert gone > drift.PSI_SIGNIFICANT
+    assert "measured differently" in drift.distribution_drift(old, {"kind": "quantiles", "points": [0.0] * 21})
+
+
+def test_ks_is_exact_at_a_jump():
+    from profiling import drift
+
+    # Half the values are 0 (a mass point), the rest spread from 0 to 10.
+    massed = [0.0] * 11 + [float(i) for i in range(1, 11)]
+    spread = [i / 2 for i in range(21)]
+    assert abs(drift.ks(massed, spread) - 0.5) < 0.06
+
+
+def test_a_zoned_time_is_measured_as_its_own_instant(tmp_path):
+    import duckdb
+    from profiling import profile
+
+    con = duckdb.connect()
+    con.execute("SET TimeZone = 'America/New_York'")
+    con.execute("CREATE TABLE t AS SELECT TIMESTAMPTZ '2024-01-01 00:00:00+00' + INTERVAL (i) DAY AS at FROM range(30) r(i)")
+    column = profile.columns(con, "t")[0]
+    assert profile.distribution(con, "t", column, False)["points"][0] == 1704067200.0

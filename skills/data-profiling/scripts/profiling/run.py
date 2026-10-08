@@ -160,7 +160,10 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         column_findings.append({
             "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
-            "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"]})
+            "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
+            # A personal column's values are never written out, so it has no distribution.
+            "distribution": None if tagged["sensitivity"] != "none" else profile.distribution(
+                con, p, c, c["name"] in {x["column"] for x in code_list})})
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
             identifier_findings.append(_identifier(con, p, c, record_key))
     parent = parts[p].parent
