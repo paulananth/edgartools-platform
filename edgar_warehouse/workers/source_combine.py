@@ -262,7 +262,8 @@ def _documents(envelope, artifacts):
     plan = _contract(contract, refs)
     inputs, size, count = {}, 0, 0
     for name, ref in refs.items():
-        body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"])
+        body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"],
+                                              allow_lookup_receipts=True)
         size += consumed
         if size > TOTAL_BYTES:
             raise ValueError("Combination readings exceed total byte budget")

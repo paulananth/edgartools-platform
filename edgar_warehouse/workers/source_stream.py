@@ -96,7 +96,7 @@ def _policy(contract):
     return spec, engine, header_engine
 
 
-def output(envelope, artifacts, documents, context_for, *, publish, max_index_bytes):
+def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, max_index_bytes):
     manifest, contract, execution, inputs = documents
     spec, engine, header_engine = _policy(contract)
     if execution["workers"] != 1:
@@ -108,6 +108,10 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
         total_rows = 0
         for entry in inputs:
             ref, context, evidence = context_for(manifest, entry, artifacts)
+            lookups, lookup_evidence = lookup_for(manifest, entry, artifacts, contract)
+            evidence.update(lookup_evidence)
+            if header_engine is not None and contract["read"].get("lookup_sets"):
+                raise ValueError("Indexed stream lookup receipts currently require JSON framing")
             ordinal = spec["ordinal_context"]
             if ordinal is not None and ordinal in context:
                 raise ValueError("Stream ordinal context is generated, never supplied by a caller")
@@ -181,7 +185,7 @@ def output(envelope, artifacts, documents, context_for, *, publish, max_index_by
                     stream = stack.enter_context(archive.open(members[0]))
                 if header_engine is None:
                     scan = engine.stream_json_array(stream, wrapper=spec["wrapper"], on_reading=project,
-                        context=context, ordinal_context=ordinal,
+                        context=context, ordinal_context=ordinal, lookups=lookups,
                         **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",
                                                       "min_integer", "record_encoding")})
                 else:

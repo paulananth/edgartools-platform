@@ -10,6 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
+import edgar_warehouse.bookkeeping.clean.config as bookkeeping_config
+import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import reference
 from . import source_stream, source_readings, source_parquet
@@ -20,7 +22,9 @@ OUTPUT_BYTES = 128 * 1024**2
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
     return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__),
-            Path(source_stream.__file__), Path(source_readings.__file__), Path(source_parquet.__file__), *source_parquet.runtime_files()]
+            Path(source_stream.__file__), Path(source_readings.__file__),
+            Path(source_parquet.__file__), *source_parquet.runtime_files(),
+            Path(bookkeeping_config.__file__), Path(control_contract.__file__)]
 
 
 def _documents(envelope: dict, artifacts):
@@ -28,8 +32,8 @@ def _documents(envelope: dict, artifacts):
         raise ValueError("source.read verifies source.output only")
     manifest = artifacts.json(envelope["input"])
     if (set(manifest) != {"version", "contract", "artifacts"}
-            or type(manifest["version"]) is not int or manifest["version"] not in (1, 2)):
-        raise ValueError("Source input names version 1 or 2, contract and artifacts")
+            or type(manifest["version"]) is not int or manifest["version"] not in (1, 2, 3)):
+        raise ValueError("Source input names version 1, 2 or 3, contract and artifacts")
     contract = files.loads(artifacts.verified(manifest["contract"], max_bytes=1024**2).decode("utf-8"))
     execution = contract.get("execution")
     required = {"profile", "workers", "max_artifacts"}
@@ -48,27 +52,70 @@ def _documents(envelope: dict, artifacts):
     inputs = manifest["artifacts"]
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= execution["max_artifacts"]:
         raise ValueError("Source input exceeds the contract's bounded artifact count")
+    for entry in inputs:
+        _entry(manifest, entry)
     if "input_sha256s" in execution:
         pins = execution["input_sha256s"]
         if not isinstance(pins,list) or len(pins) != len(inputs):
             raise ValueError("Source input_sha256s pins every artifact in order")
         for pin,entry in zip(pins,inputs):
             reference({"uri":"approved-input", "sha256":pin})
-            if manifest["version"] == 2:
-                if not isinstance(entry,dict) or set(entry) != {"input","context"}:
-                    raise ValueError("Version-2 artifact names input and context receipts")
-                entry = entry["input"]
+            entry = _entry(manifest, entry)
             if reference(entry)["sha256"] != pin:
                 raise ValueError("Source input differs from approved artifact hash")
     return manifest, contract, execution, inputs
 
 
+def _entry(manifest, entry):
+    if manifest["version"] == 1:
+        return reference(entry)
+    required = {"input", "context"} | ({"lookups"} if manifest["version"] == 3 else set())
+    if not isinstance(entry, dict) or set(entry) != required:
+        raise ValueError("Source artifact names exact input/context and version-3 lookup receipts")
+    for receipt in entry.values():
+        reference(receipt)
+    return entry["input"]
+
+
+def _lookups(manifest, entry, artifacts, contract):
+    """Authenticate a bounded immutable indexed scope before opening its source."""
+    declared = contract["read"].get("lookup_sets", {})
+    if manifest["version"] != 3:
+        if declared:
+            raise ValueError("Declared lookup sets require a version-3 input receipt")
+        return {}, {}
+    ref = _entry(manifest, entry)
+    bound = artifact_store.json_value(artifacts.verified(entry["lookups"], max_bytes=64 * 1024**2))
+    if (not isinstance(bound, dict) or set(bound) != {"version", "input", "sets"}
+            or type(bound["version"]) is not int or bound["version"] != 1
+            or bound["input"] != ref or not isinstance(bound["sets"], dict)
+            or set(bound["sets"]) != set(declared)):
+        raise ValueError("Lookup document binds exactly declared sets to the input receipt")
+    total = 0
+    for name, values in bound["sets"].items():
+        spec = declared[name]
+        if not isinstance(values, list) or len(values) > spec["max_values"]:
+            raise ValueError("Lookup raw values exceed their declared count or list shape")
+        size = 0
+        for value in values:
+            if not isinstance(value, str):
+                raise ValueError("Lookup values require exact text")
+            length = len(value.encode("utf-8"))
+            if length > spec["max_value_bytes"]:
+                raise ValueError("Lookup value exceeds its declared UTF-8 bound")
+            size += length
+            if size > spec["max_bytes"]:
+                raise ValueError("Lookup raw values exceed their declared UTF-8 byte bound")
+        total += size
+        if total > 64 * 1024**2:
+            raise ValueError("Lookup sets exceed the aggregate UTF-8 byte bound")
+    return bound["sets"], {"lookups": entry["lookups"]}
+
+
 def _context(manifest, entry, artifacts):
     if manifest["version"] == 1:
         return entry, {}, {}
-    if not isinstance(entry, dict) or set(entry) != {"input", "context"}:
-        raise ValueError("Version-2 artifact names input and context receipts")
-    ref = entry["input"]
+    ref = _entry(manifest, entry)
     bound = artifact_store.json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
     if (not isinstance(bound, dict) or set(bound) != {"version", "input", "values"}
             or type(bound["version"]) is not int or bound["version"] != 1
@@ -91,8 +138,11 @@ def _output(envelope: dict, artifacts, documents=None) -> bytes:
 
     def read(entry):
         ref, context, evidence = _context(manifest, entry, artifacts)
+        lookups, lookup_evidence = _lookups(manifest, entry, artifacts, contract)
+        evidence.update(lookup_evidence)
         data = artifacts.verified(ref, max_bytes=execution.get("max_input_bytes", max_bytes))
-        result = engine.read(source_parquet.document(data, contract) if parquet else data, context=context)
+        result = engine.read(source_parquet.document(data, contract) if parquet else data,
+                             context=context, lookups=lookups)
         return {"input": ref, **evidence, "tables": result.tables, "deferred": result.deferred}
 
     with ThreadPoolExecutor(max_workers=execution["workers"]) as pool:
@@ -108,7 +158,7 @@ def execute(envelope: dict, artifacts) -> dict:
     documents = _documents(envelope, artifacts)
     read = documents[1].get("read")
     if isinstance(read, dict) and "stream" in read:
-        output = source_stream.output(envelope, artifacts, documents, _context, publish=True,
+        output = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=True,
                                       max_index_bytes=OUTPUT_BYTES)
     else:
         output = _output(envelope, artifacts, documents)
@@ -121,7 +171,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     documents = _documents(envelope, artifacts)
     read = documents[1].get("read")
     if isinstance(read, dict) and "stream" in read:
-        expected = source_stream.output(envelope, artifacts, documents, _context, publish=False,
+        expected = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=False,
                                         max_index_bytes=OUTPUT_BYTES)
     else:
         expected = _output(envelope, artifacts, documents)

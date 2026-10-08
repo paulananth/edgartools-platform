@@ -747,6 +747,12 @@ null selects `else`, and other types refuse. Both branches validate before
 reading; only the selected branch reads the document. Nesting is capped at
 eight calls. Context/reference/custom names in all conditions must resolve.
 
+`each: {empty: {}}` returns zero rows without inspecting the document or
+evaluating columns. Use it as an `each.choose` branch when an eligibility
+condition excludes a record. Arguments must be an empty mapping; both choose
+branches still validate. This avoids relying on a supposedly absent path
+that captured data could contain.
+
 `test: {path: code, kind: truthy}` returns a native boolean without text
 coercion or materializing a subtree. Kinds are `truthy`, `missing`, `null`,
 `not_null`, `array`, `object` and `text`; optional `from: document` tests the original

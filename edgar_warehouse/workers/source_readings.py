@@ -27,7 +27,7 @@ def table_names(names):
     return names
 
 
-def load(ref, artifacts, *, max_bytes, max_rows):
+def load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
     """Return normalized version-1 tables and total authenticated bytes read."""
     data = artifacts.verified(ref, max_bytes=max_bytes)
     size = len(data)
@@ -35,6 +35,13 @@ def load(ref, artifacts, *, max_bytes, max_rows):
     if (not isinstance(body, dict) or type(body.get("version")) is not int
             or body["version"] not in (1, 2)):
         raise ValueError("Consumer requires a version-1 or version-2 source reading")
+    entries = body.get("artifacts", [])
+    if isinstance(entries, list):
+        for entry in entries:
+            if isinstance(entry, dict) and "lookups" in entry:
+                reference(entry["lookups"])
+                if not allow_lookup_receipts:
+                    raise ValueError("Consumer must explicitly bind lookup receipts into its output identity")
     if body["version"] == 1:
         return body, size
     if (set(body) != {"version", "contract", "artifacts"}
@@ -45,11 +52,12 @@ def load(ref, artifacts, *, max_bytes, max_rows):
     for artifact in body["artifacts"]:
         required = {"input", "record_count", "expanded_bytes", "table_names", "partitions"}
         if (not isinstance(artifact, dict) or not required <= set(artifact)
-                or set(artifact) - required - {"context"}):
+                or set(artifact) - required - {"context", "lookups"}):
             raise ValueError("Partitioned artifact has unknown or missing evidence")
         reference(artifact["input"])
-        if "context" in artifact:
-            reference(artifact["context"])
+        for evidence in ("context", "lookups"):
+            if evidence in artifact:
+                reference(artifact[evidence])
         names = table_names(artifact["table_names"])
         if (not _integer(artifact["record_count"], 0, 10_000_000)
                 or not _integer(artifact["expanded_bytes"], 1, 16 * 1024**3)

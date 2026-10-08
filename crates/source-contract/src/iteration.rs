@@ -9,6 +9,10 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
     let map = each.as_mapping().filter(|m| m.len() == 1).ok_or("each requires one iteration call")?;
     let (name, args) = map.iter().next().unwrap();
     match name.as_str() {
+        Some("empty") => {
+            if !args.as_mapping().is_some_and(|m| m.is_empty()) { return Err("empty iteration takes an empty mapping".into()); }
+            Ok(())
+        },
         Some("parallel") => parallel::validate(each, format),
         Some("matrix") => matrix::validate(each, format),
         Some("values") => {
@@ -71,6 +75,7 @@ pub(crate) fn needs_order(each: &Value) -> bool {
 }
 
 pub(crate) fn rows(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, each: &Value, maximum: usize, take: usize) -> Result<(Vec<El>, usize), Rejected> {
+    if each.get("empty").is_some() { return Ok((Vec::new(), 0)); }
     if let Some(path) = each.as_str() {
         let items = crate::items_of(document, path)?;
         if items.len() > maximum { return Err(Rejected::new("limit_exceeded", "Iteration exceeds max_records")); }

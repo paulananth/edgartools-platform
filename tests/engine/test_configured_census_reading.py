@@ -164,6 +164,7 @@ def test_census_name_transforms_equal_the_canonical_normalizer_recipes():
     from edgar_warehouse.rules import files
     for source, recipe in [('gleif',name_census.GLEIF_READING),
                            ('gleif',name_census.GLEIF_IDENTITY),
+                           ('gleif',files.load(files.ROOT / 'sources/gleif/census-names-stream.yaml')),
                            ('sec.submissions.company',name_census.SEC_READING)]:
         canonical = files.load(files.ROOT / f'sources/{source}/name-key.yaml')
         transforms = canonical['read']['tables']['names']['columns']['key']['text']['transforms']
