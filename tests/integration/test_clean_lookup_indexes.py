@@ -31,7 +31,8 @@ postgres = core.postgres
 database = core.database
 
 TABLES = ("source_reading", "decision", "master_entity", "current_record")
-INDEXES = ("source_reading_link_subjects", "master_entity_id_text", "decision_retired_source",
+INDEXES = ("source_reading_link_subjects", "source_reading_subject", "master_entity_id_text", "decision_retired_source",
+           "decision_subject", "decision_entity", "decision_left", "decision_right", "decision_target",
            "current_record_link_start", "current_record_link_end", "current_record_review_entity",
            "current_record_review_subject", "current_record_review_affected_subjects")
 
@@ -155,19 +156,59 @@ def test_a_populated_store_at_002_takes_003_with_the_same_snapshots(database):
         assert conn.scalar(text("SELECT count(*) FROM mdm.migration WHERE name='003_lookup_indexes.sql'")) == 1
 
 
+def test_a_populated_store_at_011_takes_012_with_the_same_snapshots(database):
+    """Migration 012 joins the keys instead of comparing each row with the
+    whole list (profiling ticket 07, tuning); every snapshot keeps its hash."""
+    owner, children, others, pairs = populate(database)
+    sql = (Path(store.__file__).parents[1] / "migrations" / "003_lookup_indexes.sql").read_text()
+    old = sql[sql.index("CREATE OR REPLACE FUNCTION mdm.match_proposal_snapshot"):]
+    old = old[: old.index("$$;") + 3]
+    scopes = [
+        ({owner["subject"]}, ()),
+        ({children[0]["subject"], pairs[3][0]["entity_id"]}, ("fixture.primary",)),
+        ({pairs[-1][0]["entity_id"], pairs[-2][0]["entity_id"]}, ()),
+        ({c["subject"] for c in children} | {o["subject"] for o in others}, ("fixture.secondary",)),
+    ]
+    with database.admin.begin() as conn:
+        conn.execute(text(old))
+        conn.execute(text("ALTER FUNCTION mdm.match_proposal_snapshot(jsonb) SET plan_cache_mode TO force_custom_plan"))
+        conn.execute(text("DROP FUNCTION mdm.readings_naming(text[])"))
+        conn.execute(text("DROP FUNCTION mdm.decisions_naming(text[])"))
+        for name in ("source_reading_link_subjects", "current_record_review_affected_subjects"):
+            conn.execute(text(f"ALTER INDEX mdm.{name} RESET (fastupdate)"))
+        # The migration ledger is append-only; only this simulation of an older
+        # store goes around that, as the database owner.
+        conn.execute(text("SET LOCAL session_replication_role = replica"))
+        conn.execute(text("DELETE FROM mdm.migration WHERE name='012_key_join_lookups.sql'"))
+        conn.execute(text("SET LOCAL session_replication_role = origin"))
+        before = [snapshot(conn, k, s) for k, s in scopes]
+        counts = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in TABLES}
+    migrate(database.admin, application_role="clean_application")
+    with database.application.connect() as conn:
+        assert [snapshot(conn, k, s) for k, s in scopes] == before
+    with database.admin.connect() as conn:
+        assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in TABLES} == counts
+        assert conn.scalar(text("SELECT count(*) FROM mdm.migration WHERE name='012_key_join_lookups.sql'")) == 1
+        # The indexes probed one key at a time keep no pending list.
+        for name in ("source_reading_link_subjects", "current_record_review_affected_subjects"):
+            assert "fastupdate=off" in conn.scalar(text(
+                "SELECT reloptions FROM pg_class WHERE oid = to_regclass(:n)"), {"n": f"mdm.{name}"})
+
+
 def test_the_closure_finds_what_it_found_before_the_indexes(database):
     """`load_closure` reads links through `mdm.reading_link_subjects`; it finds
     the same readings and decisions as the query it replaced."""
     owner, children, others, pairs = populate(database)
 
-    def old_closure(conn, keys):
+    def old_closure(conn, keys, retiring=()):
         readings, decisions = {}, {}
         while True:
             before = set(keys)
             for (body,) in conn.execute(text(
-                    """SELECT body FROM mdm.source_reading WHERE body->>'subject'=ANY(:k) OR EXISTS(
-                    SELECT 1 FROM jsonb_array_elements(body->'relationships') r
-                    WHERE r->>'target_subject'=ANY(:k) OR r->>'source_subject'=ANY(:k))"""), {"k": sorted(keys)}):
+                    """SELECT body FROM mdm.source_reading WHERE source_code=ANY(:r) OR body->>'subject'=ANY(:k)
+                    OR EXISTS(SELECT 1 FROM jsonb_array_elements(body->'relationships') r
+                    WHERE r->>'target_subject'=ANY(:k) OR r->>'source_subject'=ANY(:k))"""),
+                    {"k": sorted(keys), "r": list(retiring)}):
                 readings[body["assertion_id"]] = body
                 keys.add(body["subject"])
                 for r in body.get("relationships", []):
@@ -196,6 +237,15 @@ def test_the_closure_finds_what_it_found_before_the_indexes(database):
         assert {d["decision_id"] for d in found} == expected_decisions
         assert {i["entity_id"] for i in identities} == {i["entity_id"] for i, _ in pairs} & (
             expected_keys(readings, found) | keys)
+
+    # Retiring a source: the closure takes every reading of it (migration 012
+    # moved this branch into the joined lookup's IN).
+    retire = decision("retire_source", actor="steward", reason="probe", at=AT, source_code="fixture.secondary")
+    with database.application.connect() as conn:
+        readings, found, _ = load_closure(conn, [], [retire], limit=10000)
+        expected_readings, _ = old_closure(conn, {retire["decision_id"]}, ["fixture.secondary"])
+    assert {a["assertion_id"] for a in readings} == expected_readings
+    assert any(a["source_code"] == "fixture.secondary" for a in readings)
 
 
 def expected_keys(readings, decisions):

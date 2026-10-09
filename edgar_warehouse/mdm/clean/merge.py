@@ -143,17 +143,16 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
         evidence = rows(
             conn,
             """SELECT body FROM mdm.source_reading
-            WHERE source_code=ANY(:retiring) OR body->>'subject'=ANY(:keys)
-             OR mdm.reading_link_subjects(body) && CAST(:keys AS text[]) LIMIT :lim""",
+            WHERE assertion_id IN (SELECT id FROM mdm.readings_naming(CAST(:keys AS text[])) id
+             UNION ALL SELECT assertion_id FROM mdm.source_reading WHERE source_code=ANY(:retiring)) LIMIT :lim""",
             keys=sorted(keys),
             retiring=retiring,
             lim=limit + 1,
         )
         decision_rows = rows(
             conn,
-            """SELECT body FROM mdm.decision WHERE
-            body->>'subject'=ANY(:keys) OR body->>'entity_id'=ANY(:keys) OR body->>'left'=ANY(:keys)
-            OR body->>'right'=ANY(:keys) OR body->>'target'=ANY(:keys) OR decision_id=ANY(:keys) LIMIT :lim""",
+            """SELECT body FROM mdm.decision
+            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id) LIMIT :lim""",
             keys=sorted(keys),
             lim=limit + 1,
         )
