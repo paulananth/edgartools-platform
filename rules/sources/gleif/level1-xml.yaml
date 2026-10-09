@@ -140,3 +140,9 @@ read:
         header:
           each: no_selected_header_records
           columns: {}
+
+# Full-source attestation covers every record, independent of mastering scope.
+attestation:
+  table: level1
+  record_column: record
+  ordinal_column: source_index

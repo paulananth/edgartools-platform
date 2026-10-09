@@ -52,3 +52,9 @@ read:
     max_partitions: 4096
     max_spool_bytes: 1073741824
     max_output_rows: 100000
+
+# Full-source attestation covers every record, independent of mastering scope.
+attestation:
+  table: reporting_exceptions
+  record_column: record
+  ordinal_column: source_index

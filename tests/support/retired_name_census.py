@@ -30,7 +30,7 @@ from typing import BinaryIO
 
 from edgar_warehouse.mdm.clean import cascade as cascaded
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, mapped_values
-from edgar_warehouse.mdm.clean.gleif_source import inspect_archive
+from tests.support.retired_gleif_attestation import inspect_archive
 from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
 from edgar_warehouse.mdm.clean.store import Conflict
 

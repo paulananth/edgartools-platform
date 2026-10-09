@@ -6,6 +6,32 @@ Rules workflow after its test run.
 
 ## Streamed JSON record projection
 
+### Full-source archive attestation
+
+For native publication verification, `workers.source_attestation.attest_zip`
+uses the same configured stream policy and native readers without retaining
+projected partitions. Declare the raw record and source ordinal columns:
+
+```yaml
+attestation:
+  table: level1
+  record_column: record
+  ordinal_column: source_index
+```
+
+This boundary authenticates a private compressed snapshot, requires one
+unencrypted ZIP member and the pinned exact record count, and checks CRC,
+expanded length and original-source EOF. It hashes every configured raw record,
+including records outside the mastering scope; table selection is removed only
+from a private contract copy. Callbacks produce provisional evidence. A returned
+report is required before committing any callback result.
+
+Publisher authority and XML header references must be authenticated separately.
+GLEIF's publication binding supplies them from its pinned manifest. The generic
+boundary interprets no GLEIF fields and grants no identity or binding authority.
+Use `source.read` for Bookkeeping-managed partition publication and verification;
+the callable attestation boundary is not a separate execution profile.
+
 For a captured single-wrapper array, `source.read` can authenticate the entire
 input into a private bounded snapshot, then project each object through the
 ordinary configured engine. Declare `read.stream` and use one execution worker:

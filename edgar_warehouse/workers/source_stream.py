@@ -21,7 +21,7 @@ def _encode(value):
                       sort_keys=True, allow_nan=False).encode()
 
 
-def _policy(contract):
+def stream_policy(contract):
     read = contract["read"]
     spec = read["stream"]
     maxima = {"max_input_bytes": 1024**3, "max_bytes": 16 * 1024**3,
@@ -98,7 +98,7 @@ def _policy(contract):
 
 def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, max_index_bytes):
     manifest, contract, execution, inputs = documents
-    spec, engine, header_engine = _policy(contract)
+    spec, engine, header_engine = stream_policy(contract)
     if execution["workers"] != 1:
         raise ValueError("Streamed source.read uses one worker to bound private spool storage")
     # A single private spool bounds disk across all inputs, including failures.
