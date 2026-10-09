@@ -73,7 +73,7 @@ def main():
     # explicitly not a claim about the SEC population or installed bindings.
     raw = json.dumps({'records': rows}).encode()
     source_engine.STEPS = {}
-    engine = source_stream._policy(files.load(recipe))[1]
+    engine = source_stream.stream_policy(files.load(recipe))[1]
     setup_seconds = time.perf_counter() - started
     native_seconds, oracle_seconds, configured_seconds = [], [], []
     for trial in range(5):

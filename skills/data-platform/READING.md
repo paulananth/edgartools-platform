@@ -27,8 +27,8 @@ from a private contract copy. Callbacks produce provisional evidence. A returned
 report is required before committing any callback result.
 
 Publisher authority and XML header references must be authenticated separately.
-GLEIF's publication binding supplies them from its pinned manifest. The generic
-boundary interprets no GLEIF fields and grants no identity or binding authority.
+A source's publication binding supplies them from its pinned manifest. The generic
+boundary interprets no source fields and grants no identity or binding authority.
 Use `source.read` for Bookkeeping-managed partition publication and verification;
 the callable attestation boundary is not a separate execution profile.
 

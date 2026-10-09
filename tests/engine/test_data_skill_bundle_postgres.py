@@ -965,7 +965,7 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
             expected_sha256=raw["sha256"], on_record=lambda record,index: seen.append((record,index)))
         assert seen == [(row,0)] and attestation["record_count"] == 1
         assert attestation["canonical_source_hash"] == hashlib.sha256(
-            (json.dumps(row,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\n").encode()).hexdigest()
+            (json.dumps(row,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\\n").encode()).hexdigest()
         contract = store.put_bytes((folder / "contract.yaml").as_uri(),json.dumps(rules).encode())
         context = store.put(folder.as_uri(),{"version":1,"input":raw,"values":{"publication_count":1}})
         manifest = store.put(folder.as_uri(),{"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
