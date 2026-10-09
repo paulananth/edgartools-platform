@@ -5,6 +5,10 @@ step); its keys say what to take from it, so nothing feed-specific runs:
 
 - `table`: the reading's table whose rows become MDM records;
 - optional `record_column`: an object-valued column holding the complete source record;
+- optional `distinct_on`: 1 to 8 columns; of the artifact's rows with equal
+  values in them (a missing column reads as null) only the first, in file
+  order, becomes a record, so an entity named in many rows of one file is one
+  record of it. The rows themselves stay in the reading;
 - optional `effective_column`: a column holding the artifact's effective time,
   an ISO 8601 instant with a timezone, the same in every row (normally from
   the reading's context: when the file was published). Each of the artifact's
@@ -64,6 +68,12 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     effective_column = keys.get("effective_column")
     if "effective_column" in keys and (not isinstance(effective_column, str) or not effective_column):
         raise ValueError("mdm.prepare effective_column must be nonempty text")
+    distinct_on = keys.get("distinct_on")
+    if "distinct_on" in keys and (
+        not isinstance(distinct_on, list) or not 1 <= len(distinct_on) <= 8
+        or any(not isinstance(c, str) or not c for c in distinct_on) or len(set(distinct_on)) != len(distinct_on)
+    ):
+        raise ValueError("mdm.prepare distinct_on names 1 to 8 distinct nonempty columns")
     reading, _ = source_readings.load(envelope["input"], artifacts,
                                       max_bytes=INPUT_BYTES, max_rows=INPUT_ROWS)
     if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
@@ -75,6 +85,8 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             raise ValueError(f"The reading has no table {keys['table']}")
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ValueError("mdm.prepare table rows must be objects")
+        if distinct_on is not None:
+            rows = _first_of_each(rows, distinct_on)
         publication = {}
         if effective_column is not None and rows:
             publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
@@ -113,6 +125,17 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     if len(encoded) > MANIFEST_BYTES:
         raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
     return files, encoded
+
+
+def _first_of_each(rows: list[dict], columns: list[str]) -> list[dict]:
+    """The first row, in order, of each distinct value of the columns."""
+    seen, kept = set(), []
+    for row in rows:
+        key = json.dumps([row.get(c) for c in columns], sort_keys=True)
+        if key not in seen:
+            seen.add(key)
+            kept.append(row)
+    return kept
 
 
 def _effective_at(rows: list[dict], column: str, as_of: str) -> str:

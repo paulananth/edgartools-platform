@@ -111,6 +111,12 @@ step:
   they advance (its own, from checkpoint 0), a `batch_id` prefix and the
   `as_of` instant. Optional `record_column` selects an object-valued column
   containing the complete source record; omitted, the table row is the record.
+  Optional `distinct_on` names 1 to 8 columns: of a file's rows with equal
+  values in them, only the first in file order becomes a record, so an entity
+  named in many rows of one file (a counterparty listed by every filer) is one
+  record of it per file. Use it when the entity's own rows would otherwise
+  outgrow the Merge Stage's 10,000-record closure; the rows themselves belong
+  in silver.
   Optional `effective_column` names a column holding the file's effective
   time: an ISO 8601 instant with a timezone, written the same way in every
   row of one file and no later than `as_of` (MDM would leave later records
