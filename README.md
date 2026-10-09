@@ -18,29 +18,39 @@ mastering workers.
 
 ## Architecture
 
-Captured files are evidence. An approved Rules version says how to read them.
-Bookkeeping freezes the work, hands each unit to a worker, and admits a
-verifier's read-back before the unit is complete. Clean MDM masters identities.
-Reference data and silver are separate landings. The analytics path reads
-warehouse objects; it does not decide an identity.
+Ingest acquires one source file and keeps the verified bytes as bronze.
+An approved Rules version says how to read that file. Bookkeeping freezes
+the work, hands each unit to a worker, and admits a verifier's read-back
+before the unit is complete. Silver is the flat landing of those rows.
+Clean MDM masters identities from the source extract. Reference data is
+its own landing. The analytics path reads warehouse objects and does not
+decide an identity.
 
 ```text
-Captured files
+Ingest
+one source file, hash verified
+      |
+      v
+Bronze
+one immutable captured file
       |
       v
 Approved Rules ---------------- Bookkeeping
-      |                         frozen work, lease, retry
-      v                              |
-source.read                          v
-Rust, called from Python             verifier read-back
+how that file is read            frozen work, lease, retry
+      |                              |
+      v                              v
+source.read                          verifier read-back
+source extract                       Rust, called from Python
       |
-      +---- source.combine          when one feed joins several source extracts
+      +---- source.combine           when one feed joins several source extracts
       |
-      +---- reference data          pinned codes and hierarchies
+      +---- Silver                   flat rows on local PostgreSQL
+      |                              landed by hand from an approved spec
       |
-      +---- silver land             flat rows on local PostgreSQL
-      |
-      v
+      +---- reference data           pinned codes and hierarchies
+
+Mastering, from the source extract:
+
 mdm.prepare ---- mdm.merge ---- mdm.publish
                                       |
                                       v
@@ -56,8 +66,9 @@ Rules own the versioned contracts. Bookkeeping owns work and recovery, and
 starts without a parser or a master record. Workers read and write. A separate
 verifier rereads the destination. Clean MDM owns identities, evidence, merge
 decisions and publication intent, and each commit checks the worker's live
-lease. The Change Journal records history. Silver lands an approved spec on
-local PostgreSQL and does not commit a master.
+lease. The Change Journal records history. Silver lands an approved spec by hand on
+local PostgreSQL and does not commit a master. The pipeline worker for that
+landing is not built.
 
 ## Parsing
 
