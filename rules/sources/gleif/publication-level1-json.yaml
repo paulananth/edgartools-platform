@@ -1,0 +1,109 @@
+# Publisher metadata projection; authority stays in a separate pinned manifest binding.
+source: gleif.publication.level1
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1
+  assertions:
+  - test:
+      equal:
+        left:
+          value:
+            path: data.type
+        right:
+          const:
+            value: lei2
+    reason: Publication must describe Level 1
+  - test:
+      equal:
+        left:
+          value:
+            path: data.full_file.json.type
+        right:
+          const:
+            value: lei2
+    reason: FULL artifact must describe Level 1
+  - test:
+      equal:
+        left:
+          value:
+            path: data.full_file.json.format
+        right:
+          const:
+            value: json
+    reason: FULL artifact must be JSON
+  - test:
+      equal:
+        left:
+          value:
+            path: data.full_file.json.delta_type
+        right:
+          const:
+            value: GoldenCopy
+    reason: Census requires a FULL Golden Copy
+  - test:
+      test:
+        path: data.publish_date
+        kind: text
+    reason: Publication must name its publisher time
+  - test:
+      equal:
+        left:
+          value:
+            path: data.full_file.json.url
+        right:
+          context:
+            name: source_url
+    reason: Publisher URL must equal separately pinned publication binding
+  tables:
+    metadata:
+      each: .
+      columns:
+        publication_count:
+          value:
+            path: data.full_file.json.record_count
+            type: integer
+            nullable: false
+        compressed_bytes:
+          value:
+            path: data.full_file.json.size
+            type: integer
+            nullable: false
+        cdf_version:
+          value:
+            path: data.full_file.json.cdf_version
+            type: text
+            nullable: false
+        source_url:
+          value:
+            path: data.full_file.json.url
+            type: text
+            nullable: false
+        content_date:
+          text:
+            path: data.publish_date
+            transforms:
+            - replace:
+                from: ' '
+                to: T
+            - regex_replace:
+                pattern: $
+                with: +00:00
+        source_uri:
+          context:
+            name: source_uri
+        source_sha:
+          context:
+            name: source_sha
+  context:
+    source_uri:
+      type: text
+    source_sha:
+      type: text
+    source_url:
+      type: text

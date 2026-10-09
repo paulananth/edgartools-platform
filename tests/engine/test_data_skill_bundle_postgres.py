@@ -43,6 +43,54 @@ WHEELS = {
 DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
 
 
+@pytest.mark.parametrize("case", ["ordinary", "agent", "placeholder", "headquarters_agent",
+    "cross_line_agent", "postcode", "unicode", "noncandidate", "ineligible", "missing_name",
+    "bad_field", "bad_lines", "branch"])
+def test_complete_census_general_projection_matches_active_cascade_without_install(case):
+    """Bounded projection proof; no install or database population gate."""
+    import copy
+    from edgar_warehouse.mdm.clean import cascade, company_source, name_census, quality
+    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+    from edgar_warehouse.rules.source_engine import SourceEngine
+    from tests.engine.test_gleif_configured_fields import raw
+
+    row = copy.deepcopy(raw())
+    entity = row["Entity"]
+    entity["EntityStatus"] = {"$": "ACTIVE"}
+    if case == "agent": entity["LegalAddress"]["FirstAddressLine"] = {"$": "1209 Orange Street"}; entity.pop("HeadquartersAddress")
+    if case == "placeholder": entity["LegalAddress"]["FirstAddressLine"] = {"$": "N/A"}; entity.pop("HeadquartersAddress")
+    if case == "headquarters_agent": entity["HeadquartersAddress"]["FirstAddressLine"] = {"$": "CT Corporation"}
+    if case == "cross_line_agent": entity["HeadquartersAddress"].update(FirstAddressLine={"$": "CT"}, AdditionalAddressLine=[{"$": "CORPORATION"}])
+    if case == "postcode": entity["HeadquartersAddress"]["PostalCode"] = {"$": "12345-6789"}
+    if case == "unicode": entity["HeadquartersAddress"]["FirstAddressLine"] = {"$": "Beranových Street\nSuite 12\nΟδός 7"}
+    if case == "noncandidate": entity["LegalName"] = {"$": "Outside Company"}
+    if case == "ineligible": entity["EntityStatus"] = {"$": "INACTIVE"}
+    if case == "missing_name": entity["LegalName"] = {"$": " "}
+    if case == "bad_field": entity["LegalJurisdiction"] = {"$": []}
+    if case == "bad_lines": entity["LegalAddress"]["AdditionalAddressLine"] = [42]
+    if case == "branch": entity["EntityCategory"] = {"$": "BRANCH"}
+    spec = cascade.spec(company_source.POLICY)
+    assert len(spec["passes"]) == 7
+    contract = dataset_contract("level1")
+    expected = name_census.cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
+    recipe = files.load(files.ROOT / "sources/gleif/census-cascade-record.yaml")
+    projected = SourceEngine(recipe).read(json.dumps(row, ensure_ascii=False).encode()).tables["mapped"][0]["observation"]
+    if expected is None:
+        assert projected is None
+        return
+    assert projected["lei"] == expected.lei
+    assert projected["legal"] == expected.legal
+    assert projected["eligible"] == expected.eligible
+    assert projected["last_update"] == expected.last_update
+    assert projected["jurisdiction"] == expected.jurisdiction
+    assert cascade.place(projected["place"]) == expected.place
+    from edgar_warehouse.mdm.clean.adapters import mapped_values
+    _, _, original_quality = mapped_values(row, contract)
+    record = {"provenance": {"quality": original_quality}}
+    assert projected["legal_withheld"] == quality.withheld(record, "matching.address")
+    assert projected["headquarters_withheld"] == quality.withheld(record, "matching.headquarters_address")
+
+
 def test_name_key_recipes_run_from_installed_bundle(installed):
     python, root = installed
     result = _run(python, "-c", '''
@@ -1358,3 +1406,224 @@ print(json.dumps(verify_company_bundle(sys.argv[1],expected=json.load(sys.stdin)
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
+
+
+from pathlib import Path
+from urllib.parse import urlparse
+from edgar_warehouse.control_contract import canonical
+from edgar_warehouse.workers import source_read
+from tests.engine.test_artifact_context import task, VALUES
+
+def _census_derived(tmp_path):
+    store, work = task(tmp_path)
+    manifest = store.json(work["input"])
+    entry = manifest["artifacts"][0]
+    source = entry["input"]
+    metadata = {**VALUES, "source_uri": source["uri"], "source_sha": source["sha256"], "full": True}
+    producer_raw = store.put(tmp_path.as_uri(), {"capture": "pinned"})
+    producer = store.put(tmp_path.as_uri(), {"version": 1, "artifacts": [{
+        "input": producer_raw, "tables": {"metadata": [metadata]}, "deferred": []}]})
+    context = {"version": 2, "input": source, "reading": producer, "table": "metadata",
+               "columns": {key: key for key in VALUES}, "checks": {
+                   "source_uri": {"input": "uri"}, "source_sha": {"input": "sha256"}, "full": True},
+               "max_rows": 100, "max_bytes": 1024**2}
+    return store, work, manifest, context
+
+
+def _census_bind(store, root, work, manifest, context):
+    manifest = copy.deepcopy(manifest)
+    manifest["artifacts"][0]["context"] = store.put(root.as_uri(), context)
+    return {**work, "input": store.put(root.as_uri(), manifest)}
+
+
+def test_census_actual_worker_derived_context_retry_and_dependency_verification(tmp_path):
+    store, work, manifest, context = _census_derived(tmp_path)
+    original = source_read.execute(work, store)
+    work = _census_bind(store, tmp_path, {**work, "output": (tmp_path / "derived.json").as_uri()}, manifest, context)
+    candidate = source_read.execute(work, store)
+    assert source_read.execute(work, store) == candidate
+    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
+    actual = store.json(candidate)["artifacts"][0]
+    assert actual["tables"] == store.json(original)["artifacts"][0]["tables"]
+    assert actual["input"] == context["input"]
+    assert store.json(actual["context"])["reading"] == context["reading"]
+    # Mutate only the upstream producer after publication. The target source,
+    # bound context receipt and candidate remain unchanged; verifier still fails.
+    Path(urlparse(context["reading"]["uri"]).path).write_bytes(b"{}")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        source_read.verify({**work, "candidate": candidate}, store)
+
+
+@pytest.mark.parametrize("fault", ["input_uri", "input_sha", "missing_uri_check", "missing_sha_check",
+    "bad_input_operand", "boolean_check", "missing_column", "structured_value", "duplicate_row",
+    "empty_rows", "missing_table", "deferred", "unknown_field", "bool_bound", "bytes_bound",
+    "row_bound", "empty_columns", "large_value", "float_check", "wrong_version", "column_mismatch",
+    "column_missing", "column_structured"])
+def test_census_derivation_faults_refuse_before_target_open_or_output(tmp_path, fault):
+    store, work, manifest, context = _census_derived(tmp_path)
+    producer = store.json(context["reading"])
+    artifact = producer["artifacts"][0]
+    row = artifact["tables"]["metadata"][0]
+    if fault == "input_uri": row["source_uri"] += ".other"
+    if fault == "input_sha": row["source_sha"] = "0"*64
+    if fault == "missing_uri_check": del context["checks"]["source_uri"]
+    if fault == "missing_sha_check": del context["checks"]["source_sha"]
+    if fault == "bad_input_operand": context["checks"]["source_sha"] = {"input": "other"}
+    if fault == "boolean_check": row["full"] = 1
+    if fault == "missing_column": del row["cik"]
+    if fault == "structured_value": row["cik"] = {"id": 7}
+    if fault == "duplicate_row": artifact["tables"]["metadata"].append(copy.deepcopy(row))
+    if fault == "empty_rows": artifact["tables"]["metadata"] = []
+    if fault == "missing_table": context["table"] = "missing"
+    if fault == "deferred": artifact["deferred"] = [{"unresolved": True}]
+    if fault == "unknown_field": context["values"] = VALUES
+    if fault == "bool_bound": context["max_rows"] = True
+    if fault == "bytes_bound": context["max_bytes"] = 1
+    if fault == "row_bound": context["max_rows"] = 1; artifact["tables"]["unused"] = [{"a": 1}]
+    if fault == "empty_columns": context["columns"] = {}
+    if fault == "large_value": row["sync_run_id"] = "é" * 20000
+    if fault == "float_check": context["checks"]["full"] = 1.0
+    if fault == "wrong_version": context["version"] = True
+    if fault.startswith("column_"):
+        context["checks"]["full"] = {"column": "comparison"}
+        if fault == "column_mismatch": row["comparison"] = False
+        if fault == "column_structured": row["comparison"] = {}; row["full"] = {}
+    context["reading"] = store.put(tmp_path.as_uri(), producer)
+    work = _census_bind(store, tmp_path, work, manifest, context)
+    reads, verified = [], store.verified
+    def observed(ref, **bounds):
+        reads.append(ref)
+        return verified(ref, **bounds)
+    store.verified = observed
+    with pytest.raises(ValueError):
+        source_read.execute(work, store)
+    assert context["input"] not in reads
+    assert not Path(urlparse(work["output"]).path).exists()
+
+
+def test_census_selected_metadata_prefix_needs_late_partition_authentication(tmp_path):
+    store, work, manifest, context = _census_derived(tmp_path)
+    producer = store.json(context["reading"])
+    metadata = producer["artifacts"][0]["tables"]["metadata"]
+    chunks = [{"version": 1, "tables": {"metadata": metadata, "unused": []}, "deferred": []},
+              {"version": 1, "tables": {"metadata": [], "unused": [{"a": 1}]}, "deferred": []}]
+    parts = []
+    for index, chunk in enumerate(chunks):
+        ref = store.put(tmp_path.as_uri(), chunk)
+        parts.append({"receipt": ref, "bytes": len(canonical(chunk).encode()),
+                      "first_ordinal": index+1, "record_count": 1})
+    context["reading"] = store.put(tmp_path.as_uri(), {"version": 2, "contract": work["input"],
+        "artifacts": [{"input": producer["artifacts"][0]["input"], "table_names": ["metadata", "unused"],
+                       "record_count": 2, "expanded_bytes": 1000, "partitions": parts}]})
+    work = _census_bind(store, tmp_path, work, manifest, context)
+    candidate = source_read.execute(work, store)
+    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
+    Path(urlparse(parts[1]["receipt"]["uri"]).path).write_bytes(b"{}")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        source_read.verify({**work, "candidate": candidate}, store)
+    second = {**work, "output": (tmp_path / "second.json").as_uri()}
+    with pytest.raises(ValueError, match="hash mismatch"):
+        source_read.execute(second, store)
+    assert not (tmp_path / "second.json").exists()
+
+
+def test_census_producer_columns_compare_exact_scalars_with_full_identity(tmp_path):
+    store, work, manifest, context = _census_derived(tmp_path)
+    context["checks"]["cik"] = {"column": "cik"}
+    work = _census_bind(store, tmp_path, work, manifest, context)
+    candidate = source_read.execute(work, store)
+    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
+
+
+
+
+@pytest.mark.parametrize("fault", [None, "late_corruption", "duplicate_bound", "wrong_type", "missing_column", "deferred", "missing_table", "bool_bound", "input_mismatch", "bytes_bound", "rows_bound"])
+def test_census_derived_wanted_scope_exhausts_authenticated_inputs_before_source(tmp_path, fault):
+    from edgar_warehouse.workers import source_read
+    from tests.engine.test_source_lookup_receipts import lookup_task
+    store = Artifacts()
+    work, manifest = lookup_task(tmp_path, store)
+    entry = manifest["artifacts"][0]
+    upstream = store.put(tmp_path.as_uri(), {"captured": "complete"})
+    rows = [{"key": "A"}, {"key": "B"}]
+    if fault == "duplicate_bound": rows = [{"key": "A"}]*4
+    if fault == "wrong_type": rows[0]["key"] = True
+    if fault == "missing_column": rows[0] = {}
+    chunks = [{"version": 1, "tables": {"keys": rows}, "deferred": []},
+              {"version": 1, "tables": {"keys": []}, "deferred": []}]
+    if fault == "deferred": chunks[1]["deferred"] = [{"unresolved": True}]
+    parts = []
+    for index, chunk in enumerate(chunks):
+        receipt = store.put(tmp_path.as_uri(), chunk)
+        parts.append({"receipt": receipt, "bytes": len(canonical(chunk).encode()),
+                      "first_ordinal": index+1, "record_count": 1})
+    reading = store.put(tmp_path.as_uri(), {"version": 2, "contract": work["input"], "artifacts": [{
+        "input": upstream, "record_count": 2, "expanded_bytes": 100,
+        "table_names": ["keys"], "partitions": parts}]})
+    spec = {"readings": [reading], "table": "keys", "column": "key", "max_input_bytes": 1024**2, "max_input_rows": 100}
+    if fault == "missing_table": spec["table"] = "absent"
+    if fault == "bool_bound": spec["max_input_rows"] = True
+    if fault == "bytes_bound": spec["max_input_bytes"] = 1
+    if fault == "rows_bound": spec["max_input_rows"] = 1
+    bound = {"version": 2, "input": entry["input"], "sets": {"wanted": spec}}
+    if fault == "input_mismatch": bound["input"] = upstream
+    entry["lookups"] = store.put(tmp_path.as_uri(), bound)
+    work["input"] = store.put(tmp_path.as_uri(), manifest)
+    if fault == "late_corruption": Path(urlparse(parts[1]["receipt"]["uri"]).path).write_bytes(b"{}")
+    if fault:
+        opened, verified_stream = [], store.verified_stream
+        def observed(ref, **bounds):
+            opened.append(ref)
+            return verified_stream(ref, **bounds)
+        store.verified_stream = observed
+        with pytest.raises(ValueError): source_read.execute(work, store)
+        assert entry["input"] not in opened
+        assert not (tmp_path / "reading.json").exists()
+    else:
+        result = source_read.execute(work, store)
+        assert source_read.verify({**work, "candidate": result}, store) == ({"source.output": True}, [])
+        assert source_read.execute(work, store) == result
+        from edgar_warehouse.workers import source_readings
+        body, _ = source_readings.load(result, store, max_bytes=1024**2, max_rows=100, allow_lookup_receipts=True)
+        assert [row["n"] for row in body["artifacts"][0]["tables"]["rows"]] == ["A", "B", "A"]
+        assert store.json(body["artifacts"][0]["lookups"])["sets"]["wanted"]["readings"] == [reading]
+
+
+def test_complete_census_projection_keeps_global_duplicates_and_pair_scoped_last_updates():
+    import io
+    from edgar_warehouse.workers import source_stream
+    from tests.engine.test_gleif_configured_fields import raw
+    records = [copy.deepcopy(raw()) for _ in range(5)]
+    for row in records:
+        row["Entity"]["EntityStatus"] = {"$": "ACTIVE"}
+        row["Registration"]["LastUpdateDate"] = {"$": "earlier"}
+    records[1]["Entity"]["LegalName"] = {"$": "Outside"}
+    records[2]["Entity"]["EntityStatus"] = {"$": "INACTIVE"}
+    records[3]["Entity"]["LegalName"] = {"$": "Another"}
+    records[3]["Registration"]["LastUpdateDate"] = {"$": "another-name-update"}
+    records[4]["Registration"]["LastUpdateDate"] = {"$": "latest-example-update"}
+    config = files.load(files.ROOT / "sources/gleif/census-complete-stream.yaml")
+    engine = source_stream.stream_policy(config)[1]
+    found = []
+    receipt = engine.stream_json_array(io.BytesIO(json.dumps({"records": records}).encode()),
+        wrapper="records", lookups={"wanted": {"EXAMPLE", "ANOTHER"}},
+        context={"publication_count": len(records)}, ordinal_context="source_index",
+        max_bytes=1048576, max_record=1048576, max_records=100000,
+        on_reading=lambda reading, index: found.append(reading.tables))
+    assert receipt["record_count"] == len(records)
+    addresses = Counter(tuple(row.values()) for tables in found for row in tables["d_addresses"])
+    assert len(addresses) == 1 and next(iter(addresses.values())) == 5
+    # Deliberately dropping either noncandidate or ineligible occurrence changes
+    # the global count, while the selected candidate observations stay the same.
+    for excluded in (1, 2):
+        faulty = Counter(tuple(row.values()) for i, tables in enumerate(found) if i != excluded
+                         for row in tables["d_addresses"])
+        assert faulty != addresses
+    last = {}
+    for tables in found:
+        for row in tables["a_legal"]:
+            last[row["key"], row["lei"]] = row["updated"]
+    lei = records[0]["LEI"]["$"]
+    assert last == {("EXAMPLE", lei): "latest-example-update", ("ANOTHER", lei): "another-name-update"}
+    assert found[2]["a_legal"][0]["cascade"]["eligible"] is False
+    assert [row["source_index"] for tables in found for row in tables["a_legal"]] == [1, 3, 4, 5]

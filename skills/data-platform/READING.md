@@ -1220,3 +1220,74 @@ inputs/contracts/outputs and proof beside the original pinned members. Readback
 requires the approved inventory report and reproduces the configured outputs.
 The independent `mdm name-census` caller remains active; this change does not
 qualify a new census construction or full population mastering.
+
+## Derived scopes from authenticated source extracts
+
+Use a version-2 context receipt when a fact, such as the expected publication
+count, must come from a producer source extract. Keep the source input receipt
+in `input`; supply the producer receipt as `reading`, its `table`, and a
+`columns` mapping from context names to producer columns. Supply `checks`,
+`max_bytes` (1..64 MiB) and `max_rows` (1..100,000). Exactly one selected row
+must remain after the entire producer source extract authenticates and exhausts.
+Checks must bind producer columns to both `{"input": "uri"}` and
+`{"input": "sha256"}`. Other checks compare exact JSON scalars or
+`{"column": "another_column"}`; booleans and integers differ. Resulting
+context is scalar-only and at most 32 KiB. A missing, duplicate, deferred or
+late corrupted producer row refuses before opening the target source.
+
+A version-2 lookup receipt derives declared sets instead of embedding values:
+
+```json
+{
+  "version": 2,
+  "input": {"uri": "CAPTURE_URI", "sha256": "CAPTURE_SHA256"},
+  "sets": {
+    "wanted": {
+      "readings": [{"uri": "PRODUCER_URI", "sha256": "PRODUCER_SHA256"}],
+      "table": "wanted",
+      "column": "key",
+      "max_input_bytes": 67108864,
+      "max_input_rows": 100000
+    }
+  }
+}
+```
+
+`readings` contains 1..256 pinned producer source extracts. Bounds cover every
+producer table and partition, including unselected rows. Selected values must
+be present text. Raw duplicates count toward declared set limits before
+indexing; authentication must reach every producer's end before target input
+opens. Original context and lookup receipts stay in output identity. Retain
+version-1 receipts for explicitly approved literal values. These receipts
+prove input binding; producer completeness and publication authority still
+need their own approved source population and manifest evidence.
+
+## Typed projection and address text operations
+
+The interpreter retains ordinary functions and declared expressions:
+
+- `project: {value: EXPRESSION, then: EXPRESSION}` evaluates `then` against a
+  derived typed document and item. Context, lookup sets and ordinal remain.
+  Derived trees are bounded to depth 64, 100,000 nodes and 1 MiB text/keys.
+- `each: {project: {value: EXPRESSION, on_null: empty}}` evaluates once per
+  source document and supplies one derived row, or no row for null. `row`
+  instead emits the null row. Column `from: document` still names the original
+  source document for this iteration form.
+- `sequence: [EXPRESSION, ...]` produces at most 128 typed values, preserving
+  nulls. It can supply a configured `join` through `project`.
+- `transform: {value: EXPRESSION, transforms: [...]}` applies existing bounded
+  text operations to text, preserves null, and refuses other types.
+- `tokens: {STREET: ST, SOUTH: S}` replaces whole whitespace-separated tokens.
+  A hyphenated `SOUTH-WEST` stays whole. At most 256 replacements are allowed;
+  keys are nonempty, whitespace-free text and arguments are at most 4 KiB.
+- `lines: [OPERATION, ...]` applies a text recipe to each newline-separated
+  line, drops empty transformed lines and rejoins with newlines. Nested
+  `lines` operations refuse. `slice: {start: 0, end: 5}` slices Unicode
+  characters with `0 <= start <= end <= 1,048,576`.
+- `recover: {value: EXPRESSION, codes: [value_type, join_shape], fallback:
+  EXPRESSION}` handles only explicitly declared malformed data shapes.
+  Contract, framing, resource and callback failures propagate.
+
+Text and regex work bounds continue to apply. JSON preservation settings and
+compiled text recipes are fixed at compilation; streaming does not re-walk or
+re-hash complete recipes for every record.

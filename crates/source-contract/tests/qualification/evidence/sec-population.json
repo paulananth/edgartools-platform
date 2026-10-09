@@ -1,0 +1,1537 @@
+{
+  "original_source_eof": true,
+  "captures": [
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk1/run_manifest.json",
+        "sha256": "6c8f83632c8a6e7aa46dd7cefc8c08eaf99f1a34f60644dda793922a68270692"
+      },
+      "run": "local-cm27-chunk1",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk1/sec_company.parquet",
+          "sha256": "3e3861ada070ab353ca774ca270862ac59257d7495d85a1b711de99f9f482591"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk1/sec_company_former_name.parquet",
+          "sha256": "c440b95191c9971e0282e6fdb57d9798d25a2765aede32b9f24d56f5aea410ea"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk1/sec_company_address.parquet",
+          "sha256": "1c76621f9978c3a5429eac4c7d8c44021603f98ad2bd2ca174d2f47e42f48a6b"
+        }
+      },
+      "rows": 966
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk10/run_manifest.json",
+        "sha256": "eef95b118337d59c97f556d83de0d2dc56831f0c3e434dd6acee3387b5baa190"
+      },
+      "run": "local-cm27-chunk10",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk10/sec_company.parquet",
+          "sha256": "560878a796619c488486a302d062e733586e566937f6c793a3b97ce5d5bd0c88"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk10/sec_company_former_name.parquet",
+          "sha256": "3894d9a77ebaa3dedc3df18c77b32110ac9636a1c2c6b3d4dacc3f1f8faacb28"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk10/sec_company_address.parquet",
+          "sha256": "72f5788170520d1462cdc5016a1c9fd8d84131f74062fb2995b8cd9ed71d5b92"
+        }
+      },
+      "rows": 664
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk11/run_manifest.json",
+        "sha256": "d2faab69b141d6c74d18e6a0cde3a38675d4aa8a04d317a02c497912bcb942d7"
+      },
+      "run": "local-cm27-chunk11",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk11/sec_company.parquet",
+          "sha256": "cefb5134ec056b61f72ded5cc22bfbb15783814d83768bd85f8e563503a5a66f"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk11/sec_company_former_name.parquet",
+          "sha256": "f919bb3557671b44470b88bf8a9e6d56cabd381c2dbcd2130945aa659839b78b"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk11/sec_company_address.parquet",
+          "sha256": "8699d955bd7a3164f2b0885c4c3e81c045dfeea29f7e9b163380985b735f4a3e"
+        }
+      },
+      "rows": 620
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk12/run_manifest.json",
+        "sha256": "f76e3636024b4bbbec639e6836ddd060f9d08b1ff7d6b06cb58c2a3effeded10"
+      },
+      "run": "local-cm27-chunk12",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk12/sec_company.parquet",
+          "sha256": "a7ce4adc454b4efadc7343f6063b4a034c724da63cddf05b86b667faafae7478"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk12/sec_company_former_name.parquet",
+          "sha256": "34f1b141d252b0e253b346ecc09e12a8dc9d40af89dbadb234c979919f549869"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk12/sec_company_address.parquet",
+          "sha256": "35808d7df5978810e6d6dfeee82a802393cad0b6268eb65d1b26509b6c0cf289"
+        }
+      },
+      "rows": 311
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk13/run_manifest.json",
+        "sha256": "808d9a72e12c25f2cb4959ae8c3d6d0281e8b5ad0afdb4836e8771bd28077c03"
+      },
+      "run": "local-cm27-chunk13",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk13/sec_company.parquet",
+          "sha256": "4d3df47d75868c00fc1504ed07ffb0423896e4693822e32c44132a6c3138b35f"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk13/sec_company_former_name.parquet",
+          "sha256": "ae13ad74f88270e6cde0de34cc711a03c3d9a971e716b41f83ec657a11f01125"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk13/sec_company_address.parquet",
+          "sha256": "44cad967a211b547c31d0e1788b19f46f1bd23ba7fad6c629abfafe93b4f8970"
+        }
+      },
+      "rows": 69
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk14/run_manifest.json",
+        "sha256": "359cf0f58e899d00e2a402e2c49dc0155293ad15b0727b601447d7d0488d381d"
+      },
+      "run": "local-cm27-chunk14",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk14/sec_company.parquet",
+          "sha256": "e885a2d8a789a709c5e82d063d7f91c76c820950c1523965fac9d0a9d269b03e"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk14/sec_company_former_name.parquet",
+          "sha256": "581eb39dcbb5c44c92f7f428e1c3ed834b038be874d6553899ae9d04108bb2df"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk14/sec_company_address.parquet",
+          "sha256": "3b9c7f46950abbe6b76f7d17ece73a11580f1a53535fd31b710f915135ecb003"
+        }
+      },
+      "rows": 135
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk15/run_manifest.json",
+        "sha256": "883a2a8596bfc6005dd43cf069da27e49bd035626c5cceea477473fa25a5bf30"
+      },
+      "run": "local-cm27-chunk15",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk15/sec_company.parquet",
+          "sha256": "412aecb6ad7ee4c7217722d2c29a7484a5463bcdeeb00a5357355476fe01f1df"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk15/sec_company_former_name.parquet",
+          "sha256": "297098018b9ad693a849130e649ef64ac5106dba39b32b21b5633b52373c2cd1"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk15/sec_company_address.parquet",
+          "sha256": "917c75eb7529c9ae557129da76c877f66d9beae84433ab25fae438daf967da8a"
+        }
+      },
+      "rows": 132
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk16/run_manifest.json",
+        "sha256": "cf342cc741fee47b6258544be0bebc1e355844dd0e836eacb5373dfc67b5b348"
+      },
+      "run": "local-cm27-chunk16",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk16/sec_company.parquet",
+          "sha256": "9a6349446348fbb21b8caecb0b7c4be3bb611b423fff4b2acc6ffae692f9b192"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk16/sec_company_former_name.parquet",
+          "sha256": "e2bfc7b5e12a2c9c588956c5435de2d7c8cdf9740b6ddde3012f6874b3ad554a"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk16/sec_company_address.parquet",
+          "sha256": "6d66ae22694d7f57f5263a99d8fe9c05ef2ac05ee757c6c25914d2b6bfa50a70"
+        }
+      },
+      "rows": 300
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk17/run_manifest.json",
+        "sha256": "241af9802582d17a3fb90f029fe09091e8407c2ab9b5654210c01f85376de6f4"
+      },
+      "run": "local-cm27-chunk17",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk17/sec_company.parquet",
+          "sha256": "a780011b873a080441786d1038e925a0503baf15fce28c07ce487bed3d72e6ab"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk17/sec_company_former_name.parquet",
+          "sha256": "92b780cd427e87b1dcf814353bc4a3e685cbc2e807d4b95e4f9bf63c8a5903f5"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk17/sec_company_address.parquet",
+          "sha256": "a624519c7847d7504e4af448a0e6dc6813926a9fdbfe5a7db4579268fca1c6e2"
+        }
+      },
+      "rows": 335
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk18/run_manifest.json",
+        "sha256": "f5ac9a522ec8965148c982dce1821f8fb808444737c0c53b844cd05650f0d6f2"
+      },
+      "run": "local-cm27-chunk18",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk18/sec_company.parquet",
+          "sha256": "e817ed0761563c88b408c95178f77ef43306c3079f910aa1db42dadcd6c0411b"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk18/sec_company_former_name.parquet",
+          "sha256": "1225bef942e422b560916c759edb352f6a230443d53f0b87f5c9827296a6d90c"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk18/sec_company_address.parquet",
+          "sha256": "b61c363c110143f8cbaa1c4b7c8e80bbe9310acb17ceeb57c0ebe7e0a5388c0c"
+        }
+      },
+      "rows": 360
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk19/run_manifest.json",
+        "sha256": "25d296bd0b48883cf3243cebe8f7925d8e0fcc6bc63ab880af71f921b68be03e"
+      },
+      "run": "local-cm27-chunk19",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk19/sec_company.parquet",
+          "sha256": "eceb1d9451a0e094f11e0a0fd1196c058379aadd3594091784910ab609b2e343"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk19/sec_company_former_name.parquet",
+          "sha256": "0e2753fc06b91f081fcb7c50ffec61f3f3d5284bf58c5a65b742ca3353f208ae"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk19/sec_company_address.parquet",
+          "sha256": "35a74a20af5a75f55c888838bdc9c5e6a9a27a25627d6664ff93ead45dea97aa"
+        }
+      },
+      "rows": 348
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk2/run_manifest.json",
+        "sha256": "b9f19921d98c41c7059b713f6a330a04479fa77e8f7b83c9c3f89b73c2f11861"
+      },
+      "run": "local-cm27-chunk2",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk2/sec_company.parquet",
+          "sha256": "0d6578df5da6f70532e406909307b55e3d193f20be2a95ac2173b54f7a061557"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk2/sec_company_former_name.parquet",
+          "sha256": "baaa28ec69836e86080ebf4416af009767e59a1b65667fcdb8a6b26024dfd241"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk2/sec_company_address.parquet",
+          "sha256": "8a4f8674bde1544dec54b0e537c9aaefc8ffdb4091c85a65f78ca9a1eccd6609"
+        }
+      },
+      "rows": 960
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk20/run_manifest.json",
+        "sha256": "247dc2671aac1946b9b6b021ac441ad64de1ca363a821790f64bd56c13bd4f96"
+      },
+      "run": "local-cm27-chunk20",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk20/sec_company.parquet",
+          "sha256": "b1f62f7e03554a5dece77dd07372b91049aaae3a00105cdbb389ddba722930af"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk20/sec_company_former_name.parquet",
+          "sha256": "93b5d52b5287a35f547237d26f30bd314bfd31f997efab9a4b1c592ed93ff5da"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk20/sec_company_address.parquet",
+          "sha256": "c14830930edb596b08589a6c14efa754e2e960eecb0ed52f7d1164a9206fd4ea"
+        }
+      },
+      "rows": 389
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk21/run_manifest.json",
+        "sha256": "fc618f2d09dca709f685946ed24b6ade94fbf495cea2b9637fa0cc6924c07bff"
+      },
+      "run": "local-cm27-chunk21",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk21/sec_company.parquet",
+          "sha256": "10a6b422627c8f0f25be621058fb576c22a5f3d75d7588283a37ccfe752b2f2c"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk21/sec_company_former_name.parquet",
+          "sha256": "a62c50fc31dbbca2b05951738e19440950febf9ec5f6bb5da2aa5c2ed925dc80"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk21/sec_company_address.parquet",
+          "sha256": "1bdaf177d538a913b5e4cd356b4f19dc687c4e65e79a834b5081465e81b0d1a9"
+        }
+      },
+      "rows": 396
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk22/run_manifest.json",
+        "sha256": "cf6556bbdc65e32c64fb38984a5fa9264802083245b685d5ca55076f2e2c361e"
+      },
+      "run": "local-cm27-chunk22",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk22/sec_company.parquet",
+          "sha256": "e59ac0aed19863348719f54047ef553f7e2bb6b83952134b11c60011b694ee03"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk22/sec_company_former_name.parquet",
+          "sha256": "a3c5941a647d33d49b4af9966e09a9fd61f53b381e81959a4bf17e1dde84914e"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk22/sec_company_address.parquet",
+          "sha256": "f75cc5a8b9152fd843d5cf621e4b86b43bbd55d11d3a12f8012e48246a376ad7"
+        }
+      },
+      "rows": 464
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk23/run_manifest.json",
+        "sha256": "3acf043307ad14562465941a0a462d9d3fae571de34c06afa5699d9e30f524dc"
+      },
+      "run": "local-cm27-chunk23",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk23/sec_company.parquet",
+          "sha256": "c42f081bafea1009b193254672dd16cac1500c069da08f9dcd3528913d4358a7"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk23/sec_company_former_name.parquet",
+          "sha256": "b564d00e5e59d767090f8fcb5943315ac7e480fd74c1bdc8e4659bb16e1dd0d2"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk23/sec_company_address.parquet",
+          "sha256": "d24258b928c75764e95db09086c45a3656286a3c8a70b82896ce3e9743dad2ea"
+        }
+      },
+      "rows": 490
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk24/run_manifest.json",
+        "sha256": "95d62fe7f8a4fa7ad721dc265f5be21a3740a0ef3453306d3c599d726d4ea72f"
+      },
+      "run": "local-cm27-chunk24",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk24/sec_company.parquet",
+          "sha256": "19f1adf60f265aba019a4dac3fee8080ed49688613ef7fb313609d685a6787fe"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk24/sec_company_former_name.parquet",
+          "sha256": "543fa688c99a1baeb46bd51e33a90464ff91cc546e4fb4c331faaf3a5ca4ca33"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk24/sec_company_address.parquet",
+          "sha256": "6aa424534a2f3713c85506cc4a79c7311e01ee8fbc9b035e2096b66c3d8aae36"
+        }
+      },
+      "rows": 399
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk25/run_manifest.json",
+        "sha256": "3d9c34ea45298e2f5bc0c0c18210ab76878a308ff0068d5cbdd96dc503b3f9c8"
+      },
+      "run": "local-cm27-chunk25",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk25/sec_company.parquet",
+          "sha256": "599a1e466bf42f672f5d6217e1fb60d3089a1c99632916c7fda7196cc327090b"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk25/sec_company_former_name.parquet",
+          "sha256": "2ee18f13c21a5b31729d26fee341222800b0c4e25b8acb5178b93d15efa9f95e"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk25/sec_company_address.parquet",
+          "sha256": "ec7dfb9ed820409f1033af130814baffdf178e41d325e7e9c4a72936c052624c"
+        }
+      },
+      "rows": 391
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk26/run_manifest.json",
+        "sha256": "cbe72a815fe4bd636f271b320cd0e25378d810fc0c3a79635ce419642905994c"
+      },
+      "run": "local-cm27-chunk26",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk26/sec_company.parquet",
+          "sha256": "772878688c26f974d6897f8c404b9f06f69210d18191b71a86c1ef8992aeb583"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk26/sec_company_former_name.parquet",
+          "sha256": "39260a5b307df10a2cbf75e22b23dec2f0f2227edde33f9c2104da6176d01719"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk26/sec_company_address.parquet",
+          "sha256": "4ce2a4d681c7f6a0814683747463eb18cec8f852deb77ace9df4c0a63617075f"
+        }
+      },
+      "rows": 453
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk27/run_manifest.json",
+        "sha256": "270077be117f02efe50d68d2aaf23aa009faab28871fe0a211256371d30106b3"
+      },
+      "run": "local-cm27-chunk27",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk27/sec_company.parquet",
+          "sha256": "9e243dd711f578bcd51eef05460e138f800936b3c01a10ddf79efb2ed7833ae5"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk27/sec_company_former_name.parquet",
+          "sha256": "328419312b6485cc373c3cce0e9f0bbf7e0b807a92b116261432c3c96c695c1e"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk27/sec_company_address.parquet",
+          "sha256": "31df074b95ddba4e7f79cae3ee96e26b67151002781a8c0135c9e03c3ad4ac29"
+        }
+      },
+      "rows": 492
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk28/run_manifest.json",
+        "sha256": "898174d41dcf9bc4ce8395f0f8aedb54d434d896f086731ab47908e23e0731d1"
+      },
+      "run": "local-cm27-chunk28",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk28/sec_company.parquet",
+          "sha256": "1b0b18be5eea908ea3b8e2aaa507403330658329db83c2b03b311ceff1460546"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk28/sec_company_former_name.parquet",
+          "sha256": "f446313d4ceb36bac27e29334e745bf4f0fffed698eb5c301e6e931b29934831"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk28/sec_company_address.parquet",
+          "sha256": "500e18169d339f328e23d97f77e8538a811c914e5bb973e333ce13580b38aff5"
+        }
+      },
+      "rows": 447
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk29/run_manifest.json",
+        "sha256": "66370cc93a0abb60ca9d1c1b9d5daeca3a8f44f9c7c8420a4c48ff994295d0d1"
+      },
+      "run": "local-cm27-chunk29",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk29/sec_company.parquet",
+          "sha256": "05c7d8a27c46ff5fc6b046891f390103da64d91df8da773f4907d23e204c83ad"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk29/sec_company_former_name.parquet",
+          "sha256": "b02165832136c9b5241c9e63464bffc397ac78bc7e09dfef5440f601f1d786b6"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk29/sec_company_address.parquet",
+          "sha256": "814ef2167a1324d26631270a8c49f2ec9e920e9b9339fb5759e000b73f567f26"
+        }
+      },
+      "rows": 421
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk3/run_manifest.json",
+        "sha256": "98462c8c489142b06d07a0081b285d0aa03b9a60cbcc6480b71e78fa1ef0452b"
+      },
+      "run": "local-cm27-chunk3",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk3/sec_company.parquet",
+          "sha256": "9fa9f640b7e4cb7b34c0a1cd86564d1974f5c71dc3c7b82d1caa2d4f6dea2c6f"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk3/sec_company_former_name.parquet",
+          "sha256": "47583423c0370d9fb707dc46e075434ed11edd3dee89899a00a4fa0325413b46"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk3/sec_company_address.parquet",
+          "sha256": "e175aa3c472fa7d49e9a2aa0986a245699439aa1acf8e1f91067b857a66fd011"
+        }
+      },
+      "rows": 957
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk30/run_manifest.json",
+        "sha256": "0adb68b36928b9597a9c48df86fe1558430f2acd4000530c87181dee28f9a4d0"
+      },
+      "run": "local-cm27-chunk30",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk30/sec_company.parquet",
+          "sha256": "d496ad4f999a88c924903aaf0527eaf50d2fd250fae8ec336e34841df2f93cba"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk30/sec_company_former_name.parquet",
+          "sha256": "b3b813967f5ae6fb55feba93d0cc02a76b480a229ea7a2cd5683d284ed043466"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk30/sec_company_address.parquet",
+          "sha256": "790d73c4136856e8831ea54c16d350a750d8a95303a441f2d5fe454b1bf6ac3b"
+        }
+      },
+      "rows": 447
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk31/run_manifest.json",
+        "sha256": "bedddf799fb4a7245d597bb856bc10c66e27e71b6707cf2b7560153e3a12abfd"
+      },
+      "run": "local-cm27-chunk31",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk31/sec_company.parquet",
+          "sha256": "f0a88c9e7b72285a55e0c86971559f7018953b493d5df67c18909844ea2d89e2"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk31/sec_company_former_name.parquet",
+          "sha256": "11efe2ed36dbf05c271376b518dffe9ac0613352d1c143c1f8b6c87c5f7fe691"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk31/sec_company_address.parquet",
+          "sha256": "cbc79cc812af89b17887ae63a91f528284e144a8a94b0e385f739e6e76ed9816"
+        }
+      },
+      "rows": 448
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk32/run_manifest.json",
+        "sha256": "5382deeee653e554bd8e8f3be32c29047f4199b29b6452a0871f75ee0984ea27"
+      },
+      "run": "local-cm27-chunk32",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk32/sec_company.parquet",
+          "sha256": "9882219c1a301c68431ace70051a1afc789f37254f94d44cf4613203d01f57a3"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk32/sec_company_former_name.parquet",
+          "sha256": "3366dcc5523b3aa7fb96e013a5d75a05ae092f78e7a80d8e5325765fe9b36b2e"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk32/sec_company_address.parquet",
+          "sha256": "d0b563fefd680f95580d9894c856ada6a2a583a2582b03c066592e5df6904fbe"
+        }
+      },
+      "rows": 427
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk33/run_manifest.json",
+        "sha256": "7004a4ee04ca5592289641abe51ea52881b805ab291e1eae9f4d62966ce0c8a9"
+      },
+      "run": "local-cm27-chunk33",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk33/sec_company.parquet",
+          "sha256": "c05562974cea309e5ca086359b514694b900916af8c1844dc0943557fc115ee4"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk33/sec_company_former_name.parquet",
+          "sha256": "92fb5b907fbe85d66422689294d2f3c74aa5fad0d1119ae168ab8e22ed9ac6ed"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk33/sec_company_address.parquet",
+          "sha256": "1cf080d2407258f0c3d91c9f5917db5db4705ea2fd0c3f49429a6db28faa0144"
+        }
+      },
+      "rows": 471
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk34/run_manifest.json",
+        "sha256": "41d3c3bfe3dd813eaded4d0fee3029492fb0170f6bf3045e6554a9a3ce54ba11"
+      },
+      "run": "local-cm27-chunk34",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk34/sec_company.parquet",
+          "sha256": "4d2e64cec3017e26a2be96f24d8d287c54d261ff430490c39199e4ffd64427b5"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk34/sec_company_former_name.parquet",
+          "sha256": "8c20e36063d045f39347204988aef5ad7305c0f717a1837bdf5d7ef793f176fb"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk34/sec_company_address.parquet",
+          "sha256": "8a4e725f58513b62f5513e674c1157214b3a0697c34fafef8535f7d3fc442317"
+        }
+      },
+      "rows": 402
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk35/run_manifest.json",
+        "sha256": "ad11aa1befa8b3f2585f0de455d1c01e9d2f9a5f9eabf0acf808061e65d42a4a"
+      },
+      "run": "local-cm27-chunk35",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk35/sec_company.parquet",
+          "sha256": "a8ec2b4de40e708e51268aef796ece87bab9a00914e842a88ad62f90624da164"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk35/sec_company_former_name.parquet",
+          "sha256": "0fa34b9dc5bb868c0517e533c915d9b4ee5b0f0a82832846c18274302b0a673f"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk35/sec_company_address.parquet",
+          "sha256": "e2e82d19de806976ade9792ff23c8610fc75484feb4d20333b358831da6bd1bf"
+        }
+      },
+      "rows": 442
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk36/run_manifest.json",
+        "sha256": "b2de476af79d4ad5c6508628ccc5a4a31e41f9292a26ebdf3a58c0b6aa569477"
+      },
+      "run": "local-cm27-chunk36",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk36/sec_company.parquet",
+          "sha256": "995123b1ae8ea4e5ea3338ec1290734eeb918dbd6200236b4c0618874039ad6a"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk36/sec_company_former_name.parquet",
+          "sha256": "a92d1bc73b84c47ede00dcb54bac6e88716418944b89a28d9002320f7fcd61e1"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk36/sec_company_address.parquet",
+          "sha256": "f6efb23e4a1665c3eee8997b6f984a38d953dd2fd87fecad5bb7eed5bbac1375"
+        }
+      },
+      "rows": 373
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk37/run_manifest.json",
+        "sha256": "91ea6741184813ea73478a0f666e65312f343ec6f760abc3c8b2977f7d439cdf"
+      },
+      "run": "local-cm27-chunk37",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk37/sec_company.parquet",
+          "sha256": "40e6525223b77c982ddfe8abf934ddaa9b4556e9c3b64b93d5948638ace261bc"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk37/sec_company_former_name.parquet",
+          "sha256": "0c9352416a9799a172494b416f2b7142fd0cb4e7b48326d472dbf02dc47080e6"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk37/sec_company_address.parquet",
+          "sha256": "05866126775ff604ced284f2ab62c0efc28e803cf10f6c23600e779888d8a56f"
+        }
+      },
+      "rows": 478
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk38/run_manifest.json",
+        "sha256": "8e7e1ccfdf2137b5ce14133b9f02ae897667e0b51b026593a99dc74e80abca9c"
+      },
+      "run": "local-cm27-chunk38",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk38/sec_company.parquet",
+          "sha256": "21e4ccc4241621e7867e21173cf1cb51558874fee1e33f23d6797992b29e45d1"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk38/sec_company_former_name.parquet",
+          "sha256": "53de630fdb884ea717ea7d91c41bfc26624131f02a904792d5c30f3804ae27b8"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk38/sec_company_address.parquet",
+          "sha256": "7aa637067c0419ce4f05c08805016414ae922a607320fc61283058781c843566"
+        }
+      },
+      "rows": 410
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk39/run_manifest.json",
+        "sha256": "84dc9b4d74fcd1d684c878ce1ca9c4bd730a8b45905b8a9952f33e58d1e1dcc3"
+      },
+      "run": "local-cm27-chunk39",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk39/sec_company.parquet",
+          "sha256": "6d64c247306f4b694b72db914179e80c4c499280af5cbe97be30198e19a8641a"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk39/sec_company_former_name.parquet",
+          "sha256": "610f43525e024a08386153f449ff823677de362ebd6319ad9131644151214c5b"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk39/sec_company_address.parquet",
+          "sha256": "5046ef82b4dea7251ebbd0dbd4e3f583831a24c9a12d8a964bfc080652c2badd"
+        }
+      },
+      "rows": 372
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk4/run_manifest.json",
+        "sha256": "280280f3ce29c875e05a81610ddba49d2595796750030f83601d006f3f389a86"
+      },
+      "run": "local-cm27-chunk4",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk4/sec_company.parquet",
+          "sha256": "6bd05e90f2373684ac08a76ea7fd323c1e1c076383e21a008818ff679ec35bac"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk4/sec_company_former_name.parquet",
+          "sha256": "02b4953d18972c59102d0a9436ba3618f06d2db0ea6e2d16d810bbb4552e8d50"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk4/sec_company_address.parquet",
+          "sha256": "d458c603f7402e6acfca17abcd8f86c6b4b941ef211db887dac964b176827037"
+        }
+      },
+      "rows": 959
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk40/run_manifest.json",
+        "sha256": "4b3d284df78b3e4694b796fe7ff23e243093994ba74e4a0d291531b615ea20a8"
+      },
+      "run": "local-cm27-chunk40",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk40/sec_company.parquet",
+          "sha256": "f26a0c5a340c78f91a59fb9555556b2c1f59dc6ab0c5556db1f12c6717d5ad61"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk40/sec_company_former_name.parquet",
+          "sha256": "ff5a69a1f188f626d0819817e9edb5c4caec437a82684d1fe8503f9a15f0ccc0"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk40/sec_company_address.parquet",
+          "sha256": "bb919dbafc50e00e9be1da5b093d617e87ea9e1ca8a94b1bdb5e4757ca162fa3"
+        }
+      },
+      "rows": 507
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk41/run_manifest.json",
+        "sha256": "e41c0f1b4f943dbfaeb097df6a6ed4d43bb7e6295cafb233af479c3f80fa02cd"
+      },
+      "run": "local-cm27-chunk41",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk41/sec_company.parquet",
+          "sha256": "bd21ba15bd6fbf5472f8cbeffad445b799a3c2a2726a75d268402ca642042a3b"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk41/sec_company_former_name.parquet",
+          "sha256": "e32204b7bf1f2c1783071ed0758b7e26dd7d44d71770cb4aec8e6decefca84f8"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk41/sec_company_address.parquet",
+          "sha256": "bf54d5930c2d38456250b1185013d3e6e0be6b6ee61edee89143323018bf7d50"
+        }
+      },
+      "rows": 354
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk42/run_manifest.json",
+        "sha256": "82d7ee212dcd1aae68fd34414dd11b7dc333e13b17deeb772a9b063f2be6f654"
+      },
+      "run": "local-cm27-chunk42",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk42/sec_company.parquet",
+          "sha256": "21adf0873abd44471a99540dc0bcaf54c2239545d28354050708581e4a5cedc9"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk42/sec_company_former_name.parquet",
+          "sha256": "6473e0e3a0f16b681567f44c63f5565b51eecfb655397a80cf2a8343639b6fc9"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk42/sec_company_address.parquet",
+          "sha256": "0cdcda3a311c37083950ba519e30bb5a1b8b1b60f204917c88a74e956bb9df93"
+        }
+      },
+      "rows": 356
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk43/run_manifest.json",
+        "sha256": "4988a6b2ee20f89abe7b4ad4c6fed979400540af9ff9a433208a5c957c18ce33"
+      },
+      "run": "local-cm27-chunk43",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk43/sec_company.parquet",
+          "sha256": "a7e46e99412ce137b4ba97aa45e37d75453f8fd57b20365750d68f3f86fb1806"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk43/sec_company_former_name.parquet",
+          "sha256": "2d1d06e54bdd92a9150402c742d486099854840ae9f222ddb60553c21d6213f5"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk43/sec_company_address.parquet",
+          "sha256": "53d1fe80d29412b27c064b0c17fe8d5135da31431fbce73735e1e494d611e25a"
+        }
+      },
+      "rows": 398
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk44/run_manifest.json",
+        "sha256": "0e085e2164ff7efbf424de2a6499f6c4a86bc4bfe6c82816ec63a08f737c8b0b"
+      },
+      "run": "local-cm27-chunk44",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk44/sec_company.parquet",
+          "sha256": "ab9ebb0d33895ec51cb7100666c234c2999adeaf07e4a13d863fbdfd0585911a"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk44/sec_company_former_name.parquet",
+          "sha256": "8e8a9791ce211aaa915f732c08d631d1fb489696621eaf17972b4cb04d16fa64"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk44/sec_company_address.parquet",
+          "sha256": "2273762181faa874c2da7733f40d23209205e293efa16d9d7786a74cfaac42b1"
+        }
+      },
+      "rows": 580
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk45/run_manifest.json",
+        "sha256": "615b33f15c5428a61e9ce006c42247c253a11c9e8e3a7100af562d0d7c0f0de7"
+      },
+      "run": "local-cm27-chunk45",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk45/sec_company.parquet",
+          "sha256": "881ff5158f872533fcee3907c9058c5bcb1e3e121668a3d8774334447a59bcff"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk45/sec_company_former_name.parquet",
+          "sha256": "84bce9ce182eb57d56f85cfa9b94ee26c163e852c12c73862024040062df9fe7"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk45/sec_company_address.parquet",
+          "sha256": "5bd1ebc823f0eec751b5c58563dc498e863d2e9613a174401d528bbf3d4dec12"
+        }
+      },
+      "rows": 451
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk46/run_manifest.json",
+        "sha256": "11444dd1cf04315b76002bac21cbc950f997e3fa6e228834dfde23a0d20bd7da"
+      },
+      "run": "local-cm27-chunk46",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk46/sec_company.parquet",
+          "sha256": "9564cf3ce9b8a2e2014aa2e69153c31dd9349c6314bb61bb13072db79a94f3b0"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk46/sec_company_former_name.parquet",
+          "sha256": "79fc5d73dd0bdb3a2376b2b44d3b0a142d5054eb2cc0026f3b30489de478a34d"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk46/sec_company_address.parquet",
+          "sha256": "ce9db7c33daf5eff7076d97cb19ed5d50f7665a9431a12094ba4e7a0dc48c9a5"
+        }
+      },
+      "rows": 447
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk47/run_manifest.json",
+        "sha256": "2ce74c859ccbc6ff80746d44136d969234414284bdc664442a9b3bb6147cee36"
+      },
+      "run": "local-cm27-chunk47",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk47/sec_company.parquet",
+          "sha256": "a7367bb130b8f8799a441f89d0a6581fbf9530659307d3cb3a760d9771bcf0a7"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk47/sec_company_former_name.parquet",
+          "sha256": "f07bfe6b588dee922e096f602af1645a5127691c5dddf0cd5d8d22496eb5d1b4"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk47/sec_company_address.parquet",
+          "sha256": "1a8e8536f2fa2f354e5704430be3c452bafa057c9a4613fc8f000f3168c13c43"
+        }
+      },
+      "rows": 550
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk48/run_manifest.json",
+        "sha256": "14568e536e40a3a2eb012b45185faa2457ecf7f15f0557f7843b4bc6b0c67a77"
+      },
+      "run": "local-cm27-chunk48",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk48/sec_company.parquet",
+          "sha256": "4e95ae15a4968c84c85cb4f1c17b91188b7c1d7f0f7aec2ff136750a73611d55"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk48/sec_company_former_name.parquet",
+          "sha256": "691732913d3ac812b3cbf3bc535bbd32f02880cb184e62e90f84793c77d8669b"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk48/sec_company_address.parquet",
+          "sha256": "a0805e90978bc11f9a16f9c3742d1374d8249f59c75fdc8a34af3b38a674c2ee"
+        }
+      },
+      "rows": 406
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk49/run_manifest.json",
+        "sha256": "df42bdb6218ca38d7a3dba92eb69767324e7d30e50445663ebc589cd4383784b"
+      },
+      "run": "local-cm27-chunk49",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk49/sec_company.parquet",
+          "sha256": "fc5a0f333172983f3af99fd87b0d7fd60c0709879677f8f4fab9e9d272578ed4"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk49/sec_company_former_name.parquet",
+          "sha256": "bbf87e42af68d8c792bb964a908107f7b8baf68929f8df84b0ecb6acd67bfa91"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk49/sec_company_address.parquet",
+          "sha256": "9268de0977f8cb8d4b80d01f74d976562cc6fd0a5efd0a165a1313cdcc077c86"
+        }
+      },
+      "rows": 415
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk5/run_manifest.json",
+        "sha256": "acbe1e24842757ede4d54ca90089c17464e07e7dc7938b17d952b9e74e7b0517"
+      },
+      "run": "local-cm27-chunk5",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk5/sec_company.parquet",
+          "sha256": "0f4ac5c95ab97688a0b13b066ce6308dd885ae59d2912480e267de0904bd65b5"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk5/sec_company_former_name.parquet",
+          "sha256": "b2d0347ec3bd333166738ad4ad365517303145f97f74e69fab30ae7efc1703ed"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk5/sec_company_address.parquet",
+          "sha256": "b6b62d70cc782e62ef14eb1313b32f000cf3ec5a611f517dc5bb1d96844b7db8"
+        }
+      },
+      "rows": 965
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk50/run_manifest.json",
+        "sha256": "c65746223fc941b6940062b630712bb900eb4be18e62bb973f283545174c484a"
+      },
+      "run": "local-cm27-chunk50",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk50/sec_company.parquet",
+          "sha256": "374943b90b8531fad3534edae85828a763249aa3d192188084be7e77f5928022"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk50/sec_company_former_name.parquet",
+          "sha256": "223ee493fabc4b8bce622b4074ed9ba4d194922d68d9fca4c18502a3fd4bc8f4"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk50/sec_company_address.parquet",
+          "sha256": "df6fa4f73de1e67bdef62e161b3c7e6e17de8f8610003ed1fa135e453ba21257"
+        }
+      },
+      "rows": 509
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk51/run_manifest.json",
+        "sha256": "f0942dd16e9f85975fe262a6f47b42b93d4785674ce5e1d91800493bda1983e3"
+      },
+      "run": "local-cm27-chunk51",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk51/sec_company.parquet",
+          "sha256": "99ff99c77a5dee1f8fc9ef78f20e98204220348b39cd8c96da59d9c06f6045e9"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk51/sec_company_former_name.parquet",
+          "sha256": "c92c4ba371c5e361de64bbe1333acaae4c0b1350a47e95d9da34bbcc0c1f45d2"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk51/sec_company_address.parquet",
+          "sha256": "f313040856a34b1d9a5006bc64cb0a5453cb3cb0d0b3f375ac9eeaff084213fa"
+        }
+      },
+      "rows": 560
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk52/run_manifest.json",
+        "sha256": "c8a6dd284b31759b3323f5545e3ebe07717f7d84d1d21103618d7298695709ab"
+      },
+      "run": "local-cm27-chunk52",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk52/sec_company.parquet",
+          "sha256": "03ce244ba61fa2deb4556cc70300d1c026f5c34692aa7b5da3e9034f47b0f235"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk52/sec_company_former_name.parquet",
+          "sha256": "c9894deb8455f085d854a8a7625d795018bc149176e0ca37c33e7c8edc89220c"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk52/sec_company_address.parquet",
+          "sha256": "896eada435b9746bebed0dceb9979a951b38aaee607851bba78104d6700d6800"
+        }
+      },
+      "rows": 592
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk53/run_manifest.json",
+        "sha256": "d3b53c41d715c99fecc708c1865d40d1296e1caf6b462de66755a50ccc79bb6d"
+      },
+      "run": "local-cm27-chunk53",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk53/sec_company.parquet",
+          "sha256": "853f9aaa727a160befc0199277c739fecc0a60d3e433e4985dc2165cc4ccf2b4"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk53/sec_company_former_name.parquet",
+          "sha256": "e6dab6246e9c7f2e635add0aa4801e1bcdbc8e16ed2e824270bf338066767fb3"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk53/sec_company_address.parquet",
+          "sha256": "07dece0314b7ea0bed39ee8af87ba541b519303f59073783455376eee13e1128"
+        }
+      },
+      "rows": 533
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk54/run_manifest.json",
+        "sha256": "08029a8196a58d3709411258678609c4faa8286cb38de2d18904f92e72e14896"
+      },
+      "run": "local-cm27-chunk54",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk54/sec_company.parquet",
+          "sha256": "16fb655273ab776e8491527715fe5c4be213bb0a41a2d8267c064850f3d6faf0"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk54/sec_company_former_name.parquet",
+          "sha256": "ce38265f25b97c3487aa5839addbb7048dcd0cd18a420959c60ee2faed4e73a8"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk54/sec_company_address.parquet",
+          "sha256": "9b57d4732b00ce41fba9cc332697250ccc6ba5409a0d2b26fc9e4baa14cc3d83"
+        }
+      },
+      "rows": 585
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk55/run_manifest.json",
+        "sha256": "073bd82c2a36f037a9e1f390c7561d550be52f27a41151ac91aa3bea33bfc4d6"
+      },
+      "run": "local-cm27-chunk55",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk55/sec_company.parquet",
+          "sha256": "a0dc7cad3ce7f74a3562f3c3f22f27b88403f51ffcb18c9e0f3f58a904f95e14"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk55/sec_company_former_name.parquet",
+          "sha256": "6f66b01850f563dc011ef1516a3d271b92f35aa95d4f874298742c6d4bb1e2e9"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk55/sec_company_address.parquet",
+          "sha256": "c1621734b1ec9b2e78ee03d2177e5d9db404bc44c15d03e67875bb877d72eadd"
+        }
+      },
+      "rows": 596
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk56/run_manifest.json",
+        "sha256": "70f282714f8b632ebb49b04170f9460a22f42ecc0769ecf6a4d89caaf9ccbdfe"
+      },
+      "run": "local-cm27-chunk56",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk56/sec_company.parquet",
+          "sha256": "0651b17945f55ea1e559c601d3038cdfc60da03e702e12d34a2067d7ec171ac9"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk56/sec_company_former_name.parquet",
+          "sha256": "42c3c0d3d33e471ab47eab8d5c7c3726abe75e6f75041985a847f3157ad0e9c4"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk56/sec_company_address.parquet",
+          "sha256": "009b374c50a1a1d6ee88f9f5ce2ffbb9a6533386130e62cee9349316f54e8bb2"
+        }
+      },
+      "rows": 722
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk57/run_manifest.json",
+        "sha256": "bd3d08f081aea49a1eb88470996defee9067285c6c48cf79c4dca9fa7358971b"
+      },
+      "run": "local-cm27-chunk57",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk57/sec_company.parquet",
+          "sha256": "c00a287f05665ece79405115985db77b96f72147eae317443d104dea89be748c"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk57/sec_company_former_name.parquet",
+          "sha256": "0a48c703966c2b55f7ecd18e206acbb61add5b89de9a229d8ecba21d25468f84"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk57/sec_company_address.parquet",
+          "sha256": "f20a735bd55eb634a9766fa78000372c0ac6aab2fbbc8faee961e9fa6d5001e1"
+        }
+      },
+      "rows": 603
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk58/run_manifest.json",
+        "sha256": "ca0fc19749414fe0737b8346963fad29718402265c0c44034a90e8423daea9ce"
+      },
+      "run": "local-cm27-chunk58",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk58/sec_company.parquet",
+          "sha256": "1f0a5b1f2695a49b62cb145de6ab4d56541bc72e9ae42a66bfeffccb87e42386"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk58/sec_company_former_name.parquet",
+          "sha256": "7cf0f5f49c3d3455a2a8ebea5d0fb81b7edaa8c6fe8030306929fe4726179eb4"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk58/sec_company_address.parquet",
+          "sha256": "60358a95d23424923d70fa23a130964a582c1bced8dc8ed8a727053c6ab7e318"
+        }
+      },
+      "rows": 644
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk59/run_manifest.json",
+        "sha256": "b8212fc95914ba698dd5b38a81e7600acc51d1fab95d3da5dbc1e181513e8698"
+      },
+      "run": "local-cm27-chunk59",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk59/sec_company.parquet",
+          "sha256": "f4ad847653ca5465bbc76c1d7125765ff413273468550749cb3b7b186d5f6577"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk59/sec_company_former_name.parquet",
+          "sha256": "77541c755893d2236ce68ede44987d0f9345f63999375fde248d7601925100d5"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk59/sec_company_address.parquet",
+          "sha256": "75f2cbadb73c55a3f83b725ced0e12ef3ecf00e53cc61e0fab149c7de0dce615"
+        }
+      },
+      "rows": 655
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk6/run_manifest.json",
+        "sha256": "96b861b532fa503ecb14f9cefe2b4a6c905516fc26739966e9accb70cb840b3a"
+      },
+      "run": "local-cm27-chunk6",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk6/sec_company.parquet",
+          "sha256": "f3a0d81bb35dc82097285bf764df89303cc8fe26cd4d73f6cd9c90f145ea31b0"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk6/sec_company_former_name.parquet",
+          "sha256": "edb776e71fc1e1cd09201a3e951180e16ed831b6d63a90f9a288cbc7d89a1f12"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk6/sec_company_address.parquet",
+          "sha256": "ca3f5af0f62b50a4e4b771811fa06b1edf3e79fce3a100ef2c33828855499d42"
+        }
+      },
+      "rows": 960
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk60/run_manifest.json",
+        "sha256": "07367c56ae29f350f23112bb401089ed01981cee7fd74d765fe77602087d1b0f"
+      },
+      "run": "local-cm27-chunk60",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk60/sec_company.parquet",
+          "sha256": "63dbd49a1eb16add4af9cd19926b76e9167f8fc5f438e137920c397f232d6970"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk60/sec_company_former_name.parquet",
+          "sha256": "a9166cc4fb18606728663b7133449cd3b262ccbff14b870802cfdd6f58405132"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk60/sec_company_address.parquet",
+          "sha256": "ef7678b3755304525084f7321fc7e8f47ddc79edc0fd5ee54ec296856fb37256"
+        }
+      },
+      "rows": 592
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk61/run_manifest.json",
+        "sha256": "e16929412df75ad57b7b0b804afa03ecaee08efff3ffcb093abe1cfd0e02cbe0"
+      },
+      "run": "local-cm27-chunk61",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk61/sec_company.parquet",
+          "sha256": "03654c71ed09d1676c30095c13b3b50762a386691a370aa70233b13a904273ea"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk61/sec_company_former_name.parquet",
+          "sha256": "cfa24538165b2fa8632b1da30e672b4b828d994a9da4c758e948ec6b0b1e3504"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk61/sec_company_address.parquet",
+          "sha256": "09f24e7d0ae3d70662a106b5fb60881e1a5f64eeed7e4b8351ef6da214c5615e"
+        }
+      },
+      "rows": 767
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk62/run_manifest.json",
+        "sha256": "bfb43c1adbd555e318d508e6ffe87dbc1af49c8c6ab67cfa86b7913b7cf9473d"
+      },
+      "run": "local-cm27-chunk62",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk62/sec_company.parquet",
+          "sha256": "e811741588e5c5fc8269f65bac5b969a5ae9b72f1036bc0f863e7f739df0b522"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk62/sec_company_former_name.parquet",
+          "sha256": "3645a2ec89dd5e6128af4b69a61b8a5bdf53fa77b0c75a4d1a1dfa0852a62451"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk62/sec_company_address.parquet",
+          "sha256": "6e5fd9b4b115bbe2340f58049561b0bd117b3860e2e7f8499951f7703c98cb2e"
+        }
+      },
+      "rows": 661
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk63/run_manifest.json",
+        "sha256": "c5fe508857516e08c4232f2d82305eddb115bbe938166140c7e2c5d9bc184e92"
+      },
+      "run": "local-cm27-chunk63",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk63/sec_company.parquet",
+          "sha256": "5b9f4366f6834d039ba1e414c1be66ac5bdfddb8bfd8de7d502a331d431a7c84"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk63/sec_company_former_name.parquet",
+          "sha256": "b2b00e0e0539b6084a4522e2e8c7d0782cee34f4e7d83768512de271a38d4827"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk63/sec_company_address.parquet",
+          "sha256": "3c05296443517d5ac2da090587ed98b3365ffec19cd9685a10585974d0979de0"
+        }
+      },
+      "rows": 609
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk64/run_manifest.json",
+        "sha256": "65436cabf4dc2ab95aab6ac6df40ebf067aa7e2c5f6ab1372bc8bebf1cae9b8e"
+      },
+      "run": "local-cm27-chunk64",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk64/sec_company.parquet",
+          "sha256": "1953cabacd6b16a82cb6d8fecbf7f1535c1cb0099a0a80a0d8c4e759a443e0c0"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk64/sec_company_former_name.parquet",
+          "sha256": "33048e522938923e84e46dc2da432f70cadcda1f10dfba9e1afab074f9115d08"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk64/sec_company_address.parquet",
+          "sha256": "b8a75bff55ccfe5e23664afe267b9afcda3af8e51b38d5c3170f23634c362ef2"
+        }
+      },
+      "rows": 417
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk65/run_manifest.json",
+        "sha256": "0d38cce9fd1685c3577ecf8e3591f92f8bbf1977088fbb4b4c807cd3422a1182"
+      },
+      "run": "local-cm27-chunk65",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk65/sec_company.parquet",
+          "sha256": "594eb950281fcfff8ed1c68ac954eb7a07fd94603b420f89bfc4dba3a68fa750"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk65/sec_company_former_name.parquet",
+          "sha256": "6c76535bd2ddf00d8d6bc64c92cf49790a127e9c24f291cc8b6b86e00afe05e0"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk65/sec_company_address.parquet",
+          "sha256": "4db9576c2d380ba6eccc37327ed05365f4233dc64afb5211f3dc649347cfc5dc"
+        }
+      },
+      "rows": 505
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk66/run_manifest.json",
+        "sha256": "4c4775ac29528fecf89b91fa6bd0a226ff2da6e5f4a7dfc7daedda85437205fd"
+      },
+      "run": "local-cm27-chunk66",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk66/sec_company.parquet",
+          "sha256": "d7a2c5ecf86db28386658f7bc77a14deac24fdfdcb00b750d71aa40e6b279cce"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk66/sec_company_former_name.parquet",
+          "sha256": "21e39eb5d425518add55377ffd21a246e870a9b56e19fe7d33a63bc5ebfaf23c"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk66/sec_company_address.parquet",
+          "sha256": "650ecdca22ef3c967634cca06146398fe0669bfdef19d035cc685163f58188a7"
+        }
+      },
+      "rows": 690
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk67/run_manifest.json",
+        "sha256": "e4a82195d3d2db5540f13b47a7c732b0bb3969e09b6b51befa6c774f7a54f05e"
+      },
+      "run": "local-cm27-chunk67",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk67/sec_company.parquet",
+          "sha256": "9c9b28141ea4a952abdb7fe447897f635d24bd242f64835e2f15f29a0b7bcf04"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk67/sec_company_former_name.parquet",
+          "sha256": "52917dbddd9d9ba5bea319ab44ed07cf6df647eb27e2c77e886be659cc34ee36"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk67/sec_company_address.parquet",
+          "sha256": "86593c9910d81540e9147494192f677bf5458dbe9149146bb5c1857e5f8ec7da"
+        }
+      },
+      "rows": 769
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk68/run_manifest.json",
+        "sha256": "35318768803d085e13a79e330ce07f6a07c6c02738b428cc39ffda76de4f26f5"
+      },
+      "run": "local-cm27-chunk68",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk68/sec_company.parquet",
+          "sha256": "6d0b18c5060c05799d5b01316af5d65e5a15eff9c1c5043c65ac31620ba965c8"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk68/sec_company_former_name.parquet",
+          "sha256": "71ce890e84e0e8951e0a7f3bb7c5de84063ddb02dfae25785eee70e776fe3f5d"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk68/sec_company_address.parquet",
+          "sha256": "6f0399cf32abdb2d9fccd79108740e468516653dc672edd4732767a419fad87f"
+        }
+      },
+      "rows": 784
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk69/run_manifest.json",
+        "sha256": "8b3bf78255bb3cb4ebeed340130c602a36d15286e798ff73e1a0259ee32c0e85"
+      },
+      "run": "local-cm27-chunk69",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk69/sec_company.parquet",
+          "sha256": "01d4006785169801b0ed566161374cd20f8457cc17a1a60f1a52850c3a4f572c"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk69/sec_company_former_name.parquet",
+          "sha256": "4e3f29f12b2dde7e1e2d92d2619d7446379095f8df26bc261d06b67ffe28c5fe"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk69/sec_company_address.parquet",
+          "sha256": "557196595468d1a7425d891098368ad63f8e2b39a545bf06f4a023f2c9ed817e"
+        }
+      },
+      "rows": 6549
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk7/run_manifest.json",
+        "sha256": "194e72b2d598803e05ca1e0a8e7e341a0da4d77fc81ec0d4b329eede1c172086"
+      },
+      "run": "local-cm27-chunk7",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk7/sec_company.parquet",
+          "sha256": "3c641eb589ef4700c5025184f46ede82c4dc4bd00a95924ec195008b724c62ca"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk7/sec_company_former_name.parquet",
+          "sha256": "f745b42e7c711db9fc09ee76d6f1db833f3c81e69cfd2b63e59b55532a7f7857"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk7/sec_company_address.parquet",
+          "sha256": "a7a311541b632c5787ebaa965a96f3bcf32018d4cec147cba5b4d51eaaaac186"
+        }
+      },
+      "rows": 959
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk8/run_manifest.json",
+        "sha256": "4d6ac1d46818fa5b95f726e14003835d48d2d7e9225ff0a80ffc920f74e2b214"
+      },
+      "run": "local-cm27-chunk8",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk8/sec_company.parquet",
+          "sha256": "89d84f9ef5bdf0471f62ba73ead463f86ae17089060871d6ce6335c3a14baf1a"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk8/sec_company_former_name.parquet",
+          "sha256": "56a99201611fa6c335c702b5ab8754970e9aa8166f62ead2de3e266217eba7e0"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk8/sec_company_address.parquet",
+          "sha256": "42a173d7279f8840e9573a0776a32af40b7c3b5f2c8cf5b2a2356f8c6b850a4d"
+        }
+      },
+      "rows": 994
+    },
+    {
+      "manifest": {
+        "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/manifests/workflow_name%3Dsilver_landing_bootstrap_batch/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk9/run_manifest.json",
+        "sha256": "87e8bc0b282a905e00a19f5c336b1fcb950efaa785d98fb2a0b6ae9c80b49616"
+      },
+      "run": "local-cm27-chunk9",
+      "members": {
+        "company": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk9/sec_company.parquet",
+          "sha256": "92ab37268043e10eef73ca74b3be14b4263a9fa51125cc8cbe551ce09ca15700"
+        },
+        "former": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_former_name/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk9/sec_company_former_name.parquet",
+          "sha256": "a6ad56b7599ddace3e6095e16838d7b7682b6c01bd4158568eef8db1d1a159b7"
+        },
+        "address": {
+          "uri": "file:///Users/aneenaananth/.local/share/edgartools/clean-mdm/proving/cm27/silver-landing/sec_company_address/business_date%3D2026-09-29/run_id%3Dlocal-cm27-chunk9/sec_company_address.parquet",
+          "sha256": "a1b6963d2c8a8f02c2c97645432bb8c4c226f2d5305539632868d342a81559f7"
+        }
+      },
+      "rows": 926
+    }
+  ],
+  "filers": 43338,
+  "wanted_keys": 43245,
+  "seconds": 368.8533230861649,
+  "proof": {
+    "uri": "file:///private/tmp/codex-census-eof-proof/sec-proof.json",
+    "sha256": "2da7aa77c69f6ad26e34e6583669a16b0b02571fc94bb4a0697e6fce44ee1957"
+  },
+  "lookup": {
+    "uri": "file:///private/tmp/codex-census-eof-proof/257e0d465c71198430353bd36c5228267205cd6fcbf2d3203ed3aa54409c71d0.json",
+    "sha256": "257e0d465c71198430353bd36c5228267205cd6fcbf2d3203ed3aa54409c71d0"
+  },
+  "historical_company_former_pins_match": true,
+  "historical_address_pins_exist": false,
+  "address_manifest_bytes_authenticated_by_qualification_receipts": true
+}

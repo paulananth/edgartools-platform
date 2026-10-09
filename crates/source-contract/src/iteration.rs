@@ -13,6 +13,15 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
             if !args.as_mapping().is_some_and(|m| m.is_empty()) { return Err("empty iteration takes an empty mapping".into()); }
             Ok(())
         },
+        Some("project") => {
+            let map = args.as_mapping().ok_or("project iteration requires a mapping")?;
+            if format != "json" || map.len() != 2
+                || map.keys().any(|k| !matches!(k.as_str(), Some("value" | "on_null")))
+                || !matches!(setting(args, "on_null"), Some("empty" | "row")) {
+                return Err("each.project requires JSON, value and on_null empty or row".into());
+            }
+            validate_expr(&args["value"], steps)
+        },
         Some("parallel") => parallel::validate(each, format),
         Some("matrix") => matrix::validate(each, format),
         Some("values") => {
@@ -62,6 +71,7 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
 
 pub(crate) fn expressions(each: &Value) -> Vec<&Value> {
     let mut result = Vec::new();
+    if let Some(value) = each.get("project").and_then(|args| args.get("value")) { result.push(value); }
     if let Some(args) = each.get("choose") {
         if let Some(condition) = args.get("condition") { result.push(condition); }
         for key in ["then", "else"] { if let Some(branch) = args.get(key) { result.extend(expressions(branch)); } }
@@ -76,6 +86,16 @@ pub(crate) fn needs_order(each: &Value) -> bool {
 
 pub(crate) fn rows(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, each: &Value, maximum: usize, take: usize) -> Result<(Vec<El>, usize), Rejected> {
     if each.get("empty").is_some() { return Ok((Vec::new(), 0)); }
+    if let Some(args) = each.get("project") {
+        let value = eval(engine, context, lookups, document, document, 1, &args["value"])?;
+        if matches!(value, Val::Null) && setting(args, "on_null") == Some("empty") {
+            return Ok((Vec::new(), 0));
+        }
+        if maximum == 0 { return Err(Rejected::new("limit_exceeded", "Projection exceeds max_records")); }
+        let mut budget = (0, 0);
+        let row = crate::projected_tree(value, 0, &mut budget)?;
+        return Ok((if take == 0 { Vec::new() } else { vec![row] }, 1));
+    }
     if let Some(path) = each.as_str() {
         let items = crate::items_of(document, path)?;
         if items.len() > maximum { return Err(Rejected::new("limit_exceeded", "Iteration exceeds max_records")); }

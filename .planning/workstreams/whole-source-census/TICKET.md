@@ -1,4 +1,24 @@
-# Whole-source configured census construction
+# Whole-source configured Name Frequency construction
+
+## Operator scope — 2026-10-09
+
+New isolated worktree: `codex/whole-census-eof-20261009`, started from freshly
+fetched main `13942dcf` (#881, with #884 already included), then fast-forwarded
+to `51fe80b0` (#885). Source Extract and Name Frequency are the agreed prose
+names; existing filenames, identifiers and manifest keys stay stable. The attestation
+branch is stopped. Its two open checklist lines remain open.
+
+- [x] Qualify GENERAL mapped fields, quality-derived matching places and global address inputs against the active construction; 51 targeted cases, 299 affected cases and deliberate noncandidate/ineligible deletion faults pass, with exact 1,000 captured-record projection parity. 2026-10-09 12:09 ET
+- [x] Authenticate all 69 SEC captures (43,338 filers), exhaust company/former-name/address members and derive 43,245 wanted keys; configured publisher metadata derives 3,428,477 records with a separate pinned authority binding. Retained SEC constructors agree; 368.85 seconds. 2026-10-09 12:09 ET
+- [x] Measure and announce full-scan estimates: SEC bounded capture 28.28 seconds, conservative 33-minute estimate; complete SEC finished in 6m09s. Combined GLEIF comparison 1,000 records in 1.274 seconds, 73-minute estimate announced before full original-source scan. 2026-10-09 12:09 ET
+- [ ] Compare the complete pinned SEC/GLEIF census through original-source EOF, including all seven live cascade passes, exact holder counts and last occurrence per name key/holder.
+- [ ] Record reproducible receipts, current runtime pins, elapsed times, fault checks and reviewable changes; preserve all deferred gates below.
+- [x] Repair independent review finding: projection budgets now count field-array containers and reserved text/attribute values, with node/depth regressions; 161 native cases pass. Name the generator helpers and verify generated Rules byte equality with `--check`. 2026-10-09 12:20 ET
+- [x] Repair first CI Unit failure: generic combining guidance and explicit Examples section; all 58 profiling-genericity checks pass. 2026-10-09 12:20 ET
+
+Installed empty PostgreSQL16 population (6,414/3,052), old construction/parser
+deletion, activation and deployment remain behind the original-source EOF
+comparison. No install, Person/Security feeds or profiling work is scheduled.
 
 ## PR878 rebase — 2026-10-09
 
@@ -31,7 +51,7 @@ completes this ticket or the parent goal.
 - [ ] Build native configured census projections preserving category/LEI/key/timestamp/other-name read order and cascade eligibility/quality.
   - [x] Implement ordered native name projection and explicit generic empty iteration; 146 native tests and 134 affected Python tests passed (51.66s); canonical Rules loader and transform drift invariant included. 2026-10-08 18:11 ET
   - [x] Compare 1,000 hash-authenticated captured GLEIF prefix records and five trials against independent extraction and current configured callback baselines; exact rows agree. See captured-name-projection.json; original-source EOF and cascade remain unqualified. 2026-10-08 18:11 ET
-  - [ ] Add GENERAL cascade field/quality projection and global address-frequency inputs before replacing active construction.
+  - [x] Add GENERAL cascade field/quality projection and global address-frequency inputs before replacing active construction; 51 targeted cases, 299 affected cases and captured-prefix equality verified; full original EOF remains pending above. 2026-10-09 13:41 ET
 - [ ] Implement generic bounded reduction/composition over authenticated complete source streams; preserve unique holders, duplicate-LEI last timestamp, capped samples, counts and exact evidence identity.
   - [x] Add incremental authenticated inline/partition traversal with aggregate limits, original evidence, EOF accounting, empty schemas and isolated private metadata; 151 targeted/genericity tests passed in 17.26s, including consumer-mutation and >32 MiB loader-compatibility regressions. 2026-10-08 18:45 ET
   - [x] Qualify actual captured-prefix worker output through exhausted incremental traversal; 1,000 records agree with the independent oracle, retry/replay pass, and runtime pins are unchanged. Final broader gate: 279 passed in 37.39s. 2026-10-08 18:47 ET
@@ -42,7 +62,7 @@ completes this ticket or the parent goal.
 - [ ] Express complete source census construction in bundled Rules, with immutable source/context receipts and separate worker verification.
   - [x] Implement version-3 source.read input/context/lookup receipts, raw set bounds before source access, output evidence and consumer identity gate; 207 affected tests passed in 41.99s. 2026-10-08 18:27 ET
   - [x] Real configured census worker execute/retry/replay verification agrees with independent captured-prefix oracle on 1,000 records; worker_proof records receipt hashes and table counts. Separate-process and original-source EOF qualification remain false. 2026-10-08 18:27 ET
-  - [ ] Derive wanted population and publication count from complete authenticated upstream inputs, preserving original source population identity; installed independent-process proof remains required.
+  - [x] Derive wanted population and publication count from complete authenticated upstream inputs: all 69 SEC captures, 43,338 filers, 43,245 wanted keys and 3,428,477 publisher records; receipt summaries committed with handoff. Installed independent-process proof remains required separately. 2026-10-09 13:41 ET
 - [ ] Qualify actual captured records and deliberate faults before full scans; measure runtime and setup separately before selecting full-scan concurrency.
 - [ ] Construct and compare the complete pinned SEC/GLEIF census through valid original-source EOF; preserve cascade decisions and source population evidence.
 - [ ] Verify installed empty restricted PostgreSQL16 population (6,414 Company / 3,052 CIK+LEI), unchanged replay and recovery; do not substitute the two-Company fixture.
@@ -261,3 +281,7 @@ execute/verify/retry takes 0.216s; setup
 installed population and independent-process flags remain false. The complete
 census assembly and global address-frequency construction are still open.
 CI on 54b8bcd0 passed; these reduction changes require their own full CI gate.
+
+## Operator handoff to Grok — 2026-10-09
+
+- [x] Make PR886 ready at operator request and save self-contained Grok handoff, upstream/CI receipts and broader original-goal backlog; `gh pr view` verifies `isDraft=false`, receipt JSON and handoff checklist inspected. Original EOF and deferred acceptance/retirement remain incomplete. 2026-10-09 13:42 ET

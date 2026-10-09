@@ -103,7 +103,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
-const PRIMITIVES: [&str; 18] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member"];
+const PRIMITIVES: [&str; 22] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member", "project", "recover", "transform", "sequence"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -116,7 +116,11 @@ pub struct Engine {
     read: Value,
     steps: Steps,
     limits: Limits,
-    text_recipes: std::collections::HashMap<Value, text_transform::Recipe>,
+    text_recipes: Vec<text_transform::Recipe>,
+    text_recipe_indices: std::collections::HashMap<usize, usize>,
+    json_integer: bool,
+    json_python_text: bool,
+    json_iteration_order: bool,
 }
 
 fn contract_error(detail: impl ToString) -> Rejected {
@@ -137,6 +141,9 @@ impl LookupProjection<'_> {
 }
 
 impl Engine {
+    fn text_recipe(&self, transforms: &Value) -> &text_transform::Recipe {
+        &self.text_recipes[self.text_recipe_indices[&(transforms as *const Value as usize)]]
+    }
     pub fn prepare_json_projection<'a>(&'a self, lookups: &'a Lookups) -> Result<LookupProjection<'a>, Rejected> {
         lookup_sets::check(&self.read, lookups)?;
         self.validate_json_projection()?;
@@ -162,29 +169,46 @@ impl Engine {
             max_records: limit("max_records", 10_000_000) as usize,
         };
         // Walk expressions only: literal/reference data must never become code.
-        fn collect(expr: &Value, recipes: &mut std::collections::HashMap<Value, text_transform::Recipe>) -> Result<(), Rejected> {
-            if let Some(transforms) = expr.get("text").and_then(|args| args.get("transforms")) {
-                if !recipes.contains_key(transforms) {
+        fn collect(expr: &Value, recipes: &mut Vec<text_transform::Recipe>,
+                   unique: &mut std::collections::HashMap<Value, usize>,
+                   indices: &mut std::collections::HashMap<usize, usize>) -> Result<(), Rejected> {
+            if let Some(transforms) = expr.get("text").or_else(|| expr.get("transform")).and_then(|args| args.get("transforms")) {
+                let index = if let Some(index) = unique.get(transforms) { *index } else {
                     let mut operations = 0;
                     let mut regexes = 0;
-                    for value in recipes.keys().chain(std::iter::once(transforms)) {
-                        if let Some(list) = value.as_sequence() {
-                            operations += list.len();
-                            regexes += list.iter().filter(|op| op.get("regex_replace").is_some()).count();
-                        }
+                    for value in unique.keys().chain(std::iter::once(transforms)) {
+                        let (count, regex_count) = text_transform::cost(value);
+                        operations += count;
+                        regexes += regex_count;
                     }
-                    if recipes.len() >= 128 || operations > 1024 || regexes > 32 {
+                    if unique.len() >= 128 || operations > 1024 || regexes > 32 {
                         return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 32 regexes"));
                     }
-                    recipes.insert(transforms.clone(), text_transform::Recipe::compile(transforms).map_err(contract_error)?);
-                }
+                    let index = recipes.len();
+                    recipes.push(text_transform::Recipe::compile(transforms).map_err(contract_error)?);
+                    unique.insert(transforms.clone(), index);
+                    index
+                };
+                // Values inside the owned immutable YAML mappings keep their
+                // addresses when Engine moves. Identity avoids re-hashing the
+                // whole recipe for every field of every streamed record; no
+                // pointer is dereferenced and no external expression is used.
+                indices.insert(transforms as *const Value as usize, index);
             }
-            for child in expression_children(expr) { collect(child, recipes)?; }
+            for child in expression_children(expr) { collect(child, recipes, unique, indices)?; }
             Ok(())
         }
-        let mut text_recipes = std::collections::HashMap::new();
-        for expr in read_expressions(&read) { collect(expr, &mut text_recipes)?; }
-        Ok(Self { read, steps, limits, text_recipes })
+        let mut text_recipes = Vec::new();
+        let mut text_recipe_indices = std::collections::HashMap::new();
+        let mut unique = std::collections::HashMap::new();
+        for expr in read_expressions(&read) { collect(expr, &mut text_recipes, &mut unique, &mut text_recipe_indices)?; }
+        // The immutable expression tree determines JSON preservation once.
+        // Re-walking every expression for each streamed record makes larger
+        // configured projections proportional to records * contract size.
+        let json_integer = uses_integer(&read);
+        let json_python_text = uses_python_text(&read);
+        let json_iteration_order = uses_iteration_order(&read);
+        Ok(Self { read, steps, limits, text_recipes, text_recipe_indices, json_integer, json_python_text, json_iteration_order })
     }
 
     pub fn read(&self, bytes: &[u8], lookups: &Lookups) -> Result<Reading, Rejected> {
@@ -226,7 +250,7 @@ impl Engine {
         if json_sequence::encoded_len(&value, json_sequence::RecordEncoding::Python)? as u64 > self.limits.max_bytes {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
-        let document = formats::json_value(value, uses_integer(&self.read), uses_python_text(&self.read) || uses_iteration_order(&self.read));
+        let document = formats::json_value(value, self.json_integer, self.json_python_text || self.json_iteration_order);
         self.read_document(&document, lookups, context)
     }
 
@@ -299,8 +323,8 @@ impl Engine {
     fn document(&self, bytes: &[u8]) -> Result<El, Rejected> {
         let max_records = self.limits.max_records;
         match setting(&self.read, "format").unwrap_or_default() {
-            "json" => formats::json(bytes, uses_integer(&self.read), uses_python_text(&self.read) || uses_iteration_order(&self.read)),
-            "jsonl" => formats::jsonl(bytes, max_records, uses_integer(&self.read), uses_python_text(&self.read)),
+            "json" => formats::json(bytes, self.json_integer, self.json_python_text || self.json_iteration_order),
+            "jsonl" => formats::jsonl(bytes, max_records, self.json_integer, self.json_python_text),
             "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
@@ -352,6 +376,7 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
         if let Some(key) = expr.get(call).and_then(|args| args.get("key")) { children.push(key); }
     }
     if let Some(steps) = expr.get("steps").and_then(Value::as_sequence) { children.extend(steps); }
+    if let Some(values) = expr.get("sequence").and_then(Value::as_sequence) { children.extend(values); }
     if let Some(inputs) = expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping) {
         children.extend(inputs.values());
     }
@@ -370,6 +395,13 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
     if let Some(args) = expr.get("equal") {
         for key in ["left", "right"] {
             if let Some(child) = args.get(key) { children.push(child); }
+        }
+    }
+    for name in ["project", "recover", "transform"] {
+        if let Some(args) = expr.get(name) {
+            for key in ["value", "then", "fallback"] {
+                if let Some(child) = args.get(key) { children.push(child); }
+            }
         }
     }
     children
@@ -597,6 +629,30 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
         return Err(format!("primitive {name} is not known"));
     }
     match name {
+        "sequence" => {
+            let values = args.as_sequence().filter(|v| v.len() <= 128).ok_or("sequence has at most 128 expressions")?;
+            for value in values { validate_expr(value, steps)?; }
+        }
+        "project" => {
+            let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("project requires value and then")?;
+            if map.keys().any(|k| !matches!(k.as_str(), Some("value" | "then"))) { return Err("project requires value and then only".into()); }
+            validate_expr(&args["value"], steps)?;
+            validate_expr(&args["then"], steps)?;
+        }
+        "recover" => {
+            let map = args.as_mapping().filter(|m| m.len() == 3).ok_or("recover requires value, codes and fallback")?;
+            if map.keys().any(|k| !matches!(k.as_str(), Some("value" | "codes" | "fallback"))) { return Err("recover has unknown arguments".into()); }
+            let codes = args["codes"].as_sequence().filter(|v| !v.is_empty() && v.len() <= 2).ok_or("recover codes names data-shape refusals")?;
+            if codes.iter().any(|v| !matches!(v.as_str(), Some("value_type" | "join_shape"))) { return Err("recover catches only value_type and join_shape".into()); }
+            validate_expr(&args["value"], steps)?;
+            validate_expr(&args["fallback"], steps)?;
+        }
+        "transform" => {
+            let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("transform requires value and transforms")?;
+            if map.keys().any(|k| !matches!(k.as_str(), Some("value" | "transforms"))) { return Err("transform requires value and transforms only".into()); }
+            validate_expr(&args["value"], steps)?;
+            text_transform::Recipe::compile(&args["transforms"])?;
+        }
         "equal" => {
             let map = args.as_mapping().filter(|m| m.len() == 2)
                 .ok_or("equal requires left and right expressions")?;
@@ -1063,9 +1119,77 @@ fn falsey(value: &Val) -> bool {
     }
 }
 
+fn projected_node(depth: usize, budget: &mut (usize, usize)) -> Result<(), Rejected> {
+    budget.0 += 1;
+    if depth > 64 || budget.0 > 100_000 || budget.1 > 1_048_576 {
+        return Err(Rejected::new("projection_limit", "project exceeds depth, node or text budget"));
+    }
+    Ok(())
+}
+
+fn projected_tree(value: Val, depth: usize, budget: &mut (usize, usize)) -> Result<El, Rejected> {
+    use tree::{Child, ScalarKind};
+    projected_node(depth, budget)?;
+    let scalar = |text: String, kind: ScalarKind, budget: &mut (usize, usize)| {
+        budget.1 += text.len();
+        El { exact_number: (kind == ScalarKind::Number).then(|| text.clone()), kind, ..El::scalar(Some(text)) }
+    };
+    let result = match value {
+        Val::Null => El::scalar(None),
+        Val::Str(value) => scalar(value, ScalarKind::Text, budget),
+        Val::Bool(value) => scalar(value.to_string(), ScalarKind::Boolean, budget),
+        Val::Int(value) => scalar(value.to_string(), ScalarKind::Number, budget),
+        Val::UInt(value) => scalar(value.to_string(), ScalarKind::Number, budget),
+        Val::Float(value) => scalar(format!("{value:?}"), ScalarKind::Number, budget),
+        Val::List(values) => {
+            let mut el = El { array: true, ..El::default() };
+            let items = values.into_iter().map(|v| projected_tree(v, depth + 1, budget)).collect::<Result<Vec<_>, _>>()?;
+            el.children.insert("item".into(), Child::Many(items));
+            el
+        }
+        Val::Map(values) => {
+            let mut el = El { json_keys: Some(values.keys().cloned().collect()), ..El::default() };
+            for (key, value) in values {
+                budget.1 += key.len();
+                match value {
+                    Val::Str(value) if key == "$" => { projected_node(depth + 1, budget)?; budget.1 += value.len(); el.text = Some(value); }
+                    Val::Str(value) if key.starts_with('@') => { projected_node(depth + 1, budget)?; budget.1 += value.len(); el.attrs.insert(key, value); }
+                    Val::List(values) => {
+                        projected_node(depth + 1, budget)?;
+                        let items = values.into_iter().map(|v| projected_tree(v, depth + 2, budget)).collect::<Result<Vec<_>, _>>()?;
+                        el.children.insert(key, Child::Many(items));
+                    }
+                    value => { el.children.insert(key, Child::One(projected_tree(value, depth + 1, budget)?)); }
+                }
+            }
+            el
+        }
+    };
+    if budget.1 > 1_048_576 { return Err(Rejected::new("projection_limit", "project exceeds text budget")); }
+    Ok(result)
+}
+
 fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
+        "sequence" => args.as_sequence().unwrap().iter().map(|value|
+            eval(engine, context, lookups, document, item, ordinal, value)).collect::<Result<Vec<_>, _>>().map(Val::List),
+        "project" => {
+            let value = eval(engine, context, lookups, document, item, ordinal, &args["value"])?;
+            let mut budget = (0usize, 0usize);
+            let projected = projected_tree(value, 0, &mut budget)?;
+            eval(engine, context, lookups, &projected, &projected, ordinal, &args["then"])
+        }
+        "recover" => match eval(engine, context, lookups, document, item, ordinal, &args["value"]) {
+            Err(error) if args["codes"].as_sequence().unwrap().iter().any(|v| v.as_str() == Some(error.code.as_str())) =>
+                eval(engine, context, lookups, document, item, ordinal, &args["fallback"]),
+            result => result,
+        },
+        "transform" => match eval(engine, context, lookups, document, item, ordinal, &args["value"])? {
+            Val::Null => Ok(Val::Null),
+            Val::Str(value) => Ok(Val::Str(engine.text_recipe(&args["transforms"]).apply(value)?)),
+            _ => Err(Rejected::new("value_type", "transform requires text or null")),
+        },
         "equal" => {
             let left = eval(engine, context, lookups, document, item, ordinal, &args["left"])?;
             let right = eval(engine, context, lookups, document, item, ordinal, &args["right"])?;
@@ -1092,7 +1216,7 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
                 other => other,
             };
             let value = match (value, args.get("transforms")) {
-                (Val::Str(text), Some(transforms)) => Val::Str(engine.text_recipes[transforms].apply(text)?),
+                (Val::Str(text), Some(transforms)) => Val::Str(engine.text_recipe(transforms).apply(text)?),
                 (other, _) => other,
             };
             let Val::Str(text) = &value else { return Ok(value) };
