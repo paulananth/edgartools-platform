@@ -1,0 +1,3803 @@
+version: 1
+dataset:
+  name: null
+  inputs:
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/dtc-1-1.jsonl
+    format: jsonl
+    bytes: 109142
+    rows: 918
+    sha256: 7f2655f312afbd8c236a5b3d841ce3f7dcf2351d1e6c20d375de1bb75ca28d33
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/dtc-2-1.jsonl
+    format: jsonl
+    bytes: 115048
+    rows: 990
+    sha256: 3e1d57aa8964357632e1a17087e0f66351d252490a173baa968b3ac397eb8777
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/dtc-3-1.jsonl
+    format: jsonl
+    bytes: 4959
+    rows: 49
+    sha256: 50819438ee6c460861cf8b1542205c3895e99bd0d11e61d4e5a1b839f0d26d02
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/dtc-4-1.jsonl
+    format: jsonl
+    bytes: 5468
+    rows: 58
+    sha256: 4d1fa702cc69cea231586d66b61c56330bae271540ae0e549be201060ccebcd7
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/dtc-5-1.jsonl
+    format: jsonl
+    bytes: 7120
+    rows: 62
+    sha256: 1bdbc0398d06c1444fc5bc8f8381f14fc5646ee614385f3013a3144ff1422793
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/ficc-gov-1-1.jsonl
+    format: jsonl
+    bytes: 666
+    rows: 6
+    sha256: 33b251bb31f664ef51441b41945ec6e79489e129be2156038526b0b801e01b22
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/ficc-gov-2-1.jsonl
+    format: jsonl
+    bytes: 109332
+    rows: 308
+    sha256: 43efaeec7ab6e13235b4e0feae730981908d01b65e483b48d16354eb6a4a6604
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/ficc-mbs-1-1.jsonl
+    format: jsonl
+    bytes: 10192
+    rows: 139
+    sha256: 09686243793033f43d6c7939c13860913b79909406bb07e5888e81063b528088
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/nscc-1-1.jsonl
+    format: jsonl
+    bytes: 1733036
+    rows: 5365
+    sha256: 9134b44f454e80f297d330ff5c4d039410550f1959e33221b0ee8b685772403e
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/nscc-1-2.jsonl
+    format: jsonl
+    bytes: 1133
+    rows: 1
+    sha256: c3b4e325001b1440ff0d0a1349a9e12f05f595cb1a37383f92649f878af673b1
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/nscc-2-1.jsonl
+    format: jsonl
+    bytes: 324480
+    rows: 2028
+    sha256: 9a9e7fa8205100e70a8a0ddb91c322853dfd309fed35c305a45675a5eb1c854f
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/nscc-2-2.jsonl
+    format: jsonl
+    bytes: 223680
+    rows: 1398
+    sha256: ccda7cfbad189b18250d227975e572efbfb2be5f710b34634045ed4be347ff68
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/nscc-2-3.jsonl
+    format: jsonl
+    bytes: 218720
+    rows: 1367
+    sha256: 69e23f085ccffa188f8a957cbc0b7768fc3aa2e9eef4f216b7e3da01ffc24b29
+  - kind: file
+    location: /private/tmp/dtcc-priority1-20261009/derived/nscc-2-4.jsonl
+    format: jsonl
+    bytes: 188960
+    rows: 1181
+    sha256: 8e19f2828ad7c842117ac6b8ecaf47ab09c023ae1b38adf923b1bf2cc56a19b6
+  scan:
+    mode: full
+    reason: null
+    seed: 0
+    elapsed_seconds: 12.1
+  profiled_at: '2026-10-09T16:44:30-04:00'
+  profiled_by: data-profiling 1
+parts:
+- part: dtc_1_1
+  parent_part: null
+  rows: 918
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id001
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 918
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id001
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 918
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 1
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 2
+    passed: false
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id001
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 1
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 918
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id001
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: 'No'
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 0.995643
+    unique: 1.0
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  columns:
+  - name: Participant Account Name
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.995643
+    distinct: 912
+    unique: 0.997812
+    shape: '   AAA AAAA AA AAA AAAA AAAAAA/AAAAAAA 99                                '
+    shape_share: 0.040481
+    top:
+    - value: '   BNYMELLON/RE HSBC BANK PLC                                            '
+      rows: 2
+    - value: '   RBC DOMINION SECURITIES INC./CDS**                                    '
+      rows: 2
+    - value: '    THE BANK OF NEW YORK MELLON/FSA                                      '
+      rows: 1
+    - value: '   ADR-CITI                                                              '
+      rows: 1
+    - value: '   ALPACA SECURITIES LLC/FPSL                                            '
+      rows: 1
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: 'No'
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.995643
+    distinct: 914
+    unique: 1.0
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '0005'
+      rows: 1
+    - value: '0010'
+      rows: 1
+    - value: '0013'
+      rows: 1
+    - value: '0015'
+      rows: 1
+    - value: '0017'
+      rows: 1
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: dtc_2_1
+  parent_part: null
+  rows: 990
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id002
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 990
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id002
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 990
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 1
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 2
+    passed: false
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id002
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 1
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 990
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id002
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers: []
+  columns:
+  - name: ' No.'
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.99697
+    distinct: 987
+    unique: 1.0
+    shape: ' 9999'
+    shape_share: 0.926039
+    top:
+    - value: ' 0000 SERIES'
+      rows: 1
+    - value: ' 0005'
+      rows: 1
+    - value: ' 0010'
+      rows: 1
+    - value: ' 0013'
+      rows: 1
+    - value: ' 0015'
+      rows: 1
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Participant Account Name
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.923232
+    distinct: 912
+    unique: 0.997812
+    shape: ' AAA AAAA AA AAA AAAA AAAAAA/AAAAAAA 99                                '
+    shape_share: 0.040481
+    top:
+    - value: ' BNYMELLON/RE HSBC BANK PLC                                            '
+      rows: 2
+    - value: ' RBC DOMINION SECURITIES INC./CDS**                                    '
+      rows: 2
+    - value: '  THE BANK OF NEW YORK MELLON/FSA                                      '
+      rows: 1
+    - value: ' ABN AMRO CLEARING USA LLC                                             '
+      rows: 1
+    - value: ' ABN AMRO SECURITIES (USA) LLC                                         '
+      rows: 1
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: dtc_3_1
+  parent_part: null
+  rows: 49
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id003
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 0
+    passed: false
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 49
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 0
+    passed: false
+  - class: reference
+    test: has a unique key (required)
+    value: *id003
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 49
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 0
+    passed: true
+  - class: reference
+    test: codes with label columns
+    value: 1
+    passed: true
+  - class: reference
+    test: only codes, labels and dates
+    value: 0
+    passed: true
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 0
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id003
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 0
+    passed: true
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 49
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id003
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers: []
+  columns:
+  - name: NAME
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.959184
+    distinct: 47
+    unique: 1.0
+    shape: ' AAAAA AAAAA AAAA, AAAAAAAA AAAAAAAAAAA                                '
+    shape_share: 0.06383
+    top:
+    - value: ' AMALGAMATED BANK                                                      '
+      rows: 1
+    - value: ' AMALGAMATED BANK OF CHICAGO                                           '
+      rows: 1
+    - value: ' ASSOCIATED BANK, N.A.                                                 '
+      rows: 1
+    - value: ' BANK OF AMERICA, NATIONAL ASSOCIATION                                 '
+      rows: 1
+    - value: ' BANK OF CHINA, NEW YORK BRANCH                                        '
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: ABA
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.959184
+    distinct: 47
+    unique: 1.0
+    shape: ' 9999 9999 9'
+    shape_share: 1.0
+    top:
+    - value: ' 0110 0002 8'
+      rows: 1
+    - value: ' 0110 0188 1'
+      rows: 1
+    - value: ' 0210 0001 8'
+      rows: 1
+    - value: ' 0210 0002 1'
+      rows: 1
+    - value: ' 0210 0008 9'
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        ' 0110 0002 8': 0.021277
+        ' 0110 0188 1': 0.021277
+        ' 0210 0001 8': 0.021277
+        ' 0210 0002 1': 0.021277
+        ' 0210 0008 9': 0.021277
+        ' 0210 0103 3': 0.021277
+        ' 0210 0482 3': 0.021277
+        ' 0210 3320 5': 0.021277
+        ' 0210 3953 9': 0.021277
+        ' 0210 8855 1': 0.021277
+        ' 0220 0004 6': 0.021277
+        ' 0260 0326 9': 0.021277
+        ' 0260 0337 9': 0.021277
+        ' 0260 0378 0': 0.021277
+        ' 0260 0422 6': 0.021277
+        ' 0260 0430 7': 0.021277
+        ' 0260 0799 3': 0.021277
+        ' 0260 0959 3': 0.021277
+        ' 0260 1498 6': 0.021277
+        ' 0310 0005 3': 0.021277
+        ' 0410 0103 9': 0.021277
+        ' 0420 0001 3': 0.021277
+        ' 0420 0031 4': 0.021277
+        ' 0434 0003 6': 0.021277
+        ' 0440 0002 4': 0.021277
+        ' 0531 0112 1': 0.021277
+        ' 0620 0569 0': 0.021277
+        ' 0631 1673 7': 0.021277
+        ' 0710 0015 2': 0.021277
+        ' 0710 0028 8': 0.021277
+        ' 0710 0150 4': 0.021277
+        ' 0710 0340 5': 0.021277
+        ' 0720 0009 6': 0.021277
+        ' 0759 0057 5': 0.021277
+        ' 0759 1247 9': 0.021277
+        ' 0840 0002 6': 0.021277
+        ' 0865 0063 4': 0.021277
+        ' 1010 0001 9': 0.021277
+        ' 1010 0069 5': 0.021277
+        ' 1039 0003 6': 0.021277
+        ' 1049 1079 5': 0.021277
+        ' 1070 0642 8': 0.021277
+        ' 1140 0009 3': 0.021277
+        ' 1149 0016 4': 0.021277
+        ' 1210 0024 8': 0.021277
+        ' 1240 0005 4': 0.021277
+        ' 2642 7139 0': 0.021277
+      other: 0.0
+  code_lists:
+  - column: ABA
+    distinct: 47
+    label_column: NAME
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: code_list
+    column: ABA
+    rows: 0
+    examples: []
+    args:
+      values:
+      - ' 0110 0002 8'
+      - ' 0110 0188 1'
+      - ' 0210 0001 8'
+      - ' 0210 0002 1'
+      - ' 0210 0008 9'
+      - ' 0210 0103 3'
+      - ' 0210 0482 3'
+      - ' 0210 3320 5'
+      - ' 0210 3953 9'
+      - ' 0210 8855 1'
+      - ' 0220 0004 6'
+      - ' 0260 0326 9'
+      - ' 0260 0337 9'
+      - ' 0260 0378 0'
+      - ' 0260 0422 6'
+      - ' 0260 0430 7'
+      - ' 0260 0799 3'
+      - ' 0260 0959 3'
+      - ' 0260 1498 6'
+      - ' 0310 0005 3'
+      - ' 0410 0103 9'
+      - ' 0420 0001 3'
+      - ' 0420 0031 4'
+      - ' 0434 0003 6'
+      - ' 0440 0002 4'
+      - ' 0531 0112 1'
+      - ' 0620 0569 0'
+      - ' 0631 1673 7'
+      - ' 0710 0015 2'
+      - ' 0710 0028 8'
+      - ' 0710 0150 4'
+      - ' 0710 0340 5'
+      - ' 0720 0009 6'
+      - ' 0759 0057 5'
+      - ' 0759 1247 9'
+      - ' 0840 0002 6'
+      - ' 0865 0063 4'
+      - ' 1010 0001 9'
+      - ' 1010 0069 5'
+      - ' 1039 0003 6'
+      - ' 1049 1079 5'
+      - ' 1070 0642 8'
+      - ' 1140 0009 3'
+      - ' 1149 0016 4'
+      - ' 1210 0024 8'
+      - ' 1240 0005 4'
+      - ' 2642 7139 0'
+    proposal: flag
+    fix: null
+    fix_evidence: null
+    why: 47 codes in this delivery; a new code is flagged until the code set has it
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: dtc_4_1
+  parent_part: null
+  rows: 58
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id004
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 58
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id004
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 58
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 1
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 2
+    passed: false
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id004
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 1
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 58
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id004
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: Pledgee Number
+    shape: '9999 '
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 0.982759
+    unique: 1.0
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  columns:
+  - name: Pledgee Name
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.982759
+    distinct: 57
+    unique: 1.0
+    shape: ' AAAAA AA/AAAAAAAAAA AAAAAAA (AAAAAAAAAAA AAAA AAA AA AAAAA)(A99 AA-AA) '
+    shape_share: 0.035088
+    top:
+    - value: ' B3 S.A. - BRASIL, BOLSA, BALCAO '
+      rows: 1
+    - value: ' BANK OF AMERICA NA, NEW YORK '
+      rows: 1
+    - value: ' BANK OF MONTREAL, CHICAGO BRANCH '
+      rows: 1
+    - value: ' BMO BANK NATIONAL ASSOCIATION '
+      rows: 1
+    - value: ' CANADIAN DERIVATIVES CLEARING CORPORATION '
+      rows: 1
+    role: text
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Pledgee Number
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.982759
+    distinct: 57
+    unique: 1.0
+    shape: '9999 '
+    shape_share: 1.0
+    top:
+    - value: '0014 '
+      rows: 1
+    - value: '0059 '
+      rows: 1
+    - value: '0199 '
+      rows: 1
+    - value: '0246 '
+      rows: 1
+    - value: '0293 '
+      rows: 1
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: dtc_5_1
+  parent_part: null
+  rows: 62
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id005
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 62
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id005
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 62
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 1
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 2
+    passed: false
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id005
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 1
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 62
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id005
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: Number
+    shape: '9999 '
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 0.983871
+    unique: 1.0
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  columns:
+  - name: ' Participant Name'
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.983871
+    distinct: 61
+    unique: 1.0
+    shape: ' AAAAAAA AAAAA AAAAAAA/AAA                                             '
+    shape_share: 0.032787
+    top:
+    - value: ' BANCFIRST/DRS                                                         '
+      rows: 1
+    - value: ' BANCO POPULAR DE PUERTO RICO/DRS                                      '
+      rows: 1
+    - value: ' BANK OZK/DRS                                                          '
+      rows: 1
+    - value: ' BROADRIDGE CORPORATE ISSUER SOLUTIONS, LLC/DRS                        '
+      rows: 1
+    - value: ' CANANDAIGUA NATIONAL BANK & TRUST COMPANY/DRS                         '
+      rows: 1
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Number
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.983871
+    distinct: 61
+    unique: 1.0
+    shape: '9999 '
+    shape_share: 1.0
+    top:
+    - value: '7802 '
+      rows: 1
+    - value: '7804 '
+      rows: 1
+    - value: '7805 '
+      rows: 1
+    - value: '7806 '
+      rows: 1
+    - value: '7807 '
+      rows: 1
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: ficc_gov_1_1
+  parent_part: null
+  rows: 6
+  scan: full
+  class: reference
+  confidence: 0.857
+  tests:
+  - class: reference
+    test: has a unique key (required)
+    value: &id006
+    - Member ID
+    passed: true
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 6
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 0
+    passed: true
+  - class: reference
+    test: codes with label columns
+    value: 1
+    passed: true
+  - class: reference
+    test: only codes, labels and dates
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.667
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id006
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: Member ID
+    shape: 99AA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: Member ID
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 6
+    unique: 1.0
+    shape: 99AA
+    shape_share: 1.0
+    top:
+    - value: 94AA
+      rows: 1
+    - value: 94AB
+      rows: 1
+    - value: 94AE
+      rows: 1
+    - value: 94AH
+      rows: 1
+    - value: 94AI
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        94AA: 0.166667
+        94AB: 0.166667
+        94AE: 0.166667
+        94AH: 0.166667
+        94AI: 0.166667
+        94AJ: 0.166667
+      other: 0.0
+  - name: Member Name
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 6
+    unique: 1.0
+    shape: 'AAAAAAA AAAA AAAAAA AAAA AAA.                                         '
+    shape_share: 0.166667
+    top:
+    - value: 'CITADEL ENERGY INVESTMENTS LTD.                                       '
+      rows: 1
+    - value: 'CITADEL GLOBAL FIXED INCOME MASTER FUND LTD                           '
+      rows: 1
+    - value: 'CITADEL MULTI-STRATEGY EQUITIES MASTER FUND LTD.                      '
+      rows: 1
+    - value: 'CITADEL QFIC MASTER FUND LTD.                                         '
+      rows: 1
+    - value: 'CITADEL QUANTITATIVE STRATEGIES MASTER FUND LTD.                      '
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists:
+  - column: Member ID
+    distinct: 6
+    label_column: Member Name
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint:
+    prefix: ''
+    capped: false
+    latest: null
+    latest_column: null
+    sampled: 6
+    file: fingerprints.json
+    file_sha256: 45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01
+  quality: []
+  store_suggestion:
+    store: rdm
+    why: 'a small set of codes that gives other values their meaning: an RDM code set, published to silver'
+    advisory: true
+  silver:
+    table: ficc_gov_1_1
+    grain: one row per Member ID
+    columns:
+    - name: Member ID
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: ficc_gov_1_1.Member ID
+      sensitivity: none
+    - name: Member Name
+      type: VARCHAR
+      nullable: false
+      definition: null
+      source: ficc_gov_1_1.Member Name
+      sensitivity: none
+    key: *id006
+    links: []
+    time:
+      as_of: null
+      as_at: loaded_at
+      event_time: null
+    partition: []
+    load_mode: snapshot
+    why: a published code-set version replaces the previous one
+- part: ficc_gov_2_1
+  parent_part: null
+  rows: 308
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id007
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 308
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id007
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 308
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 1
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 2
+    passed: false
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 2
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id007
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 1
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 308
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id007
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers: []
+  columns:
+  - name: Member Number
+    type: JSON
+    stored_type: JSON
+    fill: 0.993506
+    distinct: 306
+    unique: 1.0
+    shape: '9999'
+    shape_share: 0.901961
+    top:
+    - value: '"**Broker and Dealer Accounts = Maintains both Broker and Dealer Accounts"'
+      rows: 1
+    - value: '"* Broker Account = Maintains Broker Account"'
+      rows: 1
+    - value: '"94AC"'
+      rows: 1
+    - value: '"94AG"'
+      rows: 1
+    - value: '"94BT"'
+      rows: 1
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Member Name
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.987013
+    distinct: 304
+    unique: 1.0
+    shape: Aaaaa Aaaaa Aaaa, Aaaaaaaa Aaaaaaaaaaa
+    shape_share: 0.006579
+    top:
+    - value: ABN AMRO Clearing USA LLC/9292
+      rows: 1
+    - value: ABN AMRO Clearing USA LLC/ACM Omnibus
+      rows: 1
+    - value: ABN AMRO Clearing USA LLC/ACM Omnibus Seg CME
+      rows: 1
+    - value: ABN AMRO Clearing USA LLC/Omnibus
+      rows: 1
+    - value: ABN AMRO Securities (USA) LLC
+      rows: 1
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Service(s)
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.987013
+    distinct: 8
+    unique: 0.026316
+    shape: Aaaaaaa & Aaaa Aaaaaaa
+    shape_share: 0.4375
+    top:
+    - value: Netting & Repo Netting
+      rows: 133
+    - value: Netting, Repo Netting, & GCF
+      rows: 122
+    - value: Netting
+      rows: 32
+    - value: Repo Netting
+      rows: 13
+    - value: Comparison
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        Netting & Repo Netting: 0.4375
+        Netting, Repo Netting, & GCF: 0.401316
+        Netting: 0.105263
+        Repo Netting: 0.042763
+        Comparison: 0.003289
+        'Netting ': 0.003289
+        Netting & Repo Netting (Repo Transactions Only): 0.003289
+        Netting (Bkr); Netting, & Repo Netting: 0.003289
+      other: 0.0
+  - name: unnamed_column_4
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_5
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_6
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_7
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_8
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_9
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_10
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_11
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: unnamed_column_12
+    type: JSON
+    stored_type: JSON
+    fill: 0.0
+    distinct: 0
+    unique: 0.0
+    shape: null
+    shape_share: 0.0
+    top: []
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists:
+  - column: Service(s)
+    distinct: 8
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: code_list
+    column: Service(s)
+    rows: 0
+    examples: []
+    args:
+      values:
+      - Comparison
+      - Netting
+      - 'Netting '
+      - Netting & Repo Netting
+      - Netting & Repo Netting (Repo Transactions Only)
+      - Netting (Bkr); Netting, & Repo Netting
+      - Netting, Repo Netting, & GCF
+      - Repo Netting
+    proposal: flag
+    fix: null
+    fix_evidence: null
+    why: 8 codes in this delivery; a new code is flagged until the code set has it
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: ficc_mbs_1_1
+  parent_part: null
+  rows: 139
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id008
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 139
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 1
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id008
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 139
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 1
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 1
+    passed: true
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 1
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id008
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 1
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 139
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id008
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers: []
+  columns:
+  - name: Member Name
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.978417
+    distinct: 136
+    unique: 1.0
+    shape: AAAA Aaaaaaaaaa, Aaa.
+    shape_share: 0.014706
+    top:
+    - value: '** Broker and Dealer Accounts = Maintains both Broker and Dealer Accounts'
+      rows: 1
+    - value: '* Broker Account = Maintains Broker Account'
+      rows: 1
+    - value: AEGON USA Investment Management LLC
+      rows: 1
+    - value: AIG Global Investment Corp.
+      rows: 1
+    - value: AIM Advisors, Inc.
+      rows: 1
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Service(s)
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.964029
+    distinct: 3
+    unique: 0.022388
+    shape: Aaaa
+    shape_share: 0.589552
+    top:
+    - value: Full
+      rows: 79
+    - value: EPN Only
+      rows: 54
+    - value: 'EPN Only '
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        Full: 0.589552
+        EPN Only: 0.402985
+        'EPN Only ': 0.007463
+      other: 0.0
+  code_lists:
+  - column: Service(s)
+    distinct: 3
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: code_list
+    column: Service(s)
+    rows: 0
+    examples: []
+    args:
+      values:
+      - EPN Only
+      - 'EPN Only '
+      - Full
+    proposal: flag
+    fix: null
+    fix_evidence: null
+    why: 3 codes in this delivery; a new code is flagged until the code set has it
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: none)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: nscc_1_1
+  parent_part: null
+  rows: 5365
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id009
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 4
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 5365
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 8
+    passed: true
+  - class: reference
+    test: has a unique key (required)
+    value: *id009
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 5365
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 4
+    passed: false
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 8
+    passed: false
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 8
+    passed: false
+  - class: transaction
+    test: has a unique key (required)
+    value: *id009
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 4
+    passed: false
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 5365
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id009
+    found: false
+    design: surrogate
+    rule: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: gustno, services, clearing no, exchg)'
+    alternatives: []
+    evidence:
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: gustno
+    shape: '99999      '
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.999814
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  - column: clearing no
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.999814
+    local_counter: false
+    proposal: cross_reference
+    why: 'one shape and unique: a second identifier for lookup only'
+  - column: exchg
+    shape: '    '
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.015098
+    local_counter: false
+    proposal: none
+    why: repeats or is a local counter
+  columns:
+  - name: gustno
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5364
+    unique: 0.999814
+    shape: '99999      '
+    shape_share: 1.0
+    top:
+    - value: '22959      '
+      rows: 2
+    - value: '10017      '
+      rows: 1
+    - value: '10019      '
+      rows: 1
+    - value: '10021      '
+      rows: 1
+    - value: '10024      '
+      rows: 1
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: firmname
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5232
+    unique: 0.97521
+    shape: AAAAA AAAAA (AA) AAA/AAAAAAA AAAAAAA AAAAAAAAAA AA AAAAAA AAAAAAA AAAA 9999
+    shape_share: 0.001678
+    top:
+    - value: NUVEEN SECURITIES, LLC
+      rows: 4
+    - value: BENEFIT TRUST COMPANY
+      rows: 3
+    - value: CHARLES SCHWAB & CO., INC.
+      rows: 3
+    - value: FIDELITY DISTRIBUTORS COMPANY LLC
+      rows: 3
+    - value: FRANKLIN DISTRIBUTORS, LLC
+      rows: 3
+    role: text
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Address1
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.885741
+    distinct: 1200
+    unique: 0.252525
+    shape: 99 Aaaaaaaaa Aaaa
+    shape_share: 0.106271
+    top:
+    - value: 80 Lamberton Road
+      rows: 505
+    - value: 190 Middle Street
+      rows: 196
+    - value: 803 West Michigan Street
+      rows: 174
+    - value: 225 Pictoria Drive
+      rows: 136
+    - value: 343 Sansome Street
+      rows: 135
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: Address 2
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.885741
+    distinct: 456
+    unique: 0.09596
+    shape: null
+    shape_share: 0.418561
+    top:
+    - value: ''
+      rows: 1989
+    - value: Suite 400
+      rows: 266
+    - value: Suite 301
+      rows: 196
+    - value: Suite 450
+      rows: 139
+    - value: 6th Floor
+      rows: 138
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: city
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.885741
+    distinct: 428
+    unique: 0.090067
+    shape: Aaaaaaa
+    shape_share: 0.198022
+    top:
+    - value: New York
+      rows: 480
+    - value: Windsor
+      rows: 423
+    - value: Chicago
+      rows: 279
+    - value: Milwaukee
+      rows: 258
+    - value: Portland
+      rows: 247
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: state
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.885741
+    distinct: 54
+    unique: 0.011364
+    shape: AA
+    shape_share: 0.989057
+    top:
+    - value: IL
+      rows: 797
+    - value: NY
+      rows: 596
+    - value: CT
+      rows: 569
+    - value: CA
+      rows: 427
+    - value: WI
+      rows: 377
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        IL: 0.167719
+        NY: 0.125421
+        CT: 0.119739
+        CA: 0.089857
+        WI: 0.079335
+        ME: 0.04798
+        OH: 0.041246
+        TX: 0.037458
+        MA: 0.034722
+        CO: 0.029882
+        UT: 0.027567
+        NJ: 0.020412
+        GA: 0.019781
+        NE: 0.017887
+        PA: 0.017045
+        FL: 0.015993
+        NC: 0.011153
+        '  ': 0.010943
+        OR: 0.00968
+        AZ: 0.007786
+        IA: 0.006944
+        MN: 0.006734
+        'ON': 0.006524
+        IN: 0.005892
+        KS: 0.005892
+        VA: 0.005051
+        MO: 0.00463
+        DE: 0.003998
+        MI: 0.002736
+        MD: 0.002315
+        TN: 0.002315
+        WA: 0.002104
+        NV: 0.001684
+        KY: 0.001263
+        AL: 0.001052
+        BC: 0.000842
+        DC: 0.000842
+        LA: 0.000631
+        ND: 0.000631
+        NH: 0.000631
+        OK: 0.000631
+        PR: 0.000631
+        QC: 0.000631
+        RI: 0.000631
+        SC: 0.000631
+        WV: 0.000631
+        SD: 0.000421
+        HI: 0.00021
+        ID: 0.00021
+        MS: 0.00021
+        MT: 0.00021
+        NM: 0.00021
+        PQ: 0.00021
+        VT: 0.00021
+      other: 0.0
+  - name: zip
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 0.885741
+    distinct: 646
+    unique: 0.135943
+    shape: '99999'
+    shape_share: 0.969276
+    top:
+    - value: 06095
+      rows: 521
+    - value: '04101'
+      rows: 228
+    - value: '60606'
+      rows: 225
+    - value: '53233'
+      rows: 177
+    - value: '53202'
+      rows: 176
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: services
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 81
+    unique: 0.015098
+    shape: ' '
+    shape_share: 0.646412
+    top:
+    - value: ' '
+      rows: 3468
+    - value: F/S
+      rows: 938
+    - value: IPS
+      rows: 440
+    - value: ACAT, F/S
+      rows: 163
+    - value: F/S, IPS
+      rows: 80
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        ' ': 0.646412
+        F/S: 0.174837
+        IPS: 0.082013
+        ACAT, F/S: 0.030382
+        F/S, IPS: 0.014911
+        Env-Y, OTC: 0.003728
+        Env-Y: 0.003355
+        F/S, TPA: 0.003169
+        OTC: 0.003169
+        ACAT, OTC: 0.00261
+        Bond-M: 0.002423
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, IPS, LST, OTC, CNS: 0.002237
+        ACAT: 0.001864
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, IPS, LST, OTC: 0.001864
+        SFT: 0.001678
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, LST, OTC: 0.001305
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, LST, OTC, CNS: 0.001305
+        Bond-C, Bond-M, CNS: 0.000932
+        Bond-C, Bond-M, Env-Y, OTC: 0.000932
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, IPS, OTC: 0.000746
+        ACAT, Bond-C, Bond-M, Env-Y, LST, OTC: 0.000746
+        ACAT, Bond-C, Bond-M, Env-Y, OTC: 0.000746
+        ACAT, F/S, IPS: 0.000746
+        ACAT, F/S, OTC: 0.000746
+        Bond-C, Bond-M, Env-Y, OTC, CNS: 0.000746
+        Bond-M, TFT: 0.000746
+        Env-Y, LST, OTC: 0.000746
+        LST, OTC: 0.000746
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, OTC: 0.000559
+        ACAT, Bond-C, Bond-M, F/S, OTC, CNS: 0.000559
+        Bond-C, F/S, OTC: 0.000559
+        Env-Y, F/S: 0.000559
+        ACAT, Bond-C, Bond-M: 0.000373
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, IPS, OTC, CNS: 0.000373
+        ACAT, Bond-C, Bond-M, Env-Y, LST, OTC, CNS: 0.000373
+        ACAT, Bond-C, OTC: 0.000373
+        ACAT, Env-Y, F/S: 0.000373
+        ACAT, Env-Y, F/S, OTC: 0.000373
+        ACAT, Env-Y, OTC: 0.000373
+        ACAT, F/S, LST, OTC: 0.000373
+        ACAT, LST, OTC: 0.000373
+        Bond-C, Bond-M, Env-Y: 0.000373
+        Bond-C, Bond-M, Env-Y, CNS: 0.000373
+        Bond-C, Bond-M, Env-Y, F/S, LST, OTC: 0.000373
+        Bond-C, Bond-M, OTC, CNS: 0.000373
+        Bond-C, Env-Y, F/S, LST, OTC: 0.000373
+        Bond-C, Env-Y, LST, OTC: 0.000373
+        ACAT, Bond-C, Bond-M, CNS: 0.000186
+        ACAT, Bond-C, Bond-M, Env-Y, F/S, LST, CNS: 0.000186
+        ACAT, Bond-C, Bond-M, Env-Y, IPS, LST, OTC, CNS: 0.000186
+        ACAT, Bond-C, Bond-M, Env-Y, LST: 0.000186
+        ACAT, Bond-C, Bond-M, Env-Y, OTC, CNS: 0.000186
+        ACAT, Bond-C, Bond-M, F/S, CNS: 0.000186
+        ACAT, Bond-C, Bond-M, F/S, LST, OTC: 0.000186
+        ACAT, Bond-C, Bond-M, F/S, OTC: 0.000186
+        ACAT, Bond-C, Bond-M, OTC: 0.000186
+        ACAT, Bond-C, Env-Y, LST, OTC: 0.000186
+        ACAT, Bond-C, LST, OTC: 0.000186
+        ACAT, Env-Y: 0.000186
+        ACAT, Env-Y, F/S, IPS, OTC: 0.000186
+        ACAT, Env-Y, F/S, LST, OTC: 0.000186
+        ACAT, Env-Y, LST, OTC: 0.000186
+        Bond-C, Bond-M: 0.000186
+        Bond-C, Bond-M, Env-Y, F/S, IPS, LST, OTC, CNS: 0.000186
+        Bond-C, Bond-M, Env-Y, F/S, LST, OTC, CNS: 0.000186
+        Bond-C, Bond-M, Env-Y, F/S, OTC: 0.000186
+        Bond-C, Bond-M, Env-Y, LST, OTC: 0.000186
+        Bond-C, Bond-M, Env-Y, LST, OTC, CNS: 0.000186
+        Bond-C, Bond-M, Env-Y, LST, OTC, TFT: 0.000186
+        Bond-C, Bond-M, F/S, OTC, CNS: 0.000186
+        Bond-C, Bond-M, OTC: 0.000186
+        Bond-C, Bond-M, TFT: 0.000186
+        Bond-C, Env-Y: 0.000186
+        Bond-M, CNS: 0.000186
+        Bond-M, Env-Y: 0.000186
+        Bond-M, Env-Y, TFT: 0.000186
+        Bond-M, F/S: 0.000186
+        Bond-M, IPS: 0.000186
+        F/S, OTC: 0.000186
+        IPS, LST: 0.000186
+        LST: 0.000186
+      other: 0.0
+  - name: clearing no
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5364
+    unique: 0.999814
+    shape: '9999'
+    shape_share: 0.584529
+    top:
+    - value: 13XO
+      rows: 2
+    - value: '0001'
+      rows: 1
+    - value: '0005'
+      rows: 1
+    - value: 0009
+      rows: 1
+    - value: '0010'
+      rows: 1
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: exchg
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 81
+    unique: 0.015098
+    shape: '    '
+    shape_share: 0.985089
+    top:
+    - value: '    '
+      rows: 5285
+    - value: 'A   '
+      rows: 1
+    - value: ABLE
+      rows: 1
+    - value: 'AHX '
+      rows: 1
+    - value: 'BA  '
+      rows: 1
+    role: code
+    sensitivity: none
+    sensitivity_signals: []
+    distribution:
+      kind: categories
+      shares:
+        '    ': 0.985089
+        'A   ': 0.000186
+        ABLE: 0.000186
+        'AHX ': 0.000186
+        'BA  ': 0.000186
+        BARC: 0.000186
+        'BB  ': 0.000186
+        'BMO ': 0.000186
+        'BNY ': 0.000186
+        BRUT: 0.000186
+        'BS  ': 0.000186
+        CDLC: 0.000186
+        CDRG: 0.000186
+        CLST: 0.000186
+        CNAB: 0.000186
+        'CRL ': 0.000186
+        CRVS: 0.000186
+        CWEX: 0.000186
+        CWMK: 0.000186
+        'D   ': 0.000186
+        'DA  ': 0.000186
+        'DBK ': 0.000186
+        'DVW ': 0.000186
+        'EDJ ': 0.000186
+        'ELB ': 0.000186
+        'FIR ': 0.000186
+        'G   ': 0.000186
+        GARB: 0.000186
+        'HBK ': 0.000186
+        HRTF: 0.000186
+        'IBI ': 0.000186
+        'IBK ': 0.000186
+        INCA: 0.000186
+        'ING ': 0.000186
+        'INY ': 0.000186
+        'JM  ': 0.000186
+        'JPM ': 0.000186
+        JSES: 0.000186
+        LGNT: 0.000186
+        'M   ': 0.000186
+        'MAB ': 0.000186
+        'MGS ': 0.000186
+        MIRA: 0.000186
+        MLWM: 0.000186
+        'NFS ': 0.000186
+        NITC: 0.000186
+        'NMR ': 0.000186
+        'OCO ': 0.000186
+        OPCO: 0.000186
+        'P   ': 0.000186
+        'PBI ': 0.000186
+        'PCM ': 0.000186
+        'PNS ': 0.000186
+        'PRO ': 0.000186
+        'PW  ': 0.000186
+        'RB  ': 0.000186
+        'RBC ': 0.000186
+        'RBI ': 0.000186
+        'RJ  ': 0.000186
+        'RQD ': 0.000186
+        'SAL ': 0.000186
+        'SB  ': 0.000186
+        'SCB ': 0.000186
+        SCUS: 0.000186
+        'SG  ': 0.000186
+        SSBS: 0.000186
+        'STN ': 0.000186
+        STXG: 0.000186
+        'SWT ': 0.000186
+        TRBT: 0.000186
+        TRUP: 0.000186
+        'TSD ': 0.000186
+        'UBS ': 0.000186
+        VCLR: 0.000186
+        VELX: 0.000186
+        VSIN: 0.000186
+        'WBL ': 0.000186
+        'WDF ': 0.000186
+        'WNC ': 0.000186
+        'WS  ': 0.000186
+        WSGD: 0.000186
+      other: 0.0
+  - name: sortkey
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 5232
+    unique: 0.97521
+    shape: A AAAA AAAAA (AA) AAA/AAAAAAA AAAAAAA AAAAAAAAAA AA AAAAAA AAAAAAA AAAA 9999
+    shape_share: 0.001678
+    top:
+    - value: N UVEEN SECURITIES, LLC
+      rows: 4
+    - value: B ENEFIT TRUST COMPANY
+      rows: 3
+    - value: C HARLES SCHWAB & CO., INC.
+      rows: 3
+    - value: F IDELITY DISTRIBUTORS COMPANY LLC
+      rows: 3
+    - value: F RANKLIN DISTRIBUTORS, LLC
+      rows: 3
+    role: text
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists:
+  - column: state
+    distinct: 54
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: services
+    distinct: 81
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  - column: exchg
+    distinct: 81
+    label_column: null
+    code_set: null
+    proposed_code_set: null
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: placeholder
+    column: zip
+    rows: 1
+    examples:
+    - '0000'
+    args:
+      values:
+      - NONE
+      - 'NULL'
+      - UNKNOWN
+      - TBD
+      - NOTAPPLICABLE
+      - NOTAVAILABLE
+    proposal: withhold
+    fix: null
+    fix_evidence: null
+    why: a stand-in for no value, which must not match or merge
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses
+      which columns identify a record (candidates: gustno, services, clearing no, exchg)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: nscc_1_2
+  parent_part: null
+  rows: 1
+  scan: full
+  class: unknown
+  confidence: 0.0
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id010
+    - record_id
+    passed: false
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 0
+    passed: false
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 1
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 0
+    passed: false
+  - class: reference
+    test: has a unique key (required)
+    value: *id010
+    passed: false
+  - class: reference
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: reference
+    test: at most 10000 rows
+    value: 1
+    passed: true
+  - class: reference
+    test: points at no other part, or only at a smaller list as its coarser level (required)
+    value: 0
+    passed: true
+  - class: reference
+    test: no name-like text besides labels
+    value: 0
+    passed: true
+  - class: reference
+    test: codes with label columns
+    value: 0
+    passed: false
+  - class: reference
+    test: only codes, labels and dates
+    value: 0
+    passed: true
+  - class: relationship
+    test: key made of links to other parts (required)
+    value:
+      links: 0
+      other: 1
+    passed: false
+  - class: relationship
+    test: points at two or more parts
+    value: 0
+    passed: false
+  - class: relationship
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: relationship
+    test: few attributes besides codes and dates
+    value: 0
+    passed: true
+  - class: transaction
+    test: has a unique key (required)
+    value: *id010
+    passed: false
+  - class: transaction
+    test: points at other parts
+    value: 0
+    passed: false
+  - class: transaction
+    test: points at as many parts as point at it
+    value:
+      out: 0
+      in: 0
+    passed: true
+  - class: transaction
+    test: has an event time or measures
+    value:
+      event_time: null
+      measures: 0
+    passed: false
+  - class: transaction
+    test: no name-like text
+    value: 0
+    passed: true
+  - class: transaction
+    test: at least as large as the parts it points at
+    value: 1
+    passed: true
+  - class: metadata
+    test: columns describe data (files, hashes, counts) (required)
+    value: 0.0
+    passed: false
+  - class: metadata
+    test: nothing points at it
+    value: 0
+    passed: true
+  - class: metadata
+    test: points at no other part
+    value: 0
+    passed: true
+  runner_up:
+  - - 0.0
+    - transaction
+  kind: null
+  proposed_kind: null
+  record_key:
+    columns: *id010
+    found: false
+    design: surrogate
+    basis:
+    - column_1
+    rule: 'a durable id given when a record first appears, kept in a key map looked up by sha256(part, 0x1F, normalized column_1);
+      a rename or variant is kept as an alias of the same id, so the key never changes (operator, 2026-10-05: same record:
+      durable key). name_norm@1: NFKC, case fold, NFKC, whitespace runs to one space, trim (Unicode 15.0.0)'
+    alternatives: []
+    evidence:
+      unique_raw: true
+      unique_after_normalization: true
+      folded_collisions:
+        groups: 0
+        examples: []
+      provisional: true
+      unique: false
+      null_rows: 0
+      persistence: null
+  identifiers: []
+  columns:
+  - name: column_1
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1
+    unique: 1.0
+    shape: "Aaaaa Aa Aaaaaaa\n  • @ - Aaaaaaaaa AAA aaaaaaaaaaaa aaaaaaa aa aaaaaaaaaa aaaaaaaa aaaaaaaaaaa\n  • AAAA - Aaaaaaaaa\
+      \ aaaaaaaa aaaaaaa aaaaaaaaa aaaaaaa AAAA'a AAAA aaaaaaa\n  • Aaaa-A - Aaaaaaaaa aaaaaaaaa aaaa aaaaaaaaaaaa aaaaaaa\
+      \ AAAA\n  • Aaaa-A - Aaaaaaaa aaa aaaaaaa aaaaaaaaa aaaa aaaaaaaaaaaa aaaaaaa AAAA\n  • AAA - aaaaaaa aa aaaaaa aaaa\
+      \ aaaa aaaaaaaaaaaa aaaaaaa Aaaaaaaaaa Aaa Aaaaaaaaaa, AAAA'a aaaa aaaaa aaaaaaaaaa aaaaaa\n  • Aaa -A - Aaaaaaaa aaaaaaaa\
+      \ aaaaaaaaaa aaaaaaa AAA/AAAA aa AAAA'a Aaa Aaaa aaaaaaaa\n  • A/A - Aaaaaaaaa aaaaaa aaaa aaaaaaaaaaaa aaaaaaa AAAA'a\
+      \ Aaaa/AAAA aaaaaa\n  • AAA - Aaaaaaaaaaaa aa Aaaaaaaaa Aaaaaaaaaa Aaaaaaaa\n  • AAA - Aaaaaaaaa AAAA aaa/aa Aaaa aaaaaa\
+      \ aaaaaaaaaaaa aaaaaaa AAAA\n  • AAA - Aaaaaaaaa AAA aaaaaa aaaaaaaaaaaa aaaaaaa AAAA\n  • AAA - Aaaaa Aaaa aaaaaaaaaaaa\
+      \ aaa aaaaaaaaa aaaaaaa aaa AAAA Aaaaaaaa Aaaaaaaaa Aaaaaaaaaaa Aaaaaaa\n  • AAA - aaaaaaa aa aaaaaa aaaa aaaa aaaaaaaaaaaa\
+      \ aaaaaaaaaaaa, aa a aaaaa-aaa-aaaaa aaaaa\n  • AAA - Aaaaa Aaaaa Aaaaaaaaaaaaa aaaaaaaaa aaaaaa aaaa aaaaaaaaaaaa aaaaaaa\
+      \ AAAA'a Aaaa/AAAA aaaaaa"
+    shape_share: 1.0
+    top:
+    - value: "Guide To Symbols\n  • @ - Processes OTC transactions through an interfaced clearing corporation\n  • ACAT -\
+        \ Processes customer account transfers through NSCC's ACAT service\n  • Bond-C - Processes corporate bond transactions\
+        \ through NSCC\n  • Bond-M - Compares and settles municipal bond transactions through NSCC\n  • CNS - prefers to settle\
+        \ muni bond transactions through Continuous Net Settlement, NSCC's book entry accounting system\n  • Env -Y - Receives\
+        \ envelope deliveries through ESS/IESS at NSCC's New York facility\n  • F/S - Processes mutual fund transactions through\
+        \ NSCC's Fund/SERV system\n  • IPS - Participates in Insurance Processing Services\n  • LST - Processes NYSE and/or\
+        \ Amex equity transactions through NSCC\n  • OTC - Processes OTC equity transactions through NSCC\n  • SFT - Stock\
+        \ Loan transactions are processed through the NSCC Security Financing Transaction Service\n  • TFT - prefers to settle\
+        \ muni bond transactions individually, on a trade-for-trade basis\n  • TPA - Third Party Administrator processes mutual\
+        \ fund transactions through NSCC's Fund/SERV system"
+      rows: 1
+    role: other
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint: null
+  quality:
+  - check: no_natural_key
+    column: null
+    rows: 0
+    examples: []
+    args: {}
+    proposal: flag
+    fix: 'a durable id given when a record first appears, kept in a key map looked up by sha256(part, 0x1F, normalized column_1);
+      a rename or variant is kept as an alias of the same id, so the key never changes (operator, 2026-10-05: same record:
+      durable key). name_norm@1: NFKC, case fold, NFKC, whitespace runs to one space, trim (Unicode 15.0.0)'
+    fix_evidence: null
+    why: no column or combination is unique
+  store_suggestion:
+    store: bronze_only
+    why: 'not classified with evidence: keep it raw until the operator decides'
+    advisory: true
+  silver: null
+- part: nscc_2_1
+  parent_part: null
+  rows: 2028
+  scan: full
+  class: master
+  confidence: 0.667
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id011
+    - EXECUTING BROKER MPID
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 2028
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  runner_up:
+  - - 0.5
+    - transaction
+  kind: null
+  proposed_kind:
+    domain: nscc_2_1
+    kind: nscc_2_1
+    why: has a unique key (required); points at few parts; has name-like text; has attributes besides codes and dates
+  record_key:
+    columns: *id011
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: EXECUTING BROKER MPID
+    shape: AAAA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: CLEARING BROKER
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.086292
+    local_counter: false
+    proposal: none
+    why: repeats or is a local counter
+  columns:
+  - name: EXECUTING BROKER MPID
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 2028
+    unique: 1.0
+    shape: AAAA
+    shape_share: 1.0
+    top:
+    - value: AALC
+      rows: 1
+    - value: ABAI
+      rows: 1
+    - value: ABBA
+      rows: 1
+    - value: ABBK
+      rows: 1
+    - value: ABDA
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: CLEARING BROKER
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 175
+    unique: 0.086292
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '0235'
+      rows: 213
+    - value: '0443'
+      rows: 161
+    - value: '0226'
+      rows: 146
+    - value: '0161'
+      rows: 130
+    - value: 0158
+      rows: 126
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: EXECUTING BROKER NAME
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1256
+    unique: 0.619329
+    shape: 'AAAA AAAAAAAAAA, AAA.                                                 '
+    shape_share: 0.033531
+    top:
+    - value: 'BOFA SECURITIES, INC.                                                 '
+      rows: 63
+    - value: 'VELOCITY CLEARING, LLC                                                '
+      rows: 59
+    - value: 'GOLDMAN SACHS & CO. LLC                                               '
+      rows: 26
+    - value: 'DRW EXECUTION SERVICES, LLC                                           '
+      rows: 21
+    - value: 'VIRTU AMERICAS LLC                                                    '
+      rows: 21
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint:
+    prefix: ''
+    capped: false
+    latest: null
+    latest_column: null
+    sampled: 2028
+    file: fingerprints.json
+    file_sha256: 45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+- part: nscc_2_2
+  parent_part: null
+  rows: 1398
+  scan: full
+  class: master
+  confidence: 0.833
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id012
+    - EXECUTING BROKER MPID
+    - CLEARING BROKER
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 1
+    passed: true
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 1398
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 1
+    passed: true
+  runner_up:
+  - - 0.714
+    - reference
+  kind: null
+  proposed_kind:
+    domain: nscc_2_2
+    kind: nscc_2_2
+    why: has a unique key (required); other parts point at it; points at few parts; has name-like text; has attributes besides
+      codes and dates
+  record_key:
+    columns: *id012
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: EXECUTING BROKER MPID
+    shape: AAAA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.998569
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: CLEARING BROKER
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.078684
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  columns:
+  - name: EXECUTING BROKER MPID
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1396
+    unique: 0.998569
+    shape: AAAA
+    shape_share: 1.0
+    top:
+    - value: MZHO
+      rows: 2
+    - value: NMRA
+      rows: 2
+    - value: AALC
+      rows: 1
+    - value: ABAI
+      rows: 1
+    - value: ABBA
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: CLEARING BROKER
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 110
+    unique: 0.078684
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '0443'
+      rows: 375
+    - value: '0235'
+      rows: 219
+    - value: '0226'
+      rows: 148
+    - value: 0279
+      rows: 84
+    - value: 0158
+      rows: 69
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: EXECUTING BROKER NAME
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1194
+    unique: 0.854077
+    shape: 'AAAA AAAAAAAA AAAAAAAAAAA                                             '
+    shape_share: 0.011445
+    top:
+    - value: 'APEX CLEARING CORPORATION                                             '
+      rows: 16
+    - value: 'TRADEWEB DIRECT LLC                                                   '
+      rows: 9
+    - value: 'GOLDMAN SACHS & CO. LLC                                               '
+      rows: 8
+    - value: 'TD SECURITIES (USA) LLC                                               '
+      rows: 8
+    - value: 'STONEX FINANCIAL INC.                                                 '
+      rows: 7
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint:
+    prefix: ''
+    capped: false
+    latest: null
+    latest_column: null
+    sampled: 1398
+    file: fingerprints.json
+    file_sha256: 45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+- part: nscc_2_3
+  parent_part: null
+  rows: 1367
+  scan: full
+  class: master
+  confidence: 0.667
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id013
+    - EXECUTING BROKER MPID
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 0
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 1367
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 2
+    passed: true
+  runner_up:
+  - - 0.5
+    - transaction
+  kind: null
+  proposed_kind:
+    domain: nscc_2_3
+    kind: nscc_2_3
+    why: has a unique key (required); points at few parts; has name-like text; has attributes besides codes and dates
+  record_key:
+    columns: *id013
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: EXECUTING BROKER MPID
+    shape: AAAA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: CLEARING BROKER
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.092173
+    local_counter: false
+    proposal: none
+    why: repeats or is a local counter
+  columns:
+  - name: EXECUTING BROKER MPID
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1367
+    unique: 1.0
+    shape: AAAA
+    shape_share: 1.0
+    top:
+    - value: AALC
+      rows: 1
+    - value: ABAI
+      rows: 1
+    - value: ABBA
+      rows: 1
+    - value: ABBK
+      rows: 1
+    - value: ABDA
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: CLEARING BROKER
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 126
+    unique: 0.092173
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '0443'
+      rows: 370
+    - value: '0235'
+      rows: 211
+    - value: '0226'
+      rows: 152
+    - value: 0279
+      rows: 73
+    - value: '0141'
+      rows: 66
+    role: identifier
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: EXECUTING BROKER NAME
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1189
+    unique: 0.869788
+    shape: 'AAAA AAAAAAAA AAAAAAAAAAA                                             '
+    shape_share: 0.011704
+    top:
+    - value: 'APEX CLEARING CORPORATION                                             '
+      rows: 16
+    - value: 'GOLDMAN SACHS & CO. LLC                                               '
+      rows: 8
+    - value: 'TD SECURITIES (USA) LLC                                               '
+      rows: 8
+    - value: 'TRADEWEB DIRECT LLC                                                   '
+      rows: 8
+    - value: 'STONEX FINANCIAL INC.                                                 '
+      rows: 7
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint:
+    prefix: ''
+    capped: false
+    latest: null
+    latest_column: null
+    sampled: 1367
+    file: fingerprints.json
+    file_sha256: 45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+- part: nscc_2_4
+  parent_part: null
+  rows: 1181
+  scan: full
+  class: master
+  confidence: 0.667
+  tests:
+  - class: master
+    test: has a unique key (required)
+    value: &id014
+    - EXECUTING BROKER MPID
+    passed: true
+  - class: master
+    test: other parts point at it
+    value: 0
+    passed: false
+  - class: master
+    test: points at few parts
+    value: 1
+    passed: true
+  - class: master
+    test: has name-like text
+    value: 1
+    passed: true
+  - class: master
+    test: smaller than the parts pointing at it
+    value: 1181
+    passed: false
+  - class: master
+    test: has attributes besides codes and dates
+    value: 1
+    passed: true
+  runner_up:
+  - - 0.5
+    - transaction
+  kind: null
+  proposed_kind:
+    domain: nscc_2_4
+    kind: nscc_2_4
+    why: has a unique key (required); points at few parts; has name-like text; has attributes besides codes and dates
+  record_key:
+    columns: *id014
+    found: true
+    design: null
+    rule: null
+    alternatives: []
+    evidence:
+      unique: true
+      null_rows: 0
+      persistence: null
+  identifiers:
+  - column: EXECUTING BROKER MPID
+    shape: AAAA
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 1.0
+    local_counter: false
+    proposal: record_key
+    why: the part's record key
+  - column: CLEARING BROKER
+    shape: '9999'
+    check_digit: null
+    pass_rate: null
+    chance_rate: null
+    fill: 1.0
+    unique: 0.070279
+    local_counter: false
+    proposal: none
+    why: repeats or is a local counter
+  columns:
+  - name: EXECUTING BROKER MPID
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1181
+    unique: 1.0
+    shape: AAAA
+    shape_share: 1.0
+    top:
+    - value: AALC
+      rows: 1
+    - value: ABAI
+      rows: 1
+    - value: ABBA
+      rows: 1
+    - value: ABBK
+      rows: 1
+    - value: ABDA
+      rows: 1
+    role: key
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: CLEARING BROKER
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 83
+    unique: 0.070279
+    shape: '9999'
+    shape_share: 1.0
+    top:
+    - value: '0443'
+      rows: 348
+    - value: '0235'
+      rows: 218
+    - value: '0226'
+      rows: 143
+    - value: '0052'
+      rows: 63
+    - value: 0279
+      rows: 61
+    role: link
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  - name: EXECUTING BROKER NAME
+    type: VARCHAR
+    stored_type: VARCHAR
+    fill: 1.0
+    distinct: 1044
+    unique: 0.883997
+    shape: 'AAAA AAAAAAAA AAAAAAAAAAA                                             '
+    shape_share: 0.012701
+    top:
+    - value: 'APEX CLEARING CORPORATION                                             '
+      rows: 15
+    - value: 'GOLDMAN SACHS & CO. LLC                                               '
+      rows: 8
+    - value: 'TRADEWEB DIRECT LLC                                                   '
+      rows: 8
+    - value: 'TD SECURITIES (USA) LLC                                               '
+      rows: 7
+    - value: 'DART EXECUTIONS, LLC                                                  '
+      rows: 6
+    role: name
+    sensitivity: none
+    sensitivity_signals: []
+    distribution: null
+  code_lists: []
+  time:
+    delivery: unknown
+    as_of:
+      from: null
+      to: null
+    as_at: null
+    event_time: null
+    versions_per_key: null
+    series: null
+    refresh: unknown
+  fingerprint:
+    prefix: ''
+    capped: false
+    latest: null
+    latest_column: null
+    sampled: 1181
+    file: fingerprints.json
+    file_sha256: 45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01
+  quality: []
+  store_suggestion:
+    store: mdm
+    why: 'entities with identity and a lifecycle: MDM masters them'
+    advisory: true
+  silver: null
+relationships:
+- relationship: nscc_2_4.EXECUTING BROKER MPID+CLEARING BROKER → nscc_2_2.EXECUTING BROKER MPID+CLEARING BROKER
+  from:
+    part: nscc_2_4
+    columns: *id012
+  to:
+    part: nscc_2_2
+    columns: *id012
+  inclusion: 0.988146
+  cardinality: '1:1'
+  via_part: null
+  role_column: null
+  valid:
+    from: null
+    to: null
+  onboard: separate
+  why: 'a master part pointing at a master part: onboarded after it'
+  evidence:
+    test: composite inclusion, same names
+    scan: full
+hierarchies: []
+dependencies_not_hierarchies: []
+questions:
+- id: q1
+  about: dtc_1_1
+  question: 'dtc_1_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q2
+  about: dtc_1_1
+  question: Which class is dtc_1_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q3
+  about: dtc_2_1
+  question: 'dtc_2_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q4
+  about: dtc_2_1
+  question: Which class is dtc_2_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q5
+  about: dtc_3_1
+  question: 'dtc_3_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q6
+  about: dtc_3_1
+  question: Which class is dtc_3_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q7
+  about: dtc_4_1
+  question: 'dtc_4_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q8
+  about: dtc_4_1
+  question: Which class is dtc_4_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q9
+  about: dtc_5_1
+  question: 'dtc_5_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q10
+  about: dtc_5_1
+  question: Which class is dtc_5_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q11
+  about: ficc_gov_2_1
+  question: 'ficc_gov_2_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q12
+  about: ficc_gov_2_1
+  question: Which class is ficc_gov_2_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q13
+  about: ficc_mbs_1_1
+  question: 'ficc_mbs_1_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: none)'
+  answer: null
+- id: q14
+  about: ficc_mbs_1_1
+  question: Which class is ficc_mbs_1_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q15
+  about: nscc_1_1
+  question: 'nscc_1_1 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears and kept in a key map, so it never changes; the operator
+    chooses which columns identify a record (candidates: gustno, services, clearing no, exchg)'
+  answer: null
+- id: q16
+  about: nscc_1_1
+  question: Which class is nscc_1_1? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q17
+  about: nscc_1_2
+  question: 'nscc_1_2 has no unique column: use the designed key?'
+  recommendation: 'a durable id given when a record first appears, kept in a key map looked up by sha256(part, 0x1F, normalized
+    column_1); a rename or variant is kept as an alias of the same id, so the key never changes (operator, 2026-10-05: same
+    record: durable key). name_norm@1: NFKC, case fold, NFKC, whitespace runs to one space, trim (Unicode 15.0.0)'
+  answer: null
+- id: q18
+  about: nscc_1_2
+  question: Which class is nscc_1_2? Its tests did not decide.
+  recommendation: keep it raw (bronze only) until decided
+  answer: null
+- id: q19
+  about: nscc_2_1
+  question: Is nscc_2_1 a new master kind named 'nscc_2_1'?
+  recommendation: 'yes: has a unique key (required); points at few parts; has name-like text; has attributes besides codes
+    and dates'
+  answer: null
+- id: q20
+  about: nscc_2_2
+  question: Is nscc_2_2 a new master kind named 'nscc_2_2'?
+  recommendation: 'yes: has a unique key (required); other parts point at it; points at few parts; has name-like text; has
+    attributes besides codes and dates'
+  answer: null
+- id: q21
+  about: nscc_2_3
+  question: Is nscc_2_3 a new master kind named 'nscc_2_3'?
+  recommendation: 'yes: has a unique key (required); points at few parts; has name-like text; has attributes besides codes
+    and dates'
+  answer: null
+- id: q22
+  about: nscc_2_4
+  question: Is nscc_2_4 a new master kind named 'nscc_2_4'?
+  recommendation: 'yes: has a unique key (required); points at few parts; has name-like text; has attributes besides codes
+    and dates'
+  answer: null
+approval:
+  status: draft
+  approved_by: null
+  approved_words: null
+  approved_at: null

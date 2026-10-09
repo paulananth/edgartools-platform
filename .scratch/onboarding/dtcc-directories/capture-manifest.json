@@ -1,0 +1,102 @@
+[
+  {
+    "landing_url": "https://www.dtcc.com/support/dtc-directories",
+    "landing_sha256": "8eb5b6055c23fbfb3b8d10c389c2dd4e5a5267c46e69cbf06b4ec6622768821b",
+    "url": "https://files.dtcc.com/download/assets/DTC+Participant+in+Alphabetical+Listing+-+09.30.2026.xlsx/21355760a87911f1855dc6529a108655",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/dtc-1.xlsx",
+    "captured_at": "2026-10-09T20:42:32.700305+00:00",
+    "http_status": 200,
+    "bytes": 46730,
+    "sha256": "15ad7765fb02ae9cbac9dcb1ef5f99a1ab5a56e6c793cd1fb50498612bda1732"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/dtc-directories",
+    "landing_sha256": "8eb5b6055c23fbfb3b8d10c389c2dd4e5a5267c46e69cbf06b4ec6622768821b",
+    "url": "https://files.dtcc.com/download/assets/DTC+Participant+in+Numerical+Sequence+-+09.30.2026.xlsx/2161b544a87911f181e91ece5e267a85",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/dtc-2.xlsx",
+    "captured_at": "2026-10-09T20:42:33.374774+00:00",
+    "http_status": 200,
+    "bytes": 52080,
+    "sha256": "13742f1e7268ded53514579c6ffd89820a8053d7fdfd150246d31a2311174f9e"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/dtc-directories",
+    "landing_sha256": "8eb5b6055c23fbfb3b8d10c389c2dd4e5a5267c46e69cbf06b4ec6622768821b",
+    "url": "https://files.dtcc.com/download/assets/DTC+Settling+Banks+-+09.30.2026.xlsx/21e710b8a87911f197291ece5e267a85",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/dtc-3.xlsx",
+    "captured_at": "2026-10-09T20:42:33.892313+00:00",
+    "http_status": 200,
+    "bytes": 16851,
+    "sha256": "68fd44a13447215099a4e0203dc2c75db52b97bd50e8f9f1a4b2522de625d52b"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/dtc-directories",
+    "landing_sha256": "8eb5b6055c23fbfb3b8d10c389c2dd4e5a5267c46e69cbf06b4ec6622768821b",
+    "url": "https://files.dtcc.com/download/assets/DTC+Pledgees+-+09.30.2026.xlsx/2134da9ca87911f193251ece5e267a85",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/dtc-4.xlsx",
+    "captured_at": "2026-10-09T20:42:34.486586+00:00",
+    "http_status": 200,
+    "bytes": 17351,
+    "sha256": "953f54134ef7305955f4505eb8c43b7728e0642ca40c4f8b6d298ac1b1378e56"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/dtc-directories",
+    "landing_sha256": "8eb5b6055c23fbfb3b8d10c389c2dd4e5a5267c46e69cbf06b4ec6622768821b",
+    "url": "https://files.dtcc.com/download/assets/DTC+Direct+Registration+Report+-+09.30.2026.xlsx/213655caa87911f1824c464272346ad0",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/dtc-5.xlsx",
+    "captured_at": "2026-10-09T20:42:35.124414+00:00",
+    "http_status": 200,
+    "bytes": 17529,
+    "sha256": "4920306b2fb3e4450197b682d863fb2012e9b336e0481ad904e1172f7495d190"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/ficc-gov-directories",
+    "landing_sha256": "5db148b0434e68c2cef50ffccc9429cbb35e62da43cd6bcceeceb437477b5bbf",
+    "url": "https://files.dtcc.com/download/assets/ficc-gsd-member-directory-ccit.xlsx/f357d7f889df11f1b68692cc7dabea24",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/ficc-gov-1.xlsx",
+    "captured_at": "2026-10-09T20:42:35.806358+00:00",
+    "http_status": 200,
+    "bytes": 18877,
+    "sha256": "c50050c2489731ec72e262be155bfc4d481750163983a611d8007108f5fa438f"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/ficc-gov-directories",
+    "landing_sha256": "5db148b0434e68c2cef50ffccc9429cbb35e62da43cd6bcceeceb437477b5bbf",
+    "url": "https://files.dtcc.com/download/assets/mem-gov-by-name.xlsx/f411a4d089df11f1a78e92cc7dabea24",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/ficc-gov-2.xlsx",
+    "captured_at": "2026-10-09T20:42:36.485145+00:00",
+    "http_status": 200,
+    "bytes": 153541,
+    "sha256": "edf0beed95e136d141fc0cbf3946ac089850489edeb7705cac20046bec132cfc"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/ficc-mbs-directories",
+    "landing_sha256": "1525418ba143c2ed2baa87c55777a01037686236060ceeafa20d68e9e1742e9a",
+    "url": "https://files.dtcc.com/download/assets/Mem-MBS-All.xlsx/69fd0a6e369311f0866b526112f6cc5f",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/ficc-mbs-1.xlsx",
+    "captured_at": "2026-10-09T20:42:37.092293+00:00",
+    "http_status": 200,
+    "bytes": 139949,
+    "sha256": "e38b7fc25b773c3b7bc76570b59eb19437203d725d8ba06111a8ee88f80e330f"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/nscc-directories",
+    "landing_sha256": "15c65ae24c3341b2d162f841a206560592c1d52aefd0dfea5679b3b3797c5146",
+    "url": "https://files.dtcc.com/download/assets/nscc.xlsx/d5777f6889da11f19febba8dad112d3d",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/nscc-1.xlsx",
+    "captured_at": "2026-10-09T20:42:37.694598+00:00",
+    "http_status": 200,
+    "bytes": 482563,
+    "sha256": "10fec45c15a1c4608ad3fb427db406a1b59722a8785fb67df4309579459ed847"
+  },
+  {
+    "landing_url": "https://www.dtcc.com/support/nscc-directories",
+    "landing_sha256": "15c65ae24c3341b2d162f841a206560592c1d52aefd0dfea5679b3b3797c5146",
+    "url": "https://files.dtcc.com/download/assets/NSCC+MPID+Directory.xlsx/f9da89ce369111f09a845e09fb65ecc7",
+    "local_file": "/private/tmp/dtcc-priority1-20261009/raw/nscc-2.xlsx",
+    "captured_at": "2026-10-09T20:42:38.207292+00:00",
+    "http_status": 200,
+    "bytes": 179166,
+    "sha256": "f6b92617cb7b10bde35f0a14ad10bd2abecb6028cdcefc651935887b96dd7d6a"
+  }
+]

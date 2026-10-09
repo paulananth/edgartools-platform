@@ -1,0 +1,12 @@
+{
+  "dtc-1.xlsx": {"DTC Participant in Alphabetical": 4},
+  "dtc-2.xlsx": {"DTC Participant in Numerical Se": 3},
+  "dtc-3.xlsx": {"DTC Settling Banks": 3},
+  "dtc-4.xlsx": {"DTC Pledgees": 3},
+  "dtc-5.xlsx": {"DTC Direct Registration Report": 4},
+  "ficc-gov-1.xlsx": {"Page1_1": 2},
+  "ficc-gov-2.xlsx": {"Sheet1": 10},
+  "ficc-mbs-1.xlsx": {"Sheet1": 10},
+  "nscc-1.xlsx": {"NSCC Member Directory": 1, "Guide to Symbols": 0},
+  "nscc-2.xlsx": {"OTC": 1, "Corp": 1, "Muni": 1, "UIT": 1}
+}

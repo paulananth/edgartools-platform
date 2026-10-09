@@ -133,6 +133,19 @@ switch-on**. Set up the Rules Database first if it is not there (**init**).
 
 ### discover: profile the whole data set first
 
+Before running profiling, inventory the captured formats against its supported
+inputs. When an input is unsupported, record the actual reader refusal. Keep
+that format gap separate from any exploratory export: a profile of an export
+does not qualify reading the original capture or the installed worker path.
+
+An investigative export must retain the raw capture hash, the exporter and its
+version/hash, explicit sheet or region selections, original row coordinates,
+and output hashes. Reconcile rows and cell values, preserving identifier text,
+leading zeros, types, blanks, and every excluded header or metadata region in
+the audit. Record unmeasured regions and unknown meanings in the onboarding
+log. Bring findings to the operator before choosing keys, kinds or bindings;
+leave production format support open until it has its own qualification.
+
 Use the [data-profiling](../data-profiling/SKILL.md) skill on every file or
 table of the data set, unless approved findings for these same copies already
 exist (`approval.status: approved` in its `findings.yaml`, and the same input
