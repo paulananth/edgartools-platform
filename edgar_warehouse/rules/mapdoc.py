@@ -206,9 +206,14 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
     critical = [["Dataset", "MDM field", "Test", "When it fails", "Rules path"]]
     quality = [["Dataset", "Id", "Fix or check", "What it does", "Reads", "When it fails", "Rules path"]]
     wins = [["Kind", "MDM field", "Filled by, first wins", "Winner", "Rule", "Rules path"]]
-    from edgar_warehouse.mdm.clean.activation import declared_namespaces
+    from edgar_warehouse.mdm.clean.activation import binding_namespaces
 
-    joins = declared_namespaces(policy.get("kinds") or {})  # the identifiers that join records
+    def joins(code: str) -> set[str]:
+        """The identifiers a matching rule joins this dataset's records on: a
+        binding rule for its source (or for any source) names them."""
+        return {n for block in (policy.get("kinds") or {}).values() for rule in block.get("rules") or []
+                if rule.get("family") == "binding" and rule.get("source") in (None, code)
+                for n in binding_namespaces(rule)}
 
     by_kind = winners(policy, root)
     for code, entry in (body.get("mdm") or {}).items():
@@ -248,7 +253,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
         formats = adapter.get("identifier_formats") or {}
         for ident, path in (adapter.get("identifiers") or {}).items():
             identifiers.append([code, ident, _text(path), _text(formats.get(ident)),
-                                "Yes" if ident in joins else "No: lookup only",
+                                "Yes" if ident in joins(code) else "No: lookup only",
                                 "Only with a new dataset code", f"{at}.adapter.identifiers.{ident}"])
         block = contract.get("quality") or {}
         for i, fix in enumerate(block.get("fixes") or []):

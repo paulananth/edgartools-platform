@@ -229,17 +229,15 @@ def register_policy(conn: Connection, body: dict) -> str:
 
 
 def _bound_namespaces(conn: Connection | None) -> frozenset[str]:
-    """The namespaces a binding rule may match on: those an Identifier Contract
-    declares in any registered policy (`activation.declared_namespaces`)."""
+    """Every namespace an Identifier Contract declares in any registered
+    policy, the ones a binding rule may name (`activation.declared_namespaces`,
+    the one reading of them). Without a connection, none."""
+    from .activation import declared_namespaces
+
     if conn is None:
         return frozenset()
-    return frozenset(conn.execute(text(
-        """SELECT DISTINCT n FROM mdm.policy p,
-               jsonb_each(CASE WHEN jsonb_typeof(p.body->'kinds') = 'object'
-                               THEN p.body->'kinds' ELSE '{}'::jsonb END) k,
-               jsonb_object_keys(CASE WHEN jsonb_typeof(k.value->'identifiers') = 'object'
-                                      THEN k.value->'identifiers' ELSE '{}'::jsonb END) n"""
-    )).scalars())
+    bodies = conn.execute(text("SELECT body FROM mdm.policy WHERE body ? 'kinds'")).scalars()
+    return frozenset().union(*(declared_namespaces(body["kinds"]) for body in bodies))
 
 
 def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
@@ -248,12 +246,14 @@ def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
     rule may match on (`bound`), is refused, so the operator's "lookup only"
     holds by construction. Matching reads `identifiers` alone, so a policy
     registered later that binds on such a name still joins nothing by it."""
+    from .activation import NAMESPACE
+
     names = adapter.get("cross_references", {})
     formats = adapter.get("cross_reference_formats", {})
     if not isinstance(names, dict) or not isinstance(formats, dict):
         raise ValueError("cross_references and cross_reference_formats map a namespace to a path or a format")
     for namespace in names:
-        if not isinstance(namespace, str) or not re.fullmatch(r"[a-z][a-z0-9_]*", namespace):
+        if not isinstance(namespace, str) or not NAMESPACE.fullmatch(namespace):
             raise ValueError(f"A cross-reference namespace is lower-case words: {namespace!r}")
         if namespace in adapter.get("identifiers", {}):
             raise ValueError(f"Cross-reference {namespace} is also an identifier of this contract")
