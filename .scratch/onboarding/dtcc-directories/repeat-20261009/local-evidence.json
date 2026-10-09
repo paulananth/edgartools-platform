@@ -1,0 +1,227 @@
+{
+  "duplicate_groups": [
+    {
+      "file": "nscc-1.xlsx",
+      "sheet": "NSCC Member Directory",
+      "key_column": "gustno",
+      "key_value": "22959      ",
+      "source_rows": [
+        3000,
+        3001
+      ],
+      "identical_all_columns": true,
+      "differing_columns": []
+    },
+    {
+      "file": "nscc-2.xlsx",
+      "sheet": "Corp",
+      "key_column": "EXECUTING BROKER MPID",
+      "key_value": "MZHO",
+      "source_rows": [
+        898,
+        899
+      ],
+      "identical_all_columns": false,
+      "differing_columns": [
+        "CLEARING BROKER"
+      ]
+    },
+    {
+      "file": "nscc-2.xlsx",
+      "sheet": "Corp",
+      "key_column": "EXECUTING BROKER MPID",
+      "key_value": "NMRA",
+      "source_rows": [
+        921,
+        922
+      ],
+      "identical_all_columns": false,
+      "differing_columns": [
+        "CLEARING BROKER"
+      ]
+    }
+  ],
+  "region_checks": [
+    {
+      "file": "dtc-1-1.jsonl",
+      "rows": 918,
+      "original_cells_equal": true,
+      "blank_rows": 4
+    },
+    {
+      "file": "dtc-2-1.jsonl",
+      "rows": 990,
+      "original_cells_equal": true,
+      "blank_rows": 3
+    },
+    {
+      "file": "dtc-3-1.jsonl",
+      "rows": 49,
+      "original_cells_equal": true,
+      "blank_rows": 2
+    },
+    {
+      "file": "dtc-4-1.jsonl",
+      "rows": 58,
+      "original_cells_equal": true,
+      "blank_rows": 1
+    },
+    {
+      "file": "dtc-5-1.jsonl",
+      "rows": 62,
+      "original_cells_equal": true,
+      "blank_rows": 1
+    },
+    {
+      "file": "ficc-gov-1-1.jsonl",
+      "rows": 6,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    },
+    {
+      "file": "ficc-gov-2-1.jsonl",
+      "rows": 308,
+      "original_cells_equal": true,
+      "blank_rows": 2
+    },
+    {
+      "file": "ficc-mbs-1-1.jsonl",
+      "rows": 139,
+      "original_cells_equal": true,
+      "blank_rows": 3
+    },
+    {
+      "file": "nscc-1-1.jsonl",
+      "rows": 5365,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    },
+    {
+      "file": "nscc-1-2.jsonl",
+      "rows": 1,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    },
+    {
+      "file": "nscc-2-1.jsonl",
+      "rows": 2028,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    },
+    {
+      "file": "nscc-2-2.jsonl",
+      "rows": 1398,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    },
+    {
+      "file": "nscc-2-3.jsonl",
+      "rows": 1367,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    },
+    {
+      "file": "nscc-2-4.jsonl",
+      "rows": 1181,
+      "original_cells_equal": true,
+      "blank_rows": 0
+    }
+  ],
+  "dtc_numerical_shape": {
+    "four_digit_rows": 914,
+    "other_nonblank_key_rows": 73,
+    "other_key_labels": [
+      "0000 SERIES",
+      "0100 SERIES",
+      "0200 SERIES",
+      "0300 SERIES",
+      "0400 SERIES",
+      "0500 SERIES",
+      "0600 SERIES",
+      "0700 SERIES",
+      "0800 SERIES",
+      "0900 SERIES",
+      "1000 SERIES",
+      "1100 SERIES",
+      "1200 SERIES",
+      "1300 SERIES",
+      "1400 SERIES",
+      "1500 SERIES",
+      "1600 SERIES",
+      "1700 SERIES",
+      "1800 SERIES",
+      "1900 SERIES",
+      "2000 SERIES",
+      "2100 SERIES",
+      "2200 SERIES",
+      "2300 SERIES",
+      "2400 SERIES",
+      "2500 SERIES",
+      "2600 SERIES",
+      "2700 SERIES",
+      "2800 SERIES",
+      "2900 SERIES",
+      "3000 SERIES",
+      "3100 SERIES",
+      "3200 SERIES",
+      "3300 SERIES",
+      "3400 SERIES",
+      "3500 SERIES",
+      "3600 SERIES",
+      "3700 SERIES",
+      "3800 SERIES",
+      "3900 SERIES",
+      "4000 SERIES",
+      "4100 SERIES",
+      "4200 SERIES",
+      "4300 SERIES",
+      "4400 SERIES",
+      "4700 SERIES",
+      "4800 SERIES",
+      "4900 SERIES",
+      "5000 SERIES",
+      "5100 SERIES",
+      "5200 SERIES",
+      "5300 SERIES",
+      "5400 SERIES",
+      "5600 SERIES",
+      "5700 SERIES",
+      "5800 SERIES",
+      "5900 SERIES",
+      "6000 SERIES",
+      "6500 SERIES",
+      "6700 SERIES",
+      "7200 SERIES",
+      "7300 SERIES",
+      "7400 SERIES",
+      "7500 SERIES",
+      "8000 SERIES",
+      "8100 SERIES",
+      "8200 SERIES",
+      "8300 SERIES",
+      "8400 SERIES",
+      "8500 SERIES",
+      "8600 SERIES",
+      "8800 SERIES",
+      "9100 SERIES"
+    ]
+  },
+  "dtc_pair_comparison": {
+    "comparison": "four-digit account representations and exact source names, not Company identity",
+    "alphabetical_pairs": 914,
+    "numerical_pairs": 914,
+    "intersection": 0,
+    "alphabetical_only": 914,
+    "numerical_only": 914
+  },
+  "dtc_format_comparison": {
+    "account_representation_intersection": 914,
+    "alphabetical_only": 0,
+    "numerical_only": 0,
+    "exact_names_equal": 0,
+    "names_equal_after_trimming": 914,
+    "alphabetical_name_trailing_space_rows": 903,
+    "numerical_name_trailing_space_rows": 903,
+    "comparison_status": "diagnostic only, no approved normalization"
+  }
+}

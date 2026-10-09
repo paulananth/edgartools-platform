@@ -1,0 +1,12 @@
+{
+  "url": "https://www.dtcc.com/rss-feeds/legal/all-important-notices.xml",
+  "sha256": "c30eb44b3f70c55df10978e7f71b241ff04db9e6102ab80464b62dd35fc9ee8f",
+  "bytes": 1011794,
+  "receipt_completion_time_et": "2026-10-09T18:02:26.502069-04:00",
+  "request_start_recorded": false,
+  "items": 1000,
+  "items_with_pubdate": 1000,
+  "earliest_publication": "2026-04-28T12:00:00",
+  "latest_publication": "2026-10-09T12:00:00",
+  "historical_completeness_proven": false
+}

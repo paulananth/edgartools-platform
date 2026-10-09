@@ -2,6 +2,12 @@
 
 Research: 2026-10-09. Official DTCC and GLEIF sources only. Research evidence, not ingestion qualification.
 
+**Repeat investigation:** [updated discovery story](dtcc-discovery-repeat-2026-10-09.md)
+rechecks these sources and corrects the initial rights assessment. Full DTCC
+terms contain restrictions on database compilation and automated extraction;
+the earlier text-only view omitted those clauses. Anonymous downloads succeeded
+for all ten workbooks, but ingestion permission remains unestablished.
+
 ## Useful public sources
 
 | Source | Verified access / coverage | Proposed use (inference) | Limits |
