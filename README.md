@@ -1,193 +1,170 @@
 # EdgarTools Platform
 
-A configuration-driven data platform for reading captured source files and
-mastering their evidence into governed Company, Person and relationship records.
-SEC EDGAR and GLEIF are the current source-completion focus. AWS S3 and Snowflake
-are the analytics deployment target.
+A configuration-driven platform for decision-support facts used by trading
+agents and by people auditing those facts. Agents profile a captured data set
+and onboard it, generically, into Clean MDM (identities and relationships),
+reference data, or silver. SEC EDGAR and GLEIF are the current
+source-completion focus. AWS S3 and Snowflake are the analytics deployment
+target. A local mastering proof does not authorize that deployment.
+
+Operators approve and activate exact Rules versions. A YAML file alone grants
+no execution authority. The skills state each step generically; today's sources
+are examples, not hardcoded steps. A proven name rule may bind only with
+measured proof and operator approval. A name lookup id never binds.
 
 The current executable is `edgar-warehouse`. It runs Rules, Bookkeeping, Change
-Journal and Clean MDM operations, plus independent parsing and mastering workers.
-The former warehouse acquisition and orchestration commands have been retired.
+Journal, Clean MDM and local silver operations, plus independent parsing and
+mastering workers.
 
-## Current status
+## Architecture
 
-Status reviewed **2026-10-04**. Implementation, local qualification and deployment
-are separate milestones.
-
-| Area | Implemented and verified | Remaining boundary |
-| --- | --- | --- |
-| Installable data skill | `edgartools-data` bundles the Rules creator, Rust engine, workers, Clean MDM, Bookkeeping, Change Journal and skill documents. Installed tests run without a repository checkout or `edgartools`/spaCy. | Custom parser development requires a checkout and code review. |
-| Rules and control | Versioned contracts, proof/approval/activation, frozen worklists, leases, fencing, retry and independent verifier admission. | Operators approve and activate exact versions; a YAML file alone grants no execution authority. |
-| Parse → master | Installed PostgreSQL 16 tests run `source.read` → `mdm.prepare` → `mdm.merge` with separate worker and verifier logins. Publication has its own worker and readback checks. | Bounded fixtures are not complete source integration or production proof. |
-| Configured parsing | Rust behind Python reads XML, JSON, JSON Lines and CSV. Contracts declare paths, checks, limits, calendar dates, exact integers, booleans and parallel JSON arrays. | Source-specific semantics still need complete positive and failure equivalence. |
-| SEC filing content | Merged [PR #811](https://github.com/paulananth/edgartools-platform/pull/811) qualifies artifact context and all 18 filing columns across 1,000 captured filings and 107,197 rows. | Explicit configured text/shape policies resolve its original six differences. The broader 450-case finite anchor/field/first-N audit now matches acceptance and rows with explicit indexed-object and selected-validation policies; complete failure equivalence remains unfinished. |
-| Company / Person / GLEIF | Person raw reading preserves full records and governed outcomes on 1,000 pinned captures, with installed PostgreSQL qualification. Company/GLEIF retain their readers and separate proving evidence. | Full Company joins/grouping, GLEIF streaming, source activation and complete reader retirement remain unfinished. |
-| AWS / Snowflake | Passive infrastructure and access roots, image publishing, native S3 pull, dbt and dashboard assets remain in the repository. | Local tests do not establish a hosted deployment, consumer cutover or production readiness. |
-
-The full installed-bundle rerun on empty stores must reproduce **6,414 Companies,
-3,052 CIK+LEI bindings and an unchanged replay**. Earlier source-reader proving
-results do not satisfy that new installed-worker gate. See the
-[data-skill completion ticket](.scratch/mastering-to-done/issues/21-self-sustaining-data-skill.md)
-and [Company completion requirements](docs/specs/clean-mdm/company-completion.md).
-
-## Architecture and ownership
+Captured files are evidence. An approved Rules version says how to read them.
+Bookkeeping freezes the work, hands each unit to a worker, and admits a
+verifier's read-back before the unit is complete. Clean MDM masters identities.
+Reference data and silver are separate landings. The analytics path reads
+warehouse objects; it does not decide an identity.
 
 ```text
-Approved Rules ──> Bookkeeping: frozen work, leases, retries, completion
-                         │ task envelopes and verifier admission
-Captured file receipts ──> source.read ──> mdm.prepare ──> mdm.merge
-                                                               │
-                                                          mdm.publish
-Owners' durable delivery intent ──> Change Journal: immutable history
+Captured files
+      |
+      v
+Approved Rules ---------------- Bookkeeping
+      |                         frozen work, lease, retry
+      v                              |
+source.read                          v
+Rust, called from Python             verifier read-back
+      |
+      +---- source.combine          when one feed joins several readings
+      |
+      +---- reference data          pinned codes and hierarchies
+      |
+      +---- silver land             flat rows on local PostgreSQL
+      |
+      v
+mdm.prepare ---- mdm.merge ---- mdm.publish
+                                      |
+                                      v
+                               Change Journal
+                               durable history of delivery intent
+
+Analytics, separate from mastering:
+
+S3 warehouse objects --> Snowflake native pull --> dbt gold --> Streamlit
 ```
 
-- **Rules** owns versioned source, dataset and pipeline contracts and their approval.
-- **Bookkeeping** owns work and recovery. It starts without loaders, parsers or MDM;
-  workers use its task protocol rather than its private database methods.
-- **Workers** perform source reading and destination writes. A separate verifier
-  rereads the destination and reports domain checks.
-- **Clean MDM** owns governed identities, source evidence, merge decisions and
-  publication intent. Commits are fenced by the worker's live lease.
-- **Change Journal** records durable history. It does not own work scheduling or
-  mutable master state. Delivery across stores is reconciled; it is not one
-  cross-database atomic transaction.
+Rules own the versioned contracts. Bookkeeping owns work and recovery, and
+starts without a parser or a master record. Workers read and write. A separate
+verifier rereads the destination. Clean MDM owns identities, evidence, merge
+decisions and publication intent, and each commit checks the worker's live
+lease. The Change Journal records history. Silver lands an approved spec on
+local PostgreSQL and does not commit a master.
 
-The `source.read` profile currently accepts at most two captured artifacts and
-two workers, with at most 32 MiB and 100,000 records per artifact. These are
-qualification limits, not an unbounded production ingestion service.
+## Parsing
 
-The AWS analytics target is a separate path:
+Configured reading runs in Rust (`crates/source-contract`). On 2026-10-02
+the platform chose one engine, built before the next per-source parser, with
+Rust under the cover and Python as the only caller. An approved rules file
+states the format, the container, the document checks, the tables, the
+columns, and the record checks. `edgar_warehouse/rules/source_engine.py` is
+the facade. Bookkeeping, the rules commands, and Clean MDM reach a reading
+through that facade. Calls into the edgartools package stay in Python. A
+custom step is a named Python function, used when the rules file cannot state
+the field.
+
+The engine reads XML, JSON, JSON Lines, CSV, and one zip member. An ordinary
+read holds the artifact in memory up to the contract's byte and record limits
+and fails closed past those limits. A large captured JSON array or XML
+envelope can declare streamed framing: Rust frames each record inside the
+limits that framing declares, and Python receives the projected reading. Publication
+waits for a valid end of file. Streamed framing does not activate a source.
+
+HTML filings, layout-heavy extracts, and prose stay on their Python parsers.
+The Rust engine performs the mechanical read the rules file describes.
+
+## Data model
+
+Company and Person are the identities this platform masters. A profile hangs
+on one of those identities and is the same identity, not a second one. A
+filing or a GLEIF file is evidence for that mastering.
 
 ```text
-Captured/warehouse objects in AWS S3
-  -> Snowflake native S3 pull -> dbt gold models -> Streamlit dashboard
+Company -------------------------------- Person
+  |                                        |
+  | Adviser profile                        | Adviser profile
+  | Audit Firm profile                     |   when the adviser is a natural person
+  | Fund profile                           |
+  |   when the fund is itself a company    | EMPLOYED_BY
+  |                                        | BENEFICIAL_OWNER_OF
+  | AUDITED_BY                             |
+  | IS_SUBSIDIARY_OF                       |
+  | IS_DIRECTLY_CONSOLIDATED_BY            |
+  |                                        |
+  +---------------- HOLDS -----------------+
+                    one reported period
+
+A subsidiary, a filing trust, and its adviser are separate Companies
+when they have separate identifiers.
+A rename of one identifier stays one Company. The old name is an alias.
 ```
 
-## Requirements
+Security, Fund Structure, Branch, Government Entity, International
+Organization, and Market/Venue are accepted domains for later. They are not
+running masters. A share class is not a field of its Company. Ownership, the
+accounting parent, and a GLEIF fund link are different relationships.
 
-| Task | Requirements |
-| --- | --- |
-| Install and run the data bundle | `uv`, Git, Python 3.12 for the qualified runtime, and Rust `cargo` to build the native engine. Package metadata permits Python 3.12+; CI qualifies 3.12. |
-| Local database qualification | PostgreSQL 16, four separate stores, migration-owner credentials, restricted worker/application roles and separate verifier roles. |
-| Run the full test suite | Docker, Bash and `jq` (for infrastructure-script tests); Colima on macOS. CI explicitly pulls `postgres:16-alpine`; missing prerequisites must fail rather than skip. |
-| Review and contribute | A dedicated branch/worktree, GitHub CLI `gh`, and the repository's [agent guide](AGENTS.md). |
-| AWS / Snowflake operator work | AWS CLI, Terraform, Docker image tooling, Snowflake CLI, target-specific credentials and explicit rollout approval. Local mastering does not require cloud deployment. |
+## Mastering and merging
 
-### Install the portable bundle
+Each source record waits in the Source Stage as its newest reading, unbound,
+until a rule links it to an identity. Bronze keeps what that source said
+before. The Merge Stage is the only writer of master state. One fenced
+transaction resolves the identity, selects fields, writes relationships whose
+endpoints are already accepted, records the decision, and enqueues publication.
 
-Choose a reviewed commit on `main` and set `REF` to its full SHA. This installation
-uses pinned Git sources; it does not require cloning the repository.
-
-```bash
-REPO="git+https://github.com/paulananth/edgartools-platform@${REF:?Set REF to a reviewed main commit}"
-uv tool install --python 3.12 "edgartools-data @ $REPO#subdirectory=packages/data-skill" \
-  --with "edgartools-bookkeeping @ $REPO#subdirectory=packages/bookkeeping" \
-  --with "edgartools-change-journal @ $REPO#subdirectory=packages/change-journal" \
-  --with "source-contract @ $REPO#subdirectory=crates/source-contract"
-
-edgar-warehouse --help
-edgar-warehouse doctor
+```text
+Captured record
+      |
+      v
+Source Stage
+newest reading of that source record
+unbound until a matching rule links it
+      |
+      v
+Merge Stage
+one transaction, under the worker's live lease
+  resolve the identity
+  select fields and keep the disagreement
+  write relationships with accepted endpoints
+  record why this master is the result
+      |
+      +---- linked ----> Company or Person
+      |                    plus aliases
+      |
+      +---- short of proof --> stays unbound, or goes to a steward
+      |                        a name lookup id never creates an identity
+      |
+      v
+Publication intent ----> Change Journal
 ```
 
-`doctor` checks the engine, skill command/flag/link references, the Rules folder
-and configured stores. An unused store may be unset. A successful self-check is
-not a source acceptance or deployment gate.
+A proved name rule may bind when the operator has approved that exact version.
+Anything less stays with a steward. Old readers stay until an installed
+empty-store replay matches the mastered result.
 
-Use `edgar-warehouse skill install --rules <new-directory>` to install the bundled
-skills and copy editable Rules. Set `EDGAR_RULES_ROOT` to that directory. Without
-it, the bundle reads its packaged, read-only Rules. Follow
-[Data Platform setup](skills/data-platform/SKILL.md#0-setup) for role grants,
-migrations and the approval workflow. The installer preserves skills it does
-not own and refuses conflicting replacements.
+## Install
 
-### Work from a checkout
+Install is not final. The bundle, a checkout, the stores, and the local
+qualification commands will be written here once install is completed.
 
-```bash
-git clone https://github.com/paulananth/edgartools-platform.git
-cd edgartools-platform
-uv sync --frozen --extra mdm --extra engine
-uv run edgar-warehouse --help
-```
+## Evidence and custom steps
 
-The repository package and portable bundle have different dependency scopes.
-The repository retains `edgartools` from PyPI, spaCy and warehouse/batch tooling.
-The portable bundle does not depend on `edgartools` or spaCy. Rust is built only
-when the engine is requested. Use `uv` for dependency management and execution.
+Workers read files that are already captured. Filing history is evidence for a
+Company or a Person. A form name does not classify a Person. GLEIF evidence
+that is not a Company stays evidence.
 
-### Stores and roles
-
-Configure credentials outside Git and supply these environment variables:
-
-| Store | Runtime variable | Responsibility |
-| --- | --- | --- |
-| Rules | `RULES_DATABASE_URL` | Versioned contracts and approval authority |
-| Bookkeeping | `BOOKKEEPING_CLEAN_DATABASE_URL` | Work, leases and recovery |
-| Change Journal | `CHANGE_JOURNAL_DATABASE_URL` | Durable history and receipts |
-| Clean MDM | `MDM_DATABASE_URL` | Governed evidence and master state |
-
-Migrations use owner credentials, including `RULES_MIGRATION_DATABASE_URL`,
-`BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and
-`CHANGE_JOURNAL_MIGRATION_DATABASE_URL`. Destination lease-guard installation
-uses `DESTINATION_MIGRATION_DATABASE_URL`. Run MDM migrations with an owner
-connection in `MDM_DATABASE_URL`; return to the application connection for runtime.
-Runtime MDM uses the application role;
-verification uses a separate restricted read login. See the bundled
-[Bookkeeping instructions](skills/bookkeeping/SKILL.md) and
-[MDM worker instructions](skills/data-platform/SKILL.md#3-master).
-
-## Source and form scope
-
-- **SEC Company:** `sec.submissions.company/submissions` is the sole declared
-  active acquisition feed. Its declarations do not provide a live fetch worker;
-  the current worker registry reads already captured files. Company integration
-  also uses pinned ticker and Name Census evidence.
-- **Company filing history:** `10-K`, `10-Q`, `8-K`, `20-F`, `40-F`, `6-K` and other
-  forms may appear as history. They are not separate Company-mastering feeds or
-  positive form-based Company rules. Person classification requires its complete
-  source contract, not a guess from one form or `entityType` alone.
-- **GLEIF:** captured legal-entity, relationship and reporting-exception evidence
-  has its own contracts and acceptance gates. Preserve unsupported entity kinds
-  as evidence instead of coercing them into Company.
-- **13F:** the [information-table YAML contract](crates/source-contract/contracts/thirteenf/contract.yaml)
-  reads captured XML through native Rust behind the Python worker. Parsing holdings
-  does not itself create mastered Security identities or relationships.
-
-Custom parsing is used only after a configured alternative has been tested and
-shown insufficient. The skill writes a generic versioned function, tests it,
-lists it in the Mapping Document, opens a PR and stops for operator code/Rules
-approval. It does not activate the step itself. `rules profile`, `rules check`
-and Preview against a copy of MDM remain unbuilt; use the documented manual workflow.
-A general silver writer is also unbuilt: parser tables alone are not a completed
-silver publication.
-
-## Verification and completion gates
-
-Fast checkout checks:
-
-```bash
-uv run pytest tests/unit tests/architecture
-```
-
-For full local qualification, install `jq` and keep Docker available, then sync
-the CI dependencies and provision the PostgreSQL image:
-
-```bash
-uv sync --frozen --extra s3 --extra mdm-runtime --extra mdm --extra engine
-docker pull postgres:16-alpine
-cargo test --locked --manifest-path crates/source-contract/Cargo.toml
-uv run pytest tests/unit tests/architecture tests/mdm tests/integration tests/engine
-```
-
-[CI](.github/workflows/ci.yml) keeps five jobs: Unit/Architecture, MDM, PostgreSQL
-Integration, Rust/Python Engine and shell syntax checks. The aggregate CI gate
-requires all five. Installed-bundle tests use isolated environments and real
-PostgreSQL 16 roles; mocks or prerequisite skips do not replace that evidence.
-
-Before declaring source completion, prove exact source outputs and failure
-behavior, identity and publication invariants, outage/recovery and lease fencing,
-then the full empty-store installed-worker run and unchanged replay. Retire old
-readers only after those gates pass. Cloud promotion has separate infrastructure,
-security, consumer readback and release requirements.
+A custom parsing step is written only after configured reading cannot state
+the field. The skill adds one generic versioned function, tests it, lists it
+in the Mapping Document, opens a pull request, and stops. The operator approves
+the code and the Rules version.
 
 ## AWS and Snowflake boundaries
 
@@ -197,21 +174,12 @@ schedules, image rollouts or secret values. Administrators apply infrastructure
 and access; deployment uses `sec_platform_deployer`; runtime uses service-assumed
 roles rather than long-lived runner access keys.
 
-Images are published with
+Publish images with
 [`infra/scripts/publish-warehouse-image.sh`](infra/scripts/publish-warehouse-image.sh).
-The former AWS pipeline deploy script was retired.
-[`infra/scripts/install.sh`](infra/scripts/install.sh) remains an infrastructure
-setup wizard; inspect its current plan and targets before applying. The retained
-Snowflake operator wrapper is
-[`infra/scripts/deploy-snowflake-stack.sh`](infra/scripts/deploy-snowflake-stack.sh);
-validate its target and prerequisites before applying. For dev Snowflake SQL/DDL,
-use the `snowconn` connection. Credentials remain outside Terraform and Git.
-
-The older [end-to-end runbook](docs/runbook.md),
-[Company acquisition walkthrough](docs/company-only-acquisition.md) and
-[Snowflake Postgres cutover runbook](docs/aws-mdm-snowflake-postgres-cutover.md)
-contain historical or retired execution paths. They are not instructions for
-running the current executable.
+The Snowflake operator wrapper is
+[`infra/scripts/deploy-snowflake-stack.sh`](infra/scripts/deploy-snowflake-stack.sh).
+Credentials stay outside Terraform and Git. Older runbooks in `docs/` describe
+retired execution paths.
 
 ## Repository guide
 
@@ -219,10 +187,13 @@ running the current executable.
 | --- | --- |
 | [skills/data-platform](skills/data-platform/SKILL.md) | Portable setup and onboard → parse → master → custom-step workflow |
 | [Configured reading](skills/data-platform/READING.md) | Implemented parser grammar and qualification boundaries |
+| [Combining readings](skills/data-platform/COMBINING.md) | Keyed collections and joins across readings |
+| [skills/data-profiling](skills/data-profiling/SKILL.md) | Classify a captured data set before onboarding |
+| [edgar_warehouse/silver_writer](edgar_warehouse/silver_writer) | Local PostgreSQL 16 landing from an approved silver spec |
 | [skills/bookkeeping](skills/bookkeeping/SKILL.md) | Loader-independent control, role grants and recovery |
 | [skills/change-journal](skills/change-journal/SKILL.md) | Independent durable journal and owner-controlled recovery |
 | [packages](packages) | Separately owned bundle, control and journal distributions |
-| [crates/source-contract](crates/source-contract) | Native Rust engine and Python binding |
+| [crates/source-contract](crates/source-contract) | Rust source engine; Python is the only caller |
 | [edgar_warehouse/workers](edgar_warehouse/workers) | External workers and destination verifiers |
 | [rules](rules) | Versioned source, dataset and pipeline definitions |
 | [Clean MDM specifications](docs/specs/clean-mdm/README.md) | Domain policies, evidence, Company and recovery requirements |
