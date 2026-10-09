@@ -11,13 +11,22 @@ measured twice as slow (migration 011).
 
 The rule reads the installed functions, so a later migration that adds such a
 lookup, or replaces a function and drops its setting, fails here.
+
+A GIN index is probed one key at a time, never searched with the whole list
+(`&& keys`, `?| keys`): at 2,229 keys the whole-list search took 12-21 s, one
+key at a time 14-18 ms for all of them (migration 012). No `mdm` function and
+no Merge Stage query searches with a whole list.
 """
 
 from __future__ import annotations
 
 import re
 
+from pathlib import Path
+
 from sqlalchemy import text
+
+from edgar_warehouse.mdm.clean import merge
 
 from edgar_warehouse.mdm.clean.store import migrate
 from tests.integration.test_clean_mdm_postgres import database, postgres  # noqa: F401
@@ -36,6 +45,17 @@ def key_lists(arguments: str, source: str) -> set[str]:
         name for name in names
         if re.search(rf"(=\s*ANY\s*\(\s*{name}\s*\)|(&&|\?\||@>|<@)\s*{name}\b)", source, re.I)
     }
+
+
+WHOLE_LIST = r"(&&|\?\|)\s*(CAST\s*\(\s*)?:?{name}\b"
+
+
+def whole_list_searches(arguments: str, source: str) -> set[str]:
+    """The array variables a function body searches an index with whole."""
+    declared = re.search(r"\bDECLARE\b(.*?)\bBEGIN\b", source, re.S | re.I)
+    names = set(re.findall(r"\b(\w+)\s+[\w.%]+\[\]", arguments))
+    names |= set(re.findall(r"\b(\w+)\s+[\w.%]+\[\]", declared.group(1) if declared else ""))
+    return {name for name in names if re.search(WHOLE_LIST.format(name=name), source)}
 
 
 def plpgsql_functions(conn) -> list[tuple[str, set[str], bool]]:
@@ -81,3 +101,22 @@ def test_a_store_with_rows_at_010_takes_011(database):
         config = conn.scalar(text(f"SELECT proconfig FROM pg_proc WHERE oid = '{SNAPSHOT}'::regprocedure"))
         assert SETTING in config
         assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in before} == before
+
+
+def test_whole_list_searches_finds_overlap_and_any_key():
+    assert whole_list_searches("keys text[]", "SELECT 1 WHERE f(b) && keys") == {"keys"}
+    assert whole_list_searches("", "DECLARE keys text[]; BEGIN PERFORM 1 WHERE b ?| keys; END") == {"keys"}
+    assert whole_list_searches("keys text[]", "SELECT 1 FROM unnest(keys) k(key) WHERE f(b) @> ARRAY[k.key]") == set()
+
+
+def test_no_function_or_closure_query_searches_with_a_whole_key_list(database):
+    with database.admin.connect() as conn:
+        found = [
+            (signature, sorted(whole_list_searches(arguments, source)))
+            for signature, arguments, source in conn.execute(text("""
+                SELECT p.oid::regprocedure::text, pg_get_function_arguments(p.oid), p.prosrc
+                FROM pg_proc p WHERE p.pronamespace = 'mdm'::regnamespace ORDER BY 1"""))
+        ]
+    assert [f for f in found if f[1]] == []
+    closure = Path(merge.__file__).read_text()
+    assert not re.search(WHOLE_LIST.format(name="keys"), closure)

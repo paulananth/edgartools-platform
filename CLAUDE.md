@@ -453,6 +453,15 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   statements, re-planned on every call, ran twice as slow. `tests/integration/test_clean_plan_cache_postgres.py`
   holds the rule for every installed function, including a `CREATE OR REPLACE` that drops the setting
   (migration 011, profiling ticket 07).
+- Look rows up by a list of keys by **joining** the keys (`unnest(keys) k JOIN t ON t.col = k.key`, one
+  branch per indexed column under `UNION ALL`), never `col = ANY(keys)` under an `OR`, and never an `OR` beside
+  an `IN (subquery)`: both read the whole table. Probe a GIN index one key at a time (`@> ARRAY[k.key]`,
+  `? k.key`), never with the whole list (`&&`/`?|`): at 2,229 keys the whole-list search took 12-21 s, one
+  key at a time 14-18 ms for all of them. Keep `fastupdate = off` on such an index, or every search reads its
+  growing pending list (111 us a probe against 3). The Merge Stage closure and the match proposal snapshot
+  share `mdm.readings_naming`/`mdm.decisions_naming` (migration 012); `tests/integration/
+  test_clean_plan_cache_postgres.py` refuses a whole-list search in any `mdm` function, and
+  `test_clean_lookup_indexes.py` checks every lookup uses its index with sequential scans off.
 - Memoize invariant lookups per batch, and bulk-prefetch/bulk-flush per-row round trips. This N+1 shape
   has been found and fixed at least five separate times in this codebase — assume any newly-added batch
   path has it until a real run at scale says otherwise. SQLite-backed unit tests never surface it.

@@ -53,11 +53,13 @@ MIGRATIONS: tuple[str, ...] = (
     "009_parent_history.sql",
     "010_relationship_version.sql",
     "011_key_list_plans.sql",
+    "012_key_join_lookups.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
 # SELECT: every change to master data goes through these, and the closure reads
-# a reading's links through `reading_link_subjects`.
+# a reading's links through `reading_link_subjects`, and finds what a list of
+# keys names through `readings_naming` and `decisions_naming`.
 RUNTIME_FUNCTIONS = (
     "save_batch(text,uuid)",
     "preview_batch(text,uuid)",
@@ -68,6 +70,8 @@ RUNTIME_FUNCTIONS = (
     "finish_run(uuid,jsonb,boolean)",
     "match_proposal_snapshot(jsonb)",
     "reading_link_subjects(jsonb)",
+    "readings_naming(text[])",
+    "decisions_naming(text[])",
     "cross_reference_lookup(text,text)",
     "entity_name(jsonb)",
     "relationship_holds(jsonb,timestamp with time zone)",

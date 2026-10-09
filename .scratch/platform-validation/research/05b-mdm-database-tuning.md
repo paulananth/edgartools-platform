@@ -122,6 +122,12 @@ in the migration.
   - one GIN entry per link subject on each insert;
   - `source_reading` is append-only (trigger at `001:1484`), so there are no update costs;
   - GIN's default `fastupdate=on` puts new entries in a pending list until vacuum (`sql-createindex.html`), which is fine here.
+- **Superseded 2026-10-09 (profiling ticket 07, migration 012).** Two points above did not hold at
+  scale. The whole-list overlap `&& keys` through this GIN index took 12-21 s at 2,229 keys, against
+  14-18 ms probing one key at a time (`@> ARRAY[key]`, joined to `unnest(keys)`). And `fastupdate=on`
+  was not fine: every search read the growing pending list (111 microseconds a probe, 3 with
+  `fastupdate=off`). Migration 012 probes per key, sets `fastupdate=off`, and puts the lookup in
+  `mdm.readings_naming`, which the closure and the snapshot share.
 - **A limit indexes do not fix:** when GLEIF parent links arrive (06a), one widely linked Company pulls every reading that links to it into each closure (`merge.py:90-122` keeps expanding the key set). That fan-out is logical growth. Watch `len(stored_a)` per batch.
 
 ### 2. Index the `current_record` review and relationship lookups (B).
