@@ -139,7 +139,7 @@ def main(root: Path, readings: Path, out: Path, size: int) -> None:
     print(json.dumps({"advisers": size, "filings": sum(map(len, filings.values())),
                       "custody_rows": sum(map(len, custody.values())), "corpus_sha256": corpus}), flush=True)
     import pgserver
-    server = pgserver.get_server(tempfile.mkdtemp(prefix="adv-proving-"), cleanup_mode="stop")
+    server = pgserver.get_server(tempfile.mkdtemp(prefix="adv-proving-"), cleanup_mode="delete")
     admin = create_engine(server.get_uri().replace("postgresql://", "postgresql+psycopg2://"))
     with admin.begin() as conn:
         conn.execute(text("CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"))
