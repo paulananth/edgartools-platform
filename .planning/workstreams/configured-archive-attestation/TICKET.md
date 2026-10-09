@@ -6,7 +6,7 @@
 - [x] Add a generic bounded configured archive attestation boundary; preserve full-source hashes, ordinals, counts, EOF, private snapshot and callback exception identity. Six independent historical parity cases and non-GLEIF/fault tests pass (21 cases, 15.25s); existing affected tests 97 passed (48.93s). 2026-10-09 09:20 ET
 - [x] Switch publication verification and Name Census callers; remove the old runtime inspector, preserving publication authority separately. Runtime/script search shows no retired inspector call; historical oracle is test-only. 2026-10-09 09:20 ET
 - [x] Rebase onto origin/main 702a750a. Keep `stream_policy` as the caller name, keep the installed script's newline escape, and state the attestation wording without a source name. 178 affected tests passed in 10.51s: genericity, attestation, XML header bounds, census names, and the GLEIF source cases. 2026-10-09 10:55 ET
-- [ ] Verify all six GLEIF member/format contracts, independent historical parity and deliberate transport/EOF faults; prove a non-GLEIF configured source uses the same boundary.
+- [x] Verify all six GLEIF member/format contracts, independent historical parity and deliberate transport/EOF faults; prove a non-GLEIF configured source uses the same boundary. `tests/engine/test_source_attestation.py`: 21 passed in 2.59s on 2026-10-09 15:06 ET. The six contracts are level1, relationships, and reporting-exceptions, each in json and xml. The engine build is commit ae627570.
 - [ ] Run affected tests and PostgreSQL 16 acceptance without prerequisite skips; review, commit, push and full CI gate.
 
 ## Parent goal remains active
