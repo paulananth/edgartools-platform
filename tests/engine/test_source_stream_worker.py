@@ -199,9 +199,12 @@ def test_zip_crc_corruption_is_refused_before_partition_publication(tmp_path):
 
 
 @pytest.mark.parametrize("entrypoint", ["facade", "worker"])
-def test_malformed_read_keeps_the_native_contract_refusal(tmp_path, entrypoint):
+@pytest.mark.parametrize("with_input_bound", [False, True])
+def test_malformed_read_keeps_the_native_contract_refusal(tmp_path, entrypoint, with_input_bound):
     rules = contract()
     rules["read"] = None
+    if with_input_bound:
+        rules["execution"]["max_input_bytes"] = 32 * 1024**2
     with pytest.raises(SourceRejected, match="contract"):
         if entrypoint == "facade":
             SourceEngine(rules)

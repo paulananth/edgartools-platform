@@ -34,3 +34,12 @@ exists only as a test oracle. The independently active census caller remains.
 Final captured code pins, installed CLI/replay with restricted-role PostgreSQL
 16 qualification, and the complete CI gate must pass before closure. Their
 results and completion times are recorded in TICKET.md.
+
+## Refusal correction review
+
+Full engine CI identified malformed `read: null` being accessed by Parquet
+dispatch before native validation. The guarded dispatch and optional input-bound
+check preserve native SourceRejected. Independent Spec review found no blocker
+and reran all four facade/worker, bound-absent/bound-present cases: 4 passed in
+1.20 seconds. The complete 51-case stream/worker/caller gate passed36.54s.
+Captured proof was refreshed after this worker edit.

@@ -42,7 +42,8 @@ def _documents(envelope: dict, artifacts):
     if "max_input_bytes" in execution and (type(execution['max_input_bytes']) is not int
             or not 1 <= execution['max_input_bytes'] <= 256*1024**2):
         raise ValueError('Source max_input_bytes is 1..256 MiB')
-    if "max_input_bytes" in execution and "stream" in contract.get("read", {}):
+    read = contract.get("read")
+    if "max_input_bytes" in execution and isinstance(read, dict) and "stream" in read:
         raise ValueError('Streamed framing declares its own physical input bounds')
     inputs = manifest["artifacts"]
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= execution["max_artifacts"]:
@@ -78,7 +79,8 @@ def _context(manifest, entry, artifacts):
 
 def _output(envelope: dict, artifacts, documents=None) -> bytes:
     manifest, contract, execution, inputs = documents or _documents(envelope, artifacts)
-    parquet = contract["read"].get("format") == "parquet"
+    read = contract.get("read")
+    parquet = isinstance(read, dict) and read.get("format") == "parquet"
     engine = source_engine.SourceEngine(source_parquet.engine_contract(contract) if parquet else contract)
     max_bytes = contract["read"].get("limits", {}).get("max_bytes", 32 * 1024**2)
     max_records = contract["read"].get("limits", {}).get("max_records")

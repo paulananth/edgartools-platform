@@ -78,9 +78,18 @@ and CI remain required before closure.
 
 ## CI correction — 2026-10-09 07:11 ET
 
+- [x] Preserve native malformed-contract refusal before Parquet dispatch, including the new optional input bound; 51 stream/worker/caller cases passed36.54s and independent review reran four malformed-contract cases successfully. Final captured parity/retry/separate-process proof refreshed in121.930s with every code/input pin current (2026-10-09 07:20 ET).
+
 - [x] Preserve generic skill guidance: the genericity gate found source-specific preparation prose outside an Examples section; move caller prose under Examples and retain generic framing guidance. The existing genericity tests are retained (2026-10-09 07:11 ET).
 
 The extended installed fixture originally used --bronze-receipts-path; the
 unchanged executable flag is --bronze-receipts. Corrected test mapping passes
 against the installed CLI and independent verifier. Full CI is rerun after the
 documentation correction before closure.
+
+The next full CI run includes the native refusal correction. The preceding run
+passed143 native cases,637unit,258architecture,614MDM and309integration
+cases; integration also has one existing expected failure for a changed CIK
+being held in review. Engine passed742cases and caught the malformed-contract
+refusal, now fixed. No prerequisite skips occurred. Captured proof now pins the
+corrected worker and matches every original bundle byte.

@@ -996,7 +996,7 @@
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/mdm/clean/names.py": "98fd62d9e0838902a5859e8a2ba6a3c9388618a2a865def593874a1f175e2fa6",
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/mdm/clean/cascade.py": "b980b6d4b141b1e20a18542b8a0245cd9a7fb36bdca9966831e07e1ad30c3a35",
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/tests/support/retired_company_preparation.py": "a28c3455635013fe5cddd4fa30318203d675f6ebb0be87a5ee45913b96d5c1a8",
-    "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/workers/source_read.py": "2a44cca7213daae134de577d94aaba3eda7834c608bfe4b6ba9bfc4ceb133296",
+    "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/workers/source_read.py": "7b0b6495b77f5f01945995302d1a3c4c16b1bddfd085f7cf2ef65fd0e5dc008e",
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/workers/source_combine.py": "b372a5fc8cd276decade592b25574c03fb1a42621ceddd1298ce544b50e6c0a8",
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/workers/source_parquet.py": "e3b3f347b60167d9540206f0a43ac72694b1496a45d15ac7864fbe135f621339",
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/edgar_warehouse/workers/source_staging.py": "0eac0704ed17692e1fc1e4ca408350b6d8f5e308e2388db29fe44e9582535f42",
@@ -1014,9 +1014,9 @@
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/rules/sources/sec.submissions.company/combine-landed.yaml": "1170ca8005aee88ca8a429379cb42637094dce9d94cfffa5db198a12fe222098",
     "/private/tmp/edgartools-platform-codex-company-preparation-cutover-20261009/rules/sources/sec.submissions.company/census.yaml": "b75bd96273693c9014c0570bb3846c375fc1f9c37d863aafd5b1773f2f3f31aa"
   },
-  "inventory_sha256": "6ef834d6de7cdafce848f948d183738a8f4885d4be2c6a9a1075aff100c63b55",
-  "artifact_root": "/private/tmp/codex-company-cutover-captured-final3-20261009",
-  "elapsed_seconds": 192.41335361404344,
+  "inventory_sha256": "7e10e050949c3852deb032e1f4b6378720384ed1107b141594d7888e1d61edd1",
+  "artifact_root": "/private/tmp/codex-company-cutover-captured-final4-20261009",
+  "elapsed_seconds": 121.92975066881627,
   "installed_bundle_qualified": false,
   "whole_population_mastering_qualified": false,
   "census_construction_qualified": false
