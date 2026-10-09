@@ -213,7 +213,10 @@ decides. Each one needs the operator's
 ruling and approval. Every source whose records are of a kind must be in that
 kind's `defaults.sources`, or its batch fails: adding it is such a change.
 A relationship record becomes a link only once a matching rule joins its
-record to the kind's records.
+record to the kind's records. A matching rule on an identifier names one
+namespace, and only one that has an Identifier Contract in a kind file
+(`identifiers`); a new joining identifier is its contract and its rule, with
+no code (operator, 2026-10-09: "Read the list from the rules").
 
 Not expressible yet, so log them: a publication-level contract (a reader's
 list of approved identifiers, or the files that make one release), a kind
@@ -326,7 +329,7 @@ The examples above in plain words, from today's sources:
 
 - Fields: Company's are `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`;
   Person's are in its consumer spec, `docs/specs/person/consumer.md`.
-- Joining identifiers: `cik` and `lei`; a ticker on a company's record belongs
+- Joining identifiers: `cik`, the one Identifier Contract today; a ticker on a company's record belongs
   to the security's contract.
 - A link starting at another record: a GLEIF relationship record starts at its
   child's Level 1 record. A matching address: GLEIF's headquarters address

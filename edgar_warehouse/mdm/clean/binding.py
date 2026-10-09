@@ -19,6 +19,7 @@ same record keeps its Company without any lookup.
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import timedelta
 from typing import NamedTuple
@@ -27,7 +28,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from . import correction
-from .activation import NAMESPACES, activated, binding_namespaces
+from .activation import activated, binding_namespaces, declared_namespaces
 from .evidence import decision, instant
 from .primitives import normalizer
 from .store import rows
@@ -100,22 +101,26 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
     revokes (`released`, ticket 13) holds nothing for it.
     """
     found: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
+    declared = declared_namespaces(policy.get("kinds") or {})
     for namespace, values in sorted(wanted.items()):
         if not values:
             continue
-        # A literal from a fixed set, so the per-namespace index can be used.
-        if namespace not in NAMESPACES:
+        # Only a namespace an Identifier Contract declares.
+        if namespace not in declared:
             raise ValueError(f"Unsupported identifier namespace: {namespace}")
         # The Stage row holds each record's latest reading and its binding.
-        path = f"s.reading->'identifiers'->>'{namespace}'"
+        # Containment, one value at a time, so the GIN index on identifiers
+        # (`stage_record_identifiers`) serves every namespace alike.
         found_rows = rows(
             conn,
-            f"""SELECT {path} AS value, s.entity_id::text AS entity_id, i.kind
-            FROM mdm.stage_record s
+            """SELECT s.reading->'identifiers'->>:namespace AS value,
+                      s.entity_id::text AS entity_id, i.kind
+            FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc)
+            JOIN mdm.stage_record s ON (s.reading->'identifiers') @> w.doc
             JOIN mdm.master_entity i ON i.entity_id = s.entity_id
-            WHERE {path} = ANY(:values) AND s.source_code = ANY(:sources)
-              AND NOT s.subject = ANY(:released)""",
-            values=sorted(values),
+            WHERE s.source_code = ANY(:sources) AND NOT s.subject = ANY(:released)""",
+            namespace=namespace,
+            wanted=[json.dumps({namespace: v}) for v in sorted(values)],
             sources=_issuers(policy, namespace),
             released=sorted(released),
         )
@@ -269,7 +274,8 @@ def propose(
         d["subject"]: d["entity_id"] for d in decisions if d["operation"] == "bind"
     }
     kinds = {i["entity_id"]: i["kind"] for i in identities}
-    issuers = {namespace: _issuers(policy, namespace) for namespace in NAMESPACES}
+    issuers = {namespace: _issuers(policy, namespace)
+               for namespace in declared_namespaces(policy.get("kinds") or {})}
     for a in assertions:
         if a["subject"] in caller:
             for namespace, raw in (a.get("identifiers") or {}).items():

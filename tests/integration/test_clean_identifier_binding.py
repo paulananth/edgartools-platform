@@ -729,3 +729,28 @@ def test_the_earlier_committed_company_survives_a_merge(database):
     )
     state = replay(identities, [merge], "2026-12-31T00:00:00+00:00")
     assert state.canonical[left] == state.canonical[right] == first_company
+
+
+def test_a_new_identifier_joins_by_its_contract_alone(database):
+    """Operator, 2026-10-09: "Read the list from the rules". A namespace no code
+    names, with its Identifier Contract and rule, creates one Company from its
+    issuer's records and joins the next; the lookup is by containment, so the
+    one index on identifiers serves it."""
+    rule = {**CIK_MINT, "rule_id": "company-crd", "when": [
+        {"primitive": "identifier_match@1", "args": {"namespace": "crd"}},
+        {"primitive": "identifier_cardinality@1", "args": {"namespace": "crd"}}]}
+    body = {"version": "new-identifier-test", "required_consumers": ["export", "graph"],
+            "automatic_rules": [{"kind": "company", "family": "binding", "rule_id": "company-crd",
+                                 "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}],
+            "kinds": {"company": {"version": "company-test",
+                                  "defaults": {"sources": ["fixture.primary", "fixture.secondary"],
+                                               "allow_unknown_effective": True},
+                                  "rules": [rule],
+                                  "identifiers": {"crd": {**CIK_ISSUED, "authority": "FINRA CRD",
+                                                          "normalizer": "normalize_identifier@crd-v1"}}}}}
+    with database.admin.begin() as conn:
+        policy = register_policy(conn, body)
+    load(database, policy, "b1", record("a", crd="129052"), record("b", crd="129052"))
+    load(database, policy, "b2", record("c", crd="129052"), record("d", crd="306491"), checkpoint=2)
+    found = sorted((sorted(c["identifiers"]["crd"]), len(c["subjects"])) for c in companies(database).values())
+    assert found == [(["129052"], 3), (["306491"], 1)]
