@@ -1,4 +1,4 @@
-# Configured 13F reading worker
+# Configured 13F source extract worker
 
 The `source.read` worker runs captured 13F information tables through the Rust
 engine's Python facade. Field paths, missing tokens, root checking and parser
@@ -58,7 +58,7 @@ uv run --extra engine edgar-warehouse bookkeeping finalize RUN_ID
 ```
 
 The worker renews its lease while parsing. A successful write is only a
-candidate; verification recomputes the configured reading and compares the
+candidate; verification recomputes the configured source extract and compares the
 complete destination bytes. Bookkeeping independently checks the input hash,
 output receipt, lease and report bindings before admitting completion.
 The runtime digest includes the worker, protocol client, Rules loader, facade,

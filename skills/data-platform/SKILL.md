@@ -26,7 +26,7 @@ question at a time, with your recommendation.
 | 1 | Onboard a new feed or kind | [data-onboarding](../data-onboarding/SKILL.md) |
 | 1b | Change a live feed's rules | [refining-rules](../refining-rules/SKILL.md) |
 | 2 | Parse: read captured files with the configured engine | this file, then [bookkeeping RUN](../bookkeeping/RUN.md) |
-| 2b | Combine keyed collections and join configured readings | [COMBINING.md](COMBINING.md) |
+| 2b | Combine keyed collections and join configured source extracts | [COMBINING.md](COMBINING.md) |
 | 3 | Master: the parsed records into Clean MDM | this file |
 | 4 | Approve and switch on | [APPROVE](../data-onboarding/APPROVE.md) |
 | 5 | Recover a run | [bookkeeping RECOVERY](../bookkeeping/RECOVERY.md), [change-journal](../change-journal/SKILL.md) |
@@ -80,7 +80,7 @@ question at a time, with your recommendation.
 A feed is parsed by the `source.read` worker: the configured engine reads
 each captured file by the feed's contract (its `read:` block) and writes the
 tables and the records set aside. Nothing feed-specific runs. Read
-[Configured reading](READING.md) before writing the contract: it covers
+[Configured source extract](READING.md) before writing the contract: it covers
 complete JSON records, column arrays, exact source text and frozen references.
 
 1. The feed's pipeline is saved, tested, approved and switched on (Mode 4).
@@ -105,8 +105,8 @@ Three worker profiles take parsed records into Clean MDM; a feed's rules
 file names them in its `mdm` target (or a pipeline's), after its `source.read`
 step:
 
-- `mdm.prepare`: a `source.read` reading into a Clean MDM input manifest. Its
-  unit's keys say which `table` of the reading, which MDM `dataset` (source
+- `mdm.prepare`: a source extract from `source.read` into a Clean MDM input manifest. Its
+  unit's keys say which `table` of the source extract, which MDM `dataset` (source
   code) reads the rows, the `policy` digest the batches pin, the `consumer`
   they advance (its own, from checkpoint 0), a `batch_id` prefix and the
   `as_of` instant. Optional `record_column` selects an object-valued column
@@ -119,7 +119,7 @@ step:
   stated. Omitted, records carry no time, and a link with no stated start
   makes no link (`unknown_relationship_start`). When the file itself states
   no such instant, take it from the caller: declare a `context` text field in
-  the reading, add the column `{context: {name: <field>}}`, and give each
+  the source extract, add the column `{context: {name: <field>}}`, and give each
   file its own context receipt ([READING.md](READING.md), "Artifact context
   and first-N rows").
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the

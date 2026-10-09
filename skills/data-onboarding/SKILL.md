@@ -47,7 +47,7 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
 
 The files in `rules/sources/` show Dataset Contracts and publication rules.
-For configured complete JSON reading, use `sec.submissions.person` and
+For configured complete JSON source extract, use `sec.submissions.person` and
 [data-platform READING](../data-platform/READING.md). A declared target is
 not evidence that its workers exist; check every profile before submitting.
 
@@ -258,7 +258,7 @@ blocks; do not ask whether it does.
   (`defaults.sources`: the first one listed wins each field), and its
   comments record which value fills a shared field. Read them before you
   ask about a shared field.
-- **Configured reading.** Inspect the source's `read:` block and
+- **Configured source extract.** Inspect the source's `read:` block and
   [READING.md](../data-platform/READING.md). Define the records passed to its
   Dataset Contract explicitly. For complete JSON evidence, `value: {path: .}`
   preserves the object in a named column; `mdm.prepare` selects that column
@@ -301,7 +301,7 @@ blocks; do not ask whether it does.
   the source's own record may, when the reader keeps it (`native_record`).
 - **An unmapped source value:** first test whether configured `value`, paths,
   iteration or frozen references can preserve it. Map only evidence the
-  tested reading emits. If the grammar cannot express it, record a minimal
+  tested source extract emits. If the grammar cannot express it, record a minimal
   failing example and follow data-platform Mode 6 for a reviewed custom step.
 - **The publication:** `semantics` (full file or changes only),
   `completeness` and `effective_time`.

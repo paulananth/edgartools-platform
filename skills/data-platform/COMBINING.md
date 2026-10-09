@@ -1,34 +1,34 @@
-# Combine configured readings
+# Combine configured source extracts
 
-Use `source.combine` between configured reading and MDM preparation when
+Use `source.combine` between configured source extract and MDM preparation when
 records need keyed collections or joins across captured artifacts. The worker
-uses declared column names and immutable reading receipts; it has no loader,
+uses declared column names and immutable source-extract receipts; it has no loader,
 provider, classification or database dependency.
 
 ## Inputs and configuration
 
 A standalone input manifest is an object with `version: 1`, a `contract`
 receipt (`uri`, `sha256`), and `readings`: a mapping from logical names to
-reading receipts. Each receipt holds a version-1 inline or version-2 partitioned
-configured reading. Partition receipts are authenticated within the same
-aggregate input byte and row budgets as inline readings. Contiguous source
+source-extract receipts. Each receipt holds a version-1 inline or version-2 partitioned
+configured source extract. Partition receipts are authenticated within the same
+aggregate input byte and row budgets as inline source extracts. Contiguous source
 ranges, declared table names and EOF counts are checked before combining.
 Original artifact/context receipts and row order are retained; storage
 partitions do not create new source identities. Both forms supply tables and
 an empty `deferred` list. Unresolved
-reading deferrals block combination; resolve them explicitly before this step.
+source-extract deferrals block combination; resolve them explicitly before this step.
 
 ### Incremental authenticated traversal
 
-For reductions that must traverse partitioned readings without retaining all
+For reductions that must traverse partitioned source extracts without retaining all
 decoded rows, the runtime supplies `source_readings.iter_load(receipt,
 artifacts, max_bytes=..., max_rows=...)`. It yields a header, original artifact
 index, one artifact chunk and cumulative bytes. The header names `version`,
 the original `reading` receipt and, when present, its `contract` receipt.
-An inline reading yields one chunk per original artifact (one or two). A partitioned
-reading retains its input/context/lookup receipts and current `partition`
+An inline source extract yields one chunk per original artifact (one or two). A partitioned
+source extract retains its input/context/lookup receipts and current `partition`
 range/receipt on each chunk; its tables contain only that partition's rows.
-The header's reading receipt binds the complete index, including all partition
+The header's source-extract receipt binds the complete index, including all partition
 receipts. Consumers must bind that original receipt into reduction identity.
 An empty
 source still yields its original identity and declared empty tables.
@@ -59,7 +59,7 @@ Declare all limits: `max_rows` (1..40,000,000), `max_input_bytes`
 (1..16 GiB), `max_state_bytes` (1..256 MiB), `max_keys` and `max_members`
 (each 1..10,000,000), `max_output_rows` (1..100,000), and
 `max_output_bytes` (1..32 MiB). Choose measured limits for the approved scope.
-Input limits cover every supplied reading, artifact, partition and table,
+Input limits cover every supplied source extract, artifact, partition and table,
 including unselected rows. State limits cover all groups together. State bytes
 measure canonical UTF-8 key/member/value payload; key/member counts separately
 bound Python object overhead. They are not an RSS measurement or disk spill.
@@ -68,7 +68,7 @@ bound Python object overhead. They are not an RSS measurement or disk spill.
 `table` (one name or an ordered list of 1..8 distinct names), `keys`
 (1..8 distinct text columns), `mode`, `count` (new output
 column), `sample` and `sample_limit` (0..1,000). Text keys are exact; missing,
-null and nontext values refuse. Normalize them in the reading contract.
+null and nontext values refuse. Normalize them in the source-extract contract.
 
 - `mode: count` counts every selected row, including duplicates; require
   `sample: null` and `sample_limit: 0`.
@@ -89,10 +89,10 @@ null and nontext values refuse. Normalize them in the reading contract.
   and optional last column names. Exclusion uses every member, not its sample.
 
 Output tables retain key columns plus the declared count/sample fields; keys
-and members sort lexically. Every supplied reading must authenticate and
+and members sort lexically. Every supplied source extract must authenticate and
 exhaust successfully, with no deferrals, before the worker writes its scope or
 result. A late corrupted partition invalidates all provisional reduction state.
-Original reading receipts participate in the combined scope identity, including
+Original source-extract receipts participate in the combined scope identity, including
 their original input/context/lookup evidence. Verification reconstructs exact
 bytes through the pinned contract. Successful reduction does not prove upstream
 population completeness or downstream matching parity; qualify those separately
@@ -134,9 +134,9 @@ artifact; this profile does not accept a YAML artifact. Its schema is separate
 from the `source.read` contract. A Rules-approved pipeline pins both via its
 frozen units.
 
-- `source` is one declared reading name or an ordered list of 1–8 distinct
+- `source` is one declared source-extract name or an ordered list of 1–8 distinct
   declared names. Rows are traversed in that name order, then artifact and
-  row order. Use a list to collect across separately verified readings.
+  row order. Use a list to collect across separately verified source extracts.
 - Logical names, tables, columns, groups and output fields use letters,
   digits and underscores, start with a letter or underscore, and have at
   most 64 characters.
@@ -149,11 +149,11 @@ frozen units.
   and text `"1"` are different identities; boolean/structured keys fail.
   Null group keys are skipped. Group `value` is a column or `.` for the
   complete row. Missing columns fail. `skip_null_values` decides whether
-  to skip null values; empty-string interpretation belongs in the reading
+  to skip null values; empty-string interpretation belongs in the source extract
   contract (for example `text.null_if`), not the collector.
 - `order_by` lists at most eight columns. Each must have one exact scalar
   type across selected group rows; nulls and mixed types fail. Sort is
-  ascending and stable. An empty list retains reading artifact and row
+  ascending and stable. An empty list retains source-extract artifact and row
   order. `collect` returns a list; `distinct: true` keeps the first occurrence
   of each exact JSON value after sorting. `first`/`last` select a single
   value; they require `distinct: false`. `one` also requires exactly one
@@ -184,8 +184,8 @@ frozen units.
   `replace`. `on_missing: skip` leaves the row untouched for an absent answer.
 - Optional output-table `drop` removes at most 64 distinct named columns after
   all joins. Missing columns refuse. Use it to remove declared helper keys.
-- Bounds: 1–8 named readings, at most 32 groups, 1–16 output tables and
-  at most 32 joins per output. Each reading is at most 32 MiB, all readings
+- Bounds: 1–8 named source extracts, at most 32 groups, 1–16 output tables and
+  at most 32 joins per output. Each source extract is at most 32 MiB, all source extracts
   together at most 64 MiB, and input **and** output rows each respect
   `max_rows` (1–100,000). Counts include every input table. Combined output
   is at most 32 MiB. Partition work explicitly when a limit is exceeded;
@@ -193,22 +193,22 @@ frozen units.
 
 ## One installed pipeline
 
-For a predecessor reading, the combination unit's input is
+For a predecessor source extract, the combination unit's input is
 `{"from": {"step": "read", "key": "<unit key>"}}`. Its frozen keys contain:
 
 - `combine_contract_uri` and `combine_contract_sha256`: the contract receipt
   fields as nonempty text;
-- `reading_name`: the name assigned to the resolved predecessor reading;
+- `reading_name`: the name assigned to the resolved predecessor source extract;
 - Optional `readings_uri` and `readings_sha256` together: a pinned JSON mapping
-  of up to seven additional names to reading receipts. Omit both when there
-  are no additional readings. The predecessor name must not collide with an
+  of up to seven additional names to source-extract receipts. Omit both when there
+  are no additional source extracts. The predecessor name must not collide with an
   additional name. Every unit key value is nonempty text; receipts belong in
   pinned artifacts, rather than structured unit keys.
 
 The combination worker materializes a content-addressed scope document under
-`combine-inputs/` beside its output. This binds the contract and **all** reading
-receipts. Its reading artifact's `input` points to that real document. A change
-to a contract or auxiliary reading therefore changes downstream MDM input
+`combine-inputs/` beside its output. This binds the contract and **all** source-extract
+receipts. Its source-extract artifact's `input` points to that real document. A change
+to a contract or auxiliary source extract therefore changes downstream MDM input
 identity; no receipt is invented for bytes at another URI. The verifier
 rebuilds and verifies the scope document and exact combined output.
 
@@ -252,9 +252,9 @@ rule that excludes empty text without changing source ranks.
 
 ## Preparation blueprints
 
-A source may bundle a `combine.yaml` that joins its main reading, its
-continuation pages and its catalog readings (each from its own bundled reading
-contract). Preserve every input's independently verified reading receipt. Each
+A source may bundle a `combine.yaml` that joins its main source extract, its
+continuation pages and its catalog source extracts (each from its own bundled source-extract
+contract). Preserve every input's independently verified source-extract receipt. Each
 capture must belong to its approved capture run.
 
 1. From authenticated capture manifests, replace every approved-run placeholder
@@ -263,12 +263,12 @@ capture must belong to its approved capture run.
    immutable contract receipt is recorded in the creator's frozen unit.
 2. If main-derived capture completeness proves zero continuation pages, set
    the group's source list to `[main]` and omit `pages` from readings.
-   Otherwise include every required page through its verified reading receipt.
+   Otherwise include every required page through its verified source-extract receipt.
    Finish when the immutable capture scope accounts for every main-derived
    page; never substitute a fabricated empty page for missing capture evidence.
 3. Run the configured read → combine → prepare steps and their independent
    verifiers as above. Finish this composition step only when all three
-   receipts verify, the combined scope pins every reading role (or the
+   receipts verify, the combined scope pins every source extract role (or the
    verified no-pages variant), and prepared rows reproduce the same collections.
 
 State what the blueprint keeps (sort order, distinctness, which value wins per
@@ -281,9 +281,9 @@ pass.
 ## Census evidence
 
 Bind the approved canonical census SHA into the source's census combine
-contract and use its matching census reading contract; replace capture and
-catalog run placeholders with the approved runs. Supply the full readings the
-source's `combine.yaml` uses, plus a reading named `census`. Census groups use
+contract and use its matching census source-extract contract; replace capture and
+catalog run placeholders with the approved runs. Supply the full source extracts the
+source's `combine.yaml` uses, plus a source-extract named `census`. Census groups use
 `one` and pin each row's census digest. Name evidence joins by the configured
 name key; optional cascade evidence joins by the record key. Missing name
 evidence yields null, while a cascade answer can create a cascade-only object.
@@ -316,10 +316,10 @@ workers/verifiers directly, not the installed full Company pipeline. Its
 
 ### The SEC Company preparation blueprint
 
-Use the bundled `sources/sec.submissions.company/combine.yaml` with readings
+Use the bundled `sources/sec.submissions.company/combine.yaml` with source extracts
 from the bundled main `source.yaml`, `pagination.yaml` and `catalog.yaml`.
-The four reading names are `main`, `pages`, `catalog_exchange` and
-`catalog_tickers`. Preserve every input's independently verified reading
+The four source-extract names are `main`, `pages`, `catalog_exchange` and
+`catalog_tickers`. Preserve every input's independently verified source-extract
 receipt. Both catalog captures must belong to the approved catalog run; main
 and all derived pages must belong to the approved Company capture run.
 
@@ -330,12 +330,12 @@ and all derived pages must belong to the approved Company capture run.
    immutable contract receipt is recorded in the creator's frozen unit.
 2. If main-derived capture completeness proves zero continuation pages, set
    the forms group's source list to `[main]` and omit `pages` from readings.
-   Otherwise include every required page through its verified reading receipt.
+   Otherwise include every required page through its verified source-extract receipt.
    Finish when the immutable capture scope accounts for every main-derived
    page; never substitute a fabricated empty page for missing capture evidence.
 3. Run the configured read → combine → prepare steps and their independent
    verifiers as above. Finish this composition step only when all three
-   receipts verify, the combined scope pins all four reading roles (or the
+   receipts verify, the combined scope pins all four source-extract roles (or the
    verified no-pages variant), and prepared rows reproduce the same collections.
 
 The blueprint preserves naturally sorted distinct filing forms, catalog
@@ -351,10 +351,10 @@ qualification. Keep the active Company route until the installed empty-store
 ### The SEC Company census evidence
 
 Bind the approved canonical census SHA into `combine-census.yaml` and use
-its matching reading contract `census.yaml`; replace capture/catalog run
+its matching source-extract contract `census.yaml`; replace capture/catalog run
 placeholders with the approved runs. Supply the full main/page/catalog
-readings used by `combine.yaml`, with main captures read through
-`census-main.yaml`, plus a reading named `census`. Both census groups use
+source extracts used by `combine.yaml`, with main captures read through
+`census-main.yaml`, plus a source-extract named `census`. Both census groups use
 `one` and pin each row's census digest. Name evidence joins by the configured
 SEC name key; optional cascade evidence joins by integer CIK under
 `name_census.cascade`. Missing name evidence yields null, while a cascade

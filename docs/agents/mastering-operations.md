@@ -65,7 +65,7 @@ The active stores are separate logical responsibilities:
 
 | Store | Active schema and owner |
 | --- | --- |
-| MDM | `mdm`: identities, readings, decisions, Stage/Master views and publication intents |
+| MDM | `mdm`: identities, source extracts, decisions, Stage/Master views and publication intents |
 | Bookkeeping | `bookkeeping`: work, leases, checkpoints and journal outbox |
 | Rules | `rules`: mapping/policy versions, proof and approval |
 | Change Journal | `journal`: immutable shared history and source/publication evidence |
