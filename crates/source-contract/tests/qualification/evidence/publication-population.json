@@ -1,0 +1,21 @@
+{
+  "publication_count": 3428477,
+  "publisher": {
+    "uri": "file:///private/tmp/edgartools-platform-codex-whole-census-eof-20261009/.planning/workstreams/gleif-member-contracts/lei2-publisher-metadata.json",
+    "sha256": "f0c7e5a95be12faa0eb07efd5848641235d2ca6321078d56e0d973dcd9d5953d"
+  },
+  "reading": {
+    "uri": "file:///private/tmp/codex-census-eof-proof/publisher-reading.json",
+    "sha256": "84d051b814fb6e23cc211efd71e24e2f82f1dd9218e2a470f617e13e8fb33111"
+  },
+  "context": {
+    "uri": "file:///private/tmp/codex-census-eof-proof/4a7ff921970242db8747b5caa484dc6b69cbb8e6776aa211317138704342282f.json",
+    "sha256": "4a7ff921970242db8747b5caa484dc6b69cbb8e6776aa211317138704342282f"
+  },
+  "authority_binding": {
+    "uri": "file:///private/tmp/codex-census-eof-proof/7e00ca96ffb3f986db69d3b6850d5b86411698e12f8f0a280068eca9dff7df3a.json",
+    "sha256": "7e00ca96ffb3f986db69d3b6850d5b86411698e12f8f0a280068eca9dff7df3a"
+  },
+  "authority_remains_separate": true,
+  "archive_eof_proven_by_metadata": false
+}

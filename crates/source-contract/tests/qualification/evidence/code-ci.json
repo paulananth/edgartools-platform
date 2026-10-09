@@ -1,0 +1,54 @@
+{
+  "run_id": 37958542228,
+  "head": "ae6275708361f7e44f7c5beea2a3cb4d4812c1ef",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "Shell script lint",
+      "conclusion": "success",
+      "started_at": "2026-10-09T16:21:40Z",
+      "completed_at": "2026-10-09T16:21:47Z",
+      "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37958542228/job/113915170984"
+    },
+    {
+      "name": "Integration tests (Postgres)",
+      "conclusion": "success",
+      "started_at": "2026-10-09T16:21:40Z",
+      "completed_at": "2026-10-09T16:25:27Z",
+      "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37958542228/job/113915171260"
+    },
+    {
+      "name": "Engine (Rust behind Python)",
+      "conclusion": "success",
+      "started_at": "2026-10-09T16:21:40Z",
+      "completed_at": "2026-10-09T16:26:43Z",
+      "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37958542228/job/113915171339"
+    },
+    {
+      "name": "Unit tests",
+      "conclusion": "success",
+      "started_at": "2026-10-09T16:21:39Z",
+      "completed_at": "2026-10-09T16:23:01Z",
+      "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37958542228/job/113915171465"
+    },
+    {
+      "name": "MDM tests",
+      "conclusion": "success",
+      "started_at": "2026-10-09T16:21:40Z",
+      "completed_at": "2026-10-09T16:22:31Z",
+      "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37958542228/job/113915171719"
+    },
+    {
+      "name": "CI gate",
+      "conclusion": "success",
+      "started_at": "2026-10-09T16:26:46Z",
+      "completed_at": "2026-10-09T16:26:49Z",
+      "url": "https://github.com/paulananth/edgartools-platform/actions/runs/37958542228/job/113917272042"
+    }
+  ],
+  "postgres_integration": {
+    "passed": 309,
+    "expected_failures": 1,
+    "prerequisite_skips": 0
+  }
+}
