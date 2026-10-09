@@ -43,8 +43,7 @@ These are caller-cutover prerequisites; no new whole-census construction needed.
 
 - [x] Close review input-bound regressions with large auxiliary members and actual frozen-input qualification; 175 affected tests passed in82.25s, and final captured proof matches every original bundle byte with no stale code/input pins (2026-10-09 07:06 ET).
 - [x] Bronze semantics moved to Rules; a deliberate bronze recipe fault changes the observed result (2026-10-09 06:51 ET).
-- [ ] Verify published worker receipts in a separate installed process and keep
-  PostgreSQL16 restricted-role tests/no prerequisite skips.
+- [x] Verify published worker receipts in a separate installed process and keep PostgreSQL16 restricted-role tests/no prerequisite skips; three installed CLI/Parquet/doctor tests passed253.83s, then the extended greater-than-10,000-receipt installed CLI/replay case passed85.48s after correcting its existing CLI flag (2026-10-09 07:11 ET).
 
 ## Qualification progress — 2026-10-09 06:47 ET
 
@@ -76,3 +75,12 @@ parity/retry/replay exercise, not parser performance.
 Spec and Standards reviews are recorded separately in REVIEW.md. Neither finds
 a remaining scoped implementation/design blocker. Installed final qualification
 and CI remain required before closure.
+
+## CI correction — 2026-10-09 07:11 ET
+
+- [x] Preserve generic skill guidance: the genericity gate found source-specific preparation prose outside an Examples section; move caller prose under Examples and retain generic framing guidance. The existing genericity tests are retained (2026-10-09 07:11 ET).
+
+The extended installed fixture originally used --bronze-receipts-path; the
+unchanged executable flag is --bronze-receipts. Corrected test mapping passes
+against the installed CLI and independent verifier. Full CI is rerun after the
+documentation correction before closure.

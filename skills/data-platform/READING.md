@@ -1092,7 +1092,7 @@ Materialized execution may declare `execution.max_input_bytes` (1..256 MiB).
 Otherwise the existing 32 MiB physical limit applies. `read.limits` bounds the
 framed/decoded document and emitted records independently; the output remains
 bounded. Streamed framing declares its own physical bounds and refuses this
-materialized option. Parquet templates for Company preparation retain a 64 MiB
+materialized option. A bounded preparation template may retain a 64 MiB
 physical limit, 32 MiB framed JSON and 100,000 distinct projected rows. Larger
 projected inputs require partitioning; this is a bounded preparation contract.
 
@@ -1102,6 +1102,8 @@ complete input document before projecting those entries, preserving source
 object order and literal punctuation. Missing keys emit nothing. `max_records`
 then bounds selected entries; omitting `keys` preserves whole-object iteration.
 An empty key list still validates document shape and assertions.
+
+## Examples: configured preparation caller
 
 `mdm prepare-clean-company` now binds immutable configured Parquet reading and
 combination contracts, reuses the authenticated frozen census and verifies each
