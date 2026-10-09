@@ -7,7 +7,7 @@ import zipfile
 
 import pytest
 
-from edgar_warehouse.mdm.clean.gleif_source import inspect_archive
+from edgar_warehouse.mdm.clean.gleif_publication import attest_publication as inspect_archive
 from edgar_warehouse.mdm.clean.store import Conflict
 
 

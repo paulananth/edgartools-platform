@@ -22,7 +22,7 @@ def no_custom_steps(monkeypatch):
 
 def project(records, wanted):
     found = []
-    engine = source_stream._policy(files.load(RULE))[1]
+    engine = source_stream.stream_policy(files.load(RULE))[1]
     receipt = engine.stream_json_array(
         io.BytesIO(json.dumps({'records': records}).encode()), wrapper='records',
         lookups={'wanted': wanted}, context={'publication_count':len(records)}, max_bytes=1048576, max_record=1048576,

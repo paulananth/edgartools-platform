@@ -326,12 +326,12 @@ class PublicationVerifier:
                 if native is None:
                     _, size = self._bytes(revision, MEMBER_LIMIT)
                 else:
-                    from .gleif_source import inspect_archive
+                    from .gleif_publication import attest_publication
 
                     with self.open_artifact(
                         revision["bronze_artifact_reference"]
                     ) as stream:
-                        inspected = inspect_archive(
+                        inspected = attest_publication(
                             stream,
                             member=name,
                             metadata=member["native"],

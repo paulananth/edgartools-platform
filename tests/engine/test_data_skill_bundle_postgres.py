@@ -912,12 +912,15 @@ def test_all_gleif_member_contracts_read_from_installed_bundle(installed):
     """Packaged templates must execute without checkout or fixture imports."""
     python, root = installed
     result = _run(python, '-c', '''
-import io, json, zipfile
+import hashlib, io, json, zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read
+from edgar_warehouse.mdm.clean import gleif_source
+from edgar_warehouse.mdm.clean.gleif_publication import attest_publication
+assert not hasattr(gleif_source, "inspect_archive")
 store = Artifacts()
 lei = "5493001KJTIIGC8Y1R12"
 date = "2026-09-11T16:00:00+00:00"
@@ -955,6 +958,14 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
         with zipfile.ZipFile(zipped,"w",compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("captured."+format,body)
         raw = store.put_bytes((folder / "captured.zip").as_uri(),zipped.getvalue())
+        seen = []
+        attestation = attest_publication(io.BytesIO(zipped.getvalue()), member=member.replace("-","_"),
+            metadata={"format":format+".zip", "cdf_version":gleif_source.FORMATS[member.replace("-","_")][0],
+                "content_date":date, "file_content":"GLEIF_FULL_PUBLISHED", "delta_start":None, "record_count":1},
+            expected_sha256=raw["sha256"], on_record=lambda record,index: seen.append((record,index)))
+        assert seen == [(row,0)] and attestation["record_count"] == 1
+        assert attestation["canonical_source_hash"] == hashlib.sha256(
+            (json.dumps(row,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\\n").encode()).hexdigest()
         contract = store.put_bytes((folder / "contract.yaml").as_uri(),json.dumps(rules).encode())
         context = store.put(folder.as_uri(),{"version":1,"input":raw,"values":{"publication_count":1}})
         manifest = store.put(folder.as_uri(),{"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})

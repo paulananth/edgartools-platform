@@ -29,7 +29,7 @@ from typing import BinaryIO
 
 from . import cascade as cascaded
 from .adapters import UnsupportedRecord, mapped_values
-from .gleif_source import inspect_archive
+from .gleif_publication import attest_publication
 from .primitives import NORMALIZERS
 from edgar_warehouse.rules import files as rules_files
 from edgar_warehouse.workers.source_mapping import project_record, read_record
@@ -147,7 +147,7 @@ def build(
             if found.keys & cascade_wanted:
                 entities.append(found)
 
-    report = inspect_archive(
+    report = attest_publication(
         gleif_archive,
         member="level1",
         metadata=gleif_metadata,
