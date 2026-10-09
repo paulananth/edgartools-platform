@@ -1304,9 +1304,16 @@ def test_active_company_preparation_caller_runs_from_installed_bundle(installed,
     """Frozen input is produced once; installed CLI and verifier cannot use checkout."""
     from tests.mdm.test_clean_company_source import landing, source_row, ticker_row, filing_row
     from tests.support.retired_company_preparation import prepare_company_bundle as historical
+    from edgar_warehouse.mdm.clean.company_source import bronze_receipts
     python, root = installed
-    args = landing(tmp_path, [source_row(123)], tickers=[ticker_row(123,"A")],
+    selected = "a" * 64
+    args = landing(tmp_path, [source_row(123,raw_object_id=selected)], tickers=[ticker_row(123,"A")],
                    filings=[filing_row(123,"10-Q"),filing_row(123,"10-K")])
+    receipts = tmp_path / "receipts.json"
+    receipts.write_text(json.dumps(bronze_receipts("capture-1",
+        [{"sha256":f"{n:064x}","path":f"s3://bronze/{n}.json"} for n in range(10001)]
+        + [{"sha256":selected,"path":"s3://bronze/selected.json"}])))
+    args["bronze_receipts_path"] = str(receipts)
     original = historical(**{**args,"output":str(tmp_path/"historical")})
     arguments = ["mdm","prepare-clean-company"]
     for name,value in args.items():
