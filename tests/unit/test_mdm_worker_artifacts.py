@@ -1,5 +1,6 @@
 """Immutable preparation and staging boundaries without database effects."""
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -139,3 +140,36 @@ def test_links_stated_in_two_dated_files_fold_into_one_link_first_and_last_state
     undated = {k: {**c, "source_meta": {"effective_at": None}} for k, c in claims.items()}
     edges, reviews = relationships.project(undated, state, entities, "2026-10-09T00:00:00+00:00", types=types)
     assert edges == [] and {r["reason"] for r in reviews} == {"unknown_relationship_start"}
+
+
+def test_distinct_on_keeps_the_first_row_of_each_key_in_file_order(tmp_path):
+    """Operator, 2026-10-09: "Yes, code it": one record per key and file, so an
+    entity named in many rows of one file is one record of it, not many."""
+    rows = [{"id": "a", "name": "Acme"}, {"id": "b", "name": "Bee"}, {"id": "a", "name": "ACME INC"},
+            {"id": None, "name": "x"}, {"id": None, "name": "y"}, {"name": "z"}]
+    store, envelope = _prepare(tmp_path, rows, distinct_on=["id"])
+    candidate = mdm_prepare.execute(envelope, store)
+    batch = store.json(candidate)["batches"][0]
+    kept = [json.loads(line) for line in (tmp_path / "prepared" / batch["input"]["path"]).read_text().splitlines()]
+    # A missing column and a null are one key: null.
+    assert kept == [{"id": "a", "name": "Acme"}, {"id": "b", "name": "Bee"}, {"id": None, "name": "x"}]
+    assert batch["input"]["record_count"] == 3
+    assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+    (tmp_path / "two").mkdir()
+    store, envelope = _prepare(tmp_path / "two", rows[:3] + [{"id": "a", "name": "Acme"}], distinct_on=["id", "name"])
+    batch = store.json(mdm_prepare.execute(envelope, store))["batches"][0]
+    assert [json.loads(line) for line in (tmp_path / "two" / "prepared" / batch["input"]["path"]).read_text().splitlines()] == rows[:3]
+
+
+def test_a_dropped_duplicate_is_still_checked(tmp_path):
+    rows = [{"id": "a", "published": "2026-06-30T00:00:00+00:00"}, {"id": "a", "published": "2026-05-31T00:00:00+00:00"}]
+    store, envelope = _prepare(tmp_path, rows, distinct_on=["id"], effective_column="published")
+    with pytest.raises(ValueError, match="one effective time"):
+        mdm_prepare.execute(envelope, store)
+
+
+@pytest.mark.parametrize("value", [[], "id", [""], ["id", "id"], [1], ["c"] * 9])
+def test_distinct_on_names_one_to_eight_distinct_columns(tmp_path, value):
+    store, envelope = _prepare(tmp_path, [{"id": 1}], distinct_on=value)
+    with pytest.raises(ValueError, match="distinct_on"):
+        mdm_prepare.execute(envelope, store)
