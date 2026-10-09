@@ -68,6 +68,13 @@ Findings remain unapproved until the operator reviews them.
 
 ## Current boundary
 
+Repeated under the updated skills after #893:
+[live discovery research](../../../docs/research/dtcc-discovery-repeat-2026-10-09.md).
+Full terms contain restrictions on automated extraction and database compilation;
+rights are an explicit prerequisite, with no permission obtained. The repeated
+profile reproduces all parts and questions, and separates identical duplicate
+rows from distinct clearing-broker relationships. This does not approve findings.
+
 Discovery is incomplete: rights, delivery semantics, record-region decisions,
 classification approval, Company overlap and notice evaluation remain open.
 See [DISCOVERY.md](../../../.scratch/onboarding/dtcc-directories/DISCOVERY.md).

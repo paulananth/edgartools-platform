@@ -1,0 +1,57 @@
+{
+  "code_base": "4489170c",
+  "skills": [
+    "data-profiling",
+    "data-onboarding"
+  ],
+  "status": "research_only_unapproved",
+  "fresh_downloads": 10,
+  "fresh_bytes": 1124637,
+  "all_fresh_capture_hashes_match_prior": true,
+  "recapture_seconds": 5.59,
+  "profiling_command_seconds": 21.2,
+  "profiling_internal_seconds": 9.2,
+  "full_regions": 14,
+  "profile_rows": 13870,
+  "unanswered_questions": 22,
+  "parts_identical_to_prior": true,
+  "questions_identical_to_prior": true,
+  "fingerprints_identical_to_prior": true,
+  "original_cells_reconciled_regions": 14,
+  "production_xlsx_reader_qualified": false,
+  "raw_reader_probe_exit": 1,
+  "company_overlap_measured": false,
+  "identity_bindings": 0,
+  "permission_for_database_compilation": "unestablished; published terms contain restrictions",
+  "profile_files": [
+    {
+      "path": "/private/tmp/dtcc-repeat-20261009/profile/REPORT.md",
+      "sha256": "eebe787968e3c454a7786c53bef1bfe818dbb083bf224d5a3e6e2fb3af8092a6",
+      "bytes": 16683
+    },
+    {
+      "path": "/private/tmp/dtcc-repeat-20261009/profile/findings.yaml",
+      "sha256": "73930e7453155dc63cb83fdb3a0c425532691ac2e281981a8edd2f455893d69e",
+      "bytes": 95937
+    },
+    {
+      "path": "/private/tmp/dtcc-repeat-20261009/profile/fingerprints.json",
+      "sha256": "45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01",
+      "bytes": 813354
+    },
+    {
+      "path": "/private/tmp/dtcc-repeat-20261009/profile/invalid_rows.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "terms_html": {
+    "url": "https://www.dtcc.com/terms",
+    "sha256": "9a815ecf2507d95701370e96492f882e13043ca070851345da18efef92cb0b8d",
+    "decode": "Parse self.__next_f.push JSON arrays; concatenate string element 1 in script order (61 chunks).",
+    "independently_verified_restrictions": [
+      "database or information-service compilation",
+      "automated mining or systematic extraction"
+    ]
+  }
+}

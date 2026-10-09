@@ -2,6 +2,11 @@
 
 Status: exploratory local-file profile; unapproved. No source or MDM activation.
 
+Repeat investigation under the updated skills: [discovery story](../../../docs/research/dtcc-discovery-repeat-2026-10-09.md).
+The original evidence below is preserved. Repeat profiling reproduces it;
+the new note resolves the duplicate-row patterns and documents restrictions
+found in the full DTCC terms before any automated onboarding.
+
 ## Captures and coverage
 
 Ten anonymous HTTP GETs returned 200. Raw workbooks total 1,124,637 bytes.
