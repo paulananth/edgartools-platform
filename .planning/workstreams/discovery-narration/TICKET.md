@@ -11,7 +11,7 @@ discovery as it happens.
 - [x] Require live updates across data-onboarding phases and its delegated profiling work. Reviewed mandatory link to profiling's narration contract and onboarding-specific phase/evidence updates (2026-10-09 17:18 ET).
 - [x] Validate skill structure and walk through fast discovery, silent scan, failed command and approval pause scenarios. Both skill-creator validators and `git diff --check` pass; manual scenario review below (2026-10-09 17:18 ET).
 - [x] Add an operator coordination note in both skills protecting the narration requirements from stale LLM edits. Reviewed both notes and reran both skill validators successfully (2026-10-09 17:20 ET).
-- [ ] Review the diff, run the overlap guard, commit and publish a reviewable PR.
+- [x] Review the diff, run the overlap guard, commit and publish a reviewable PR. Validators and diff review passed; authorized overlap recorded below; commit `ff6279ff` pushed and [PR #893](https://github.com/paulananth/edgartools-platform/pull/893) created, ready for review (2026-10-09 17:21 ET).
 
 ## Scope
 
