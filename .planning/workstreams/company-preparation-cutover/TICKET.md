@@ -11,7 +11,7 @@ The broad whole-population mastering/recovery gate remains open separately.
 - [x] Switch prepare-clean-company to configured reading/combination; record/classification evidence/provenance/publication parity and retry pass caller tests (2026-10-09 06:51 ET).
 - [x] Independent historical parity plus run/census/receipt/Rules/output faults; 123 affected and final 36 focused/architecture cases passed, including late stale-run refusal (2026-10-09 06:51 ET).
 - [x] Remove old preparation function, forms/ticker collectors, census attachment and pinning helper; runtime-consumer absence and independent census preservation tests pass (2026-10-09 06:51 ET).
-- [ ] Run affected tests, installed restricted-role PostgreSQL 16 qualification, independent review and full CI; publish a separate reviewable PR.
+- [x] Run affected tests, installed restricted-role PostgreSQL16 qualification and independent review; complete CI37923186101 passed on8a896f2e in4m39s, including all five suites, shell lint and aggregate gate. Publish reviewable non-draft PR#880; final ticket-only head gets its automatic CI gate before reporting ready (2026-10-09 07:26 ET).
 
 ## Scope and design
 
@@ -93,3 +93,15 @@ cases; integration also has one existing expected failure for a changed CIK
 being held in review. Engine passed742cases and caught the malformed-contract
 refusal, now fixed. No prerequisite skips occurred. Captured proof now pins the
 corrected worker and matches every original bundle byte.
+
+## Closure — 2026-10-09 07:26 ET
+
+The scoped Company preparation goal is complete: active CLI switched, outputs /
+refusals / provenance / replay qualified, and obsolete preparation runtime
+deleted. CI37923186101 passed on8a896f2e. PR880 is non-draft and mergeable;
+no merge or deployment was requested for this change. This closure update changes
+only the ticket; the final PR head must also have its automatic CI gate pass.
+
+Remaining work is separate: the independent census caller still uses its
+address collector, and whole-source census construction/mastering qualification
+remains open. No claim is made that every remaining parser has been retired.
