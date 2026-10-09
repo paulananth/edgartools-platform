@@ -200,8 +200,11 @@ pub const ENCODINGS: [&str; 2] = ["utf-8", "windows-1252"];
 /// UTF-8 bytes. With [utf-8, windows-1252], valid UTF-8 is read as UTF-8 and
 /// anything else as windows-1252. A byte no declared encoding defines refuses
 /// the artifact; nothing is replaced or guessed.
+/// `encodings` is what `validate` admitted: one name, or utf-8 then one other.
 pub fn decode<'a>(bytes: &'a [u8], encodings: &[String]) -> Result<std::borrow::Cow<'a, [u8]>, Rejected> {
-    let (last, first) = encodings.split_last().expect("a contract declares at least one encoding");
+    let Some((last, first)) = encodings.split_last() else {
+        return Err(Rejected::new("encoding", "no encoding is declared"));
+    };
     if first.iter().any(|e| e == "utf-8") && std::str::from_utf8(bytes).is_ok() {
         return Ok(std::borrow::Cow::Borrowed(bytes));
     }
@@ -222,7 +225,8 @@ fn decode_one<'a>(bytes: &'a [u8], encoding: &str) -> Result<std::borrow::Cow<'a
             }
             Ok(std::borrow::Cow::Owned(out.into_bytes()))
         }
-        _ => Ok(std::borrow::Cow::Borrowed(bytes)),
+        "utf-8" => Ok(std::borrow::Cow::Borrowed(bytes)),
+        other => Err(Rejected::new("encoding", format!("{other} is not a declared encoding"))),
     }
 }
 

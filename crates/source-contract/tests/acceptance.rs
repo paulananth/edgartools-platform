@@ -424,3 +424,28 @@ fn a_csv_declared_windows_1252_reads_its_letters_and_refuses_an_undefined_byte()
     let json = "read:\n  format: jsonl\n  encoding: windows-1252\n  tables:\n    rows:\n      each: record\n      columns:\n        a: { text: { path: a } }\n";
     assert!(configured(json, Steps::new()).is_err()); // declared for CSV only
 }
+
+#[test]
+fn a_chosen_member_keeps_its_bound_and_any_format_can_be_chosen() {
+    let contract = |max: usize| format!("read:\n  format: jsonl\n  container: zip\n  member: \"b*.jsonl\"\n  limits: {{ max_bytes: 100000, max_member_bytes: {max} }}\n  tables:\n    rows:\n      each: record\n      columns:\n        a: {{ text: {{ path: a }} }}\n");
+    let archive = zipped(&[("a.jsonl", "{\"a\":\"x\"}\n"), ("b.jsonl", "{\"a\":\"y\"}\n")]);
+    let e = configured(&contract(1000), Steps::new()).unwrap();
+    assert_eq!(e.read(&archive, &Lookups::new()).unwrap().tables["rows"][0]["a"], Val::Str("y".into()));
+    let small = configured(&contract(4), Steps::new()).unwrap();
+    assert_eq!(small.read(&archive, &Lookups::new()).unwrap_err().code, "limit_exceeded");
+}
+
+#[test]
+fn every_byte_windows_1252_leaves_undefined_refuses_and_a_bad_declaration_never_loads() {
+    let contract = |encoding: &str| format!("read:\n  format: csv\n  encoding: {encoding}\n  tables:\n    rows:\n      each: record\n      columns:\n        name: {{ text: {{ path: name }} }}\n");
+    for list in ["windows-1252", "[utf-8, windows-1252]"] {
+        let e = configured(&contract(list), Steps::new()).unwrap();
+        for byte in [0x81u8, 0x8D, 0x8F, 0x90, 0x9D] {
+            let body = [b"name\nA".as_slice(), &[byte], b"\n"].concat();
+            assert_eq!(e.read(&body, &Lookups::new()).unwrap_err().code, "encoding", "{list} 0x{byte:02X}");
+        }
+    }
+    for bad in ["[]", "[utf-8, 5]", "{ a: 1 }", "[utf-8, windows-1252, utf-8]"] {
+        assert!(configured(&contract(bad), Steps::new()).is_err(), "{bad}");
+    }
+}
