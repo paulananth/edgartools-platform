@@ -1119,12 +1119,17 @@ fn falsey(value: &Val) -> bool {
     }
 }
 
-fn projected_tree(value: Val, depth: usize, budget: &mut (usize, usize)) -> Result<El, Rejected> {
-    use tree::{Child, ScalarKind};
+fn projected_node(depth: usize, budget: &mut (usize, usize)) -> Result<(), Rejected> {
     budget.0 += 1;
     if depth > 64 || budget.0 > 100_000 || budget.1 > 1_048_576 {
         return Err(Rejected::new("projection_limit", "project exceeds depth, node or text budget"));
     }
+    Ok(())
+}
+
+fn projected_tree(value: Val, depth: usize, budget: &mut (usize, usize)) -> Result<El, Rejected> {
+    use tree::{Child, ScalarKind};
+    projected_node(depth, budget)?;
     let scalar = |text: String, kind: ScalarKind, budget: &mut (usize, usize)| {
         budget.1 += text.len();
         El { exact_number: (kind == ScalarKind::Number).then(|| text.clone()), kind, ..El::scalar(Some(text)) }
@@ -1147,10 +1152,11 @@ fn projected_tree(value: Val, depth: usize, budget: &mut (usize, usize)) -> Resu
             for (key, value) in values {
                 budget.1 += key.len();
                 match value {
-                    Val::Str(value) if key == "$" => { budget.1 += value.len(); el.text = Some(value); }
-                    Val::Str(value) if key.starts_with('@') => { budget.1 += value.len(); el.attrs.insert(key, value); }
+                    Val::Str(value) if key == "$" => { projected_node(depth + 1, budget)?; budget.1 += value.len(); el.text = Some(value); }
+                    Val::Str(value) if key.starts_with('@') => { projected_node(depth + 1, budget)?; budget.1 += value.len(); el.attrs.insert(key, value); }
                     Val::List(values) => {
-                        let items = values.into_iter().map(|v| projected_tree(v, depth + 1, budget)).collect::<Result<Vec<_>, _>>()?;
+                        projected_node(depth + 1, budget)?;
+                        let items = values.into_iter().map(|v| projected_tree(v, depth + 2, budget)).collect::<Result<Vec<_>, _>>()?;
                         el.children.insert(key, Child::Many(items));
                     }
                     value => { el.children.insert(key, Child::One(projected_tree(value, depth + 1, budget)?)); }

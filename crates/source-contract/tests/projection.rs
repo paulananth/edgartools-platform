@@ -70,3 +70,25 @@ fn token_replacements_match_whole_whitespace_tokens_without_splitting_hyphens() 
     assert_eq!(result.tables["rows"][0]["v"], Val::Str("S S SOUTH-WEST W".into()));
     assert!(engine("{transform: {value: {const: {value: text}}, transforms: [{tokens: {'two words': one}}]}}").is_err());
 }
+
+#[test]
+fn projected_node_budget_counts_empty_field_arrays_and_attribute_values() {
+    let expression = "{project: {value: {value: {path: input}}, then: {const: {value: ok}}}}";
+    for prefix in ["field", "@attribute"] {
+        let children: serde_json::Map<String, serde_json::Value> = (0..100_000)
+            .map(|i| (format!("{prefix}{i}"), if prefix.starts_with('@') {
+                serde_json::json!("")
+            } else { serde_json::json!([]) })).collect();
+        let raw = serde_json::to_vec(&serde_json::json!({"input": children})).unwrap();
+        assert_eq!(engine(expression).unwrap().read(&raw, &Lookups::new()).unwrap_err().code, "projection_limit");
+    }
+}
+
+#[test]
+fn projected_depth_budget_counts_field_array_containers() {
+    let expression = "{project: {value: {value: {path: input}}, then: {const: {value: ok}}}}";
+    let mut input = serde_json::json!(null);
+    for _ in 0..33 { input = serde_json::json!({"field": [input]}); }
+    let raw = serde_json::to_vec(&serde_json::json!({"input": input})).unwrap();
+    assert_eq!(engine(expression).unwrap().read(&raw, &Lookups::new()).unwrap_err().code, "projection_limit");
+}

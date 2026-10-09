@@ -369,19 +369,19 @@ proved before retiring active semantic consumers.
 
 ## Whole-source Name Frequency qualification
 
-Use `gleif/census-complete-stream.yaml` for the configured original-source
-projection and `census-cascade-record.yaml` for bounded GENERAL comparisons.
+Use the configured original-source projection and its bounded record
+projection for comparisons.
 The filenames and wire identifiers remain stable. Current-name keys come
-from complete authenticated SEC source extracts; publication count comes from
+from complete authenticated producer Source Extracts; publication count comes from
 the complete pinned publisher metadata. Publication authority remains a
 separate pinned-manifest binding.
 
-The global `d_addresses` table contains every supported GENERAL occurrence
+The global `d_addresses` table contains every supported category occurrence
 with a fit street, including duplicates, ineligible entities and noncandidates.
 Count these rows before applying candidate eligibility. Preserve `source_index`
 when composing candidate observations across tables or storage partitions:
-the last candidate occurrence per LEI wins. Legal-name timestamps remain last
-occurrence per name key and LEI, rather than globally per LEI. Complete legal
+the last candidate occurrence per holder wins. Legal-name timestamps remain last
+occurrence per name key and holder, rather than globally per holder. Complete legal
 holder sets are subtracted from other-name holders before counts or samples.
 
 The retained seven cascade functions compare the complete population after
@@ -389,3 +389,8 @@ original-source EOF. A repackaged prefix, a source-extract prefix or a capped
 sample does not prove completeness. Keep whole-source comparison evidence,
 installed empty-database qualification, active-caller replacement and parser
 retirement as separately verified gates.
+
+### Examples: bundled whole-source projections
+
+`gleif/census-complete-stream.yaml` emits the original-source projection;
+`gleif/census-cascade-record.yaml` supports bounded GENERAL comparisons.

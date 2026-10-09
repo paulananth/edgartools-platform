@@ -13,6 +13,8 @@ branch is stopped. Its two open checklist lines remain open.
 - [x] Measure and announce full-scan estimates: SEC bounded capture 28.28 seconds, conservative 33-minute estimate; complete SEC finished in 6m09s. Combined GLEIF comparison 1,000 records in 1.274 seconds, 73-minute estimate announced before full original-source scan. 2026-10-09 12:09 ET
 - [ ] Compare the complete pinned SEC/GLEIF census through original-source EOF, including all seven live cascade passes, exact holder counts and last occurrence per name key/holder.
 - [ ] Record reproducible receipts, current runtime pins, elapsed times, fault checks and reviewable changes; preserve all deferred gates below.
+- [x] Repair independent review finding: projection budgets now count field-array containers and reserved text/attribute values, with node/depth regressions; 161 native cases pass. Name the generator helpers and verify generated Rules byte equality with `--check`. 2026-10-09 12:20 ET
+- [x] Repair first CI Unit failure: generic combining guidance and explicit Examples section; all 58 profiling-genericity checks pass. 2026-10-09 12:20 ET
 
 Installed empty PostgreSQL16 population (6,414/3,052), old construction/parser
 deletion, activation and deployment remain behind the original-source EOF
