@@ -8,8 +8,9 @@ beyond MDM's own storage (companies keep their own versioned table): the kinds
 come from MDM, their meanings from `rules/context/definitions.yaml`.
 
 A subject that is no master kind and not `relationship` is a code set: it is
-read from RDM (`edgar_warehouse/rdm/context.py`, `RDM_DATABASE_URL`). Silver
-table specs join this command with ticket 06.
+read from RDM (`edgar_warehouse/rdm/context.py`, `RDM_DATABASE_URL`). The
+subject `silver` is a silver table's spec (`edgar_warehouse/silver_writer/context.py`,
+`SILVER_DATABASE_URL`).
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             "Answers are JSON of at most 8 KB; follow next_step."
         ),
     )
-    parser.add_argument("subject", help="A master kind (company, person, ...), 'relationship', or a code set")
+    parser.add_argument("subject", help="A master kind (company, person, ...), 'relationship', 'silver', or a code set")
     parser.add_argument("key", nargs="?", help="An entity id, <namespace>:<value> for an identifier, or a code")
     parser.add_argument("--search", help="Words to find in names, in place of a key")
     parser.add_argument("--limit", type=int, default=5, help=f"How many search matches (1-{SEARCH_MAX})")
@@ -80,13 +81,17 @@ class Store:
 STORES = {
     "MDM": Store("MDM", "MDM_DATABASE_URL", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
     "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm migrate", "edgar_warehouse.rdm.context:CodeContext"),
+    "SILVER": Store("silver", "SILVER_DATABASE_URL", False, "edgar-warehouse silver migrate",
+                    "edgar_warehouse.silver_writer.context:TableContext"),
 }
 
 
 def store_for(subject: str) -> Store:
-    """A master kind or `relationship` is MDM's; any other subject is a code set."""
+    """A master kind or `relationship` is MDM's, `silver` is the silver schema's; any other subject is a code set."""
     from edgar_warehouse.mdm.clean.evidence import KINDS
 
+    if subject == "silver":
+        return STORES["SILVER"]
     return STORES["MDM" if subject in KINDS or subject == "relationship" else "RDM"]
 
 

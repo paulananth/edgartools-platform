@@ -232,7 +232,8 @@ columns:
      source: <part.column or expression>, sensitivity: none|personal|sensitive_personal}
 key: [<col>, ...]
 links:                          # pointers to masters
-  - {columns: [<col>], kind: <MDM kind>, source_key: <col>, mdm_id_column: <col>, inclusion: <0..1>}
+  - {columns: [<col>], kind: <MDM kind>, source_code: <the master's Dataset Contract>, to_part: <part>,
+     source_key: <col>, mdm_id_column: <col>, inclusion: <0..1>}
 time: {as_of: <col|null>, as_at: <col>, event_time: <col|null>}
 partition: [<col>]              # e.g. a date
 load_mode: append|upsert|snapshot
@@ -241,6 +242,20 @@ why: <plain words for each choice above>
 
 Each link keeps the source's own key and an MDM id column filled after
 mastering; a row whose entity is not mastered yet keeps an empty MDM id.
+
+Links point to master parts only; a pointer to another transaction or reference
+part stays a relationship finding (§3). Profiling leaves `kind` and
+`source_code` empty: data-onboarding fills them from the onboarded master, and
+the writer refuses a link without them. The MDM id is read from MDM by
+(`source_code`, `kind`, the source key's value as the record key), so a key
+that two sources share never resolves to the wrong master (ticket 06; added
+2026-10-08, a change to the approved spec).
+
+The writer (`edgar-warehouse silver`) adds a `loaded_at` column when `as_at` is
+`loaded_at`, and lands each delivery as its load mode says: `append` refuses a
+changed row under a landed key, `upsert` updates changed rows, `snapshot` also
+removes rows the delivery no longer holds. A rerun of the same delivery changes
+nothing; a changed spec is registered as a new table.
 
 ## 7. Drift (`compare`)
 

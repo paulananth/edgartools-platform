@@ -112,7 +112,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     _propose_kinds(findings_parts)
     for f in findings_parts:
         f["store_suggestion"] = classify.store(f["class"])
-        f["silver"] = _silver(f, relationships) if f["class"] in {"transaction", "reference"} else None
+        f["silver"] = _silver(f, relationships, by_name) if f["class"] in {"transaction", "reference"} else None
     con.close()
     return {
         "version": 1,
@@ -376,8 +376,18 @@ def _relationships(links, parts: dict) -> list[dict]:
     return found
 
 
-def _silver(f: dict, relationships: list[dict]) -> dict:
-    links = [r for r in relationships if r["from"]["part"] == f["part"]]
+def _silver(f: dict, relationships: list[dict], parts: dict) -> dict:
+    """The silver table spec (findings spec section 6). Links point to masters only:
+    a link to another transaction or reference part stays a relationship finding.
+    Each link's kind and Dataset Contract are filled by data-onboarding."""
+    links = [r for r in relationships if r["from"]["part"] == f["part"]
+             and parts.get(r["to"]["part"], {}).get("class") == "master"]
+    taken = [r["from"]["columns"][0] for r in links]
+
+    def id_column(r):
+        column = r["from"]["columns"][0]
+        return f"{column}_mdm_id" if taken.count(column) == 1 else f"{column}_{r['to']['part']}_mdm_id"
+
     return {
         "table": f["part"].replace(".", "_").lower(),
         "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
@@ -385,8 +395,8 @@ def _silver(f: dict, relationships: list[dict]) -> dict:
                      "nullable": c["fill"] < 1.0, "definition": None,
                      "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in f["columns"]],
         "key": f["record_key"]["columns"],
-        "links": [{"columns": r["from"]["columns"], "kind": None, "to_part": r["to"]["part"],
-                   "source_key": r["from"]["columns"][0], "mdm_id_column": f"{r['from']['columns'][0]}_mdm_id",
+        "links": [{"columns": r["from"]["columns"], "kind": None, "source_code": None, "to_part": r["to"]["part"],
+                   "source_key": r["from"]["columns"][0], "mdm_id_column": id_column(r),
                    "inclusion": r["inclusion"]} for r in links],
         "time": {"as_of": f["time"]["as_of"]["from"], "as_at": f["time"]["as_at"] or "loaded_at",
                  "event_time": f["time"]["event_time"]},

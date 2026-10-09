@@ -1,0 +1,286 @@
+{
+  "findings": "findings.yaml",
+  "tables": [
+    {
+      "class": "transaction",
+      "first": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 36525,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 36525,
+        "table": "currencyexchange"
+      },
+      "key": [
+        "Date",
+        "FromCurrency",
+        "ToCurrency"
+      ],
+      "links": [],
+      "load_mode": "append",
+      "part": "currencyexchange",
+      "rerun": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 0,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 36525,
+        "table": "currencyexchange"
+      },
+      "seconds": 2.01,
+      "sha256": "9fda4b74df10675a165f01026003fc7e9dc030aebfc5d077680b0bb99d4d4a96",
+      "source_keys_with_empty_mdm_id": {},
+      "table": "currencyexchange",
+      "types": {
+        "Date": "date",
+        "Exchange": "double precision",
+        "FromCurrency": "text",
+        "ToCurrency": "text",
+        "loaded_at": "timestamp with time zone"
+      }
+    },
+    {
+      "class": "reference",
+      "first": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 1461,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 1461,
+        "table": "date"
+      },
+      "key": [
+        "Date"
+      ],
+      "links": [],
+      "load_mode": "snapshot",
+      "part": "date",
+      "rerun": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 0,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 1461,
+        "table": "date"
+      },
+      "seconds": 0.15,
+      "sha256": "675b65985b0760c8480d647f51288be76429e3a9d6a78fa01358e26d3ff9fb46",
+      "source_keys_with_empty_mdm_id": {},
+      "table": "date",
+      "types": {
+        "Date": "date",
+        "DateKey": "bigint",
+        "DayofWeek": "text",
+        "DayofWeekNumber": "bigint",
+        "DayofWeekShort": "text",
+        "Month": "text",
+        "MonthNumber": "bigint",
+        "MonthShort": "text",
+        "Quarter": "text",
+        "WorkingDay": "bigint",
+        "WorkingDayNumber": "bigint",
+        "Year": "bigint",
+        "YearMonth": "text",
+        "YearMonthNumber": "bigint",
+        "YearMonthShort": "text",
+        "YearQuarter": "text",
+        "YearQuarterNumber": "bigint",
+        "loaded_at": "timestamp with time zone"
+      }
+    },
+    {
+      "class": "transaction",
+      "first": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 7794,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 7794,
+        "table": "orderrows"
+      },
+      "key": [
+        "OrderKey",
+        "LineNumber"
+      ],
+      "links": [
+        {
+          "kind": "venue",
+          "mdm_id_column": "ProductKey_mdm_id",
+          "source_code": "contoso.product",
+          "source_key": "ProductKey",
+          "to_part": "product"
+        }
+      ],
+      "load_mode": "append",
+      "part": "orderrows",
+      "rerun": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 0,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 7794,
+        "table": "orderrows"
+      },
+      "seconds": 0.44,
+      "sha256": "f238e95b23fd12866b9f478c901c22528959e20a0aee8a6a423876bb4f8dae61",
+      "source_keys_with_empty_mdm_id": {
+        "ProductKey_mdm_id": 7794
+      },
+      "table": "orderrows",
+      "types": {
+        "LineNumber": "bigint",
+        "NetPrice": "double precision",
+        "OrderKey": "bigint",
+        "ProductKey": "bigint",
+        "ProductKey_mdm_id": "text",
+        "Quantity": "bigint",
+        "UnitCost": "double precision",
+        "UnitPrice": "double precision",
+        "loaded_at": "timestamp with time zone"
+      }
+    },
+    {
+      "class": "transaction",
+      "first": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 3242,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 3242,
+        "table": "orders"
+      },
+      "key": [
+        "OrderKey"
+      ],
+      "links": [
+        {
+          "kind": "person",
+          "mdm_id_column": "CustomerKey_mdm_id",
+          "source_code": "contoso.customer",
+          "source_key": "CustomerKey",
+          "to_part": "customer"
+        },
+        {
+          "kind": "venue",
+          "mdm_id_column": "StoreKey_mdm_id",
+          "source_code": "contoso.store",
+          "source_key": "StoreKey",
+          "to_part": "store"
+        }
+      ],
+      "load_mode": "append",
+      "part": "orders",
+      "rerun": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 0,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 3242,
+        "table": "orders"
+      },
+      "seconds": 0.23,
+      "sha256": "1ecbcb25a039177b1d058773e8e72c2d68934b79cd32ad182c6003286f7be814",
+      "source_keys_with_empty_mdm_id": {
+        "CustomerKey_mdm_id": 3242,
+        "StoreKey_mdm_id": 3242
+      },
+      "table": "orders",
+      "types": {
+        "CurrencyCode": "text",
+        "CustomerKey": "bigint",
+        "CustomerKey_mdm_id": "text",
+        "DeliveryDate": "date",
+        "OrderDate": "date",
+        "OrderKey": "bigint",
+        "StoreKey": "bigint",
+        "StoreKey_mdm_id": "text",
+        "loaded_at": "timestamp with time zone"
+      }
+    },
+    {
+      "class": "transaction",
+      "first": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 7794,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 7794,
+        "table": "sales"
+      },
+      "key": [
+        "OrderKey",
+        "LineNumber"
+      ],
+      "links": [
+        {
+          "kind": "person",
+          "mdm_id_column": "CustomerKey_mdm_id",
+          "source_code": "contoso.customer",
+          "source_key": "CustomerKey",
+          "to_part": "customer"
+        },
+        {
+          "kind": "venue",
+          "mdm_id_column": "ProductKey_mdm_id",
+          "source_code": "contoso.product",
+          "source_key": "ProductKey",
+          "to_part": "product"
+        },
+        {
+          "kind": "venue",
+          "mdm_id_column": "StoreKey_mdm_id",
+          "source_code": "contoso.store",
+          "source_key": "StoreKey",
+          "to_part": "store"
+        }
+      ],
+      "load_mode": "append",
+      "part": "sales",
+      "rerun": {
+        "changed": 0,
+        "deleted": 0,
+        "inserted": 0,
+        "mdm_ids_found": 0,
+        "mdm_ids_updated": 0,
+        "rows": 7794,
+        "table": "sales"
+      },
+      "seconds": 0.79,
+      "sha256": "efee74156d8986e7714d0e867deb83812726a112b163e314aba4e5e2e76ba286",
+      "source_keys_with_empty_mdm_id": {
+        "CustomerKey_mdm_id": 7794,
+        "ProductKey_mdm_id": 7794,
+        "StoreKey_mdm_id": 7794
+      },
+      "table": "sales",
+      "types": {
+        "CurrencyCode": "text",
+        "CustomerKey": "bigint",
+        "CustomerKey_mdm_id": "text",
+        "DeliveryDate": "date",
+        "ExchangeRate": "double precision",
+        "LineNumber": "bigint",
+        "NetPrice": "double precision",
+        "OrderDate": "date",
+        "OrderKey": "bigint",
+        "ProductKey": "bigint",
+        "ProductKey_mdm_id": "text",
+        "Quantity": "bigint",
+        "StoreKey": "bigint",
+        "StoreKey_mdm_id": "text",
+        "UnitCost": "double precision",
+        "UnitPrice": "double precision",
+        "loaded_at": "timestamp with time zone"
+      }
+    }
+  ]
+}
