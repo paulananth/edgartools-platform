@@ -1,0 +1,34 @@
+# Local qualification recipe; no source activation or whole-census claim.
+# Pin canonical JSON of this recipe as the source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  max_rows: 1000000
+  max_input_bytes: 1073741824
+  max_state_bytes: 67108864
+  max_keys: 300000
+  max_members: 1000000
+  max_output_rows: 100000
+  max_output_bytes: 33554432
+  groups:
+    legal:
+      source: names
+      table: a_legal
+      keys: [key]
+      mode: members
+      member: lei
+      last: updated
+      last_null: ''
+      count: count
+      sample: holders
+      sample_limit: 5
+    other:
+      source: names
+      table: [b_other, c_transliterated]
+      keys: [key]
+      mode: members
+      member: lei
+      exclude: legal
+      count: count
+      sample: holders
+      sample_limit: 5

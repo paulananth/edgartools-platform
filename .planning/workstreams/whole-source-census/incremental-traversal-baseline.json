@@ -1,0 +1,46 @@
+{
+  "scope": "synthetic repeated one-row partitions; isolated metadata traversal cost only",
+  "trials_per_size": 1,
+  "results": [
+    {
+      "partitions": 128,
+      "index_bytes": 34609,
+      "aggregate_bytes": 43441,
+      "materialized_seconds": 0.09769584983587265,
+      "incremental_seconds": 0.739919557236135,
+      "rows": 128
+    },
+    {
+      "partitions": 512,
+      "index_bytes": 137138,
+      "aggregate_bytes": 172466,
+      "materialized_seconds": 0.33228299068287015,
+      "incremental_seconds": 7.951785103883594,
+      "rows": 512
+    },
+    {
+      "partitions": 2048,
+      "index_bytes": 548301,
+      "aggregate_bytes": 689613,
+      "materialized_seconds": 1.1512626698240638,
+      "incremental_seconds": 101.89904133416712,
+      "rows": 2048
+    },
+    {
+      "partitions": 4096,
+      "index_bytes": 1097165,
+      "aggregate_bytes": 1379789,
+      "materialized_seconds": 1.7921395911835134,
+      "incremental_seconds": 461.361885256134,
+      "rows": 4096
+    }
+  ],
+  "runtime_sha256": {
+    "/private/tmp/edgartools-platform-codex-whole-source-census-20261008/edgar_warehouse/workers/source_readings.py": "6a690b788bb750365b1d2d295b5cefcef3f35055a1c79dc25d94290716dc57f9",
+    "/private/tmp/codex-reading-traversal-benchmark.py": "e903f2335c44e8eddf92a9a6c1255765d2bc96b257bdb5561955abc61b2b175c"
+  },
+  "full_source_qualified": false,
+  "runtime_revision": "e572cc5537ed8876bff16d0c0903d8ee8e85a0c7",
+  "runtime_pin_note": "Baseline process used its already imported e572cc55 module while the disk file was later changed. The loaded module file hash was preserved before editing; the original harness incorrectly hashed the later disk file at completion and this field corrects that artifact.",
+  "harness_source": "import hashlib\nimport json\nfrom pathlib import Path\nimport tempfile\nimport time\n\nfrom edgar_warehouse.bookkeeping.clean.artifacts import Artifacts\nfrom edgar_warehouse.workers import source_readings\n\n\ndef digest(path):\n    return hashlib.sha256(Path(path).read_bytes()).hexdigest()\n\n\nresults = []\nwith tempfile.TemporaryDirectory(prefix=\"codex-traversal-bench-\", dir=\"/private/tmp\") as location:\n    root = Path(location)\n    store = Artifacts()\n    input_ref = store.put(root.as_uri(), {\"captured\": \"synthetic repeated row\"})\n    contract_ref = store.put(root.as_uri(), {\"fixture\": \"traversal cost only\"})\n    part = store.put(root.as_uri(), {\"version\": 1, \"tables\": {\"rows\": [{\"key\": \"a\", \"value\": 1}]}, \"deferred\": []})\n    part_bytes = len(store.verified(part))\n    for count in (128, 512, 2048, 4096):\n        index = {\"version\": 2, \"contract\": contract_ref, \"artifacts\": [{\n            \"input\": input_ref, \"record_count\": count, \"expanded_bytes\": count * 64,\n            \"table_names\": [\"rows\"], \"partitions\": [{\n                \"receipt\": part, \"first_ordinal\": i + 1, \"record_count\": 1,\n                \"bytes\": part_bytes} for i in range(count)]}]}\n        ref = store.put(root.as_uri(), index)\n        index_bytes = len(store.verified(ref))\n        maximum = index_bytes + count * part_bytes\n        started = time.perf_counter()\n        materialized, consumed = source_readings.load(ref, store, max_bytes=maximum, max_rows=count)\n        load_seconds = time.perf_counter() - started\n        assert len(materialized[\"artifacts\"][0][\"tables\"][\"rows\"]) == count\n        assert consumed == maximum\n        del materialized\n        seen = 0\n        started = time.perf_counter()\n        for body, ordinal, chunk, consumed in source_readings.iter_load(\n                ref, store, max_bytes=maximum, max_rows=count):\n            assert ordinal == 0 and body[\"contract\"] == contract_ref\n            assert chunk[\"input\"] == input_ref\n            seen += len(chunk[\"tables\"][\"rows\"])\n        seconds = time.perf_counter() - started\n        assert seen == count and consumed == maximum\n        result = {\"partitions\": count, \"index_bytes\": index_bytes,\n                  \"aggregate_bytes\": consumed, \"materialized_seconds\": load_seconds,\n                  \"incremental_seconds\": seconds, \"rows\": seen}\n        results.append(result)\n        print(json.dumps(result), flush=True)\nreport = {\"scope\": \"synthetic repeated one-row partitions; isolated metadata traversal cost only\",\n          \"trials_per_size\": 1, \"results\": results,\n          \"runtime_sha256\": {source_readings.__file__: digest(source_readings.__file__), __file__: digest(__file__)},\n          \"full_source_qualified\": False}\nPath(\"/private/tmp/codex-reading-traversal-cost.json\").write_text(json.dumps(report, indent=2) + \"\\n\")\n"
+}

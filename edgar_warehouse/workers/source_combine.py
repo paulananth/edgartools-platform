@@ -13,7 +13,7 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse import control_contract
 from edgar_warehouse.control_contract import canonical, reference
-from . import source_readings
+from . import source_readings, source_reduction
 
 CHECK = "source.combined"
 INPUT_BYTES = 32 * 1024**2
@@ -22,10 +22,12 @@ OUTPUT_BYTES = 32 * 1024**2
 MAX_ROWS = 100_000
 NAME = source_readings.NAME
 COLLECTION_MODES = frozenset(("collect", "collect_flat"))
+ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
 
 
 def runtime_files() -> list[Path]:
-    return [Path(artifact_store.__file__), Path(control_contract.__file__), Path(source_readings.__file__)]
+    return [Path(artifact_store.__file__), ARTIFACT_CODEC_FILE, Path(control_contract.__file__), Path(source_readings.__file__),
+            Path(source_reduction.__file__)]
 
 
 def _name(value):
@@ -204,12 +206,14 @@ def _reading_body(body):
     return body, rows
 
 
-def _encode(body):
+def _encode(body, max_bytes=None):
     """Bound output before publishing, including repeated joined collections."""
     buffer = io.BytesIO()
+    if max_bytes is None:
+        max_bytes = OUTPUT_BYTES
     for chunk in json.JSONEncoder(sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).iterencode(body):
         data = chunk.encode()
-        if buffer.tell() + len(data) > OUTPUT_BYTES:
+        if buffer.tell() + len(data) > max_bytes:
             raise ValueError("Combined reading exceeds output byte budget; partition inputs")
         buffer.write(data)
     return buffer.getvalue()
@@ -259,10 +263,15 @@ def _documents(envelope, artifacts):
     if not refs:
         raise ValueError("Combination requires reading receipts")
     contract = artifacts.json(manifest["contract"])
+    if isinstance(contract, dict) and "reduce" in contract:
+        plan = source_reduction.contract(contract, refs)
+        tables = source_reduction.tables(plan, refs, artifacts)
+        return _output(envelope, manifest, refs, tables, max_bytes=plan["max_output_bytes"])
     plan = _contract(contract, refs)
     inputs, size, count = {}, 0, 0
     for name, ref in refs.items():
-        body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"])
+        body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"],
+                                              allow_lookup_receipts=True)
         size += consumed
         if size > TOTAL_BYTES:
             raise ValueError("Combination readings exceed total byte budget")
@@ -300,11 +309,15 @@ def _documents(envelope, artifacts):
             if count > plan["max_rows"]:
                 raise ValueError("Combination exceeds output row budget")
         tables[name] = result
+    return _output(envelope, manifest, refs, tables)
+
+
+def _output(envelope, manifest, refs, tables, *, max_bytes=None):
     scope = canonical(manifest).encode()
     scope_hash = hashlib.sha256(scope).hexdigest()
     scope_ref = {"uri": f"{envelope['output'].rsplit('/', 1)[0]}/combine-inputs/{scope_hash}.json", "sha256": scope_hash}
     output = _encode({"version": 1, "contract": manifest["contract"], "readings": refs,
-                      "artifacts": [{"input": scope_ref, "tables": tables, "deferred": []}]})
+                      "artifacts": [{"input": scope_ref, "tables": tables, "deferred": []}]}, max_bytes)
     return scope_ref, scope, output
 
 

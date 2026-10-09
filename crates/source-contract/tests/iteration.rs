@@ -96,3 +96,13 @@ fn text_shape_never_accepts_numbers_booleans_containers_or_missing_values() {
         assert_eq!(read(body, raw).unwrap().tables["rows"][0]["text"], Val::Bool(expected));
     }
 }
+
+#[test]
+fn empty_iteration_skips_input_and_columns_without_a_sentinel_path() {
+    let body=BASE.replace("each: {objects: {path: '.', on_invalid: empty}}", "each: {empty: {}}")
+        .replace("rank: {ordinal: {}}", "rank: {value: {path: '.', type: integer}}");
+    assert!(read(&body,r#"{"__no_census_rows__":[{"n":1}]}"#).unwrap().tables["rows"].is_empty());
+    for invalid in ["empty: null", "empty: {path: .}", "empty: []"] {
+        assert!(Engine::from_yaml(&body.replace("empty: {}", invalid),Steps::new()).is_err());
+    }
+}

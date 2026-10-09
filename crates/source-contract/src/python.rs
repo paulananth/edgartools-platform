@@ -4,7 +4,7 @@
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
 use crate::{Engine, Lookups, Raw, Rejected, Step, Steps, Val};
@@ -13,6 +13,38 @@ create_exception!(source_contract, SourceRejected, PyException);
 
 fn rejected(error: Rejected) -> PyErr {
     SourceRejected::new_err((error.code, error.detail))
+}
+
+fn indexed_sets(engine: &Engine, lookups: Option<&Bound<'_, PyDict>>) -> PyResult<Lookups> {
+    let mut sets = Lookups::new();
+    let Some(lookups) = lookups else { return Ok(sets) };
+    let mut aggregate = 0usize;
+    for (name, values) in lookups.iter() {
+        let name: String = name.extract()?;
+        let bounds = crate::lookup_sets::input_bounds(&engine.read, &name).map_err(rejected)?;
+        let mut chosen = std::collections::BTreeSet::new();
+        let mut count = 0usize;
+        let mut bytes = 0usize;
+        for item in values.try_iter()? {
+            let item = item?;
+            count = count.checked_add(1).ok_or_else(|| rejected(Rejected::new("limit_exceeded", "lookup count overflow")))?;
+            if bounds.is_some_and(|(maximum,_,_)| count > maximum) {
+                return Err(rejected(Rejected::new("limit_exceeded", "lookup raw values exceed max_values")));
+            }
+            let text = item.downcast::<PyString>()?.to_str()?;
+            if let Some((_,maximum,max_value)) = bounds {
+                if text.len() > max_value { return Err(rejected(Rejected::new("limit_exceeded", "lookup key exceeds max_value_bytes"))); }
+                bytes = bytes.checked_add(text.len()).ok_or_else(|| rejected(Rejected::new("limit_exceeded", "lookup byte count overflow")))?;
+                aggregate = aggregate.checked_add(text.len()).ok_or_else(|| rejected(Rejected::new("limit_exceeded", "lookup byte count overflow")))?;
+                if bytes > maximum || aggregate > 64 * 1024 * 1024 {
+                    return Err(rejected(Rejected::new("limit_exceeded", "lookup raw values exceed byte budget")));
+                }
+            }
+            chosen.insert(text.to_owned());
+        }
+        sets.insert(name, chosen);
+    }
+    Ok(sets)
 }
 
 fn to_py(py: Python<'_>, value: &Val) -> PyResult<PyObject> {
@@ -103,16 +135,17 @@ impl PyEngine {
         self.inner.validate_context(&values).map_err(rejected)
     }
 
-    #[pyo3(signature = (stream, wrapper, on_reading, *, max_bytes, max_record, max_records, max_depth=64, min_integer=i64::MIN, record_encoding="native", context="{}", ordinal_context=None))]
+    #[pyo3(signature = (stream, wrapper, on_reading, *, max_bytes, max_record, max_records, max_depth=64, min_integer=i64::MIN, record_encoding="native", context="{}", ordinal_context=None, lookups=None))]
     fn scan_json_array(&self, py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_reading: Py<PyAny>,
                        max_bytes: usize, max_record: usize, max_records: usize, max_depth: usize,
-                       min_integer: i64, record_encoding: &str, context: &str, ordinal_context: Option<String>) -> PyResult<(usize, usize)> {
+                       min_integer: i64, record_encoding: &str, context: &str, ordinal_context: Option<String>, lookups: Option<&Bound<'_, PyDict>>) -> PyResult<(usize, usize)> {
         let record_encoding = match record_encoding {
             "native" => crate::json_sequence::RecordEncoding::Native,
             "python" => crate::json_sequence::RecordEncoding::Python,
             _ => return Err(rejected(crate::Rejected::new("contract", "record_encoding is native or python"))),
         };
-        self.inner.validate_json_projection().map_err(rejected)?;
+        let sets = indexed_sets(&self.inner, lookups)?;
+        let projection = self.inner.prepare_json_projection(&sets).map_err(rejected)?;
         let mut values = crate::context::from_json(context).map_err(rejected)?;
         if let Some(name) = &ordinal_context {
             if values.contains_key(name) {
@@ -128,7 +161,7 @@ impl PyEngine {
                     .ok_or_else(|| crate::Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
                 values.insert(name.clone(), Val::Int(position));
             }
-            let reading = self.inner.read_json_value(record, &Lookups::new(), &values)?;
+            let reading = projection.read_json_value(record, &values)?;
             Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
                 .map_err(|error| crate::Rejected::new("stream_consumer", error))
         })).map_err(rejected)?;
@@ -137,11 +170,7 @@ impl PyEngine {
 
     #[pyo3(signature = (data, lookups, context="{}"))]
     fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>, context: &str) -> PyResult<PyObject> {
-        let mut sets = Lookups::new();
-        for (name, values) in lookups.iter() {
-            let values: Vec<String> = values.try_iter()?.map(|v| v?.extract()).collect::<PyResult<_>>()?;
-            sets.insert(name.extract()?, values.into_iter().collect());
-        }
+        let sets = indexed_sets(&self.inner, Some(lookups))?;
         let context = crate::context::from_json(context).map_err(rejected)?;
         // Other Python threads run while the engine reads; a step takes the
         // interpreter back for its own call.

@@ -85,6 +85,16 @@ def _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, mi
     return {**bounds, "min_integer": min_integer, "record_encoding": record_encoding}
 
 
+def _lookup_iterables(lookups):
+    # The native ingestion checks declared raw bounds before deduplication.
+    # Do not eagerly list an unbounded generator in the Python facade.
+    sets = dict(lookups or {})
+    for name, values in sets.items():
+        if isinstance(values, str):
+            raise TypeError(f"lookup {name} is one string, not a collection of them")
+    return sets
+
+
 class SourceEngine:
     def __init__(self, contract: Mapping):
         read = contract.get("read")
@@ -98,7 +108,8 @@ class SourceEngine:
     def stream_json_array(self, stream, *, wrapper: str, on_reading, max_bytes: int,
                           max_record: int, max_records: int, max_depth: int = 64,
                           min_integer: int = -(2**63), record_encoding: str = "native",
-                          context: Mapping[str, object] | None = None, ordinal_context: str | None = None) -> dict:
+                          context: Mapping[str, object] | None = None, ordinal_context: str | None = None,
+                          lookups: Mapping[str, Iterable[str]] | None = None) -> dict:
         """Frame and project inside Rust; callbacks prepare readings until valid EOF."""
         arguments = _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, min_integer, record_encoding)
         def receive(body, index):
@@ -106,7 +117,7 @@ class SourceEngine:
         try:
             records, size = self._engine.scan_json_array(stream, wrapper, receive,
                 context=json.dumps(dict(context or {}), ensure_ascii=False, separators=(",", ":"), allow_nan=False),
-                ordinal_context=ordinal_context, **arguments)
+                ordinal_context=ordinal_context, lookups=_lookup_iterables(lookups), **arguments)
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
         return {"record_count": records, "expanded_bytes": size}
@@ -153,11 +164,7 @@ class SourceEngine:
              context: Mapping[str, object] | None = None) -> Reading:
         """`lookups` names the sets an `in_lookup` check reads, such as an
         approved scope; each is a collection of strings, never one string."""
-        sets = {}
-        for name, values in (lookups or {}).items():
-            if isinstance(values, str):
-                raise TypeError(f"lookup {name} is one string, not a collection of them")
-            sets[name] = list(values)
+        sets = _lookup_iterables(lookups)
         try:
             result = self._engine.read(data, sets, json.dumps(dict(context or {}), ensure_ascii=False, separators=(",", ":"), allow_nan=False))
         except source_contract.SourceRejected as error:
