@@ -1,0 +1,548 @@
+# Profiling report: None
+
+Profiled 2026-10-09T09:51:31-04:00 by data-profiling 1. Scan: **full**; 73.2 s. Approval: **draft**.
+
+## Parts
+
+| Part | Rows | Class | Confidence | Record key | Store (advice) |
+|---|---|---|---|---|---|
+| ia_1d3_cik | 766 | unknown | 0.0 | record_id (designed: surrogate) | bronze_only |
+| ia_adv_base_a | 2938 | master | 1.0 | FilingID | mdm |
+| ia_schedule_d_5k3 | 3022 | unknown | 0.0 | record_id (designed: surrogate) | bronze_only |
+
+## Why each class
+
+- **ia_1d3_cik** is unknown: points at few parts; has attributes besides codes and dates; at most 10000 rows; no name-like text besides labels; only codes, labels and dates; nothing points at it; few attributes besides codes and dates; points at other parts; points at as many parts as point at it; has an event time or measures; no name-like text; nothing points at it. Failed: has a unique key (required); other parts point at it; has name-like text; smaller than the parts pointing at it; has a unique key (required); other parts point at it; points at no other part, or only at a smaller list as its coarser level (required); codes with label columns; key made of links to other parts (required); points at two or more parts; has a unique key (required); at least as large as the parts it points at; columns describe data (files, hashes, counts) (required); points at no other part.
+- **ia_adv_base_a** is master: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller than the parts pointing at it; has attributes besides codes and dates.
+- **ia_schedule_d_5k3** is unknown: points at few parts; has name-like text; has attributes besides codes and dates; at most 10000 rows; nothing points at it; points at other parts; points at as many parts as point at it; has an event time or measures; at least as large as the parts it points at; nothing points at it. Failed: has a unique key (required); other parts point at it; smaller than the parts pointing at it; has a unique key (required); other parts point at it; points at no other part, or only at a smaller list as its coarser level (required); no name-like text besides labels; codes with label columns; only codes, labels and dates; key made of links to other parts (required); points at two or more parts; few attributes besides codes and dates; has a unique key (required); no name-like text; columns describe data (files, hashes, counts) (required); points at no other part.
+
+## Relationships
+
+| From | To | Inclusion | Cardinality | Onboard | Why |
+|---|---|---|---|---|---|
+| ia_1d3_cik.FilingID | ia_adv_base_a.FilingID | 1.0 | N:1 | separate | a unknown part pointing at a master part: onboarded after it |
+| ia_schedule_d_5k3.Filing ID | ia_adv_base_a.FilingID | 1.0 | N:1 | separate | a unknown part pointing at a master part: onboarded after it |
+
+## Hierarchies
+
+- **ia_adv_base_a: Execution Type > 1F1-Country** (reference, functional_dependency): each value of a level has one value at the next coarser level; holds 1.0, depth 2, balanced, orphans 0, cycles 0, invalid rows 0.
+- **ia_adv_base_a: 5D1e > 5D3e > 9E** (reference, functional_dependency): each value of a level has one value at the next coarser level; holds 1.0, depth 3, balanced, orphans 0, cycles 0, invalid rows 0.
+
+Dependencies that are not hierarchies: a yes/no flag (never a level), or a coincidence (lift over guessing the parent's commonest value below 0.5, or under 50% of the rows with a child value seen twice):
+
+- ia_adv_base_a: 5B5 → 1N (flag): holds 0.999319, lift 0.599844, supported 0.983322
+- ia_adv_base_a: 5B5 → 4A (flag): holds 0.998298, lift -9.5e-05, supported 0.983322
+- ia_adv_base_a: 5B5 → 5G9 (flag): holds 0.996937, lift 0.181901, supported 0.983322
+- ia_adv_base_a: 5B5 → 5G10 (flag): holds 0.996937, lift 0.181901, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A4 (flag): holds 0.997958, lift 0.625038, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A5 (flag): holds 0.997277, lift -2.2e-05, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A7 (flag): holds 0.999319, lift -0.000389, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A8 (flag): holds 0.998298, lift 0.166587, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A9 (flag): holds 0.998298, lift 0.722196, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A10 (flag): holds 1.0, lift 1.0, supported 0.983322
+- ia_adv_base_a: 5B5 → 6A13 (flag): holds 0.998298, lift -9.5e-05, supported 0.983322
+- ia_adv_base_a: 5B5 → 7A5 (flag): holds 0.99966, lift 0.00108, supported 0.983322
+- ia_adv_base_a: 5B5 → 9D1 (flag): holds 0.997277, lift 0.771424, supported 0.983322
+- ia_adv_base_a: 5B5 → 11A1 (flag): holds 0.996256, lift 0.656254, supported 0.983322
+- ia_adv_base_a: 5B5 → 11A2 (flag): holds 0.993533, lift 0.619999, supported 0.983322
+- ia_adv_base_a: 5B5 → 11B1 (flag): holds 0.998979, lift 0.86365, supported 0.983322
+- ia_adv_base_a: 5B5 → 11B2 (flag): holds 0.998979, lift 0.857157, supported 0.983322
+- ia_adv_base_a: 5B5 → 11C3 (flag): holds 1.0, lift 1.0, supported 0.983322
+- ia_adv_base_a: 5B5 → 11D3 (flag): holds 0.997958, lift 0.625038, supported 0.983322
+- ia_adv_base_a: 5B5 → 11E1 (flag): holds 0.996596, lift 0.714259, supported 0.983322
+- ia_adv_base_a: 5B5 → 11E3 (flag): holds 0.99966, lift 0.50054, supported 0.983322
+- ia_adv_base_a: 5B5 → 11F (flag): holds 0.997277, lift 0.636356, supported 0.983322
+- ia_adv_base_a: 5B5 → 11G (flag): holds 0.99081, lift 0.517853, supported 0.983322
+- ia_adv_base_a: 5B5 → 11H1a (flag): holds 0.995916, lift 0.60004, supported 0.983322
+- ia_adv_base_a: 5B5 → 11H1b (flag): holds 0.993533, lift 0.486485, supported 0.983322
+- ia_adv_base_a: 5B5 → 11H1c (flag): holds 0.99081, lift 0.341458, supported 0.983322
+- ia_adv_base_a: 5B5 → 12B2 (flag): holds 0.99661, lift -5e-05, supported 0.99322
+- ia_adv_base_a: 1F5 → 1N (flag): holds 0.999319, lift 0.599844, supported 0.985705
+- ia_adv_base_a: 1F5 → 4A (flag): holds 0.998298, lift -9.5e-05, supported 0.985705
+- ia_adv_base_a: 1F5 → 5G9 (flag): holds 0.996596, lift 0.090823, supported 0.985705
+- ia_adv_base_a: 1F5 → 5G10 (flag): holds 0.996937, lift 0.181901, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A4 (flag): holds 0.996937, lift 0.437557, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A5 (flag): holds 0.997277, lift -2.2e-05, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A7 (flag): holds 0.999319, lift -0.000389, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A8 (flag): holds 0.998298, lift 0.166587, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A9 (flag): holds 0.996937, lift 0.50005, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A10 (flag): holds 0.998979, lift 0.6667, supported 0.985705
+- ia_adv_base_a: 1F5 → 6A13 (flag): holds 0.998298, lift -9.5e-05, supported 0.985705
+- ia_adv_base_a: 1F5 → 7A5 (flag): holds 0.99966, lift 0.00108, supported 0.985705
+- ia_adv_base_a: 1F5 → 9D1 (flag): holds 0.996596, lift 0.714259, supported 0.985705
+- ia_adv_base_a: 1F5 → 11A1 (flag): holds 0.996937, lift 0.718778, supported 0.985705
+- ia_adv_base_a: 1F5 → 11A2 (flag): holds 0.993193, lift 0.600021, supported 0.985705
+- ia_adv_base_a: 1F5 → 11B1 (flag): holds 0.998298, lift 0.772706, supported 0.985705
+- ia_adv_base_a: 1F5 → 11B2 (flag): holds 0.998639, lift 0.80959, supported 0.985705
+- ia_adv_base_a: 1F5 → 11C3 (flag): holds 1.0, lift 1.0, supported 0.985705
+- ia_adv_base_a: 1F5 → 11D3 (flag): holds 0.997958, lift 0.625038, supported 0.985705
+- ia_adv_base_a: 1F5 → 11E1 (flag): holds 0.995575, lift 0.628553, supported 0.985705
+- ia_adv_base_a: 1F5 → 11E3 (flag): holds 0.99966, lift 0.50054, supported 0.985705
+- ia_adv_base_a: 1F5 → 11F (flag): holds 0.997277, lift 0.636356, supported 0.985705
+- ia_adv_base_a: 1F5 → 11H1a (flag): holds 0.995235, lift 0.533348, supported 0.985705
+- ia_adv_base_a: 1F5 → 11H1b (flag): holds 0.992512, lift 0.405412, supported 0.985705
+- ia_adv_base_a: 1F5 → 12B2 (flag): holds 0.99661, lift -5e-05, supported 0.983051
+- ia_adv_base_a: 5C2 → 1N (flag): holds 0.998298, lift -9.5e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 4A (flag): holds 0.998298, lift -9.5e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 5G9 (flag): holds 0.996256, lift 1.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 5G10 (flag): holds 0.996256, lift 1.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A4 (flag): holds 0.994554, lift -2.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A5 (flag): holds 0.997277, lift -2.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A7 (flag): holds 0.999319, lift -0.000389, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A8 (flag): holds 0.997958, lift 0.000101, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A9 (flag): holds 0.993873, lift -6.3e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A10 (flag): holds 0.996937, lift 0.000101, supported 0.996937
+- ia_adv_base_a: 5C2 → 6A13 (flag): holds 0.998298, lift -9.5e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 7A5 (flag): holds 0.99966, lift 0.00108, supported 0.996937
+- ia_adv_base_a: 5C2 → 11B1 (flag): holds 0.992512, lift 1.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 11B2 (flag): holds 0.992852, lift -3.9e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 11C3 (flag): holds 0.996937, lift 0.000101, supported 0.996937
+- ia_adv_base_a: 5C2 → 11D3 (flag): holds 0.994554, lift -2.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 11E3 (flag): holds 0.999319, lift -0.000389, supported 0.996937
+- ia_adv_base_a: 5C2 → 11F (flag): holds 0.992512, lift 1.2e-05, supported 0.996937
+- ia_adv_base_a: 5C2 → 12B2 (flag): holds 0.99661, lift -5e-05, supported 0.976271
+- ia_adv_base_a: 5B6 → 1N (flag): holds 0.998298, lift -9.5e-05, supported 0.991491
+- ia_adv_base_a: 5B6 → 4A (flag): holds 0.998298, lift -9.5e-05, supported 0.991491
+- ia_adv_base_a: 5B6 → 5G9 (flag): holds 0.996596, lift 0.090823, supported 0.991491
+- ia_adv_base_a: 5B6 → 5G10 (flag): holds 0.996596, lift 0.090823, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A4 (flag): holds 0.994894, lift 0.062411, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A5 (flag): holds 0.997277, lift -2.2e-05, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A7 (flag): holds 0.999319, lift -0.000389, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A8 (flag): holds 0.997958, lift 0.000101, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A9 (flag): holds 0.994894, lift 0.166587, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A10 (flag): holds 0.996937, lift 0.000101, supported 0.991491
+- ia_adv_base_a: 5B6 → 6A13 (flag): holds 0.998298, lift -9.5e-05, supported 0.991491
+- ia_adv_base_a: 5B6 → 7A5 (flag): holds 0.99966, lift 0.00108, supported 0.991491
+- ia_adv_base_a: 5B6 → 9D1 (flag): holds 0.992852, lift 0.399976, supported 0.991491
+- ia_adv_base_a: 5B6 → 11A1 (flag): holds 0.992852, lift 0.343724, supported 0.991491
+- ia_adv_base_a: 5B6 → 11B1 (flag): holds 0.996256, lift 0.500006, supported 0.991491
+- ia_adv_base_a: 5B6 → 11B2 (flag): holds 0.996596, lift 0.523764, supported 0.991491
+- ia_adv_base_a: 5B6 → 11C3 (flag): holds 0.997277, lift 0.111092, supported 0.991491
+- ia_adv_base_a: 5B6 → 11D3 (flag): holds 0.995916, lift 0.250076, supported 0.991491
+- ia_adv_base_a: 5B6 → 11E1 (flag): holds 0.994554, lift 0.542847, supported 0.991491
+- ia_adv_base_a: 5B6 → 11E3 (flag): holds 0.999319, lift -0.000389, supported 0.991491
+- ia_adv_base_a: 5B6 → 11F (flag): holds 0.994554, lift 0.272711, supported 0.991491
+- ia_adv_base_a: 5B6 → 11H1a (flag): holds 0.993533, lift 0.366665, supported 0.991491
+- ia_adv_base_a: 5B6 → 11H1b (flag): holds 0.99115, lift 0.297262, supported 0.991491
+- ia_adv_base_a: 5B6 → 12B2 (flag): holds 0.99661, lift -5e-05, supported 0.99322
+- ia_adv_base_a: Execution Date → 1N (flag): holds 0.998298, lift -9.5e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 4A (flag): holds 0.998298, lift -9.5e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 5G9 (flag): holds 0.996256, lift 1.2e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 5G10 (flag): holds 0.996256, lift 1.2e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A4 (flag): holds 0.994554, lift -2.2e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A5 (flag): holds 0.997617, lift 0.124843, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A7 (flag): holds 0.999319, lift -0.000389, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A8 (flag): holds 0.997958, lift 0.000101, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A9 (flag): holds 0.993873, lift -6.3e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A10 (flag): holds 0.996937, lift 0.000101, supported 0.993533
+- ia_adv_base_a: Execution Date → 6A13 (flag): holds 0.998298, lift -9.5e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 7A5 (flag): holds 0.99966, lift 0.00108, supported 0.993533
+- ia_adv_base_a: Execution Date → 11B1 (flag): holds 0.992512, lift 1.2e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 11B2 (flag): holds 0.992852, lift -3.9e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 11C3 (flag): holds 0.996937, lift 0.000101, supported 0.993533
+- ia_adv_base_a: Execution Date → 11D3 (flag): holds 0.994554, lift -2.2e-05, supported 0.993533
+- ia_adv_base_a: Execution Date → 11E3 (flag): holds 0.999319, lift -0.000389, supported 0.993533
+- ia_adv_base_a: Execution Date → 11F (flag): holds 0.992852, lift 0.045417, supported 0.993533
+- ia_adv_base_a: Execution Date → 12B2 (flag): holds 0.99661, lift -5e-05, supported 0.969492
+- ia_adv_base_a: 1F1-State → 1F1-Country (coincidence): holds 1.0, lift 0.0, supported 0.999595
+- ia_adv_base_a: 5D1i → 1C-Legal (flag): holds 0.99003, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 1C-Business (flag): holds 0.992024, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 1N (flag): holds 0.996012, lift 0.200007, supported 0.982054
+- ia_adv_base_a: 5D1i → 4A (flag): holds 0.999003, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 5G9 (flag): holds 0.994018, lift 0.250007, supported 0.982054
+- ia_adv_base_a: 5D1i → 5G10 (flag): holds 0.995015, lift 0.285721, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A4 (flag): holds 0.993021, lift 0.363642, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A5 (flag): holds 0.995015, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A7 (flag): holds 0.999003, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A8 (flag): holds 0.999003, lift 0.500004, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A9 (flag): holds 0.994018, lift 0.500004, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A10 (flag): holds 0.994018, lift 0.333339, supported 0.982054
+- ia_adv_base_a: 5D1i → 6A13 (flag): holds 0.998006, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 7A5 (flag): holds 0.999003, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 11B2 (flag): holds 0.99003, lift 0.444449, supported 0.982054
+- ia_adv_base_a: 5D1i → 11C3 (flag): holds 0.998006, lift 0.66667, supported 0.982054
+- ia_adv_base_a: 5D1i → 11E3 (flag): holds 0.999003, lift 9e-06, supported 0.982054
+- ia_adv_base_a: 5D1i → 12B2 (flag): holds 1.0, lift 0.0, supported 1.0
+- ia_adv_base_a: 9F → 1C-Legal (flag): holds 0.992059, lift -3.7e-05, supported 0.992589
+- ia_adv_base_a: 9F → 1C-Business (flag): holds 0.991001, lift 5.2e-05, supported 0.992589
+- ia_adv_base_a: 9F → 1N (flag): holds 0.997882, lift -0.000225, supported 0.992589
+- ia_adv_base_a: 9F → 4A (flag): holds 0.997882, lift -0.000225, supported 0.992589
+- ia_adv_base_a: 9F → 5F1 (flag): holds 0.991001, lift 5.2e-05, supported 0.992589
+- ia_adv_base_a: 9F → 5G9 (flag): holds 0.996294, lift -9.1e-05, supported 0.992589
+- ia_adv_base_a: 9F → 5G10 (flag): holds 0.996824, lift 8.9e-05, supported 0.992589
+- ia_adv_base_a: 9F → 6A4 (flag): holds 0.995765, lift 0.272735, supported 0.992589
+- ia_adv_base_a: 9F → 6A5 (flag): holds 0.997882, lift 0.19982, supported 0.992589
+- ia_adv_base_a: 9F → 6A7 (flag): holds 0.999471, lift 0.000719, supported 0.992589
+- ia_adv_base_a: 9F → 6A8 (flag): holds 0.998412, lift 8.9e-05, supported 0.992589
+- ia_adv_base_a: 9F → 6A9 (flag): holds 0.996294, lift 0.46149, supported 0.992589
+- ia_adv_base_a: 9F → 6A10 (flag): holds 0.996824, lift 0.333393, supported 0.992589
+- ia_adv_base_a: 9F → 6A13 (flag): holds 0.998412, lift 8.9e-05, supported 0.992589
+- ia_adv_base_a: 9F → 7A5 (flag): holds 1.0, lift 0.0, supported 0.992589
+- ia_adv_base_a: 9F → 11B1 (flag): holds 0.99153, lift 0.238103, supported 0.992589
+- ia_adv_base_a: 9F → 11B2 (flag): holds 0.992589, lift 0.263191, supported 0.992589
+- ia_adv_base_a: 9F → 11C3 (flag): holds 0.995765, lift 0.111121, supported 0.992589
+- ia_adv_base_a: 9F → 11D3 (flag): holds 0.992059, lift -3.7e-05, supported 0.992589
+- ia_adv_base_a: 9F → 11E3 (flag): holds 0.998941, lift -0.000226, supported 0.992589
+- ia_adv_base_a: 9F → 11F (flag): holds 0.991001, lift 0.227313, supported 0.992589
+- ia_adv_base_a: 9F → 11H1a (flag): holds 0.990471, lift 0.217379, supported 0.992589
+- ia_adv_base_a: 9F → 12B1 (flag): holds 1.0, lift 1.0, supported 0.944444
+- ia_adv_base_a: 9F → 12B2 (flag): holds 1.0, lift 0.0, supported 0.962264
+- ia_adv_base_a: 1C-New Name → 1G-State (coincidence): holds 1.0, lift 1.0, supported 0.0
+- ia_adv_base_a: 1G-State → 1G-Country (coincidence): holds 1.0, lift 0.0, supported 0.957692
+- ia_adv_base_a: 5B4 → 1N (flag): holds 0.998298, lift -9.5e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 4A (flag): holds 0.998298, lift -9.5e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 5G9 (flag): holds 0.996256, lift 1.2e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 5G10 (flag): holds 0.996937, lift 0.181901, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A4 (flag): holds 0.994554, lift -2.2e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A5 (flag): holds 0.997277, lift -2.2e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A7 (flag): holds 0.999319, lift -0.000389, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A8 (flag): holds 0.997958, lift 0.000101, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A9 (flag): holds 0.993873, lift -6.3e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A10 (flag): holds 0.996937, lift 0.000101, supported 0.994894
+- ia_adv_base_a: 5B4 → 6A13 (flag): holds 0.998298, lift -9.5e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 7A5 (flag): holds 0.99966, lift 0.00108, supported 0.994894
+- ia_adv_base_a: 5B4 → 11A1 (flag): holds 0.99081, lift 0.156243, supported 0.994894
+- ia_adv_base_a: 5B4 → 11B1 (flag): holds 0.993873, lift 0.181767, supported 0.994894
+- ia_adv_base_a: 5B4 → 11B2 (flag): holds 0.993873, lift 0.142804, supported 0.994894
+- ia_adv_base_a: 5B4 → 11C3 (flag): holds 0.996937, lift 0.000101, supported 0.994894
+- ia_adv_base_a: 5B4 → 11D3 (flag): holds 0.994554, lift -2.2e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 11E1 (flag): holds 0.99115, lift 0.257106, supported 0.994894
+- ia_adv_base_a: 5B4 → 11E3 (flag): holds 0.999319, lift -0.000389, supported 0.994894
+- ia_adv_base_a: 5B4 → 11F (flag): holds 0.992512, lift 1.2e-05, supported 0.994894
+- ia_adv_base_a: 5B4 → 11H1a (flag): holds 0.99081, lift 0.099993, supported 0.994894
+- ia_adv_base_a: 5B4 → 12B2 (flag): holds 0.99661, lift -5e-05, supported 0.986441
+- ia_adv_base_a: 5D1d → 1N (flag): holds 0.996451, lift 6.9e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 4A (flag): holds 0.998225, lift -0.000212, supported 0.984028
+- ia_adv_base_a: 5D1d → 5G9 (flag): holds 0.992902, lift 6.9e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 5G10 (flag): holds 0.992902, lift 6.9e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A4 (flag): holds 0.99024, lift 4.4e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A5 (flag): holds 0.996451, lift 6.9e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A7 (flag): holds 1.0, lift 1.0, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A8 (flag): holds 0.999113, lift 0.500176, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A9 (flag): holds 0.99024, lift 4.4e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A10 (flag): holds 0.992014, lift -2.5e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 6A13 (flag): holds 0.998225, lift -0.000212, supported 0.984028
+- ia_adv_base_a: 5D1d → 7A5 (flag): holds 0.999113, lift 0.000351, supported 0.984028
+- ia_adv_base_a: 5D1d → 11C3 (flag): holds 0.994676, lift -2.5e-05, supported 0.984028
+- ia_adv_base_a: 5D1d → 11E3 (flag): holds 0.999113, lift 0.000351, supported 0.984028
+- ia_adv_base_a: 5D1d → 12B2 (flag): holds 1.0, lift 0.0, supported 0.978261
+- ia_adv_base_a: 1F2-Other → 9E (coincidence): holds 1.0, lift 1.0, supported 0.0
+- ia_adv_base_a: 5D1j → 1C-Business (flag): holds 0.991018, lift 0.100004, supported 0.976048
+- ia_adv_base_a: 5D1j → 1N (flag): holds 0.996008, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 4A (flag): holds 0.999002, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 5G9 (flag): holds 0.993014, lift 0.125003, supported 0.976048
+- ia_adv_base_a: 5D1j → 5G10 (flag): holds 0.992016, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 6A5 (flag): holds 0.99501, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 6A7 (flag): holds 0.999002, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 6A8 (flag): holds 0.998004, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 6A10 (flag): holds 0.991018, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 6A13 (flag): holds 0.998004, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 7A5 (flag): holds 0.999002, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 11C3 (flag): holds 0.994012, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 11E3 (flag): holds 0.999002, lift 4e-06, supported 0.976048
+- ia_adv_base_a: 5D1j → 12B2 (flag): holds 1.0, lift 0.0, supported 0.961039
+- ia_adv_base_a: 5D1k → 1C-Business (flag): holds 0.990891, lift 3.4e-05, supported 0.984818
+- ia_adv_base_a: 5D1k → 1N (flag): holds 0.994939, lift -5.4e-05, supported 0.984818
+- ia_adv_base_a: 5D1k → 4A (flag): holds 0.998988, lift 0.000144, supported 0.984818
+- ia_adv_base_a: 5D1k → 5G9 (flag): holds 0.992915, lift 0.125002, supported 0.984818
+- ia_adv_base_a: 5D1k → 5G10 (flag): holds 0.992915, lift 3e-06, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A4 (flag): holds 0.993927, lift 0.454534, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A5 (flag): holds 0.994939, lift -5.4e-05, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A7 (flag): holds 0.998988, lift 0.500072, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A8 (flag): holds 0.997976, lift 0.333429, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A9 (flag): holds 0.996964, lift 0.700043, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A10 (flag): holds 0.994939, lift 0.444415, supported 0.984818
+- ia_adv_base_a: 5D1k → 6A13 (flag): holds 0.997976, lift 0.000144, supported 0.984818
+- ia_adv_base_a: 5D1k → 7A5 (flag): holds 0.998988, lift 0.000144, supported 0.984818
+- ia_adv_base_a: 5D1k → 11B1 (flag): holds 0.990891, lift 0.470606, supported 0.984818
+- ia_adv_base_a: 5D1k → 11B2 (flag): holds 0.990891, lift 0.470606, supported 0.984818
+- ia_adv_base_a: 5D1k → 11C3 (flag): holds 0.997976, lift 0.666715, supported 0.984818
+- ia_adv_base_a: 5D1k → 11D3 (flag): holds 0.991903, lift 0.333347, supported 0.984818
+- ia_adv_base_a: 5D1k → 11E3 (flag): holds 0.998988, lift 0.000144, supported 0.984818
+- ia_adv_base_a: 5D1k → 11F (flag): holds 0.991903, lift 0.50001, supported 0.984818
+- ia_adv_base_a: 5D1k → 12B2 (flag): holds 1.0, lift 0.0, supported 1.0
+- ia_adv_base_a: 1F1-Country → 1F1-Private (flag): holds 1.0, lift 0.0, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 1N (flag): holds 0.998159, lift -3.1e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 4A (flag): holds 0.998159, lift -3.1e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 5G9 (flag): holds 0.99595, lift 1.8e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 5G10 (flag): holds 0.99595, lift 1.8e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A4 (flag): holds 0.994109, lift 3e-06, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A5 (flag): holds 0.997054, lift -0.000167, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A7 (flag): holds 0.999264, lift 0.000512, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A8 (flag): holds 0.997791, lift 5.9e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A9 (flag): holds 0.993373, lift 5.9e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A10 (flag): holds 0.996686, lift -9.2e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 6A13 (flag): holds 0.998159, lift -3.1e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 7A5 (flag): holds 0.999632, lift 0.000512, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 11B1 (flag): holds 0.9919, lift 1.8e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 11B2 (flag): holds 0.992636, lift -3.1e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 11C3 (flag): holds 0.996686, lift -9.2e-05, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 11D3 (flag): holds 0.994109, lift 3e-06, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 11E3 (flag): holds 0.999264, lift 0.000512, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 11F (flag): holds 0.992268, lift -5e-06, supported 0.995582
+- ia_adv_base_a: 1F1-Country → 12B2 (flag): holds 0.995951, lift -0.000103, supported 0.97166
+- ia_adv_base_a: 5D1c → 1C-Business (flag): holds 0.99075, lift -2.8e-05, supported 0.991778
+- ia_adv_base_a: 5D1c → 1N (flag): holds 0.995889, lift -1e-06, supported 0.991778
+- ia_adv_base_a: 5D1c → 4A (flag): holds 0.998972, lift -0.000244, supported 0.991778
+- ia_adv_base_a: 5D1c → 5G9 (flag): holds 0.992806, lift 0.12503, supported 0.991778
+- ia_adv_base_a: 5D1c → 5G10 (flag): holds 0.992806, lift 3.4e-05, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A4 (flag): holds 0.99075, lift 0.181795, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A5 (flag): holds 0.995889, lift 0.199999, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A7 (flag): holds 1.0, lift 1.0, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A8 (flag): holds 0.998972, lift 0.499878, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A9 (flag): holds 0.993834, lift 0.454589, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A10 (flag): holds 0.992806, lift 0.222249, supported 0.991778
+- ia_adv_base_a: 5D1c → 6A13 (flag): holds 0.997945, lift 0.000242, supported 0.991778
+- ia_adv_base_a: 5D1c → 7A5 (flag): holds 0.998972, lift -0.000244, supported 0.991778
+- ia_adv_base_a: 5D1c → 11C3 (flag): holds 0.995889, lift 0.333333, supported 0.991778
+- ia_adv_base_a: 5D1c → 11E3 (flag): holds 0.998972, lift -0.000244, supported 0.991778
+- ia_adv_base_a: 5D1c → 12B2 (flag): holds 1.0, lift 0.0, supported 0.973333
+- ia_adv_base_a: 5D1l → 1C-Business (flag): holds 0.991778, lift -1e-06, supported 0.99075
+- ia_adv_base_a: 5D1l → 1N (flag): holds 0.995889, lift -1e-06, supported 0.99075
+- ia_adv_base_a: 5D1l → 4A (flag): holds 0.998972, lift -0.000244, supported 0.99075
+- ia_adv_base_a: 5D1l → 5G9 (flag): holds 0.992806, lift 0.12503, supported 0.99075
+- ia_adv_base_a: 5D1l → 5G10 (flag): holds 0.992806, lift 3.4e-05, supported 0.99075
+- ia_adv_base_a: 5D1l → 6A5 (flag): holds 0.994861, lift -4.9e-05, supported 0.99075
+- ia_adv_base_a: 5D1l → 6A7 (flag): holds 0.998972, lift 0.499878, supported 0.99075
+- ia_adv_base_a: 5D1l → 6A8 (flag): holds 0.997945, lift 0.333495, supported 0.99075
+- ia_adv_base_a: 5D1l → 6A10 (flag): holds 0.99075, lift -2.8e-05, supported 0.99075
+- ia_adv_base_a: 5D1l → 6A13 (flag): holds 0.997945, lift 0.000242, supported 0.99075
+- ia_adv_base_a: 5D1l → 7A5 (flag): holds 0.998972, lift -0.000244, supported 0.99075
+- ia_adv_base_a: 5D1l → 11C3 (flag): holds 0.994861, lift 0.166626, supported 0.99075
+- ia_adv_base_a: 5D1l → 11D3 (flag): holds 0.991778, lift 0.11111, supported 0.99075
+- ia_adv_base_a: 5D1l → 11E3 (flag): holds 0.998972, lift -0.000244, supported 0.99075
+- ia_adv_base_a: 5D1l → 11F (flag): holds 0.991778, lift 0.199999, supported 0.99075
+- ia_adv_base_a: 5D1l → 12B2 (flag): holds 1.0, lift 0.0, supported 0.986667
+- ia_adv_base_a: 1G-Country → 1C-Legal (flag): holds 0.99635, lift -0.0001, supported 0.981752
+- ia_adv_base_a: 1G-Country → 1G-Private (flag): holds 1.0, lift 0.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 4A (flag): holds 1.0, lift 0.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 5G10 (flag): holds 1.0, lift 0.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 6A5 (flag): holds 1.0, lift 1.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 6A7 (flag): holds 1.0, lift 1.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 6A8 (flag): holds 0.99635, lift 0.49995, supported 0.981752
+- ia_adv_base_a: 1G-Country → 6A12 (flag): holds 0.992701, lift 3.7e-05, supported 0.981752
+- ia_adv_base_a: 1G-Country → 6A13 (flag): holds 1.0, lift 0.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 7A5 (flag): holds 1.0, lift 0.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 11C3 (flag): holds 0.99635, lift -0.0001, supported 0.981752
+- ia_adv_base_a: 1G-Country → 11E3 (flag): holds 1.0, lift 0.0, supported 0.981752
+- ia_adv_base_a: 1G-Country → 12B2 (flag): holds 1.0, lift 0.0, supported 0.970588
+- ia_adv_base_a: 5H → 5D1e (coincidence): holds 0.991085, lift 3.4e-05, supported 1.0
+- ia_adv_base_a: 5D1e → 1C-Business (flag): holds 0.991684, lift 1e-06, supported 0.997921
+- ia_adv_base_a: 5D1e → 1N (flag): holds 0.995842, lift 1e-06, supported 0.997921
+- ia_adv_base_a: 5D1e → 4A (flag): holds 0.99896, lift -0.00048, supported 0.997921
+- ia_adv_base_a: 5D1e → 5G9 (flag): holds 0.991684, lift 1e-06, supported 0.997921
+- ia_adv_base_a: 5D1e → 5G10 (flag): holds 0.992723, lift -6.8e-05, supported 0.997921
+- ia_adv_base_a: 5D1e → 6A5 (flag): holds 0.995842, lift 1e-06, supported 0.997921
+- ia_adv_base_a: 5D1e → 6A7 (flag): holds 1.0, lift 0.0, supported 0.997921
+- ia_adv_base_a: 5D1e → 6A8 (flag): holds 0.99896, lift -0.00048, supported 0.997921
+- ia_adv_base_a: 5D1e → 6A10 (flag): holds 0.990644, lift -5.2e-05, supported 0.997921
+- ia_adv_base_a: 5D1e → 6A13 (flag): holds 0.997921, lift 1e-06, supported 0.997921
+- ia_adv_base_a: 5D1e → 7A5 (flag): holds 0.99896, lift -0.00048, supported 0.997921
+- ia_adv_base_a: 5D1e → 11C3 (flag): holds 0.993763, lift 1e-06, supported 0.997921
+- ia_adv_base_a: 5D1e → 11D3 (flag): holds 0.990644, lift -5.2e-05, supported 0.997921
+- ia_adv_base_a: 5D1e → 11E3 (flag): holds 0.99896, lift -0.00048, supported 0.997921
+- ia_adv_base_a: 5D1e → 12B2 (flag): holds 1.0, lift 0.0, supported 1.0
+- ia_adv_base_a: 1OAmount → 1C-Business (flag): holds 0.994595, lift 7.5e-05, supported 1.0
+- ia_adv_base_a: 1OAmount → 1F1-Private (flag): holds 0.994595, lift 7.5e-05, supported 1.0
+- ia_adv_base_a: 1OAmount → 1F2-M-F (coincidence): holds 1.0, lift 0.0, supported 1.0
+- ia_schedule_d_5k3: 5K(3)(e) → 5K(3)(c) Country (coincidence): holds 1.0, lift 0.0, supported 0.981465
+- ia_schedule_d_5k3: 5K(3)(c) State → 5K(3)(c) Country (coincidence): holds 1.0, lift 0.0, supported 0.99819
+
+## Identifiers, sensitive columns and time
+
+- **ia_1d3_cik**: identifiers: FilingID (none)
+- **ia_adv_base_a**: identifiers: FilingID (record_key), 9E (none), Execution Date (none)
+- **ia_schedule_d_5k3**: identifiers: Filing ID (none), 5K(3)(c) Country (none)
+
+## Data quality to hand to data-quality
+
+- ia_1d3_cik: no_natural_key: no column or combination is unique
+- ia_adv_base_a: placeholder: a stand-in for no value, which must not match or merge
+- ia_adv_base_a: placeholder: a stand-in for no value, which must not match or merge
+- ia_adv_base_a: placeholder: a stand-in for no value, which must not match or merge
+- ia_adv_base_a: placeholder: a stand-in for no value, which must not match or merge
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 47 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 49 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 30 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 40 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 43 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 9 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 3 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 41 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 23 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 41 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 6 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 49 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 40 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 39 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 21 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 19 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 8 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 28 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 48 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_adv_base_a: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_schedule_d_5k3: placeholder: a stand-in for no value, which must not match or merge
+- ia_schedule_d_5k3: code_list: 42 codes in this delivery; a new code is flagged until the code set has it
+- ia_schedule_d_5k3: code_list: 28 codes in this delivery; a new code is flagged until the code set has it
+- ia_schedule_d_5k3: code_list: 2 codes in this delivery; a new code is flagged until the code set has it
+- ia_schedule_d_5k3: no_natural_key: no column or combination is unique
+
+## Questions for the operator (one at a time)
+
+1. ia_1d3_cik has no unique column: use the designed key? Recommendation: a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses which columns identify a record (candidates: FilingID, CIK)
+2. Which class is ia_1d3_cik? Its tests did not decide. Recommendation: keep it raw (bronze only) until decided
+3. Is ia_adv_base_a a new master kind named 'ia_adv_base_a'? Recommendation: yes: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller than the parts pointing at it; has attributes besides codes and dates
+4. ia_schedule_d_5k3 has no unique column: use the designed key? Recommendation: a durable id given when a record first appears and kept in a key map, so it never changes; the operator chooses which columns identify a record (candidates: Filing ID, 5K(3)(c) Country, 5K(3)(d), 5K(3)(g))
+5. Which class is ia_schedule_d_5k3? Its tests did not decide. Recommendation: keep it raw (bronze only) until decided
+
+Samples of personal columns are masked to their shape. Store suggestions are advice only.
