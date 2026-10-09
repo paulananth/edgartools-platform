@@ -1317,7 +1317,8 @@ def test_active_company_preparation_caller_runs_from_installed_bundle(installed,
     original = historical(**{**args,"output":str(tmp_path/"historical")})
     arguments = ["mdm","prepare-clean-company"]
     for name,value in args.items():
-        arguments.extend(["--"+name.replace("_","-"),str(value)])
+        option = "bronze-receipts" if name == "bronze_receipts_path" else name.replace("_","-")
+        arguments.extend(["--"+option,str(value)])
     run = _run(python,"-c", """
 import sys
 from edgar_warehouse.rules import source_engine
