@@ -466,7 +466,7 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records", "xml-streamed-recovery"])
+@pytest.mark.parametrize("trial_mode", ["configured", "parquet-records", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records", "xml-streamed-recovery"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -521,6 +521,18 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
+    if trial_mode == "parquet-records":
+        import io
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        stream = io.BytesIO()
+        pq.write_table(pa.Table.from_pylist([json.loads(line) for line in FILERS.splitlines()]), stream)
+        filer_bytes = stream.getvalue()
+        contract_bytes = json.dumps({"execution": {"profile":"source.read", "workers":1, "max_artifacts":1},
+            "read": {"format":"parquet", "parquet":{"columns":["cik","name"]},
+                "limits":{"max_bytes":1048576,"max_records":1000},
+                "tables":{"filers":{"each":"rows", "columns":{
+                    "cik":{"text":{"path":"cik"}}, "name":{"text":{"path":"name"}}}}}}}).encode()
     if streamed_trial:
         spec = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {
             "format": "json", "limits": {"max_bytes": 4096, "max_records": 10}, "tables": {
@@ -1286,3 +1298,44 @@ engine.dispose()
     finally:
         admin.dispose()
         app.dispose()
+
+
+def test_active_company_preparation_caller_runs_from_installed_bundle(installed, tmp_path):
+    """Frozen input is produced once; installed CLI and verifier cannot use checkout."""
+    from tests.mdm.test_clean_company_source import landing, source_row, ticker_row, filing_row
+    from tests.support.retired_company_preparation import prepare_company_bundle as historical
+    python, root = installed
+    args = landing(tmp_path, [source_row(123)], tickers=[ticker_row(123,"A")],
+                   filings=[filing_row(123,"10-Q"),filing_row(123,"10-K")])
+    original = historical(**{**args,"output":str(tmp_path/"historical")})
+    arguments = ["mdm","prepare-clean-company"]
+    for name,value in args.items():
+        arguments.extend(["--"+name.replace("_","-"),str(value)])
+    run = _run(python,"-c", """
+import sys
+from edgar_warehouse.rules import source_engine
+from edgar_warehouse.mdm.clean import company_source
+from edgar_warehouse.cli import main
+source_engine.STEPS = {}
+assert not hasattr(company_source,'prepare_company_bundle')
+assert not hasattr(company_source,'_filed_forms')
+assert not hasattr(company_source,'_catalog_tickers')
+sys.exit(main(sys.argv[1:]))
+""", *arguments,cwd=root)
+    assert run.returncode == 0, run.stderr
+    report = json.loads(run.stdout)
+    assert report['scope'] == original['scope']
+    for name in original['files']:
+        assert (tmp_path/'historical'/name).read_bytes() == (tmp_path/'pinned'/name).read_bytes(),name
+    verified = _run(python,"-c", """
+import json,sys
+from edgar_warehouse.rules import source_engine
+from edgar_warehouse.mdm.clean.company_prepare import verify_company_bundle
+source_engine.STEPS = {}
+print(json.dumps(verify_company_bundle(sys.argv[1],expected=json.load(sys.stdin))))
+""",str(tmp_path/'pinned'),cwd=root,document=report)
+    assert verified.returncode == 0,verified.stderr
+    assert json.loads(verified.stdout)['records'] == 1
+    repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
+    assert repeated.returncode == 0,repeated.stderr
+    assert json.loads(repeated.stdout)==report

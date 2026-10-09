@@ -5,7 +5,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean.company_source import _census_evidence
+from tests.support.retired_company_preparation import _census_evidence
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_combination_contract import captures,read,blueprint

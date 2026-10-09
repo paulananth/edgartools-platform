@@ -6,7 +6,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.company_source import _business_addresses, _catalog_tickers, _filed_forms
+from tests.support.retired_company_preparation import _business_addresses, _catalog_tickers, _filed_forms
 from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.workers import source_combine
 from tests.engine.test_source_combine import envelope, group, join, plan, reading, table

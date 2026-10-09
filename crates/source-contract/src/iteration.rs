@@ -21,12 +21,22 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
             if format != "json" { return Err("each.objects requires JSON".into()); }
             let map = args.as_mapping().ok_or("objects arguments must be a mapping")?;
             let entries = name.as_str() == Some("entries");
-            if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "on_invalid")) && !(entries && matches!(k.as_str(), Some("key_field" | "value_field")))) { return Err("objects/entries has an unknown argument".into()); }
+            if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "on_invalid")) && !(entries && matches!(k.as_str(), Some("key_field" | "value_field" | "keys")))) { return Err("objects/entries has an unknown argument".into()); }
             if entries {
                 for key in ["key_field", "value_field"] {
                     if !setting(args,key).is_some_and(|name| !name.is_empty() && name.len() <= 64
                         && name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))) {
                         return Err("entries requires distinct key_field/value_field identifiers of 1..64 ASCII characters".into());
+                    }
+                }
+                if let Some(keys) = args.get("keys") {
+                    let keys = keys.as_sequence().filter(|v| v.len() <= 1000)
+                        .ok_or("entries.keys names at most 1000 distinct keys")?;
+                    let mut seen = std::collections::HashSet::new();
+                    for key in keys {
+                        let key = key.as_str().filter(|v| v.len() <= 4096)
+                            .ok_or("entries.keys are bounded text")?;
+                        if !seen.insert(key) { return Err("entries.keys must be distinct".into()); }
                     }
                 }
                 if args["key_field"] == args["value_field"] { return Err("entries key_field/value_field must differ".into()); }
@@ -110,7 +120,13 @@ pub(crate) fn rows(engine: &Engine, context: &Row, document: &El, each: &Value, 
         _ if setting(args, "on_invalid") == Some("empty") => return Ok((Vec::new(), 0)),
         _ => return Err(Rejected::new("objects_shape", "objects path must name one JSON object")),
     };
-    let keys = object.json_keys.as_ref().ok_or_else(|| Rejected::new("objects_order", "JSON object order is missing"))?;
+    let all_keys = object.json_keys.as_ref().ok_or_else(|| Rejected::new("objects_order", "JSON object order is missing"))?;
+    let selected_keys;
+    let keys = if let Some(wanted) = args.get("keys") {
+        let wanted: std::collections::HashSet<&str> = wanted.as_sequence().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+        selected_keys = all_keys.iter().filter(|key| wanted.contains(key.as_str())).cloned().collect::<Vec<_>>();
+        &selected_keys
+    } else { all_keys };
     if keys.len() > maximum { return Err(Rejected::new("limit_exceeded", "Object entries exceed max_records")); }
     let mut result = Vec::new();
     for key in keys.iter().take(take) {

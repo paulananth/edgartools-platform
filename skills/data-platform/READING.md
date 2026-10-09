@@ -1075,3 +1075,38 @@ paired faults that prove refusal order. Holder aggregation and
 cascade decisions remain in the census implementation. Whole-source census
 construction, complete source provenance and installed population qualification
 are still required before removing that implementation.
+
+## Bounded Parquet framing and sparse object entries
+
+The `source.read` worker accepts `read.format: parquet`. Arrow frames projected
+rows as JSON `rows`; configured Rust expressions produce the output tables.
+The physical Parquet receipt remains the source identity. Optional
+`read.parquet.columns` declares 1..128 distinct input columns; omitted means all.
+`distinct: true` deduplicates exact projected rows, preserving first occurrence.
+A declared `take: 1..1000` frames the first source rows as a bounded sample.
+Without `take`, framing consumes every projected row through EOF. Dates become
+ISO text; unsupported scalars and nonfinite numbers refuse. No provider logic
+runs in framing. Do not omit fencing columns when projecting/deduplicating.
+
+Materialized execution may declare `execution.max_input_bytes` (1..256 MiB).
+Otherwise the existing 32 MiB physical limit applies. `read.limits` bounds the
+framed/decoded document and emitted records independently; the output remains
+bounded. Streamed framing declares its own physical bounds and refuses this
+materialized option. Parquet templates for Company preparation retain a 64 MiB
+physical limit, 32 MiB framed JSON and 100,000 distinct projected rows. Larger
+projected inputs require partitioning; this is a bounded preparation contract.
+
+`each.entries` optionally declares `keys: [literal, keys]`, at most 1,000 distinct
+text keys of at most 4,096 bytes each. The reader authenticates and parses the
+complete input document before projecting those entries, preserving source
+object order and literal punctuation. Missing keys emit nothing. `max_records`
+then bounds selected entries; omitting `keys` preserves whole-object iteration.
+An empty key list still validates document shape and assertions.
+
+`mdm prepare-clean-company` now binds immutable configured Parquet reading and
+combination contracts, reuses the authenticated frozen census and verifies each
+worker before publishing its existing bundle. It retains complete worker
+inputs/contracts/outputs and proof beside the original pinned members. Readback
+requires the approved inventory report and reproduces the configured outputs.
+The independent `mdm name-census` caller remains active; this change does not
+qualify a new census construction or full population mastering.

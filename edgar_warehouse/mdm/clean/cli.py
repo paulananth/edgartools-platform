@@ -397,7 +397,7 @@ def execute_manifest(
 
 
 def prepare_clean_company(args) -> int:
-    from .company_source import prepare_company_bundle
+    from .company_prepare import prepare_company_bundle
 
     report = prepare_company_bundle(
         landing_root=args.landing_root,

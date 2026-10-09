@@ -11,6 +11,7 @@ import time
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean import company_source, name_census, names
+from tests.support.retired_company_preparation import _census_evidence
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 
@@ -114,7 +115,7 @@ def main():
             raise ValueError('Combination verification failed')
         actual = store.json(combined)['artifacts'][0]['tables']['company']
         expected = [{'name': row['name'], 'cik': row['cik'], 'name_census':
-                     company_source._census_evidence(census, {'entity_name': row['name'], 'cik': row['cik']}, raw['sha256'])}
+                     _census_evidence(census, {'entity_name': row['name'], 'cik': row['cik']}, raw['sha256'])}
                     for row in captured]
         if digest(actual) != digest(expected): raise ValueError('Captured-name census evidence differs')
         prepare = {'input': combined, 'output': (root / 'prepared/manifest.json').as_uri(), 'checks': ['mdm.prepared'],

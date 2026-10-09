@@ -18,10 +18,10 @@ from edgar_warehouse.mdm.clean.company_source import (
     SOURCE_CODE,
     bronze_receipts,
     census_filers,
-    prepare_company_bundle,
     write_bronze_receipts,
     write_name_census,
 )
+from edgar_warehouse.mdm.clean.company_prepare import prepare_company_bundle
 from edgar_warehouse.mdm.clean.store import Conflict
 from tests.support.retired_company_address import business_address
 from tests.mdm.test_clean_activation import proof
