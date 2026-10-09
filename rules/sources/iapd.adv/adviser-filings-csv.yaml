@@ -1,0 +1,31 @@
+# The reading of Form ADV Part 1A (IA_ADV_Base_A) in one monthly bulk file:
+# one row per filing. June and July 2025 files are windows-1252, later ones
+# UTF-8 (ticket 07). DateSubmitted has two formats (6/24/2025 7:44 to
+# August 2025, 06/24/2026 10:37:17 AM after); kept as text, since the file's
+# month end (context `published`) dates the records.
+read:
+  format: csv
+  container: zip
+  member: "IA_ADV_Base_A_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    filings:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        submitted: {text: {path: DateSubmitted, path_mode: literal, null_if: [""]}}
+        legal_name: {text: {path: "1A", path_mode: literal, null_if: [""]}}
+        business_name: {text: {path: "1B1", path_mode: literal, null_if: [""]}}
+        sec_file_number: {text: {path: "1D", path_mode: literal, null_if: [""]}}
+        crd: {text: {path: "1E1", path_mode: literal, null_if: [""]}}
+        lei: {text: {path: "1P", path_mode: literal, null_if: [""]}}
+        street: {text: {path: "1F1-Street 1", path_mode: literal, null_if: [""]}}
+        street2: {text: {path: "1F1-Street 2", path_mode: literal, null_if: [""]}}
+        city: {text: {path: "1F1-City", path_mode: literal, null_if: [""]}}
+        region: {text: {path: "1F1-State", path_mode: literal, null_if: [""]}}
+        country: {text: {path: "1F1-Country", path_mode: literal, null_if: [""]}}
+        postcode: {text: {path: "1F1-Postal", path_mode: literal, null_if: [""]}}
+        published: {context: {name: published}}

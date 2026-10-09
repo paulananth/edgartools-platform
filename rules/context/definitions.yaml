@@ -59,5 +59,8 @@ relationships:
   IS_FEEDER_TO: The fund feeds its money into the other fund (a master fund).
   IS_INTERNATIONAL_BRANCH_OF: The branch belongs to this head office.
   AUDITED_BY: The company's statements were audited by the other company, an audit firm, for one engagement.
+  CUSTODIAN: >-
+    The other company is the adviser's custodian: it holds 10% or more of the adviser's separately
+    managed account assets, as the adviser filed. First and last stated show whether the adviser changed it.
   HAS_MARKET_OPERATOR: The trading venue's business is managed and operated by this entity, its market operator.
   IS_SEGMENT_OF_EXCHANGE: The trading venue is a market segment of the other venue, its exchange.

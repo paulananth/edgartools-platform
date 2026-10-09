@@ -1,0 +1,122 @@
+# IAPD Form ADV: the MDM mappings of the monthly Form ADV bulk file (a ZIP of
+# 101 CSV tables, one month's filings each), read for the Company kind:
+# advisers from Part 1A (IA_ADV_Base_A) and their custodians from Schedule D
+# 5.K(3) (IA_Schedule_D_5K3), with each adviser-to-custodian link.
+# Profiling ticket 07 (.scratch/profiling/issues/07-readers-per-feed.md):
+# operator, 2026-10-09 10:38 ET, the design, "Approve as proposed
+# (Recommended)"; 10:46 ET, "Claude codes the date change (Recommended)": one
+# record per filing (an adviser's filings join by CRD), one per custody row (a
+# custodian's rows join by LEI or BD number), and each row's link dated by its
+# monthly file (mdm.prepare effective_column, PR #884).
+# The readings are beside this file: adviser-filings-csv.yaml and
+# custody-csv.yaml. Each file's month end comes in as context (`published`).
+# The acquisition and bookkeeping sections belong to the Bookkeeping skill.
+source: iapd.adv
+bronze:
+  # Bronze: reference/iapd_adv_bulk/<YYYY-MM>/ADV_Filing_Data_<from>_<to>.zip
+  family: iapd_adv_bulk
+mdm:
+  iapd.adv.filings.v1:
+    contract:
+      provider: SEC Investment Adviser Public Disclosure (IAPD)
+      family: iapd_adv_bulk
+      schema_version: iapd-adv-filing-csv-v1
+      record_key: the Form ADV filing (FilingID); an adviser's filings join by its CRD
+      publication_key: exact captured monthly ADV bulk file (sha256)
+      effective_time: the end of the month the file covers (context `published`)
+      semantics: patch
+      completeness: the filings submitted in one month; no retirement by absence
+      nonblocking_deferred_reasons:
+      - quality_filing_name_present
+      adapter:
+        version: iapd-adv-filing-csv-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        kind: company
+        record_key:
+        - filing_id
+        # CRD joins an adviser's filings into one Company (binding rule
+        # iapd-adv-crd). Item 1.P's LEI is the adviser's own and joins by
+        # iapd-adv-lei. The SEC file number (801-) is lookup only. Item 1.D(3)
+        # lists 1 to 46 CIKs a filing (571 filings several): a record path holds
+        # one value, so CIKs are left out until a list-shaped identifier exists
+        # (ticket 07).
+        identifiers:
+          crd: crd
+          lei: lei
+        identifier_formats:
+          lei: lei
+        cross_references:
+          sec_file_number: sec_file_number
+        fields:
+          name: legal_name
+          address:
+            components:
+              street: street
+              street2: street2
+              city: city
+              region: region
+              postcode: postcode
+              country: country
+  iapd.adv.custody.v1:
+    contract:
+      provider: SEC Investment Adviser Public Disclosure (IAPD)
+      family: iapd_adv_bulk
+      schema_version: iapd-adv-custody-csv-v1
+      record_key: one custody row (the filing and the row's number in the monthly
+        file); a custodian's rows join by LEI or SEC broker-dealer number
+      publication_key: exact captured monthly ADV bulk file (sha256)
+      effective_time: the end of the month the file covers (context `published`)
+      semantics: patch
+      completeness: the custodians holding 10% or more of an adviser's separately
+        managed account assets, per filing that month; no retirement by absence
+      nonblocking_deferred_reasons:
+      - quality_custodian_name_present
+      adapter:
+        version: iapd-adv-custody-csv-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        kind: company
+        record_key:
+        - filing_id
+        - row
+        # The custodian's identity, operator 2026-10-09 09:55 ET: "LEI, then BD
+        # number, name last". 5.K(3)(f) is "LEI or other": only an LEI-shaped
+        # value is read as an LEI (custody-csv.yaml); BD number (5.K(3)(e), SEC's
+        # 8- file number) is a new namespace that joins. A custodian with
+        # neither keeps a name id, lookup only.
+        identifiers:
+          lei: lei
+          bd_number: bd_number
+        identifier_formats:
+          lei: lei
+        cross_references:
+          name_id: legal_name
+        cross_reference_formats:
+          name_id: name_id@1
+        fields:
+          name: legal_name
+          address:
+            components:
+              city: city
+              region: state
+              country: country
+        # The adviser to custodian link (operator: "the relationship is of type
+        # custodian"; "CUSTODIAN (Recommended)"). It starts at the adviser's
+        # filing and ends at this row's custodian; no date is stated, so MDM
+        # starts it when first stated and shows when last stated (operator,
+        # "First/last stated is enough (Recommended)"). The amount held is a
+        # silver fact, not a property (operator: "that is a fact").
+        relationships:
+        - type: CUSTODIAN
+          source_key:
+          - filing_id
+          source_source: iapd.adv.filings.v1
+          target_key:
+          - filing_id
+          - row
+          target_source: iapd.adv.custody.v1
+          valid_from: link_start
+          scope: IAPD Form ADV custody

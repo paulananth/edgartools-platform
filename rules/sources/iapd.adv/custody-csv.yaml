@@ -1,0 +1,40 @@
+# The reading of Form ADV Schedule D 5.K(3) (IA_Schedule_D_5K3) in one monthly
+# bulk file: one row per filing and custodian. A row is keyed by its filing and
+# its row number in the file (53 filings list one custodian twice; every
+# filing is in one month's file only). 5.K(3)(f) is "LEI or other": `lei`
+# keeps only an LEI-shaped value (18 letters or digits, then 2 digits), so an
+# other id never reads as an LEI; `other_id` keeps the value as written.
+read:
+  format: csv
+  container: zip
+  member: "IA_Schedule_D_5K3_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    custody:
+      each: record
+      columns:
+        filing_id: {text: {path: "Filing ID", path_mode: literal}}
+        row: {ordinal: {}}
+        legal_name: {text: {path: "5K(3)(a)", path_mode: literal, null_if: [""]}}
+        business_name: {text: {path: "5K(3)(b)", path_mode: literal, null_if: [""]}}
+        city: {text: {path: "5K(3)(c) City", path_mode: literal, null_if: [""]}}
+        state: {text: {path: "5K(3)(c) State", path_mode: literal, null_if: [""]}}
+        country: {text: {path: "5K(3)(c) Country", path_mode: literal, null_if: [""]}}
+        related_person: {text: {path: "5K(3)(d)", path_mode: literal, null_if: [""]}}
+        bd_number: {text: {path: "5K(3)(e)", path_mode: literal, null_if: [""]}}
+        other_id: {text: {path: "5K(3)(f)", path_mode: literal, null_if: [""]}}
+        lei:
+          text:
+            path: "5K(3)(f)"
+            path_mode: literal
+            transforms:
+            - trim: true
+            - regex_replace: {pattern: "^.*[^A-Z0-9].*$", with: ""}
+            - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
+            - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
+            null_if: [""]
+        amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
+        published: {context: {name: published}}

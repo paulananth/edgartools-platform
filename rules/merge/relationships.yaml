@@ -32,7 +32,7 @@
 #
 # Before this file the same table was held in code; a policy registered without
 # this section still uses it (relationships.TYPES_V0), so the two must agree.
-version: relationship-types-v3
+version: relationship-types-v4
 types:
   # Consolidation (GLEIF's relationship file names; IFRS 10 / ASC 810).
   IS_DIRECTLY_CONSOLIDATED_BY:
@@ -100,6 +100,14 @@ types:
     to_profile: fund
     hierarchy: true
     cycles: invalid
+  # Custody (Form ADV Schedule D 5.K(3); profiling ticket 07, operator
+  # 2026-10-09: "the relationship is of type custodian", "CUSTODIAN
+  # (Recommended)"): the adviser's custodian for its separately managed
+  # account assets. No date is stated: it starts when first stated, and
+  # last_seen shows when last stated.
+  CUSTODIAN:
+    from: [company]
+    to: [company]
   # Branches (GLEIF).
   IS_INTERNATIONAL_BRANCH_OF:
     from: [branch]

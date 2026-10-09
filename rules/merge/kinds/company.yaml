@@ -14,6 +14,10 @@ defaults:
   # GLEIF's accounting-parent links (platform validation 06a); it maps no
   # fields, so it fills none.
   - gleif.relationships.v1
+  # Form ADV (profiling ticket 07): advisers' filings and the custodians they
+  # name, last, so SEC and GLEIF win every field they fill.
+  - iapd.adv.filings.v1
+  - iapd.adv.custody.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -233,6 +237,58 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cik
+# Form ADV (profiling ticket 07; operator, 2026-10-09 10:38 ET, "Approve as
+# proposed (Recommended)"): an adviser's filings join the one Company that
+# holds its CRD, or create it; a custodian's custody rows join the one Company
+# that holds its LEI, then its SEC broker-dealer number, or create it. A
+# custodian named by neither is not bound (its name id is lookup only) until a
+# proven name rule (ticket 07b). Declared, not switched on: each rule activates
+# on its Identifier Contract, approved by the operator.
+- rule_id: iapd-adv-crd
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.filings.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: crd
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: crd
+- rule_id: iapd-adv-custodian-lei
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.custody.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
+- rule_id: iapd-adv-custodian-bd
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.custody.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: bd_number
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: bd_number
 - rule_id: sec-gleif-name-jurisdiction
   version: 2026-09-25.1
   family: name_binding
@@ -677,6 +733,54 @@ identifiers:
       reason: "ticket 15: approved policy digest 0d4d5cb0...0702; ticket 05 Proving Run, 6,414
         of 6,414 Companies by their CIK, 0 controls, no CIK on two Companies, a second pass
         changed nothing"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  # Form ADV (ticket 07). Verification is filled in when the operator approves
+  # each contract on its proving corpus.
+  crd:
+    authority: FINRA Central Registration Depository
+    sources:
+    - iapd.adv.filings.v1
+    normalizer: normalize_identifier@crd-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  lei:
+    authority: GLEIF (ISO 17442)
+    sources:
+    - iapd.adv.filings.v1
+    - iapd.adv.custody.v1
+    normalizer: normalize_identifier@lei-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  bd_number:
+    authority: SEC (broker-dealer file number, 8-)
+    sources:
+    - iapd.adv.custody.v1
+    normalizer: normalize_identifier@crd-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
     tolerance:
       unit: items
       warm_up_decisions: 10000
