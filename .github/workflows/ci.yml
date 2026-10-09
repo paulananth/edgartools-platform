@@ -78,12 +78,10 @@ jobs:
 
       # Fixtures inspect the image before starting their disposable databases.
       # Provision it explicitly so a fresh runner cannot skip/fail setup.
-      # Pull through the public ECR mirror. An anonymous Docker Hub pull
-      # fails the job once the shared runner address hits the rate limit.
+      # One public mirror often rate-limits a shared runner address.
+      # Retry across mirrors, then tag the image the fixtures already run.
       - name: Pull PostgreSQL 16 test image
-        run: |
-          docker pull public.ecr.aws/docker/library/postgres:16-alpine
-          docker tag public.ecr.aws/docker/library/postgres:16-alpine postgres:16-alpine
+        run: bash scripts/ci/pull-postgres-16.sh
 
       - name: Run integration tests
         run: uv run pytest tests/integration/ -v --tb=short
@@ -113,10 +111,9 @@ jobs:
       - name: Run engine tests
         # Worker qualification uses the real restricted-role PG16 task protocol.
         # Provision explicitly; a missing prerequisite must fail, never skip.
-        # The public ECR mirror avoids the anonymous Docker Hub rate limit.
+        # Retry across public mirrors when one address is rate-limited.
         run: |
-          docker pull public.ecr.aws/docker/library/postgres:16-alpine
-          docker tag public.ecr.aws/docker/library/postgres:16-alpine postgres:16-alpine
+          bash scripts/ci/pull-postgres-16.sh
           uv run --frozen --extra mdm --extra engine pytest tests/engine/ -v --tb=short
 
   # ── Infra script lint (bash -n syntax check) ──────────────────────────────
