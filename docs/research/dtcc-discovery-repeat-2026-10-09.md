@@ -32,6 +32,11 @@ The current role distinctions matter for MDM: participant/account numbers and MP
 
 The [all-important-notices XML](https://www.dtcc.com/rss-feeds/legal/all-important-notices.xml) was fetched anonymously and parsed successfully locally: 1,000 items. Titles can be notice codes, with substantive topics in descriptions. This is an observed current feed size, not a complete historical archive or demonstrated weekly membership-change coverage. A title-only membership filter would miss relevant topics; subject/content qualification is still needed.
 
+An independently verified [RSS receipt](../../.scratch/onboarding/dtcc-directories/repeat-20261009/rss-receipt.json)
+pins the XML hash, 1,011,794 bytes and all 1,000 publication dates. The observed
+publication range is April 28–October 9, 2026. Receipt-completion time is known;
+request-start time was not recorded.
+
 For example, notice `25130-26` is published October 9, 2026, while its summary describes DRS changes planned for November 13, pending regulatory approval. Publication time and effective time are separate. [Official notice](https://files.dtcc.com/download/assets/25130-26/a9d42d58c3e511f1b02c76c53cdc9348).
 
 ## Rights discovery requiring resolution

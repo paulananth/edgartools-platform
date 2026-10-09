@@ -11,7 +11,7 @@ research using the updated data-profiling and data-onboarding skills.
 - [x] Verify pinned local captures and repeat full exploratory profiling with measured runtime and provenance. Ten identical recaptures; full 14-region/13,870-row profile in 21.2 seconds, identical parts/questions/fingerprints; hashes pinned (2026-10-09 18:05 ET).
 - [x] Investigate duplicate identifiers, worksheet boundaries and account-to-Company implications against original captured cells. All 14 regions reconciled cell-for-cell; DTC headings counted, NSCC and MPID duplicate groups traced to original row numbers; no Company identity claim (2026-10-09 18:05 ET).
 - [x] Write a sourced discovery story, measured results, unresolved decisions and next recommendation. `docs/research/dtcc-discovery-repeat-2026-10-09.md`; 16 local links verified, four repeat output hashes verified (2026-10-09 18:05 ET).
-- [ ] Verify artifacts, update the onboarding log and checklist, commit and publish findings for review.
+- [x] Verify artifacts, update the onboarding log and checklist, commit and publish findings for review. Hash/link/row checks passed, overlap guard exit 0, commit `91b373dc` pushed and [PR #895](https://github.com/paulananth/edgartools-platform/pull/895) created; RSS receipt independently parsed and pinned (2026-10-09 18:06 ET).
 
 ## Boundary
 
