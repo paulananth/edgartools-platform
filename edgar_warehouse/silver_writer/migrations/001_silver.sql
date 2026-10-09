@@ -26,7 +26,8 @@ CREATE VIEW silver.table_context AS
     t.spec -> 'key' AS key,
     coalesce((SELECT jsonb_agg(jsonb_build_object(
                 'columns', l -> 'columns', 'kind', l ->> 'kind', 'source_code', l ->> 'source_code',
-                'source_key', l ->> 'source_key', 'mdm_id_column', l ->> 'mdm_id_column'))
+                'source_key', l ->> 'source_key', 'mdm_id_column', l ->> 'mdm_id_column',
+                'inclusion', l -> 'inclusion'))
                 FROM jsonb_array_elements(coalesce(t.spec -> 'links', '[]'::jsonb)) l), '[]'::jsonb) AS links,
     t.spec -> 'time' AS time_columns,
     t.spec ->> 'load_mode' AS load_mode,
@@ -40,7 +41,7 @@ COMMENT ON VIEW silver.table_context IS
 COMMENT ON COLUMN silver.table_context.table_name IS 'The silver table, in the silver schema.';
 COMMENT ON COLUMN silver.table_context.grain IS 'What one row is.';
 COMMENT ON COLUMN silver.table_context.key IS 'The columns that identify a row.';
-COMMENT ON COLUMN silver.table_context.links IS 'Each pointer to a master: the source key column, the master kind and Dataset Contract, and the column holding the master''s MDM id (empty until the entity is mastered).';
+COMMENT ON COLUMN silver.table_context.links IS 'Each pointer to a master: the source key column, the master kind and Dataset Contract, the column holding the master''s MDM id (empty until the entity is mastered), and the share of source keys profiling found among the master''s keys (inclusion).';
 COMMENT ON COLUMN silver.table_context.time_columns IS 'The as-of, as-at and event time columns.';
 COMMENT ON COLUMN silver.table_context.load_mode IS 'append (rows only grow), upsert (rows change by key) or snapshot (the table is the latest delivery).';
 COMMENT ON COLUMN silver.table_context.definition IS 'The table in plain words: its definition, or the spec''s why.';

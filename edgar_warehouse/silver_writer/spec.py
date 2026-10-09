@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import re
 
-from edgar_warehouse.control_contract import Blocked, digest
+from edgar_warehouse.control_contract import Blocked
 
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
 OPTIONAL = {"definition"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
-LINK_KEYS = {"columns", "kind", "source_code", "source_key", "mdm_id_column", "inclusion"}
+LINK_KEYS = {"columns", "kind", "source_code", "to_part", "source_key", "mdm_id_column", "inclusion"}
 LOAD_MODES = ("append", "upsert", "snapshot")
 LOADED_AT = "loaded_at"  # the as-at column the writer adds when no source column holds it
 NAME_BYTES = 63  # PostgreSQL cuts longer names silently; two long names could become one
@@ -50,16 +50,15 @@ def postgres_type(logical: str) -> str:
     raise Blocked(f"No silver type for {logical!r}: name the logical type in the spec")
 
 
-def nested(logical: str) -> bool:
-    return postgres_type(logical) == "jsonb"
-
-
 def check(spec: dict) -> dict:
     """The spec, checked: every key the format names, real types, names a store
     keeps apart, links that name their master, and a load mode. Refuses with Blocked."""
     if not isinstance(spec, dict) or not KEYS <= set(spec) or set(spec) - KEYS - OPTIONAL:
         raise Blocked(f"A silver table spec holds {sorted(KEYS)} (and optionally {sorted(OPTIONAL)})")
     _name(spec["table"], "table")
+    for field in ("grain", "why"):
+        _words(spec[field], field, required=True)
+    _words(spec.get("definition"), "definition")
     columns = spec["columns"]
     if not isinstance(columns, list) or not columns:
         raise Blocked("A silver table spec names at least one column")
@@ -68,7 +67,13 @@ def check(spec: dict) -> dict:
         if not isinstance(column, dict) or not {"name", "type", "nullable"} <= set(column) or set(column) - COLUMN_KEYS:
             raise Blocked(f"A column holds name, type and nullable, and only {sorted(COLUMN_KEYS)}: {column!r}")
         names.append(_name(column["name"], "column"))
+        if not isinstance(column["type"], str):
+            raise Blocked(f"Column {column['name']}: type is a logical type name")
         postgres_type(column["type"])
+        for field in ("definition", "source"):
+            _words(column.get(field), f"column {column['name']} {field}")
+        if column.get("sensitivity") not in (None, "none", "personal", "sensitive_personal"):
+            raise Blocked(f"Column {column['name']}: sensitivity is none, personal or sensitive_personal")
         if not isinstance(column["nullable"], bool):
             raise Blocked(f"Column {column['name']}: nullable is true or false")
     key = spec["key"]
@@ -81,13 +86,18 @@ def check(spec: dict) -> dict:
     added = []
     for link in spec["links"] or []:
         if not isinstance(link, dict) or not {"columns", "kind", "source_code", "source_key", "mdm_id_column"} <= set(link) \
-                or set(link) - LINK_KEYS - {"to_part"}:
+                or set(link) - LINK_KEYS:
             raise Blocked(f"A link holds columns, kind, source_code, source_key and mdm_id_column: {link!r}")
-        if not link["kind"] or not link["source_code"]:
+        if not isinstance(link["kind"], str) or not link["kind"] or not isinstance(link["source_code"], str) \
+                or not link["source_code"]:
             raise Blocked(f"Link on {link['source_key']}: name the master's kind and Dataset Contract "
                           "(data-onboarding fills them from the onboarded master)")
         if link["columns"] != [link["source_key"]] or link["source_key"] not in names:
             raise Blocked(f"A link points from one column of the spec, its source key: {link!r}")
+        if link.get("inclusion") is not None and not (isinstance(link["inclusion"], (int, float))
+                                                      and not isinstance(link["inclusion"], bool)
+                                                      and 0 <= link["inclusion"] <= 1):
+            raise Blocked(f"Link on {link['source_key']}: inclusion is a share from 0 to 1")
         added.append(_name(link["mdm_id_column"], "column"))
     time = spec["time"]
     if not isinstance(time, dict) or set(time) != {"as_of", "as_at", "event_time"} or not time["as_at"]:
@@ -107,10 +117,6 @@ def check(spec: dict) -> dict:
     return spec
 
 
-def sha256(spec: dict) -> str:
-    return digest(spec)
-
-
 def columns(spec: dict) -> list[str]:
     """Every column of the table: the spec's columns, each link's MDM id column, and loaded_at when added."""
     return [c["name"] for c in spec["columns"]] + mdm_id_columns(spec) + added_time(spec)
@@ -126,6 +132,18 @@ def added_time(spec: dict) -> list[str]:
 
 def _column(spec: dict, name: str) -> dict:
     return next(c for c in spec["columns"] if c["name"] == name)
+
+
+def quote(name: str) -> str:
+    """A PostgreSQL identifier, written by hand: SQLAlchemy's quoting doubles `%`
+    for its own parameter formatting, which statements sent as written must not."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _words(value, what: str, required: bool = False) -> None:
+    if (value is None and not required) or (isinstance(value, str) and value.strip()):
+        return
+    raise Blocked(f"{what} is plain words" + ("" if required else ", or empty"))
 
 
 def _name(value, what: str) -> str:

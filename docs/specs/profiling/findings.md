@@ -246,7 +246,9 @@ mastering; a row whose entity is not mastered yet keeps an empty MDM id.
 Links point to master parts only; a pointer to another transaction or reference
 part stays a relationship finding (§3). Profiling leaves `kind` and
 `source_code` empty: data-onboarding fills them from the onboarded master, and
-the writer refuses a link without them. The MDM id is read from MDM by
+the writer refuses a link without them. A link points from one column, its
+source key (`columns: [<source_key>]`); a key column is never empty
+(`nullable: false`). The MDM id is read from MDM by
 (`source_code`, `kind`, the source key's value as the record key), so a key
 that two sources share never resolves to the wrong master (ticket 06; added
 2026-10-08, a change to the approved spec).
@@ -255,7 +257,10 @@ The writer (`edgar-warehouse silver`) adds a `loaded_at` column when `as_at` is
 `loaded_at`, and lands each delivery as its load mode says: `append` refuses a
 changed row under a landed key, `upsert` updates changed rows, `snapshot` also
 removes rows the delivery no longer holds. A rerun of the same delivery changes
-nothing; a changed spec is registered as a new table.
+nothing; a changed spec is registered as a new table. `silver refresh-ids` fills
+the MDM ids of rows already landed when their masters are mastered (or merged)
+later, without the rows being delivered again; `loaded_at` moves only when a
+delivered value changes.
 
 ## 7. Drift (`compare`)
 

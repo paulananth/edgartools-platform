@@ -24,7 +24,7 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land
+from edgar_warehouse.silver_writer.writer import MdmIds, land, refresh_ids
 from tests.integration import test_clean_entity_context_postgres as entity_context
 from tests.integration import test_clean_mdm_postgres as core
 from tests.unit.test_silver_writer import a_spec
@@ -159,7 +159,7 @@ def test_a_spec_becomes_a_table_with_comments_and_a_changed_spec_is_refused(stor
                      "tags": "jsonb", "member_id_mdm_id": "text", "loaded_at": "timestamp with time zone"}
     assert comments == 0  # every column says what it holds
     assert context["links"] == [{"columns": ["member_id"], "kind": "company", "source_code": "fixture.primary",
-                                 "source_key": "member_id", "mdm_id_column": "member_id_mdm_id"}]
+                                 "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}]
     assert context["key"] == ["visit_id"] and context["load_mode"] == "append"
 
 
@@ -168,7 +168,7 @@ def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_cha
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
     first = land(sink, "visit", visits(), ids)
-    assert (first["inserted"], first["changed"], first["mdm_ids_found"]) == (3, 0, 2)
+    assert (first["inserted"], first["changed"], first["mdm_keys_found"]) == (3, 0, 2)
     rows = table(runtime)
     assert rows[1]["member_id_mdm_id"] == mastered["a"] and rows[2]["member_id_mdm_id"] == mastered["b"]
     assert rows[3]["member_id"] == "z" and rows[3]["member_id_mdm_id"] is None  # not mastered: empty id
@@ -186,6 +186,45 @@ def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_cha
     filled = land(sink, "visit", visits(), ids)
     assert (filled["inserted"], filled["changed"], filled["mdm_ids_updated"]) == (0, 0, 1)
     assert table(runtime)[3]["member_id_mdm_id"] == identity["entity_id"]
+    # Migrating again over the populated schema installs nothing and keeps the runtime's rights.
+    assert silver.migrate(owner, runtime_role=RUNTIME, existing_only=True)
+    assert land(sink, "visit", visits(), ids)["inserted"] == 0
+
+
+def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, database):
+    owner, runtime, ids, mastered = stores
+    silver.register(owner, visit_spec(), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    land(sink, "visit", visits(), ids)
+    # z is mastered after its row landed; the row is never delivered again.
+    z = entity_context.company("z")
+    identity, binding = core.identity_and_binding(z)
+    core.apply(database, 2, assertions=[z], identities=[identity], decisions=[binding])
+    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
+    assert table(runtime)[3]["member_id_mdm_id"] == identity["entity_id"]
+    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 0}
+    # p and q (no identifiers, so nothing refuses the merge) land apart, then are merged:
+    # both rows then point at the survivor.
+    p_, q_ = (core.source(key, fields={"name": f"Company {key}"}, identifiers={}) for key in ("p", "q"))
+    pairs = [core.identity_and_binding(r) for r in (p_, q_)]
+    core.apply(database, 3, assertions=[p_, q_], identities=[i for i, _ in pairs], decisions=[d for _, d in pairs])
+    left, right = (i["entity_id"] for i, _ in pairs)
+    more = [{"visit_id": 4, "member_id": "p"}, {"visit_id": 5, "member_id": "q"}]
+    land(sink, "visit", more, ids)
+    assert table(runtime)[4]["member_id_mdm_id"] == left and table(runtime)[5]["member_id_mdm_id"] == right
+    loaded = {k: r["loaded_at"] for k, r in table(runtime).items()}
+    core.apply(database, 4, decisions=[core.decision(
+        "merge", actor="steward", reason="same company", at=core.AT, left=left, right=right)])
+    with database.application.connect() as conn:
+        canonical = dict(conn.execute(text("SELECT object_id, canonical_id FROM mdm.current_entity "
+                                           "WHERE object_id = ANY(:ids)"), {"ids": [left, right]}).all())
+    survivor = canonical[left] or left
+    assert survivor == (canonical[right] or right)
+    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
+    rows = table(runtime)
+    assert rows[4]["member_id_mdm_id"] == rows[5]["member_id_mdm_id"] == survivor
+    assert rows[1]["member_id_mdm_id"] == mastered["a"]  # unmerged rows keep their id
+    assert {k: r["loaded_at"] for k, r in rows.items()} == loaded  # an id is not a delivered value
 
 
 def test_upsert_changes_only_changed_rows_and_snapshot_removes_rows_no_longer_delivered(stores):
@@ -229,6 +268,11 @@ def test_a_name_with_symbols_is_quoted_everywhere(stores):
         key=["Line No."], links=[], time={"as_of": None, "as_at": "loaded_at", "event_time": None}, partition=[])
     silver.register(owner, odd, runtime_role=RUNTIME)
     assert land(PostgresSink(runtime), "Odd % : Table", [{"Line No.": 1, "Price ($) 100%": 2.5}])["inserted"] == 1
+    with runtime.connect() as conn:  # the table and its columns carry the names exactly as the spec writes them
+        names = conn.execute(text("SELECT column_name FROM information_schema.columns "
+                                  "WHERE table_schema='silver' AND table_name=:t ORDER BY ordinal_position"),
+                             {"t": "Odd % : Table"}).scalars().all()
+    assert names == ["Line No.", "Price ($) 100%", "loaded_at"]
 
 
 def test_an_agent_reads_a_table_spec_through_context(stores):
@@ -245,6 +289,8 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
     assert answer["kind"] == "silver table" and answer["key"] == ["visit_id"] and answer["load_mode"] == "append"
     assert answer["links"][0]["mdm_id_column"] == "member_id_mdm_id"
     assert answer["trust"]["spec_ref"].startswith("silver.table_spec/visit@")
+    with runtime.connect() as conn:  # the next step an agent is offered runs as written
+        assert conn.exec_driver_sql(answer["next_step"]).all() == []
     listed = TableContext(runtime).answer(entity_context.args("silver"))
     assert [t["table_name"] for t in listed["tables"]] == ["visit"]
     with pytest.raises(ContextError, match="No silver table"):

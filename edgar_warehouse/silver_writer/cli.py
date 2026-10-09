@@ -20,7 +20,7 @@ def _handle(args):
     from . import database
     from .rows import records
     from .sink import PostgresSink
-    from .writer import MdmIds, land
+    from .writer import MdmIds, land, refresh_ids
 
     engines = []
 
@@ -36,11 +36,15 @@ def _handle(args):
         elif args.silver_command == "register":
             result = database.register(engine("SILVER_MIGRATION_DATABASE_URL"), spec_file(args.spec, args.part),
                                        runtime_role=args.runtime_role)
-        elif args.silver_command == "land":
+        elif args.silver_command in {"land", "refresh-ids"}:
             ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
-            result = land(PostgresSink(engine("SILVER_DATABASE_URL")), args.table, records(args.rows), ids)
+            sink = PostgresSink(engine("SILVER_DATABASE_URL"))
+            result = (land(sink, args.table, records(args.rows), ids) if args.silver_command == "land"
+                      else refresh_ids(sink, args.table, ids))
         else:
-            result = describe(engine("SILVER_DATABASE_URL"), args.table)
+            from .context import TableContext
+
+            result = TableContext(engine("SILVER_DATABASE_URL")).table(args.table)
     finally:
         for value in engines:
             value.dispose()
@@ -67,21 +71,6 @@ def spec_file(path: Path, part: str | None) -> dict:
     return body
 
 
-def describe(engine, table: str | None) -> list[dict] | dict:
-    from sqlalchemy import text
-
-    from edgar_warehouse.control_contract import Blocked
-
-    with engine.connect() as conn:
-        if table is None:
-            return [dict(r) for r in conn.execute(text(
-                "SELECT table_name, grain, load_mode, spec_ref FROM silver.table_context ORDER BY table_name")).mappings()]
-        row = conn.execute(text("SELECT * FROM silver.table_context WHERE table_name=:t"), {"t": table}).mappings().first()
-    if not row:
-        raise Blocked(f"silver.{table} is not registered")
-    return dict(row)
-
-
 def _commands(parser):
     commands = parser.add_subparsers(dest="silver_command", required=True)
     for name in ("init", "migrate"):
@@ -97,6 +86,9 @@ def _commands(parser):
     landed.add_argument("table")
     landed.add_argument("rows", type=Path, help="Flat rows: a .jsonl, .csv or .parquet file")
     landed.set_defaults(handler=_handle)
+    refreshed = commands.add_parser("refresh-ids", help="Fill the MDM ids of rows already landed, from MDM as it is now")
+    refreshed.add_argument("table")
+    refreshed.set_defaults(handler=_handle)
     described = commands.add_parser("describe", help="A silver table for an agent: grain, key, links, time, load mode")
     described.add_argument("table", nargs="?")
     described.set_defaults(handler=_handle)

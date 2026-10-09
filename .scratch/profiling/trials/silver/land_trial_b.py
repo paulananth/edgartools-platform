@@ -5,7 +5,8 @@ not SEC) land through the silver writer on PG16, with no domain-specific change.
         <findings.yaml> <csv folder> <out.json>
 
 Each link's kind and Dataset Contract are filled the way data-onboarding fills
-them (`contoso.<master part>`). MDM is a freshly migrated database in which no
+them: the master part's own name as its kind, and `contoso.<master part>` as its
+Dataset Contract (the names onboarding would propose; none is onboarded here). MDM is a freshly migrated database in which no
 Contoso master is onboarded, so every MDM id stays empty: an unmastered record
 keeps its source key and an empty id. Resolution through mastered records is
 proven by tests/integration/test_silver_writer_postgres.py.
@@ -53,7 +54,7 @@ for part in body["parts"]:
     if not spec:
         continue
     for link in spec["links"]:  # what data-onboarding fills from the onboarded master
-        link["kind"], link["source_code"] = "person" if link["to_part"] == "customer" else "venue", f"contoso.{link['to_part']}"
+        link["kind"], link["source_code"] = link["to_part"], f"contoso.{link['to_part']}"
     registered = silver.register(owner, spec, runtime_role="silver_runtime")
     started = time.monotonic()
     first = land(PostgresSink(runtime), spec["table"], records(folder / f"{part['part']}.csv"), MdmIds(mdm_app))

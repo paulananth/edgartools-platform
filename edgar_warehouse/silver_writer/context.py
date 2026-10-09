@@ -14,6 +14,8 @@ from sqlalchemy import text
 
 from edgar_warehouse.context import PROG, ContextError, fit, page_offset
 
+from .spec import quote
+
 VIEW = "silver.table_context WHERE table_name = '<table>'"
 
 
@@ -27,18 +29,23 @@ class TableContext:
         if args.as_of or args.as_at or args.search is not None or args.hops != 1 or args.relationship_type:
             raise ContextError("A silver table answers with its spec: --search, --as-of, --as-at, --hops and --type "
                                "are for masters, codes and relationships.", f"{PROG} silver <table>")
+        if not args.key:
+            answer = {"name": "silver tables", "kind": "silver", "tables": self.table(None), "truncated": False,
+                      "next_page": None, "next_step": f"{PROG} silver <table_name>"}
+            return fit(answer, "tables", page_offset(args.page), f"{PROG} silver", "silver.table_context")
+        return fit(self.table(args.key), "links", page_offset(args.page), f"{PROG} silver {shlex.quote(args.key)}", VIEW)
+
+    def table(self, name: str | None) -> dict | list[dict]:
+        """One table's spec as an agent reads it, or every table in a line each."""
         with self.engine.connect() as conn:
-            if not args.key:
-                tables = [dict(r) for r in conn.execute(text(
+            if name is None:
+                return [dict(r) for r in conn.execute(text(
                     "SELECT table_name, grain, load_mode FROM silver.table_context ORDER BY table_name")).mappings()]
-                answer = {"name": "silver tables", "kind": "silver", "tables": tables, "truncated": False,
-                          "next_page": None, "next_step": f"{PROG} silver <table_name>"}
-                return fit(answer, "tables", page_offset(args.page), f"{PROG} silver", "silver.table_context")
             row = conn.execute(text("SELECT * FROM silver.table_context WHERE table_name = :t"),
-                               {"t": args.key}).mappings().first()
+                               {"t": name}).mappings().first()
         if row is None:
-            raise ContextError(f"No silver table {args.key!r}.", f"{PROG} silver")
-        answer = {
+            raise ContextError(f"No silver table {name!r}.", f"{PROG} silver")
+        return {
             "name": row["table_name"],
             "kind": "silver table",
             "key": row["key"],
@@ -50,10 +57,5 @@ class TableContext:
             "trust": {"source": "silver", "spec_ref": row["spec_ref"], "registered_at": row["registered_at"].isoformat()},
             "truncated": False,
             "next_page": None,
-            "next_step": f"SELECT * FROM silver.{_quoted(row['table_name'])} LIMIT 10",
+            "next_step": f"SELECT * FROM silver.{quote(row['table_name'])} LIMIT 10",
         }
-        return fit(answer, "links", page_offset(args.page), f"{PROG} silver {shlex.quote(args.key)}", VIEW)
-
-
-def _quoted(name: str) -> str:
-    return '"' + name.replace('"', '""') + '"'

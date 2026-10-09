@@ -7,6 +7,7 @@ Samples of personal columns are masked to their shape.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import shutil
 import sys
 import tempfile
@@ -386,7 +387,11 @@ def _silver(f: dict, relationships: list[dict], parts: dict) -> dict:
 
     def id_column(r):
         column = r["from"]["columns"][0]
-        return f"{column}_mdm_id" if taken.count(column) == 1 else f"{column}_{r['to']['part']}_mdm_id"
+        name = f"{column}_mdm_id" if taken.count(column) == 1 else f"{column}_{r['to']['part']}_mdm_id"
+        if len(name.encode()) <= 63:  # PostgreSQL's longest name
+            return name
+        short = hashlib.sha256(name.encode()).hexdigest()[:8]
+        return f"{column.encode()[:40].decode(errors='ignore')}_{short}_mdm_id"
 
     return {
         "table": f["part"].replace(".", "_").lower(),

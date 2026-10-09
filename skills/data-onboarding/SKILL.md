@@ -73,7 +73,8 @@ Every step says what differs for each target.
      ids) runs `edgar-warehouse silver land <table> <rows file>` with the
      part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same
      delivery changes nothing; an unmastered record keeps its source key and an
-     empty MDM id until a later landing fills it.
+     empty MDM id. Once its master is onboarded, `edgar-warehouse silver
+     refresh-ids <table>` fills the ids of rows already landed.
   3. `edgar-warehouse context silver <table>` shows an agent what the table holds.
 
   Scheduled landing through the declared pipeline still needs a verified

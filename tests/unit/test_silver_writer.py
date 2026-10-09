@@ -11,7 +11,7 @@ import pytest
 
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import rows, spec as specs, writer
-from edgar_warehouse.silver_writer.sink import _copy_text
+from edgar_warehouse.silver_writer.sink import _copy_text, _without_values
 
 
 def a_spec(**more):
@@ -72,6 +72,11 @@ def test_a_spec_is_checked_and_the_writer_adds_its_mdm_ids_and_loaded_at():
     ({"load_mode": "merge"}, "load_mode"),
     ({"time": {"as_of": None, "as_at": "recorded", "event_time": None}}, "as_at names a column"),
     ({"extra": 1}, "A silver table spec holds"),
+    ({"grain": None}, "grain is plain words"),
+    ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id",
+                 "mdm_id_column": "m", "inclusion": 1.5}]}, "inclusion is a share"),
+    ({"links": [{"columns": ["member_id", "amount"], "kind": "person", "source_code": "x",
+                 "source_key": "member_id", "mdm_id_column": "m"}]}, "one column of the spec"),
 ])
 def test_a_spec_that_could_not_land_is_refused_before_any_table(change, refused):
     with pytest.raises(Blocked, match=refused):
@@ -88,6 +93,15 @@ def test_values_are_written_for_the_database_to_cast():
         _copy_text({"a": 1}, "text", "c")
     with pytest.raises(Blocked, match="finite"):
         _copy_text(float("nan"), "double precision", "c")
+    aware = datetime.datetime(2026, 10, 8, 12, tzinfo=datetime.timezone.utc)
+    assert _copy_text(aware, "timestamp with time zone", "c") == "2026-10-08T12:00:00+00:00"
+    with pytest.raises(Blocked, match="would lose it"):
+        _copy_text(aware, "timestamp", "c")
+
+
+def test_a_refused_value_is_never_shown():
+    message = 'invalid input syntax for type bigint: "jane.doe@example.org"'
+    assert _without_values(message) == 'invalid input syntax for type bigint: "…"'
 
 
 def test_rows_come_from_json_lines_csv_and_parquet(tmp_path):
@@ -127,7 +141,7 @@ def test_each_link_gets_its_master_mdm_id_and_an_unmastered_record_keeps_it_empt
                                          {"visit_id": 3, "member_id": None}], ids)
     assert asked == [("fixture.members", "person", ["m1", "m2"])]
     assert [r["member_id_mdm_id"] for r in sink.written] == ["entity-1", None, None]
-    assert result["mdm_ids_found"] == 1
+    assert result["mdm_keys_found"] == 1
 
 
 def test_a_field_the_spec_does_not_name_or_a_missing_mdm_database_is_refused():

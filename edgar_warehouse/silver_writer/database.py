@@ -10,11 +10,12 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from edgar_warehouse.control_contract import Blocked, canonical
+from edgar_warehouse.control_contract import Blocked, canonical, digest as spec_digest
 
 from . import spec as specs
 
 MIGRATIONS = Path(__file__).parent / "migrations"
+LOCK = 730706  # the advisory lock that serialises migrating and registering
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
@@ -27,7 +28,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Silver migration requires PostgreSQL 16")
         _separate(conn, runtime_role)
-        conn.execute(text("SELECT pg_advisory_xact_lock(730706)"))
+        conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": LOCK})
         exists = conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='silver')"))
         saved = conn.scalar(text("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='silver'"))
         if existing_only and not exists:
@@ -65,17 +66,17 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
     and record the spec. The same spec again changes nothing; a changed spec for
     a registered table is refused: register it as a new table."""
     spec = specs.check(spec)
-    digest = specs.sha256(spec)
+    digest = spec_digest(spec)
     name = spec["table"]
     with engine.begin() as conn:
         _separate(conn, runtime_role)
-        conn.execute(text("SELECT pg_advisory_xact_lock(730706)"))
+        conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": LOCK})
         held = conn.execute(text("SELECT sha256 FROM silver.table_spec WHERE table_name=:t"), {"t": name}).scalar()
         if held == digest:
             return {"table": name, "sha256": digest, "created": False}
         if held:
             raise Blocked(f"silver.{name} holds another spec ({held[:12]}); a changed spec is registered as a new table")
-        q = lambda n: _quote(conn, n)  # noqa: E731
+        q = specs.quote
         table = f"silver.{q(name)}"
         if conn.scalar(text("SELECT to_regclass(:t) IS NOT NULL"), {"t": table}):
             raise Blocked(f"silver.{name} exists without a registered spec; refusing to adopt it")
@@ -96,12 +97,15 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
                 words += f" Sensitivity: {c['sensitivity']}."
             _comment(conn, f"COLUMN {table}.{q(c['name'])}", words)
         for link in spec["links"] or []:
+            share = link.get("inclusion")
             _comment(conn, f"COLUMN {table}.{q(link['mdm_id_column'])}",
                      f"The MDM id of the {link['kind']} whose {link['source_code']} record key is "
-                     f"{link['source_key']}; empty while that record is not mastered.")
+                     f"{link['source_key']}; empty while that record is not mastered."
+                     + (f" Profiling found {share:.1%} of the source keys among the master's keys." if share is not None else ""))
         for c in specs.added_time(spec):
-            _comment(conn, f"COLUMN {table}.{q(c)}", "When the writer last loaded or changed this row (the as-at time).")
-        runtime = _quote(conn, runtime_role)
+            _comment(conn, f"COLUMN {table}.{q(c)}", "When the row's delivered values were last written (the as-at "
+                     "time); filling an MDM id later does not change it.")
+        runtime = q(runtime_role)
         _ddl(conn, f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {runtime}")
         conn.execute(text("INSERT INTO silver.table_spec(table_name, spec, sha256) VALUES (:t, CAST(:s AS jsonb), :h)"),
                      {"t": name, "s": canonical(spec), "h": digest})

@@ -8,11 +8,12 @@ import decimal
 import io
 import json
 import math
+import re
 from typing import Iterable, Protocol
 
 from sqlalchemy import text
 
-from edgar_warehouse.control_contract import Blocked
+from edgar_warehouse.control_contract import Blocked, digest
 
 from . import spec as specs
 
@@ -26,6 +27,12 @@ class Sink(Protocol):
     def write(self, spec: dict, rows: Iterable[dict]) -> dict:
         """Write one delivery of rows (the spec's columns and each link's MDM id) as the
         spec's load mode says, all or nothing, and count what changed."""
+
+    def link_keys(self, spec: dict, link: dict) -> set[str]:
+        """Every source key value a link's column holds in the table, as text."""
+
+    def set_ids(self, spec: dict, link: dict, found: dict[str, str | None]) -> int:
+        """Set a link's MDM id on every row from `found` (source key to id, or empty); count rows changed."""
 
 
 class PostgresSink:
@@ -42,7 +49,7 @@ class PostgresSink:
                                {"t": table}).first()
         if not row:
             raise Blocked(f"silver.{table} is not registered: the schema owner registers its spec first")
-        if specs.sha256(row.spec) != row.sha256:
+        if digest(row.spec) != row.sha256:
             raise Blocked(f"silver.{table}: the registered spec does not match its sha256")
         return specs.check(row.spec)
 
@@ -55,7 +62,7 @@ class PostgresSink:
         stamped = specs.added_time(spec)
         key = spec["key"]
         with self.engine.begin() as conn:
-            q = conn.dialect.identifier_preparer.quote_identifier
+            q = specs.quote
             table = f"silver.{q(spec['table'])}"
             staged = source + ids
             with conn.connection.driver_connection.cursor() as cur:
@@ -72,14 +79,17 @@ class PostgresSink:
                     cur.execute("CREATE TEMP TABLE silver_rows ON COMMIT DROP AS SELECT "
                                 + ", ".join([f"CAST({q(c)} AS {types[c]}) AS {q(c)}" for c in source]
                                             + [q(c) for c in ids]) + " FROM silver_in")
-                except DataError as exc:  # the database names the value it could not read
-                    raise Blocked(f"silver.{spec['table']}: a value is not its column's type: "
-                                  f"{str(exc).splitlines()[0]}") from exc
-                for c in spec["columns"]:
-                    if not c["nullable"]:
-                        cur.execute(f"SELECT count(*) FROM silver_rows WHERE {q(c['name'])} IS NULL")
-                        if cur.fetchone()[0]:
-                            raise Blocked(f"silver.{spec['table']}: column {c['name']} is empty in some rows")
+                except DataError as exc:
+                    # The database's message quotes the value; a cell may be personal, so only its type is named.
+                    raise Blocked(f"silver.{spec['table']}: a value is not its column's type "
+                                  f"({_without_values(str(exc).splitlines()[0])})") from exc
+                required = [c["name"] for c in spec["columns"] if not c["nullable"]]
+                if required:
+                    cur.execute("SELECT " + ", ".join(f"count(*) FILTER (WHERE {q(c)} IS NULL)" for c in required)
+                                + " FROM silver_rows")
+                    empty = [c for c, n in zip(required, cur.fetchone()) if n]
+                    if empty:
+                        raise Blocked(f"silver.{spec['table']}: column {empty[0]} is empty in some rows")
                 keys = ", ".join(q(k) for k in key)
                 cur.execute(f"SELECT count(*) FROM (SELECT 1 FROM silver_rows GROUP BY {keys} HAVING count(*) > 1) d")
                 if cur.fetchone()[0]:
@@ -97,21 +107,48 @@ class PostgresSink:
                 cur.execute(f"INSERT INTO {table} ({', '.join(q(c) for c in written)}) "
                             f"SELECT {', '.join(values)} FROM silver_rows s ON CONFLICT ({keys}) DO NOTHING")
                 inserted = cur.rowcount
-                if changed:
-                    sets = [f"{q(c)} = s.{q(c)}" for c in staged] + [f"{q(c)} = now()" for c in stamped]
-                    cur.execute(f"UPDATE {table} t SET {', '.join(sets)} FROM silver_rows s WHERE {match} AND {differs}")
                 ids_updated = 0
-                if ids:
+                if ids:  # before changed rows are rewritten, so this counts every landed row whose id moved
                     cur.execute(f"UPDATE {table} t SET {', '.join(f'{q(c)} = s.{q(c)}' for c in ids)} "
                                 f"FROM silver_rows s WHERE {match} AND ROW({', '.join('t.' + q(c) for c in ids)}) "
                                 f"IS DISTINCT FROM ROW({', '.join('s.' + q(c) for c in ids)})")
                     ids_updated = cur.rowcount
+                if changed:
+                    sets = [f"{q(c)} = s.{q(c)}" for c in staged] + [f"{q(c)} = now()" for c in stamped]
+                    cur.execute(f"UPDATE {table} t SET {', '.join(sets)} FROM silver_rows s WHERE {match} AND {differs}")
                 deleted = 0
                 if spec["load_mode"] == "snapshot":
                     cur.execute(f"DELETE FROM {table} t WHERE NOT EXISTS (SELECT 1 FROM silver_rows s WHERE {match})")
                     deleted = cur.rowcount
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
                 "deleted": deleted, "mdm_ids_updated": ids_updated}
+
+    def link_keys(self, spec: dict, link: dict) -> set[str]:
+        q = specs.quote
+        with self.engine.connect() as conn:
+            with conn.connection.driver_connection.cursor() as cur:
+                cur.execute(f"SELECT DISTINCT CAST({q(link['source_key'])} AS text) FROM silver.{q(spec['table'])} "
+                            f"WHERE {q(link['source_key'])} IS NOT NULL")
+                return {r[0] for r in cur.fetchall()}
+
+    def set_ids(self, spec: dict, link: dict, found: dict[str, str | None]) -> int:
+        q = specs.quote
+        table, key, column = f"silver.{q(spec['table'])}", q(link["source_key"]), q(link["mdm_id_column"])
+        with self.engine.begin() as conn:
+            with conn.connection.driver_connection.cursor() as cur:
+                cur.execute(f"LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE")
+                cur.execute("CREATE TEMP TABLE silver_ids (source_key text PRIMARY KEY, entity_id text) ON COMMIT DROP")
+                buffer = io.StringIO("".join(f"{_copy_text(k, 'text', 'key')}\t{_copy_text(v, 'text', 'id')}\n"
+                                             for k, v in found.items()))
+                cur.copy_expert("COPY silver_ids FROM STDIN", buffer)
+                cur.execute(f"UPDATE {table} t SET {column} = i.entity_id FROM silver_ids i "
+                            f"WHERE CAST(t.{key} AS text) = i.source_key AND t.{column} IS DISTINCT FROM i.entity_id")
+                return cur.rowcount
+
+
+def _without_values(message: str) -> str:
+    """A database message with each quoted value removed."""
+    return re.sub(r'"(?:[^"]|"")*"', '"…"', message)
 
 
 def _chunks(rows: Iterable[dict], columns: list[str], types: dict) -> Iterable[tuple[io.StringIO, int]]:
@@ -145,6 +182,8 @@ def _copy_text(value, pg_type: str, column: str) -> str:
     elif isinstance(value, bytes):
         value = "\\x" + value.hex()
     elif isinstance(value, (datetime.date, datetime.time)):
+        if pg_type == "timestamp" and isinstance(value, datetime.datetime) and value.tzinfo is not None:
+            raise Blocked(f"Column {column} holds times without a time zone; a time with one would lose it")
         value = value.isoformat()
     elif isinstance(value, decimal.Decimal):
         value = format(value, "f")

@@ -3,7 +3,10 @@
 Each row keeps the source's own key for every link, and the master's MDM id
 beside it: read from MDM by the link's Dataset Contract, kind and record key
 (compared as text). A record MDM has not mastered keeps an empty id; a later
-landing fills it.
+landing of the row, or `refresh_ids` for rows already landed, fills it.
+
+A delivery is held in memory while its keys are looked up (the sink copies it
+in bounded chunks); a part too large for that is landed in several deliveries.
 """
 
 from __future__ import annotations
@@ -47,7 +50,8 @@ class MdmIds:
 
 def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
     """Write records into a registered table: fields are the spec's columns (a
-    field the spec does not name is refused), and each link's MDM id is looked up."""
+    field the spec does not name is refused), and each link's MDM id is looked up.
+    `mdm_keys_found` counts the distinct source keys MDM knows, over all links."""
     spec = sink.spec(table)
     names = {c["name"] for c in spec["columns"]}
     rows = []
@@ -59,16 +63,34 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
     links = spec["links"] or []
     if links and ids is None:
         raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (MDM_DATABASE_URL)")
-    resolved = 0
+    known = 0
     for link in links:
         column = link["source_key"]
         keys = {_key(r.get(column)) for r in rows} - {None}
         found = ids(link["source_code"], link["kind"], keys) if keys else {}
         for row in rows:
             row[link["mdm_id_column"]] = found.get(_key(row.get(column)))
-        resolved += sum(1 for v in found.values() if v)
+        known += sum(1 for v in found.values() if v)
     result = sink.write(spec, rows)
-    return {**result, "mdm_ids_found": resolved}
+    return {**result, "mdm_keys_found": known}
+
+
+def refresh_ids(sink: Sink, table: str, ids) -> dict:
+    """Fill (or correct) every link's MDM id on rows already landed, from MDM as it
+    is now: a record mastered after its rows landed gets its id without its rows
+    being delivered again; an id whose entity was merged moves to the survivor."""
+    spec = sink.spec(table)
+    links = spec["links"] or []
+    if not links:
+        return {"table": table, "rows_updated": 0}
+    if ids is None:
+        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (MDM_DATABASE_URL)")
+    updated = {}
+    for link in links:
+        keys = sink.link_keys(spec, link)
+        found = ids(link["source_code"], link["kind"], keys) if keys else {}
+        updated[link["mdm_id_column"]] = sink.set_ids(spec, link, {k: found.get(k) for k in keys})
+    return {"table": table, "rows_updated": updated}
 
 
 def _key(value) -> str | None:
