@@ -207,7 +207,10 @@ that matter most:
   `invalid_rows.jsonl` beside the findings, never dropped. Each part's key
   sample for `compare` (hashes only) is in `fingerprints.json` beside them;
   keep it with the approved findings.
-- **silver:** the table spec for a part MDM does not own.
+- **silver:** the table spec for a part MDM does not own. Its links point to
+  master parts only, each with an empty `kind` and `source_code` that
+  data-onboarding fills; `edgar-warehouse silver register` makes the table and
+  `silver land` writes the part's rows into it.
 
 ## Compare a new delivery
 

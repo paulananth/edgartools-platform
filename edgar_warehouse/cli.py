@@ -107,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     from edgar_warehouse.context import register as register_context
     from edgar_warehouse.mdm.cli import register_mdm_subparser
     from edgar_warehouse.rdm.cli import register as register_rdm
+    from edgar_warehouse.silver_writer.cli import register as register_silver
     from edgar_warehouse.rules.cli import register as register_rules
     from edgar_warehouse.application.plan_cli import register as register_plan
     from edgar_warehouse.workers.cli import arguments as worker_arguments
@@ -119,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_plan(subparsers)
     register_context(subparsers)
     register_rdm(subparsers)
+    register_silver(subparsers)
     register_bundle(subparsers, parser)
     return parser
 

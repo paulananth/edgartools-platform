@@ -147,11 +147,13 @@ ticket 05, RDM part).
 
 Each publish writes the version to silver as three tables keyed by
 (`code_set`, `version`): `rdm_code` (with `path`, `label_path`, `level`,
-`depth`), `rdm_code_label`, `rdm_crosswalk`. The silver writer is plan row 6;
-until it exists, the publish writes the same rows as canonical JSON Lines files
-beside the version for consumers to load: `<out>/<code_set>/<version>/`
+`depth`), `rdm_code_label`, `rdm_crosswalk`. The publish writes these rows as
+canonical JSON Lines files beside the version: `<out>/<code_set>/<version>/`
 holds `canonical.jsonl` (the pinned bytes), `rdm_code.jsonl`,
-`rdm_code_label.jsonl`, `rdm_crosswalk.jsonl` and `pin.json`.
+`rdm_code_label.jsonl`, `rdm_crosswalk.jsonl` and `pin.json`. The silver writer
+(plan row 6, `edgar-warehouse silver`) lands them: the three tables' specs are
+registered once, then `silver land` reads each file. RDM does not write to the
+silver database itself, so publishing never depends on it (ticket 06, 2026-10-08).
 
 ## 7. Migration of the existing reference YAML (plan row 2)
 

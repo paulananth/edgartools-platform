@@ -1,7 +1,8 @@
 # Silver outputs
 
 Type: task
-Status: open: listed under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
+Status: superseded (2026-10-08) by profiling plan decision 36 and profiling ticket 06 (`.scratch/profiling/issues/06-silver-writer.md`): silver for the trials and the proof is a `silver` schema on PostgreSQL 16 behind one sink interface, written by `edgar-warehouse silver` from profiling's silver table specs. The Delta and Lakebase outcome below, and its `deltalake` extra, are not built. A `rules run --target silver` entry point is not built; scheduled landing waits for a silver output worker (Bookkeeping) and a warehouse sink, each its own ticket.
+Earlier: open: listed under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
 Was: open
 Blocked by: 03
 

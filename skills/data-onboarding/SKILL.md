@@ -58,12 +58,29 @@ Every step says what differs for each target.
 - **MDM target.** The feed's records become MDM records through its
   Dataset Contract (`mdm` section) and its kind's merge rules. Everything in
   this skill builds it.
-- **Silver target.** Typed landing needs an implemented, verified output
-  worker in the declared pipeline. Check every profile with
-  `edgar-warehouse workers describe <profile>`. Bookkeeping owns orchestration;
-  workers own reading and destination writes. A missing profile is unfinished
-  implementation: record the gap and qualify the supported MDM path. The
-  installed bundle currently has no general silver writer.
+- **Silver target.** A transaction or published reference part lands in a
+  silver table made from its approved silver table spec (the part's `silver`
+  in `findings.yaml`). The spec's links point to master parts only; fill each
+  link's `kind` and `source_code` (the master's Dataset Contract) from the
+  onboarded master, since the writer looks each row's MDM id up by them and
+  refuses a link without them. Then:
+  1. The schema owner (`SILVER_MIGRATION_DATABASE_URL`) runs
+     `edgar-warehouse silver init --runtime-role <runtime login>` once, and
+     `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <runtime login>`
+     for the part. A changed spec is refused for a registered table: register
+     it as a new table.
+  2. The runtime (`SILVER_DATABASE_URL`, plus `MDM_DATABASE_URL` to read MDM
+     ids) runs `edgar-warehouse silver land <table> <rows file>` with the
+     part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same
+     delivery changes nothing; an unmastered record keeps its source key and an
+     empty MDM id. Once its master is onboarded, `edgar-warehouse silver
+     refresh-ids <table>` fills the ids of rows already landed.
+  3. `edgar-warehouse context silver <table>` shows an agent what the table holds.
+
+  Scheduled landing through the declared pipeline still needs a verified
+  output worker (`edgar-warehouse workers describe <profile>`); Bookkeeping
+  owns orchestration. A missing profile is unfinished implementation: record
+  the gap.
 
 ## How to run commands
 
@@ -533,7 +550,9 @@ Either way, write it in the log.
 |---|---|---|---|
 | `rules check` | not built | Dry run by hand (**test**) | rules-skill ticket 03 |
 | Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | rules-skill ticket 04 |
-| General silver writer | not built | Onboard the MDM target only (**Two targets**) | rules-skill ticket 05 |
+| Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
+| Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a follow-up of profiling ticket 06 |
+| Silver output worker in a pipeline | not built | Run `silver land` by hand (**Two targets**) | a Bookkeeping worker ticket |
 
 ## Examples (this repo's sources)
 
