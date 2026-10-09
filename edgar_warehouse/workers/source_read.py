@@ -12,7 +12,7 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.control_contract import reference
+from edgar_warehouse.control_contract import canonical, reference
 from . import source_stream, source_readings, source_parquet
 
 OUTPUT_BYTES = 128 * 1024**2
@@ -92,12 +92,14 @@ def _lookups(manifest, entry, artifacts, contract):
     ref = _entry(manifest, entry)
     bound = artifact_store.json_value(artifacts.verified(entry["lookups"], max_bytes=64 * 1024**2))
     if (not isinstance(bound, dict) or set(bound) != {"version", "input", "sets"}
-            or type(bound["version"]) is not int or bound["version"] != 1
+            or type(bound["version"]) is not int or bound["version"] not in (1, 2)
             or bound["input"] != ref or not isinstance(bound["sets"], dict)
             or set(bound["sets"]) != set(declared)):
         raise ValueError("Lookup document binds exactly declared sets to the input receipt")
+    sets = (bound["sets"] if bound["version"] == 1
+            else _derived_sets(bound["sets"], declared, artifacts))
     total = 0
-    for name, values in bound["sets"].items():
+    for name, values in sets.items():
         spec = declared[name]
         if not isinstance(values, list) or len(values) > spec["max_values"]:
             raise ValueError("Lookup raw values exceed their declared count or list shape")
@@ -114,7 +116,50 @@ def _lookups(manifest, entry, artifacts, contract):
         total += size
         if total > 64 * 1024**2:
             raise ValueError("Lookup sets exceed the aggregate UTF-8 byte bound")
-    return bound["sets"], {"lookups": entry["lookups"]}
+    return sets, {"lookups": entry["lookups"]}
+
+
+def _derived_sets(specs, declared, artifacts):
+    """Exhaust authenticated producer readings before making indexed scopes.
+
+    Values stay raw until the existing count/UTF-8 bounds validate them;
+    duplicate rows therefore cannot evade those limits through deduplication.
+    """
+    result = {}
+    named = lambda value: isinstance(value, str) and source_readings.NAME.fullmatch(value) is not None
+    for name, spec in specs.items():
+        required = {"readings", "table", "column", "max_input_bytes", "max_input_rows"}
+        if (not isinstance(spec, dict) or set(spec) != required
+                or not isinstance(spec["readings"], list) or not 1 <= len(spec["readings"]) <= 256
+                or not named(spec["table"]) or not named(spec["column"])
+                or type(spec["max_input_bytes"]) is not int or not 1 <= spec["max_input_bytes"] <= 64 * 1024**2
+                or type(spec["max_input_rows"]) is not int or not 1 <= spec["max_input_rows"] <= 100000):
+            raise ValueError("Derived lookup requires complete readings, named table/column and explicit bounds")
+        for ref in spec["readings"]:
+            reference(ref)
+        values, consumed, rows, size = [], 0, 0, 0
+        bounds = declared[name]
+        for ref in spec["readings"]:
+            used = 0
+            for _, _, chunk, used in source_readings.iter_load(
+                    ref, artifacts, max_bytes=spec["max_input_bytes"] - consumed,
+                    max_rows=spec["max_input_rows"] - rows, allow_lookup_receipts=True):
+                if chunk["deferred"] or spec["table"] not in chunk["tables"]:
+                    raise ValueError("Derived lookup requires resolved records and its declared table")
+                rows += sum(len(table) for table in chunk["tables"].values())
+                for row in chunk["tables"][spec["table"]]:
+                    value = row.get(spec["column"])
+                    if not isinstance(value, str):
+                        raise ValueError("Derived lookup columns require present exact text")
+                    length = len(value.encode("utf-8"))
+                    if (len(values) >= bounds["max_values"] or length > bounds["max_value_bytes"]
+                            or size + length > bounds["max_bytes"]):
+                        raise ValueError("Derived lookup exceeds declared raw value bounds")
+                    values.append(value)
+                    size += length
+            consumed += used
+        result[name] = values
+    return result
 
 
 def _context(manifest, entry, artifacts):
@@ -122,11 +167,80 @@ def _context(manifest, entry, artifacts):
         return entry, {}, {}
     ref = _entry(manifest, entry)
     bound = artifact_store.json_value(artifacts.verified(entry["context"], max_bytes=32 * 1024))
-    if (not isinstance(bound, dict) or set(bound) != {"version", "input", "values"}
-            or type(bound["version"]) is not int or bound["version"] != 1
-            or bound["input"] != ref or not isinstance(bound["values"], dict)):
+    if (not isinstance(bound, dict) or type(bound.get("version")) is not int
+            or bound.get("input") != ref):
         raise ValueError("Context document must bind its values to the exact input receipt")
-    return ref, bound["values"], {"context": entry["context"]}
+    if bound["version"] == 1:
+        if set(bound) != {"version", "input", "values"} or not isinstance(bound["values"], dict):
+            raise ValueError("Context document must bind its values to the exact input receipt")
+        values = bound["values"]
+    elif bound["version"] == 2:
+        values = _derived_context(bound, artifacts)
+    else:
+        raise ValueError("Context document requires version 1 or 2")
+    return ref, values, {"context": entry["context"]}
+
+
+def _derived_context(bound, artifacts):
+    """Use one verified producer row, after complete traversal and checks."""
+    required = {"version", "input", "reading", "table", "columns", "checks", "max_bytes", "max_rows"}
+    if set(bound) != required:
+        raise ValueError("Derived context requires exact reading, table, columns, checks and limits")
+    reference(bound["reading"])
+    named = lambda value: isinstance(value, str) and source_readings.NAME.fullmatch(value) is not None
+    if (not named(bound["table"]) or not isinstance(bound["columns"], dict)
+            or not 1 <= len(bound["columns"]) <= 64
+            or not all(named(name) and named(column) for name, column in bound["columns"].items())
+            or not isinstance(bound["checks"], dict) or not 1 <= len(bound["checks"]) <= 64
+            or not all(named(name) for name in bound["checks"])
+            or type(bound["max_bytes"]) is not int or not 1 <= bound["max_bytes"] <= 64 * 1024**2
+            or type(bound["max_rows"]) is not int or not 1 <= bound["max_rows"] <= 100000):
+        raise ValueError("Derived context has invalid named fields or explicit bounds")
+    checks = {}
+    input_checks = set()
+    for column, expected in bound["checks"].items():
+        if isinstance(expected, dict):
+            if set(expected) == {"column"} and named(expected["column"]):
+                checks[column] = expected
+                continue
+            if set(expected) != {"input"} or expected["input"] not in ("uri", "sha256"):
+                raise ValueError("Derived context check requires a scalar or exact input identity field")
+            input_checks.add(expected["input"])
+            expected = bound["input"][expected["input"]]
+        elif expected is not None and type(expected) not in (str, bool, int):
+            raise ValueError("Derived context checks compare exact JSON scalars")
+        checks[column] = expected
+    if input_checks != {"uri", "sha256"}:
+        raise ValueError("Derived context must check producer columns against exact input URI and hash")
+    selected = None
+    for _, _, chunk, _ in source_readings.iter_load(
+            bound["reading"], artifacts, max_bytes=bound["max_bytes"],
+            max_rows=bound["max_rows"], allow_lookup_receipts=True):
+        if chunk["deferred"] or bound["table"] not in chunk["tables"]:
+            raise ValueError("Derived context requires resolved records and a declared metadata table")
+        for row in chunk["tables"][bound["table"]]:
+            for column, expected in checks.items():
+                if isinstance(expected, dict):
+                    other = expected["column"]
+                    if other not in row:
+                        raise ValueError("Derived context check names a missing comparison column")
+                    expected = row[other]
+                if expected is not None and type(expected) not in (str, bool, int):
+                    raise ValueError("Derived context comparison columns require scalar values")
+                if column not in row or canonical(row[column]) != canonical(expected):
+                    raise ValueError(f"Derived context producer check failed: {column}")
+            if selected is not None:
+                raise ValueError("Derived context requires exactly one metadata row")
+            selected = {}
+            for name, column in bound["columns"].items():
+                if column not in row or (row[column] is not None and type(row[column]) not in (str, bool, int)):
+                    raise ValueError("Derived context values require present scalar columns")
+                selected[name] = row[column]
+    if selected is None:
+        raise ValueError("Derived context requires exactly one metadata row")
+    if len(canonical(selected).encode()) > 32 * 1024:
+        raise ValueError("Derived context values exceed scalar byte budget")
+    return selected
 
 
 def _output(envelope: dict, artifacts, documents=None) -> bytes:

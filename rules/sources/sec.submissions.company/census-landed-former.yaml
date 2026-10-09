@@ -1,0 +1,19 @@
+# Complete landed former-name population; no take.
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+  max_input_bytes: 67108864
+read:
+  format: parquet
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    former:
+      each: rows
+      columns:
+        row:
+          value:
+            path: .
+  assertions: []

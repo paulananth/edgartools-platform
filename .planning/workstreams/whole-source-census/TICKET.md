@@ -1,4 +1,22 @@
-# Whole-source configured census construction
+# Whole-source configured Name Frequency construction
+
+## Operator scope — 2026-10-09
+
+New isolated worktree: `codex/whole-census-eof-20261009`, started from freshly
+fetched main `13942dcf` (#881, with #884 already included), then fast-forwarded
+to `51fe80b0` (#885). Source Extract and Name Frequency are the agreed prose
+names; existing filenames, identifiers and manifest keys stay stable. The attestation
+branch is stopped. Its two open checklist lines remain open.
+
+- [x] Qualify GENERAL mapped fields, quality-derived matching places and global address inputs against the active construction; 51 targeted cases, 299 affected cases and deliberate noncandidate/ineligible deletion faults pass, with exact 1,000 captured-record projection parity. 2026-10-09 12:09 ET
+- [x] Authenticate all 69 SEC captures (43,338 filers), exhaust company/former-name/address members and derive 43,245 wanted keys; configured publisher metadata derives 3,428,477 records with a separate pinned authority binding. Retained SEC constructors agree; 368.85 seconds. 2026-10-09 12:09 ET
+- [x] Measure and announce full-scan estimates: SEC bounded capture 28.28 seconds, conservative 33-minute estimate; complete SEC finished in 6m09s. Combined GLEIF comparison 1,000 records in 1.274 seconds, 73-minute estimate announced before full original-source scan. 2026-10-09 12:09 ET
+- [ ] Compare the complete pinned SEC/GLEIF census through original-source EOF, including all seven live cascade passes, exact holder counts and last occurrence per name key/holder.
+- [ ] Record reproducible receipts, current runtime pins, elapsed times, fault checks and reviewable changes; preserve all deferred gates below.
+
+Installed empty PostgreSQL16 population (6,414/3,052), old construction/parser
+deletion, activation and deployment remain behind the original-source EOF
+comparison. No install, Person/Security feeds or profiling work is scheduled.
 
 ## PR878 rebase — 2026-10-09
 

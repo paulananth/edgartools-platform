@@ -18,6 +18,26 @@ enum Operation {
     RegexReplace(Regex, String),
     Pad(String, String),
     RemovePrefix(String),
+    Lines(Recipe),
+    Slice(usize, usize),
+    Tokens(std::collections::HashMap<String, String>),
+}
+
+pub(crate) fn cost(value: &Value) -> (usize, usize) {
+    let mut result = (0, 0);
+    for op in value.as_sequence().into_iter().flatten() {
+        result.0 += 1;
+        result.1 += usize::from(op.get("regex_replace").is_some());
+        if let Some(inner) = op.get("lines") {
+            // Nested lines are rejected by compile. Inspect one bounded level
+            // here rather than recursively visiting malformed recipes.
+            if let Some(ops) = inner.as_sequence() {
+                result.0 += ops.len();
+                result.1 += ops.iter().filter(|op| op.get("regex_replace").is_some()).count();
+            }
+        }
+    }
+    result
 }
 
 fn text(value: &Value) -> Result<String, String> {
@@ -75,6 +95,29 @@ impl Recipe {
                 }
                 Some("pad") => { let (left, right) = pair(args, "left", "right")?; Operation::Pad(left, right) }
                 Some("remove_prefix") => Operation::RemovePrefix(text(args)?),
+                Some("lines") => {
+                    if args.as_sequence().is_some_and(|ops| ops.iter().any(|op| op.get("lines").is_some())) {
+                        return Err("lines transforms cannot contain another lines operation".into());
+                    }
+                    Operation::Lines(Recipe::compile(args)?)
+                }
+                Some("tokens") => {
+                    let map = args.as_mapping().filter(|m| m.len() <= 256).ok_or("tokens requires at most 256 text replacements")?;
+                    let mut replacements = std::collections::HashMap::new();
+                    for (key, value) in map {
+                        let key = text(key)?;
+                        if key.is_empty() || key.chars().any(whitespace) { return Err("tokens keys are nonempty whitespace-free text".into()); }
+                        replacements.insert(key, text(value)?);
+                    }
+                    Operation::Tokens(replacements)
+                }
+                Some("slice") => {
+                    let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("slice requires start and end")?;
+                    let start = map.get(Value::String("start".into())).and_then(Value::as_u64).ok_or("slice start is unsigned")?;
+                    let end = map.get(Value::String("end".into())).and_then(Value::as_u64).ok_or("slice end is unsigned")?;
+                    if start > end || end > MAX_TEXT as u64 { return Err("slice requires 0 <= start <= end <= 1048576".into()); }
+                    Operation::Slice(start as usize, end as usize)
+                }
                 _ => return Err("unknown text transform operation or argument".into()),
             });
         }
@@ -126,6 +169,26 @@ impl Recipe {
                         cursor = matched.end();
                     }
                     bounded_push(&mut out, &value[cursor..])?;
+                    out
+                }
+                Operation::Tokens(replacements) => {
+                    let mut out = String::new();
+                    for token in value.split(whitespace).filter(|token| !token.is_empty()) {
+                        if !out.is_empty() { bounded_push(&mut out, " ")?; }
+                        bounded_push(&mut out, replacements.get(token).map(String::as_str).unwrap_or(token))?;
+                    }
+                    out
+                }
+                Operation::Slice(start, end) => chars(value.chars().skip(*start).take(end - start))?,
+                Operation::Lines(recipe) => {
+                    let mut out = String::new();
+                    for line in value.split('\n') {
+                        let line = recipe.apply(line.to_owned())?;
+                        if !line.is_empty() {
+                            if !out.is_empty() { bounded_push(&mut out, "\n")?; }
+                            bounded_push(&mut out, &line)?;
+                        }
+                    }
                     out
                 }
             };
