@@ -446,6 +446,13 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   (`edgar_warehouse/mdm/fence_monitor.py`) discovers the fenced table set live and verifies no leak.
 - SQLAlchemy's `Session` never auto-commits, and a logged "succeeded" is not evidence of a durable write.
   Commit only once the work a checkpoint claims is itself durable, and roll staged state back on failure.
+- A PL/pgSQL function that looks rows up against a list of keys held in a variable (`= ANY(keys)`, `&& keys`,
+  `?| keys`) carries `SET plan_cache_mode = force_custom_plan`; no other function does, and never set it for the
+  session. After five calls PL/pgSQL may reuse a generic plan, which cannot hash the list, so each row is compared
+  with every key (the match proposal snapshot: 5.2 s generic, 0.8 s custom, at 4,000 Form ADV filings); per-row
+  statements, re-planned on every call, ran twice as slow. `tests/integration/test_clean_plan_cache_postgres.py`
+  holds the rule for every installed function, including a `CREATE OR REPLACE` that drops the setting
+  (migration 011, profiling ticket 07).
 - Memoize invariant lookups per batch, and bulk-prefetch/bulk-flush per-row round trips. This N+1 shape
   has been found and fixed at least five separate times in this codebase — assume any newly-added batch
   path has it until a real run at scale says otherwise. SQLite-backed unit tests never surface it.

@@ -208,6 +208,16 @@ generic seq-scan plan inside the function. If it does, attach
 `SET` clause applies only while the function runs (`sql-createfunction.html`,
 `sql-prepare.html`).
 
+**Seen, 2026-10-09 (profiling ticket 07).** The case arose on Form ADV filings:
+with the indexes in place, the snapshot's generic plan still compared each row
+with every key (an array held in a variable cannot be hashed), 5.2 s against
+0.8 s planned with its keys, at about 4,000 filings. The local PG16 build has
+no `auto_explain`, so the evidence is the same call timed under
+`plan_cache_mode` generic, custom and auto. Migration 011 attaches the setting
+to the snapshot alone; set for the session, it made the per-row statements in
+`write_batch` and `keep_stage` twice as slow. The rule and its test:
+CLAUDE.md, `tests/integration/test_clean_plan_cache_postgres.py`.
+
 ### Noted for the operator, not physical design
 
 The snapshot is computed three times per batch: `merge.py:479`,
