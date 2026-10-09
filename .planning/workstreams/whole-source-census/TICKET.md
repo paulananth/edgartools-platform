@@ -4,12 +4,15 @@
 
 - [x] Rebase six PR commits onto main79a8c78f in isolated codex/pr878-rebase-20261009; original dirty publication-context worktree remains untouched (2026-10-09 08:41 ET).
 - [x] Resolve two source_read conflicts preserving authenticated lookups, Parquet framing, input bounds, malformed-contract refusal and codec pins; range-diff confirms only these integration changes in the replayed commits (2026-10-09 08:41 ET).
-- [ ] Verify native and affected tests, then synchronize PR878 with an explicit lease; full CI must pass on the updated PR head.
+- [x] Verify148 native and339 affected cases plus25 lookup/Parquet receipt cases; synchronize PR878 with an explicit lease against3b63a4e9. Full CI37932169326 passed on56ba955f: all five suites, shell lint and aggregate gate (2026-10-09 08:51 ET).
 
 Local verification: 148 native cases passed; 339 affected cases passed82.94s.
 The conflict-specific lookup/Parquet receipt and changed-scope refusal cases
 pass alongside existing receipt checks: 25 passed. The original protected
 publication-context work remains on its original commit and is not included.
+This rebase checkpoint closes only the synchronization task. The broader
+census checklist below remains incomplete. The final ticket-only commit also
+receives its automatic CI check before reporting PR878 ready.
 
 
 Parent goal: self-sustaining bundled skills and Rules creator, configured
