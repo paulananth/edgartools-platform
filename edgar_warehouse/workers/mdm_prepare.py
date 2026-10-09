@@ -5,6 +5,11 @@ step); its keys say what to take from it, so nothing feed-specific runs:
 
 - `table`: the reading's table whose rows become MDM records;
 - optional `record_column`: an object-valued column holding the complete source record;
+- optional `effective_column`: a column holding the artifact's effective time,
+  an ISO 8601 instant with a timezone, the same in every row (normally from
+  the reading's context: when the file was published). Each of the artifact's
+  publications states it, so MDM dates the records, and a link without a
+  stated start starts then. Without it a publication states no time;
 - `dataset`: the MDM source code whose registered contract reads them;
 - `policy`: the Mastering Policy digest the batches pin;
 - `consumer`: the MDM consumer the batches advance, from checkpoint 0, so a
@@ -22,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
@@ -55,6 +61,9 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     record_column = keys.get("record_column")
     if "record_column" in keys and (not isinstance(record_column, str) or not record_column):
         raise ValueError("mdm.prepare record_column must be nonempty text")
+    effective_column = keys.get("effective_column")
+    if "effective_column" in keys and (not isinstance(effective_column, str) or not effective_column):
+        raise ValueError("mdm.prepare effective_column must be nonempty text")
     reading, _ = source_readings.load(envelope["input"], artifacts,
                                       max_bytes=INPUT_BYTES, max_rows=INPUT_ROWS)
     if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
@@ -66,6 +75,9 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             raise ValueError(f"The reading has no table {keys['table']}")
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ValueError("mdm.prepare table rows must be objects")
+        publication = {}
+        if effective_column is not None and rows:
+            publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
         if record_column is not None:
             if any(not isinstance(row.get(record_column), dict) for row in rows):
                 raise ValueError("mdm.prepare record_column must hold an object in every row")
@@ -88,7 +100,8 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
                 "stage": "mastering", "consumer": keys["consumer"],
                 "input": {"path": name, "sha256": hashlib.sha256(data).hexdigest(),
                           "record_count": len(chunk), "source_code": keys["dataset"],
-                          "publication": {"publication_key": f"{keys['dataset']}:{source}", "revision": 1}},
+                          "publication": {"publication_key": f"{keys['dataset']}:{source}", "revision": 1,
+                                          **publication}},
             })
     if not batches:
         raise ValueError(f"The reading's {keys['table']} table holds no rows")
@@ -100,6 +113,28 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     if len(encoded) > MANIFEST_BYTES:
         raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
     return files, encoded
+
+
+def _effective_at(rows: list[dict], column: str, as_of: str) -> str:
+    """The one effective time every row of an artifact states, checked.
+
+    Compared as written: one file states its time one way. A time after the
+    manifest's `as_of` is refused, since MDM would read those records as not
+    yet in effect and leave them out silently. (The same test as Clean MDM's
+    `evidence.instant`, kept here so the worker's pinned runtime stays small.)
+    """
+    if len({json.dumps(row.get(column)) for row in rows}) != 1:
+        raise ValueError(f"mdm.prepare {column} must hold one effective time per artifact")
+    value = rows[0].get(column)
+    try:
+        moment = datetime.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        moment = None
+    if moment is None or moment.tzinfo is None:
+        raise ValueError(f"mdm.prepare {column} must be an instant with a timezone")
+    if moment > datetime.fromisoformat(as_of):
+        raise ValueError(f"mdm.prepare {column} is after the manifest's as_of")
+    return value
 
 
 def _beside(output: str, name: str) -> str:
