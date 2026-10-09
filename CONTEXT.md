@@ -186,6 +186,10 @@ _Avoid_: A per-source configuration table, a runtime switch, a place to store sa
 The declaration, per identifier namespace, of who issues the value, how many identities one value may name and how many values one identity may carry, the second handle used to detect a violation, and the measurement that verified the claim.
 _Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
 
+**Cross-reference**:
+An identifier kept so a record can be found, which its kind's Identifier Contract does not use to decide identity. Records that share one stay separate.
+_Avoid_: An identifier the Identifier Contract declares, a crosswalk, a name that creates an identity
+
 **Source Contract**:
 The one versioned file that declares everything about one source after its Bronze Artifacts exist: how they are read, the silver table they produce, the Dataset Contract that maps them into MDM, and the test cases and batch gate that prove it.
 _Avoid_: Source config, pipeline config, adapter config, a contract that also fetches bronze
@@ -263,6 +267,10 @@ _Avoid_: Any table with a key, reference data, the events about those things
 **Reference Data**:
 The values that give other data its meaning: a small, near-constant code set, changed only as a whole new approved version.
 _Avoid_: Master data, a lookup table copied into a source without a version, free-text labels
+
+**RDM**:
+Reference Data Management: where code sets are kept, each changed only by publishing a new approved version, apart from master data.
+_Avoid_: MDM, a code list copied into a source, silver, a cross-reference
 
 **Transaction Data**:
 Facts and events about master data over time, which only grow, are kept in silver, and point at their masters.
