@@ -11,6 +11,7 @@ import pytest
 
 from edgar_warehouse.mdm.clean.adapters import normalize
 from edgar_warehouse.mdm.clean.evidence import assertion, validate_assertion
+from edgar_warehouse.mdm.clean import store
 from edgar_warehouse.mdm.clean.store import register_dataset
 
 AT = "2026-01-02T00:00:00+00:00"
@@ -79,7 +80,11 @@ def test_a_name_gives_one_name_id_in_every_source_and_keeps_what_tells_names_apa
     ({"cross_references": {"Tax Id": "tax_id"}}, "lower-case"),
     ({"cross_reference_formats": {"tax_id": "sec_cik"}}, "no cross-reference"),
 ])
-def test_registration_refuses_a_cross_reference_that_could_join_or_cannot_run(adapter, words):
+def test_registration_refuses_a_cross_reference_that_could_join_or_cannot_run(adapter, words, monkeypatch):
+    # The namespaces a binding rule may match on are those an Identifier Contract
+    # declares in a registered policy (operator, 2026-10-09: "Read the list from
+    # the rules"); here, CIK and LEI.
+    monkeypatch.setattr(store, "_bound_namespaces", lambda conn: frozenset({"cik", "lei"}))
     with pytest.raises(ValueError, match=words):
         register_dataset(None, "fixture.primary", contract(**adapter))
 

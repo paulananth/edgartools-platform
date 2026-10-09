@@ -228,13 +228,26 @@ def register_policy(conn: Connection, body: dict) -> str:
     return key
 
 
-def _check_cross_references(adapter: dict) -> None:
+def _bound_namespaces(conn: Connection | None) -> frozenset[str]:
+    """The namespaces a binding rule may match on: those an Identifier Contract
+    declares in any registered policy (`activation.declared_namespaces`)."""
+    if conn is None:
+        return frozenset()
+    return frozenset(conn.execute(text(
+        """SELECT DISTINCT n FROM mdm.policy p,
+               jsonb_each(CASE WHEN jsonb_typeof(p.body->'kinds') = 'object'
+                               THEN p.body->'kinds' ELSE '{}'::jsonb END) k,
+               jsonb_object_keys(CASE WHEN jsonb_typeof(k.value->'identifiers') = 'object'
+                                      THEN k.value->'identifiers' ELSE '{}'::jsonb END) n"""
+    )).scalars())
+
+
+def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
     """Lookup-only ids (profiling ticket 03) must never be able to join records:
     a namespace that is also one of the contract's identifiers, or one a binding
-    rule matches on, is refused, so the operator's "lookup only" holds by
-    construction."""
-    from .activation import NAMESPACES
-
+    rule may match on (`bound`), is refused, so the operator's "lookup only"
+    holds by construction. Matching reads `identifiers` alone, so a policy
+    registered later that binds on such a name still joins nothing by it."""
     names = adapter.get("cross_references", {})
     formats = adapter.get("cross_reference_formats", {})
     if not isinstance(names, dict) or not isinstance(formats, dict):
@@ -244,7 +257,7 @@ def _check_cross_references(adapter: dict) -> None:
             raise ValueError(f"A cross-reference namespace is lower-case words: {namespace!r}")
         if namespace in adapter.get("identifiers", {}):
             raise ValueError(f"Cross-reference {namespace} is also an identifier of this contract")
-        if namespace in NAMESPACES:
+        if namespace in bound:
             raise ValueError(f"Cross-reference {namespace} names a namespace that binds records; use its own name")
     if set(formats) - set(names):
         raise ValueError(f"A format for no cross-reference: {sorted(set(formats) - set(names))}")
@@ -279,7 +292,7 @@ def register_dataset(
         raise ValueError("probable_kind_values must map source values to kinds")
     from .adapters import FORMATS
 
-    _check_cross_references(adapter)
+    _check_cross_references(adapter, _bound_namespaces(conn))
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),

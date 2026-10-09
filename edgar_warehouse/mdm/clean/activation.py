@@ -24,6 +24,7 @@ has its own statistical gate (ticket 08).
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable
 from statistics import NormalDist
 
@@ -349,10 +350,23 @@ def rule_version_conflicts(body: dict, registered: Iterable[dict]) -> list[tuple
     )
 
 
-# The namespaces an identifier rule may name: exactly the keys source evidence
-# stores (`cik`, `lei`), not the spec's `sec.cik`, so a rule can never name a
-# namespace no record carries and silently match nothing.
-NAMESPACES = frozenset({"cik", "lei"})
+# The namespaces an identifier rule may name: the keys source evidence stores
+# (`cik`, not the spec's `sec.cik`) that an Identifier Contract in the policy
+# declares (operator, 2026-10-09: "Read the list from the rules"), so a rule
+# can never name a namespace no source issues and silently match nothing, and
+# a new identifier needs no code. Each is lower-case words: binding reads it as
+# a JSON key inside SQL.
+NAMESPACE = re.compile(r"[a-z][a-z0-9_]*")
+
+
+def declared_namespaces(kinds: dict) -> frozenset[str]:
+    """The namespaces the kinds' Identifier Contracts declare."""
+    found = frozenset(n for block in kinds.values() for n in (block.get("identifiers") or {}))
+    if bad := sorted(n for n in found if not isinstance(n, str) or not NAMESPACE.fullmatch(n)):
+        raise Conflict(f"An identifier namespace is lower-case words: {bad}")
+    return found
+
+
 ON_NO_MATCH = frozenset({"mint", "wait"})
 # Company compatibility is kind equality only: Q9 says a name change never
 # revokes a binding, and a name-similarity test is fuzzy matching (ticket 08).
@@ -395,10 +409,14 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
                 "not a binding test"
             )
     namespaces = binding_namespaces(rule)
-    if len(namespaces) != 1 or namespaces[0] not in NAMESPACES:
+    declared = declared_namespaces(kinds)
+    if len(namespaces) != 1:
+        raise Conflict(f"Binding rule {rule_id} must name exactly one namespace: {namespaces}")
+    if namespaces[0] not in declared:
         raise Conflict(
-            f"Binding rule {rule_id} must name exactly one namespace of "
-            f"{sorted(NAMESPACES)}: {namespaces}"
+            f"Binding rule {rule_id} must name exactly one namespace an Identifier "
+            f"Contract declares: {namespaces[0]} has no Identifier Contract "
+            f"(declared: {sorted(declared)})"
         )
     if not any(t["primitive"] == "identifier_match@1" for t in tests):
         raise Conflict(f"Binding rule {rule_id} does not match an identifier")

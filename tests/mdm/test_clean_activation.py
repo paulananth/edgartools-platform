@@ -459,6 +459,23 @@ class TestAnIdentifierRule:
         rule = {**CIK_RULE, "on_no_match": "wait", "source": "gleif.level1.v1"}
         check_policy(binding_policy(rule=rule, activate=False))
 
+    def test_a_new_identifier_needs_only_its_contract_and_rule(self):
+        """Operator, 2026-10-09: "Read the list from the rules". A namespace with
+        an Identifier Contract may be matched on, with no code; its name is
+        lower-case words, since binding reads it as a JSON key in SQL."""
+        def renamed(name):
+            rule = {**CIK_RULE, "when": [{**t, "args": {"namespace": name}} for t in CIK_RULE["when"]]}
+            body = binding_policy(rule=rule, activate=False)
+            body["kinds"]["company"]["identifiers"] = {name: CIK_CONTRACT}
+            return body
+
+        check_policy(renamed("crd"))
+        with pytest.raises(Conflict, match="lower-case words"):
+            check_policy(renamed("crd'); DROP"))
+        with pytest.raises(Conflict, match="no Identifier Contract"):
+            check_policy(binding_policy(rule={**CIK_RULE, "when": [
+                {**t, "args": {"namespace": "crd"}} for t in CIK_RULE["when"]]}, activate=False))
+
     def test_no_contract_means_no_activation(self):
         with pytest.raises(Conflict, match="no Identifier Contract"):
             check_policy(binding_policy(contract=False))

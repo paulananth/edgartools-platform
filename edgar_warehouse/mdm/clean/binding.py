@@ -27,7 +27,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from . import correction
-from .activation import NAMESPACES, activated, binding_namespaces
+from .activation import activated, binding_namespaces, declared_namespaces
 from .evidence import decision, instant
 from .primitives import normalizer
 from .store import rows
@@ -100,11 +100,13 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
     revokes (`released`, ticket 13) holds nothing for it.
     """
     found: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
+    declared = declared_namespaces(policy.get("kinds") or {})
     for namespace, values in sorted(wanted.items()):
         if not values:
             continue
-        # A literal from a fixed set, so the per-namespace index can be used.
-        if namespace not in NAMESPACES:
+        # A literal the policy declares (lower-case words, checked there), so
+        # the per-namespace index can be used.
+        if namespace not in declared:
             raise ValueError(f"Unsupported identifier namespace: {namespace}")
         # The Stage row holds each record's latest reading and its binding.
         path = f"s.reading->'identifiers'->>'{namespace}'"
@@ -269,7 +271,8 @@ def propose(
         d["subject"]: d["entity_id"] for d in decisions if d["operation"] == "bind"
     }
     kinds = {i["entity_id"]: i["kind"] for i in identities}
-    issuers = {namespace: _issuers(policy, namespace) for namespace in NAMESPACES}
+    issuers = {namespace: _issuers(policy, namespace)
+               for namespace in declared_namespaces(policy.get("kinds") or {})}
     for a in assertions:
         if a["subject"] in caller:
             for namespace, raw in (a.get("identifiers") or {}).items():

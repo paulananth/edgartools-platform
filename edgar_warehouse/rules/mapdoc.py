@@ -206,7 +206,9 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
     critical = [["Dataset", "MDM field", "Test", "When it fails", "Rules path"]]
     quality = [["Dataset", "Id", "Fix or check", "What it does", "Reads", "When it fails", "Rules path"]]
     wins = [["Kind", "MDM field", "Filled by, first wins", "Winner", "Rule", "Rules path"]]
-    from edgar_warehouse.mdm.clean.activation import NAMESPACES  # the identifiers that join records
+    from edgar_warehouse.mdm.clean.activation import declared_namespaces
+
+    joins = declared_namespaces(policy.get("kinds") or {})  # the identifiers that join records
 
     by_kind = winners(policy, root)
     for code, entry in (body.get("mdm") or {}).items():
@@ -246,7 +248,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
         formats = adapter.get("identifier_formats") or {}
         for ident, path in (adapter.get("identifiers") or {}).items():
             identifiers.append([code, ident, _text(path), _text(formats.get(ident)),
-                                "Yes" if ident in NAMESPACES else "No: lookup only",
+                                "Yes" if ident in joins else "No: lookup only",
                                 "Only with a new dataset code", f"{at}.adapter.identifiers.{ident}"])
         block = contract.get("quality") or {}
         for i, fix in enumerate(block.get("fixes") or []):
