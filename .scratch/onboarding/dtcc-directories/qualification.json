@@ -1,0 +1,60 @@
+{
+  "code_base": "1735dd43",
+  "profiling_version": "data-profiling 1",
+  "dataset_label_requested": "DTCC public directories September\u2013October 2026",
+  "dataset_label_emitted": null,
+  "approval_status": "draft",
+  "command_exit": 0,
+  "command_elapsed_seconds": 14.9,
+  "internal_elapsed_seconds": 12.1,
+  "scan_mode": "full",
+  "raw_workbooks": 10,
+  "raw_bytes": 1124637,
+  "worksheet_regions": 14,
+  "profile_rows": 13870,
+  "export_roundtrip_verified": true,
+  "production_xlsx_reader_qualified": false,
+  "mdm_bindings_proposed": false,
+  "files": [
+    {
+      "path": ".scratch/onboarding/dtcc-directories/export_workbooks.py",
+      "sha256": "e9f25ca2ff81044c29f1304df853b22b43ad593c65d7fd1262415ca74123ac68",
+      "bytes": 3615
+    },
+    {
+      "path": ".scratch/onboarding/dtcc-directories/workbook-selections.json",
+      "sha256": "a325b740fef9bf79d0814536263d75842c7d49911ad7362c531edd93d50d3fd4",
+      "bytes": 492
+    },
+    {
+      "path": ".scratch/onboarding/dtcc-directories/capture-manifest.json",
+      "sha256": "2daec083906317b6836233c7c4b09cfaf1625c85743cc80b7df556abfdb393ab",
+      "bytes": 5431
+    },
+    {
+      "path": ".scratch/onboarding/dtcc-directories/derived-manifest.json",
+      "sha256": "d5759d8073e7504cb05e1759037668d335950aad304bf22c6b612bcf70eb6608",
+      "bytes": 9980
+    },
+    {
+      "path": ".scratch/onboarding/dtcc-directories/profile/findings.yaml",
+      "sha256": "b158d840f3b20864f369c7b097591f17f7807d96d74667cfae4bce3803b1bb7a",
+      "bytes": 95938
+    },
+    {
+      "path": ".scratch/onboarding/dtcc-directories/profile/REPORT.md",
+      "sha256": "197ebe87da920ffa4ac4384f3173ed37cd59fe63cb23731edec43fa8dea6690d",
+      "bytes": 16684
+    },
+    {
+      "path": ".scratch/onboarding/dtcc-directories/profile/fingerprints.json",
+      "sha256": "45747e9ebbd7dbda5c2f01b5873347bf0416313f4deae518ccd41e72514a4d01",
+      "bytes": 813354
+    },
+    {
+      "path": "skills/data-profiling/scripts/profile_data.py",
+      "sha256": "4e3b67e0877acc35227649011f1328024c003159084fa2575aa7ac56ec2bf29f",
+      "bytes": 5871
+    }
+  ]
+}
