@@ -237,58 +237,6 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cik
-# Form ADV (profiling ticket 07; operator, 2026-10-09 10:38 ET, "Approve as
-# proposed (Recommended)"): an adviser's filings join the one Company that
-# holds its CRD, or create it; a custodian's custody rows join the one Company
-# that holds its LEI, then its SEC broker-dealer number, or create it. A
-# custodian named by neither is not bound (its name id is lookup only) until a
-# proven name rule (ticket 07b). Declared, not switched on: each rule activates
-# on its Identifier Contract, approved by the operator.
-- rule_id: iapd-adv-crd
-  version: 2026-10-09.1
-  family: binding
-  source: iapd.adv.filings.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: mint
-  when:
-  - primitive: identifier_match@1
-    args:
-      namespace: crd
-  - primitive: identifier_cardinality@1
-    args:
-      namespace: crd
-- rule_id: iapd-adv-custodian-lei
-  version: 2026-10-09.1
-  family: binding
-  source: iapd.adv.custody.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: mint
-  when:
-  - primitive: identifier_match@1
-    args:
-      namespace: lei
-  - primitive: identifier_cardinality@1
-    args:
-      namespace: lei
-- rule_id: iapd-adv-custodian-bd
-  version: 2026-10-09.1
-  family: binding
-  source: iapd.adv.custody.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: mint
-  when:
-  - primitive: identifier_match@1
-    args:
-      namespace: bd_number
-  - primitive: identifier_cardinality@1
-    args:
-      namespace: bd_number
 - rule_id: sec-gleif-name-jurisdiction
   version: 2026-09-25.1
   family: name_binding
@@ -577,6 +525,58 @@ rules:
       - DUPLICATE
   - primitive: holds_no_other_lei@1
     args: {}
+# Form ADV (profiling ticket 07; operator, 2026-10-09 10:38 ET, "Approve as
+# proposed (Recommended)"): an adviser's filings join the one Company that
+# holds its CRD, or create it; a custodian's custody rows join the one Company
+# that holds its LEI, then its SEC broker-dealer number, or create it. A
+# custodian named by neither is not bound (its name id is lookup only) until a
+# proven name rule (ticket 07b). Declared, not switched on: each rule activates
+# on its Identifier Contract, approved by the operator.
+- rule_id: iapd-adv-crd
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.filings.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: crd
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: crd
+- rule_id: iapd-adv-custodian-lei
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.custody.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
+- rule_id: iapd-adv-custodian-bd
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.custody.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: bd_number
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: bd_number
 normalizers:
   conformed: normalize_text@edgar-conformed-v1
 lists:

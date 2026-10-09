@@ -21,7 +21,7 @@ def test_every_committed_mapping_document_equals_its_rules():
 
 def test_only_sources_that_feed_mdm_have_one():
     assert {name for name, _, _ in mapdoc.documents().values()} == {
-        "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person"}
+        "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person", "iapd.adv"}
 
 
 @pytest.fixture
@@ -114,12 +114,13 @@ def test_the_sheets_say_what_the_rules_say():
     assert ["sec.submissions.company.v1", "cik", "cik", "sec_cik", "Yes", "Only with a new dataset code",
             "mdm.sec.submissions.company.v1.contract.adapter.identifiers.cik"] in sec["Identifiers"]
     assert [row[1] for row in sec["Critical data elements"][1:]] == ["name"]
-    assert ["company", "name", "sec.submissions.company.v1, gleif.level1.v1", "sec.submissions.company.v1",
+    assert ["company", "name", "sec.submissions.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custody.v1", "sec.submissions.company.v1",
             "Kind default", "merge/kinds/company.yaml defaults.sources"] in sec["Who wins"]
     kind = found["company"]
     assert [row[1] for row in kind["Matching rules"][1:]] == [
         "company-cik", "sec-gleif-name-jurisdiction", "sec-gleif-name-postal",
-        *(f"sec-gleif-cascade-p{n}" for n in range(1, 8))]
+        *(f"sec-gleif-cascade-p{n}" for n in range(1, 8)),
+        "iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd"]
     assert "Exactly one Company holds that CIK" in kind["Matching rules"][1][5]
     assert "the name alone" in kind["Matching rules"][10][5] and "the country, street" in kind["Matching rules"][4][5]
     assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][2][5]
@@ -173,7 +174,7 @@ def test_a_field_with_its_own_rule_shows_its_own_winner(rules_copy):
     by_name = {name: sheets for name, sheets, _ in found.values()}
     assert ["address", "gleif.level1.v1, sec.submissions.company.v1", "gleif.level1.v1", "Its own rule",
             "merge/kinds/company.yaml fields.address"] in by_name["company"]["Who wins each field"]
-    assert ["name", "sec.submissions.company.v1, gleif.level1.v1", "sec.submissions.company.v1", "Kind default",
+    assert ["name", "sec.submissions.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custody.v1", "sec.submissions.company.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in by_name["company"]["Who wins each field"]
     assert ["company", "address", "gleif.level1.v1, sec.submissions.company.v1", "gleif.level1.v1",
             "Its own rule", "merge/kinds/company.yaml fields.address"] in by_name["gleif"]["Who wins"]
@@ -193,7 +194,7 @@ def test_a_field_rule_without_its_own_order_says_the_order_is_the_default(rules_
     body["fields"] = {"name": {"max_age_days": 400}}
     kind_file.write_text(files.dumps(body), encoding="utf-8")
     sheets = {name: s for name, s, _ in mapdoc.documents(rules_copy).values()}["company"]
-    assert ["name", "sec.submissions.company.v1, gleif.level1.v1", "sec.submissions.company.v1",
+    assert ["name", "sec.submissions.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custody.v1", "sec.submissions.company.v1",
             "Its own rule (max_age_days: 400), order from the kind default",
             "merge/kinds/company.yaml fields.name; merge/kinds/company.yaml defaults.sources"] in (
         sheets["Who wins each field"])

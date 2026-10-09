@@ -426,6 +426,8 @@ class TestTheCompanyRule:
             "sec.submissions.company.v1",
             "gleif.level1.v1",
             "gleif.relationships.v1",
+            "iapd.adv.filings.v1",
+            "iapd.adv.custody.v1",
         ]
 
 

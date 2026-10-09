@@ -82,6 +82,13 @@ WITH_REAL_NAMES = {
     "policy": "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6",
 }
 
+# Profiling ticket 07: the Form ADV sources, matching rules (switched off),
+# Identifier Contracts and the CUSTODIAN type; peeled, the policy is the one
+# below. Not yet approved: the operator approves its digest with the proof.
+WITH_FORM_ADV = {
+    "policy": "6528d6469f1556dbd2a58cf0d7c9ed75c812122d6668ca2db688ab03543843a5",
+}
+
 # Profiling ticket 04b, part B: the calculated ultimate parent keeps its
 # history (accounting-chain-v2) and a successor entity ends parent links
 # (operator, 2026-10-07: "It should also consider corporate actions"); peeled,
@@ -155,7 +162,7 @@ PERSON_BEFORE_CONFIGURED_FIELDS = "a740357f911d531ae72a995409d5630b1eeced83c5c8b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_PARENT_HISTORY, WITH_REAL_NAMES, WITH_REFERENCE_PINS, WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
+    layered = (WITH_FORM_ADV, WITH_PARENT_HISTORY, WITH_REAL_NAMES, WITH_REFERENCE_PINS, WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
     assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.

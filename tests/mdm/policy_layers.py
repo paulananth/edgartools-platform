@@ -36,6 +36,28 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
+FORM_ADV_SOURCES = ("iapd.adv.filings.v1", "iapd.adv.custody.v1")
+FORM_ADV_RULES = ("iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd")
+
+
+def without_form_adv(policy: dict) -> dict:
+    """Profiling ticket 07 (operator, 2026-10-09: the design "Approve as
+    proposed (Recommended)", the type "CUSTODIAN (Recommended)"): the Form ADV
+    sources, their three identifier matching rules (declared, not switched on)
+    with the Identifier Contracts for crd, lei and bd_number, and the CUSTODIAN
+    type. Peeled, the policy is the one before."""
+    body = _copy(policy)
+    company = body["kinds"]["company"]
+    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s not in FORM_ADV_SOURCES]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] not in FORM_ADV_RULES]
+    for namespace in ("crd", "lei", "bd_number"):
+        company["identifiers"].pop(namespace)
+    if "relationships" in body:
+        body["relationships"]["types"].pop("CUSTODIAN")
+        body["relationships"]["version"] = "relationship-types-v3"
+    return body
+
+
 def without_parent_history(policy: dict) -> dict:
     """Profiling ticket 04b, part B (operator, 2026-10-07: "It should also
     consider corporate actions"): the calculated ultimate parent keeps its
@@ -133,7 +155,7 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_parent_history, without_real_names, without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+LAYERS = [without_form_adv, without_parent_history, without_real_names, without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
 
 
 def peel(policy: dict) -> dict:
