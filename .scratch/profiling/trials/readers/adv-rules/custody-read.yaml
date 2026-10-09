@@ -1,0 +1,24 @@
+read:
+  format: csv
+  container: zip
+  member: "IA_Schedule_D_5K3_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    custody:
+      each: record
+      columns:
+        filing_id: {text: {path: "Filing ID", path_mode: literal}}
+        row: {ordinal: {}}
+        legal_name: {text: {path: "5K(3)(a)", path_mode: literal, null_if: [""]}}
+        business_name: {text: {path: "5K(3)(b)", path_mode: literal, null_if: [""]}}
+        city: {text: {path: "5K(3)(c) City", path_mode: literal, null_if: [""]}}
+        state: {text: {path: "5K(3)(c) State", path_mode: literal, null_if: [""]}}
+        country: {text: {path: "5K(3)(c) Country", path_mode: literal, null_if: [""]}}
+        related_person: {text: {path: "5K(3)(d)", path_mode: literal, null_if: [""]}}
+        bd_number: {text: {path: "5K(3)(e)", path_mode: literal, null_if: [""]}}
+        other_id: {text: {path: "5K(3)(f)", path_mode: literal, null_if: [""]}}
+        amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
+        published: {context: {name: published}}
