@@ -8,7 +8,7 @@ quality:
       test: present@1
       value: fields.name
       on_fail: exception
-  iapd.adv.custody.v1:
+  iapd.adv.custodians.v1:
     checks:
     - id: custodian_name_present
       test: present@1

@@ -427,7 +427,7 @@ class TestTheCompanyRule:
             "gleif.level1.v1",
             "gleif.relationships.v1",
             "iapd.adv.filings.v1",
-            "iapd.adv.custody.v1",
+            "iapd.adv.custodians.v1",
         ]
 
 

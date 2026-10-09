@@ -83,10 +83,10 @@ WITH_REAL_NAMES = {
 }
 
 # Profiling ticket 07: the Form ADV sources, matching rules (switched off),
-# Identifier Contracts and the CUSTODIAN type; peeled, the policy is the one
+# and Identifier Contracts; peeled, the policy is the one
 # below. Not yet approved: the operator approves its digest with the proof.
 WITH_FORM_ADV = {
-    "policy": "6528d6469f1556dbd2a58cf0d7c9ed75c812122d6668ca2db688ab03543843a5",
+    "policy": "067022bdb589e0cac9056738c3b6ed3211a6678593ca2f8505b40b2f0d7481cf",
 }
 
 # Profiling ticket 04b, part B: the calculated ultimate parent keeps its

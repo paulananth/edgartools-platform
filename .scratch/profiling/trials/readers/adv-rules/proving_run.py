@@ -8,14 +8,16 @@ Form ADV Dataset Contracts registered with the test Rules authority.
 
 The cohort: advisers (CRD) with custody rows in at least two filings, chosen
 by the sha256 of their CRD, so the list is fixed; every filing of theirs in
-the 13 months and every custody row of those filings. Each month's records are
-applied in month order, dated by the file's month end (what mdm.prepare's
-`effective_column` gives them), filings first. Then everything again: the
-second pass must change nothing.
+the 13 months and every custody row of those filings (size 0: everything).
+Each month's records are applied in month order, dated by the file's month
+end (what mdm.prepare's `effective_column` gives them), filings first; custody
+rows reduced to the first of each custodian_id in the file (what
+`distinct_on` does). Then everything again: the second pass must change
+nothing.
 
-The change test: for each adviser and custodian (by LEI, else BD number), the
-expected first and last filing month that names it, from the source rows,
-against MDM's CUSTODIAN links (first stated, last_seen).
+The checks: each adviser's CRD on one Company; each identified custodian (LEI
+or BD number) on one Company; the records on the largest Companies. Custody
+facts and the adviser-to-custodian history belong to silver, not here.
 
     cd <a worktree with the code>   # needs declared Identifier Contract namespaces
     uv run --no-sync --with pgserver python <this file> <rules root> <readings folder> <out folder> [advisers]
@@ -32,8 +34,6 @@ import sys
 import tempfile
 import time
 from collections import Counter, defaultdict
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from pathlib import Path
 from uuid import uuid4
 
@@ -46,7 +46,7 @@ from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.support.rules_authority import register_dataset
 
-FILINGS, CUSTODY = "iapd.adv.filings.v1", "iapd.adv.custody.v1"
+FILINGS, CUSTODY = "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
 RULES = ["iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd"]
 AS_OF = "2026-10-09T15:00:00+00:00"
 BATCH = int(os.environ.get("BATCH", "500"))
@@ -60,7 +60,8 @@ def cohort(readings: Path, size: int) -> tuple[dict, dict]:
     per_crd = Counter(r["crd"] for rows in filings.values() for r in rows if r["filing_id"] in with_custody)
     eligible = sorted((c for c, n in per_crd.items() if n >= 2), key=lambda c: hashlib.sha256(c.encode()).hexdigest())
     chosen = set(eligible[:size])
-    keep = {r["filing_id"] for rows in filings.values() for r in rows if r["crd"] in chosen}
+    # size 0: every filing and custody row of the 13 months.
+    keep = {r["filing_id"] for rows in filings.values() for r in rows if size <= 0 or r["crd"] in chosen}
     return ({m: [r for r in rows if r["filing_id"] in keep] for m, rows in filings.items()},
             {m: [r for r in rows if r["filing_id"] in keep] for m, rows in custody.items()})
 
@@ -77,6 +78,16 @@ def proving_policy(root: Path, corpus: str) -> dict:
         {"kind": "company", "family": "binding", "rule_id": r, "rule_version": versions[r],
          "verdict": "bind", "activation": "deterministic"} for r in RULES]]
     return body
+
+
+def first_of_each(rows: list[dict], column: str) -> list[dict]:
+    """mdm.prepare `distinct_on: [column]`: the first row of each value, in file order."""
+    seen, kept = set(), []
+    for row in rows:
+        if row.get(column) not in seen:
+            seen.add(row.get(column))
+            kept.append(row)
+    return kept
 
 
 def assertions(code: str, contract: dict, rows: list[dict], month: str) -> tuple[list[dict], Counter]:
@@ -107,43 +118,18 @@ def counts(conn) -> dict:
     }
 
 
-def expected_links(filings: dict, custody: dict) -> dict:
-    """(crd, custodian id) -> (first month, last month) naming it, for identified custodians."""
-    crd = {r["filing_id"]: r["crd"] for rows in filings.values() for r in rows}
-    seen = defaultdict(list)
-    for month, rows in custody.items():
-        for r in rows:
-            ident = (f"lei:{r['lei']}" if r["lei"] else None) or (f"bd:{r['bd_number']}" if r["bd_number"] else None)
-            if ident:
-                seen[(crd[r["filing_id"]], ident)].append(month)
-    return {k: (min(v), max(v)) for k, v in seen.items()}
-
-
-def month(instant: str | None) -> str:
-    """The New York month of a stored instant (MDM keeps them in UTC)."""
-    return datetime.fromisoformat(instant).astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m") if instant else ""
-
-
-def mdm_links(conn) -> dict:
-    """(crd, custodian id) -> (first stated, last stated) months, from MDM."""
-    ids = defaultdict(set)
+def companies_by_id(conn) -> dict:
+    """Each identifier value (crd:, lei:, bd:) -> the open Companies whose bound
+    records carry it, and each Company's record count by source."""
+    holders, records = defaultdict(set), defaultdict(Counter)
     for entity, source, crd, lei, bd in conn.execute(text(
             "SELECT entity_id::text, source_code, reading->'identifiers'->>'crd', reading->'identifiers'->>'lei', "
             "reading->'identifiers'->>'bd_number' FROM mdm.stage_record WHERE entity_id IS NOT NULL")):
-        if source == FILINGS and crd:
-            ids[entity].add(("crd", crd))
-        if source == CUSTODY:
-            ids[entity].add(("custodian", f"lei:{lei}" if lei else f"bd:{bd}"))
-    found = {}
-    for body, in conn.execute(text("SELECT body FROM mdm.current_record WHERE object_type='relationship' "
-                                   "AND body->>'type'='CUSTODIAN'")):
-        crds = {v for k, v in ids[body["source_id"]] if k == "crd"}
-        custodians = {v for k, v in ids[body["target_id"]] if k == "custodian"}
-        starts = [p["valid_from"] for p in body["periods"]]
-        for c in crds:
-            for t in custodians:
-                found[(c, t)] = (month(min(starts)), month(body.get("last_seen")), len(body["periods"]))
-    return found
+        records[entity][source] += 1
+        for name, value in (("crd", crd), ("lei", lei), ("bd", bd)):
+            if value:
+                holders[f"{name}:{value}"].add(entity)
+    return holders, records
 
 
 def main(root: Path, readings: Path, out: Path, size: int) -> None:
@@ -177,7 +163,7 @@ def main(root: Path, readings: Path, out: Path, size: int) -> None:
     def apply_all(tag: str) -> None:
         nonlocal checkpoint
         for month in sorted(filings):
-            for code, rows in ((FILINGS, filings[month]), (CUSTODY, custody[month])):
+            for code, rows in ((FILINGS, filings[month]), (CUSTODY, first_of_each(custody[month], "custodian_id"))):
                 if not rows:
                     continue
                 found, skipped = assertions(code, contracts[code], rows, month)
@@ -194,32 +180,29 @@ def main(root: Path, readings: Path, out: Path, size: int) -> None:
 
     apply_all("first")
     with app.connect() as conn:
-        first, first_links = counts(conn), mdm_links(conn)
+        first, (holders, records) = counts(conn), companies_by_id(conn)
     apply_all("second")
     with app.connect() as conn:
-        second, second_links = counts(conn), mdm_links(conn)
-        sample = [r[0] for r in conn.execute(text(
-            "SELECT body FROM mdm.current_record WHERE object_type='relationship' AND body->>'type'='CUSTODIAN' LIMIT 3"))]
-    expected = expected_links(filings, custody)
-    got = {k: v[:2] for k, v in first_links.items()}
+        second, again = counts(conn), companies_by_id(conn)
+    custodian_ids = {r["custodian_id"] for rows in custody.values() for r in rows}
+    advisers = {r["crd"] for rows in filings.values() for r in rows}
     report = {
         "policy_digest": policy, "corpus_sha256": corpus, "deferred": dict(deferred),
-        "after_first": first, "after_second": second, "second_pass_changed_nothing": first == second and first_links == second_links,
-        "links_expected": len(expected), "links_in_mdm": len(got),
-        "links_matching": sum(got.get(k) == v for k, v in expected.items()),
-        "links_missing": sorted(map(list, set(expected) - set(got)))[:10],
-        # A custodian known by an LEI in some rows and a BD number in others is
-        # one Company holding both: its links show under both ids.
-        "links_extra": sorted(map(list, set(got) - set(expected)))[:10],
-        "links_differing": [[*k, expected[k], got[k]] for k in expected if k in got and got[k] != expected[k]][:10],
-        "links_with_more_than_one_period": sum(v[2] > 1 for v in first_links.values()),
-        "custodian_dropped_by_adviser": len({k[0] for k, v in expected.items()
-                                             if v[1] < max(m for m, rows in filings.items()
-                                                           for r in rows if r["crd"] == k[0])}),
-        "sample_links": sample, "seconds": round(sum(t["seconds"] for t in timings), 1),
+        "after_first": first, "after_second": second,
+        "second_pass_changed_nothing": first == second and (holders, records) == again,
+        "advisers": len(advisers),
+        "advisers_on_one_company": sum(len(holders.get(f"crd:{c}", ())) == 1 for c in advisers),
+        "custodian_ids_identified": sum(not i.startswith("name:") for i in custodian_ids),
+        "custodian_ids_on_one_company": sum(len(holders.get(i, ())) == 1 for i in custodian_ids
+                                            if not i.startswith("name:")),
+        "custodian_ids_on_two_or_more": sorted(i for i in custodian_ids if len(holders.get(i, ())) > 1)[:10],
+        "custodian_ids_named_only": sum(i.startswith("name:") for i in custodian_ids),
+        "most_records_on_one_custodian_company": max((r[CUSTODY] for r in records.values()), default=0),
+        "most_records_on_one_adviser_company": max((r[FILINGS] for r in records.values()), default=0),
+        "seconds": round(sum(t["seconds"] for t in timings), 1),
     }
     (out / "report.json").write_text(json.dumps(report, indent=1, default=str) + "\n")
-    print(json.dumps({k: v for k, v in report.items() if k != "sample_links"}, indent=1, default=str))
+    print(json.dumps(report, indent=1, default=str))
     server.cleanup()
 
 

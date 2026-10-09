@@ -4,6 +4,10 @@
 # filing is in one month's file only). 5.K(3)(f) is "LEI or other": `lei`
 # keeps only an LEI-shaped value (18 letters or digits, then 2 digits), so an
 # other id never reads as an LEI; `other_id` keeps the value as written.
+# `custodian_id` names the custodian as the operator ruled (2026-10-09 09:55
+# ET: "LEI, then BD number, name last"): `lei:<LEI>`, else `bd:<8- number>`,
+# else `name:<name, trimmed, upper case>`. MDM takes one record per file and
+# custodian_id (mdm.prepare `distinct_on`); every row is a silver fact.
 read:
   format: csv
   container: zip
@@ -36,5 +40,29 @@ read:
             - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
             - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
             null_if: [""]
+        custodian_id:
+          coalesce:
+            skip: "null"
+            values:
+            - text:
+                path: "5K(3)(f)"
+                path_mode: literal
+                transforms:
+                - trim: true
+                - regex_replace: {pattern: "^.*[^A-Z0-9].*$", with: ""}
+                - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
+                - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
+                - pad: {left: "lei:", right: ""}
+                null_if: ["lei:"]
+            - text:
+                path: "5K(3)(e)"
+                path_mode: literal
+                transforms: [{trim: true}, {pad: {left: "bd:", right: ""}}]
+                null_if: ["bd:"]
+            - text:
+                path: "5K(3)(a)"
+                path_mode: literal
+                transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
+                null_if: ["name:"]
         amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
         published: {context: {name: published}}

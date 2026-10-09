@@ -15,9 +15,9 @@ defaults:
   # fields, so it fills none.
   - gleif.relationships.v1
   # Form ADV (profiling ticket 07): advisers' filings and the custodians they
-  # name, last, so SEC and GLEIF win every field they fill.
+  # name (one record per file), last, so SEC and GLEIF win every field they fill.
   - iapd.adv.filings.v1
-  - iapd.adv.custody.v1
+  - iapd.adv.custodians.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -527,8 +527,9 @@ rules:
     args: {}
 # Form ADV (profiling ticket 07; operator, 2026-10-09 10:38 ET, "Approve as
 # proposed (Recommended)"): an adviser's filings join the one Company that
-# holds its CRD, or create it; a custodian's custody rows join the one Company
-# that holds its LEI, then its SEC broker-dealer number, or create it. A
+# holds its CRD, or create it; a custodian's records (one per monthly file)
+# join the one Company that holds its LEI, then its SEC broker-dealer number,
+# or create it. A
 # custodian named by neither is not bound (its name id is lookup only) until a
 # proven name rule (ticket 07b). Declared, not switched on: each rule activates
 # on its Identifier Contract, approved by the operator.
@@ -550,7 +551,7 @@ rules:
 - rule_id: iapd-adv-custodian-lei
   version: 2026-10-09.1
   family: binding
-  source: iapd.adv.custody.v1
+  source: iapd.adv.custodians.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -565,7 +566,7 @@ rules:
 - rule_id: iapd-adv-custodian-bd
   version: 2026-10-09.1
   family: binding
-  source: iapd.adv.custody.v1
+  source: iapd.adv.custodians.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -758,7 +759,7 @@ identifiers:
     authority: GLEIF (ISO 17442)
     sources:
     - iapd.adv.filings.v1
-    - iapd.adv.custody.v1
+    - iapd.adv.custodians.v1
     normalizer: normalize_identifier@lei-v1
     claim:
       forward: 1
@@ -773,7 +774,7 @@ identifiers:
   bd_number:
     authority: SEC (broker-dealer file number, 8-)
     sources:
-    - iapd.adv.custody.v1
+    - iapd.adv.custodians.v1
     normalizer: normalize_identifier@crd-v1
     claim:
       forward: 1

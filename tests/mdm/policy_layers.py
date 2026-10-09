@@ -36,25 +36,22 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
 
 
-FORM_ADV_SOURCES = ("iapd.adv.filings.v1", "iapd.adv.custody.v1")
+FORM_ADV_SOURCES = ("iapd.adv.filings.v1", "iapd.adv.custodians.v1")
 FORM_ADV_RULES = ("iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd")
 
 
 def without_form_adv(policy: dict) -> dict:
     """Profiling ticket 07 (operator, 2026-10-09: the design "Approve as
-    proposed (Recommended)", the type "CUSTODIAN (Recommended)"): the Form ADV
+    proposed (Recommended)"; "custodian must be in mdm"): the Form ADV
     sources, their three identifier matching rules (declared, not switched on)
-    with the Identifier Contracts for crd, lei and bd_number, and the CUSTODIAN
-    type. Peeled, the policy is the one before."""
+    with the Identifier Contracts for crd, lei and bd_number. Peeled, the
+    policy is the one before."""
     body = _copy(policy)
     company = body["kinds"]["company"]
     company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s not in FORM_ADV_SOURCES]
     company["rules"] = [r for r in company["rules"] if r["rule_id"] not in FORM_ADV_RULES]
     for namespace in ("crd", "lei", "bd_number"):
         company["identifiers"].pop(namespace)
-    if "relationships" in body:
-        body["relationships"]["types"].pop("CUSTODIAN")
-        body["relationships"]["version"] = "relationship-types-v3"
     return body
 
 
