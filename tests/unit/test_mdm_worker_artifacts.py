@@ -156,8 +156,16 @@ def test_distinct_on_keeps_the_first_row_of_each_key_in_file_order(tmp_path):
     assert batch["input"]["record_count"] == 3
     assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
     (tmp_path / "two").mkdir()
-    store, envelope = _prepare(tmp_path / "two", rows[:3], distinct_on=["id", "name"])
-    assert store.json(mdm_prepare.execute(envelope, store))["batches"][0]["input"]["record_count"] == 3
+    store, envelope = _prepare(tmp_path / "two", rows[:3] + [{"id": "a", "name": "Acme"}], distinct_on=["id", "name"])
+    batch = store.json(mdm_prepare.execute(envelope, store))["batches"][0]
+    assert [json.loads(line) for line in (tmp_path / "two" / "prepared" / batch["input"]["path"]).read_text().splitlines()] == rows[:3]
+
+
+def test_a_dropped_duplicate_is_still_checked(tmp_path):
+    rows = [{"id": "a", "published": "2026-06-30T00:00:00+00:00"}, {"id": "a", "published": "2026-05-31T00:00:00+00:00"}]
+    store, envelope = _prepare(tmp_path, rows, distinct_on=["id"], effective_column="published")
+    with pytest.raises(ValueError, match="one effective time"):
+        mdm_prepare.execute(envelope, store)
 
 
 @pytest.mark.parametrize("value", [[], "id", [""], ["id", "id"], [1], ["c"] * 9])

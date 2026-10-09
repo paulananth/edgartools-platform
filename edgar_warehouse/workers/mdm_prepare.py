@@ -5,7 +5,8 @@ step); its keys say what to take from it, so nothing feed-specific runs:
 
 - `table`: the reading's table whose rows become MDM records;
 - optional `record_column`: an object-valued column holding the complete source record;
-- optional `distinct_on`: 1 to 8 columns; of the artifact's rows with equal
+- optional `distinct_on`: 1 to 8 columns of the table row (not of the
+  `record_column` object); of the artifact's rows with equal
   values in them (a missing column reads as null) only the first, in file
   order, becomes a record, so an entity named in many rows of one file is one
   record of it. The rows themselves stay in the reading;
@@ -62,18 +63,9 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     keys = envelope["keys"]
     if not KEYS <= set(keys):
         raise ValueError(f"mdm.prepare needs the unit keys {sorted(KEYS)}")
-    record_column = keys.get("record_column")
-    if "record_column" in keys and (not isinstance(record_column, str) or not record_column):
-        raise ValueError("mdm.prepare record_column must be nonempty text")
-    effective_column = keys.get("effective_column")
-    if "effective_column" in keys and (not isinstance(effective_column, str) or not effective_column):
-        raise ValueError("mdm.prepare effective_column must be nonempty text")
-    distinct_on = keys.get("distinct_on")
-    if "distinct_on" in keys and (
-        not isinstance(distinct_on, list) or not 1 <= len(distinct_on) <= 8
-        or any(not isinstance(c, str) or not c for c in distinct_on) or len(set(distinct_on)) != len(distinct_on)
-    ):
-        raise ValueError("mdm.prepare distinct_on names 1 to 8 distinct nonempty columns")
+    record_column = _optional_text(keys, "record_column")
+    effective_column = _optional_text(keys, "effective_column")
+    distinct_on = _distinct_columns(keys)
     reading, _ = source_readings.load(envelope["input"], artifacts,
                                       max_bytes=INPUT_BYTES, max_rows=INPUT_ROWS)
     if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
@@ -85,14 +77,16 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             raise ValueError(f"The reading has no table {keys['table']}")
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ValueError("mdm.prepare table rows must be objects")
-        if distinct_on is not None:
-            rows = _first_of_each(rows, distinct_on)
+        # Every row is checked before duplicates are dropped, so a dropped
+        # row cannot hide a bad time or shape.
         publication = {}
         if effective_column is not None and rows:
             publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
+        if record_column is not None and any(not isinstance(row.get(record_column), dict) for row in rows):
+            raise ValueError("mdm.prepare record_column must hold an object in every row")
+        if distinct_on is not None:
+            rows = _first_of_each(rows, distinct_on)
         if record_column is not None:
-            if any(not isinstance(row.get(record_column), dict) for row in rows):
-                raise ValueError("mdm.prepare record_column must hold an object in every row")
             rows = [row[record_column] for row in rows]
         source = artifact["input"]["sha256"]
         if "context" in artifact:
@@ -125,6 +119,25 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     if len(encoded) > MANIFEST_BYTES:
         raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
     return files, encoded
+
+
+def _optional_text(keys: dict, name: str) -> str | None:
+    value = keys.get(name)
+    if name in keys and (not isinstance(value, str) or not value):
+        raise ValueError(f"mdm.prepare {name} must be nonempty text")
+    return value
+
+
+def _distinct_columns(keys: dict) -> list[str] | None:
+    """`distinct_on`: 1 to 8 distinct columns of the table row (as many as
+    source.combine's `order_by` takes)."""
+    columns = keys.get("distinct_on")
+    if "distinct_on" in keys and (
+        not isinstance(columns, list) or not 1 <= len(columns) <= 8
+        or any(not isinstance(c, str) or not c for c in columns) or len(set(columns)) != len(columns)
+    ):
+        raise ValueError("mdm.prepare distinct_on names 1 to 8 distinct nonempty columns")
+    return columns
 
 
 def _first_of_each(rows: list[dict], columns: list[str]) -> list[dict]:
