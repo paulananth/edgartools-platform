@@ -19,7 +19,7 @@ import pyarrow.parquet as pq
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
 from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
-from edgar_warehouse.mdm.clean.company_source import _filed_forms
+from tests.support.retired_company_preparation import _filed_forms
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_combine, source_read
 

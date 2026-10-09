@@ -63,3 +63,27 @@ fn base_expressions_are_inventoried_validated_and_evaluated_lazily(){
     assert!(Engine::from_yaml(&body.replace("{value: {path: unused}}","{context: {name: absent}}"),Steps::new()).is_err());
     assert!(Engine::from_yaml(&body.replace("fields: {}","fields: {}, typo: true"),Steps::new()).is_err());
 }
+
+#[test]
+fn keyed_entries_authenticate_full_document_but_bound_selected_keys() {
+    let body=BASE.replace("value_field: entry", "value_field: entry, keys: ['a.b', '$', missing]");
+    let rows=read(&body,r#"{"ignored":0,"$":"exact","a.b":false,"other":{},"tail":null}"#).unwrap().tables.remove("rows").unwrap();
+    assert_eq!(rows.len(),2);
+    assert_eq!(rows[0]["key"],Val::Str("$".into()));
+    assert_eq!(rows[1]["key"],Val::Str("a.b".into()));
+    assert_eq!(rows[1]["entry"],Val::Bool(false));
+    assert!(read(&body,r#"{"a.b":1} trailing"#).is_err());
+    let empty=BASE.replace("value_field: entry", "value_field: entry, keys: []");
+    assert!(read(&empty,r#"{"a":0,"b":1,"c":2,"d":3}"#).unwrap().tables["rows"].is_empty());
+}
+
+#[test]
+fn keyed_entries_refuse_invalid_bounds_and_duplicates() {
+    for keys in ["null", "[1]", "['a', 'a']", "{}"] {
+        let body=BASE.replace("value_field: entry", &format!("value_field: entry, keys: {keys}"));
+        assert!(Engine::from_yaml(&body,Steps::new()).is_err());
+    }
+    let keys=(0..1001).map(|n|format!("k{n}")).collect::<Vec<_>>().join(",");
+    let body=BASE.replace("value_field: entry", &format!("value_field: entry, keys: [{keys}]"));
+    assert!(Engine::from_yaml(&body,Steps::new()).is_err());
+}

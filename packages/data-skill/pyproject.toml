@@ -22,8 +22,7 @@ dependencies = [
     "lxml>=5.3",
     "ijson>=3.3,<4",
     "fsspec>=2023.1.0",
-    # Only the Name Census reads the landing Parquet; it goes with
-    # company_source.py when Company is read by the engine (to-do 21).
+    # Generic source.read Parquet framing and the independent census boundary.
     "pyarrow>=17.0.0",
 ]
 

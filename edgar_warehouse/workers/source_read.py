@@ -12,7 +12,7 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import reference
-from . import source_stream, source_readings
+from . import source_stream, source_readings, source_parquet
 
 OUTPUT_BYTES = 128 * 1024**2
 
@@ -20,7 +20,7 @@ OUTPUT_BYTES = 128 * 1024**2
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
     return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__),
-            Path(source_stream.__file__), Path(source_readings.__file__)]
+            Path(source_stream.__file__), Path(source_readings.__file__), Path(source_parquet.__file__), *source_parquet.runtime_files()]
 
 
 def _documents(envelope: dict, artifacts):
@@ -34,11 +34,17 @@ def _documents(envelope: dict, artifacts):
     execution = contract.get("execution")
     required = {"profile", "workers", "max_artifacts"}
     if (not isinstance(execution, dict) or not required <= set(execution)
-            or set(execution) - required - {"input_sha256s"}
+            or set(execution) - required - {"input_sha256s", "max_input_bytes"}
             or execution["profile"] != "source.read"
             or any(type(execution[key]) is not int or not 1 <= execution[key] <= 2
                    for key in ("workers", "max_artifacts"))):
         raise ValueError("Source execution requires source.read with 1..2 workers and artifacts")
+    if "max_input_bytes" in execution and (type(execution['max_input_bytes']) is not int
+            or not 1 <= execution['max_input_bytes'] <= 256*1024**2):
+        raise ValueError('Source max_input_bytes is 1..256 MiB')
+    read = contract.get("read")
+    if "max_input_bytes" in execution and isinstance(read, dict) and "stream" in read:
+        raise ValueError('Streamed framing declares its own physical input bounds')
     inputs = manifest["artifacts"]
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= execution["max_artifacts"]:
         raise ValueError("Source input exceeds the contract's bounded artifact count")
@@ -73,17 +79,20 @@ def _context(manifest, entry, artifacts):
 
 def _output(envelope: dict, artifacts, documents=None) -> bytes:
     manifest, contract, execution, inputs = documents or _documents(envelope, artifacts)
-    engine = source_engine.SourceEngine(contract)
+    read = contract.get("read")
+    parquet = isinstance(read, dict) and read.get("format") == "parquet"
+    engine = source_engine.SourceEngine(source_parquet.engine_contract(contract) if parquet else contract)
     max_bytes = contract["read"].get("limits", {}).get("max_bytes", 32 * 1024**2)
     max_records = contract["read"].get("limits", {}).get("max_records")
-    if max_bytes > 32 * 1024**2:
+    if max_bytes > execution.get("max_input_bytes", 32 * 1024**2):
         raise ValueError("source.read accepts at most 32 MiB per artifact")
     if type(max_records) is not int or not 1 <= max_records <= 100000:
         raise ValueError("source.read requires a limit of at most 100000 records")
 
     def read(entry):
         ref, context, evidence = _context(manifest, entry, artifacts)
-        result = engine.read(artifacts.verified(ref, max_bytes=max_bytes), context=context)
+        data = artifacts.verified(ref, max_bytes=execution.get("max_input_bytes", max_bytes))
+        result = engine.read(source_parquet.document(data, contract) if parquet else data, context=context)
         return {"input": ref, **evidence, "tables": result.tables, "deferred": result.deferred}
 
     with ThreadPoolExecutor(max_workers=execution["workers"]) as pool:

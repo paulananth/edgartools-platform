@@ -194,7 +194,7 @@ class TestTheCascade:
 
 
 def test_a_record_carries_its_ciks_cascade_answer_inside_its_census_entry():
-    from edgar_warehouse.mdm.clean.company_source import _census_evidence
+    from tests.support.retired_company_preparation import _census_evidence
 
     found = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
     row = {"cik": 320193, "entity_name": "APPLE INC"}
