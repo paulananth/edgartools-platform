@@ -24,9 +24,7 @@ independent caller is a subsequent change, not collateral deletion here.
 
 ## Current implementation checkpoint
 
-- [ ] Preserve large complete bronze inventories while binding only verified
-  selected Company receipt keys; compare original bundle bytes, replay and
-  refusal of malformed unrelated receipts.
+- [x] Preserve large complete bronze inventories while binding only verified selected Company receipt keys; all original bundle bytes, replay, retry and malformed unrelated receipt refusal pass the greater-than-10,000-receipt test, independently rerun in review (2026-10-09 07:06 ET).
 
 The CLI import now selects company_prepare. Preparation-only collectors and
 census attachment were removed from company_source; frozen test support retains
@@ -43,8 +41,7 @@ boundary and qualify those frozen inputs before treating the switch as ready.
 Move the bronze attachment expression from creator Python into its Rules recipe.
 These are caller-cutover prerequisites; no new whole-census construction needed.
 
-- [ ] Close review input-bound regressions with a large auxiliary-member and
-  actual frozen-input qualification, preserving physical receipts.
+- [x] Close review input-bound regressions with large auxiliary members and actual frozen-input qualification; 175 affected tests passed in82.25s, and final captured proof matches every original bundle byte with no stale code/input pins (2026-10-09 07:06 ET).
 - [x] Bronze semantics moved to Rules; a deliberate bronze recipe fault changes the observed result (2026-10-09 06:51 ET).
 - [ ] Verify published worker receipts in a separate installed process and keep
   PostgreSQL16 restricted-role tests/no prerequisite skips.
@@ -65,3 +62,17 @@ require final report, installed qualification and CI. A20-case focused gate
 passed19.30s after formatting and codec-pin edits. Larger projected tables
 still obey the explicit100000distinct rows/32MiB framing bound; the captured
 proof is not a universal claim about every64MiB publication.
+
+## Final captured qualification — 2026-10-09 07:06 ET
+
+The final source/oracle checkpoint is pinned in captured-proof.json. It passed
+in192.413s while local tests and installed package builds ran concurrently:
+966Companies,529459filings,1932addresses,10391tickers, and the unchanged
+43245-entry census. Original bundle bytes, retry, worker verification and
+separate-process readback match. Every implementation and input pin was checked
+again after completion, with no stale pins. This duration measures the complete
+parity/retry/replay exercise, not parser performance.
+
+Spec and Standards reviews are recorded separately in REVIEW.md. Neither finds
+a remaining scoped implementation/design blocker. Installed final qualification
+and CI remain required before closure.
