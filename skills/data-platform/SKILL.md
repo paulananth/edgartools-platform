@@ -111,6 +111,12 @@ step:
   they advance (its own, from checkpoint 0), a `batch_id` prefix and the
   `as_of` instant. Optional `record_column` selects an object-valued column
   containing the complete source record; omitted, the table row is the record.
+  Optional `effective_column` names a column holding the file's effective
+  time (an ISO 8601 instant with a timezone, the same in every row of one
+  file; normally a context value, such as the date the file was published).
+  Its publications state it, so MDM dates the records, and a link with no
+  stated start starts then. Omitted, records carry no time, and a link with
+  no stated start makes no link (`unknown_relationship_start`).
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
   manifest. Its verifier rebuilds them and reports `mdm.prepared`.
 - `mdm.merge`: one Clean MDM input manifest (contract version 2) through the
