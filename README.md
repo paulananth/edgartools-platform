@@ -197,6 +197,7 @@ retired execution paths.
 | [edgar_warehouse/workers](edgar_warehouse/workers) | External workers and destination verifiers |
 | [rules](rules) | Versioned source, dataset and pipeline definitions |
 | [Clean MDM specifications](docs/specs/clean-mdm/README.md) | Domain policies, evidence, Company and recovery requirements |
+| [Reference data (RDM)](docs/specs/rdm/spec.md) | Code sets, approved versions, hierarchies and crosswalks |
 | [infra/terraform](infra/terraform) | AWS/Snowflake passive and access roots |
 | [infra/snowflake](infra/snowflake) | Native pull, dbt gold and dashboard assets |
 | [tests](tests) | Unit, architecture, MDM, PostgreSQL and engine acceptance |
