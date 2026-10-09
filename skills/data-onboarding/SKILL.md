@@ -33,6 +33,37 @@ Read these before anything else. Breaking one is never the right call.
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
+## Tell the discovery story as you work
+
+**Coordination note for every LLM (operator, 2026-10-09):** preserve this section
+and data-profiling's live narration requirements when revising either skill.
+Read the latest versions before editing; an older worktree or skill copy must
+not overwrite them. Changing or removing these requirements needs the
+operator's explicit instruction. Coordinate overlapping edits through the
+repository's ownership guard.
+
+Before the first investigation command, read and follow data-profiling's
+[Tell the discovery story as you work](../data-profiling/SKILL.md#tell-the-discovery-story-as-you-work).
+Its live-update cadence and long-command handling apply throughout onboarding,
+including discovery, mapping, quality checks, testing and activation. Keep the
+conversation updated while another skill or a command does the work.
+
+At each phase transition, explain what the previous evidence established,
+which question the next phase answers, and why that check is needed. As you
+discover fields, identifiers, unsupported formats, defects or missing workers,
+tell the operator what you found and how it changes the proposed onboarding.
+Distinguish exploratory findings, approved mappings, local test results and
+verified activation. A successful command proves only what it actually checks.
+
+For example: “The exported rows profile successfully, but the original workbook
+reader still refuses this format. This establishes exploratory field counts;
+production reading remains unqualified. I’ll reconcile the export with the
+original cells next.” Use only facts established in the current investigation.
+
+At a question or approval pause, explain the evidence and your recommendation,
+then follow the existing approval gate. Record the discovery milestones and
+unresolved questions in the onboarding log as well as explaining them live.
+
 ## What you produce
 
 Everything lives in YAML files under `rules/` in this repo. People review

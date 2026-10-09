@@ -30,6 +30,51 @@ advice only.
 | Start a long pass silently | Say the size and the time estimate first (the run prints both) |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
+## Tell the discovery story as you work
+
+**Coordination note for every LLM (operator, 2026-10-09):** preserve these live
+narration requirements when editing or replacing this skill. Read the latest
+version and carry them into any revision; an older worktree or skill copy must
+not overwrite them. Changing or removing them requires the operator's explicit
+instruction. Coordinate overlapping edits through the repository's ownership
+guard.
+
+Keep the operator informed in the conversation throughout every mode, including
+when data-onboarding or refining-rules calls this skill. Saved reports accompany
+these live updates; the operator must be able to follow the investigation before
+the report is finished.
+
+- **Before the first investigation command:** say what question you are
+  answering, which copies you will inspect, and what you will check first.
+  Reuse names and paths already supplied by the operator.
+- **At each meaningful finding or change of direction:** give a short update
+  connecting **what you checked → what the evidence shows → why it matters →
+  what you will check next**. Explain the reason for the next check. Tell the
+  operator when evidence changes an earlier hypothesis.
+- **Before a long pass:** give its scope, size, full or sampled coverage and
+  time estimate, naming the measurement or basis for the estimate. If the
+  estimate is unknown, say so and measure a bounded pass first.
+- **While work is running:** send an update at least every 60 seconds. Start
+  long commands with a yielding/background execution mechanism and poll or
+  wait in intervals of at most 30 seconds so you can keep talking. Report
+  observed progress and elapsed time. When the tool emits no progress, say
+  which command or stage is still running and that there is no new result;
+  report counts, percentages or an ETA only when measured.
+- **When a check fails or a meaning is unknown:** explain the refusal or
+  evidence gap, its effect on the investigation, and the next bounded check
+  or operator decision. Label sampled results, hypotheses and measured facts
+  explicitly; keep sensitive examples masked as required by Hard stops.
+- **At approval or handover:** summarize what was learned, what remains
+  unresolved, and what the evidence permits next. Link the report and ask the
+  required question. Narration supplies context; approval still comes from
+  the operator's exact words.
+
+For example, after measuring a candidate key: “The account column repeats in
+two rows, so it cannot identify every record alone. I’ll check whether the
+service column separates those rows before proposing a composite key.” Use
+the actual evidence from the current run, in plain words, in 1–3 sentences
+per update. Surface conclusions and their supporting reasons.
+
 ## Setup
 
 The commands run from this skill's own folder (installed with the skill),
