@@ -94,18 +94,23 @@ mdm:
         record_key:
         - published
         - custodian_id
-        # The custodian's identity, operator 2026-10-09 09:55 ET: "LEI, then BD
-        # number, name last". 5.K(3)(f) is "LEI or other": only an LEI-shaped
-        # value is read as an LEI (custody-csv.yaml); BD number (5.K(3)(e), SEC's
-        # 8- file number) is a new namespace that joins. A custodian with
-        # neither keeps a name id, lookup only, and waits for a proven name rule.
+        # The custodian's identity, operator 2026-10-09: "BD number first
+        # (Recommended)" (it replaced "LEI, then BD number, name last"):
+        # advisers report the right BD number (5.K(3)(e), SEC's 8- file
+        # number) but often a parent's or another LEI, 8 BD numbers with 2 to
+        # 4 valid LEIs each. So the BD number joins; the LEI joins only a row
+        # with no BD number (`custodian_lei`, custody-csv.yaml); every reported
+        # LEI is kept for lookup (`reported_lei`). 5.K(3)(f) is "LEI or other":
+        # only an LEI-shaped value is read as an LEI. A custodian with neither
+        # keeps a name id, lookup only, and waits for a proven name rule.
         identifiers:
-          lei: lei
           bd_number: bd_number
+          lei: custodian_lei
         identifier_formats:
           lei: lei
         cross_references:
           name_id: legal_name
+          reported_lei: lei
         cross_reference_formats:
           name_id: name_id@1
         fields:
