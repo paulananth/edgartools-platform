@@ -34,7 +34,7 @@ Approved Rules ---------------- Bookkeeping
 source.read                          v
 Rust, called from Python             verifier read-back
       |
-      +---- source.combine          when one feed joins several readings
+      +---- source.combine          when one feed joins several source extracts
       |
       +---- reference data          pinned codes and hierarchies
       |
@@ -61,12 +61,12 @@ local PostgreSQL and does not commit a master.
 
 ## Parsing
 
-Configured reading runs in Rust (`crates/source-contract`). On 2026-10-02
+Configured source extract runs in Rust (`crates/source-contract`). On 2026-10-02
 the platform chose one engine, built before the next per-source parser, with
 Rust under the cover and Python as the only caller. An approved rules file
 states the format, the container, the document checks, the tables, the
 columns, and the record checks. `edgar_warehouse/rules/source_engine.py` is
-the facade. Bookkeeping, the rules commands, and Clean MDM reach a reading
+the facade. Bookkeeping, the rules commands, and Clean MDM reach a source extract
 through that facade. Calls into the edgartools package stay in Python. A
 custom step is a named Python function, used when the rules file cannot state
 the field.
@@ -75,7 +75,7 @@ The engine reads XML, JSON, JSON Lines, CSV, and one zip member. An ordinary
 read holds the artifact in memory up to the contract's byte and record limits
 and fails closed past those limits. A large captured JSON array or XML
 envelope can declare streamed framing: Rust frames each record inside the
-limits that framing declares, and Python receives the projected reading. Publication
+limits that framing declares, and Python receives the projected source extract. Publication
 waits for a valid end of file. Streamed framing does not activate a source.
 
 HTML filings, layout-heavy extracts, and prose stay on their Python parsers.
@@ -114,7 +114,7 @@ accounting parent, and a GLEIF fund link are different relationships.
 
 ## Mastering and merging
 
-Each source record waits in the Source Stage as its newest reading, unbound,
+Each source record waits in the Source Stage as its newest source extract, unbound,
 until a rule links it to an identity. Bronze keeps what that source said
 before. The Merge Stage is the only writer of master state. One fenced
 transaction resolves the identity, selects fields, writes relationships whose
@@ -125,7 +125,7 @@ Captured record
       |
       v
 Source Stage
-newest reading of that source record
+newest source extract of that source record
 unbound until a matching rule links it
       |
       v
@@ -161,7 +161,7 @@ Workers read files that are already captured. Filing history is evidence for a
 Company or a Person. A form name does not classify a Person. GLEIF evidence
 that is not a Company stays evidence.
 
-A custom parsing step is written only after configured reading cannot state
+A custom parsing step is written only after configured source extract cannot state
 the field. The skill adds one generic versioned function, tests it, lists it
 in the Mapping Document, opens a pull request, and stops. The operator approves
 the code and the Rules version.
@@ -186,8 +186,8 @@ retired execution paths.
 | Location | Purpose |
 | --- | --- |
 | [skills/data-platform](skills/data-platform/SKILL.md) | Portable setup and onboard → parse → master → custom-step workflow |
-| [Configured reading](skills/data-platform/READING.md) | Implemented parser grammar and qualification boundaries |
-| [Combining readings](skills/data-platform/COMBINING.md) | Keyed collections and joins across readings |
+| [Configured source extract](skills/data-platform/READING.md) | Implemented parser grammar and qualification boundaries |
+| [Combining source extracts](skills/data-platform/COMBINING.md) | Keyed collections and joins across source extracts |
 | [skills/data-profiling](skills/data-profiling/SKILL.md) | Classify a captured data set before onboarding |
 | [edgar_warehouse/silver_writer](edgar_warehouse/silver_writer) | Local PostgreSQL 16 landing from an approved silver spec |
 | [skills/bookkeeping](skills/bookkeeping/SKILL.md) | Loader-independent control, role grants and recovery |

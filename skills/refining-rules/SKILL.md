@@ -126,7 +126,7 @@ counts look wrong, or **compare** lists drift handled by data-quality:
      the explicit `mdm.prepare.record_column` objects. Preserve source types,
      unknown evidence and immutable input references. Use data-platform
      [READING.md](../data-platform/READING.md) for supported expressions.
-     Where a live source's configured reading does not yet cover its whole
+     Where a live source's configured source extract does not yet cover its whole
      preparation (its ticket says what is open), the retained preparation
      stays an equivalence oracle until that part is qualified.
      Label diagnostic runs on retained preparation as such; they do not prove
@@ -205,7 +205,7 @@ Never invent a command.
 
 - A provider ruled out: `sec.gov`. A full pass over SEC submissions took
   about 3 minutes per 1,000 documents on a laptop.
-- Configured reading not yet whole: Company raw columns omit the catalog and
+- Configured source extract not yet whole: Company raw columns omit the catalog and
   census joins and full address and pagination preparation; GLEIF keeps its
   archive and publication validation until bounded streaming is built.
 - Issued identifiers: `cik`, `lei`. Name-rule proofs:

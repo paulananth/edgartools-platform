@@ -1,4 +1,4 @@
-# Configured reading
+# Configured source extract
 
 Use this reference when writing a captured JSON contract. It describes the
 implemented engine grammar; a source version is approved through the normal
@@ -86,21 +86,21 @@ may be fewer than source records; the publication count always counts every
 framed source record.
 
 Record projection runs in Rust through the ordinary table interpreter;
-Python receives projected readings, retains private partitions and orchestrates
+Python receives projected source extracts, retains private partitions and orchestrates
 verification. Approved custom expressions keep their registered step boundary.
 This avoids converting and serializing every raw record through Python.
 
 Projected tables and deferred records accumulate in private partitions.
 Partition count, bytes, record count, aggregate spool bytes and output rows
 are independently bounded. Every input must authenticate and reach valid EOF
-before any partition is written. The version-2 reading index names immutable
+before any partition is written. The version-2 source-extract index names immutable
 content-addressed partitions, their byte sizes, source ordinal ranges and
 declared table names (at most 64 distinct names).
 The verifier rebuilds them from the original receipts and compares their
 exact bytes without writes. A later output-write failure may leave immutable
 partitions for retry; the index is written last.
 
-`source.combine` and `mdm.prepare` accept both inline and partitioned readings.
+`source.combine` and `mdm.prepare` accept both inline and partitioned source extracts.
 They authenticate every partition and enforce aggregate consumer byte and row
 budgets before writing output. Partitions retain the original artifact/context
 identity and row order; they do not create additional MDM batches. Consumers
@@ -156,7 +156,7 @@ Expressions, context names, references and custom steps are validated when
 the contract loads. The expression inventory also enables exact numeric and
 Python JSON formatting policies inside assertions. Assertions run even when
 every table is empty and cannot defer records. The source worker writes no
-reading output on rejection; the existing parser and byte limits still apply.
+source-extract output on rejection; the existing parser and byte limits still apply.
 
 A contract may require an object document, require a member to be an object
 when present, take a row only from an object member, or convert a looked-up
@@ -235,7 +235,7 @@ use `join_limit`. Empty output returns text unless `null_if_empty` is true.
 Base fields retain their nulls; collision checks still precede omission.
 
 A source's bundled `*-fields.yaml` recipes demonstrate these operations. Freeze
-the entire reading under the Dataset Contract's `adapter.reading` before
+the entire source extract under the Dataset Contract's `adapter.reading` before
 qualification. The generic record mapper validates all expressions before
 selective evaluation, then evaluates fields and matching at their existing
 MDM normalization points. Compare exact assertions, quality, deferrals and
@@ -251,7 +251,7 @@ at most 128 characters. Only existing declared roots enter serialization;
 missing roots stay missing. Selected values retain their types and must be
 JSON values. This lets unrelated foreign metadata, such as Parquet timestamps,
 remain outside field parsing without coercing it to text. Validate the full
-reading and check that every mapped value path is covered by the declared
+source extract and check that every mapped value path is covered by the declared
 roots.
 This option affects the record bridge; artifact `source.read` already consumes
 serialized input and continues reading its declared paths directly.
@@ -261,10 +261,10 @@ selected table holds complete records in a column. Every selected value must
 be an object. Preparation writes those exact objects as JSON Lines; its
 verifier rebuilds the same selection. Without `record_column`, the entire
 table row remains the record. A missing/null/list/scalar selection fails
-before output files are written. Reading outputs are bounded to the source
+before output files are written. Source-extract outputs are bounded to the source
 verifier's 128 MiB budget; MDM preparation reads at most 32 MiB and refuses
 records files above 16 MiB or a manifest above 32 MiB before writing. Partition
-large inputs explicitly; source reading has no MDM-specific budget.
+large inputs explicitly; source extract has no MDM-specific budget.
 No field renaming or classification happens
 in this worker; MDM uses its registered Dataset Contract and pinned policy.
 
@@ -648,7 +648,7 @@ The context receipt names immutable JSON, at most 32 KiB:
 Its `input` must equal the artifact's exact URI and hash. Build the context
 from approved caller facts and pin it in the execution worklist. A hash proves
 bytes and binding; Rules approval supplies authority for those facts. The
-worker and independent verifier reread both receipts. Reading output retains
+worker and independent verifier reread both receipts. Source-extract output retains
 version 1 and adds the context receipt to each artifact. MDM preparation uses
 both input and context hashes for record, batch and publication identity, so
 different context for the same captured bytes remains separate. Version-1
@@ -661,7 +661,7 @@ reference joins, other sources or complete malformed source equivalence. Keep th
 ## Indexed membership and scope receipts
 
 Use `member` when a record must be selected against a large, immutable set
-of exact text keys. Declare the set and its bounds in the reading contract:
+of exact text keys. Declare the set and its bounds in the source-extract contract:
 
 ```yaml
 read:
@@ -715,23 +715,23 @@ strict JSON of at most 64 MiB:
 `input` must equal the captured receipt's complete URI and hash. `sets` must
 hold exactly the declared names, each with a text array. The worker validates
 these documents before opening source bytes; its verifier independently
-replays the reading with the same receipts. Output retains lookup evidence,
+replays the source extract with the same receipts. Output retains lookup evidence,
 even when selection yields no rows. JSON streaming supports these indexed
 sets; XML streaming currently refuses them explicitly. Eager configured reads
 retain their declared-format support.
 
 A consumer must bind lookup evidence into its output identity. The configured
-combiner supports this: its scope hashes the complete reading receipts, so
+combiner supports this: its scope hashes the complete source-extract receipts, so
 identical rows under different lookup receipts remain distinct for downstream
 preparation and publication. Direct MDM preparation of a lookup-bearing
-reading refuses until its identity contract supports that evidence. Declare
+source extract refuses until its identity contract supports that evidence. Declare
 a combine step before preparation for this route; never discard the receipt.
 
 Construct the set from verified upstream population evidence and pin its
 receipt in the worklist. Authentication proves the supplied bytes and input
 binding; it does not prove that the set is complete or that a supplied count
 was derived correctly. Compare complete source populations and retain their
-provenance before retiring an active consumer. A sampled reading or successful
+provenance before retiring an active consumer. A sampled source extract or successful
 EOF on a repackaged prefix does not qualify the original whole source.
 
 ## Fallback and conditional values
@@ -794,7 +794,7 @@ a source activation nor complete mastering.
 Read each captured continuation page with its own contract at the raw page
 root, bound to the page receipt, with no item-limit context. Do not invent a
 wrapper the page does not have. Capture every page the pinned main document
-names, read pages in bounded groups, combine them with the main reading, then
+names, read pages in bounded groups, combine them with the main source extract, then
 combine the per-record lists with `collect_flat` and `sort_values: true`. See
 [Combination](COMBINING.md) for list and element-budget semantics. Same-date
 captures plus version and hash evidence prove captured bytes and declared page
@@ -880,7 +880,7 @@ capture-run check on base rows. Both finite malformed-case and physical capture
 qualification must pass before adoption. Byte, header, row, numeric and Unicode
 safety boundaries remain explicit, so finite parity does not imply universal
 arbitrary-input parity. No source activation, producer success or complete
-mastering follows from successful catalog reading.
+mastering follows from successful catalog source extract.
 
 ## Large JSON array framing foundation
 
@@ -1123,13 +1123,13 @@ column arrays at the raw page root and emits all eighteen filing fields;
 it has no recent-limit context. Bind `cik`, `sync_run_id`, `raw_object_id`
 and `load_mode` to the page receipt. `raw_object_id` retains the caller's
 publication context; the independent `input` receipt identifies the exact
-page bytes. Do not invent a `filings` wrapper before configured reading.
+page bytes. Do not invent a `filings` wrapper before configured source extract.
 
 Capture all filenames declared by the pinned main document. Read pages in
-bounded pairs, combine up to seven page readings with the main reading,
+bounded pairs, combine up to seven page source extracts with the main source extract,
 then combine the resulting per-Company form lists with `collect_flat` and
 `sort_values: true`. This preserves complete page scope through immutable
-reading receipts while keeping each work unit bounded. See
+source-extract receipts while keeping each work unit bounded. See
 [Combination](COMBINING.md) for list and element-budget semantics.
 Same-date S3 captures plus version/hash evidence prove captured bytes and
 declared page coverage; they do not prove Bookkeeping producer success.
@@ -1213,7 +1213,7 @@ An empty key list still validates document shape and assertions.
 
 ## Examples: configured preparation caller
 
-`mdm prepare-clean-company` now binds immutable configured Parquet reading and
+`mdm prepare-clean-company` now binds immutable configured Parquet source extract and
 combination contracts, reuses the authenticated frozen census and verifies each
 worker before publishing its existing bundle. It retains complete worker
 inputs/contracts/outputs and proof beside the original pinned members. Readback

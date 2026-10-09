@@ -271,7 +271,7 @@ Rules:
   Records written before this exists carry no rule identity and are immutable.
   Absence therefore means "decided by the adapter's lookup table, before
   governed rules existed", on the same convention as an absent
-  `mapping_version` meaning the first reading.
+  `mapping_version` meaning the first source extract.
 
 - A step whose verdict decides no kind (`deferred`, `entity_undetermined`)
   may name a **`probable_kind`**: the kind a record it holds back probably is

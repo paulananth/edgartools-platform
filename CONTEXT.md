@@ -78,9 +78,13 @@ _Avoid_: A Security, an ETF share, a name ending in "fund" as proof of the profi
 The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
 
+**Source Extract**:
+The tables taken from one captured file by its contract, together with the receipt that names those bytes.
+_Avoid_: Reading, a prediction, Bronze Artifact, Source Capture, Logical Source Revision, Derived Filing Text, Reported Output, Interpretation, Projection, Snapshot, Statement, an extracted temporary file
+
 **Source Stage**:
-What one source says now about one entity, per field, before any survivorship is applied — read per kind. It holds one record per source record, its newest reading; a newer reading replaces it and an older one arriving late does not. A record names the bronze object it was read from, and bronze is the only history of what a source said before. A record waits in the Stage, unbound, until a matching rule links it to an identity.
-_Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a history of every reading (bronze is that); the surviving value, which is the master record's
+What one source says now about one entity, per field, before any survivorship is applied — read per kind. It holds one record per source record, its newest source extract; a newer source extract replaces it and an older one arriving late does not. A record names the bronze object it was read from, and bronze is the only history of what a source said before. A record waits in the Stage, unbound, until a matching rule links it to an identity.
+_Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a history of every source extract (bronze is that); the surviving value, which is the master record's
 
 **Probable Kind**:
 The kind that a rule step gives to a record it holds in the Stage. It sorts the Stage and never creates an identity; the rule of that kind decides.
@@ -166,9 +170,9 @@ _Avoid_: Source Record Binding, corporate acquisition, merging fields because th
 The rules that select a master field value from eligible source claims after identity has been resolved, while retaining the claims that were not selected.
 _Avoid_: Proof of identity, source rank as permission to merge identities
 
-**Name Census**:
-The pinned count, over one whole SEC capture and one full GLEIF Golden Copy, of which SEC filers and which GLEIF legal entities carry each name with its legal form kept; a name matching rule binds only a name that exactly one of each carries.
-_Avoid_: A matcher, a list of approved pairs, a count over the records a Stage happens to hold
+**Name Frequency**:
+The pinned count, over one whole SEC capture and one full GLEIF Golden Copy, of how many SEC filers and how many GLEIF legal entities carry each name with its legal form kept. It proposes no binding. A name matching rule may bind only a name whose SEC count and GLEIF count are each exactly one.
+_Avoid_: Census, Name Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
 
 **Match Exclusion**:
 An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.

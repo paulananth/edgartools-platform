@@ -84,7 +84,7 @@ kind and name is enforced by a partial unique index.
 Activation of source mappings and merge policies requires explicit MDM
 governance connections and approval. The idempotent MDM handoff commits
 first, followed by Rules activation in a separate transaction. Registration
-receipts pin dataset readings. A Bookkeeping-only edit does not create a new
+receipts pin dataset source extracts. A Bookkeeping-only edit does not create a new
 MDM mapping. Export retains these receipts along with proof and approval.
 
 `Rules.resolve` exports an active version into content-addressed control
@@ -131,7 +131,7 @@ not business records:
 
 An MDM input artifact contains `{"version":1,"command":{...}}`, an existing
 Merge Stage command without `run_id`, preview flags or lease proof. Records
-must agree with the source readings frozen in the Rules registration receipt.
+must agree with the source extracts frozen in the Rules registration receipt.
 A publication input contains `version`, `batch_id`, `consumer`, and an exact
 `destination`. Authority is supplied separately by the worker, preserving
 the business batch id and request hash on retry.

@@ -184,7 +184,7 @@ Unknown effective time remains unknown; a sample never retires absent records.
 ### Name each record's bronze object
 
 The latest-only Stage keeps, for each source record, the bronze object its
-winning reading came from (ticket 10). A Company row's `raw_object_id` is the
+winning source extract came from (ticket 10). A Company row's `raw_object_id` is the
 sha256 of its SEC submissions document, and the capture run recorded where
 it wrote each document (`pipeline_run.raw_writes_json` in bookkeeping). Write
 that run's receipts once, then pass them to the preparation:
