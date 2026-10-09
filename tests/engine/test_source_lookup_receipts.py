@@ -16,14 +16,25 @@ def no_custom_steps(monkeypatch):
     monkeypatch.setattr('edgar_warehouse.rules.source_engine.STEPS', {})
 
 
-def lookup_task(tmp_path, store, *, streamed=True, values=None):
+def lookup_task(tmp_path, store, *, streamed=True, values=None, parquet=False):
     rules = contract()
     rules['read']['lookup_sets'] = {'wanted': {'max_values':3, 'max_bytes':8, 'max_value_bytes':4}}
     rules['read']['tables']['rows']['select'] = {'member':{'lookup':'wanted','key':{'value':{'path':'n'}}}}
     if not streamed:
         del rules['read']['stream']
         rules['read']['tables']['rows']['each'] = 'records'
-    envelope = task(tmp_path, store, [b'{"records":[{"n":"A"},{"n":"B"},{"n":"A"}]}'], rules)
+    data = b'{"records":[{"n":"A"},{"n":"B"},{"n":"A"}]}'
+    if parquet:
+        from io import BytesIO
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        assert not streamed
+        rules['read']['format'] = 'parquet'
+        rules['read']['tables']['rows']['each'] = 'rows'
+        buffer = BytesIO()
+        pq.write_table(pa.table({'n':['A','B','A']}), buffer)
+        data = buffer.getvalue()
+    envelope = task(tmp_path, store, [data], rules)
     manifest = store.json(envelope['input'])
     ref = manifest['artifacts'][0]
     context = store.put(tmp_path.as_uri(), {'version':1, 'input':ref,
@@ -35,15 +46,16 @@ def lookup_task(tmp_path, store, *, streamed=True, values=None):
     return envelope, manifest
 
 
-@pytest.mark.parametrize('streamed', [False, True])
-def test_lookup_receipt_flows_through_execution_retry_verification_and_consumption(tmp_path, streamed):
+@pytest.mark.parametrize('streamed,parquet', [(False,False), (True,False), (False,True)])
+def test_lookup_receipt_flows_through_execution_retry_verification_and_consumption(tmp_path, streamed, parquet):
     store = Artifacts()
-    envelope, manifest = lookup_task(tmp_path, store, streamed=streamed)
+    envelope, manifest = lookup_task(tmp_path, store, streamed=streamed, parquet=parquet)
     receipt = source_read.execute(envelope, store)
     assert source_read.execute(envelope, store) == receipt
     assert source_read.verify({**envelope,'candidate':receipt}, store) == ({'source.output':True}, [])
     found, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100, allow_lookup_receipts=True)
     artifact = found['artifacts'][0]
+    assert artifact['input'] == manifest['artifacts'][0]['input']
     assert artifact['lookups'] == manifest['artifacts'][0]['lookups']
     assert [row['n'] for row in artifact['tables']['rows']] == ['A','A']
     if streamed:
@@ -96,9 +108,10 @@ def test_lookup_hash_corruption_refuses_without_publication(tmp_path):
     assert not (tmp_path/'reading.json.parts').exists()
 
 
-def test_changed_authenticated_scope_cannot_verify_an_old_candidate(tmp_path):
+@pytest.mark.parametrize('parquet', [False, True])
+def test_changed_authenticated_scope_cannot_verify_an_old_candidate(tmp_path, parquet):
     store = Artifacts()
-    envelope, manifest = lookup_task(tmp_path, store)
+    envelope, manifest = lookup_task(tmp_path, store, streamed=not parquet, parquet=parquet)
     candidate = source_read.execute(envelope, store)
     entry = manifest['artifacts'][0]
     new_scope = store.json(entry['lookups'])

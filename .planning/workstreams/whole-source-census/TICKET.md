@@ -1,5 +1,17 @@
 # Whole-source configured census construction
 
+## PR878 rebase — 2026-10-09
+
+- [x] Rebase six PR commits onto main79a8c78f in isolated codex/pr878-rebase-20261009; original dirty publication-context worktree remains untouched (2026-10-09 08:41 ET).
+- [x] Resolve two source_read conflicts preserving authenticated lookups, Parquet framing, input bounds, malformed-contract refusal and codec pins; range-diff confirms only these integration changes in the replayed commits (2026-10-09 08:41 ET).
+- [ ] Verify native and affected tests, then synchronize PR878 with an explicit lease; full CI must pass on the updated PR head.
+
+Local verification: 148 native cases passed; 339 affected cases passed82.94s.
+The conflict-specific lookup/Parquet receipt and changed-scope refusal cases
+pass alongside existing receipt checks: 25 passed. The original protected
+publication-context work remains on its original commit and is not included.
+
+
 Parent goal: self-sustaining bundled skills and Rules creator, configured
 parsing/MDM orchestration, custom parsing only after an approved demonstrated
 need, and complete retirement of executable old parsers.
