@@ -139,13 +139,25 @@ pub fn csv(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
     Ok(records(rows))
 }
 
-/// The one member of a ZIP archive, read no further than `max_member_bytes`.
-pub fn zip_member(bytes: &[u8], max_member_bytes: u64) -> Result<Vec<u8>, Rejected> {
+/// One member of a ZIP archive, read no further than `max_member_bytes`: the
+/// only member, or, when `pattern` is given, the one member whose name it matches.
+pub fn zip_member(bytes: &[u8], max_member_bytes: u64, pattern: Option<&str>) -> Result<Vec<u8>, Rejected> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(malformed)?;
-    if archive.len() != 1 {
-        return Err(Rejected::new("zip_members", format!("{} members, not one", archive.len())));
-    }
-    let member = archive.by_index(0).map_err(malformed)?;
+    let index = match pattern {
+        None if archive.len() == 1 => 0,
+        None => return Err(Rejected::new("zip_members", format!("{} members, not one", archive.len()))),
+        Some(pattern) => {
+            let found: Vec<usize> = (0..archive.len())
+                .filter(|&i| archive.name_for_index(i).is_some_and(|name| matches_pattern(pattern, name)))
+                .collect();
+            match found[..] {
+                [index] => index,
+                [] => return Err(Rejected::new("zip_members", format!("no member matches {pattern}"))),
+                _ => return Err(Rejected::new("zip_members", format!("{} members match {pattern}, not one", found.len()))),
+            }
+        }
+    };
+    let member = archive.by_index(index).map_err(malformed)?;
     if member.encrypted() {
         return Err(Rejected::new("zip_members", "the member is encrypted"));
     }
@@ -156,3 +168,68 @@ pub fn zip_member(bytes: &[u8], max_member_bytes: u64) -> Result<Vec<u8>, Reject
     }
     Ok(out)
 }
+
+/// Whether a member name matches a pattern: `*` stands for any run of
+/// characters, `?` for one; everything else matches itself.
+pub(crate) fn matches_pattern(pattern: &str, name: &str) -> bool {
+    let (pattern, name): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
+    let (mut p, mut n, mut star, mut mark) = (0, 0, None, 0);
+    while n < name.len() {
+        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == name[n]) {
+            p += 1;
+            n += 1;
+        } else if p < pattern.len() && pattern[p] == '*' {
+            star = Some(p);
+            mark = n;
+            p += 1;
+        } else if let Some(s) = star {
+            p = s + 1;
+            mark += 1;
+            n = mark;
+        } else {
+            return false;
+        }
+    }
+    pattern[p..].iter().all(|c| *c == '*')
+}
+
+/// Encodings a text format may declare (`read.encoding`); UTF-8 when none is.
+pub const ENCODINGS: [&str; 2] = ["utf-8", "windows-1252"];
+
+/// The text of an artifact in the first declared encoding that reads it, as
+/// UTF-8 bytes. With [utf-8, windows-1252], valid UTF-8 is read as UTF-8 and
+/// anything else as windows-1252. A byte no declared encoding defines refuses
+/// the artifact; nothing is replaced or guessed.
+pub fn decode<'a>(bytes: &'a [u8], encodings: &[String]) -> Result<std::borrow::Cow<'a, [u8]>, Rejected> {
+    let (last, first) = encodings.split_last().expect("a contract declares at least one encoding");
+    if first.iter().any(|e| e == "utf-8") && std::str::from_utf8(bytes).is_ok() {
+        return Ok(std::borrow::Cow::Borrowed(bytes));
+    }
+    decode_one(bytes, last)
+}
+
+fn decode_one<'a>(bytes: &'a [u8], encoding: &str) -> Result<std::borrow::Cow<'a, [u8]>, Rejected> {
+    match encoding {
+        "windows-1252" => {
+            let mut out = String::with_capacity(bytes.len());
+            for (offset, byte) in bytes.iter().enumerate() {
+                out.push(match byte {
+                    0x80..=0x9F => WINDOWS_1252[(byte - 0x80) as usize].ok_or_else(|| {
+                        Rejected::new("encoding", format!("byte 0x{byte:02X} at {offset} is not windows-1252"))
+                    })?,
+                    _ => char::from(*byte),
+                });
+            }
+            Ok(std::borrow::Cow::Owned(out.into_bytes()))
+        }
+        _ => Ok(std::borrow::Cow::Borrowed(bytes)),
+    }
+}
+
+/// Windows-1252 bytes 0x80 to 0x9F; the rest is Latin-1. Five bytes are undefined.
+const WINDOWS_1252: [Option<char>; 32] = [
+    Some('\u{20AC}'), None, Some('\u{201A}'), Some('\u{0192}'), Some('\u{201E}'), Some('\u{2026}'), Some('\u{2020}'), Some('\u{2021}'),
+    Some('\u{02C6}'), Some('\u{2030}'), Some('\u{0160}'), Some('\u{2039}'), Some('\u{0152}'), None, Some('\u{017D}'), None,
+    None, Some('\u{2018}'), Some('\u{2019}'), Some('\u{201C}'), Some('\u{201D}'), Some('\u{2022}'), Some('\u{2013}'), Some('\u{2014}'),
+    Some('\u{02DC}'), Some('\u{2122}'), Some('\u{0161}'), Some('\u{203A}'), Some('\u{0153}'), None, Some('\u{017E}'), Some('\u{0178}'),
+];

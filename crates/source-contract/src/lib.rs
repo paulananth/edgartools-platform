@@ -205,7 +205,7 @@ impl Engine {
         }
         let member;
         let bytes = if setting(&self.read, "container") == Some("zip") {
-            member = formats::zip_member(bytes, self.limits.max_member_bytes)?;
+            member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
             &member[..]
         } else {
             bytes
@@ -301,7 +301,7 @@ impl Engine {
         match setting(&self.read, "format").unwrap_or_default() {
             "json" => formats::json(bytes, uses_integer(&self.read), uses_python_text(&self.read) || uses_iteration_order(&self.read)),
             "jsonl" => formats::jsonl(bytes, max_records, uses_integer(&self.read), uses_python_text(&self.read)),
-            "csv" => formats::csv(bytes, max_records),
+            "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
                     Err(error)
@@ -412,6 +412,16 @@ fn uses_integer(read: &Value) -> bool {
     uses_feature(read, |expr| expr.get("integer").is_some() || expr.get("value").is_some())
 }
 
+/// The encodings a contract declares, in the order they are tried: one name, or a list.
+fn encodings(read: &Value) -> Vec<String> {
+    match read.get("encoding") {
+        None => vec!["utf-8".into()],
+        Some(Value::String(one)) => vec![one.clone()],
+        Some(Value::Sequence(many)) => many.iter().map(|e| e.as_str().unwrap_or_default().to_string()).collect(),
+        Some(_) => Vec::new(),
+    }
+}
+
 fn setting<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
     value.get(name).and_then(Value::as_str)
 }
@@ -480,6 +490,25 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     if let Some(container) = read.get("container") {
         if container.as_str() != Some("zip") {
             return Err(format!("container {container:?} is not read"));
+        }
+    }
+    if let Some(member) = read.get("member") {
+        if setting(read, "container") != Some("zip") {
+            return Err("read.member chooses a ZIP member: it needs container zip".into());
+        }
+        if !member.as_str().is_some_and(|m| !m.is_empty() && m.len() <= 256) {
+            return Err("read.member is a member name pattern of 1 to 256 bytes".into());
+        }
+    }
+    if read.get("encoding").is_some() {
+        let named = encodings(read);
+        let fits = !named.is_empty() && named.len() <= 2 && named.iter().all(|e| formats::ENCODINGS.contains(&e.as_str()))
+            && (named.len() == 1 || (named[0] == "utf-8" && named[1] != "utf-8"));
+        if !fits || format != "csv" {
+            return Err(format!(
+                "read.encoding is one of {:?}, or [utf-8, <another>] (UTF-8 when the bytes are UTF-8), for CSV",
+                formats::ENCODINGS
+            ));
         }
     }
     for path in read.get("require").and_then(Value::as_sequence).into_iter().flatten() {

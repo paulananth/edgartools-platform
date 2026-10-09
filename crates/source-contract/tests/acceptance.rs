@@ -391,3 +391,36 @@ fn dates_read_as_python_writes_them() {
     assert_eq!(rows[0]["d"], Val::Str("2024-01-02T08:04:05.500000+00:00".into()));
     assert_eq!(rows[1]["d"], Val::Str("2024-01-02T03:04:05+00:00".into()));
 }
+
+#[test]
+fn a_zip_of_many_tables_reads_the_one_member_its_pattern_names() {
+    let contract = "read:\n  format: csv\n  container: zip\n  member: \"Table_B_*.csv\"\n  limits: { max_bytes: 100000, max_member_bytes: 1000 }\n  tables:\n    rows:\n      each: record\n      columns:\n        a: { text: { path: a } }\n";
+    let e = configured(contract, Steps::new()).unwrap();
+    let many = zipped(&[("Table_A_2026.csv", "a\nx\n"), ("Table_B_2026.csv", "a\ny\n"), ("notes.txt", "")]);
+    assert_eq!(e.read(&many, &Lookups::new()).unwrap().tables["rows"][0]["a"], Val::Str("y".into()));
+    let none = zipped(&[("Table_A_2026.csv", "a\nx\n")]);
+    assert_eq!(e.read(&none, &Lookups::new()).unwrap_err().code, "zip_members");
+    let two = zipped(&[("Table_B_1.csv", "a\nx\n"), ("Table_B_2.csv", "a\ny\n")]);
+    assert_eq!(e.read(&two, &Lookups::new()).unwrap_err().code, "zip_members");
+    let without = contract.replace("  container: zip\n", "");
+    assert!(configured(&without, Steps::new()).is_err()); // a member needs a ZIP container
+}
+
+#[test]
+fn a_csv_declared_windows_1252_reads_its_letters_and_refuses_an_undefined_byte() {
+    let contract = |encoding: &str| format!("read:\n  format: csv\n  encoding: {encoding}\n  tables:\n    rows:\n      each: record\n      columns:\n        name: {{ text: {{ path: name }} }}\n");
+    let e = configured(&contract("windows-1252"), Steps::new()).unwrap();
+    let rows = e.read(b"name\nSOCI\xC9T\xC9 G\xC9N\xC9RALE \x96 \x80\n", &Lookups::new()).unwrap();
+    assert_eq!(rows.tables["rows"][0]["name"], Val::Str("SOCIÉTÉ GÉNÉRALE – €".into()));
+    assert_eq!(e.read(b"name\nA\x81B\n", &Lookups::new()).unwrap_err().code, "encoding");
+    let utf8 = configured(&contract("utf-8"), Steps::new()).unwrap();
+    assert_eq!(utf8.read(b"name\nSOCI\xC9T\xC9\n", &Lookups::new()).unwrap_err().code, "malformed"); // never guessed
+    assert!(configured(&contract("latin-9"), Steps::new()).is_err());
+    let either = configured(&contract("[utf-8, windows-1252]"), Steps::new()).unwrap();
+    assert_eq!(either.read(b"name\nSOCI\xC9T\xC9\n", &Lookups::new()).unwrap().tables["rows"][0]["name"], Val::Str("SOCIÉTÉ".into()));
+    assert_eq!(either.read("name\nSOCIÉTÉ\n".as_bytes(), &Lookups::new()).unwrap().tables["rows"][0]["name"], Val::Str("SOCIÉTÉ".into()));
+    assert!(configured(&contract("[windows-1252, utf-8]"), Steps::new()).is_err()); // UTF-8 is tried first or not at all
+    assert!(configured(&contract("[utf-8, utf-8]"), Steps::new()).is_err());
+    let json = "read:\n  format: jsonl\n  encoding: windows-1252\n  tables:\n    rows:\n      each: record\n      columns:\n        a: { text: { path: a } }\n";
+    assert!(configured(json, Steps::new()).is_err()); // declared for CSV only
+}
