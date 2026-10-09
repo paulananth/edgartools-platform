@@ -758,7 +758,6 @@ identifiers:
   lei:
     authority: GLEIF (ISO 17442)
     sources:
-    - iapd.adv.filings.v1
     - iapd.adv.custodians.v1
     normalizer: normalize_identifier@lei-v1
     claim:

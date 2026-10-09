@@ -38,18 +38,20 @@ mdm:
         record_key:
         - filing_id
         # CRD joins an adviser's filings into one Company (binding rule
-        # iapd-adv-crd). Item 1.P's LEI is the adviser's own and joins by
-        # iapd-adv-lei. The SEC file number (801-) is lookup only. Item 1.D(3)
+        # iapd-adv-crd); it is the adviser's identity. Item 1.P's LEI is lookup
+        # only (`reported_lei`): advisers report an affiliate's or another
+        # firm's LEI (8 valid LEIs on 2 to 7 advisers each, 3 advisers with
+        # two, over 13 months), so it cannot join records. Operator,
+        # 2026-10-09: "Keep LEI, lookup only (Recommended)". The SEC file
+        # number (801-) is lookup only too. Item 1.D(3)
         # lists 1 to 46 CIKs a filing (571 filings several): a record path holds
         # one value, so CIKs are left out until a list-shaped identifier exists
         # (ticket 07).
         identifiers:
           crd: crd
-          lei: lei
-        identifier_formats:
-          lei: lei
         cross_references:
           sec_file_number: sec_file_number
+          reported_lei: lei
         fields:
           name: legal_name
           address:

@@ -86,7 +86,7 @@ WITH_REAL_NAMES = {
 # and Identifier Contracts; peeled, the policy is the one
 # below. Not yet approved: the operator approves its digest with the proof.
 WITH_FORM_ADV = {
-    "policy": "067022bdb589e0cac9056738c3b6ed3211a6678593ca2f8505b40b2f0d7481cf",
+    "policy": "af0fa7cce9845419238d7ed23aa5fb7c1c8ccd576f2137e2b4ef3c732369a7cc",
 }
 
 # Profiling ticket 04b, part B: the calculated ultimate parent keeps its

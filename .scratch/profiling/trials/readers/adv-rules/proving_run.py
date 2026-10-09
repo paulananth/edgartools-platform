@@ -141,6 +141,10 @@ def main(root: Path, readings: Path, out: Path, size: int) -> None:
     import pgserver
     server = pgserver.get_server(tempfile.mkdtemp(prefix="adv-proving-"), cleanup_mode="delete")
     admin = create_engine(server.get_uri().replace("postgresql://", "postgresql+psycopg2://"))
+    with admin.connect() as conn:
+        # A small write-ahead log: this machine's disk is nearly full.
+        conn.execution_options(isolation_level="AUTOCOMMIT").execute(text("ALTER SYSTEM SET max_wal_size = '256MB'"))
+        conn.execute(text("SELECT pg_reload_conf()"))
     with admin.begin() as conn:
         conn.execute(text("CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"))
     app = create_engine(admin.url.set(username="clean_application", password="test"))
