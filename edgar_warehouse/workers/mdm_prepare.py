@@ -76,8 +76,8 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ValueError("mdm.prepare table rows must be objects")
         publication = {}
-        if effective_column is not None:
-            publication["effective_at"] = _effective_at(rows, effective_column)
+        if effective_column is not None and rows:
+            publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
         if record_column is not None:
             if any(not isinstance(row.get(record_column), dict) for row in rows):
                 raise ValueError("mdm.prepare record_column must hold an object in every row")
@@ -115,18 +115,25 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     return files, encoded
 
 
-def _effective_at(rows: list[dict], column: str) -> str:
-    """The one effective time every row of an artifact states, checked."""
-    values = {json.dumps(row.get(column)) for row in rows}
-    if len(values) != 1:
+def _effective_at(rows: list[dict], column: str, as_of: str) -> str:
+    """The one effective time every row of an artifact states, checked.
+
+    Compared as written: one file states its time one way. A time after the
+    manifest's `as_of` is refused, since MDM would read those records as not
+    yet in effect and leave them out silently. (The same test as Clean MDM's
+    `evidence.instant`, kept here so the worker's pinned runtime stays small.)
+    """
+    if len({json.dumps(row.get(column)) for row in rows}) != 1:
         raise ValueError(f"mdm.prepare {column} must hold one effective time per artifact")
-    value = rows[0].get(column) if rows else None
+    value = rows[0].get(column)
     try:
-        zoned = isinstance(value, str) and datetime.fromisoformat(value).tzinfo is not None
+        moment = datetime.fromisoformat(value) if isinstance(value, str) else None
     except ValueError:
-        zoned = False
-    if not zoned:
+        moment = None
+    if moment is None or moment.tzinfo is None:
         raise ValueError(f"mdm.prepare {column} must be an instant with a timezone")
+    if moment > datetime.fromisoformat(as_of):
+        raise ValueError(f"mdm.prepare {column} is after the manifest's as_of")
     return value
 
 

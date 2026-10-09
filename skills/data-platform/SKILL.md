@@ -112,11 +112,16 @@ step:
   `as_of` instant. Optional `record_column` selects an object-valued column
   containing the complete source record; omitted, the table row is the record.
   Optional `effective_column` names a column holding the file's effective
-  time (an ISO 8601 instant with a timezone, the same in every row of one
-  file; normally a context value, such as the date the file was published).
-  Its publications state it, so MDM dates the records, and a link with no
-  stated start starts then. Omitted, records carry no time, and a link with
-  no stated start makes no link (`unknown_relationship_start`).
+  time: an ISO 8601 instant with a timezone, written the same way in every
+  row of one file and no later than `as_of` (MDM would leave later records
+  out). Its publications state it, so MDM dates the records, and a link
+  restated by each file starts when first stated, with `last_seen` when last
+  stated. Omitted, records carry no time, and a link with no stated start
+  makes no link (`unknown_relationship_start`). When the file itself states
+  no such instant, take it from the caller: declare a `context` text field in
+  the reading, add the column `{context: {name: <field>}}`, and give each
+  file its own context receipt ([READING.md](READING.md), "Artifact context
+  and first-N rows").
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
   manifest. Its verifier rebuilds them and reports `mdm.prepared`.
 - `mdm.merge`: one Clean MDM input manifest (contract version 2) through the
