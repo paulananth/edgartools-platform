@@ -1,0 +1,5 @@
+1a restated, different fields: Conflict: Source native revision has contradictory publications
+1b restated, identical fields: Conflict: Source native revision has contradictory publications
+2 undated link, no effective time: {'edges': [], 'reviews': ['unknown_relationship_start']}
+3a two filings, stated open periods: {'edges': [{'periods': [('2025-06-24T00:00:00+00:00', None), ('2026-03-10T00:00:00+00:00', None)], 'last_seen': None}], 'reviews': []}
+3b two filings, observed (publication time): {'edges': [{'periods': [('2025-06-30T00:00:00+00:00', None)], 'last_seen': '2026-03-31T00:00:00+00:00'}], 'reviews': []}
