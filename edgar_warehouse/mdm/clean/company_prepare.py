@@ -146,9 +146,23 @@ def _configured_records(
         table["columns"]["_origin"]["object"]["fields"].update(
             {key: _literal(value) for key, value in origin.items()}
         )
-        main["read"]["references"]["bronze"] = {
-            sha: {"object": uri} for sha, uri in bronze.items()
-        }
+        if bronze:
+            # Authenticate the bounded selection before binding its references.
+            # A capture run's complete receipt inventory can exceed the native
+            # inline-reference bound; unrelated receipts remain authenticated
+            # by _read_receipts and retained as original bundle evidence.
+            selection = deepcopy(main)
+            selection["read"]["references"]["bronze"] = {}
+            read("bronze_scope", raw, selection)
+            selected_rows = store.json(refs.pop("bronze_scope"))["artifacts"][0][
+                "tables"
+            ]["company"]
+            selected_ids = {row.get("raw_object_id") for row in selected_rows}
+            main["read"]["references"]["bronze"] = {
+                sha: {"object": uri}
+                for sha, uri in bronze.items()
+                if sha in selected_ids
+            }
         read("main", raw, main)
         for e in pinned:
             contract = _bind(deepcopy(base[e.field]), bindings)

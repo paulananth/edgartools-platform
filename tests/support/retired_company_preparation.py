@@ -384,4 +384,3 @@ def prepare_company_bundle(
         if stage.exists():
             shutil.rmtree(stage)
     return report
-

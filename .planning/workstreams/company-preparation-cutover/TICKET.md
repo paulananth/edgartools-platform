@@ -24,6 +24,10 @@ independent caller is a subsequent change, not collateral deletion here.
 
 ## Current implementation checkpoint
 
+- [ ] Preserve large complete bronze inventories while binding only verified
+  selected Company receipt keys; compare original bundle bytes, replay and
+  refusal of malformed unrelated receipts.
+
 The CLI import now selects company_prepare. Preparation-only collectors and
 census attachment were removed from company_source; frozen test support retains
 the historical oracle. The independently active census route remains.

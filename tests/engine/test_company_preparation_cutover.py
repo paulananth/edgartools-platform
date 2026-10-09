@@ -57,6 +57,39 @@ def test_preparation_preserves_records_publication_scope_and_all_original_files(
     assert records[0]["business_address"]["street"] == "last"
 
 
+def test_large_bronze_inventory_preserves_selected_provenance_and_refusals(tmp_path):
+    from edgar_warehouse.mdm.clean.company_source import bronze_receipts
+    from edgar_warehouse.mdm.clean.company_prepare import verify_company_bundle
+    from edgar_warehouse.mdm.clean.store import Conflict
+
+    selected = "a" * 64
+    args = landing(tmp_path, [source_row(123, raw_object_id=selected)])
+    body = bronze_receipts(
+        "capture-1",
+        [{"sha256": f"{n:064x}", "path": f"s3://bronze/{n}.json"}
+         for n in range(10001)]
+        + [{"sha256": selected, "path": "s3://bronze/selected.json"}],
+    )
+    path = tmp_path / "receipts.json"
+    path.write_text(json.dumps(body))
+    args["bronze_receipts_path"] = str(path)
+    expected = historical(**{**args, "output": str(tmp_path / "historical")})
+    actual = prepare_company_bundle(**args)
+    for name in expected["files"]:
+        assert (tmp_path / "historical" / name).read_bytes() == (
+            Path(args["output"]) / name
+        ).read_bytes(), name
+    assert verify_company_bundle(args["output"], expected=actual)["records"] == 1
+    assert prepare_company_bundle(**args) == actual
+
+    # Even an unrelated malformed receipt must still be refused before selection.
+    body["receipts"][0]["object"] = ""
+    path.write_text(json.dumps(body))
+    for prepare in (historical, prepare_company_bundle):
+        with pytest.raises(Conflict, match="names no object"):
+            prepare(**args)
+
+
 def test_active_cli_has_no_retired_preparation_import():
     import inspect
     from edgar_warehouse.mdm.clean import cli, company_source
