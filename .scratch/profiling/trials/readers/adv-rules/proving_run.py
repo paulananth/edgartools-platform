@@ -25,6 +25,7 @@ against MDM's CUSTODIAN links (first stated, last_seen).
 from __future__ import annotations
 
 import copy
+import os
 import hashlib
 import json
 import sys
@@ -48,7 +49,7 @@ from tests.support.rules_authority import register_dataset
 FILINGS, CUSTODY = "iapd.adv.filings.v1", "iapd.adv.custody.v1"
 RULES = ["iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd"]
 AS_OF = "2026-10-09T15:00:00+00:00"
-BATCH = 500
+BATCH = int(os.environ.get("BATCH", "500"))
 
 
 def cohort(readings: Path, size: int) -> tuple[dict, dict]:
@@ -160,11 +161,17 @@ def main(root: Path, readings: Path, out: Path, size: int) -> None:
     built = core.initialize_database(admin, app)
     policy_body = proving_policy(root, corpus)
     contracts = {code: files.mdm_contract("iapd.adv", code, root=root) for code in (FILINGS, CUSTODY)}
+    # Blocker checks (ticket 07): NO_LINKS drops the custody links, FILINGS_ONLY
+    # loads adviser filings alone; CLOSURE_LIMIT lowers the Merge Stage's bound.
+    if os.environ.get("NO_LINKS"):
+        contracts[CUSTODY]["adapter"].pop("relationships")
+    if os.environ.get("FILINGS_ONLY"):
+        custody = {m: [] for m in custody}
     with admin.begin() as conn:
         for code, contract in contracts.items():
             register_dataset(conn, code, built.registry, contract)
         policy = register_policy(conn, policy_body)
-    stage = MergeStage(Store(app))
+    stage = MergeStage(Store(app), closure_limit=int(os.environ.get("CLOSURE_LIMIT", "10000")))
     checkpoint, timings, deferred = 0, [], Counter()
 
     def apply_all(tag: str) -> None:
@@ -201,6 +208,9 @@ def main(root: Path, readings: Path, out: Path, size: int) -> None:
         "links_expected": len(expected), "links_in_mdm": len(got),
         "links_matching": sum(got.get(k) == v for k, v in expected.items()),
         "links_missing": sorted(map(list, set(expected) - set(got)))[:10],
+        # A custodian known by an LEI in some rows and a BD number in others is
+        # one Company holding both: its links show under both ids.
+        "links_extra": sorted(map(list, set(got) - set(expected)))[:10],
         "links_differing": [[*k, expected[k], got[k]] for k in expected if k in got and got[k] != expected[k]][:10],
         "links_with_more_than_one_period": sum(v[2] > 1 for v in first_links.values()),
         "custodian_dropped_by_adviser": len({k[0] for k, v in expected.items()
