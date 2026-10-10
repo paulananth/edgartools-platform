@@ -1,0 +1,69 @@
+"""L4 design check (scratch, not collected by CI): does mastering depend on batch size?
+
+One cm27 Company bundle (chunk1, 966 records) mastered into two fresh PG16 stores:
+once as its one batch, once one record per batch. Same Companies, bindings and reviews expected.
+"""
+import json
+import os
+from pathlib import Path
+from uuid import uuid4
+
+from sqlalchemy import text
+
+from edgar_warehouse.mdm.clean.cli import batch_input
+from edgar_warehouse.mdm.clean.merge import MergeStage
+from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.rules import files
+from tests.integration import test_clean_mdm_postgres as core
+from tests.support.rules_authority import register_dataset
+
+postgres = core.postgres
+database = core.database
+BUNDLE = Path(os.environ.get("L4_BUNDLE", "~/.local/share/edgartools/clean-mdm/proving/cm27/bundles/chunk1")).expanduser()
+
+
+def master(database, per_record):
+    from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY
+    policy, dataset = POLICY, CONTRACT  # today's, as the installed proof uses
+    manifest = json.loads((BUNDLE / "manifest.json").read_text())
+    with database.admin.begin() as conn:
+        digest = register_policy(conn, policy)
+        register_dataset(conn, "sec.submissions.company.v1", str(uuid4()), dataset)
+    store = Store(database.application)
+    (batch,) = manifest["batches"]
+    found = batch_input(batch, BUNDLE.resolve(), store, policy_digest=digest)
+    stage, run = MergeStage(store), str(uuid4())
+    groups = [[a] for a in found["assertions"]] if per_record else [found["assertions"]]
+    deferred = found["deferred"]
+    for n, group in enumerate(groups):
+        stage.apply(batch_id=f"b{n}", run_id=run, consumer="trial", policy_digest=digest,
+                    expected_checkpoint=n, checkpoint=n + 1, as_of=manifest["as_of"],
+                    assertions=group, deferred=deferred if n == 0 else [],
+                    occurrences=[o for o in found["occurrences"] if any(o.get("assertion_id") == a.get("assertion_id") for a in group)] if per_record else found["occurrences"])
+    with database.application.connect() as conn:
+        entities = sorted((tuple(r) for r in conn.execute(text("SELECT kind, body::text FROM mdm.current_entity")).all()), key=repr)
+        bindings = sorted((tuple(r) for r in conn.execute(text("SELECT subject, entity_id IS NOT NULL FROM mdm.stage_record")).all()), key=repr)
+        reviews = sorted((tuple(r) for r in conn.execute(text(
+            "SELECT body->>'subject', body->>'reason', body->>'blocking' FROM mdm.current_record WHERE object_type='review'")).all()), key=repr)
+        golden = sorted((tuple(r) for r in conn.execute(text(
+            "SELECT (body->'fields')::text FROM mdm.current_entity")).all()), key=repr)
+    return {"assertions": len(found["assertions"]), "deferred": len(deferred), "entities": len(entities),
+            "bindings": bindings, "reviews": reviews, "golden": golden}
+
+
+RESULTS = {}
+
+
+def test_whole_batch(database):
+    RESULTS["whole"] = master(database, per_record=False)
+
+
+def test_one_record_per_batch(database):
+    RESULTS["single"] = master(database, per_record=True)
+
+
+def test_batch_size_does_not_change_mastering():
+    whole, single = RESULTS["whole"], RESULTS["single"]
+    print({k: (v if isinstance(v, int) else len(v)) for k, v in whole.items()})
+    for key in ("entities", "bindings", "reviews", "golden"):
+        assert whole[key] == single[key], key
