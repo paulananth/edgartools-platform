@@ -6,9 +6,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
-import subprocess
-import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,6 +17,7 @@ from edgar_warehouse.bookkeeping.clean.config import Blocked
 from edgar_warehouse.rules import db as rules_db
 from edgar_warehouse.rules.acquisition_authority import proof_holds
 from edgar_warehouse.rules.db import Rules, migrate
+from tests.support import pg16
 from tests.support.rules_approval import approve
 
 BATCH = "a" * 64
@@ -40,46 +38,27 @@ def proof(saved, passed=True, **extra):
 
 @pytest.fixture(scope="module")
 def pg():
-    assert shutil.which("docker"), "PG16 acceptance requires Docker (Colima on macOS)"
-    name = f"rules-approval-{uuid4().hex[:10]}"
-    subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "-p", "127.0.0.1::5432",
-                    "-e", "POSTGRES_PASSWORD=test", "postgres:16-alpine"], capture_output=True, check=True)
     engines = []
-    try:
-        for _ in range(100):
-            if subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"], capture_output=True).returncode == 0:
-                break
-            time.sleep(0.1)
-        port = subprocess.run(["docker", "port", name, "5432/tcp"], capture_output=True, text=True,
-                              check=True).stdout.strip().rsplit(":", 1)[1]
+    # Docker in CI; PG16_SERVER=pgserver runs on a local PostgreSQL 16 (tests/support/pg16.py).
+    with pg16.server() as found:
 
         def engine(db, user="postgres"):
-            value = create_engine(f"postgresql://{user}:test@127.0.0.1:{port}/{db}")
+            value = create_engine(found.url(db, user, driver="postgresql"))
             engines.append(value)
             return value
 
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                with engine("postgres").connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                break
-            except DBAPIError:
-                if time.monotonic() > deadline:
-                    raise
-                time.sleep(0.1)
-        with engine("postgres").connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            for role in ("rules_agent", "operator"):
-                conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test'")
-            conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
-            conn.exec_driver_sql("GRANT rules_approver TO operator")
-            conn.exec_driver_sql("CREATE DATABASE rules")
-        yield {"owner": engine("rules"), "agent": Rules(engine("rules", "rules_agent")),
-               "approver": Rules(engine("rules", "operator"))}
-    finally:
-        for value in engines:
-            value.dispose()
-        subprocess.run(["docker", "stop", "--time", "1", name], capture_output=True)
+        try:
+            with engine("postgres").connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                for role in ("rules_agent", "operator"):
+                    conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test'")
+                conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
+                conn.exec_driver_sql("GRANT rules_approver TO operator")
+                conn.exec_driver_sql("CREATE DATABASE rules")
+            yield {"owner": engine("rules"), "agent": Rules(engine("rules", "rules_agent")),
+                   "approver": Rules(engine("rules", "operator"))}
+        finally:
+            for value in engines:
+                value.dispose()
 
 
 @pytest.fixture(scope="module")

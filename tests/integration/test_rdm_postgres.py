@@ -12,9 +12,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
-import subprocess
-import time
-from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -25,50 +22,32 @@ from edgar_warehouse.rdm import cli, store
 from edgar_warehouse.rdm.database import migrate
 from edgar_warehouse.rdm.store import RDM
 from edgar_warehouse.rules import files
+from tests.support import pg16
 
-IMAGE = "postgres:16-alpine"
 OPERATOR = {"by": "operator", "words": "approved"}
-
-
-def docker(*args):
-    return subprocess.run(["docker", *args], text=True, capture_output=True, check=True).stdout.strip()
 
 
 @contextlib.contextmanager
 def server():
     """A PG16 server with an empty `rdm` database (and a `not_rdm` one) and the runtime login."""
-    docker("image", "inspect", IMAGE)
-    name = f"rdm-test-{uuid4().hex[:10]}"
-    docker("run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::5432", "-e", "POSTGRES_PASSWORD=test", IMAGE)
     engines = []
-    try:
-        port = docker("port", name, "5432/tcp").rsplit(":", 1)[1]
+    # Docker in CI; PG16_SERVER=pgserver runs on a local PostgreSQL 16 (tests/support/pg16.py).
+    with pg16.server() as found:
 
         def engine(db, user="postgres"):
-            value = create_engine(f"postgresql+psycopg2://{user}:test@127.0.0.1:{port}/{db}")
+            value = create_engine(found.url(db, user))
             engines.append(value)
             return value
 
-        admin = engine("postgres")
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            try:
-                with admin.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                break
-            except DBAPIError:
-                time.sleep(0.1)
-        else:
-            pytest.fail("PostgreSQL did not become ready")
-        with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.exec_driver_sql("CREATE ROLE rdm_runtime LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
-            conn.exec_driver_sql("CREATE DATABASE rdm")
-            conn.exec_driver_sql("CREATE DATABASE not_rdm")
-        yield engine
-    finally:
-        for value in engines:
-            value.dispose()
-        docker("stop", name)
+        try:
+            with engine("postgres").connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.exec_driver_sql("CREATE ROLE rdm_runtime LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
+                conn.exec_driver_sql("CREATE DATABASE rdm")
+                conn.exec_driver_sql("CREATE DATABASE not_rdm")
+            yield engine
+        finally:
+            for value in engines:
+                value.dispose()
 
 
 @pytest.fixture(scope="module")

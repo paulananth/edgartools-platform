@@ -27,6 +27,7 @@ from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land, refresh_ids
 from tests.integration import test_clean_entity_context_postgres as entity_context
 from tests.integration import test_clean_mdm_postgres as core
+from tests.support import pg16
 from tests.unit.test_silver_writer import a_spec
 
 RUNTIME = "silver_runtime"
@@ -34,20 +35,12 @@ RUNTIME = "silver_runtime"
 
 @pytest.fixture(scope="module")
 def postgres():
-    url = os.environ.get("PG16_ADMIN_URL")
-    name = None
-    if not url:
-        core.docker("image", "inspect", core.IMAGE)
-        name = f"silver-test-{uuid4().hex[:10]}"
-        core.docker("run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::5432",
-                    "-e", "POSTGRES_PASSWORD=test", core.IMAGE)
-        port = core.docker("port", name, "5432/tcp").rsplit(":", 1)[1]
-        url = f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres"
-    try:
+    if url := os.environ.get("PG16_ADMIN_URL"):  # a server kept between runs
         yield from _servers(url)
-    finally:
-        if name:
-            core.docker("stop", name)
+        return
+    # Docker in CI; PG16_SERVER=pgserver runs on a local PostgreSQL 16 (tests/support/pg16.py).
+    with pg16.server() as found:
+        yield from _servers(found.url())
 
 
 def _servers(url):
