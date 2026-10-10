@@ -13,6 +13,7 @@ from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
 from edgar_warehouse.mdm.clean.store import Conflict, canonical
 from tests.mdm.test_clean_company_source import gleif_archive, gleif_reading
 from tests.mdm.test_clean_name_census import gleif
+from tests.support.sec_capture import key, write_capture
 
 
 RECORDS = [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.", other=["Old Name Inc"]),
@@ -21,25 +22,6 @@ RECORDS = [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.", other=["Old Name Inc"]),
            gleif("549300BRANCH00000001", "Apple Inc.", category="BRANCH")]
 FILERS = [("0000320193", "APPLE INC", ["Old Name Inc"]), ("0000000001", "OLD NAME INC", []),
           ("0000789019", "Apple Inc.", [])]
-
-
-def key(cik: int) -> str:
-    return f"warehouse/bronze/submissions/sec/cik={cik}/main/2026/09/29/CIK{cik:010d}.json"
-
-
-def write_capture(root: Path, documents: dict[int, dict]) -> tuple[Path, Path]:
-    """A capture folder (receipts.jsonl and bronze/) and a population naming every document."""
-    receipts = []
-    for cik, document in documents.items():
-        raw = json.dumps(document).encode()
-        path = root / "bronze" / key(cik).removeprefix("warehouse/bronze/")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(raw)
-        receipts.append({"bytes": len(raw), "key": key(cik), "sha256": hashlib.sha256(raw).hexdigest()})
-    (root / "receipts.jsonl").write_text("".join(json.dumps(r) + "\n" for r in receipts))
-    population = root / "population.json"
-    population.write_text(json.dumps([key(cik) for cik in documents]))
-    return root, population
 
 
 @pytest.fixture

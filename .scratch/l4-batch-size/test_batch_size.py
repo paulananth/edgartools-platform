@@ -67,3 +67,32 @@ def test_batch_size_does_not_change_mastering():
     print({k: (v if isinstance(v, int) else len(v)) for k, v in whole.items()})
     for key in ("entities", "bindings", "reviews", "golden"):
         assert whole[key] == single[key], key
+
+
+NEW = Path(os.environ.get("L4_NEW_BUNDLE", "/nonexistent"))
+
+
+def master_bundle(database, bundle):
+    """One bundle mastered as its manifest says, into a fresh store, today's policy and contract."""
+    global BUNDLE
+    saved, BUNDLE = BUNDLE, bundle
+    try:
+        return master(database, per_record=False)
+    finally:
+        BUNDLE = saved
+
+
+def test_landed_bundle(database):
+    RESULTS["landed"] = master_bundle(database, BUNDLE)
+
+
+def test_raw_bundle(database):
+    RESULTS["raw"] = master_bundle(database, NEW)
+
+
+def test_raw_bundle_masters_as_the_landed_one():
+    landed, raw = RESULTS["landed"], RESULTS["raw"]
+    print({"landed": {k: (v if isinstance(v, int) else len(v)) for k, v in landed.items()},
+           "raw": {k: (v if isinstance(v, int) else len(v)) for k, v in raw.items()}})
+    for key in ("bindings", "reviews", "golden"):
+        assert landed[key] == raw[key], key
