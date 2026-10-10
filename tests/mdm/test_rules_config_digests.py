@@ -151,8 +151,9 @@ WITH_CONFIGURED_READING = {
 # L6 (operator ruling 2026-10-10: refusals live in the MDM contract): the checks
 # the older GLEIF reader made before mapping, as the contract's own record checks
 # with the columns they read; and what it kept and stamped, the record's own time
-# (`effective_at`) and the whole record (`native_record: .`). Awaiting the
-# operator's approval with its evidence.
+# (`effective_at`) and the whole record (`native_record: .`). Approved by the
+# operator, 2026-10-10 14:13 ET: "Approved" (evidence: the first 20,000 Golden Copy records reach
+# the same outcome both ways; the whole-file comparison was running).
 WITH_REFUSALS = {
     "level1": "fc104ef9284a9a4014e1a0149c683c9ae18169a6cb5dc651cd38396257aa7754",
 }
