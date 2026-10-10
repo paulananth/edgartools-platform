@@ -1,0 +1,18 @@
+{
+ "records": 1142826,
+ "read": 3428477,
+ "shard": "0/3",
+ "complete": true,
+ "seconds": 11571.7,
+ "estimate_full_minutes": 192.9,
+ "outcomes": {
+  "deferred:unsupported_identity_kind": 128238,
+  "assertion:id": 1014513,
+  "deferred:invalid_lei_checksum": 75
+ },
+ "differences": [],
+ "equal": true,
+ "approved_contract": "f53c9c428b65440b18a4567d363c0075d372fa9db1d661dec5b415d974d73ffe",
+ "configured_contract": "fc104ef9284a9a4014e1a0149c683c9ae18169a6cb5dc651cd38396257aa7754",
+ "archive_sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a"
+}
