@@ -180,8 +180,7 @@ trial proves read → prepare → merge with the actual Person Dataset Contract
 and policy, preserving two fixture records; a separate 1,000-capture comparison
 proves retained outcomes and assertion identities. These are qualification
 results, not operator activation. Company raw columns and filing arrays are
-qualified components; its catalog/census joins and complete source read block
-remain unfinished. GLEIF still requires bounded archive streaming. Use only
+qualified components. Its catalog and Name Frequency joins are qualified on fixtures. The whole-capture comparison, active caller replacement, and the installed 6,414 Company proof remain open. GLEIF's full archive has been read and reduced. A separate process later verified that saved reading. Golden-copy equivalence of the older GLEIF reader and deletion of `gleif_source.py` remain open. Use only
 pipelines whose every profile resolves with `workers describe`; a declared
 Company acquisition or silver step without a worker remains incomplete.
 
