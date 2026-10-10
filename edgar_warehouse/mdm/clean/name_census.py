@@ -154,44 +154,76 @@ def build(
         expected_sha256=gleif_sha256,
         on_record=on_record,
     )
+    gleif = {
+        "archive_sha256": gleif_sha256,
+        "content_date": gleif_metadata["content_date"],
+        "file_content": gleif_metadata["file_content"],
+        "record_count": report["record_count"],
+    }
+    return document(
+        sec_population=sec_population,
+        gleif=gleif,
+        held=by_key,
+        wanted=wanted,
+        legal=legal,
+        other=other,
+        cascade=cascade if passes else None,
+        entities=entities if passes else (),
+        address_counts=counts if passes else None,
+    )
+
+
+def document(
+    *,
+    sec_population: dict,
+    gleif: dict,
+    held: dict[str, set],
+    wanted: set,
+    legal: dict[str, dict[str, str]],
+    other: dict[str, set],
+    cascade: dict | None,
+    entities,
+    address_counts,
+) -> dict:
+    """The census document from what was counted, however it was read.
+
+    `held` is each SEC name key's CIKs and `wanted` the current-name keys;
+    `legal` each wanted key's GLEIF legal holders with their last update,
+    `other` the entities holding it only as another name; with `cascade`, the
+    candidate `entities` and the global `address_counts` the passes read.
+    """
     entries = {}
     for key in sorted(wanted):
         leis = legal.get(key, {})
         entries[key] = {
-            "ciks": sorted(by_key[key])[:CAP],
-            "cik_count": len(by_key[key]),
+            "ciks": sorted(held[key])[:CAP],
+            "cik_count": len(held[key]),
             "leis": [[lei, leis[lei]] for lei in sorted(leis)[:CAP]],
             "lei_count": len(leis),
             # Another legal entity whose other name is this one, not counting
             # an entity that also holds it as its legal name.
             "other_name_holders": len(other.get(key, set()) - set(leis)),
         }
-    document = {
+    result = {
         "version": VERSION,
         "normalizers": {"sec": SEC_NORMALIZER, "gleif": GLEIF_NORMALIZER},
         "sec": sec_population,
-        "gleif": {
-            "archive_sha256": gleif_sha256,
-            "content_date": gleif_metadata["content_date"],
-            "file_content": gleif_metadata["file_content"],
-            "record_count": report["record_count"],
-        },
+        "gleif": gleif,
         "entries": entries,
     }
-    if passes:
+    if cascade is not None:
         spec = cascade["spec"]
-        document["cascade"] = {
+        result["cascade"] = {
             **spec,
             "assignments": cascaded.assign(
                 cascade["filers"],
                 entities,
                 spec["passes"],
-                address_counts=counts,
+                address_counts=address_counts,
                 over_shared=spec["over_shared"],
             ),
         }
-    return document
-
+    return result
 
 def entry(census: dict, name: str | None, *, census_digest: str) -> dict | None:
     """What one SEC record carries: its census entry, bound to the census.
