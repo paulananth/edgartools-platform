@@ -43,6 +43,43 @@ def say(message: str) -> None:
     _clock[0] = now
 
 
+SHOWN = 6  # parts or links named in one progress line; the rest are counted
+
+
+def _listed(items: list[str]) -> str:
+    return ", ".join(items[:SHOWN]) + (f" and {len(items) - SHOWN} more" if len(items) > SHOWN else "")
+
+
+def _parts_found(parts, profiles) -> str:
+    """What the inputs hold: the parts, largest first, with their rows."""
+    by_size = sorted(parts, key=lambda p: -_rows(profiles, p))
+    return f"{len(parts)} parts: " + _listed([f"{p} ({_rows(profiles, p):,} rows)" for p in by_size])
+
+
+def _keys_found(parts, unique) -> str:
+    """Which top-level parts identify their rows by a column of their own."""
+    tops = [p for p in parts if parts[p].parent is None]
+    keyed = [f"{p} by {', '.join(unique[p][0])}" for p in tops if unique[p]]
+    none = [p for p in tops if not unique[p]]
+    return ("identified: " + _listed(keyed) if keyed else "no part has a unique column") + (
+        f"; no unique column: {_listed(none)}" if none else "")
+
+
+def _links_found(found) -> str:
+    """Which columns point at another part's key."""
+    shown = [f"{l['from']['part']}.{', '.join(l['from']['columns'])} → {l['to']['part']}" for l in found]
+    return f"{len(found)} links between parts: {_listed(shown)}" if found else "no column points at another part"
+
+
+def _classes_found(findings) -> str:
+    """What each part is, grouped by class."""
+    by_class: dict[str, list[str]] = {}
+    for f in sorted(findings, key=lambda f: -f["rows"]):
+        by_class.setdefault(f["class"], []).append(f"{f['part']} ({f['confidence']})" if f["class"] != "unknown"
+                                                   else f["part"])
+    return "; ".join(f"{cls}: {_listed(names)}" for cls, names in sorted(by_class.items()))
+
+
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
                    sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
                    work: Path | None = None) -> dict:
@@ -74,17 +111,15 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         for part in registered:
             part.sha256 = sha if part.parent is None else None
             parts[part.name] = part
-    say(f"registered {len(parts)} parts")
-
     profiles = {p: profile.columns(con, p) for p in parts}
-    say("profiled columns")
+    say(_parts_found(parts, profiles))
     # An entity carried inside a part (its identifier and the columns that follow it) becomes a part.
     carried: dict[str, set[str]] = {}
     entities: dict[str, dict] = {}
     for p in list(parts):
         found, clashes = embedded.find(con, p, profiles[p], set(parts))
         for clash in clashes:
-            say(f"{clash}: an entity inside {p} not made a part: a part of that name exists")
+            say(f"{clash}: an entity carried inside {p}, left in place: a part of that name exists")
         for entity in found:
             entity["evidence"]["disagreeing_rows"] = embedded.register(con, entity)
             parts[entity["part"]] = inputs.Part(entity["part"], parts[p].location, "derived", 0,
@@ -92,21 +127,24 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
             profiles[entity["part"]] = profile.columns(con, entity["part"])
             carried.setdefault(p, set()).update(entity["follows"])
             entities[entity["part"]] = entity
-            say(f"{entity['part']}: an entity inside {p}, keyed by {entity['column']}")
+            evidence = entity["evidence"]
+            say(f"{p} carries an entity: {evidence['values']:,} distinct {entity['column']} over {evidence['rows']:,} rows, "
+                f"each with one {', '.join(entity['follows'])}; it becomes the part {entity['part']}")
     # A list of plain values has no key of its own: its parent's key and the place in the list.
     unique = {p: [] if keys.plain_values(cols) else keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
-    say("found unique keys")
+    say(_keys_found(parts, unique))
     confirmed = {}
     for p, part in parts.items():
         if part.scan == "sampled" and part.is_input:  # children keep keys found in the sample
-            say(f"{p}: full pass for its identifier-like key candidates")
+            say(f"{p} was read as a sample; reading it whole once to test its key candidates")
             confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
-            say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
+            held = [c for c, e in confirmed[p].items() if e["unique"]]
+            say(f"{p}: {', '.join(held) or 'no candidate'} unique over every row")
             # Only keys a full pass confirmed: a combination unique in a sample is not a key.
             unique[p] = [k for k in unique[p] if len(k) == 1 and confirmed[p].get(k[0], {}).get("unique")]
     found_links = keys.links(con, profiles, unique, parts, confirmed) + keys.composite_links(con, profiles, unique)
     child = keys.child_links(parts)
-    say(f"found {len(found_links)} links")
+    say(_links_found(found_links))
 
     record_keys: dict[str, dict] = {}
     for p in sorted(parts, key=lambda n: n.count(".")):  # parents before their children
@@ -124,7 +162,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}),
                             carried.get(p, set()))
                       for p in parts]
-    say("classified parts")
+    say(_classes_found(findings_parts))
     for f in findings_parts:
         if f["part"] in entities:
             f["derived_evidence"] = entities[f["part"]]["evidence"]
@@ -133,7 +171,8 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     by_name = {f["part"]: f for f in findings_parts}
     not_levels: list[dict] = []
     hierarchies = _hierarchies(con, by_name, profiles, found_links, not_levels)
-    say(f"found {len(hierarchies)} hierarchies")
+    say(f"{len(hierarchies)} hierarchies: " + "; ".join(h["hierarchy"] for h in hierarchies[:5])
+        + (" ..." if len(hierarchies) > 5 else "") if hierarchies else "no hierarchy")
     relationships = _relationships(found_links + child, by_name)
     _mask_samples(hierarchies, by_name)
     marked = _mark(hierarchies, by_name)
