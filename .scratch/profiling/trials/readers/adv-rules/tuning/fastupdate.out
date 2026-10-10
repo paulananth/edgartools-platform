@@ -1,0 +1,76 @@
+{"batch": "2025-06 0", "seconds": 5.21, "sql_seconds": 4.56, "keys": 1480, "fn": {"write_batch": 3.9, "keep_stage": 1.23, "record_company_version": 0.84, "match_proposal_snapshot": 0.07}}
+{"batch": "2025-06 500", "seconds": 6.85, "sql_seconds": 6.13, "keys": 1548, "fn": {"write_batch": 4.85, "keep_stage": 1.47, "record_company_version": 1.6, "match_proposal_snapshot": 0.18}}
+{"batch": "2025-06 1000", "seconds": 7.75, "sql_seconds": 7.14, "keys": 1660, "fn": {"write_batch": 5.55, "keep_stage": 1.43, "record_company_version": 2.32, "match_proposal_snapshot": 0.27}}
+{"batch": "2025-06 1500", "seconds": 8.43, "sql_seconds": 7.85, "keys": 1701, "fn": {"write_batch": 6.11, "keep_stage": 1.41, "record_company_version": 3.01, "match_proposal_snapshot": 0.29}}
+{"batch": "2025-06 2000", "seconds": 9.53, "sql_seconds": 8.83, "keys": 1721, "fn": {"write_batch": 6.76, "keep_stage": 1.51, "record_company_version": 3.48, "match_proposal_snapshot": 0.33}}
+{"batch": "2025-07 0", "seconds": 10.28, "sql_seconds": 9.64, "keys": 1849, "fn": {"write_batch": 7.36, "keep_stage": 1.42, "record_company_version": 4.13, "match_proposal_snapshot": 0.41}}
+{"batch": "2025-07 500", "seconds": 7.11, "sql_seconds": 6.37, "keys": 1964, "fn": {"write_batch": 3.72, "keep_stage": 1.52, "record_company_version": 0.51, "match_proposal_snapshot": 0.51}}
+{"batch": "2025-07 1000", "seconds": 7.95, "sql_seconds": 7.28, "keys": 2013, "fn": {"write_batch": 4.68, "keep_stage": 2.16, "record_company_version": 0.55, "match_proposal_snapshot": 0.47}}
+{"batch": "2025-07 1500", "seconds": 5.56, "sql_seconds": 4.96, "keys": 2059, "fn": {"write_batch": 2.6, "keep_stage": 1.04, "record_company_version": 0.37, "match_proposal_snapshot": 0.44}}
+{"batch": "2025-07 2000", "seconds": 5.59, "sql_seconds": 5.08, "keys": 2229, "fn": {"write_batch": 2.63, "keep_stage": 1.02, "record_company_version": 0.41, "match_proposal_snapshot": 0.49}}
+{"batch": "2025-07 2500", "seconds": 0.74, "sql_seconds": 0.59, "keys": 244, "fn": {"write_batch": 0.0, "keep_stage": 0.0, "record_company_version": 0.0, "match_proposal_snapshot": 0.0}}
+{"batch": "2025-08 0", "seconds": 5.78, "sql_seconds": 5.17, "keys": 2161, "fn": {"write_batch": 2.73, "keep_stage": 1.02, "record_company_version": 0.45, "match_proposal_snapshot": 0.6}}
+{"batch": "2025-08 500", "seconds": 6.18, "sql_seconds": 5.39, "keys": 2298, "fn": {"write_batch": 2.49, "keep_stage": 0.91, "record_company_version": 0.38, "match_proposal_snapshot": 0.57}}
+{"batch": "2025-08 1000", "seconds": 7.25, "sql_seconds": 6.66, "keys": 2364, "fn": {"write_batch": 3.66, "keep_stage": 1.97, "record_company_version": 0.4, "match_proposal_snapshot": 0.59}}
+{"batch": "2025-08 1500", "seconds": 7.63, "sql_seconds": 6.94, "keys": 2521, "fn": {"write_batch": 2.9, "keep_stage": 1.13, "record_company_version": 0.44, "match_proposal_snapshot": 0.94}}
+{"batch": "2025-08 2000", "seconds": 5.44, "sql_seconds": 4.99, "keys": 1272, "fn": {"write_batch": 1.77, "keep_stage": 0.67, "record_company_version": 0.29, "match_proposal_snapshot": 0.96}}
+{"batch": "2025-09 0", "seconds": 23.05, "sql_seconds": 21.51, "keys": 2493, "fn": {"write_batch": 9.73, "keep_stage": 4.14, "record_company_version": 1.75, "match_proposal_snapshot": 2.74}}
+{"batch": "2025-09 500", "seconds": 18.82, "sql_seconds": 16.84, "keys": 2551, "fn": {"write_batch": 7.44, "keep_stage": 2.5, "record_company_version": 0.98, "match_proposal_snapshot": 4.21}}
+{"batch": "2025-09 1000", "seconds": 19.51, "sql_seconds": 17.69, "keys": 2717, "fn": {"write_batch": 7.43, "keep_stage": 2.55, "record_company_version": 1.16, "match_proposal_snapshot": 4.5}}
+{"batch": "2025-09 1500", "seconds": 19.84, "sql_seconds": 17.73, "keys": 2604, "fn": {"write_batch": 8.09, "keep_stage": 3.22, "record_company_version": 1.11, "match_proposal_snapshot": 4.23}}
+functions (calls, total s, self s):
+   ('write_batch', 40, Decimal('94.41'), Decimal('33.40'))
+   ('save_batch', 20, Decimal('57.78'), Decimal('2.50'))
+   ('preview_batch', 20, Decimal('46.83'), Decimal('0.00'))
+   ('keep_stage', 40, Decimal('32.32'), Decimal('5.80'))
+   ('record_company_version', 17458, Decimal('24.19'), Decimal('22.61'))
+   ('match_proposal_snapshot', 60, Decimal('22.80'), Decimal('22.80'))
+   ('record_stage', 18562, Decimal('14.60'), Decimal('12.02'))
+   ('record_binding', 18562, Decimal('11.92'), Decimal('11.92'))
+   ('reading_link_subjects', 18562, Decimal('4.51'), Decimal('4.51'))
+   ('record_match_proposal', 20, Decimal('4.50'), Decimal('4.50'))
+   ('stage_fold', 18562, Decimal('2.58'), Decimal('1.92'))
+   ('entity_name', 17458, Decimal('1.58'), Decimal('1.58'))
+   ('stage_claim', 35744, Decimal('0.66'), Decimal('0.66'))
+avg body bytes: (Decimal('504'), Decimal('989'))
+keys 2604 current_entity rows 5716
+  readings_naming     0.218s  -> 1070
+  decisions_naming    0.560s  -> 1070
+    subject join      0.162s  -> Hash Join (a
+         Hash Join (actual time=110.469..146.119 rows=1070 loops=1)
+           Hash Cond: (k.key = (r.body ->> 'subject'::text))
+           ->  Function Scan on unnest k (actual time=0.739..1.144 rows=2604 loops=1)
+           ->  Hash (actual time=109.417..109.418 rows=9281 loops=1)
+                 Buckets: 8192  Batches: 2  Memory Usage: 4999kB
+                 ->  Seq Scan on source_reading r (actual time=0.052..10.750 rows=9281 loops=1)
+         Planning Time: 1.484 ms
+         Execution Time: 148.296 ms
+    link per key      0.041s  -> Nested Loop 
+         Nested Loop (actual time=18.323..18.325 rows=0 loops=1)
+           ->  Function Scan on unnest k (actual time=0.745..1.492 rows=2604 loops=1)
+           ->  Bitmap Heap Scan on source_reading s (actual time=0.003..0.003 rows=0 loops=2604)
+                 Recheck Cond: (mdm.reading_link_subjects(body) @> ARRAY[k.key])
+                 ->  Bitmap Index Scan on source_reading_link_subjects (actual time=0.002..0.002 rows=0 loops=2604)
+                       Index Cond: (mdm.reading_link_subjects(body) @> ARRAY[k.key])
+         Planning Time: 2.020 ms
+         Execution Time: 18.438 ms
+    link GIN forced  21.533s  -> Result (actu
+         Result (actual time=21464.393..21464.395 rows=0 loops=1)
+           One-Time Filter: (current_setting('enable_seqscan'::text) IS NOT NULL)
+           ->  Bitmap Heap Scan on source_reading (actual time=21464.385..21464.386 rows=0 loops=1)
+                 Recheck Cond: (mdm.reading_link_subjects(body) && '{..}'::text[])
+                 ->  Bitmap Index Scan on source_reading_link_subjects (actual time=21464.381..21464.382 rows=0 loops=1)
+                       Index Cond: (mdm.reading_link_subjects(body) && '{..}'::text[])
+         Planning Time: 35.499 ms
+         Execution Time: 21464.720 ms
+    link lookup       1.269s  -> Seq Scan on 
+         Seq Scan on source_reading (actual time=1210.753..1210.754 rows=0 loops=1)
+           Filter: (mdm.reading_link_subjects(body) && '{..}'::text[])
+           Rows Removed by Filter: 9281
+         Planning Time: 25.363 ms
+         Execution Time: 1210.827 ms
+  identities          0.043s  -> 464
+  current_entity      0.028s  -> 464
+  current_record      0.083s  -> 0
+  whole snapshot      2.855s  -> 8018162dd480
+  rows+agg only       1.775s  -> 2140 rows 17

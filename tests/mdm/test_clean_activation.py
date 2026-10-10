@@ -570,20 +570,11 @@ class TestTheCompanyPolicy:
         # profiling ticket 02 pinned the reference data in place of the table;
         # profiling ticket 04b named the relationship types as their sources do,
         # then gave the calculated ultimate parent its history and let a
-        # successor entity end parent links.
-        assert policy_layers.digests(policy_layers.company_part(POLICY)) == [
-            "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605",
-            "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6",
-            "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4",
-            "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",
-            "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5",
-            "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
-            "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",
-            "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
-            "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d",
-            "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
-            "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
-        ]
+        # successor entity end parent links; profiling ticket 07 declared the
+        # Form ADV sources and their three matching rules, switched off.
+        chain = policy_layers.digests(policy_layers.company_part(POLICY))
+        assert chain == policy_layers.PINNED
+        assert chain[-1] == "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
 
     def test_the_proof_files_match_the_pinned_hashes(self):
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"

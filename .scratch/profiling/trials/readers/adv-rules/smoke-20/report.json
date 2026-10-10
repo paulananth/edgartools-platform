@@ -1,0 +1,55 @@
+{
+ "policy_digest": "d615e4ced32d73ae1ae9e6f9f9f8f270c0ae51147008494aead88a6ec77b3482",
+ "corpus_sha256": "acc1d0b9433e72ae886dc4971061f21d2b5de57638b6ed81635e2e94ab8cf2d8",
+ "deferred": {},
+ "after_first": {
+  "companies_open": 43,
+  "stage_records": {
+   "iapd.adv.custodians.v1": 178,
+   "iapd.adv.filings.v1": 122
+  },
+  "stage_bound": {
+   "iapd.adv.custodians.v1": 138,
+   "iapd.adv.filings.v1": 122
+  },
+  "open_reviews": {
+   "binding_required": 40
+  },
+  "decisions_by_rule": {
+   "iapd-adv-custodian-bd": 107,
+   "iapd-adv-crd": 122,
+   "iapd-adv-custodian-lei": 31
+  },
+  "custodian_links": 0
+ },
+ "after_second": {
+  "companies_open": 43,
+  "stage_records": {
+   "iapd.adv.custodians.v1": 178,
+   "iapd.adv.filings.v1": 122
+  },
+  "stage_bound": {
+   "iapd.adv.custodians.v1": 138,
+   "iapd.adv.filings.v1": 122
+  },
+  "open_reviews": {
+   "binding_required": 40
+  },
+  "decisions_by_rule": {
+   "iapd-adv-custodian-bd": 107,
+   "iapd-adv-crd": 122,
+   "iapd-adv-custodian-lei": 31
+  },
+  "custodian_links": 0
+ },
+ "second_pass_changed_nothing": true,
+ "advisers": 20,
+ "advisers_on_one_company": 20,
+ "custodian_ids_identified": 24,
+ "custodian_ids_on_one_company": 24,
+ "custodian_ids_on_two_or_more": [],
+ "custodian_ids_named_only": 9,
+ "most_records_on_one_custodian_company": 14,
+ "most_records_on_one_adviser_company": 54,
+ "seconds": 14.5
+}

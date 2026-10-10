@@ -2,7 +2,8 @@
 
 Each ticket that declares rules switched off (or adds a table) is one layer:
 peeling it must give back the digest the operator approved before it. A new
-layer is one entry in `LAYERS`, and every pinned test sees it.
+layer is one entry in `LAYERS`, with the policy's digest while that layer is
+still on; every pinned test reads the chain from here (`PINNED`).
 """
 
 from __future__ import annotations
@@ -34,6 +35,25 @@ def company_proofs(proofs: dict, policy: dict) -> dict:
     """The pending proofs of the rules Company declares."""
     declared = {rule["rule_id"] for rule in policy["kinds"]["company"].get("rules") or []}
     return {rule_id: proof for rule_id, proof in proofs.items() if rule_id in declared}
+
+
+FORM_ADV_SOURCES = ("iapd.adv.filings.v1", "iapd.adv.custodians.v1")
+FORM_ADV_RULES = ("iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd")
+
+
+def without_form_adv(policy: dict) -> dict:
+    """Profiling ticket 07 (operator, 2026-10-09: the design "Approve as
+    proposed (Recommended)"; "custodian must be in mdm"): the Form ADV
+    sources, their three identifier matching rules (declared, not switched on)
+    with the Identifier Contracts for crd, lei and bd_number. Peeled, the
+    policy is the one before."""
+    body = _copy(policy)
+    company = body["kinds"]["company"]
+    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s not in FORM_ADV_SOURCES]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] not in FORM_ADV_RULES]
+    for namespace in ("crd", "lei", "bd_number"):
+        company["identifiers"].pop(namespace)
+    return body
 
 
 def without_parent_history(policy: dict) -> dict:
@@ -133,12 +153,36 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
-LAYERS = [without_parent_history, without_real_names, without_reference_pins, without_relationship_types, without_gleif_parent_links, without_name_rules_on, without_cik_approval, without_cik, without_cascade, without_place_codes]
+# Newest first: each layer, and Company's policy digest with it and every
+# layer after it still on.
+LAYERS = [
+    # Not yet approved: the operator approves its digest with the proof.
+    (without_form_adv, "af0fa7cce9845419238d7ed23aa5fb7c1c8ccd576f2137e2b4ef3c732369a7cc"),
+    (without_parent_history, "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605"),
+    (without_real_names, "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6"),
+    # Approved: "Ticket 02's last step needs your approval. Approved" (2026-10-07 08:01 ET).
+    (without_reference_pins, "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4"),
+    (without_relationship_types, "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4"),
+    (without_gleif_parent_links, "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5"),
+    # Approved: "yes" (2026-09-29 21:04 ET, company mastering ticket 25).
+    (without_name_rules_on, "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe"),
+    # Approved 0d4d5cb0...0702 on 2026-09-29 07:27 ET (ticket 15).
+    (without_cik_approval, "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6"),
+    (without_cik, "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702"),
+    (without_cascade, "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d"),
+    (without_place_codes, "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17"),
+]
+
+# Every layer peeled: the policy the operator approved (2026-09-25 15:21 ET).
+APPROVED = "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
+
+# The digest chain `digests` must give for Company's part of the policy.
+PINNED = [pinned for _, pinned in LAYERS] + [APPROVED]
 
 
 def peel(policy: dict) -> dict:
     """The policy with every layer peeled: what the operator approved."""
-    for layer in LAYERS:
+    for layer, _ in LAYERS:
         policy = layer(policy)
     return policy
 
@@ -146,7 +190,7 @@ def peel(policy: dict) -> dict:
 def digests(policy: dict) -> list[str]:
     """The policy's digest, then its digest after each layer is peeled."""
     found = [digest(policy)]
-    for layer in LAYERS:
+    for layer, _ in LAYERS:
         policy = layer(policy)
         found.append(digest(policy))
     return found

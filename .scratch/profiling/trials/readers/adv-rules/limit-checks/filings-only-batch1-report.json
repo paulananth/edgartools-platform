@@ -1,0 +1,44 @@
+{
+ "policy_digest": "456ca5ee3bf11a031ad5cf6e66bf26b6167fa58a5d8fcbecaf54b1f543de67c0",
+ "corpus_sha256": "6ed387f107d8dc275a7b5bdf0d126280f89b588c749c734ade7d444f9804234e",
+ "deferred": {},
+ "after_first": {
+  "companies_open": 20,
+  "stage_records": {
+   "iapd.adv.filings.v1": 122
+  },
+  "stage_bound": {
+   "iapd.adv.filings.v1": 122
+  },
+  "open_reviews": {},
+  "decisions_by_rule": {
+   "iapd-adv-crd": 122
+  },
+  "custodian_links": 0
+ },
+ "after_second": {
+  "companies_open": 20,
+  "stage_records": {
+   "iapd.adv.filings.v1": 122
+  },
+  "stage_bound": {
+   "iapd.adv.filings.v1": 122
+  },
+  "open_reviews": {},
+  "decisions_by_rule": {
+   "iapd-adv-crd": 122
+  },
+  "custodian_links": 0
+ },
+ "second_pass_changed_nothing": true,
+ "links_expected": 0,
+ "links_in_mdm": 0,
+ "links_matching": 0,
+ "links_missing": [],
+ "links_extra": [],
+ "links_differing": [],
+ "links_with_more_than_one_period": 0,
+ "custodian_dropped_by_adviser": 0,
+ "sample_links": [],
+ "seconds": 19.2
+}

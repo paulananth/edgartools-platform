@@ -14,6 +14,10 @@ defaults:
   # GLEIF's accounting-parent links (platform validation 06a); it maps no
   # fields, so it fills none.
   - gleif.relationships.v1
+  # Form ADV (profiling ticket 07): advisers' filings and the custodians they
+  # name (one record per file), last, so SEC and GLEIF win every field they fill.
+  - iapd.adv.filings.v1
+  - iapd.adv.custodians.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -521,6 +525,62 @@ rules:
       - DUPLICATE
   - primitive: holds_no_other_lei@1
     args: {}
+# Form ADV (profiling ticket 07; operator, 2026-10-09 14:56 ET: "custodian
+# must be in mdm, they are a company, Advisors must be in MDM"): an adviser's
+# filings join the one Company that holds its CRD, or create it; a
+# custodian's records (one per monthly file) join the one Company that holds
+# its SEC broker-dealer number, or, with none, its LEI, or create it
+# (operator: "BD number first (Recommended)"; the reading fills
+# `custodian_lei` only when a row has no BD number, so the two custodian
+# rules never apply to one record and their order here does not matter). A
+# custodian named by neither is not bound (its name id is lookup only) until a
+# proven name rule (ticket 07b). Declared, not switched on: each rule activates
+# on its Identifier Contract, approved by the operator.
+- rule_id: iapd-adv-crd
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.filings.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: crd
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: crd
+- rule_id: iapd-adv-custodian-lei
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.custodians.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
+- rule_id: iapd-adv-custodian-bd
+  version: 2026-10-09.1
+  family: binding
+  source: iapd.adv.custodians.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: bd_number
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: bd_number
 normalizers:
   conformed: normalize_text@edgar-conformed-v1
 lists:
@@ -677,6 +737,55 @@ identifiers:
       reason: "ticket 15: approved policy digest 0d4d5cb0...0702; ticket 05 Proving Run, 6,414
         of 6,414 Companies by their CIK, 0 controls, no CIK on two Companies, a second pass
         changed nothing"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  # Form ADV (ticket 07). Verification is filled in when the operator approves
+  # each contract on its proving corpus.
+  crd:
+    authority: FINRA Central Registration Depository
+    sources:
+    - iapd.adv.filings.v1
+    normalizer: normalize_identifier@crd-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  lei:
+    authority: GLEIF (ISO 17442)
+    sources:
+    - iapd.adv.custodians.v1
+    normalizer: normalize_identifier@lei-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  # The CRD normalizer keeps digits only: "8-129" is 8129. Over 13 months
+  # the 326 BD numbers have no zero-padded variant (no "8-00129").
+  bd_number:
+    authority: SEC (broker-dealer file number, 8-)
+    sources:
+    - iapd.adv.custodians.v1
+    normalizer: normalize_identifier@crd-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
     tolerance:
       unit: items
       warm_up_decisions: 10000

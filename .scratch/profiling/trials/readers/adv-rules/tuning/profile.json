@@ -1,0 +1,315 @@
+[
+ {
+  "batch": "2025-06 0",
+  "seconds": 11.75,
+  "sql_seconds": 10.91,
+  "statements": {
+   "SELECT body FROM mdm.policy WHERE digest=%(digest)s": [
+    3,
+    0.006
+   ],
+   "SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm.decision q WHERE q.body->>'subject' = ANY(%(subjects)s) AND q.operation = 'quarantine' AND NOT EXIS": [
+    1,
+    0.007
+   ],
+   "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NOT NULL": [
+    1,
+    0.005
+   ],
+   "SELECT body FROM mdm.decision WHERE operation = 'revoke' AND body->>'subject' = ANY(%(subjects)s)": [
+    1,
+    0.002
+   ],
+   "SELECT s.reading->'identifiers'->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS jsonb[])) AS w(doc) JOIN mdm.sta": [
+    2,
+    0.014
+   ],
+   "SELECT max(published_at) FROM mdm.master_entity WHERE kind=%(kind)s": [
+    1,
+    0.001
+   ],
+   "SELECT pg_advisory_xact_lock(730234)": [
+    2,
+    0.001
+   ],
+   "SELECT effects FROM mdm.batch WHERE batch_id=%(id)s": [
+    2,
+    0.001
+   ],
+   "SELECT body FROM mdm.source_reading WHERE source_code=ANY(%(retiring)s) OR body->>'subject'=ANY(%(keys)s) OR mdm.reading_link_subjects(body) && CAST(%(keys)s AS": [
+    2,
+    0.046
+   ],
+   "SELECT body FROM mdm.decision WHERE body->>'subject'=ANY(%(keys)s) OR body->>'entity_id'=ANY(%(keys)s) OR body->>'left'=ANY(%(keys)s) OR body->>'right'=ANY(%(ke": [
+    2,
+    0.086
+   ],
+   "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(%(sources)s) LIMIT %(lim)s": [
+    2,
+    0.001
+   ],
+   "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(%(keys)s) LIMIT %(lim)s": [
+    2,
+    0.006
+   ],
+   "SELECT mdm.match_proposal_snapshot(CAST(%(scope)s AS jsonb))": [
+    2,
+    0.107
+   ],
+   "SELECT source_code,body FROM mdm.dataset WHERE source_code=ANY(%(codes)s)": [
+    2,
+    0.002
+   ],
+   "SELECT object_type,object_id,body FROM mdm.current_record WHERE (object_type='relationship' AND body->>'source_id'=ANY(%(ids)s)) OR (object_type='relationship' ": [
+    2,
+    0.026
+   ],
+   "SELECT coalesce(max(generation),0) FROM mdm.batch": [
+    2,
+    0.001
+   ],
+   "SELECT mdm.preview_batch(%(request)s,CAST(%(run)s AS uuid))": [
+    1,
+    4.821
+   ],
+   "SELECT 'entity' AS object_type,object_id,body FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) LIMIT %(lim)s": [
+    1,
+    0.004
+   ],
+   "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))": [
+    1,
+    0.33
+   ],
+   "SELECT body FROM mdm.match_proposal WHERE assessment_id=%(key)s": [
+    2,
+    0.091
+   ],
+   "SELECT EXISTS(SELECT 1 FROM mdm.match_proposal_event WHERE assessment_id=%(key)s AND event IN ('applied','superseded'))": [
+    1,
+    0.0
+   ],
+   "SELECT EXISTS(SELECT 1 FROM mdm.master_entity WHERE kind=%(kind)s AND published_at >= CAST(%(at)s AS timestamptz))": [
+    1,
+    0.001
+   ],
+   "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))": [
+    1,
+    5.352
+   ]
+  }
+ },
+ {
+  "batch": "2025-06 500",
+  "seconds": 13.93,
+  "sql_seconds": 13.16,
+  "statements": {
+   "SELECT body FROM mdm.policy WHERE digest=%(digest)s": [
+    3,
+    0.003
+   ],
+   "SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm.decision q WHERE q.body->>'subject' = ANY(%(subjects)s) AND q.operation = 'quarantine' AND NOT EXIS": [
+    1,
+    0.005
+   ],
+   "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NOT NULL": [
+    1,
+    0.005
+   ],
+   "SELECT body FROM mdm.decision WHERE operation = 'revoke' AND body->>'subject' = ANY(%(subjects)s)": [
+    1,
+    0.004
+   ],
+   "SELECT s.reading->'identifiers'->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS jsonb[])) AS w(doc) JOIN mdm.sta": [
+    2,
+    0.387
+   ],
+   "SELECT object_id, canonical_id FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) AND canonical_id IS NOT NULL": [
+    2,
+    0.012
+   ],
+   "SELECT object_id FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) AND status='review'": [
+    1,
+    0.001
+   ],
+   "SELECT max(published_at) FROM mdm.master_entity WHERE kind=%(kind)s": [
+    1,
+    0.0
+   ],
+   "SELECT pg_advisory_xact_lock(730234)": [
+    2,
+    0.001
+   ],
+   "SELECT effects FROM mdm.batch WHERE batch_id=%(id)s": [
+    2,
+    0.001
+   ],
+   "SELECT body FROM mdm.source_reading WHERE source_code=ANY(%(retiring)s) OR body->>'subject'=ANY(%(keys)s) OR mdm.reading_link_subjects(body) && CAST(%(keys)s AS": [
+    4,
+    0.441
+   ],
+   "SELECT body FROM mdm.decision WHERE body->>'subject'=ANY(%(keys)s) OR body->>'entity_id'=ANY(%(keys)s) OR body->>'left'=ANY(%(keys)s) OR body->>'right'=ANY(%(ke": [
+    4,
+    0.598
+   ],
+   "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(%(sources)s) LIMIT %(lim)s": [
+    2,
+    0.001
+   ],
+   "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(%(keys)s) LIMIT %(lim)s": [
+    2,
+    0.008
+   ],
+   "SELECT mdm.match_proposal_snapshot(CAST(%(scope)s AS jsonb))": [
+    2,
+    0.372
+   ],
+   "SELECT source_code,body FROM mdm.dataset WHERE source_code=ANY(%(codes)s)": [
+    2,
+    0.001
+   ],
+   "SELECT object_type,object_id,body FROM mdm.current_record WHERE (object_type='relationship' AND body->>'source_id'=ANY(%(ids)s)) OR (object_type='relationship' ": [
+    2,
+    0.023
+   ],
+   "SELECT coalesce(max(generation),0) FROM mdm.batch": [
+    2,
+    0.001
+   ],
+   "SELECT mdm.preview_batch(%(request)s,CAST(%(run)s AS uuid))": [
+    1,
+    5.235
+   ],
+   "SELECT 'entity' AS object_type,object_id,body FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) LIMIT %(lim)s": [
+    1,
+    0.006
+   ],
+   "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))": [
+    1,
+    0.308
+   ],
+   "SELECT body FROM mdm.match_proposal WHERE assessment_id=%(key)s": [
+    2,
+    0.108
+   ],
+   "SELECT EXISTS(SELECT 1 FROM mdm.match_proposal_event WHERE assessment_id=%(key)s AND event IN ('applied','superseded'))": [
+    1,
+    0.001
+   ],
+   "SELECT EXISTS(SELECT 1 FROM mdm.master_entity WHERE kind=%(kind)s AND published_at >= CAST(%(at)s AS timestamptz))": [
+    1,
+    0.001
+   ],
+   "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))": [
+    1,
+    5.639
+   ]
+  }
+ },
+ {
+  "batch": "2025-06 1000",
+  "seconds": 15.9,
+  "sql_seconds": 15.05,
+  "statements": {
+   "SELECT body FROM mdm.policy WHERE digest=%(digest)s": [
+    3,
+    0.005
+   ],
+   "SELECT q.decision_id, q.body->>'subject' AS subject FROM mdm.decision q WHERE q.body->>'subject' = ANY(%(subjects)s) AND q.operation = 'quarantine' AND NOT EXIS": [
+    1,
+    0.006
+   ],
+   "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NOT NULL": [
+    1,
+    0.027
+   ],
+   "SELECT body FROM mdm.decision WHERE operation = 'revoke' AND body->>'subject' = ANY(%(subjects)s)": [
+    1,
+    0.005
+   ],
+   "SELECT s.reading->'identifiers'->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS jsonb[])) AS w(doc) JOIN mdm.sta": [
+    2,
+    0.814
+   ],
+   "SELECT object_id, canonical_id FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) AND canonical_id IS NOT NULL": [
+    2,
+    0.015
+   ],
+   "SELECT object_id FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) AND status='review'": [
+    1,
+    0.002
+   ],
+   "SELECT max(published_at) FROM mdm.master_entity WHERE kind=%(kind)s": [
+    1,
+    0.001
+   ],
+   "SELECT pg_advisory_xact_lock(730234)": [
+    2,
+    0.001
+   ],
+   "SELECT effects FROM mdm.batch WHERE batch_id=%(id)s": [
+    2,
+    0.001
+   ],
+   "SELECT body FROM mdm.source_reading WHERE source_code=ANY(%(retiring)s) OR body->>'subject'=ANY(%(keys)s) OR mdm.reading_link_subjects(body) && CAST(%(keys)s AS": [
+    4,
+    0.841
+   ],
+   "SELECT body FROM mdm.decision WHERE body->>'subject'=ANY(%(keys)s) OR body->>'entity_id'=ANY(%(keys)s) OR body->>'left'=ANY(%(keys)s) OR body->>'right'=ANY(%(ke": [
+    4,
+    1.009
+   ],
+   "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(%(sources)s) LIMIT %(lim)s": [
+    2,
+    0.002
+   ],
+   "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(%(keys)s) LIMIT %(lim)s": [
+    2,
+    0.008
+   ],
+   "SELECT mdm.match_proposal_snapshot(CAST(%(scope)s AS jsonb))": [
+    2,
+    0.794
+   ],
+   "SELECT source_code,body FROM mdm.dataset WHERE source_code=ANY(%(codes)s)": [
+    2,
+    0.001
+   ],
+   "SELECT object_type,object_id,body FROM mdm.current_record WHERE (object_type='relationship' AND body->>'source_id'=ANY(%(ids)s)) OR (object_type='relationship' ": [
+    2,
+    0.022
+   ],
+   "SELECT coalesce(max(generation),0) FROM mdm.batch": [
+    2,
+    0.001
+   ],
+   "SELECT mdm.preview_batch(%(request)s,CAST(%(run)s AS uuid))": [
+    1,
+    5.176
+   ],
+   "SELECT 'entity' AS object_type,object_id,body FROM mdm.current_entity WHERE object_id=ANY(%(ids)s) LIMIT %(lim)s": [
+    1,
+    0.006
+   ],
+   "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))": [
+    1,
+    0.357
+   ],
+   "SELECT body FROM mdm.match_proposal WHERE assessment_id=%(key)s": [
+    2,
+    0.118
+   ],
+   "SELECT EXISTS(SELECT 1 FROM mdm.match_proposal_event WHERE assessment_id=%(key)s AND event IN ('applied','superseded'))": [
+    1,
+    0.001
+   ],
+   "SELECT EXISTS(SELECT 1 FROM mdm.master_entity WHERE kind=%(kind)s AND published_at >= CAST(%(at)s AS timestamptz))": [
+    1,
+    0.001
+   ],
+   "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))": [
+    1,
+    5.839
+   ]
+  }
+ }
+]

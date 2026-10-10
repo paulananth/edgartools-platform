@@ -1,0 +1,93 @@
+# The reading of Form ADV Schedule D 5.K(3) (IA_Schedule_D_5K3) in one monthly
+# bulk file: one row per filing and custodian. A row is keyed by its filing and
+# its row number in the file (53 filings list one custodian twice; every
+# filing is in one month's file only). 5.K(3)(f) is "LEI or other": `lei`
+# keeps only an LEI-shaped value (18 letters or digits, then 2 digits), so an
+# other id never reads as an LEI; `other_id` keeps the value as written.
+# Advisers report the right broker-dealer number but often a parent's or
+# another LEI (8 BD numbers with 2 to 4 valid LEIs each over 13 months), so a
+# custodian is named as the operator ruled (2026-10-09: "BD number first
+# (Recommended)", replacing "LEI, then BD number, name last"):
+# `custodian_id` is `bd:<8- number>`, else `lei:<LEI>`, else `name:<name,
+# trimmed, upper case>`; `custodian_lei` is the LEI only when the row has no
+# BD number (it identifies the custodian then); `lei` keeps every reported LEI
+# for lookup. MDM takes one record per file and custodian_id (mdm.prepare
+# `distinct_on`); every row is a silver fact.
+read:
+  format: csv
+  container: zip
+  member: "IA_Schedule_D_5K3_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    custody:
+      each: record
+      columns:
+        filing_id: {text: {path: "Filing ID", path_mode: literal}}
+        row: {ordinal: {}}
+        legal_name: {text: {path: "5K(3)(a)", path_mode: literal, null_if: [""]}}
+        business_name: {text: {path: "5K(3)(b)", path_mode: literal, null_if: [""]}}
+        city: {text: {path: "5K(3)(c) City", path_mode: literal, null_if: [""]}}
+        state: {text: {path: "5K(3)(c) State", path_mode: literal, null_if: [""]}}
+        country: {text: {path: "5K(3)(c) Country", path_mode: literal, null_if: [""]}}
+        related_person: {text: {path: "5K(3)(d)", path_mode: literal, null_if: [""]}}
+        bd_number: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+        other_id: {text: {path: "5K(3)(f)", path_mode: literal, null_if: [""]}}
+        lei:
+          text:
+            path: "5K(3)(f)"
+            path_mode: literal
+            transforms:
+            - trim: true
+            - regex_replace: {pattern: "^.*[^A-Z0-9].*$", with: ""}
+            - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
+            - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
+            null_if: [""]
+        # The LEI only when the row has no BD number: `equal` holds when both
+        # sides are null, and the right side is always null (any value, with
+        # or without line breaks, is replaced by "" and read as null).
+        custodian_lei:
+          choose:
+            condition:
+              equal:
+                left: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+                right: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{regex_replace: {pattern: "(?s)^.*$", with: ""}}], null_if: [""]}}
+            then:
+              text:
+                path: "5K(3)(f)"
+                path_mode: literal
+                transforms:
+                - trim: true
+                - regex_replace: {pattern: "^.*[^A-Z0-9].*$", with: ""}
+                - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
+                - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
+                null_if: [""]
+            else: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{regex_replace: {pattern: "(?s)^.*$", with: ""}}], null_if: [""]}}
+        custodian_id:
+          coalesce:
+            skip: "null"
+            values:
+            - text:
+                path: "5K(3)(e)"
+                path_mode: literal
+                transforms: [{trim: true}, {pad: {left: "bd:", right: ""}}]
+                null_if: ["bd:"]
+            - text:
+                path: "5K(3)(f)"
+                path_mode: literal
+                transforms:
+                - trim: true
+                - regex_replace: {pattern: "^.*[^A-Z0-9].*$", with: ""}
+                - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
+                - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
+                - pad: {left: "lei:", right: ""}
+                null_if: ["lei:"]
+            - text:
+                path: "5K(3)(a)"
+                path_mode: literal
+                transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
+                null_if: ["name:"]
+        amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
+        published: {context: {name: published}}

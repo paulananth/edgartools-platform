@@ -24,79 +24,8 @@ BEFORE = {
     "name_proofs": "42e7b849964f64d17eaf35ae2e9f02c46ee8783501ac87e8206e65eb031be6ef",
     "name_matching_active": "c21dc69cdf1f2004d28afdacc120ca086c46475621b3709dfcfdc3fad1a6d0fb",
 }
-WITH_PLACE_CODES = {
-    "policy": "3520e890d46020e1c0a579807151b9d1cadcf5adab535172811b8e96f99b1e17",
-    "name_matching_active": "ad70680ac2cbeb04da821038436ccd0c5eff8bfa74f96e29cc205bdd0cd8db80",
-}
-# Company mastering ticket 21 declared the cascade's seven passes, switched
-# off; without them the policy is the one above, so the approved rules are
-# unchanged (operator, 2026-09-28: they stay until ticket 20).
-WITH_CASCADE = {
-    "policy": "8bdc2f68294bbe93aebaa1949090073d1bec4f2adb95fddfdc11594344f6555d",
-    "name_matching_active": "8bec2b784b140257223fb8faf592290f679c06c223e0803c69adfb2080045583",
-}
-
-
-
-# Company mastering ticket 15 declared the CIK matching rule and its Identifier
-# Contract, switched off; without them the policy is the one above.
-WITH_CIK = {
-    "policy": "0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702",
-    "name_matching_active": "34f7174cc9cb5b8390e8afc592e2487d0b1e488544f6d908641acd252e598a24",
-}
-
-
-# The operator approved 0d4d5cb0...0702 on 2026-09-29 07:27 ET (ticket 15): the
-# contract's stamps are filled and the rule is switched on.
-WITH_CIK_APPROVAL = {
-    "policy": "15e07b302482bbbe191fd5b89855373f04f18db31a3c9caaa733f1bc87b9b6d6",
-    "name_matching_active": "86a7a9e3f9bd9e2bd428331442f031f2b4736f55ee3f890c329de0c05f21acde",
-}
-
-# The operator approved switching both name matching rules on ("yes",
-# 2026-09-29 21:04 ET, company mastering ticket 25); without them it is the
-# policy above.
-WITH_NAME_RULES_ON = {
-    "policy": "75bd2b6744c075750c5f86632aa7e9fd504be03a648f91a1b0f3ab8c51e33dbe",
-}
-
-# Platform validation 06a added GLEIF's relationship file to Company's
-# sources, for its accounting-parent links; without it the policy is the one
-# above.
-WITH_GLEIF_PARENT_LINKS = {
-    "policy": "6978715fa0b862e00caecc791c239c5b3ed8ffdf7450521bf761c886a5708ae5",
-}
-
-# Profiling ticket 04 moved the relationship types from code into the policy
-# (operator, 2026-10-06: "Types as data"); without them the policy is the one
-# above. Production keeps the policy above until the operator approves this one.
-WITH_RELATIONSHIP_TYPES = {
-    "policy": "1e38238fbb48390f13188c52ff312606aead9d942380dac31f0f5a1154203da4",
-}
-
-# Profiling ticket 04b names every relationship type as its source or standard
-# does (operator, 2026-10-07, each name approved one by one); peeled, the types
-# are the table profiling ticket 04 moved into the policy, and the policy is
-# the one below.
-WITH_REAL_NAMES = {
-    "policy": "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6",
-}
-
-# Profiling ticket 04b, part B: the calculated ultimate parent keeps its
-# history (accounting-chain-v2) and a successor entity ends parent links
-# (operator, 2026-10-07: "It should also consider corporate actions"); peeled,
-# the policy is the one above.
-WITH_PARENT_HISTORY = {
-    "policy": "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605",
-}
-
-# Profiling ticket 02 pins the reference data (RDM `sec-place-codes` version
-# 1 and its sha256) in place of the embedded table; the operator approved it
-# ("Ticket 02's last step needs your approval. Approved", 2026-10-07 08:01 ET).
-# Peeled, the table is embedded again and the policy is the one above.
-WITH_REFERENCE_PINS = {
-    "policy": "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4",
-}
+# Company's policy layers and their digests, newest first, are in
+# `tests/mdm/policy_layers.py` (`LAYERS`, `PINNED`): one place for each.
 
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
@@ -155,8 +84,8 @@ PERSON_BEFORE_CONFIGURED_FIELDS = "a740357f911d531ae72a995409d5630b1eeced83c5c8b
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
-    layered = (WITH_PARENT_HISTORY, WITH_REAL_NAMES, WITH_REFERENCE_PINS, WITH_RELATIONSHIP_TYPES, WITH_GLEIF_PARENT_LINKS, WITH_NAME_RULES_ON, WITH_CIK_APPROVAL, WITH_CIK, WITH_CASCADE, WITH_PLACE_CODES, BEFORE)
-    assert policy_layers.digests(COMPANY) == [pins["policy"] for pins in layered]
+    assert policy_layers.digests(COMPANY) == policy_layers.PINNED
+    assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
     assert digest(company_source.CONTRACT) == WITH_PINNED_PLACE_CHECK

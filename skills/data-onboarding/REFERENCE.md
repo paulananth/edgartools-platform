@@ -68,7 +68,7 @@ The reason codes the code raises today:
 | Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | yes (operator, 2026-09-27: "never stop the run") |
 | A relationship type not mapped yet | `unsupported_relationship_type` | yes (operator, 2026-09-27); each run reports a count by type, so a new type is seen |
 | The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
-| A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never |
+| A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never, unless the operator rules one defect non-blocking for one contract (the records still never merge; they wait for a steward); quote the ruling in a comment beside the list |
 
 A contract that lists no reason blocks on every one. The "yes" reasons are
 decided (a source's native operation; the operator for relationship types and

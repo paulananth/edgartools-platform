@@ -1,0 +1,16 @@
+{"batch": "2025-06 0", "seconds": 6.38, "keys": 1480, "fn": {"write_batch": 4.79, "keep_stage": 1.47, "record_company_version": 1.11, "match_proposal_snapshot": 0.13}}
+{"batch": "2025-06 500", "seconds": 8.65, "keys": 1548, "fn": {"write_batch": 5.75, "keep_stage": 1.7, "record_company_version": 1.93, "match_proposal_snapshot": 0.5}}
+{"batch": "2025-06 1000", "seconds": 11.08, "keys": 1660, "fn": {"write_batch": 6.64, "keep_stage": 1.57, "record_company_version": 2.86, "match_proposal_snapshot": 0.9}}
+{"batch": "2025-06 1500", "seconds": 18.64, "keys": 1701, "fn": {"write_batch": 11.83, "keep_stage": 2.95, "record_company_version": 6.11, "match_proposal_snapshot": 1.61}}
+{"batch": "2025-06 2000", "seconds": 17.63, "keys": 1721, "fn": {"write_batch": 8.73, "keep_stage": 2.31, "record_company_version": 3.12, "match_proposal_snapshot": 2.49}}
+{"batch": "2025-07 0", "seconds": 16.55, "keys": 1849, "fn": {"write_batch": 5.92, "keep_stage": 2.36, "record_company_version": 0.82, "match_proposal_snapshot": 3.52}}
+{"batch": "2025-07 500", "seconds": 18.8, "keys": 1964, "fn": {"write_batch": 6.23, "keep_stage": 2.41, "record_company_version": 1.09, "match_proposal_snapshot": 4.07}}
+{"batch": "2025-07 1000", "seconds": 18.07, "keys": 2013, "fn": {"write_batch": 5.69, "keep_stage": 2.39, "record_company_version": 0.8, "match_proposal_snapshot": 3.47}}
+{"batch": "2025-07 1500", "seconds": 28.19, "keys": 2059, "fn": {"write_batch": 8.02, "keep_stage": 2.47, "record_company_version": 1.38, "match_proposal_snapshot": 7.0}}
+{"batch": "2025-07 2000", "seconds": 26.47, "keys": 2229, "fn": {"write_batch": 6.92, "keep_stage": 2.39, "record_company_version": 1.12, "match_proposal_snapshot": 5.9}}
+{"batch": "2025-07 2500", "seconds": 2.85, "keys": 244, "fn": {"write_batch": 0.4, "keep_stage": 0.15, "record_company_version": 0.05, "match_proposal_snapshot": 0.73}}
+{"batch": "2025-08 0", "seconds": 25.56, "keys": 2161, "fn": {"write_batch": 5.63, "keep_stage": 1.83, "record_company_version": 0.75, "match_proposal_snapshot": 6.99}}
+{"batch": "2025-08 500", "seconds": 27.69, "keys": 2298, "fn": {"write_batch": 6.05, "keep_stage": 2.35, "record_company_version": 0.88, "match_proposal_snapshot": 7.09}}
+{"batch": "2025-08 1000", "seconds": 53.17, "keys": 2364, "fn": {"write_batch": 12.54, "keep_stage": 4.91, "record_company_version": 2.2, "match_proposal_snapshot": 16.09}}
+{"batch": "2025-08 1500", "seconds": 76.97, "keys": 2521, "fn": {"write_batch": 18.36, "keep_stage": 7.49, "record_company_version": 2.72, "match_proposal_snapshot": 25.22}}
+{"batch": "2025-08 2000", "seconds": 24.57, "keys": 1272, "fn": {"write_batch": 7.03, "keep_stage": 2.66, "record_company_version": 1.22, "match_proposal_snapshot": 6.41}}

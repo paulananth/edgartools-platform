@@ -1,0 +1,127 @@
+# IAPD Form ADV: the MDM mappings of the monthly Form ADV bulk file (a ZIP of
+# 101 CSV tables, one month's filings each), read for the Company kind:
+# advisers from Part 1A (IA_ADV_Base_A) and their custodians from Schedule D
+# 5.K(3) (IA_Schedule_D_5K3), one record per monthly file and custodian.
+# Profiling ticket 07 (.scratch/profiling/issues/07-readers-per-feed.md):
+# operator, 2026-10-09 10:38 ET, the design, "Approve as proposed
+# (Recommended)"; 10:46 ET, "Claude codes the date change (Recommended)": one
+# record per filing (an adviser's filings join by CRD), dated by its monthly
+# file (mdm.prepare effective_column, PR #884); one record per file and
+# custodian (a custodian's records join by LEI or BD number; mdm.prepare
+# distinct_on). Custody rows and their amounts are silver facts.
+# The readings are beside this file: adviser-filings-csv.yaml and
+# custody-csv.yaml. Each file's month end comes in as context (`published`).
+# The acquisition and bookkeeping sections belong to the Bookkeeping skill.
+source: iapd.adv
+bronze:
+  # Bronze: reference/iapd_adv_bulk/<YYYY-MM>/ADV_Filing_Data_<from>_<to>.zip
+  family: iapd_adv_bulk
+mdm:
+  iapd.adv.filings.v1:
+    contract:
+      provider: SEC Investment Adviser Public Disclosure (IAPD)
+      family: iapd_adv_bulk
+      schema_version: iapd-adv-filing-csv-v1
+      record_key: the Form ADV filing (FilingID); an adviser's filings join by its CRD
+      publication_key: exact captured monthly ADV bulk file (sha256)
+      effective_time: the end of the month the file covers (context `published`)
+      semantics: patch
+      completeness: the filings submitted in one month; no retirement by absence
+      nonblocking_deferred_reasons:
+      - quality_filing_name_present
+      adapter:
+        version: iapd-adv-filing-csv-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        kind: company
+        record_key:
+        - filing_id
+        # CRD joins an adviser's filings into one Company (binding rule
+        # iapd-adv-crd); it is the adviser's identity. Item 1.P's LEI is lookup
+        # only (`adv_lei`): advisers report an affiliate's or another
+        # firm's LEI (8 valid LEIs on 2 to 7 advisers each, 3 advisers with
+        # two, over 13 months), so it cannot join records. Operator,
+        # 2026-10-09: "Keep LEI, lookup only (Recommended)". The SEC file
+        # number (801-) is lookup only too. Item 1.D(3)
+        # lists 1 to 46 CIKs a filing (571 filings several): a record path holds
+        # one value, so CIKs are left out until a list-shaped identifier exists
+        # (ticket 07).
+        identifiers:
+          crd: crd
+        cross_references:
+          sec_file_number: sec_file_number
+          adv_lei: lei
+        fields:
+          name: legal_name
+          address:
+            components:
+              street: street
+              street2: street2
+              city: city
+              region: region
+              postcode: postcode
+              country: country
+  iapd.adv.custodians.v1:
+    contract:
+      provider: SEC Investment Adviser Public Disclosure (IAPD)
+      family: iapd_adv_bulk
+      schema_version: iapd-adv-custodian-csv-v1
+      record_key: one custodian named in one monthly file (the file's month end and
+        custodian_id, from its first custody row in the file); a custodian's
+        records join by LEI or SEC broker-dealer number
+      publication_key: exact captured monthly ADV bulk file (sha256)
+      effective_time: the end of the month the file covers (context `published`)
+      semantics: patch
+      completeness: the custodians holding 10% or more of an adviser's separately
+        managed account assets, named in one month's filings; no retirement by absence
+      # A custodian named only by an LEI that fails its check digits (36
+      # custodians, 76 records over 13 months) is set aside for a steward and
+      # the feed keeps loading (operator, 2026-10-09: "Set aside, non-blocking
+      # (Recommended)").
+      nonblocking_deferred_reasons:
+      - quality_custodian_name_present
+      - invalid_lei_checksum
+      adapter:
+        version: iapd-adv-custodian-csv-v1
+        retain_deferred: true
+        source_record_provenance: true
+        field_shape: nullable_text
+        kind: company
+        # One record per file and custodian (operator, 2026-10-09: "custodian
+        # must be in mdm, they are a company"; "Yes, code it (Recommended)"):
+        # mdm.prepare keeps the first custody row of each custodian_id in the
+        # file (`distinct_on: [custodian_id]`). One record per row made the
+        # largest custodian 17,333 records, past the Merge Stage's 10,000-record
+        # closure. Every custody row, with its amount, is a silver fact linked to
+        # both Companies; the adviser-to-custodian history is read there, not
+        # from an MDM link (operator: "silver contains other dimentions and facts").
+        record_key:
+        - published
+        - custodian_id
+        # The custodian's identity, operator 2026-10-09: "BD number first
+        # (Recommended)" (it replaced "LEI, then BD number, name last"):
+        # advisers report the right BD number (5.K(3)(e), SEC's 8- file
+        # number) but often a parent's or another LEI, 8 BD numbers with 2 to
+        # 4 valid LEIs each. So the BD number joins; the LEI joins only a row
+        # with no BD number (`custodian_lei`, custody-csv.yaml); every reported
+        # LEI is kept for lookup (`adv_lei`). 5.K(3)(f) is "LEI or other":
+        # only an LEI-shaped value is read as an LEI. A custodian with neither
+        # keeps a name id, lookup only, and waits for a proven name rule.
+        identifiers:
+          bd_number: bd_number
+          lei: custodian_lei
+        identifier_formats:
+          lei: lei
+        cross_references:
+          name_id: legal_name
+          adv_lei: lei
+        cross_reference_formats:
+          name_id: name_id@1
+        fields:
+          name: legal_name
+          address:
+            components:
+              city: city
+              region: state
+              country: country

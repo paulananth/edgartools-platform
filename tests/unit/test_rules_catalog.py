@@ -30,7 +30,8 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     company = tables["edgartools-rules.mdm.clean.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
-    assert "`sec.submissions.company.v1`, then `gleif.level1.v1`: the first with a value wins" in name["description"]
+    assert ("`sec.submissions.company.v1`, then `gleif.level1.v1`, then `iapd.adv.filings.v1`, then "
+            "`iapd.adv.custodians.v1`: the first with a value wins") in name["description"]
     relationships = tables['edgartools-rules.sources.gleif."gleif.relationships.v1"']
     assert "it fills no company field" in relationships["description"]
     assert "Read by the classification rule" in next(c for c in sec["columns"] if c["name"] == "sic")["description"]
