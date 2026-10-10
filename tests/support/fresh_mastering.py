@@ -56,12 +56,8 @@ def _gleif(member, row, ordinal):
     publication = {"publication_key": f"offline-cohort/gleif/{member}", "revision": 1,
                    "artifact_sha256": digest(row), "member": member,
                    "record_locator": str(ordinal)}
-    outcome, reading = gleif_source.record_evidence(
-        row, member=member, contract=gleif_source.dataset_contract(member),
-        source_code=f"gleif.{member}.v1", eligible_leis={CHILD_LEI, PARENT_LEI},
-        publication=publication, ordinal=ordinal)
-    assert outcome == "assertion", reading
-    return reading
+    return normalize(row, source_code=f"gleif.{member}.v1", contract=gleif_source.dataset_contract(member),
+                     publication={**publication, "effective_at": None})
 
 
 def gleif_cohort():
@@ -85,7 +81,7 @@ def gleif_cohort():
 def gleif_successor(effective: str):
     """The child's Level 1 record again, now naming the parent as its successor
     with a completed merger on `effective` (synthetic: a parent absorbing its
-    subsidiary; profiling ticket 04c), read by the real GLEIF reader."""
+    subsidiary; profiling ticket 04c), read by the GLEIF contract."""
     fixture = json.loads(FIXTURE.read_text())
     (row,) = [r for r in fixture["gleif"] if r["LEI"]["$"] == CHILD_LEI]
     row = json.loads(json.dumps(row))
@@ -98,8 +94,5 @@ def gleif_successor(effective: str):
     # A later GLEIF publication: a new revision of the same record.
     publication = {"publication_key": "offline-cohort/gleif/level1/succession", "revision": 2,
                    "artifact_sha256": digest(row), "member": "level1", "record_locator": "0"}
-    outcome, reading = gleif_source.record_evidence(
-        row, member="level1", contract=gleif_source.dataset_contract("level1"), source_code="gleif.level1.v1",
-        eligible_leis={CHILD_LEI, PARENT_LEI}, publication=publication, ordinal=0)
-    assert outcome == "assertion", reading
-    return reading
+    return normalize(row, source_code="gleif.level1.v1", contract=gleif_source.dataset_contract("level1"),
+                     publication={**publication, "effective_at": None})

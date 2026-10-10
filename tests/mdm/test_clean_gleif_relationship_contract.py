@@ -73,3 +73,12 @@ def test_a_record_the_older_reader_set_aside_waits_with_the_same_reason(row, rea
 def test_an_empty_deletion_field_and_a_single_period_object_read_as_usual():
     assert read(record(deletion=None))["relationships"]
     assert read(record(PERIOD))["relationships"][0]["valid_from"] == "2020-01-01T00:00:00+00:00"
+
+
+def test_a_null_deletion_field_and_a_bad_check_digit():
+    row = record()
+    row["RelationshipRecord"]["Extension"] = {"gleif:Deletion": None}
+    assert read(row)["relationships"]
+    with pytest.raises(UnsupportedRecord) as waiting:
+        read(record(start="HWUPKR0MPOU8FGXBT395"))
+    assert waiting.value.reason == "invalid_lei_checksum"

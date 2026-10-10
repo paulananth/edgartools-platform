@@ -1198,7 +1198,7 @@ from uuid import uuid4
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.mdm.clean import adapters, gleif_source, company_source
+from edgar_warehouse.mdm.clean import adapters, company_source
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
@@ -1249,14 +1249,13 @@ assert digest(sec_readings)==digest(body["readings"])
 contract=files.mdm_contract("gleif","gleif.level1.v1")
 retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
 assertions=[]
-for ordinal,row in enumerate(body["rows"]):
+for row in body["rows"]:
     publication={"publication_key":"installed-gleif-fixture","revision":1,
-                 "artifact_sha256":digest(row),"member":"level1"}
-    kwargs={"member":"level1","source_code":"gleif.level1.v1","eligible_leis":body["leis"],
-            "publication":publication,"ordinal":ordinal}
-    actual=gleif_source.record_evidence(row,contract=contract,**kwargs)
-    assert actual[0]=="assertion" and digest(actual)==digest(gleif_source.record_evidence(row,contract=retained,**kwargs))
-    assertions.append(actual[1])
+                 "artifact_sha256":digest(row),"member":"level1","effective_at":None}
+    kwargs={"source_code":"gleif.level1.v1","publication":publication}
+    actual=adapters.normalize(row,contract=contract,**kwargs)
+    assert digest(actual)==digest(adapters.normalize(row,contract=retained,**kwargs))
+    assertions.append(actual)
 store=Store(engine); stage=MergeStage(store); run=str(uuid4())
 command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-gleif-qualification",
          "policy_digest":body["policy"],"expected_checkpoint":0,"checkpoint":1,

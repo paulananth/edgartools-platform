@@ -44,3 +44,19 @@ def test_every_exception_waits_with_the_older_readers_reason(row, reason):
         normalize(row, source_code="gleif.reporting_exceptions.v1", contract=dataset_contract("reporting_exceptions"),
                   publication=PUBLICATION)
     assert refused.value.reason == reason
+
+
+def test_a_null_deletion_field_in_a_full_file_is_read_as_usual():
+    # 257,509 reporting exceptions in the 2026-09-11 full file carry it as null.
+    row = {**record(), "Extension": {"gleif:Deletion": None}}
+    with pytest.raises(UnsupportedRecord) as kept:
+        normalize(row, source_code="gleif.reporting_exceptions.v1", contract=dataset_contract("reporting_exceptions"),
+                  publication=PUBLICATION)
+    assert kept.value.reason == "reported_parent_exception"
+
+
+def test_a_bad_check_digit_waits_as_such():
+    with pytest.raises(UnsupportedRecord) as waiting:
+        normalize(record(lei="HWUPKR0MPOU8FGXBT395"), source_code="gleif.reporting_exceptions.v1",
+                  contract=dataset_contract("reporting_exceptions"), publication=PUBLICATION)
+    assert waiting.value.reason == "invalid_lei_checksum"
