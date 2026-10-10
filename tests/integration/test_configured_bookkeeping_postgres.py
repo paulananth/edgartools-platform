@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 import json
-import shutil
 import subprocess
 import time
 from uuid import uuid4
@@ -27,6 +26,7 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
 from edgar_warehouse.workers import copy
+from tests.support import pg16
 from tests.support.bookkeeping_protocol import RUNTIME, complete, drive, verification_for, verification_report
 from tests.support.rules_approval import approve
 
@@ -50,75 +50,62 @@ class Databases:
 
 @pytest.fixture(scope="module")
 def databases():
-    assert shutil.which("docker"), "PG16 acceptance requires Docker (Colima on macOS)"
-    name = f"bookkeeping-acceptance-{uuid4().hex[:10]}"
-    subprocess.run(["docker", "image", "inspect", "postgres:16-alpine"], capture_output=True, check=True)
-    subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "-p", "127.0.0.1::5432",
-                    "-e", "POSTGRES_PASSWORD=test", "postgres:16-alpine"], capture_output=True, check=True)
-    engines = []
-    try:
-        for _ in range(80):
-            ready = subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"], capture_output=True)
-            if ready.returncode == 0:
-                break
-            time.sleep(0.1)
-        else:
-            pytest.fail("PostgreSQL 16 failed to start")
-        port = subprocess.run(["docker", "port", name, "5432/tcp"], capture_output=True, text=True, check=True).stdout.strip().rsplit(":", 1)[1]
+    # Docker in CI; PG16_SERVER=pgserver runs on a local PostgreSQL 16 (tests/support/pg16.py).
+    with pg16.server() as server:
+        engines = []
+        try:
+            def engine(db, user="postgres"):
+                value = create_engine(server.url(db, user, driver="postgresql"), connect_args={"connect_timeout": 5})
+                engines.append(value)
+                return value
 
-        def engine(db, user="postgres"):
-            value = create_engine(f"postgresql://{user}:test@127.0.0.1:{port}/{db}", connect_args={"connect_timeout": 5})
-            engines.append(value)
-            return value
-
-        setup = engine("postgres")
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            try:
-                with setup.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                break
-            except DBAPIError:
-                time.sleep(0.1)
-        else:
-            pytest.fail("PostgreSQL host connection did not become ready")
-        with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            for role in ("bk_runtime", "bk_verifier", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
-                conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
-            # Control's grants go to one group; the worker (bk_runtime) and the
-            # verifier (bk_verifier) log in separately (mastering to-do 20b).
-            conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
-            conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
-            conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
-            conn.exec_driver_sql("GRANT rules_approver TO operator")
-            for db in ("bookkeeping_clean", "rules", "change_journal_clean", "destination"):
-                conn.exec_driver_sql(f"CREATE DATABASE {db}")
-        admin = engine("bookkeeping_clean")
-        runtime = engine("bookkeeping_clean", "bk_runtime")
-        rules_admin = engine("rules")
-        ledger_admin = engine("change_journal_clean")
-        destination_admin = engine("destination")
-        with pytest.raises(Blocked, match="not initialized"):
-            migrate(admin, runtime_role="bk_control", existing_only=True)
-        with pytest.raises(Blocked, match="not initialized"):
-            migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True)
-        migrate(admin, runtime_role="bk_control")
-        for profile in PROFILES:
-            grant_profile(admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
-        migrate_rules(rules_admin)
-        migrate_journal(ledger_admin, runtime_role="ledger_runtime")
-        migrate_guard(destination_admin, runtime_role="destination_runtime")
-        with destination_admin.begin() as conn:
-            conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
-            conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
-        migrate_guard(destination_admin, runtime_role="clean_application")
-        yield Databases(admin, runtime, engine("bookkeeping_clean", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
-                        ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
-                        engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
-    finally:
-        for value in engines:
-            value.dispose()
-        subprocess.run(["docker", "stop", "--time", "1", name], capture_output=True, check=True)
+            setup = engine("postgres")
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                try:
+                    with setup.connect() as conn:
+                        conn.execute(text("SELECT 1"))
+                    break
+                except DBAPIError:
+                    time.sleep(0.1)
+            else:
+                pytest.fail("PostgreSQL host connection did not become ready")
+            with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                for role in ("bk_runtime", "bk_verifier", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
+                    conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
+                # Control's grants go to one group; the worker (bk_runtime) and the
+                # verifier (bk_verifier) log in separately (mastering to-do 20b).
+                conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
+                conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
+                conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
+                conn.exec_driver_sql("GRANT rules_approver TO operator")
+                for db in ("bookkeeping_clean", "rules", "change_journal_clean", "destination"):
+                    conn.exec_driver_sql(f"CREATE DATABASE {db}")
+            admin = engine("bookkeeping_clean")
+            runtime = engine("bookkeeping_clean", "bk_runtime")
+            rules_admin = engine("rules")
+            ledger_admin = engine("change_journal_clean")
+            destination_admin = engine("destination")
+            with pytest.raises(Blocked, match="not initialized"):
+                migrate(admin, runtime_role="bk_control", existing_only=True)
+            with pytest.raises(Blocked, match="not initialized"):
+                migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True)
+            migrate(admin, runtime_role="bk_control")
+            for profile in PROFILES:
+                grant_profile(admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+            migrate_rules(rules_admin)
+            migrate_journal(ledger_admin, runtime_role="ledger_runtime")
+            migrate_guard(destination_admin, runtime_role="destination_runtime")
+            with destination_admin.begin() as conn:
+                conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
+                conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
+            migrate_guard(destination_admin, runtime_role="clean_application")
+            yield Databases(admin, runtime, engine("bookkeeping_clean", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
+                            ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
+                            engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
+        finally:
+            for value in engines:
+                value.dispose()
 
 
 def config(steps=1, *, seconds=120, zero=False, resource="output:{destination}"):
@@ -949,13 +936,14 @@ def test_source_configs_use_same_control_contract():
 
 def test_provisioning_uses_nologin_owners_and_empty_stores(monkeypatch):
     import runpy
-    name = f"bookkeeping-provision-{uuid4().hex[:10]}"
-    subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "-p", "127.0.0.1::5432",
-                    "-e", "POSTGRES_PASSWORD=test", "postgres:16-alpine"], capture_output=True, check=True)
+    with pg16.server() as server:
+        _provision(server, monkeypatch, runpy)
+
+
+def _provision(server, monkeypatch, runpy):
     engines = []
     try:
-        port = subprocess.run(["docker", "port", name, "5432/tcp"], capture_output=True, text=True, check=True).stdout.strip().rsplit(":", 1)[1]
-        url = f"postgresql://postgres:test@127.0.0.1:{port}/postgres"
+        url = server.url(driver="postgresql")
         admin = create_engine(url, connect_args={"connect_timeout": 3})
         engines.append(admin)
         deadline = time.monotonic() + 30
@@ -978,13 +966,13 @@ def test_provisioning_uses_nologin_owners_and_empty_stores(monkeypatch):
         assert provision(url, rules=True, journal=True) == result
         for database, role, table in (("bookkeeping_clean", "bookkeeping_clean_runtime", "bookkeeping.pipeline_run"),
                                       ("rules", "rules_agent", "rules.rule_version")):
-            runtime = create_engine(f"postgresql://{role}:test@127.0.0.1:{port}/{database}")
+            runtime = create_engine(server.url(database, role, driver="postgresql"))
             engines.append(runtime)
             with runtime.connect() as conn:
                 assert conn.scalar(text(f"SELECT count(*) FROM {table}")) == 0
             with pytest.raises(DBAPIError), runtime.begin() as conn:
                 conn.execute(text(f"DELETE FROM {table}"))
-        journal_admin = create_engine(f"postgresql://postgres:test@127.0.0.1:{port}/change_journal_clean")
+        journal_admin = create_engine(server.url("change_journal_clean", driver="postgresql"))
         engines.append(journal_admin)
         with journal_admin.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM journal.event")) == 0
@@ -994,4 +982,3 @@ def test_provisioning_uses_nologin_owners_and_empty_stores(monkeypatch):
     finally:
         for engine in engines:
             engine.dispose()
-        subprocess.run(["docker", "stop", "--time", "1", name], capture_output=True, check=True)
