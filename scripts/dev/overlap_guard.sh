@@ -63,13 +63,14 @@ fi
 
 # Branch heads that a PR merged (lines: <branch>\t<commit>).
 gh pr list --state merged --limit 300 --json headRefName,headRefOid \
-  --jq '.[] | "\(.headRefName)\t\(.headRefOid)"' > "$tmp/merged" 2>/dev/null || : > "$tmp/merged"
+  --jq '.[] | "\(.headRefName)\t\(.headRefOid)"' > "$tmp/merged" 2>/dev/null \
+  || { echo "overlap_guard: merged PRs could not be listed; every worktree's branch is checked" >&2; : > "$tmp/merged"; }
 
 # Worktrees of other runtimes.
 git worktree list --porcelain | awk '/^worktree /{w=substr($0,10)} /^branch /{print w "\t" substr($0,19)}' \
   | while IFS=$'\t' read -r path ref; do
       [[ "$ref" == */* && "${ref%%/*}" != "$mine" ]] || continue
-      if grep -qxF "$ref"$'\t'"$(git rev-parse "$ref")" "$tmp/merged"; then
+      if grep -qxF "$ref"$'\t'"$(git rev-parse "refs/heads/$ref")" "$tmp/merged"; then
         dirty_files "$path"
       else
         { branch_files "$ref"; dirty_files "$path"; }
