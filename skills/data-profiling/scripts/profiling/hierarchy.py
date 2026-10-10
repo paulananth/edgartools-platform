@@ -21,15 +21,23 @@ from a hierarchy:
 - support: a child value seen on one row only determines its parent
   trivially; at least half the rows must carry a child value seen on two or
   more. A list of codes (one row per code) is exempt: there each code has one
-  row by design.
+  row by design;
+- minority: a parent level whose values other than the commonest sit on
+  fewer than 10 rows shows nothing (two rows with values of their own
+  "determine" it perfectly).
 A dependency failing either is reported as coincidental, with its evidence,
 never as a hierarchy, and the child gets no coarser parent in its place (that
 would skip a level).
 
 A yes/no flag is never a level (operator, 2026-10-08: "Flag is not a level
 (Recommended)"): a code that determines a flag is reported as a flag
-dependency, and the code's search goes on to a real parent. A two-valued
-category with names of its own (domestic and foreign) is still a level.
+dependency, and the code's search goes on to a real parent. A flag may be
+written several ways in one column (0, false, 1, true). A two-valued category
+with names of its own (domestic and foreign) is still a level.
+
+Two columns that each determine the other (on at least 99% of rows: an id and
+its name, with a stray spelling) name one thing; one of them stands for both,
+never one as the other's level.
 """
 
 from __future__ import annotations
@@ -41,14 +49,16 @@ HOLDS = 0.99
 MAX_DEPTH = 50
 LIFT = 0.5  # the share of guessing's misses the dependency explains
 SUPPORT = 0.5  # share of rows whose child value is seen on two or more rows
+MINORITY = 10  # rows a parent level needs outside its commonest value to show a dependency
 FLAG_VALUES = {"0", "1", "TRUE", "FALSE", "T", "F", "Y", "N", "YES", "NO"}
 
 
 def is_flag(profile: dict) -> bool:
-    """A yes/no column: boolean, or two values that read as yes and no."""
+    """A yes/no column: boolean, or values that all read as yes or no (one column may spell them several ways)."""
     if profile["type"] == "BOOLEAN":
         return True
-    return profile["distinct"] == 2 and {str(t["value"]).strip().upper() for t in profile["top"]} <= FLAG_VALUES
+    values = {str(t["value"]).strip().upper() for t in profile["top"]}
+    return 2 <= profile["distinct"] <= len(profile["top"]) and values <= FLAG_VALUES
 
 
 def _hierarchy(name: str, part: str, kind: str, levels: list[dict], rule: str, holds: float, marked: list[dict], *,
@@ -61,33 +71,37 @@ def _hierarchy(name: str, part: str, kind: str, levels: list[dict], rule: str, h
 
 
 def _equivalent(con, part: str, columns: list[dict]) -> list[dict]:
-    """Keep one column of each set that names the same thing one to one (code and its labels)."""
+    """Keep one column of each set that names the same thing one to one (a code and its labels, an id and
+    its name), each determining the other on at least HOLDS of rows."""
     kept: list[dict] = []
     for col in columns:
-        if not any(k["distinct"] == col["distinct"] and determines(con, part, k["name"], col["name"]) == 1.0
-                   and determines(con, part, col["name"], k["name"]) == 1.0 for k in kept):
+        if not any(determines(con, part, k["name"], col["name"]) >= HOLDS
+                   and determines(con, part, col["name"], k["name"]) >= HOLDS for k in kept):
             kept.append(col)
     return kept
 
 
 def chance(con, part: str, child: str, parent: str, held: float) -> dict:
     """How far a dependency child → parent is from coincidence: the share of rows the parent's commonest
-    value covers (guessing it is right that often), the lift of the dependency over that guess, and the
-    share of rows whose child value is seen on two or more rows."""
+    value covers (guessing it is right that often), the lift of the dependency over that guess, the
+    share of rows whose child value is seen on two or more rows, and the rows outside the commonest value."""
     t, c, p = sql_name(part), sql_name(child), sql_name(parent)
-    baseline, supported = con.execute(f"""
+    top, total, supported = con.execute(f"""
         WITH b AS (SELECT {c} AS child, {p} AS parent FROM {t} WHERE {c} IS NOT NULL AND {p} IS NOT NULL),
              n AS (SELECT count(*) AS total FROM b)
-        SELECT (SELECT max(k) FROM (SELECT count(*) k FROM b GROUP BY parent)) / any_value(n.total),
+        SELECT (SELECT max(k) FROM (SELECT count(*) k FROM b GROUP BY parent)), any_value(n.total),
                (SELECT sum(k) FROM (SELECT count(*) k FROM b GROUP BY child HAVING count(*) >= 2)) / any_value(n.total)
         FROM n""").fetchone()
-    baseline, supported = float(baseline or 0), float(supported or 0)
+    top, total, supported = int(top or 0), int(total or 0), float(supported or 0)
+    baseline = top / total if total else 0.0
     lift = (held - baseline) / (1 - baseline) if baseline < 1 else 0.0
-    return {"held": held, "baseline": round(baseline, 6), "lift": round(lift, 6), "supported": round(supported, 6)}
+    return {"held": held, "baseline": round(baseline, 6), "lift": round(lift, 6), "supported": round(supported, 6),
+            "minority_rows": total - top}
 
 
 def coincidental(evidence: dict, list_of_codes: bool = False) -> bool:
-    return evidence["lift"] < LIFT or (not list_of_codes and evidence["supported"] < SUPPORT)
+    return (evidence["lift"] < LIFT or (not list_of_codes and evidence["supported"] < SUPPORT)
+            or evidence["minority_rows"] < MINORITY)
 
 
 def by_dependency(con, part: str, code_columns: list[dict], record_key: list[str] | None = None,
