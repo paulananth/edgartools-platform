@@ -94,5 +94,24 @@ def test_raw_bundle_masters_as_the_landed_one():
     landed, raw = RESULTS["landed"], RESULTS["raw"]
     print({"landed": {k: (v if isinstance(v, int) else len(v)) for k, v in landed.items()},
            "raw": {k: (v if isinstance(v, int) else len(v)) for k, v in raw.items()}})
-    for key in ("bindings", "reviews", "golden"):
+    for key in ("bindings", "reviews"):
         assert landed[key] == raw[key], key
+
+    def strip(value):
+        # The assertion id hashes the delivered record, whose provenance differs by design.
+        if isinstance(value, dict):
+            return {k: strip(v) for k, v in value.items() if k != "assertion_id"}
+        if isinstance(value, list):
+            return [strip(v) for v in value]
+        return value
+
+    old = sorted(json.dumps(strip(json.loads(g[0])), sort_keys=True) for g in landed["golden"])
+    new = sorted(json.dumps(strip(json.loads(g[0])), sort_keys=True) for g in raw["golden"])
+    fields = {}
+    for a, b in zip(old, new):
+        a, b = json.loads(a), json.loads(b)
+        for f in set(a) | set(b):
+            if a.get(f) != b.get(f):
+                fields.setdefault(f, [a.get(f), b.get(f)])
+    print("differing golden fields:", json.dumps(fields, default=str)[:3000])
+    assert old == new

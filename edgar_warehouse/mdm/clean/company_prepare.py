@@ -65,6 +65,20 @@ def _document(capture: Path, receipts: dict, key: str) -> bytes:
     return data
 
 
+def _cik(key):
+    return int(key.split("/cik=", 1)[1].split("/", 1)[0])
+
+
+def _record(row, key, sha256):
+    # Where the record was delivered, beside what it says (ticket 10).
+    return {**row, "_origin": {"bronze": {"object": key, "sha256": sha256, "locator": "$"}}}
+
+
+def _payload(records):
+    return "".join(json.dumps(row, default=_json_value, sort_keys=True, separators=(",", ":"),
+                              ensure_ascii=False, allow_nan=False) + "\n" for row in records).encode()
+
+
 def _configured_records(capture, receipts, keys, catalog_key, census, census_hash, pins, output):
     # The workers' inputs are private copies of bytes already checked against
     # their receipts; every contract, input and output is retained in the bundle.
@@ -99,7 +113,7 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
         for start in range(0, len(keys), main_contract["execution"]["max_artifacts"]):
             unit = keys[start:start + main_contract["execution"]["max_artifacts"]]
             inputs = [(_document(capture, receipts, key), {
-                "cik": int(key.split("/cik=", 1)[1].split("/", 1)[0]), "sync_run_id": pins["capture_run"],
+                "cik": _cik(key), "sync_run_id": pins["capture_run"],
                 "raw_object_id": receipts[key], "load_mode": pins["load_mode"], "recent_limit": None,
                 "last_synced_at": pins["observed_at"]}) for key in unit]
             units.append((unit, read(f"main-{start}", deepcopy(main_contract), inputs)))
@@ -141,10 +155,7 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
             tasks.append({"profile": "source.combine", "task": {**task, "candidate": result}})
             combined = store.json(result)["artifacts"][0]["tables"]["company"]
             by_cik = {int(row["cik"]): row for row in combined}
-            for key in unit:
-                row = by_cik[int(key.split("/cik=", 1)[1].split("/", 1)[0])]
-                # Where the record was delivered, beside what it says (ticket 10).
-                records.append({**row, "_origin": {"bronze": {"object": key, "sha256": receipts[key], "locator": "$"}}})
+            records.extend(_record(by_cik[_cik(key)], key, receipts[key]) for key in unit)
         proof = {"version": 1, "workers": tasks, "frozen_census_digest": census_hash}
         store.put_bytes((root / "proof.json").as_uri(), (canonical(proof) + "\n").encode())
         retained = {"workers/" + str(path.relative_to(staging)): path.read_bytes()
@@ -181,20 +192,14 @@ def verify_company_bundle(output, *, expected):
         if set(entry) != {"profile", "task"} or entry["profile"] not in profiles:
             raise ValueError("Unsupported Company worker profile")
         profiles[entry["profile"]].verify(entry["task"], store)
-    combined = store.json(proof["workers"][-1]["task"]["candidate"])
-    records = combined["artifacts"][0]["tables"]["company"]
-    expected = "".join(
-        json.dumps(
-            row,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-        + "\n"
-        for row in records
-    ).encode()
-    if (target / "records.jsonl").read_bytes() != expected:
+    by_cik = {}
+    for entry in proof["workers"]:
+        if entry["profile"] == "source.combine":
+            for row in store.json(entry["task"]["candidate"])["artifacts"][0]["tables"]["company"]:
+                by_cik[int(row["cik"])] = row
+    keys = json.loads((target / "documents.json").read_bytes())
+    records = [_record(by_cik[_cik(key)], key, by_cik[_cik(key)]["raw_object_id"]) for key in keys]
+    if (target / "records.jsonl").read_bytes() != _payload(records):
         raise Conflict("Prepared records differ from the verified workers")
     return {"source.output": True, "source.combined": True, "records": len(records)}
 
@@ -250,8 +255,7 @@ def prepare_company_bundle(
     pins = {"capture_run": capture_run, "catalog_run": catalog_run, "observed_at": observed_at,
             "load_mode": load_mode}
     records, worker_files = _configured_records(folder, receipts, keys, catalog, census, census_hash, pins, output)
-    payload = ("\n".join(json.dumps(row, default=_json_value, sort_keys=True, separators=(",", ":"),
-                                    ensure_ascii=False, allow_nan=False) for row in records) + "\n").encode()
+    payload = _payload(records)
     payload_hash = hashlib.sha256(payload).hexdigest()
     documents_hash = hashlib.sha256(documents_raw).hexdigest()
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
