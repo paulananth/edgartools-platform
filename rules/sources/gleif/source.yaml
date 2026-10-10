@@ -557,7 +557,37 @@ mdm:
             tables:
               mapped:
                 each: .
+                checks:
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`), in its
+                # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
+                - check: lei
+                  column: _lei
+                  on_fail: defer
+                # A flag with a value blocks until someone decides (ticket 18).
+                - check: absent
+                  column: _deletion
+                  reason: gleif_deletion_flag
+                  on_fail: defer
+                - check: in_set
+                  column: _category
+                  values: [DIRECT_ACCOUNTING_CONSOLIDATION_PARENT, ULTIMATE_ACCOUNTING_CONSOLIDATION_PARENT]
+                  reason: unsupported_exception_category
+                  on_fail: defer
                 columns:
+                  _lei:
+                    value:
+                      path: LEI.$
+                      type: text
+                      path_mode: literal
+                  _deletion:
+                    value:
+                      path: Extension.gleif:Deletion
+                      path_mode: literal
+                  _category:
+                    value:
+                      path: ExceptionCategory.$
+                      type: text
+                      path_mode: literal
                   fields:
                     object:
                       fields: {}
@@ -571,7 +601,20 @@ mdm:
         field_shape: nullable_text
         fields: {}
         provenance:
-          native_record: _native
+          native_record: .
+        # GLEIF's reasons for not reporting a parent (REPEX 2.1 ExceptionReasonEnum, with its
+        # deprecated values); each must be one, and a record states at least one.
+        every_in:
+        - path: ExceptionReason
+          item: $
+          values: [NO_LEI, NATURAL_PERSONS, NON_CONSOLIDATING, NO_KNOWN_PERSON, NON_PUBLIC,
+                   BINDING_LEGAL_COMMITMENTS, LEGAL_OBSTACLES, DISCLOSURE_DETRIMENTAL,
+                   DETRIMENT_NOT_EXCLUDED, CONSENT_NOT_OBTAINED]
+          missing: missing_exception_reason
+          reason: invalid_exception_reason
+        # An exception is retained source evidence, not a new Company binding or a
+        # fabricated parent edge: every record waits with this reason.
+        retained_as: reported_parent_exception
         kind: company
         record_key:
         - LEI.$

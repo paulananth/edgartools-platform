@@ -260,12 +260,29 @@ def _matching_values(row: dict, mapping: dict) -> dict:
 
 def _refuse(row: dict, mapping: dict) -> None:
     """The contract's own record checks come first: a record they set aside
-    defers with their reason, before its kind, key or fields are read."""
+    defers with their reason, before its kind, key or fields are read.
+
+    After the reading's checks, `every_in` rules test each value of a list
+    (the engine's checks test one value): `{path, item, values, missing,
+    reason}` sets the record aside with `missing` when the path holds no
+    value and with `reason` when one is not in `values`. `retained_as` names
+    the reason every remaining record waits with: a source whose records are
+    evidence only, never an identity."""
     if "reading" in mapping:
         from edgar_warehouse.workers.source_mapping import record_refusal
 
         if reason := record_refusal(row, mapping["reading"]):
             raise UnsupportedRecord(reason)
+    for rule in mapping.get("every_in", []):
+        node = value(row, rule["path"])
+        found = _as_list(node) if node else []  # empty text, list or object: none
+        if not found:
+            raise UnsupportedRecord(rule["missing"])
+        if any(not isinstance(item, dict) or not isinstance(item.get(rule["item"]), str)
+               or item[rule["item"]] not in rule["values"] for item in found):
+            raise UnsupportedRecord(rule["reason"])
+    if mapping.get("retained_as"):
+        raise UnsupportedRecord(mapping["retained_as"])
 
 
 def mapped_values(row: dict, contract: dict) -> tuple[dict, dict, dict | None]:

@@ -160,6 +160,9 @@ WITH_REFUSALS = {
     # path, the one RELATIONSHIP_PERIOD by `find ... one`, ISO instants, the interval and
     # status rules. Awaiting the operator's approval with its evidence.
     "relationships": "78cb4dd50732ac563a65aa5fb4581237266be617307ac73519a378df6f02fb97",
+    # Reporting exceptions: the category, every reason in GLEIF's list (`every_in`), and
+    # each record retained as evidence (`retained_as`). Awaiting the operator's approval.
+    "reporting_exceptions": "8ec18c6d58eb8204e61cd6bbcbe9f673559b2a7cc7083a1fd32540c19d353d34",
 }
 
 
@@ -182,8 +185,9 @@ def _without_refusals(contract: dict) -> dict:
     if adapter.get("native_member") == "relationships" and "effective_at" in adapter:
         adapter["record_key"] = ["start", "end", "relationship_type"]
         adapter["relationships"] = [copy.deepcopy(BUILT_ROW_RELATIONSHIP)]
-    if "effective_at" in adapter:
-        adapter.pop("effective_at")
+    if "effective_at" in adapter or "retained_as" in adapter:
+        for added in ("effective_at", "every_in", "retained_as"):
+            adapter.pop(added, None)
         adapter["provenance"] = {"native_record": "_native"}
     mapped = adapter["reading"]["read"]["tables"]["mapped"]
     mapped.pop("checks", None)
