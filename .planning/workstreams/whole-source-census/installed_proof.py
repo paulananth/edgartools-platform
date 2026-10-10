@@ -216,20 +216,25 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
         with mdm_reader.connect() as conn:
             return counts(conn), bindings(conn)
 
-    # First SEC pass, with a recovery: the first worker is killed once records are landing.
+    # First SEC pass, with a recovery: the first worker is killed while it holds an
+    # item, before the item's one merge transaction commits (rows land only on commit).
     run_id = submit("sec", sec_first)
     killed = subprocess.Popen([str(python), "-I", *entry, "workers", "work", "mdm.merge", run_id, "--limit", "100"],
                               env={**os.environ, **worker}, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     deadline = time.monotonic() + 600
+    held = None
     while killed.poll() is None and time.monotonic() < deadline:
-        with mdm_reader.connect() as conn:
-            if conn.execute(text("SELECT count(*) FROM mdm.stage_record")).scalar():
-                killed.send_signal(signal.SIGKILL)
-                break
-        time.sleep(1)
+        items = json.loads(cli("bookkeeping", "status", run_id))["items"]
+        held = next((i for i in items if i["state"] == "running"), None)
+        if held:
+            killed.send_signal(signal.SIGKILL)
+            break
+        time.sleep(0.2)
     killed.wait()
-    recovery = {"killed_worker_exit": killed.returncode, "rows_at_kill": snapshot()[0]["stage_records"]}
+    recovery = {"killed_worker_exit": killed.returncode, "item_at_kill": held,
+                "rows_at_kill": snapshot()[0]["stage_records"]}
     say(stage="worker killed", **recovery)
+    assert killed.returncode == -signal.SIGKILL, "the worker finished before it was killed"
     time.sleep(LEASE_SECONDS + 5)  # its lease lapses; the run resumes under a new worker
     finish(run_id, ("mdm.merge",))
     if only != "sec":
