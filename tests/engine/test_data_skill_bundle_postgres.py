@@ -1278,7 +1278,6 @@ second=stage.apply(**second_command)
 # through actual SEC normalization, Merge Stage and publication/recovery.
 import io, base64
 import zipfile
-from collections import Counter
 from edgar_warehouse.mdm.clean import name_census
 from edgar_warehouse.workers import source_stream
 assert not any(hasattr(name_census,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
@@ -1294,12 +1293,11 @@ with zipfile.ZipFile(io.BytesIO(packed)) as z, z.open(z.namelist()[0]) as member
         context={"publication_count":census_arguments["gleif_metadata"]["record_count"]},
         ordinal_context=spec["ordinal_context"],on_reading=lambda reading,_:tables.append(reading.tables),
         **{k:spec[k] for k in ("max_bytes","max_record","max_records","max_depth","min_integer","record_encoding")})
-legal,other,_=name_census.fold_reading(tables,cascade_wanted=set(),address_counts=Counter())
 meta=census_arguments["gleif_metadata"]
-census=name_census.document(sec_population=census_arguments["sec_population"],
+census=name_census.census(sec_population=census_arguments["sec_population"],
     gleif={"archive_sha256":census_arguments["gleif_sha256"],"content_date":meta["content_date"],
            "file_content":meta["file_content"],"record_count":meta["record_count"]},
-    held=held,wanted=wanted,legal=legal,other=other,cascade=None,entities=(),address_counts=None)
+    held=held,wanted=wanted,readings=tables)
 expected=body["historical_census"]
 assert census==expected
 census_assertions=[]

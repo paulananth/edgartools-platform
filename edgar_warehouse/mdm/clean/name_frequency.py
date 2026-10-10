@@ -20,7 +20,7 @@ import hashlib
 import json
 import os
 import tempfile
-from collections import Counter, defaultdict
+from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
 
@@ -30,7 +30,8 @@ from edgar_warehouse.workers import source_read, source_readings
 
 from . import cascade as cascaded
 from . import name_census
-from .company_source import POLICY, _read_manifest, _read_member, cascade_filer
+from .company_source import POLICY, _read_bounded, _read_manifest, _read_member, cascade_filer
+from .gleif_source import validate_metadata
 from .matching import active_rules
 from .store import Conflict, canonical, digest
 
@@ -38,8 +39,12 @@ SEC = rules_files.ROOT / "sources/sec.submissions.company"
 GLEIF_READING = rules_files.ROOT / "sources/gleif/census-complete-stream.yaml"
 # The saved Golden Copy reading: 13.25 GB expanded projects to about 211 MB
 # and 3.3 million rows (whole-source census ticket, 2026-10-09).
+# The bounds are the recipe's own spool and output limits (`max_spool_bytes`,
+# `max_output_rows`), so any reading it can write can be counted.
 GLEIF_BYTES = 1024**3
 GLEIF_ROWS = 10_000_000
+CONTRACT_BYTES = 1024**2
+METADATA_BYTES = 64 * 1024
 
 
 def _read(store: Artifacts, folder: Path, name: str, raw: bytes, contract: dict) -> dict:
@@ -100,25 +105,28 @@ def _capture(root: Path, manifest: str, store: Artifacts, folder: Path) -> tuple
     return filers, candidates, population, hashlib.sha256(address_raw).hexdigest()
 
 
-def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set, cascade_wanted: set, counts) -> tuple:
-    """Fold the verified Golden Copy reading, bound to the full publication and this population."""
-    if metadata.get("file_content") != "GLEIF_FULL_PUBLISHED":
+def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tuple[dict, object]:
+    """The verified Golden Copy reading, bound to its recipe, the full publication
+    and this population: its census header and its tables in source order."""
+    validate_metadata("level1", metadata)
+    if metadata["file_content"] != "GLEIF_FULL_PUBLISHED":
         raise Conflict("The Name Census counts a full Golden Copy, never a delta")
     header, _ = source_readings._index(deepcopy(reading), store, source_readings.INDEX_BYTES, True)
-    (artifact,) = header["artifacts"]
-    if artifact["record_count"] != metadata.get("record_count"):
-        raise Conflict("The Golden Copy reading and its publication disagree on the record count")
     recipe = rules_files.load(GLEIF_READING)
+    used = store.verified(header["contract"], max_bytes=CONTRACT_BYTES).decode("utf-8")
+    if rules_files.loads(used, str(GLEIF_READING)) != recipe:
+        raise Conflict("The Golden Copy reading was not made by census-complete-stream.yaml")
+    (artifact,) = header["artifacts"]
+    if artifact["record_count"] != metadata["record_count"]:
+        raise Conflict("The Golden Copy reading and its publication disagree on the record count")
     entry = {"input": artifact["input"], "context": artifact["context"], "lookups": artifact["lookups"]}
     lookups, _ = source_read._lookups({"version": 3}, entry, store, recipe)
     if set(lookups["wanted"]) != wanted:
         raise Conflict("The Golden Copy reading projected another SEC population's names")
-    chunks = (chunk["tables"] for _, _, chunk, _ in source_readings.iter_load(
-        reading, store, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS, allow_lookup_receipts=True))
-    legal, other, entities = name_census.fold_reading(chunks, cascade_wanted=cascade_wanted, address_counts=counts)
     gleif = {"archive_sha256": artifact["input"]["sha256"], "content_date": metadata["content_date"],
              "file_content": metadata["file_content"], "record_count": artifact["record_count"]}
-    return gleif, legal, other, entities
+    return gleif, (chunk["tables"] for _, _, chunk, _ in source_readings.iter_load(
+        reading, store, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS, allow_lookup_receipts=True))
 
 
 def write_name_frequency(*, landing_root: str, landing_manifests: list[str], gleif_reading: dict,
@@ -128,11 +136,17 @@ def write_name_frequency(*, landing_root: str, landing_manifests: list[str], gle
     A name is unique only if it is unique among all SEC filers (ticket 08), so
     every capture given is counted; a filer in two captures would make its own
     name look shared and is refused. With the Company rules' cascade switched
-    on, it runs every declared pass over the whole population. An existing
-    file is never overwritten with different content.
+    on, it runs every declared pass over one capture (ticket 20 extends the
+    cascade's addresses to several). An existing file is never overwritten
+    with different content.
     """
     if not landing_manifests:
         raise Conflict("A Name Census counts at least one SEC capture")
+    spec = cascaded.spec(POLICY)
+    on = bool(spec["passes"]) and any(t["primitive"] == cascaded.TEST for _, rule in active_rules(POLICY)
+                                      for t in rule["when"])
+    if on and len(landing_manifests) != 1:
+        raise Conflict("A cascade pass needs a census of one capture")
     root = Path(landing_root).resolve()
     store = Artifacts()
     filers, candidates, captures, addresses = [], [], [], []
@@ -144,27 +158,20 @@ def write_name_frequency(*, landing_root: str, landing_manifests: list[str], gle
             candidates.extend(found)
             captures.append(population)
             addresses.append(address)
-    if len({cik for cik, _, _ in filers}) != len(filers):
+    if len(captures) > 1 and len({cik for cik, _, _ in filers}) != len(filers):
         raise Conflict("A filer is in two of the census's captures")
     sec = captures[0] if len(captures) == 1 else {"captures": captures, "filers": len(filers)}
-    spec = cascaded.spec(POLICY)
-    on = spec["passes"] and any(t["primitive"] == cascaded.TEST for _, rule in active_rules(POLICY)
-                                for t in rule["when"])
-    if on and len(captures) == 1:
+    if on:
         sec = {**sec, "address_member_sha256": addresses[0]}
     held, wanted = name_census._sec_population(filers)
-    counts = cascaded.count_addresses(f.place for f in candidates) if on else Counter()
-    metadata = json.loads(Path(gleif_metadata).read_text())
-    gleif, legal, other, entities = _gleif(gleif_reading, store, metadata, wanted,
-                                           {f.key for f in candidates} - {""}, counts)
-    census = name_census.document(
-        sec_population=sec, gleif=gleif, held=held, wanted=wanted, legal=legal, other=other,
-        cascade={"spec": spec, "filers": candidates} if on else None,
-        entities=entities if on else (), address_counts=counts if on else None)
+    metadata = json.loads(_read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
+    gleif, readings = _gleif(gleif_reading, store, metadata, wanted)
+    census = name_census.census(sec_population=sec, gleif=gleif, held=held, wanted=wanted, readings=readings,
+                                cascade={"spec": spec, "filers": candidates} if on else None)
     data = (canonical(census) + "\n").encode()
     target = Path(output).resolve()
     if target.exists():
-        if target.read_bytes() != data:
+        if _read_bounded(target, len(data)) != data:
             raise Conflict("Existing Name Census has different content")
     else:
         target.parent.mkdir(parents=True, exist_ok=True)

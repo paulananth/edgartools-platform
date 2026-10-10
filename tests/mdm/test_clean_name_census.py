@@ -56,10 +56,6 @@ def configured(filers, records, *, cascade=None, recipe=None, population=None, a
     """The census `mdm name-census` writes: the Golden Copy through its configured
     complete reading (`census-complete-stream.yaml`), folded, then `document`.
     `cascade` is {"spec", "filers"}: the passes and every SEC filer as the cascade reads it."""
-    from collections import Counter
-
-    from edgar_warehouse.mdm.clean import cascade as cascaded
-
     held, wanted = name_census._sec_population(filers)
     spec, engine, _ = source_stream.stream_policy(recipe or files.load(COMPLETE_READING))
     found = []
@@ -68,16 +64,12 @@ def configured(filers, records, *, cascade=None, recipe=None, population=None, a
         lookups={"wanted": sorted(wanted)}, context={"publication_count": len(records)},
         ordinal_context=spec["ordinal_context"], on_reading=lambda reading, _ordinal: found.append(reading.tables),
         **{k: spec[k] for k in ("max_bytes", "max_record", "max_records", "max_depth", "min_integer", "record_encoding")})
-    on = bool(cascade and cascade["spec"]["passes"])
-    counts = cascaded.count_addresses(f.place for f in cascade["filers"]) if on else Counter()
-    legal, other, entities = name_census.fold_reading(
-        found, cascade_wanted={f.key for f in cascade["filers"]} - {""} if on else set(), address_counts=counts)
-    return name_census.document(
+    return name_census.census(
         sec_population=population or {"capture_run_id": "run-1", "filers": len(filers)},
-        gleif={"archive_sha256": archive_sha256 or hashlib.sha256(archive(records)).hexdigest(), "content_date": metadata(0)["content_date"],
-               "file_content": "GLEIF_FULL_PUBLISHED", "record_count": len(records)},
-        held=held, wanted=wanted, legal=legal, other=other, cascade=cascade if on else None,
-        entities=entities, address_counts=counts if on else None)
+        gleif={"archive_sha256": archive_sha256 or hashlib.sha256(archive(records)).hexdigest(),
+               "content_date": metadata(0)["content_date"], "file_content": "GLEIF_FULL_PUBLISHED",
+               "record_count": len(records)},
+        held=held, wanted=wanted, readings=found, cascade=cascade)
 
 
 def census(filers, records):
