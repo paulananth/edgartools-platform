@@ -320,8 +320,11 @@ mdm:
           gleif_registration_authority: Entity.RegistrationAuthority.RegistrationAuthorityID.$
           gleif_registration_authority_entity_id: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
           gleif_entity_creation_date: Entity.EntityCreationDate.$
+        # The record as GLEIF published it, and the time it states for itself
+        # (L6: what the older reader kept and stamped, now the contract's own).
         provenance:
-          native_record: _native
+          native_record: .
+        effective_at: Registration.LastUpdateDate.$
         kind_field: Entity.EntityCategory.$
         kind_values:
           GENERAL: company

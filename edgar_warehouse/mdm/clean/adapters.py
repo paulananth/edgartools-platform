@@ -135,6 +135,8 @@ def mapped_field(row: dict, name: str, spec: str | dict):
 
 
 def value(row: dict, path: str):
+    if path == ".":  # the whole record, as a provenance path names it
+        return row
     result: Any = row
     for part in path.split("."):
         if not isinstance(result, dict):
@@ -411,7 +413,9 @@ def normalize(
         record_key=key,
         publication_key=publication["publication_key"],
         revision=publication["revision"],
-        effective_at=publication.get("effective_at"),
+        # A contract may name where each record states its own time (GLEIF's
+        # LastUpdateDate); otherwise the publication states one for all.
+        effective_at=value(row, mapping["effective_at"]) if mapping.get("effective_at") else publication.get("effective_at"),
         kind=kind,
         fields=fields,
         identifiers=identifiers,

@@ -150,9 +150,11 @@ WITH_CONFIGURED_READING = {
 
 # L6 (operator ruling 2026-10-10: refusals live in the MDM contract): the checks
 # the older GLEIF reader made before mapping, as the contract's own record checks
-# with the columns they read. Awaiting the operator's approval with its evidence.
+# with the columns they read; and what it kept and stamped, the record's own time
+# (`effective_at`) and the whole record (`native_record: .`). Awaiting the
+# operator's approval with its evidence.
 WITH_REFUSALS = {
-    "level1": "9305c467d2d6b7827062cdda2db9101f6749eeaea34dcf49e84a6d3108701c30",
+    "level1": "fc104ef9284a9a4014e1a0149c683c9ae18169a6cb5dc651cd38396257aa7754",
 }
 
 
@@ -160,6 +162,9 @@ def _without_refusals(contract: dict) -> dict:
     if "reading" not in contract["adapter"]:
         return contract
     adapter = copy.deepcopy(contract["adapter"])
+    if "effective_at" in adapter:
+        adapter.pop("effective_at")
+        adapter["provenance"] = {"native_record": "_native"}
     mapped = adapter["reading"]["read"]["tables"]["mapped"]
     mapped.pop("checks", None)
     mapped["columns"] = {k: v for k, v in mapped["columns"].items() if not k.startswith("_")}
