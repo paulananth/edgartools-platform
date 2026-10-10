@@ -1,0 +1,46 @@
+{
+ "after_first_pass": {
+  "companies_open": 6414,
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312,
+   "unsupported_identity_kind": 39
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  }
+ },
+ "bindings": "9216cc18292f1c683f4767dfb86ae89c14a72f7df050df08e3800ce1e305b85b",
+ "bindings_equal_checkout_replay": true,
+ "gleif_scope_leis": 3755,
+ "goal": "whole-source census: installed empty-store Company proof",
+ "minutes": 30.8,
+ "only": null,
+ "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
+ "recovery": {
+  "item_at_kill": {
+   "attempt": "b9985863-9240-4cf4-8a6c-463bff57b4da",
+   "attempts": 1,
+   "checks": {},
+   "error": null,
+   "ordinal": 0,
+   "receipt": null,
+   "state": "running",
+   "step": "merge",
+   "unit_key": "sec-first-chunk1"
+  },
+  "killed_worker_exit": -9,
+  "rows_at_kill": {}
+ },
+ "second_pass_changed_nothing": true
+}
