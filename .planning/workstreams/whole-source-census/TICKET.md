@@ -289,3 +289,19 @@ CI on 54b8bcd0 passed; these reduction changes require their own full CI gate.
 
 - [x] Make PR886 ready at operator request and save self-contained Grok handoff, upstream/CI receipts and broader original-goal backlog; `gh pr view` verifies `isDraft=false`, receipt JSON and handoff checklist inspected. The original-source comparison is recorded on the 16:40 ET bullets above. Deferred acceptance and retirement remain incomplete. 2026-10-09 13:42 ET
 - [x] Write the handoff for Claude or Codex. `.planning/workstreams/whole-source-census/HANDOFF-20261010.md`, 2026-10-10 06:42 ET. The installed proof stays open.
+
+## Operator handoff to Claude — 2026-10-10
+
+Operator, 2026-10-10 07:08 ET: "merge and take over the goals from grok handover including the checklist". Claude owns this goal from here, on `claude/whole-source-census` (worktree `edgartools-platform-claude-census`). Source: `HANDOFF-20261010.md` (Grok, 06:42 ET). Its guards stay: no further full `source.read` execute; the checkout replay is not the installed proof; no live SEC request; `sec_client.py` stays until a live-SEC proof is allowed; `READING.md`/`COMBINING.md` edited only with the guard; new prose says Name Frequency, code names stay.
+
+- [x] Take over: handoff read; evidence present (2026-10-10 07:08 ET): saved reading, separate verify, reduction, checkout counts (`/private/tmp/codex-worker-replay-proof/`, `/private/tmp/counts-pin-20261009.json`), engine build `/private/tmp/codex-census-eof-native-site-v3`, seven bundles (`proving/cm27/bundles`, 6,726 records)
+- [ ] Installed empty PostgreSQL 16 proof: 6,414 Companies, 3,052 CIK+LEI bindings, an unchanged second pass, and recovery; a separate worker and verifier outside the checkout (no driver exists yet)
+- [ ] Replace the active Name Frequency command (`cli.py` still calls `write_name_census`)
+- [ ] Delete the old construction code once no caller remains (`gleif_source.py`: `source_publications.py`, `native_consumption.py`, `company_source.py`, `gleif_publication.py`; `adapters.py`: `mdm_merge.py`, `name_census.py`, `cli.py`, `company_source.py`, `gleif_source.py`, `quality.py`, `store.py`)
+- [ ] Issue 20 L4: whole-capture Company equivalence, then delete `company_source.py` (14 original columns match on 1,000 pinned submissions; the current read also carries `last_sync_run_id`, `last_synced_at`)
+- [ ] Issue 20 L6: Golden Copy equivalence of the older GLEIF reader, then delete `gleif_source.py` (52 in-memory fixture tests passed 2026-10-09 20:37 ET)
+- [ ] Issue 20 L8: a configured `provider.capture` worker, then delete `sec_client.py` (needs the operator's permission for a live SEC proof)
+- [ ] Issue 20 20c: Company through the engine only (the four Company-named steps renamed to registered profiles, or removed)
+- [ ] Issue 20 20d: Person through the engine only (blocked by 20c)
+- [ ] Skill audit remainder: installed separate-process qualification, full CI, independent review, a reviewable PR for any skill edit (`READING.md` and `COMBINING.md` still use the old wording)
+
