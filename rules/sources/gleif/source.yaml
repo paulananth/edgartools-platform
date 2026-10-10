@@ -417,7 +417,55 @@ mdm:
             tables:
               mapped:
                 each: .
+                checks:
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`), in its
+                # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
+                - check: lei
+                  column: _start
+                  on_fail: defer
+                - check: lei
+                  column: _end
+                  on_fail: defer
+                - check: in_set
+                  column: _start_type
+                  values: [LEI]
+                  reason: unsupported_relationship_endpoint
+                  on_fail: defer
+                - check: in_set
+                  column: _end_type
+                  values: [LEI]
+                  reason: unsupported_relationship_endpoint
+                  on_fail: defer
+                # A flag with a value blocks until someone decides (ticket 18).
+                - check: absent
+                  column: _deletion
+                  reason: gleif_deletion_flag
+                  on_fail: defer
                 columns:
+                  _start:
+                    value:
+                      path: RelationshipRecord.Relationship.StartNode.NodeID.$
+                      type: text
+                      path_mode: literal
+                  _end:
+                    value:
+                      path: RelationshipRecord.Relationship.EndNode.NodeID.$
+                      type: text
+                      path_mode: literal
+                  _start_type:
+                    value:
+                      path: RelationshipRecord.Relationship.StartNode.NodeIDType.$
+                      type: text
+                      path_mode: literal
+                  _end_type:
+                    value:
+                      path: RelationshipRecord.Relationship.EndNode.NodeIDType.$
+                      type: text
+                      path_mode: literal
+                  _deletion:
+                    value:
+                      path: RelationshipRecord.Extension.gleif:Deletion
+                      path_mode: literal
                   fields:
                     object:
                       fields: {}
@@ -431,31 +479,50 @@ mdm:
         field_shape: nullable_text
         fields: {}
         provenance:
-          native_record: _native
+          native_record: .
         kind: company
+        # Read from the GLEIF record as published (L6: what the older reader built
+        # first, now the contract's own paths, with the record's own time).
+        effective_at: RelationshipRecord.Registration.LastUpdateDate.$
         record_key:
-        - start
-        - end
-        - relationship_type
+        - RelationshipRecord.Relationship.StartNode.NodeID.$
+        - RelationshipRecord.Relationship.EndNode.NodeID.$
+        - RelationshipRecord.Relationship.RelationshipType.$
         relationships:
-        - type_field: relationship_type
+        - type_field: RelationshipRecord.Relationship.RelationshipType.$
           type_values:
             IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
             IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
           # The link starts at the child's Level 1 record, not at this
           # relationship record (platform validation 06a).
           source_key:
-          - start
+          - RelationshipRecord.Relationship.StartNode.NodeID.$
           source_source: gleif.level1.v1
           target_key:
-          - end
+          - RelationshipRecord.Relationship.EndNode.NodeID.$
           target_source: gleif.level1.v1
-          valid_from: valid_from
-          valid_to: valid_to
+          # GLEIF lists several periods; the relationship's own is the one
+          # RELATIONSHIP_PERIOD, and a record with none or several waits.
+          find:
+            period:
+              in: RelationshipRecord.Relationship.RelationshipPeriods.RelationshipPeriod
+              where:
+                PeriodType.$: RELATIONSHIP_PERIOD
+              one: ambiguous_relationship_period
+          valid_from: period.StartDate.$
+          valid_to: period.EndDate.$
+          time_format: instant
+          interval:
+            reason: invalid_relationship_interval
+          status:
+            path: RelationshipRecord.Relationship.RelationshipStatus.$
+            values: [ACTIVE, INACTIVE]
+            need_end: [INACTIVE]
+            reason: invalid_relationship_status_interval
           scope: GLEIF accounting consolidation
           properties:
-            source_relationship_status: status
-            source_registration_status: registration_status
+            source_relationship_status: RelationshipRecord.Relationship.RelationshipStatus.$
+            source_registration_status: RelationshipRecord.Registration.RegistrationStatus.$
   gleif.reporting_exceptions.v1:
     contract:
       provider: GLEIF

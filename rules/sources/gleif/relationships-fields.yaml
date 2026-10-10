@@ -14,7 +14,55 @@ read:
   tables:
     mapped:
       each: .
+      checks:
+      # The checks the older reader made before mapping (`gleif_source.record_evidence`), in its
+      # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
+      - check: lei
+        column: _start
+        on_fail: defer
+      - check: lei
+        column: _end
+        on_fail: defer
+      - check: in_set
+        column: _start_type
+        values: [LEI]
+        reason: unsupported_relationship_endpoint
+        on_fail: defer
+      - check: in_set
+        column: _end_type
+        values: [LEI]
+        reason: unsupported_relationship_endpoint
+        on_fail: defer
+      # A flag with a value blocks until someone decides (ticket 18).
+      - check: absent
+        column: _deletion
+        reason: gleif_deletion_flag
+        on_fail: defer
       columns:
+        _start:
+          value:
+            path: RelationshipRecord.Relationship.StartNode.NodeID.$
+            type: text
+            path_mode: literal
+        _end:
+          value:
+            path: RelationshipRecord.Relationship.EndNode.NodeID.$
+            type: text
+            path_mode: literal
+        _start_type:
+          value:
+            path: RelationshipRecord.Relationship.StartNode.NodeIDType.$
+            type: text
+            path_mode: literal
+        _end_type:
+          value:
+            path: RelationshipRecord.Relationship.EndNode.NodeIDType.$
+            type: text
+            path_mode: literal
+        _deletion:
+          value:
+            path: RelationshipRecord.Extension.gleif:Deletion
+            path_mode: literal
         fields:
           object:
             fields: {}

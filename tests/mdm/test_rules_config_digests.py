@@ -156,6 +156,22 @@ WITH_CONFIGURED_READING = {
 # the same outcome both ways; the whole-file comparison was running).
 WITH_REFUSALS = {
     "level1": "fc104ef9284a9a4014e1a0149c683c9ae18169a6cb5dc651cd38396257aa7754",
+    # The relationships contract reads the GLEIF record as published: keys and ends by
+    # path, the one RELATIONSHIP_PERIOD by `find ... one`, ISO instants, the interval and
+    # status rules. Awaiting the operator's approval with its evidence.
+    "relationships": "78cb4dd50732ac563a65aa5fb4581237266be617307ac73519a378df6f02fb97",
+}
+
+
+# What the relationships contract read before L6: the row the older reader built.
+BUILT_ROW_RELATIONSHIP = {
+    "type_field": "relationship_type",
+    "type_values": {"IS_DIRECTLY_CONSOLIDATED_BY": "IS_DIRECTLY_CONSOLIDATED_BY",
+                    "IS_ULTIMATELY_CONSOLIDATED_BY": "IS_ULTIMATELY_CONSOLIDATED_BY"},
+    "source_key": ["start"], "source_source": "gleif.level1.v1",
+    "target_key": ["end"], "target_source": "gleif.level1.v1",
+    "valid_from": "valid_from", "valid_to": "valid_to", "scope": "GLEIF accounting consolidation",
+    "properties": {"source_relationship_status": "status", "source_registration_status": "registration_status"},
 }
 
 
@@ -163,6 +179,9 @@ def _without_refusals(contract: dict) -> dict:
     if "reading" not in contract["adapter"]:
         return contract
     adapter = copy.deepcopy(contract["adapter"])
+    if adapter.get("native_member") == "relationships" and "effective_at" in adapter:
+        adapter["record_key"] = ["start", "end", "relationship_type"]
+        adapter["relationships"] = [copy.deepcopy(BUILT_ROW_RELATIONSHIP)]
     if "effective_at" in adapter:
         adapter.pop("effective_at")
         adapter["provenance"] = {"native_record": "_native"}
@@ -219,8 +238,9 @@ def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     assert [r["source_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    assert digest(gleif_source.dataset_contract("relationships")) == WITH_CONFIGURED_READING["relationships"]
-    assert digest(_without_configured_reading(gleif_source.dataset_contract("relationships"))) == WITH_LINK_START["relationships"]
+    contract = gleif_source.dataset_contract("relationships")
+    assert digest(contract) == WITH_REFUSALS["relationships"]
+    assert digest(_without_configured_reading(_without_refusals(contract))) == WITH_LINK_START["relationships"]
 
 
 def test_an_unknown_gleif_member_is_refused():
