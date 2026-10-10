@@ -33,6 +33,37 @@ Read these before anything else. Breaking one is never the right call.
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
+## Tell the discovery story as you work
+
+**Coordination note for every LLM (operator, 2026-10-09):** preserve this section
+and data-profiling's live narration requirements when revising either skill.
+Read the latest versions before editing; an older worktree or skill copy must
+not overwrite them. Changing or removing these requirements needs the
+operator's explicit instruction. Coordinate overlapping edits through the
+repository's ownership guard.
+
+Before the first investigation command, read and follow data-profiling's
+[Tell the discovery story as you work](../data-profiling/SKILL.md#tell-the-discovery-story-as-you-work).
+Its live-update cadence and long-command handling apply throughout onboarding,
+including discovery, mapping, quality checks, testing and activation. Keep the
+conversation updated while another skill or a command does the work.
+
+At each phase transition, explain what the previous evidence established,
+which question the next phase answers, and why that check is needed. As you
+discover fields, identifiers, unsupported formats, defects or missing workers,
+tell the operator what you found and how it changes the proposed onboarding.
+Distinguish exploratory findings, approved mappings, local test results and
+verified activation. A successful command proves only what it actually checks.
+
+For example: “The exported rows profile successfully, but the original workbook
+reader still refuses this format. This establishes exploratory field counts;
+production reading remains unqualified. I’ll reconcile the export with the
+original cells next.” Use only facts established in the current investigation.
+
+At a question or approval pause, explain the evidence and your recommendation,
+then follow the existing approval gate. Record the discovery milestones and
+unresolved questions in the onboarding log as well as explaining them live.
+
 ## What you produce
 
 Everything lives in YAML files under `rules/` in this repo. People review
@@ -132,6 +163,19 @@ A new data set runs **discover → plan-parts**, then each part runs
 switch-on**. Set up the Rules Database first if it is not there (**init**).
 
 ### discover: profile the whole data set first
+
+Before running profiling, inventory the captured formats against its supported
+inputs. When an input is unsupported, record the actual reader refusal. Keep
+that format gap separate from any exploratory export: a profile of an export
+does not qualify reading the original capture or the installed worker path.
+
+An investigative export must retain the raw capture hash, the exporter and its
+version/hash, explicit sheet or region selections, original row coordinates,
+and output hashes. Reconcile rows and cell values, preserving identifier text,
+leading zeros, types, blanks, and every excluded header or metadata region in
+the audit. Record unmeasured regions and unknown meanings in the onboarding
+log. Bring findings to the operator before choosing keys, kinds or bindings;
+leave production format support open until it has its own qualification.
 
 Use the [data-profiling](../data-profiling/SKILL.md) skill on every file or
 table of the data set, unless approved findings for these same copies already
@@ -586,6 +630,4 @@ These name today's sources only as examples; nothing above depends on them.
   (`candidate()` stamps the copied policy); ticket 27's
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
   about 25 minutes, a second pass that changes nothing).
-- **Unfinished live pipelines:** Company catalog and census joins and GLEIF
-  streaming were unfinished when this was written (see Codex's retirement
-  tickets).
+- **Unfinished live pipelines:** Company whole-capture equivalence, active Name Frequency caller replacement, the installed 6,414 Company proof, and deletion of `gleif_source.py` remain open.
