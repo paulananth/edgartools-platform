@@ -1,0 +1,43 @@
+{
+ "after_first_pass": {
+  "companies_open": 6414,
+  "decisions_by_rule": {
+   "company-cik": 6414
+  },
+  "open_reviews": {
+   "classification_deferred": 312
+  },
+  "stage_bound": {
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "sec.submissions.company.v1:company": 6414
+  }
+ },
+ "bindings": "67749419118e9df5b13b0ad4fc277c9612ec07f8e1434e7078cc6cb4a1270af8",
+ "bindings_equal_checkout_replay": null,
+ "gleif_scope_leis": 0,
+ "goal": "whole-source census: installed empty-store Company proof",
+ "minutes": 5.0,
+ "only": "sec",
+ "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
+ "recovery": {
+  "item_at_kill": {
+   "attempt": "1fa91227-75bd-481c-b8f5-17f4a62aba18",
+   "attempts": 1,
+   "checks": {},
+   "error": null,
+   "ordinal": 0,
+   "receipt": null,
+   "state": "running",
+   "step": "merge",
+   "unit_key": "sec-first-chunk1"
+  },
+  "killed_worker_exit": -9,
+  "resumed_attempts": 2,
+  "rows_at_kill": {
+   "sec.submissions.company.v1:company": 919
+  }
+ },
+ "second_pass_changed_nothing": true
+}

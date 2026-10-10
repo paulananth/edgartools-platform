@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +19,7 @@ from edgar_warehouse.mdm.clean.store import (
     migrate,
     register_policy,
 )
+from tests.support import pg16
 from tests.support.rules_authority import register_dataset
 
 IMAGE = "postgres:16-alpine"
@@ -41,53 +41,25 @@ class Database:
 
 @pytest.fixture(scope="module")
 def postgres():
-    docker("image", "inspect", IMAGE)
-    name = f"clean-mdm-test-{uuid4().hex[:10]}"
-    docker(
-        "run",
-        "-d",
-        "--rm",
-        "--name",
-        name,
-        "-p",
-        "127.0.0.1::5432",
-        "-e",
-        "POSTGRES_PASSWORD=test",
-        IMAGE,
-    )
-    port = None
-    try:
-        port = docker("port", name, "5432/tcp").rsplit(":", 1)[1]
-        admin = create_engine(
-            f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres"
-        )
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            try:
-                with admin.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                break
-            except DBAPIError:
-                time.sleep(0.1)
-        else:
-            pytest.fail("PostgreSQL did not become ready")
-        with admin.begin() as conn:
-            conn.execute(
-                text(
-                    "CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"
+    # Docker in CI; PG16_SERVER=pgserver runs on a local PostgreSQL 16 (tests/support/pg16.py).
+    with pg16.server() as server:
+        admin = create_engine(server.url())
+        app = None
+        try:
+            with admin.begin() as conn:
+                conn.execute(
+                    text(
+                        "CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"
+                    )
                 )
-            )
-        app = create_engine(
-            f"postgresql+psycopg2://clean_application:test@127.0.0.1:{port}/postgres"
-        )
-        yield admin, app
-        app.dispose()
-        admin.dispose()
-    finally:
-        docker("stop", name)
-        # The next module's container may be given the same port.
-        if port:
-            _templates.pop(int(port), None)
+            app = create_engine(server.url(user="clean_application"))
+            yield admin, app
+        finally:
+            if app is not None:
+                app.dispose()
+            admin.dispose()
+            # The next module's server may be given the same port.
+            _templates.pop(admin.url.port, None)
 
 
 # Each module's first test migrates a template database once (checking a
