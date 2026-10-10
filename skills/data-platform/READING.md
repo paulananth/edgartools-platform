@@ -1291,3 +1291,39 @@ The interpreter retains ordinary functions and declared expressions:
 Text and regex work bounds continue to apply. JSON preservation settings and
 compiled text recipes are fixed at compilation; streaming does not re-walk or
 re-hash complete recipes for every record.
+
+## One table from a ZIP of tables, and declared text encodings
+
+A published archive often holds many tables, one file each. Name the one a
+contract reads with `read.member`, a pattern over the member names (`*` for any
+run of characters, `?` for one; 1 to 256 bytes); it needs `container: zip`:
+
+```yaml
+read:
+  format: csv
+  container: zip
+  member: "Table_B_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 200000000, max_member_bytes: 100000000, max_records: 1000000}
+  tables:
+    rows:
+      each: record
+      columns:
+        name: {text: {path: Name}}
+```
+
+Exactly one member must match: none, or more than one, refuses the artifact
+with `zip_members`, and so does an encrypted member. Without `member`, the
+archive must hold exactly one member, as before. The member is read no further
+than `max_member_bytes`; a larger one refuses with `limit_exceeded`.
+
+CSV text is UTF-8 unless `read.encoding` declares otherwise (CSV only):
+`utf-8` or `windows-1252`, or the list `[utf-8, windows-1252]` for a source
+whose publications changed encoding: an artifact whose bytes are valid UTF-8
+is read as UTF-8, any other as windows-1252. UTF-8 comes first or not at all,
+since windows-1252 reads nearly any bytes. A byte no declared encoding defines
+refuses the artifact with `encoding`; invalid UTF-8 under `utf-8` alone refuses
+with `malformed`. Nothing is replaced or guessed. The one case the list cannot
+tell apart is a windows-1252 file whose accented letters happen to form valid
+UTF-8 pairs; profile the source's publications before choosing the list, and
+prefer a single encoding when every publication shares one.
