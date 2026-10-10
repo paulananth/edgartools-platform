@@ -75,8 +75,13 @@ mdm:
       semantics: patch
       completeness: the custodians holding 10% or more of an adviser's separately
         managed account assets, named in one month's filings; no retirement by absence
+      # A custodian named only by an LEI that fails its check digits (36
+      # custodians, 76 records over 13 months) is set aside for a steward and
+      # the feed keeps loading (operator, 2026-10-09: "Set aside, non-blocking
+      # (Recommended)").
       nonblocking_deferred_reasons:
       - quality_custodian_name_present
+      - invalid_lei_checksum
       adapter:
         version: iapd-adv-custodian-csv-v1
         retain_deferred: true
