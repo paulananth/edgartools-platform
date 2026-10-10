@@ -148,13 +148,17 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
                     shutil.copy2(item, target / item.name)
             manifest = json.loads((source / "manifest.json").read_text())
             manifest["policy_digest"] = policy
+            # Each pass's batches are its own, as a fresh capture's would be: a repeat of the
+            # first pass's batch ids would be skipped as already merged, never mastered again.
+            for batch in manifest["batches"]:
+                batch["batch_id"], batch["consumer"] = f"{batch['batch_id']}:{tag}", f"{batch['consumer']}:{tag}"
             ref = store.put_bytes((target / "manifest.json").as_uri(), json.dumps(manifest).encode())
             merge.append({"keys": {"batch_id": f"{tag}-chunk{n}", "consumer": "sec.submissions.company.v1"},
                           "input": ref, "output": (tmp_path / tag / f"merged-chunk{n}.json").as_uri(), "cursor": {}})
         return store.put(tmp_path.as_uri(), {"version": 2, "steps": {"merge": merge}})
 
     # GLEIF: the Level 1 reading with its approved scope filled; one artifact, the whole archive.
-    def gleif_units(tag: str) -> dict:
+    def gleif_units(tag: str) -> tuple[dict, int]:
         (cache,) = WORK.glob("gleif-rows-*.jsonl")
         leis = sorted({json.loads(line)[1]["LEI"]["$"] for line in cache.open()})
         contract = files.load(files.ROOT / "sources/gleif/level1-json.yaml")
@@ -237,8 +241,8 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
         with mdm_reader.connect() as conn:
             return counts(conn), bindings(conn)
 
-    # First SEC pass, with a recovery: the first worker is killed while it holds an
-    # item, before the item's one merge transaction commits (rows land only on commit).
+    # First SEC pass, with a recovery: the first worker is killed while it holds an item
+    # after an earlier item has committed (an item's rows land in one transaction, on commit).
     run_id = submit("sec", sec_first)
     killed = subprocess.Popen([str(python), "-I", *entry, "workers", "work", "mdm.merge", run_id, "--limit", "100"],
                               env={**os.environ, **worker}, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -247,7 +251,7 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
     while killed.poll() is None and time.monotonic() < deadline:
         items = json.loads(cli("bookkeeping", "status", run_id))["items"]
         held = next((i for i in items if i["state"] == "running"), None)
-        if held:
+        if held and snapshot()[0]["stage_records"]:
             killed.send_signal(signal.SIGKILL)
             break
         time.sleep(0.2)
@@ -256,8 +260,13 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
                 "rows_at_kill": snapshot()[0]["stage_records"]}
     say(stage="worker killed", **recovery)
     assert killed.returncode == -signal.SIGKILL, "the worker finished before it was killed"
+    assert recovery["rows_at_kill"], "no earlier item had committed when the worker was killed"
     time.sleep(LEASE_SECONDS + 5)  # its lease lapses; the run resumes under a new worker
     finish(run_id, ("mdm.merge",))
+    resumed = next(i for i in json.loads(cli("bookkeeping", "status", run_id))["items"]
+                   if i["unit_key"] == held["unit_key"])
+    recovery["resumed_attempts"] = resumed["attempts"]
+    assert resumed["state"] == "verified" and resumed["attempts"] == held["attempts"] + 1, resumed
     if only != "sec":
         finish(submit("gleif", gleif_first), ("source.read", "mdm.prepare", "mdm.merge"))
     first, first_bindings = snapshot()
@@ -282,5 +291,6 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
     say(stage="report", **report)
     assert report["second_pass_changed_nothing"]
     assert first["stage_bound"].get(SEC) == 6414
+    assert report["bindings_equal_checkout_replay"] in (True, None)
     if only != "sec":
         assert first["companies_open"] == 6414 and first["stage_bound"].get(GLEIF) == 3052

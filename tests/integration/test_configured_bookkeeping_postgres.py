@@ -60,16 +60,6 @@ def databases():
                 return value
 
             setup = engine("postgres")
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline:
-                try:
-                    with setup.connect() as conn:
-                        conn.execute(text("SELECT 1"))
-                    break
-                except DBAPIError:
-                    time.sleep(0.1)
-            else:
-                pytest.fail("PostgreSQL host connection did not become ready")
             with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                 for role in ("bk_runtime", "bk_verifier", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
                     conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
@@ -946,16 +936,6 @@ def _provision(server, monkeypatch, runpy):
         url = server.url(driver="postgresql")
         admin = create_engine(url, connect_args={"connect_timeout": 3})
         engines.append(admin)
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            try:
-                with admin.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                break
-            except DBAPIError:
-                time.sleep(0.1)
-        else:
-            pytest.fail("Provisioning acceptance PostgreSQL unavailable")
         monkeypatch.setenv("BOOKKEEPING_CLEAN_RUNTIME_PASSWORD", "test")
         monkeypatch.setenv("RULES_AGENT_PASSWORD", "test")
         script = Path(__file__).parents[2] / "infra/scripts/provision-clean-bookkeeping.py"

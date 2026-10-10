@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,16 +46,6 @@ def postgres():
         admin = create_engine(server.url())
         app = None
         try:
-            deadline = time.monotonic() + 30
-            while time.monotonic() < deadline:
-                try:
-                    with admin.connect() as conn:
-                        conn.execute(text("SELECT 1"))
-                    break
-                except DBAPIError:
-                    time.sleep(0.1)
-            else:
-                pytest.fail("PostgreSQL did not become ready")
             with admin.begin() as conn:
                 conn.execute(
                     text(
