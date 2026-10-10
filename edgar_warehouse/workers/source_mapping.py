@@ -40,15 +40,17 @@ def read_record(row: dict, reading: dict):
 
 def record_refusal(row: dict, reading: dict) -> str | None:
     """The reason a declared record check (`checks:` on the mapped table) sets
-    this record aside, or None. Only the checks run, never a column, so the
-    caller decides where a refusal falls in its own order."""
+    this record aside, or None. Only the checks run, with the columns they
+    name, so the caller decides where a refusal falls in its own order."""
     body = json.loads(json.dumps(reading, ensure_ascii=False, allow_nan=False))
     tables = body.get("read", {}).get("tables", {})
     if set(tables) != {"mapped"}:
         raise SourceRejected("contract", "record mapping requires one mapped table")
     if not tables["mapped"].get("checks"):
         return None
-    tables["mapped"]["columns"] = {}
+    named = {check["column"] for check in tables["mapped"]["checks"] if isinstance(check, dict) and "column" in check}
+    tables["mapped"]["columns"] = {name: spec for name, spec in tables["mapped"].get("columns", {}).items()
+                                   if name in named}
     result = read_record(row, body)
     if not result.deferred:
         return None
@@ -66,6 +68,8 @@ def project_record(row: dict, reading: dict, *, column: str) -> dict:
     # Full compilation is cached by immutable content; runtime remains selective.
     _engine(json.dumps(body, sort_keys=True, ensure_ascii=False, allow_nan=False))
     tables["mapped"]["columns"] = {column: tables["mapped"]["columns"][column]}
+    # Record checks are the caller's refusal step (`record_refusal`); a projection projects.
+    tables["mapped"].pop("checks", None)
     inputs = body.get("input_fields")
     if "input_fields" in body:
         if (not isinstance(inputs, list) or not 1 <= len(inputs) <= 128

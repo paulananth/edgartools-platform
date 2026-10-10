@@ -7,6 +7,8 @@ register different rules: the live Company policy is `983352e8…4049`.
 
 from __future__ import annotations
 
+import copy
+
 
 import pytest
 
@@ -146,6 +148,24 @@ WITH_CONFIGURED_READING = {
 }
 
 
+# L6 (operator ruling 2026-10-10: refusals live in the MDM contract): the checks
+# the older GLEIF reader made before mapping, as the contract's own record checks
+# with the columns they read. Awaiting the operator's approval with its evidence.
+WITH_REFUSALS = {
+    "level1": "9305c467d2d6b7827062cdda2db9101f6749eeaea34dcf49e84a6d3108701c30",
+}
+
+
+def _without_refusals(contract: dict) -> dict:
+    if "reading" not in contract["adapter"]:
+        return contract
+    adapter = copy.deepcopy(contract["adapter"])
+    mapped = adapter["reading"]["read"]["tables"]["mapped"]
+    mapped.pop("checks", None)
+    mapped["columns"] = {k: v for k, v in mapped["columns"].items() if not k.startswith("_")}
+    return {**contract, "adapter": adapter}
+
+
 def _without_configured_reading(contract: dict) -> dict:
     return {**contract, "adapter": {k: v for k, v in contract["adapter"].items() if k != "reading"}}
 
@@ -174,6 +194,8 @@ def _without_invalid_lei(contract: dict) -> dict:
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_source.dataset_contract(member)
+    assert digest(contract) == WITH_REFUSALS.get(member, WITH_CONFIGURED_READING[member])
+    contract = _without_refusals(contract)
     assert digest(contract) == WITH_CONFIGURED_READING[member]
     contract = _without_configured_reading(contract)
     assert digest(contract) == WITH_SUCCESSOR.get(member, WITH_LINK_START.get(member, WITH_INVALID_LEI[member]))

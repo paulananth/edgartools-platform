@@ -36,8 +36,9 @@ def test_a_check_names_its_reason_and_a_passing_record_has_none():
 
 
 def test_a_reading_without_checks_refuses_nothing():
-    assert record_refusal(record(Extension={"gleif:Deletion": {"$": "x"}}),
-                          files.source("gleif")["mdm"]["gleif.level1.v1"]["contract"]["adapter"]["reading"]) is None
+    reading = copy.deepcopy(files.source("gleif")["mdm"]["gleif.level1.v1"]["contract"]["adapter"]["reading"])
+    reading["read"]["tables"]["mapped"].pop("checks")
+    assert record_refusal(record(Extension={"gleif:Deletion": {"$": "x"}}), reading) is None
 
 
 def test_the_refusal_comes_before_the_kind():
