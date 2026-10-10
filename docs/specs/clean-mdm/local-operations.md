@@ -122,18 +122,22 @@ missing generations return 404. An unconfigured v2 API has no v2 routes.
 
 The SEC-to-GLEIF matching rules (ticket 08) bind only a name no other SEC
 filer or GLEIF legal entity carries. The census counts that once, over the
-whole SEC capture (`sec_company` current names and `sec_company_former_name`)
-and a full GLEIF Level 1 Golden Copy (legal and other names, branches
-excluded). It refuses a delta. Each SEC capture is read through its configured
-Rules by the `source.read` worker and its verifier. The Golden Copy arrives as
+whole SEC population (each filer's current and former names) and a full GLEIF
+Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
+delta. The population file lists the receipt keys of the main submissions
+documents counted; each is read from the capture folder (`receipts.jsonl` and
+`bronze/`) through `rules/sources/sec.submissions.company/census-raw.yaml` by the
+`source.read` worker and its verifier, two documents a unit, and must match its
+receipt. The matching cascade is refused while switched on: it has no configured
+reading here yet. The Golden Copy arrives as
 one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
 (about an hour for 3.4 million records); the command checks that the reading
-projected exactly the names these captures hold. It needs local files only:
+projected exactly the names this population holds. It needs local files only:
 
 ```bash
 edgar-warehouse mdm name-census \
-  --landing-root "$COMPANY_LANDING_ROOT" \
-  --landing-manifest "$COMPANY_LANDING_MANIFEST" \
+  --capture "$SEC_SUBMISSIONS_CAPTURE" \
+  --population "$SEC_POPULATION_JSON" \
   --gleif-reading "$GLEIF_CENSUS_READING_JSON" \
   --gleif-reading-sha256 "$GLEIF_CENSUS_READING_SHA256" \
   --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \

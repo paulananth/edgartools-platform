@@ -21,8 +21,8 @@ from edgar_warehouse.mdm.clean.company_source import (
     write_bronze_receipts,
 )
 from edgar_warehouse.mdm.clean.company_prepare import prepare_company_bundle
-from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
-from edgar_warehouse.mdm.clean.store import Conflict
+
+from edgar_warehouse.mdm.clean.store import Conflict, canonical
 from tests.support.retired_company_address import business_address
 from tests.mdm.test_clean_activation import proof
 
@@ -189,15 +189,31 @@ def gleif_reading(folder, archive, wanted, count):
 
 
 def name_frequency(tmp_path, root, manifests, gleif, filers, output):
-    """`mdm name-census` over these captures and a Golden Copy of `gleif` records."""
-    from edgar_warehouse.mdm.clean.name_census import _sec_population
+    """A Name Census naming these landed captures, written by the retained independent
+    oracle: `mdm name-census` now counts the raw capture (Issue 20 L4), and these
+    landed fixtures stay until Company preparation reads the raw capture too."""
+    import io
+
+    from tests.support import retired_name_census
 
     folder = tmp_path / f"golden-{output.stem}"
     folder.mkdir()
     archive, metadata, _ = gleif_archive(folder, gleif)
-    reading = gleif_reading(folder / "reading", archive, _sec_population(filers)[1], len(gleif))
-    return write_name_frequency(landing_root=str(root), landing_manifests=[str(m) for m in manifests],
-                                gleif_reading=reading, gleif_metadata=str(metadata), output=str(output))
+    captures = []
+    for manifest in manifests:
+        landing = json.loads(Path(manifest).read_text())
+        member = lambda table: next((t for t in landing["tables"] if t["table_name"] == table), None)  # noqa: E731
+        digest_of = lambda table: (hashlib.sha256((root / member(table)["relative_path"]).read_bytes()).hexdigest()  # noqa: E731
+                                   if member(table) else None)
+        captures.append({"capture_run_id": landing["run_id"], "company_member_sha256": digest_of("sec_company"),
+                         "former_name_member_sha256": digest_of("sec_company_former_name"),
+                         "filers": pq.read_metadata(root / member("sec_company")["relative_path"]).num_rows})
+    sec = captures[0] if len(captures) == 1 else {"captures": captures, "filers": len(filers)}
+    census = retired_name_census.build(filers=filers, sec_population=sec, gleif_archive=io.BytesIO(archive.read_bytes()),
+                                       gleif_metadata=json.loads(metadata.read_text()),
+                                       gleif_sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+    Path(output).write_text(canonical(census) + "\n")
+    return census
 
 
 def filers_of(rows, former):
@@ -356,9 +372,10 @@ def test_prepared_bundle_is_bounded_pinned_and_idempotent(tmp_path):
 
 
 def test_preparation_rejects_capture_mismatch_and_false_manifest_count(tmp_path):
-    # The Name Census reads the whole capture first and refuses it already.
+    # Preparation's configured combination fences each row to the capture run.
+    other = landing(tmp_path / "a", [source_row(123, last_sync_run_id="other-run")])
     with pytest.raises(Conflict, match="different capture run"):
-        landing(tmp_path / "a", [source_row(123, last_sync_run_id="other-run")])
+        prepare_company_bundle(**other)
     args = landing(tmp_path, [source_row(123)])
     path = Path(args["landing_manifest"])
     body = json.loads(path.read_text())
@@ -792,8 +809,6 @@ class TestMatchingEvidenceIsPinned:
         assert record["name_census"]["ciks"] == ["0000320193", "0000789019"]
         prepare_company_bundle(**{**args, "landing_manifest": str(second), "name_census": str(census),
                                   "output": str(tmp_path / "second-bundle")})
-        with pytest.raises(Conflict, match="two of the census's captures"):
-            name_frequency(tmp_path, root, [args["landing_manifest"]] * 2, [], both[:1], tmp_path / "twice.json")
 
     def test_a_census_of_another_capture_is_refused(self, tmp_path):
         args = landing(tmp_path, [source_row(123)])
