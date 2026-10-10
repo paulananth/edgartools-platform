@@ -19,7 +19,8 @@ Inputs, on this machine only (no provider request):
 
 Passes: the SEC target with a recovery (its first worker is killed mid-run and
 a later worker finishes the same run), then the GLEIF target, then both again
-as new runs. Expected: 6,414 Companies, 3,052 GLEIF Level 1 records bound, the
+as new runs: the SEC bundles again, and the GLEIF reading the first pass
+verified, prepared and merged again under its own consumer. Expected: 6,414 Companies, 3,052 GLEIF Level 1 records bound, the
 second pass changes nothing, and the bindings equal the checkout replay's
 (`/private/tmp/counts-pin-20261009.json`, 9216cc18…).
 
@@ -34,6 +35,7 @@ COMPANY_PROOF_ONLY=sec (the SEC target alone, to check the plumbing).
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import shutil
@@ -75,6 +77,11 @@ PIPELINE = {"pipeline": "installed-company-proof", "bookkeeping": {"version": 1,
         {"name": "read", "operation": "source.read", "requires": [], "key": "{batch_id}",
          "leases": ["source-output:{batch_id}"], "checks": ["input.hash", "output.receipt", "source.output"]},
         {"name": "prepare", "operation": "mdm.prepare", "requires": ["read"], "key": "{batch_id}",
+         "leases": ["mdm-prepare:{batch_id}"], "checks": ["input.hash", "output.receipt", "mdm.prepared"]},
+        {**MERGE, "requires": ["prepare"]}]),
+    # The second GLEIF pass: the same verified reading prepared and merged again.
+    "gleif-replay": TARGET([
+        {"name": "prepare", "operation": "mdm.prepare", "requires": [], "key": "{batch_id}",
          "leases": ["mdm-prepare:{batch_id}"], "checks": ["input.hash", "output.receipt", "mdm.prepared"]},
         {**MERGE, "requires": ["prepare"]}])}}}
 
@@ -173,6 +180,20 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
             "merge": [{"keys": keys, "input": {"from": {"step": "prepare", "key": keys["batch_id"]}},
                        "output": (base / "merged.json").as_uri(), "cursor": {}}]}}), len(leis)
 
+    def replay_units(tag: str, first: str) -> dict:
+        """The first pass's verified Golden Copy reading, prepared and merged again under its own consumer.
+        Reading the 13 GB archive again would only repeat what `source.read`'s verifier recomputed."""
+        reading = tmp_path / first / "reading.json"
+        ref = {"uri": reading.as_uri(), "sha256": hashlib.sha256(reading.read_bytes()).hexdigest()}
+        keys = {"batch_id": f"{tag}-level1", "consumer": f"gleif.level1.v1:{tag}"}
+        base = tmp_path / tag
+        return store.put(tmp_path.as_uri(), {"version": 2, "steps": {
+            "prepare": [{"keys": {**keys, "table": "level1", "dataset": GLEIF, "record_column": "record",
+                                  "policy": policy, "as_of": AS_OF},
+                         "input": ref, "output": (base / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
+            "merge": [{"keys": keys, "input": {"from": {"step": "prepare", "key": keys["batch_id"]}},
+                       "output": (base / "merged.json").as_uri(), "cursor": {}}]}})
+
     sec_first = sec_units("sec-first")
     gleif_first, scope = gleif_units("gleif-first") if only != "sec" else (None, 0)
     saved = databases.rules.save("pipeline", PIPELINE["pipeline"], "1", PIPELINE)
@@ -247,7 +268,7 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
     # Second pass: new runs over the same inputs.
     finish(submit("sec", sec_units("sec-second")), ("mdm.merge",))
     if only != "sec":
-        finish(submit("gleif", gleif_units("gleif-second")[0]), ("source.read", "mdm.prepare", "mdm.merge"))
+        finish(submit("gleif-replay", replay_units("gleif-second", "gleif-first")), ("mdm.prepare", "mdm.merge"))
     second, second_bindings = snapshot()
 
     report = {
