@@ -27,7 +27,7 @@ Leave the function registry and worker adapter interfaces. A single versioned sc
 - Existing census: `~/.local/share/edgartools/clean-mdm/proving/cm27/census.json` (5.5 MiB).
 - Prior baseline: `.scratch/company-mastering/research/27/report.json`; harness `.scratch/company-mastering/research/27_proving_run.py`.
 
-Availability was checked; these files still need hash validation before reuse. The prior harness uses the old readers directly and is not proof of installed configured-worker orchestration.
+Hash validation on 2026-10-09 21:22 ET: the Golden Copy is 927,550,946 bytes and sha256 `1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a`. The Name Frequency file `proving/cm27/census.json` is 5,717,347 bytes, sha256 `84522f67c6d61c8ab115130ac96677320f5307a4f40dbf077a6693e59cec44cf`. The seven bundles hold 6,726 records. The prior harness uses the old readers directly and is not proof of installed configured-worker orchestration. No installed-bundle driver for this population exists. A current-policy checkout replay failed in 46.88 seconds on 2026-10-09 21:26 ET because it loaded the installed engine extension, which refuses a nested object field. Engine build ae627570 accepts that GLEIF mapping. A rerun on that build, process 26113, finished 2026-10-09 22:13 ET in 2,428.9 seconds: 6,414 Companies and 3,052 bound GLEIF level-1 records, and the second pass changed nothing. Counts file `/private/tmp/counts-pin-20261009.json` sha256 `2320a00d41165aa689a0f5bda0462039c42f95359d849e229418f67471aa241f`. This checkout replay uses `gleif_source.py`. The installed empty-store run, a separate worker and verifier, and recovery have not been done.
 
 ## Review and failure evidence
 
