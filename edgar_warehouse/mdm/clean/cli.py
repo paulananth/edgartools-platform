@@ -415,14 +415,13 @@ def prepare_clean_company(args) -> int:
 
 
 def name_census(args) -> int:
-    from .company_source import write_name_census
+    from .name_frequency import write_name_frequency
 
-    report = write_name_census(
+    report = write_name_frequency(
         landing_root=args.landing_root,
         landing_manifests=args.landing_manifests,
-        gleif_archive=args.gleif_archive,
+        gleif_reading={"uri": Path(args.gleif_reading).resolve().as_uri(), "sha256": args.gleif_reading_sha256},
         gleif_metadata=args.gleif_metadata,
-        gleif_sha256=args.gleif_sha256,
         output=args.output,
     )
     print(json.dumps(report, sort_keys=True))
