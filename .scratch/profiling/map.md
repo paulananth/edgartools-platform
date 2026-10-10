@@ -28,8 +28,8 @@ Any data set can be profiled, classified into master, reference, relationship, t
 | 04c | [GLEIF's successor entity, read from its lists](issues/04c-gleif-successor-entity.md) | A | 04b | done: #852 |
 | 05 | [Agent context views and command](issues/05-agent-context-views-and-command.md) | A (MDM) / B (RDM) | 03, 04 (02 for RDM) | MDM (#837) and RDM (#847) parts done; silver waits for 06 |
 | 05b | [Relationships at a past recording time (`--as-at`)](issues/05b-relationship-as-at.md) | A | 05 | done (#868) |
-| 06 | [Silver writer (rules-skill ticket 05)](issues/06-silver-writer.md) | B | 01a (started before Codex's gate on the operator's word, 2026-10-08) | in review |
-| 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open |
+| 06 | [Silver writer (rules-skill ticket 05)](issues/06-silver-writer.md) | B | 01a (started before Codex's gate on the operator's word, 2026-10-08) | done (#879) |
+| 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open: Form ADV rules (#896, not switched on) and READING section (#897) merged; next Forms 3, 4, 5 |
 | 07b | [Name-based matching](issues/07b-name-based-matching.md) | A | 03, 04 | done (#838) |
 | 07c | [Unstructured extraction](issues/07c-unstructured-extraction.md) | B | 07 | open |
 | 08 | [Recreation proof](issues/08-recreation-proof.md) | B | all above | cohort (#859), slice, rulings file and sandbox done; baseline and cold agent wait for Codex's retirement (SEC reading into MDM); 13F rows wait for 06 |
