@@ -34,7 +34,6 @@ COMPANY_PROOF_ONLY=sec (the SEC target alone, to check the plumbing).
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import os
@@ -44,7 +43,6 @@ import subprocess
 import time
 from pathlib import Path
 
-import pytest
 from sqlalchemy import create_engine, text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
