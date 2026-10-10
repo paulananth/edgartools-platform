@@ -16,7 +16,7 @@ from pathlib import Path
 
 import duckdb
 
-from . import classify, codes, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
+from . import classify, codes, embedded, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
@@ -71,12 +71,22 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
 
     profiles = {p: profile.columns(con, p) for p in parts}
     say("profiled columns")
+    # An entity carried inside a part (its identifier and the columns that follow it) becomes a part.
+    carried: dict[str, set[str]] = {}
+    for p in list(parts):
+        for entity in embedded.find(con, p, profiles[p], set(parts)):
+            embedded.register(con, entity)
+            parts[entity["part"]] = inputs.Part(entity["part"], parts[p].location, "derived", 0,
+                                                scan=parts[p].scan, derived_from=p)
+            profiles[entity["part"]] = profile.columns(con, entity["part"])
+            carried.setdefault(p, set()).update(entity["follows"])
+            say(f"{entity['part']}: an entity inside {p}, keyed by {entity['column']}")
     # A list of plain values has no key of its own: its parent's key and the place in the list.
     unique = {p: [] if keys.plain_values(cols) else keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
     say("found unique keys")
     confirmed = {}
     for p, part in parts.items():
-        if part.scan == "sampled" and part.parent is None:  # children keep keys found in the sample
+        if part.scan == "sampled" and part.parent is None and part.derived_from is None:  # children keep keys found in the sample
             say(f"{p}: full pass for its identifier-like key candidates")
             confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
             say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
@@ -91,15 +101,16 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         parent = parts[p].parent
         parent_key = record_keys[parent]["columns"] if parent else None
         within = keys.unique_within_parent(con, p, profiles[p]) if parent and not unique[p] else None
-        name = None
+        basis = None
         if not parent and not unique[p]:
             people = sensitivity.person_part([c["name"] for c in profiles[p] if not c["structure"]])
             personal = {c["name"] for c in profiles[p]
                         if sensitivity.tag(c["name"], [], people)["sensitivity"] != "none"}
-            name = names.name_basis(con, p, profiles[p], personal)
-        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within, name)
+            basis = names.name_basis(con, p, profiles[p], personal)
+        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within, basis)
 
-    findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}))
+    findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}),
+                            carried.get(p, set()))
                       for p in parts]
     say("classified parts")
     _inherit(findings_parts, parts)
@@ -118,7 +129,8 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     return {
         "version": 1,
         "dataset": {"name": name,
-                    "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts if parts[p].parent is None],
+                    "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts
+                               if parts[p].parent is None and parts[p].derived_from is None],
                     "scan": {"mode": "sampled" if any(x.scan == "sampled" for x in parts.values()) else "full",
                              "reason": f"an input over {limit / inputs.GB:.0f} GB" if any(
                                  x.scan == "sampled" for x in parts.values()) else None,
@@ -135,7 +147,9 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     }
 
 
-def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) -> dict:
+def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, carried=frozenset()) -> dict:
+    """One part's findings. `carried`: its columns that belong to an entity found inside it (embedded.py),
+    left out of its own name-like text and attributes."""
     columns = profiles[p]
     names = [c["name"] for c in columns if not c["structure"]]
     people = sensitivity.person_part(names)
@@ -171,17 +185,20 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
             identifier_findings.append(_identifier(con, p, c, record_key))
     parent = parts[p].parent
+    own = [c for c in columns if c["name"] not in carried]
     facts = {
-        "rows": columns[0]["rows"] if columns else 0, "key": record_key["columns"], "key_found": record_key["found"],
+        # A nested record is identified by its parent's key and its place in the list: a key by structure.
+        "rows": columns[0]["rows"] if columns else 0, "key": record_key["columns"],
+        "key_found": record_key["found"] or (parent is not None and record_key["design"] == "natural_composite"),
         "in_degree": len({l["from"]["part"] for l in inbound}),
         "out_degree": len({l["to"]["part"] for l in out}) + (1 if parent else 0),
         "self_ends": len({l["to"]["part"] for l in out}) == 1 and len(out) >= 2,
         "key_links": sum(1 for c in record_key["columns"] if c in linked_columns),
         "key_other": sum(1 for c in record_key["columns"] if c not in linked_columns),
         # The key's own label names an entity; other labels name codes.
-        "name_like": sum(codes.name_like(c, code_columns - key_labels) for c in columns),
+        "name_like": sum(codes.name_like(c, code_columns - key_labels) for c in own),
         # A column holding one value for every row describes nothing: not an attribute.
-        "attributes": sum(1 for c in columns if not c["structure"] and c["name"] not in record_key["columns"]
+        "attributes": sum(1 for c in own if not c["structure"] and c["name"] not in record_key["columns"]
                           and c["name"] not in code_columns and c["name"] not in linked_columns
                           and not profile.is_temporal(c) and c["distinct"] > 1),
         "labels": sum(1 for c in code_list if c["label_column"]),
@@ -207,7 +224,8 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         times["event_time"] = None  # an event time belongs to events
     kind = next((k for k in kinds if k.lower() == p.rsplit(".", 1)[-1].lower()), None)
     return {
-        "part": p, "parent_part": parent, "rows": facts["rows"], "scan": parts[p].scan,
+        "part": p, "parent_part": parent, "derived_from": parts[p].derived_from, "rows": facts["rows"],
+        "scan": parts[p].scan,
         "class": decided["class"], "confidence": decided["confidence"], "tests": decided["tests"],
         "runner_up": decided["runner_up"],
         "kind": kind,

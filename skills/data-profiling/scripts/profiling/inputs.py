@@ -51,6 +51,7 @@ class Part:
     reopen: Callable[[], Iterator[dict]] | None = field(default=None, repr=False)
     source_sql: str | None = None  # a sampled table file, read again in full by this reader
     sha256: str | None = None
+    derived_from: str | None = None  # an entity found inside this part (embedded.py), not an input
 
     def finding(self, rows: int) -> dict:
         return {"kind": "table" if self.format in {"sqlite", "postgres", "duckdb"} else "file",
@@ -80,9 +81,14 @@ def _scalar(value):
 
 
 def _columnar(value: dict) -> bool:
-    """An object of two or more lists of one equal length: a table stored by column."""
+    """An object of two or more lists of plain values, of one equal length: a table stored by column.
+
+    Lists of records are not columns: two lists of objects that happen to be
+    equally long (a document's transactions and its holdings) are separate parts.
+    """
     lists = [v for v in value.values() if isinstance(v, list)]
-    return len(lists) >= 2 and len(lists) == len(value) and len({len(v) for v in lists}) == 1
+    return len(lists) >= 2 and len(lists) == len(value) and len({len(v) for v in lists}) == 1 \
+        and all(not isinstance(_scalar(item), (dict, list)) for v in lists for item in v)
 
 
 class Flattener:

@@ -89,9 +89,10 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 
 | Mode | What it does | Output |
 |---|---|---|
-| inventory | Lists every input, its format, size and parts (nested lists become child parts) | `dataset.inputs`, parts |
+| inventory | Lists every input, its format, size and parts (nested lists become child parts; equal-length lists of records stay separate parts, and only lists of plain values are read as a table stored by column) | `dataset.inputs`, parts |
 | profile | Exact counts per column: fill, distinct, unique, shape, length, top values | `columns` |
-| keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists | `record_key` |
+| entities | An entity carried inside another part (an identifier-shaped column that repeats, with a name-like column of the same object that follows it on at least 95% of rows) becomes its own part, one row per identifier; the part it came from links to it. An id with only a name is a code with its label until other attributes show otherwise | `derived_from` |
+| keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists (a nested record with none of its own: its parent's key and its place in the list, which classification counts as a key) | `record_key` |
 | links | Each column pointing at another part's key (inclusion ≥ 0.9), with cardinality and evidence | `relationships` |
 | classify | The five classes, each from named tests; "unknown" when the tests do not decide | `class`, `confidence`, `tests` |
 | hierarchies | Per source: parent columns, functional dependencies, code nesting, separate level tables (a list naming its coarser list); a yes/no flag, or a dependency that holds by coincidence (a near-constant parent, or child values seen once), is listed apart, never a hierarchy | `hierarchies`, `dependencies_not_hierarchies` |

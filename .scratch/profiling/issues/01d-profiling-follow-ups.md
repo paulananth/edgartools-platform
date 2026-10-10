@@ -27,3 +27,18 @@ real data, approvals in a Rules Database.
 - [x] Skills: PR #874, CI green, merged on the operator's word 2026-10-08 15:06 ET
 - [x] Skills follow-up: PR #876, CI green, merged 2026-10-08 18:23 ET
 - [x] Ticket 05b: its PR, CI and merge part checked (#868, 1539704d) 2026-10-08 11:00 ET
+
+### Nested documents and entities inside parts (found on ticket 07's insider ownership filings)
+
+Operator, 2026-10-09: "Fix the profiler first (Recommended)"; standing instruction: "fix the skill once you find any issue". Branch `claude/profiling-01d-nested`.
+
+- [x] GoF consult: leave it (`inputs.py` unchanged since written; `run.py` grows one step a ticket, each a line or two); the new step is its own module (`embedded.py`), called once from `profile_inputs` 2026-10-09 21:25 ET
+- [x] Lists of records zipped by position: `_columnar` read any object of equal-length lists as one table stored by column, so a document's 3 transactions and 3 holdings became 3 rows pairing each transaction with an unrelated holding, under a made-up parent part, and single-item lists elsewhere were left as columns of the document (1,360 of 8,391 transactions missing). Now only lists of plain values are a table stored by column (tests: sibling lists stay separate parts with the single item joined; a table of plain values still reads by column); the ownership profile now counts 8,391 and 1,528, equal to a direct count 2026-10-09 21:25 ET
+- [x] Entities inside parts (`embedded.py`): an identifier-shaped column that repeats (at most half as many values as rows) with a name-like column of the same object that follows it on at least 95% of rows becomes its own part (`derived_from`), one row per identifier, each column at its most common value; the part it came from links to it, and its carried columns leave that part's own name and attribute counts. Test: 180 documents carrying 60 parties: the party is a master part keyed by its id, linked from the document, the document a transaction; an id with only a name stays a code with its label (reference), honestly; ownership: the issuer (63, by CIK) master 1.0 2026-10-09 21:25 ET
+- [x] A nested record with no key of its own (its parent's key and its place, designed) counts as a key for classification; the findings still say designed (test: repeated identical items are a transaction keyed by parent and position) 2026-10-09 21:25 ET
+- [x] Report title "None": the dataset's name was overwritten by a loop variable; test: the name is kept in findings and the report title 2026-10-09 21:25 ET
+- [x] Withdrawn, not a gap: "classify ignores links from nested tables to their parent": a child's link to its parent already counts as the child pointing at another part; a document is not a master because its own lines point at it 2026-10-09 21:25 ET
+- [x] Skill text: the entities mode and the list rule in SKILL.md's modes table; genericity lint passes (59) 2026-10-09 21:25 ET
+- [ ] Trial B and Trial A against their answer keys; Trial B (SQLite form; the CSV copy is gone, and both forms gave identical findings): 52 of 52, score lines identical to before, 2026-10-09 21:25 ET
+- [ ] Three-axis review, PR, CI, merge on the operator's word
+
