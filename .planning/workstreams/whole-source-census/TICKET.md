@@ -288,3 +288,4 @@ CI on 54b8bcd0 passed; these reduction changes require their own full CI gate.
 ## Operator handoff to Grok — 2026-10-09
 
 - [x] Make PR886 ready at operator request and save self-contained Grok handoff, upstream/CI receipts and broader original-goal backlog; `gh pr view` verifies `isDraft=false`, receipt JSON and handoff checklist inspected. The original-source comparison is recorded on the 16:40 ET bullets above. Deferred acceptance and retirement remain incomplete. 2026-10-09 13:42 ET
+- [x] Write the handoff for Claude or Codex. `.planning/workstreams/whole-source-census/HANDOFF-20261010.md`, 2026-10-10 06:42 ET. The installed proof stays open.
