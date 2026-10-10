@@ -46,9 +46,16 @@ def say(message: str) -> None:
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
                    sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
                    work: Path | None = None) -> dict:
-    """Profile every input and return the findings (the findings.yaml document)."""
+    """Profile every input and return the findings (the findings.yaml document).
+
+    `work` holds the run's working copy; when none is given, one is made and removed at the end."""
+    if work is None:
+        work = Path(tempfile.mkdtemp(prefix="profiling-"))
+        try:
+            return profile_inputs(sources, name, limit, sample, seed, kinds, work)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
     started = time.monotonic()
-    work = work or Path(tempfile.mkdtemp(prefix="profiling-"))
     work.mkdir(parents=True, exist_ok=True)
     database = work / "profile.duckdb"
     database.unlink(missing_ok=True)
@@ -73,20 +80,25 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     say("profiled columns")
     # An entity carried inside a part (its identifier and the columns that follow it) becomes a part.
     carried: dict[str, set[str]] = {}
+    entities: dict[str, dict] = {}
     for p in list(parts):
-        for entity in embedded.find(con, p, profiles[p], set(parts)):
-            embedded.register(con, entity)
+        found, clashes = embedded.find(con, p, profiles[p], set(parts))
+        for clash in clashes:
+            say(f"{clash}: an entity inside {p} not made a part: a part of that name exists")
+        for entity in found:
+            entity["evidence"]["disagreeing_rows"] = embedded.register(con, entity)
             parts[entity["part"]] = inputs.Part(entity["part"], parts[p].location, "derived", 0,
                                                 scan=parts[p].scan, derived_from=p)
             profiles[entity["part"]] = profile.columns(con, entity["part"])
             carried.setdefault(p, set()).update(entity["follows"])
+            entities[entity["part"]] = entity
             say(f"{entity['part']}: an entity inside {p}, keyed by {entity['column']}")
     # A list of plain values has no key of its own: its parent's key and the place in the list.
     unique = {p: [] if keys.plain_values(cols) else keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
     say("found unique keys")
     confirmed = {}
     for p, part in parts.items():
-        if part.scan == "sampled" and part.parent is None and part.derived_from is None:  # children keep keys found in the sample
+        if part.scan == "sampled" and part.is_input:  # children keep keys found in the sample
             say(f"{p}: full pass for its identifier-like key candidates")
             confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
             say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
@@ -113,6 +125,10 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
                             carried.get(p, set()))
                       for p in parts]
     say("classified parts")
+    for f in findings_parts:
+        if f["part"] in entities:
+            f["derived_evidence"] = entities[f["part"]]["evidence"]
+            f["quality"] += embedded.disagreements(entities[f["part"]])
     _inherit(findings_parts, parts)
     by_name = {f["part"]: f for f in findings_parts}
     not_levels: list[dict] = []
@@ -130,7 +146,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         "version": 1,
         "dataset": {"name": name,
                     "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts
-                               if parts[p].parent is None and parts[p].derived_from is None],
+                               if parts[p].is_input],
                     "scan": {"mode": "sampled" if any(x.scan == "sampled" for x in parts.values()) else "full",
                              "reason": f"an input over {limit / inputs.GB:.0f} GB" if any(
                                  x.scan == "sampled" for x in parts.values()) else None,

@@ -45,6 +45,7 @@ approval:                       # §9
 ```yaml
 - part: <name>                  # table, file, or child table (parent.list)
   parent_part: <name|null>      # for a child table made from a nested list
+  derived_from: <name|null>     # for an entity found inside another part (§3.2)
   rows: <n>
   class: master|reference|relationship|transaction|metadata|unknown
   confidence: <0..1>            # share of the class's tests that passed
@@ -124,6 +125,31 @@ one gap; more deliveries give the usual one). The new findings carry them;
 once approved findings carry a measured kind, a later change of kind is a
 drift item. `versions_per_key` counts rows per business key when the record
 key holds the recording, valid-from or event time.
+
+A child table's designed key (its parent's key and `_position`, its place in
+the list) is unique by construction, so the class test "has a unique key"
+passes on it; `record_key.found` still says false (designed).
+
+### 3.2 An entity found inside another part
+
+A part may carry another entity on every row: its identifier and its
+attributes. When an identifier-shaped column repeats (at most half as many
+values as rows) and at least one name-like column of the same nested object
+(or, for a top-level identifier, of the top level) follows it on at least 95%
+of rows, the entity becomes its own part, named `<part>.<object>` (or
+`<part>.<identifier>`), with `derived_from` naming the part it came from. It
+holds one row per identifier value, each carried column at its most common
+value (a tie goes to the smallest value). A column filled on fewer than half
+the identifier's rows, or one value on 95% of all rows, follows by
+coincidence and is not carried. The part it came from links to it by the
+identifier, and its carried columns leave its own name-like and attribute
+counts. The part writes `derived_evidence`: `{rows, values, repeats (values
+per row), follows: {<column>: <share of rows following>}, disagreeing_rows:
+{<column>: <rows giving another value than the one kept>}}`; each column with
+disagreeing rows is a quality item `carried_value_disagrees` for a steward.
+An entity is not an input: `dataset.inputs` leaves it out, and it never takes
+a full pass of its own. An id with only a name is indistinguishable from a
+code with its label, and is classed by the same tests.
 
 A record key designed on a name (research note 02; operator, 2026-10-05:
 "Same record: durable key") also writes `basis` (the name column) and, in its

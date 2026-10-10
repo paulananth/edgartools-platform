@@ -53,6 +53,11 @@ class Part:
     sha256: str | None = None
     derived_from: str | None = None  # an entity found inside this part (embedded.py), not an input
 
+    @property
+    def is_input(self) -> bool:
+        """A part read from an input as it is: not a nested list, not an entity found inside a part."""
+        return self.parent is None and self.derived_from is None
+
     def finding(self, rows: int) -> dict:
         return {"kind": "table" if self.format in {"sqlite", "postgres", "duckdb"} else "file",
                 "location": self.location, "format": self.format, "bytes": self.bytes, "rows": rows,
@@ -87,8 +92,8 @@ def _columnar(value: dict) -> bool:
     equally long (a document's transactions and its holdings) are separate parts.
     """
     lists = [v for v in value.values() if isinstance(v, list)]
-    return len(lists) >= 2 and len(lists) == len(value) and len({len(v) for v in lists}) == 1 \
-        and all(not isinstance(_scalar(item), (dict, list)) for v in lists for item in v)
+    return (len(lists) >= 2 and len(lists) == len(value) and len({len(v) for v in lists}) == 1
+            and all(not isinstance(_scalar(item), (dict, list)) for v in lists for item in v))
 
 
 class Flattener:

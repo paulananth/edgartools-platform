@@ -77,3 +77,57 @@ def test_a_nested_record_with_no_key_of_its_own_is_identified_by_its_parent_and_
     assert fees["record_key"] == {**fees["record_key"], "found": False, "design": "natural_composite",
                                   "columns": ["document_id", "_position"]}
     assert fees["class"] == "transaction"
+
+
+def _lines(path: Path, flip: bool = False) -> None:
+    # 240 order lines, each naming one of 60 suppliers by an issued-looking id at the top level of the row,
+    # with the supplier's name and city; a status that is "OK" on nearly every row (it follows any id by
+    # coincidence); a per-row channel; two rows giving supplier 7 another name; and supplier 9's two names
+    # tied (two rows each), in an order `flip` reverses.
+    rows = ["line_id,supplier_id,supplier_name,supplier_city,status,channel,quantity"]
+    for n in range(240):
+        s = n % 60
+        name = f"{WORDS[s % 10]} {WORDS[s // 10]} Supply"
+        if s == 7 and n in (7, 67):
+            name = "Renamed Supply"
+        if s == 9:
+            name = ("Tied One", "Tied Two")[(n // 60 + flip) % 2]
+        rows.append(f"L{n:05d},S{s:06d},{name},{WORDS[(s * 3) % 10]}ville,{'HOLD' if n == 5 else 'OK'},"
+                    f"{'web' if (n // 60) % 2 else 'store'},{n % 13 + 1}")
+    path.write_text("\n".join(rows) + "\n")
+
+
+def _run(base: Path, flip: bool = False) -> dict:
+    base.mkdir(parents=True, exist_ok=True)
+    _lines(base / "lines.csv", flip)
+    assert profile_data.main(["run", "--name", "lines", "--input", f"lines={base / 'lines.csv'}",
+                              "--out", str(base / "out")]) == 0
+    return yaml.safe_load((base / "out" / "findings.yaml").read_text())
+
+
+def test_a_top_level_identifier_carries_only_the_columns_that_follow_it(tmp_path):
+    found = _run(tmp_path)
+    supplier = next(p for p in found["parts"] if p["part"] == "lines.supplier_id")
+    assert [c["name"] for c in supplier["columns"]] == ["supplier_id", "supplier_name", "supplier_city"]
+    assert supplier["derived_evidence"]["values"] == 60 and supplier["derived_evidence"]["rows"] == 240
+    assert set(supplier["derived_evidence"]["follows"]) == {"supplier_name", "supplier_city"}
+    # 2 renamed rows, and supplier 9's two rows of the name not kept.
+    assert supplier["derived_evidence"]["disagreeing_rows"] == {"supplier_name": 4, "supplier_city": 0}
+    flagged = [q for q in supplier["quality"] if q["check"] == "carried_value_disagrees"]
+    assert [(q["column"], q["rows"]) for q in flagged] == [("supplier_name", 4)]
+
+
+def test_a_tie_keeps_the_same_value_whatever_the_row_order():
+    import duckdb
+    from profiling import embedded
+
+    kept = []
+    for order in ("ASC", "DESC"):
+        con = duckdb.connect()
+        con.execute("CREATE TABLE src AS SELECT * FROM (VALUES ('S1', 'Tied One'), ('S1', 'Tied Two'), "
+                    "('S1', 'Tied Two'), ('S1', 'Tied One')) v(id, name)")
+        con.execute(f"CREATE TABLE rows AS SELECT * FROM src ORDER BY name {order}")
+        entity = {"part": "rows.id", "from": "rows", "column": "id", "follows": ["name"]}
+        assert embedded.register(con, entity) == {"name": 2}
+        kept.append(con.execute('SELECT name FROM "rows.id"').fetchone()[0])
+    assert kept == ["Tied One", "Tied One"]
