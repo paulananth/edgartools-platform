@@ -150,8 +150,9 @@ WITH_CONFIGURED_READING = {
 
 # L6 (operator ruling 2026-10-10 13:20 ET: a non-object `Extension` fails closed as the
 # older reader did, "go with your recommendations" 17:55 ET): the deletion column reads
-# an object's `gleif:Deletion` and anything else as the flag itself. Awaiting the
-# operator's approval.
+# an object's `gleif:Deletion` and anything else as the flag itself. Approved by the
+# operator, 2026-10-10 18:06 ET: "approved" (evidence: no Golden Copy record has a
+# non-object `Extension`, so every member's whole-file comparison holds).
 WITH_EXTENSION_CHECK = {
     "level1": "67fe1aaaa0aee2bafb1d1e234cfd147b9acd8058ad27deed9e3bb4c3572b1eac",
     "relationships": "b9b1fd11129ea8ffb258989f076775377c94071d001be6a2e6c8d3621c294b1a",
