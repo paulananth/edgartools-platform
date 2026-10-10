@@ -275,7 +275,7 @@ def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
 
 
 def test_an_unknown_gleif_member_is_refused():
-    with pytest.raises(ValueError, match="Unknown native GLEIF member"):
+    with pytest.raises(ValueError, match="Unknown GLEIF member"):
         gleif_publication.dataset_contract("level2")
 
 

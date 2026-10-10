@@ -82,3 +82,19 @@ def test_a_null_deletion_field_and_a_bad_check_digit():
     with pytest.raises(UnsupportedRecord) as waiting:
         read(record(start="HWUPKR0MPOU8FGXBT395"))
     assert waiting.value.reason == "invalid_lei_checksum"
+
+
+@pytest.mark.parametrize("extension,flagged", [
+    (None, False), ({}, False), ({"gleif:Deletion": None}, False), ({"gleif:Deletion": {"$": "x"}}, True),
+    ("unexpected", True), (7, True), ([], True),
+], ids=["null", "empty object", "null flag", "flag", "text", "number", "list"])
+def test_an_extension_that_is_not_an_object_is_read_as_the_flag(extension, flagged):
+    # As the older reader did: an object holds the flag, anything else is it (operator, 2026-10-10).
+    row = record()
+    row["RelationshipRecord"]["Extension"] = extension
+    if not flagged:
+        assert read(row)["relationships"]
+        return
+    with pytest.raises(UnsupportedRecord) as refused:
+        read(row)
+    assert refused.value.reason == "gleif_deletion_flag"

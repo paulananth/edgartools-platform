@@ -65,7 +65,7 @@ def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
                     if relationship.get("source_key"):  # a link starts at Level 1 too
                         relationship["source_source"] = level1_source
             return contract
-    raise ValueError("Unknown native GLEIF member")
+    raise ValueError("Unknown GLEIF member")
 
 
 def attest_publication(stream, *, member, metadata, expected_sha256, on_record=None,

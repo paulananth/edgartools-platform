@@ -59,7 +59,7 @@ mdm:
               mapped:
                 each: .
                 checks:
-                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired after 68cc1240), in its
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
                 # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM
                 # contract). A record a check sets aside defers in the Stage with that reason.
                 - check: lei
@@ -430,7 +430,7 @@ mdm:
               mapped:
                 each: .
                 checks:
-                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired after 68cc1240), in its
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
                 # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
                 - check: lei
                   column: _start
@@ -582,7 +582,7 @@ mdm:
               mapped:
                 each: .
                 checks:
-                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired after 68cc1240), in its
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
                 # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
                 - check: lei
                   column: _lei
