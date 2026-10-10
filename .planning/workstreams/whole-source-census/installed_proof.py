@@ -160,7 +160,9 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
                                                 "values": {"publication_count": PUBLICATION_COUNT}})
         reading = store.put(tmp_path.as_uri(), {"version": 2, "contract": contract_ref,
                                                 "artifacts": [{"input": raw, "context": context}]})
-        keys = {"batch_id": f"{tag}-level1", "consumer": "gleif.level1.v1"}
+        # Each unit's consumer is its own, from checkpoint 0 (`mdm_prepare.py`): the second
+        # pass re-applies the same records as a new consumer, never rewinds the first one's.
+        keys = {"batch_id": f"{tag}-level1", "consumer": f"gleif.level1.v1:{tag}"}
         base = tmp_path / tag
         return store.put(tmp_path.as_uri(), {"version": 2, "steps": {
             "read": [{"keys": keys, "input": reading, "output": (base / "reading.json").as_uri(), "cursor": {}}],
