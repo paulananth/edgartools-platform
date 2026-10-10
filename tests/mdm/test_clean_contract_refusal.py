@@ -63,3 +63,19 @@ def test_a_reading_of_several_tables_is_a_contract_error():
     reading["read"]["tables"]["other"] = reading["read"]["tables"]["mapped"]
     with pytest.raises(SourceRejected):
         record_refusal(record(), reading)
+
+
+@pytest.mark.parametrize("member,row", [
+    ("level1", lambda e: {**record(), "Extension": e}),
+    ("reporting_exceptions", lambda e: {"LEI": {"$": "HWUPKR0MPOU8FGXBT394"},
+                                        "ExceptionCategory": {"$": "DIRECT_ACCOUNTING_CONSOLIDATION_PARENT"},
+                                        "ExceptionReason": [{"$": "NON_CONSOLIDATING"}], "Extension": e}),
+])
+@pytest.mark.parametrize("extension,flagged", [
+    (None, False), ({}, False), ({"gleif:Deletion": None}, False), ({"gleif:Deletion": {"$": "x"}}, True),
+    ("unexpected", True), (7, True), ([], True),
+], ids=["null", "empty object", "null flag", "flag", "text", "number", "list"])
+def test_an_extension_that_is_not_an_object_is_read_as_the_flag(member, row, extension, flagged):
+    # As the older reader did: an object holds the flag, anything else is it (operator, 2026-10-10).
+    reading = files.source("gleif")["mdm"][f"gleif.{member}.v1"]["contract"]["adapter"]["reading"]
+    assert (record_refusal(row(extension), reading) == "gleif_deletion_flag") is flagged

@@ -84,9 +84,21 @@ mdm:
                       type: text
                       path_mode: literal
                   _deletion:
-                    value:
-                      path: Extension.gleif:Deletion
-                      path_mode: literal
+                    # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+                    # keep failing closed): an object holds the flag, anything else is it.
+                    choose:
+                      condition:
+                        test:
+                          path: Extension
+                          kind: object
+                      then:
+                        value:
+                          path: Extension.gleif:Deletion
+                          path_mode: literal
+                      else:
+                        value:
+                          path: Extension
+                          path_mode: literal
                   _category:
                     value:
                       path: Entity.EntityCategory.$
@@ -463,9 +475,21 @@ mdm:
                       type: text
                       path_mode: literal
                   _deletion:
-                    value:
-                      path: RelationshipRecord.Extension.gleif:Deletion
-                      path_mode: literal
+                    # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+                    # keep failing closed): an object holds the flag, anything else is it.
+                    choose:
+                      condition:
+                        test:
+                          path: RelationshipRecord.Extension
+                          kind: object
+                      then:
+                        value:
+                          path: RelationshipRecord.Extension.gleif:Deletion
+                          path_mode: literal
+                      else:
+                        value:
+                          path: RelationshipRecord.Extension
+                          path_mode: literal
                   fields:
                     object:
                       fields: {}
@@ -580,9 +604,21 @@ mdm:
                       type: text
                       path_mode: literal
                   _deletion:
-                    value:
-                      path: Extension.gleif:Deletion
-                      path_mode: literal
+                    # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+                    # keep failing closed): an object holds the flag, anything else is it.
+                    choose:
+                      condition:
+                        test:
+                          path: Extension
+                          kind: object
+                      then:
+                        value:
+                          path: Extension.gleif:Deletion
+                          path_mode: literal
+                      else:
+                        value:
+                          path: Extension
+                          path_mode: literal
                   _category:
                     value:
                       path: ExceptionCategory.$
