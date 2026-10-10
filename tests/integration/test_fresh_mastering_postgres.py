@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean.consumer import ContractReader
-from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
 from edgar_warehouse.mdm.clean.store import Store, register_policy

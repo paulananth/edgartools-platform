@@ -4,7 +4,7 @@ Company rows come from the pinned four-company fixture. Person controls
 are separate raw JSON documents with their original field names; no runtime
 field-name conversion is used.
 
-GLEIF readings go through the real GLEIF reader (`record_evidence`): two
+GLEIF readings go through the GLEIF contracts (`adapters.normalize`): two
 Level 1 records from the same fixture, and one accounting-parent record
 between them. That parent record is synthetic, not a GLEIF fact.
 """
@@ -12,7 +12,7 @@ between them. That parent record is synthetic, not a GLEIF fact.
 from pathlib import Path
 import json
 
-from edgar_warehouse.mdm.clean import gleif_source
+from edgar_warehouse.mdm.clean import gleif_publication
 from edgar_warehouse.mdm.clean.adapters import normalize
 from edgar_warehouse.mdm.clean.store import digest
 from edgar_warehouse.rules import files
@@ -56,7 +56,7 @@ def _gleif(member, row, ordinal):
     publication = {"publication_key": f"offline-cohort/gleif/{member}", "revision": 1,
                    "artifact_sha256": digest(row), "member": member,
                    "record_locator": str(ordinal)}
-    return normalize(row, source_code=f"gleif.{member}.v1", contract=gleif_source.dataset_contract(member),
+    return normalize(row, source_code=f"gleif.{member}.v1", contract=gleif_publication.dataset_contract(member),
                      publication={**publication, "effective_at": None})
 
 
@@ -94,5 +94,5 @@ def gleif_successor(effective: str):
     # A later GLEIF publication: a new revision of the same record.
     publication = {"publication_key": "offline-cohort/gleif/level1/succession", "revision": 2,
                    "artifact_sha256": digest(row), "member": "level1", "record_locator": "0"}
-    return normalize(row, source_code="gleif.level1.v1", contract=gleif_source.dataset_contract("level1"),
+    return normalize(row, source_code="gleif.level1.v1", contract=gleif_publication.dataset_contract("level1"),
                      publication={**publication, "effective_at": None})

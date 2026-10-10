@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import BinaryIO
 from edgar_warehouse.rules import files as rules_files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
-from edgar_warehouse.mdm.clean.gleif_source import VERSION, validate_metadata
+from edgar_warehouse.mdm.clean.gleif_publication import VERSION, validate_metadata
 from edgar_warehouse.mdm.clean.evidence import instant
 from edgar_warehouse.mdm.clean.store import Conflict, canonical
 

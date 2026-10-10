@@ -1,5 +1,10 @@
 # Native GLEIF Company evidence
 
+> **Retired (Issue 20 L6, 2026-10-10).** The code this page describes was deleted:
+> `gleif_source.py` and `native_consumption.py`, and the `native_source` manifest (now refused). GLEIF records are read by their contracts (`rules/sources/gleif/`), and a
+> publication is attested by `gleif_publication.attest_publication`. The page stays as
+> the record of what was built; the code last ran at commit `68cc1240`.
+
 Ticket 12 adds a native evidence path to the existing Clean MDM commands. It does
 not activate Company matching rules or implement the Source Contract runner.
 The September 11 captured source is **JSON ZIP**. XML ZIP is an explicit alternative

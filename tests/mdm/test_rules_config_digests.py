@@ -12,7 +12,7 @@ import copy
 
 import pytest
 
-from edgar_warehouse.mdm.clean import company_source, gleif_source
+from edgar_warehouse.mdm.clean import company_source, gleif_publication
 from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import policy_layers
@@ -246,7 +246,7 @@ def _without_invalid_lei(contract: dict) -> dict:
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
-    contract = gleif_source.dataset_contract(member)
+    contract = gleif_publication.dataset_contract(member)
     if member in WITH_EXTENSION_CHECK:
         assert digest(contract) == WITH_EXTENSION_CHECK[member]
         contract = _without_extension_check(contract)
@@ -265,18 +265,18 @@ def test_each_gleif_mapping_is_unchanged(member):
 
 
 def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
-    contract = gleif_source.dataset_contract("relationships", level1_source="x.level1")
+    contract = gleif_publication.dataset_contract("relationships", level1_source="x.level1")
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     assert [r["source_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    contract = _without_extension_check(gleif_source.dataset_contract("relationships"))
+    contract = _without_extension_check(gleif_publication.dataset_contract("relationships"))
     assert digest(contract) == WITH_REFUSALS["relationships"]
     assert digest(_without_configured_reading(_without_refusals(contract))) == WITH_LINK_START["relationships"]
 
 
 def test_an_unknown_gleif_member_is_refused():
     with pytest.raises(ValueError, match="Unknown native GLEIF member"):
-        gleif_source.dataset_contract("level2")
+        gleif_publication.dataset_contract("level2")
 
 
 @pytest.mark.parametrize(

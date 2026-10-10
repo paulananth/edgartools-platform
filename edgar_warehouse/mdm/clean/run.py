@@ -66,25 +66,12 @@ class RunCoordinator:
         )
         return result
 
-    def pinned_readings(self, run_id: str) -> dict:
-        """The source readings an already-started run pinned, if it started.
-
-        A run resumes under the mappings it began with. Reading the newest
-        instead makes a mapping registered mid-run change the reconstructed
-        scope, and the run can then never be resumed.
-        """
-        scope = self._scope(run_id)
-        if not scope:
-            return {}
-        return (scope.get("native_consumption") or {}).get("mapping_versions") or {}
-
     def start(
         self,
         run_id: str,
         expected_batches: list[str],
         *,
         manifest_digest: str,
-        native_consumption: dict | None = None,
     ) -> None:
         if not expected_batches or len(expected_batches) != len(set(expected_batches)):
             raise ValueError("A root run requires a nonempty frozen batch manifest")
@@ -93,8 +80,6 @@ class RunCoordinator:
             "manifest_digest": manifest_digest,
             "contract_version": 2,
         }
-        if native_consumption is not None:
-            scope["native_consumption"] = native_consumption
         existing = self._scope(run_id)
         if existing is not None and existing != scope:
             raise Conflict("Root run scope changed")
@@ -105,21 +90,11 @@ class RunCoordinator:
                 {"run": run_id, "scope": canonical(scope)},
             )
 
-    def completed_source(self, run_id: str) -> dict:
-        """A cursor is insufficient: independently reconcile whole-source work."""
-        if not self.reconcile(run_id).get("source_consumption_complete", False):
-            raise Conflict("Previous source publication is not fully consumed")
-        scope = self._scope(run_id)
-        if scope is None:
-            raise Conflict("Previous root run disappeared")
-        return scope["native_consumption"]
-
     def reconcile(self, run_id: str) -> dict:
         scope = self._scope(run_id)
         if scope is None:
             raise Conflict("Root run was not registered")
         expected = set(scope["expected_batches"])
-        source_report = {}
         with self.mdm.engine.connect().execution_options(
             isolation_level="REPEATABLE READ"
         ) as conn:
@@ -171,29 +146,6 @@ class RunCoordinator:
                     {"run": run_id},
                 ).all()
             }
-            if "native_consumption" in scope:
-                from .native_consumption import consumption_report
-
-                # Only bounded per-batch summaries cross this boundary; never
-                # reload millions of retained source records to reconcile.
-                summaries = conn.execute(
-                    text("""SELECT b.batch_id,
-                  b.effects->'continuity_proof' AS continuity_proof,
-                  b.effects->'source_accounting' AS source_accounting,
-                  jsonb_array_length(coalesce(b.effects->'assertions','[]')) AS normalized,
-                  jsonb_array_length(coalesce(b.effects->'deferred','[]')) AS deferred,
-                  NOT EXISTS(SELECT 1 FROM jsonb_array_elements(
-                    coalesce(b.effects->'assertions','[]') || coalesce(b.effects->'deferred','[]')) r
-                    WHERE r->>'source_code' IS DISTINCT FROM b.effects->'continuity_proof'->>'source_code'
-                       OR r->>'publication_key' IS DISTINCT FROM b.effects->'continuity_proof'->>'publication') AS source_consistent
-                  FROM mdm.batch b JOIN mdm.run_batch o USING(batch_id)
-                  WHERE o.run_id=CAST(:run AS uuid)"""),
-                    {"run": run_id},
-                ).mappings()
-                source_report = consumption_report(
-                    scope["native_consumption"],
-                    {r["batch_id"]: dict(r) for r in summaries},
-                )
         report = {
             "expected_batches": len(expected),
             "observed_batches": len(observed),
@@ -204,13 +156,11 @@ class RunCoordinator:
             "waiting_links": len(waiting) if len(waiting) <= 100 else _count_waiting_links(self.mdm),
             "waiting_link_list": waiting[:100],
             "attempt_events": attempts,
-            **source_report,
         }
         complete = (
             expected == observed
             and pending == 0
             and unresolved == 0
-            and source_report.get("source_consumption_complete", True)
         )
         report["end_to_end_complete"] = complete
         # A lost acknowledgement is harmless: another call derives the same

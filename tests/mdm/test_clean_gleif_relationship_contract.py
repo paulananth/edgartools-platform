@@ -1,12 +1,12 @@
 """A GLEIF relationship record read by its contract alone (L6): the keys, ends,
-period and refusals the older reader (`gleif_source.record_evidence`) built first.
+period and refusals the older reader (`gleif_source.record_evidence`, retired after 68cc1240) built first.
 Each case's outcome was compared with that reader on 2026-10-10: all equal."""
 
 import pytest
 
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
 from edgar_warehouse.mdm.clean.evidence import subject_key
-from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
 
 CHILD, PARENT = "HWUPKR0MPOU8FGXBT394", "5493001KJTIIGC8Y1R12"
 PERIOD = {"StartDate": {"$": "2020-01-01T00:00:00Z"}, "PeriodType": {"$": "RELATIONSHIP_PERIOD"}}

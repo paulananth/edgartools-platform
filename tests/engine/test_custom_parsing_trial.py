@@ -1,12 +1,20 @@
 """A real release-sequence gap, drafted for review without activating source rules."""
 import json
+from datetime import UTC, datetime
 
 import pytest
 
-from edgar_warehouse.mdm.clean.gleif_source import release_sequence
+from edgar_warehouse.mdm.clean.evidence import instant
 from edgar_warehouse.rules.mapdoc import custom_parsing
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules.steps import epoch_microseconds
+
+
+def release_sequence(value: str) -> int:
+    """The retired GLEIF reader's release sequence (gleif_source.py, Issue 20 L6),
+    kept here as the fixed reference the generic step must equal."""
+    delta = instant(value) - datetime(1970, 1, 1, tzinfo=UTC)
+    return (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
 
 
 @pytest.mark.parametrize("value", ["1970-01-01T00:00:00Z", "1969-12-31T23:59:59.999999Z",

@@ -89,7 +89,6 @@ def test_an_unregistered_run_cannot_be_reconciled(database):
     coordinator = RunCoordinator(Store(database.application))
     with pytest.raises(Conflict, match="not registered"):
         coordinator.reconcile(str(uuid4()))
-    assert coordinator.pinned_readings(str(uuid4())) == {}
 
 
 def test_the_application_login_cannot_write_the_run_table(database):

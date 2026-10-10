@@ -1,11 +1,11 @@
 """A GLEIF reporting exception read by its contract alone (L6): the checks the
-older reader (`gleif_source.record_evidence`) made, then retained as evidence.
+older reader (`gleif_source.record_evidence`, retired after 68cc1240) made, then retained as evidence.
 Each case's outcome was compared with that reader on 2026-10-10: all equal."""
 
 import pytest
 
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
-from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
 
 LEI = "HWUPKR0MPOU8FGXBT394"
 PUBLICATION = {"publication_key": "p", "revision": 1, "artifact_sha256": "a" * 64,

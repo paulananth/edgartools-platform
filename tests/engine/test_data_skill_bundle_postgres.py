@@ -50,7 +50,7 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     """Bounded projection proof; no install or database population gate."""
     import copy
     from edgar_warehouse.mdm.clean import cascade, company_source, quality
-    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+    from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
     from tests.support.retired_name_census import cascade_entity
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
@@ -967,9 +967,11 @@ from xml.etree import ElementTree as ET
 from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read
-from edgar_warehouse.mdm.clean import gleif_source
+from edgar_warehouse.mdm.clean import gleif_publication
 from edgar_warehouse.mdm.clean.gleif_publication import attest_publication
-assert not hasattr(gleif_source, "inspect_archive")
+import importlib.util
+assert importlib.util.find_spec("edgar_warehouse.mdm.clean.gleif_source") is None
+assert not hasattr(gleif_publication, "inspect_archive")
 store = Artifacts()
 lei = "5493001KJTIIGC8Y1R12"
 date = "2026-09-11T16:00:00+00:00"
@@ -1009,7 +1011,7 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
         raw = store.put_bytes((folder / "captured.zip").as_uri(),zipped.getvalue())
         seen = []
         attestation = attest_publication(io.BytesIO(zipped.getvalue()), member=member.replace("-","_"),
-            metadata={"format":format+".zip", "cdf_version":gleif_source.FORMATS[member.replace("-","_")][0],
+            metadata={"format":format+".zip", "cdf_version":gleif_publication.FORMATS[member.replace("-","_")][0],
                 "content_date":date, "file_content":"GLEIF_FULL_PUBLISHED", "delta_start":None, "record_count":1},
             expected_sha256=raw["sha256"], on_record=lambda record,index: seen.append((record,index)))
         assert seen == [(row,0)] and attestation["record_count"] == 1

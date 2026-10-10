@@ -1,6 +1,6 @@
 """A GLEIF Level 1 record read by its contract alone (L6): the fields, kinds,
 addresses, corrections and successor links the older reader
-(`gleif_source.record_evidence`, `tests/mdm/test_clean_gleif_source.py`) was
+(`gleif_source.record_evidence` and its tests, retired after 68cc1240) was
 tested for, now through `adapters.normalize` with the configured contract."""
 
 import copy
@@ -9,7 +9,7 @@ import pytest
 
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
 from edgar_warehouse.mdm.clean.evidence import subject_key
-from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
 from edgar_warehouse.mdm.clean.matching import _read
 
 LEI = "HWUPKR0MPOU8FGXBT394"
