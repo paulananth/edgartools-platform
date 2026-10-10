@@ -124,22 +124,26 @@ The SEC-to-GLEIF matching rules (ticket 08) bind only a name no other SEC
 filer or GLEIF legal entity carries. The census counts that once, over the
 whole SEC capture (`sec_company` current names and `sec_company_former_name`)
 and a full GLEIF Level 1 Golden Copy (legal and other names, branches
-excluded). It refuses a delta. It needs local files only:
+excluded). It refuses a delta. Each SEC capture is read through its configured
+Rules by the `source.read` worker and its verifier. The Golden Copy arrives as
+one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
+(about an hour for 3.4 million records); the command checks that the reading
+projected exactly the names these captures hold. It needs local files only:
 
 ```bash
 edgar-warehouse mdm name-census \
   --landing-root "$COMPANY_LANDING_ROOT" \
   --landing-manifest "$COMPANY_LANDING_MANIFEST" \
-  --gleif-archive "$GLEIF_LEVEL1_JSON_ZIP" \
+  --gleif-reading "$GLEIF_CENSUS_READING_JSON" \
+  --gleif-reading-sha256 "$GLEIF_CENSUS_READING_SHA256" \
   --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
-  --gleif-sha256 "$GLEIF_LEVEL1_SHA256" \
   --output "$NAME_CENSUS_JSON"
 ```
 
 The metadata file holds the archive's verified publication metadata
-(`format`, `cdf_version`, `content_date`, `file_content`, `record_count`).
-Rebuild the census for each full Golden Copy: a census counted before a new
-GLEIF entity took a name cannot see it.
+(`format`, `cdf_version`, `content_date`, `file_content`, `record_count`); its
+record count must equal the reading's. Rebuild the census for each full Golden
+Copy: a census counted before a new GLEIF entity took a name cannot see it.
 
 ## Prepare a native Company sample
 
