@@ -33,7 +33,7 @@ read:
         state: {text: {path: "5K(3)(c) State", path_mode: literal, null_if: [""]}}
         country: {text: {path: "5K(3)(c) Country", path_mode: literal, null_if: [""]}}
         related_person: {text: {path: "5K(3)(d)", path_mode: literal, null_if: [""]}}
-        bd_number: {text: {path: "5K(3)(e)", path_mode: literal, null_if: [""]}}
+        bd_number: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
         other_id: {text: {path: "5K(3)(f)", path_mode: literal, null_if: [""]}}
         lei:
           text:
@@ -46,13 +46,14 @@ read:
             - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
             null_if: [""]
         # The LEI only when the row has no BD number: `equal` holds when both
-        # sides are null, and the right side is always null.
+        # sides are null, and the right side is always null (any value, with
+        # or without line breaks, is replaced by "" and read as null).
         custodian_lei:
           choose:
             condition:
               equal:
                 left: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
-                right: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{regex_replace: {pattern: "^.*$", with: ""}}], null_if: [""]}}
+                right: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{regex_replace: {pattern: "(?s)^.*$", with: ""}}], null_if: [""]}}
             then:
               text:
                 path: "5K(3)(f)"
@@ -63,7 +64,7 @@ read:
                 - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
                 - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
                 null_if: [""]
-            else: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{regex_replace: {pattern: "^.*$", with: ""}}], null_if: [""]}}
+            else: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{regex_replace: {pattern: "(?s)^.*$", with: ""}}], null_if: [""]}}
         custodian_id:
           coalesce:
             skip: "null"

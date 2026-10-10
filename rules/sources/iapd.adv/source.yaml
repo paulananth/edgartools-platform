@@ -39,7 +39,7 @@ mdm:
         - filing_id
         # CRD joins an adviser's filings into one Company (binding rule
         # iapd-adv-crd); it is the adviser's identity. Item 1.P's LEI is lookup
-        # only (`reported_lei`): advisers report an affiliate's or another
+        # only (`adv_lei`): advisers report an affiliate's or another
         # firm's LEI (8 valid LEIs on 2 to 7 advisers each, 3 advisers with
         # two, over 13 months), so it cannot join records. Operator,
         # 2026-10-09: "Keep LEI, lookup only (Recommended)". The SEC file
@@ -51,7 +51,7 @@ mdm:
           crd: crd
         cross_references:
           sec_file_number: sec_file_number
-          reported_lei: lei
+          adv_lei: lei
         fields:
           name: legal_name
           address:
@@ -105,7 +105,7 @@ mdm:
         # number) but often a parent's or another LEI, 8 BD numbers with 2 to
         # 4 valid LEIs each. So the BD number joins; the LEI joins only a row
         # with no BD number (`custodian_lei`, custody-csv.yaml); every reported
-        # LEI is kept for lookup (`reported_lei`). 5.K(3)(f) is "LEI or other":
+        # LEI is kept for lookup (`adv_lei`). 5.K(3)(f) is "LEI or other":
         # only an LEI-shaped value is read as an LEI. A custodian with neither
         # keeps a name id, lookup only, and waits for a proven name rule.
         identifiers:
@@ -115,7 +115,7 @@ mdm:
           lei: lei
         cross_references:
           name_id: legal_name
-          reported_lei: lei
+          adv_lei: lei
         cross_reference_formats:
           name_id: name_id@1
         fields:

@@ -525,11 +525,14 @@ rules:
       - DUPLICATE
   - primitive: holds_no_other_lei@1
     args: {}
-# Form ADV (profiling ticket 07; operator, 2026-10-09 10:38 ET, "Approve as
-# proposed (Recommended)"): an adviser's filings join the one Company that
-# holds its CRD, or create it; a custodian's records (one per monthly file)
-# join the one Company that holds its LEI, then its SEC broker-dealer number,
-# or create it. A
+# Form ADV (profiling ticket 07; operator, 2026-10-09 14:56 ET: "custodian
+# must be in mdm, they are a company, Advisors must be in MDM"): an adviser's
+# filings join the one Company that holds its CRD, or create it; a
+# custodian's records (one per monthly file) join the one Company that holds
+# its SEC broker-dealer number, or, with none, its LEI, or create it
+# (operator: "BD number first (Recommended)"; the reading fills
+# `custodian_lei` only when a row has no BD number, so the two custodian
+# rules never apply to one record and their order here does not matter). A
 # custodian named by neither is not bound (its name id is lookup only) until a
 # proven name rule (ticket 07b). Declared, not switched on: each rule activates
 # on its Identifier Contract, approved by the operator.
@@ -770,6 +773,8 @@ identifiers:
       unit: items
       warm_up_decisions: 10000
       max_per_10k: 5
+  # The CRD normalizer keeps digits only: "8-129" is 8129. Over 13 months
+  # the 326 BD numbers have no zero-padded variant (no "8-00129").
   bd_number:
     authority: SEC (broker-dealer file number, 8-)
     sources:
