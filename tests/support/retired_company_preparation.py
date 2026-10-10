@@ -8,7 +8,9 @@ from pathlib import Path
 import pyarrow.parquet as pq
 from edgar_warehouse.mdm.clean.company_source import (
     SOURCE_CODE, CONTRACT, POLICY, ADDRESS_READING, _read_manifest, _read_member,
-    _read_bounded, _read_receipts, instant, Conflict, canonical, digest, project_record)
+    _read_bounded, _read_receipts, Conflict, canonical, project_record)
+from edgar_warehouse.mdm.clean.evidence import instant
+from edgar_warehouse.mdm.clean.store import digest
 
 from edgar_warehouse.mdm.clean.name_census import entry as census_entry
 
