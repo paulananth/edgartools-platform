@@ -25,6 +25,7 @@ what changed, and would let a common name look unique.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from typing import BinaryIO
 
 from . import cascade as cascaded
@@ -172,6 +173,46 @@ def build(
         address_counts=counts if passes else None,
     )
 
+
+def fold_reading(readings, *, cascade_wanted: set, address_counts) -> tuple[dict, dict, list]:
+    """What the configured complete reading of the Golden Copy counted.
+
+    `readings` yields the reading's tables (`census-complete-stream.yaml`), in
+    source order: legal holders with their last update (a later record wins),
+    other-name holders, and for every supported GENERAL record its cascade
+    view. A candidate is an entity holding a filer's name; the same LEI later
+    in the source replaces it, and its other rows in one record add their
+    names. Every supported GENERAL address adds to `address_counts`.
+    Returns (legal, other, candidates in first-seen order).
+    """
+    legal: dict[str, dict[str, str]] = defaultdict(dict)
+    other: dict[str, set] = defaultdict(set)
+    entities: dict = {}
+    position: dict[str, int] = {}
+    for tables in readings:
+        for row in tables["a_legal"]:
+            legal[row["key"]][row["lei"]] = row["updated"] or ""
+        for table in ("b_other", "c_transliterated"):
+            for row in tables[table]:
+                other[row["key"]].add(row["lei"])
+        for table in ("a_legal", "b_other", "c_transliterated"):
+            for row in tables[table]:
+                seen = row["cascade"]
+                if seen is None:
+                    continue
+                keys = frozenset({seen["legal"], *([row["key"]] if row["key"] in cascade_wanted else [])}) - {""}
+                if not keys & cascade_wanted:
+                    continue
+                lei, index = seen["lei"], row["source_index"]
+                if index > position.get(lei, -1):
+                    entities[lei] = cascaded.Entity(lei, keys, cascaded.place(seen["place"]), seen["jurisdiction"],
+                                                    seen["eligible"], seen["last_update"], seen["legal"])
+                    position[lei] = index
+                elif index == position[lei]:
+                    entities[lei] = replace(entities[lei], keys=entities[lei].keys | keys)
+        for row in tables["d_addresses"]:
+            address_counts[(row["street"], row["postcode"], row["country"])] += 1
+    return legal, other, list(entities.values())
 
 def document(
     *,
