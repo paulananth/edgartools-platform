@@ -34,14 +34,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare.add_argument("--bronze-receipts", help="Bronze receipts of this same capture run: each record names its bronze object")
     prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
 
-    census = mdm_sub.add_parser("name-census", help="Count SEC captures and one full GLEIF Golden Copy into a Name Census file")
+    census = mdm_sub.add_parser("name-census", help="Count SEC captures and one configured full GLEIF Golden Copy "
+                                "reading into a Name Census file")
     census.add_argument("--landing-root", required=True)
     census.add_argument("--landing-manifest", dest="landing_manifests", required=True, action="append",
                         help="Landing manifest of an SEC capture (sec_company, sec_company_former_name); repeat it "
                              "for each capture of the population, which together must be every SEC filer")
-    census.add_argument("--gleif-archive", required=True, help="GLEIF Level 1 Golden Copy JSON zip (full, never a delta)")
+    census.add_argument("--gleif-reading", required=True,
+                        help="The verified source.read output of rules/sources/gleif/census-complete-stream.yaml "
+                             "over a full Golden Copy (its reading.json)")
+    census.add_argument("--gleif-reading-sha256", required=True)
     census.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
-    census.add_argument("--gleif-sha256", required=True)
     census.add_argument("--output", required=True)
     census.set_defaults(handler=_logged_handler("name-census", _clean("name_census")))
 

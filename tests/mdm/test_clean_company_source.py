@@ -19,9 +19,9 @@ from edgar_warehouse.mdm.clean.company_source import (
     bronze_receipts,
     census_filers,
     write_bronze_receipts,
-    write_name_census,
 )
 from edgar_warehouse.mdm.clean.company_prepare import prepare_company_bundle
+from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
 from edgar_warehouse.mdm.clean.store import Conflict
 from tests.support.retired_company_address import business_address
 from tests.mdm.test_clean_activation import proof
@@ -167,6 +167,46 @@ def write_run(root, run_id, tables, folder=""):
     return manifest
 
 
+def gleif_reading(folder, archive, wanted, count):
+    """The Golden Copy through its configured complete reading, as the `source.read` worker writes it."""
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean.name_frequency import GLEIF_READING
+    from edgar_warehouse.rules import files
+    from edgar_warehouse.workers import source_read
+
+    folder.mkdir()
+    store = Artifacts()
+    source = store.put_bytes((folder / archive.name).as_uri(), archive.read_bytes())
+    context = store.put(folder.as_uri(), {"version": 1, "input": source, "values": {"publication_count": count}})
+    lookups = store.put(folder.as_uri(), {"version": 1, "input": source, "sets": {"wanted": sorted(wanted)}})
+    contract = store.put(folder.as_uri(), files.load(GLEIF_READING))
+    request = store.put(folder.as_uri(), {"version": 3, "contract": contract,
+                                          "artifacts": [{"input": source, "context": context, "lookups": lookups}]})
+    task = {"input": request, "output": (folder / "reading.json").as_uri(), "checks": ["source.output"]}
+    candidate = source_read.execute(task, store)
+    assert source_read.verify({**task, "candidate": candidate}, store) == ({"source.output": True}, [])
+    return candidate
+
+
+def name_frequency(tmp_path, root, manifests, gleif, filers, output):
+    """`mdm name-census` over these captures and a Golden Copy of `gleif` records."""
+    from edgar_warehouse.mdm.clean.name_census import _sec_population
+
+    folder = tmp_path / f"golden-{output.stem}"
+    folder.mkdir()
+    archive, metadata, _ = gleif_archive(folder, gleif)
+    reading = gleif_reading(folder / "reading", archive, _sec_population(filers)[1], len(gleif))
+    return write_name_frequency(landing_root=str(root), landing_manifests=[str(m) for m in manifests],
+                                gleif_reading=reading, gleif_metadata=str(metadata), output=str(output))
+
+
+def filers_of(rows, former):
+    names = {}
+    for row in former:
+        names.setdefault(int(row["cik"]), []).append(row["former_name"])
+    return [(f"{int(r['cik']):010d}", r["entity_name"], names.get(int(r["cik"]), [])) for r in rows]
+
+
 def landing(
     tmp_path, rows, tickers=None, filings=None, addresses=None, former=None, gleif=()
 ):
@@ -181,7 +221,7 @@ def landing(
             "sec_company": rows,
             "sec_company_filing": filings or [filing_row(999, "10-K")],
             "sec_company_address": addresses or [address_row(999)],
-            "sec_company_former_name": former or [former_row(999, "OLD NAME INC")],
+            "sec_company_former_name": (former := former or [former_row(999, "OLD NAME INC")]),
         },
     )
     ticker_manifest = write_run(
@@ -189,16 +229,8 @@ def landing(
         "catalog-1",
         {"sec_company_ticker": tickers or [ticker_row(999, "ZZZ")]},
     )
-    archive, metadata, sha = gleif_archive(tmp_path, gleif)
     census = tmp_path / "name-census.json"
-    write_name_census(
-        landing_root=str(root),
-        landing_manifests=[str(manifest)],
-        gleif_archive=str(archive),
-        gleif_metadata=str(metadata),
-        gleif_sha256=sha,
-        output=str(census),
-    )
+    name_frequency(tmp_path, root, [manifest], list(gleif), filers_of(rows, former), census)
     return {
         "landing_root": str(root),
         "landing_manifest": str(manifest),
@@ -748,12 +780,9 @@ class TestMatchingEvidenceIsPinned:
             "sec_company_address": [address_row(999, last_sync_run_id="capture-2")],
             "sec_company_former_name": [former_row(999, "OLD NAME INC", last_sync_run_id="capture-2")],
         }, folder="two")
-        (tmp_path / "g").mkdir()
-        archive, metadata, sha = gleif_archive(tmp_path / "g", [])
         census = tmp_path / "whole.json"
-        write_name_census(landing_root=str(root), landing_manifests=[args["landing_manifest"], str(second)],
-                          gleif_archive=str(archive), gleif_metadata=str(metadata), gleif_sha256=sha,
-                          output=str(census))
+        both = [("0000320193", "APPLE INC", []), ("0000789019", "APPLE INC", [])]
+        name_frequency(tmp_path, root, [args["landing_manifest"], second], [], both, census)
         sec = json.loads(census.read_text())["sec"]
         assert sec["filers"] == 2
         assert [c["capture_run_id"] for c in sec["captures"]] == ["capture-1", "capture-2"]
@@ -764,9 +793,7 @@ class TestMatchingEvidenceIsPinned:
         prepare_company_bundle(**{**args, "landing_manifest": str(second), "name_census": str(census),
                                   "output": str(tmp_path / "second-bundle")})
         with pytest.raises(Conflict, match="two of the census's captures"):
-            write_name_census(landing_root=str(root), landing_manifests=[args["landing_manifest"]] * 2,
-                              gleif_archive=str(archive), gleif_metadata=str(metadata), gleif_sha256=sha,
-                              output=str(tmp_path / "twice.json"))
+            name_frequency(tmp_path, root, [args["landing_manifest"]] * 2, [], both[:1], tmp_path / "twice.json")
 
     def test_a_census_of_another_capture_is_refused(self, tmp_path):
         args = landing(tmp_path, [source_row(123)])

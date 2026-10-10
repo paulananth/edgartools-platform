@@ -49,8 +49,9 @@ DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-pyt
 def test_complete_census_general_projection_matches_active_cascade_without_install(case):
     """Bounded projection proof; no install or database population gate."""
     import copy
-    from edgar_warehouse.mdm.clean import cascade, company_source, name_census, quality
+    from edgar_warehouse.mdm.clean import cascade, company_source, quality
     from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+    from tests.support.retired_name_census import cascade_entity
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
 
@@ -72,7 +73,7 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     spec = cascade.spec(company_source.POLICY)
     assert len(spec["passes"]) == 7
     contract = dataset_contract("level1")
-    expected = name_census.cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
+    expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
     recipe = files.load(files.ROOT / "sources/gleif/census-cascade-record.yaml")
     projected = SourceEngine(recipe).read(json.dumps(row, ensure_ascii=False).encode()).tables["mapped"][0]["observation"]
     if expected is None:
@@ -1276,12 +1277,27 @@ second=stage.apply(**second_command)
 # Build a fresh census inside the installation and carry its exact evidence
 # through actual SEC normalization, Merge Stage and publication/recovery.
 import io, base64
+import zipfile
 from edgar_warehouse.mdm.clean import name_census
-assert not any(hasattr(name_census,name) for name in ("_text","_other_names","sec_keys"))
+from edgar_warehouse.workers import source_stream
+assert not any(hasattr(name_census,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
 packed=base64.b64decode(body["census_archive"],validate=True)
 census_arguments=body["census_arguments"]
 assert hashlib.sha256(packed).hexdigest()==census_arguments["gleif_sha256"]
-census=name_census.build(gleif_archive=io.BytesIO(packed),**census_arguments)
+# The Golden Copy through the installed configured complete reading, folded as `mdm name-census` folds it.
+held,wanted=name_census._sec_population(census_arguments["filers"])
+spec,stream,_=source_stream.stream_policy(files.load(files.ROOT/"sources/gleif/census-complete-stream.yaml"))
+tables=[]
+with zipfile.ZipFile(io.BytesIO(packed)) as z, z.open(z.namelist()[0]) as member:
+    stream.stream_json_array(member,wrapper=spec["wrapper"],lookups={"wanted":sorted(wanted)},
+        context={"publication_count":census_arguments["gleif_metadata"]["record_count"]},
+        ordinal_context=spec["ordinal_context"],on_reading=lambda reading,_:tables.append(reading.tables),
+        **{k:spec[k] for k in ("max_bytes","max_record","max_records","max_depth","min_integer","record_encoding")})
+meta=census_arguments["gleif_metadata"]
+census=name_census.census(sec_population=census_arguments["sec_population"],
+    gleif={"archive_sha256":census_arguments["gleif_sha256"],"content_date":meta["content_date"],
+           "file_content":meta["file_content"],"record_count":meta["record_count"]},
+    held=held,wanted=wanted,readings=tables)
 expected=body["historical_census"]
 assert census==expected
 census_assertions=[]
@@ -1335,9 +1351,7 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    files.ROOT/"sources/sec.submissions.company/source.yaml",
                    files.ROOT/"sources/sec.submissions.person/source.yaml",Path(company_source.__file__),
                    files.ROOT/"sources/sec.submissions.company/landed-address.yaml",Path(name_census.__file__),
-                   files.ROOT/"sources/gleif/census-record.yaml",
-                   files.ROOT/"sources/gleif/census-identity.yaml",
-                   files.ROOT/"sources/gleif/census-update.yaml",
+                   files.ROOT/"sources/gleif/census-complete-stream.yaml",
                    files.ROOT/"sources/sec.submissions.company/census-filer.yaml"]}
 print(json.dumps({"pins":pins,"generation":census_result["generation"],"counts":counts,
                   "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_address_caller":True,"installed_census_caller":True,"census_digest":digest(census),"publication_recovery":True,"full_population":False}))

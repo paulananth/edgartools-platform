@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import re
 from pathlib import Path
 
@@ -17,10 +16,8 @@ import pyarrow.parquet as pq
 
 from edgar_warehouse.rules import files as rules_files
 
-from .evidence import instant
-from .matching import active_rules
 from edgar_warehouse.workers.source_mapping import project_record
-from .store import Conflict, canonical, digest
+from .store import Conflict, canonical
 
 SOURCE_CODE = "sec.submissions.company.v1"
 # The mapping and the merge rules are data in `rules/`, edited and reviewed as
@@ -294,86 +291,6 @@ def cascade_filer(row: dict, business: dict | None):
     except UnsupportedRecord:
         return None
     return cascade.filer_of(cascade.record(f"{int(row['cik']):010d}", fields, matching, quality))
-
-
-def write_name_census(
-    *,
-    landing_root: str,
-    landing_manifests: list[str],
-    gleif_archive: str,
-    gleif_metadata: str,
-    gleif_sha256: str,
-    output: str,
-) -> dict:
-    """Count SEC captures and one full GLEIF Golden Copy into a census file.
-
-    A name is unique only if it is unique among all SEC filers (ticket 08), so
-    a census counts every capture it is given: the whole SEC population may be
-    captured in several runs of at most 1,000 filers (ticket 26). A filer in
-    two captures would make its own name look shared, so it is refused. One
-    capture keeps the census exactly as before.
-
-    An existing census is never overwritten with different content.
-    """
-    from . import cascade as cascaded
-    from .gleif_source import dataset_contract
-    from .name_census import build
-
-    if not landing_manifests:
-        raise Conflict("A Name Census counts at least one SEC capture")
-    filers, captures = [], []
-    for landing_manifest in landing_manifests:
-        counted, capture = census_filers(landing_root=landing_root, landing_manifest=landing_manifest)
-        filers.extend(counted)
-        captures.append(capture)
-    if len(captures) > 1 and len({cik for cik, _, _ in filers}) != len(filers):
-        raise Conflict("A filer is in two of the census's captures")
-    population = captures[0] if len(captures) == 1 else {"captures": captures, "filers": len(filers)}
-    # The cascade's passes (ticket 21), from the Company rules. The census
-    # runs them only once one is switched on (ticket 20); until then it and
-    # every record it feeds are as before. It runs every declared pass, in
-    # order: an earlier pass's answer never depends on a later one.
-    spec = cascaded.spec(POLICY)
-    cascade = None
-    if spec["passes"] and any(
-        t["primitive"] == cascaded.TEST for _, rule in active_rules(POLICY) for t in rule["when"]
-    ):
-        if len(landing_manifests) != 1:
-            # Ticket 20 extends the cascade's addresses to several captures.
-            raise Conflict("A cascade pass needs a census of one capture")
-        cascade_population, pinned = cascade_filers(
-            landing_root=landing_root, landing_manifest=landing_manifests[0]
-        )
-        population = {**population, **pinned}
-        cascade = {"spec": spec, "filers": cascade_population, "gleif_contract": dataset_contract("level1")}
-    metadata = json.loads(Path(gleif_metadata).read_text())
-    with Path(gleif_archive).open("rb") as archive:
-        census = build(
-            filers=filers,
-            sec_population=population,
-            gleif_archive=archive,
-            gleif_metadata=metadata,
-            gleif_sha256=gleif_sha256,
-            cascade=cascade,
-        )
-    data = (canonical(census) + "\n").encode()
-    target = Path(output).resolve()
-    if target.exists():
-        if target.read_bytes() != data:
-            raise Conflict("Existing Name Census has different content")
-    else:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("xb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-    return {
-        "version": census["version"],
-        "sha256": digest(census),
-        "sec": census["sec"],
-        "gleif": census["gleif"],
-        "entries": len(census["entries"]),
-    }
 
 
 # Ticket 08, the SEC-to-GLEIF matching rules, measured on bronze and the

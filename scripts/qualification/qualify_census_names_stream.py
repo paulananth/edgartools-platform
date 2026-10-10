@@ -18,6 +18,11 @@ from scripts.qualification import qualify_census_reading as captured
 from scripts.qualification.qualify_census_reading import sha, SampleComplete
 from tests.engine.test_census_names_stream import expected
 from tests.support import retired_name_census as oracle
+# The per-record census recipes the retired builder read; the configured
+# complete stream is generated from them (`build_frequency_rules.py`).
+IDENTITY = files.load(files.ROOT / 'sources/gleif/census-identity.yaml')
+UPDATE = files.load(files.ROOT / 'sources/gleif/census-update.yaml')
+RECORD = files.load(files.ROOT / 'sources/gleif/census-record.yaml')
 
 
 def main():
@@ -93,14 +98,14 @@ def main():
         def configured(row, ordinal):
             tables = {'a_legal': [], 'b_other': [], 'c_transliterated': []}
             get = lambda recipe, column: source_mapping.project_record(row, recipe, column=column)['value']
-            if get(name_census.GLEIF_IDENTITY, 'category') != 'BRANCH':
-                lei = get(name_census.GLEIF_IDENTITY, 'lei')
+            if get(IDENTITY, 'category') != 'BRANCH':
+                lei = get(IDENTITY, 'lei')
                 if lei:
-                    key = get(name_census.GLEIF_IDENTITY, 'key')
+                    key = get(IDENTITY, 'key')
                     if key in wanted:
                         tables['a_legal'].append({'key':key, 'lei':lei,
-                            'updated':get(name_census.GLEIF_UPDATE, 'updated')})
-                    reading = source_mapping.read_record(row, name_census.GLEIF_READING)
+                            'updated':get(UPDATE, 'updated')})
+                    reading = source_mapping.read_record(row, RECORD)
                     for old, new in [('other','b_other'), ('transliterated','c_transliterated')]:
                         tables[new] = [{'key':r['key'], 'lei':lei} for r in reading.tables[old] if r['key'] in wanted]
             baseline.append(tables)

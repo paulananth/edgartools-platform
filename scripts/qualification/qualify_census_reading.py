@@ -105,7 +105,9 @@ def main():
     arguments = dict(filers=all_filers, sec_population={'capture_run_id':'captured-sample', 'filers':len(all_filers)},
                      gleif_metadata=meta, gleif_sha256=hashlib.sha256(sampled_archive).hexdigest())
     source_engine.STEPS = {}
-    actual = name_census.build(gleif_archive=io.BytesIO(sampled_archive), **arguments)
+    from tests.mdm.test_clean_name_census import configured
+    actual = configured(all_filers, rows, population=arguments['sec_population'],
+                        archive_sha256=arguments['gleif_sha256'])
     expected = retired_name_census.build(gleif_archive=io.BytesIO(sampled_archive), **arguments)
     if actual != expected:
         raise ValueError('actual constructed census differs from historical output')
