@@ -8,10 +8,14 @@ import io
 import json
 import zipfile
 
-import pytest
 
-from edgar_warehouse.mdm.clean.name_census import VERSION, build, entry
-from edgar_warehouse.mdm.clean.store import Conflict, digest
+from edgar_warehouse.mdm.clean import name_census
+from edgar_warehouse.mdm.clean.name_census import VERSION, entry
+from edgar_warehouse.mdm.clean.store import digest
+from edgar_warehouse.rules import files
+from edgar_warehouse.workers import source_stream
+
+COMPLETE_READING = files.ROOT / "sources/gleif/census-complete-stream.yaml"
 
 
 def gleif(lei, legal, *, other=(), category="GENERAL", updated="2026-09-01T00:00:00Z"):
@@ -48,15 +52,36 @@ def metadata(count, **changes):
     }
 
 
-def census(filers, records, **meta):
-    raw = archive(records)
-    return build(
-        filers=filers,
-        sec_population={"capture_run_id": "run-1", "filers": len(filers)},
-        gleif_archive=io.BytesIO(raw),
-        gleif_metadata=metadata(len(records), **meta),
-        gleif_sha256=hashlib.sha256(raw).hexdigest(),
-    )
+def configured(filers, records, *, cascade=None, recipe=None, population=None, archive_sha256=None):
+    """The census `mdm name-census` writes: the Golden Copy through its configured
+    complete reading (`census-complete-stream.yaml`), folded, then `document`.
+    `cascade` is {"spec", "filers"}: the passes and every SEC filer as the cascade reads it."""
+    from collections import Counter
+
+    from edgar_warehouse.mdm.clean import cascade as cascaded
+
+    held, wanted = name_census._sec_population(filers)
+    spec, engine, _ = source_stream.stream_policy(recipe or files.load(COMPLETE_READING))
+    found = []
+    engine.stream_json_array(
+        io.BytesIO(json.dumps({"records": records}).encode()), wrapper=spec["wrapper"],
+        lookups={"wanted": sorted(wanted)}, context={"publication_count": len(records)},
+        ordinal_context=spec["ordinal_context"], on_reading=lambda reading, _ordinal: found.append(reading.tables),
+        **{k: spec[k] for k in ("max_bytes", "max_record", "max_records", "max_depth", "min_integer", "record_encoding")})
+    on = bool(cascade and cascade["spec"]["passes"])
+    counts = cascaded.count_addresses(f.place for f in cascade["filers"]) if on else Counter()
+    legal, other, entities = name_census.fold_reading(
+        found, cascade_wanted={f.key for f in cascade["filers"]} - {""} if on else set(), address_counts=counts)
+    return name_census.document(
+        sec_population=population or {"capture_run_id": "run-1", "filers": len(filers)},
+        gleif={"archive_sha256": archive_sha256 or hashlib.sha256(archive(records)).hexdigest(), "content_date": metadata(0)["content_date"],
+               "file_content": "GLEIF_FULL_PUBLISHED", "record_count": len(records)},
+        held=held, wanted=wanted, legal=legal, other=other, cascade=cascade if on else None,
+        entities=entities, address_counts=counts if on else None)
+
+
+def census(filers, records):
+    return configured(filers, records)
 
 
 APPLE = ("0000320193", "APPLE INC", [])
@@ -114,26 +139,6 @@ class TestTheCensusIsBoundToItsInputs:
         assert doc["gleif"]["file_content"] == "GLEIF_FULL_PUBLISHED"
         assert doc["gleif"]["record_count"] == 1
 
-    def test_a_delta_publication_is_refused(self):
-        with pytest.raises(Conflict, match="never a delta"):
-            census(
-                [APPLE],
-                [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")],
-                file_content="GLEIF_DELTA_PUBLISHED",
-                delta_start="2026-09-10T16:00:00+00:00",
-            )
-
-    def test_a_population_count_that_disagrees_is_refused(self):
-        raw = archive([])
-        with pytest.raises(Conflict, match="SEC population"):
-            build(
-                filers=[APPLE],
-                sec_population={"capture_run_id": "run-1", "filers": 2},
-                gleif_archive=io.BytesIO(raw),
-                gleif_metadata=metadata(0),
-                gleif_sha256=hashlib.sha256(raw).hexdigest(),
-            )
-
 
 class TestWhatARecordCarries:
     def test_its_entry_names_the_census(self):
@@ -163,19 +168,12 @@ class TestTheCascade:
     def run(self, records):
         from edgar_warehouse.mdm.clean import cascade
         from edgar_warehouse.mdm.clean.company_source import POLICY
-        from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
 
         filer = cascade.Filer(cik="0000320193", key="APPLE INC",
                               place=cascade.place({"street": "1 APPLE PARK WAY", "city": "CUPERTINO",
                                                    "postcode": "95014", "country": "US"}),
                               incorporated="US-CA", business_country="US")
-        raw = archive(records)
-        return build(
-            filers=[APPLE], sec_population={"capture_run_id": "run-1", "filers": 1},
-            gleif_archive=io.BytesIO(raw), gleif_metadata=metadata(len(records)),
-            gleif_sha256=hashlib.sha256(raw).hexdigest(),
-            cascade={"spec": cascade.spec(POLICY), "filers": [filer], "gleif_contract": dataset_contract("level1")},
-        )
+        return configured([APPLE], records, cascade={"spec": cascade.spec(POLICY), "filers": [filer]})
 
     def test_the_entity_at_the_filers_address_binds_in_the_first_pass(self):
         found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way"),
@@ -204,64 +202,3 @@ def test_a_record_carries_its_ciks_cascade_answer_inside_its_census_entry():
     assert carried["key"] == "APPLE INC"
     assert carried["cascade"] == {"census": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
     assert "cascade" not in _census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")
-
-
-def same(left, right):
-    """Equal but for the archive digest: each zip the fixture writes has its own timestamps."""
-    return [{**d, "gleif": {**d["gleif"], "archive_sha256": None}} for d in (left, right)] == [
-        {**right, "gleif": {**right["gleif"], "archive_sha256": None}}] * 2
-
-
-class TestTheConfiguredReadingCountsTheSame:
-    """The configured Golden Copy reading, folded, gives the document `build` gives."""
-
-    def configured(self, filers, cascade_filers, records, spec):
-        from collections import Counter
-
-        from edgar_warehouse.mdm.clean import cascade, name_census
-        from edgar_warehouse.rules import files
-        from edgar_warehouse.workers import source_stream
-        from tests.mdm.test_clean_name_census import metadata
-
-        held, wanted = name_census._sec_population(filers)
-        engine = source_stream.stream_policy(files.load(files.ROOT / "sources/gleif/census-complete-stream.yaml"))[1]
-        found = []
-        engine.stream_json_array(
-            io.BytesIO(json.dumps({"records": records}).encode()), wrapper="records",
-            lookups={"wanted": sorted(wanted)}, context={"publication_count": len(records)},
-            ordinal_context="source_index", max_bytes=1048576, max_record=1048576, max_records=100000,
-            on_reading=lambda reading, _ordinal: found.append(reading.tables))
-        counts = cascade.count_addresses(f.place for f in cascade_filers) if spec else Counter()
-        legal, other, entities = name_census.fold_reading(
-            found, cascade_wanted={f.key for f in cascade_filers} - {""}, address_counts=counts)
-        raw = archive(records)
-        return name_census.document(
-            sec_population={"capture_run_id": "run-1", "filers": len(filers)},
-            gleif={"archive_sha256": hashlib.sha256(raw).hexdigest(), "content_date": metadata(0)["content_date"],
-                   "file_content": "GLEIF_FULL_PUBLISHED", "record_count": len(records)},
-            held=held, wanted=wanted, legal=legal, other=other,
-            cascade={"spec": spec, "filers": cascade_filers} if spec else None,
-            entities=entities, address_counts=counts)
-
-    def test_names_counted_alike(self):
-        records = [gleif("A", "Apple Inc.", other=["Wayfair Inc."]),
-                   gleif("B", "Other LLC", other=["Apple Inc."]),
-                   gleif("A", "Apple Inc.", updated="2026-09-02T00:00:00Z"),
-                   gleif("C", "Apple Inc.", category="BRANCH")]
-        assert same(self.configured([APPLE, WAYFAIR], [], records, None), census([APPLE, WAYFAIR], records))
-
-    def test_cascade_answered_alike(self):
-        from edgar_warehouse.mdm.clean import cascade
-        from edgar_warehouse.mdm.clean.company_source import POLICY
-
-        case = TestTheCascade()
-        records = [case.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way"),
-                   case.native("5493001KJTIIGC8Y1R12", "Apple Inc.", "1 Rue de Paris", country="FR"),
-                   case.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way", status="INACTIVE")]
-        filer = cascade.Filer(cik="0000320193", key="APPLE INC",
-                              place=cascade.place({"street": "1 APPLE PARK WAY", "city": "CUPERTINO",
-                                                   "postcode": "95014", "country": "US"}),
-                              incorporated="US-CA", business_country="US")
-        expected = case.run(records)
-        assert expected["cascade"]["assignments"]
-        assert same(self.configured([APPLE], [filer], records, cascade.spec(POLICY)), expected)
