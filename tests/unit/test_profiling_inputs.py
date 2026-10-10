@@ -206,3 +206,26 @@ def test_a_list_inside_a_nested_object_names_its_enclosing_part(con, tmp_path):
     f.write_text(json.dumps([{"id": 1, "group": {"items": [{"x": 1}, {"x": 2}]}}]))
     parts = {p.name: p for p in inputs.register(con, "n", str(f), tmp_path / "w")}
     assert parts["n.group.items"].parent == "n"
+
+
+def test_sibling_lists_of_records_stay_separate_parts(con, tmp_path):
+    # Two equally long lists of objects are two child parts, never one table zipped by position;
+    # a single item written as an object joins its list.
+    f = tmp_path / "d.json"
+    f.write_text(json.dumps([
+        {"id": 1, "table": {"tx": [{"a": 1}, {"a": 2}], "hold": [{"b": 1}, {"b": 2}]}},
+        {"id": 2, "table": {"tx": {"a": 3}}},
+    ]))
+    parts = {p.name: p for p in inputs.register(con, "d", str(f), tmp_path / "w")}
+    assert "d.table" not in parts
+    assert parts["d.table.tx"].parent == parts["d.table.hold"].parent == "d"
+    assert con.execute('SELECT _parent_row, a FROM "d.table.tx" ORDER BY 1, 2').fetchall() == [(0, 1), (0, 2), (1, 3)]
+    assert con.execute('SELECT _parent_row, b FROM "d.table.hold" ORDER BY 1, 2').fetchall() == [(0, 1), (0, 2)]
+
+
+def test_lists_of_plain_values_of_one_length_are_a_table_stored_by_column(con, tmp_path):
+    f = tmp_path / "c.json"
+    f.write_text(json.dumps([{"id": 1, "m": {"x": [1, 2], "y": ["p", "q"]}}]))
+    parts = {p.name for p in inputs.register(con, "c", str(f), tmp_path / "w")}
+    assert "c.m" in parts
+    assert con.execute('SELECT x, y FROM "c.m" ORDER BY 1').fetchall() == [(1, "p"), (2, "q")]

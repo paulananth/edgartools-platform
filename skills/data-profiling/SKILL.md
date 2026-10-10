@@ -32,48 +32,35 @@ advice only.
 
 ## Tell the discovery story as you work
 
-**Coordination note for every LLM (operator, 2026-10-09):** preserve these live
-narration requirements when editing or replacing this skill. Read the latest
-version and carry them into any revision; an older worktree or skill copy must
-not overwrite them. Changing or removing them requires the operator's explicit
-instruction. Coordinate overlapping edits through the repository's ownership
-guard.
+**Coordination note for every LLM:** keep this section when editing the skill;
+read its latest version first, and change it only on the operator's explicit
+instruction. Operator, 2026-10-09: live narration; then "fix the skill to be
+more story telling ... i need to know what it is finding no more ... discussion
+and slop".
 
-Keep the operator informed in the conversation throughout every mode, including
-when data-onboarding or refining-rules calls this skill. Saved reports accompany
-these live updates; the operator must be able to follow the investigation before
-the report is finished.
+Tell the operator what the data is, as you find it. Every update is a finding:
+what the data turned out to be, its numbers, and what that means.
 
-- **Before the first investigation command:** say what question you are
-  answering, which copies you will inspect, and what you will check first.
-  Reuse names and paths already supplied by the operator.
-- **At each meaningful finding or change of direction:** give a short update
-  connecting **what you checked → what the evidence shows → why it matters →
-  what you will check next**. Explain the reason for the next check. Tell the
-  operator when evidence changes an earlier hypothesis.
-- **Before a long pass:** give its scope, size, full or sampled coverage and
-  time estimate, naming the measurement or basis for the estimate. If the
-  estimate is unknown, say so and measure a bounded pass first.
-- **While work is running:** send an update at least every 60 seconds. Start
-  long commands with a yielding/background execution mechanism and poll or
-  wait in intervals of at most 30 seconds so you can keep talking. Report
-  observed progress and elapsed time. When the tool emits no progress, say
-  which command or stage is still running and that there is no new result;
-  report counts, percentages or an ETA only when measured.
-- **When a check fails or a meaning is unknown:** explain the refusal or
-  evidence gap, its effect on the investigation, and the next bounded check
-  or operator decision. Label sampled results, hypotheses and measured facts
-  explicitly; keep sensitive examples masked as required by Hard stops.
-- **At approval or handover:** summarize what was learned, what remains
-  unresolved, and what the evidence permits next. Link the report and ask the
-  required question. Narration supplies context; approval still comes from
-  the operator's exact words.
+- **One finding, with numbers, and its meaning.** "Every order names its
+  supplier: 63 suppliers by an issued id, one name each. The supplier is an
+  entity carried inside the orders."
+- **No process talk.** Do not announce commands, say what you will check
+  next, explain why you chose a step, think aloud or restate the plan. Name a
+  step only when it blocks the story (a refusal, a failure) or will take long:
+  then once, with its size and a measured time estimate.
+- **Say when evidence overturns an earlier finding**, in one sentence.
+- **Mark what is not proven**: "measured" against "not yet tested".
+- **While a command runs**, give an update at least every 60 seconds: a new
+  finding, or the stage and elapsed time if there is none. Start long commands
+  in the background and check at most every 30 seconds.
+- **At the end, tell the whole story in a few lines**: what each part is, how
+  the parts connect, what is unresolved. Then ask the one question. Approval
+  still comes only from the operator's exact words.
+- Mask sensitive values, as Hard stops require.
 
-For example, after measuring a candidate key: “The account column repeats in
-two rows, so it cannot identify every record alone. I’ll check whether the
-service column separates those rows before proposing a composite key.” Use
-the actual evidence from the current run, in plain words, in 1–3 sentences
-per update. Surface conclusions and their supporting reasons.
+Not: "I'll check the key candidates next, then look at links." Instead: "Each
+order line is identified by its order and its place in the list; no column of
+its own is unique."
 
 ## Setup
 
@@ -89,9 +76,10 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 
 | Mode | What it does | Output |
 |---|---|---|
-| inventory | Lists every input, its format, size and parts (nested lists become child parts) | `dataset.inputs`, parts |
+| inventory | Lists every input, its format, size and parts (nested lists become child parts; equal-length lists of records stay separate parts, and only lists of plain values are read as a table stored by column) | `dataset.inputs`, parts |
 | profile | Exact counts per column: fill, distinct, unique, shape, length, top values | `columns` |
-| keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists | `record_key` |
+| entities | An entity carried inside another part (an identifier-shaped column that repeats, with a name-like column of the same object that follows it on at least 95% of rows) becomes its own part, one row per identifier; the part it came from links to it. An id with only a name is a code with its label until other attributes show otherwise | `derived_from` |
+| keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists (a nested record with none of its own: its parent's key and its place in the list, which classification counts as a key) | `record_key` |
 | links | Each column pointing at another part's key (inclusion ≥ 0.9), with cardinality and evidence | `relationships` |
 | classify | The five classes, each from named tests; "unknown" when the tests do not decide | `class`, `confidence`, `tests` |
 | hierarchies | Per source: parent columns, functional dependencies, code nesting, separate level tables (a list naming its coarser list); a yes/no flag, or a dependency that holds by coincidence (a near-constant parent, or child values seen once), is listed apart, never a hierarchy | `hierarchies`, `dependencies_not_hierarchies` |

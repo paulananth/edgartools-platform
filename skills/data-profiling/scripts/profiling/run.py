@@ -16,7 +16,7 @@ from pathlib import Path
 
 import duckdb
 
-from . import classify, codes, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
+from . import classify, codes, embedded, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
@@ -43,12 +43,56 @@ def say(message: str) -> None:
     _clock[0] = now
 
 
+SHOWN = 6  # parts or links named in one progress line; the rest are counted
+
+
+def _listed(items: list[str]) -> str:
+    return ", ".join(items[:SHOWN]) + (f" and {len(items) - SHOWN} more" if len(items) > SHOWN else "")
+
+
+def _parts_found(parts, profiles) -> str:
+    """What the inputs hold: the parts, largest first, with their rows."""
+    by_size = sorted(parts, key=lambda p: -_rows(profiles, p))
+    return f"{len(parts)} parts: " + _listed([f"{p} ({_rows(profiles, p):,} rows)" for p in by_size])
+
+
+def _keys_found(parts, unique) -> str:
+    """Which top-level parts identify their rows by a column of their own."""
+    tops = [p for p in parts if parts[p].parent is None]
+    keyed = [f"{p} by {', '.join(unique[p][0])}" for p in tops if unique[p]]
+    none = [p for p in tops if not unique[p]]
+    return ("identified: " + _listed(keyed) if keyed else "no part has a unique column") + (
+        f"; no unique column: {_listed(none)}" if none else "")
+
+
+def _links_found(found) -> str:
+    """Which columns point at another part's key."""
+    shown = [f"{l['from']['part']}.{', '.join(l['from']['columns'])} → {l['to']['part']}" for l in found]
+    return f"{len(found)} links between parts: {_listed(shown)}" if found else "no column points at another part"
+
+
+def _classes_found(findings) -> str:
+    """What each part is, grouped by class."""
+    by_class: dict[str, list[str]] = {}
+    for f in sorted(findings, key=lambda f: -f["rows"]):
+        by_class.setdefault(f["class"], []).append(f"{f['part']} ({f['confidence']})" if f["class"] != "unknown"
+                                                   else f["part"])
+    return "; ".join(f"{cls}: {_listed(names)}" for cls, names in sorted(by_class.items()))
+
+
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
                    sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
                    work: Path | None = None) -> dict:
-    """Profile every input and return the findings (the findings.yaml document)."""
+    """Profile every input and return the findings (the findings.yaml document).
+
+    `work` holds the run's working copy; when none is given, one is made and removed at the end."""
+    if work is None:
+        work = Path(tempfile.mkdtemp(prefix="profiling-"))
+        try:
+            return profile_inputs(sources, name, limit, sample, seed, kinds, work)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
     started = time.monotonic()
-    work = work or Path(tempfile.mkdtemp(prefix="profiling-"))
     work.mkdir(parents=True, exist_ok=True)
     database = work / "profile.duckdb"
     database.unlink(missing_ok=True)
@@ -67,46 +111,68 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         for part in registered:
             part.sha256 = sha if part.parent is None else None
             parts[part.name] = part
-    say(f"registered {len(parts)} parts")
-
     profiles = {p: profile.columns(con, p) for p in parts}
-    say("profiled columns")
+    say(_parts_found(parts, profiles))
+    # An entity carried inside a part (its identifier and the columns that follow it) becomes a part.
+    carried: dict[str, set[str]] = {}
+    entities: dict[str, dict] = {}
+    for p in list(parts):
+        found, clashes = embedded.find(con, p, profiles[p], set(parts))
+        for clash in clashes:
+            say(f"{clash}: an entity carried inside {p}, left in place: a part of that name exists")
+        for entity in found:
+            entity["evidence"]["disagreeing_rows"] = embedded.register(con, entity)
+            parts[entity["part"]] = inputs.Part(entity["part"], parts[p].location, "derived", 0,
+                                                scan=parts[p].scan, derived_from=p)
+            profiles[entity["part"]] = profile.columns(con, entity["part"])
+            carried.setdefault(p, set()).update(entity["follows"])
+            entities[entity["part"]] = entity
+            evidence = entity["evidence"]
+            say(f"{p} carries an entity: {evidence['values']:,} distinct {entity['column']} over {evidence['rows']:,} rows, "
+                f"each with one {', '.join(entity['follows'])}; it becomes the part {entity['part']}")
     # A list of plain values has no key of its own: its parent's key and the place in the list.
     unique = {p: [] if keys.plain_values(cols) else keys.unique_keys(con, p, cols) for p, cols in profiles.items()}
-    say("found unique keys")
+    say(_keys_found(parts, unique))
     confirmed = {}
     for p, part in parts.items():
-        if part.scan == "sampled" and part.parent is None:  # children keep keys found in the sample
-            say(f"{p}: full pass for its identifier-like key candidates")
+        if part.scan == "sampled" and part.is_input:  # children keep keys found in the sample
+            say(f"{p} was read as a sample; reading it whole once to test its key candidates")
             confirmed[p] = keys.confirm_sampled(con, part, unique[p], profiles[p])
-            say(f"{p}: confirmed {[c for c, e in confirmed[p].items() if e['unique']]} in full")
+            held = [c for c, e in confirmed[p].items() if e["unique"]]
+            say(f"{p}: {', '.join(held) or 'no candidate'} unique over every row")
             # Only keys a full pass confirmed: a combination unique in a sample is not a key.
             unique[p] = [k for k in unique[p] if len(k) == 1 and confirmed[p].get(k[0], {}).get("unique")]
     found_links = keys.links(con, profiles, unique, parts, confirmed) + keys.composite_links(con, profiles, unique)
     child = keys.child_links(parts)
-    say(f"found {len(found_links)} links")
+    say(_links_found(found_links))
 
     record_keys: dict[str, dict] = {}
     for p in sorted(parts, key=lambda n: n.count(".")):  # parents before their children
         parent = parts[p].parent
         parent_key = record_keys[parent]["columns"] if parent else None
         within = keys.unique_within_parent(con, p, profiles[p]) if parent and not unique[p] else None
-        name = None
+        basis = None
         if not parent and not unique[p]:
             people = sensitivity.person_part([c["name"] for c in profiles[p] if not c["structure"]])
             personal = {c["name"] for c in profiles[p]
                         if sensitivity.tag(c["name"], [], people)["sensitivity"] != "none"}
-            name = names.name_basis(con, p, profiles[p], personal)
-        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within, name)
+            basis = names.name_basis(con, p, profiles[p], personal)
+        record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within, basis)
 
-    findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}))
+    findings_parts = [_part(con, p, parts, profiles, record_keys[p], found_links, kinds, confirmed.get(p, {}),
+                            carried.get(p, set()))
                       for p in parts]
-    say("classified parts")
+    say(_classes_found(findings_parts))
+    for f in findings_parts:
+        if f["part"] in entities:
+            f["derived_evidence"] = entities[f["part"]]["evidence"]
+            f["quality"] += embedded.disagreements(entities[f["part"]])
     _inherit(findings_parts, parts)
     by_name = {f["part"]: f for f in findings_parts}
     not_levels: list[dict] = []
     hierarchies = _hierarchies(con, by_name, profiles, found_links, not_levels)
-    say(f"found {len(hierarchies)} hierarchies")
+    say(f"{len(hierarchies)} hierarchies: " + "; ".join(h["hierarchy"] for h in hierarchies[:5])
+        + (" ..." if len(hierarchies) > 5 else "") if hierarchies else "no hierarchy")
     relationships = _relationships(found_links + child, by_name)
     _mask_samples(hierarchies, by_name)
     marked = _mark(hierarchies, by_name)
@@ -118,7 +184,8 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     return {
         "version": 1,
         "dataset": {"name": name,
-                    "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts if parts[p].parent is None],
+                    "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts
+                               if parts[p].is_input],
                     "scan": {"mode": "sampled" if any(x.scan == "sampled" for x in parts.values()) else "full",
                              "reason": f"an input over {limit / inputs.GB:.0f} GB" if any(
                                  x.scan == "sampled" for x in parts.values()) else None,
@@ -135,7 +202,9 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     }
 
 
-def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) -> dict:
+def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, carried=frozenset()) -> dict:
+    """One part's findings. `carried`: its columns that belong to an entity found inside it (embedded.py),
+    left out of its own name-like text and attributes."""
     columns = profiles[p]
     names = [c["name"] for c in columns if not c["structure"]]
     people = sensitivity.person_part(names)
@@ -171,17 +240,20 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
             identifier_findings.append(_identifier(con, p, c, record_key))
     parent = parts[p].parent
+    own = [c for c in columns if c["name"] not in carried]
     facts = {
-        "rows": columns[0]["rows"] if columns else 0, "key": record_key["columns"], "key_found": record_key["found"],
+        # A nested record is identified by its parent's key and its place in the list: a key by structure.
+        "rows": columns[0]["rows"] if columns else 0, "key": record_key["columns"],
+        "key_found": record_key["found"] or (parent is not None and record_key["design"] == "natural_composite"),
         "in_degree": len({l["from"]["part"] for l in inbound}),
         "out_degree": len({l["to"]["part"] for l in out}) + (1 if parent else 0),
         "self_ends": len({l["to"]["part"] for l in out}) == 1 and len(out) >= 2,
         "key_links": sum(1 for c in record_key["columns"] if c in linked_columns),
         "key_other": sum(1 for c in record_key["columns"] if c not in linked_columns),
         # The key's own label names an entity; other labels name codes.
-        "name_like": sum(codes.name_like(c, code_columns - key_labels) for c in columns),
+        "name_like": sum(codes.name_like(c, code_columns - key_labels) for c in own),
         # A column holding one value for every row describes nothing: not an attribute.
-        "attributes": sum(1 for c in columns if not c["structure"] and c["name"] not in record_key["columns"]
+        "attributes": sum(1 for c in own if not c["structure"] and c["name"] not in record_key["columns"]
                           and c["name"] not in code_columns and c["name"] not in linked_columns
                           and not profile.is_temporal(c) and c["distinct"] > 1),
         "labels": sum(1 for c in code_list if c["label_column"]),
@@ -207,7 +279,8 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed) ->
         times["event_time"] = None  # an event time belongs to events
     kind = next((k for k in kinds if k.lower() == p.rsplit(".", 1)[-1].lower()), None)
     return {
-        "part": p, "parent_part": parent, "rows": facts["rows"], "scan": parts[p].scan,
+        "part": p, "parent_part": parent, "derived_from": parts[p].derived_from, "rows": facts["rows"],
+        "scan": parts[p].scan,
         "class": decided["class"], "confidence": decided["confidence"], "tests": decided["tests"],
         "runner_up": decided["runner_up"],
         "kind": kind,

@@ -239,3 +239,41 @@ def test_a_key_named_for_the_other_part_still_links(tmp_path):
         csv.writer(f).writerows([["person_id", "shoe_size"], *[[i, 30 + i % 15] for i in range(1, 301)]])
     links = {(r["from"]["part"], r["to"]["part"]) for r in run.profile_inputs({"set": str(folder)}, "x")["relationships"]}
     assert ("person_detail", "person") in links
+
+
+def test_a_flag_written_several_ways_is_still_a_flag(con):
+    # One yes/no column spelled 0, false, 1 and true: splitting "no" over two spellings must not make it a level.
+    con.execute("""CREATE TABLE s AS SELECT 'D' || (i % 60) AS dept, 'G' || (i % 60 % 6) AS grp,
+        CASE WHEN i % 60 IN (7, 8) THEN (CASE WHEN i % 2 = 0 THEN '1' ELSE 'true' END)
+             ELSE (CASE WHEN i % 60 < 30 THEN '0' ELSE 'false' END) END AS flag
+        FROM range(3000) r(i)""")
+    cols = {c["name"]: c for c in profile.columns(con, "s")}
+    assert cols["flag"]["distinct"] == 4 and hierarchy.is_flag(cols["flag"])
+    rejected = []
+    found = hierarchy.by_dependency(con, "s", [cols["dept"], cols["grp"], cols["flag"]], ["dept"], rejected)
+    assert [[l["column"] for l in h["levels"]] for h in found] == [["grp", "dept"]]
+    assert not [r for r in rejected if r["child"] == "flag"]  # the flag is never a level, above or below
+
+
+def test_a_level_whose_other_values_sit_on_a_few_rows_proves_nothing(con):
+    # A code that is 'A' on all but 2 rows: any column whose 2 rows hold their own values "determines" it.
+    con.execute("""CREATE TABLE p AS SELECT 'P' || (i % 50) AS price,
+        CASE WHEN i IN (3, 4) THEN 'B' ELSE 'A' END AS kind FROM range(1000) r(i)""")
+    con.execute("UPDATE p SET price = 'P99' WHERE kind = 'B'")
+    cols = {c["name"]: c for c in profile.columns(con, "p")}
+    evidence = hierarchy.chance(con, "p", "price", "kind", 1.0)
+    assert evidence["lift"] == 1.0 and evidence["minority_rows"] == 2 and hierarchy.coincidental(evidence)
+    rejected = []
+    assert hierarchy.by_dependency(con, "p", [cols["price"], cols["kind"]], ["price"], rejected) == []
+    assert rejected and rejected[0]["reason"] == "coincidence"
+
+
+def test_two_names_of_one_thing_are_one_level_even_with_a_stray_spelling(con):
+    # An id and its name, one to one but for one row spelling a name differently; the group is a real level.
+    con.execute("""CREATE TABLE n AS SELECT 'I' || (i % 60) AS id, 'Name ' || (i % 60) AS name,
+        'G' || (i % 60 % 6) AS grp FROM range(3000) r(i)""")
+    con.execute("UPDATE n SET name = 'Name 7 Inc' WHERE rowid = 7")
+    cols = {c["name"]: c for c in profile.columns(con, "n")}
+    rejected = []
+    found = hierarchy.by_dependency(con, "n", [cols["name"], cols["id"], cols["grp"]], ["id"], rejected)
+    assert len(found) == 1 and len(found[0]["levels"]) == 2 and found[0]["levels"][0]["column"] == "grp"

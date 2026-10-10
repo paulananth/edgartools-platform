@@ -368,3 +368,11 @@ def test_a_part_read_as_a_sample_keeps_no_fingerprint(result):
     findings = run.profile_inputs({"set": str(result["folder"])}, "small limit", limit=1000, sample=500)
     sampled = [p for p in findings["parts"] if p["scan"] == "sampled"]
     assert sampled and all(p["fingerprint"] is None for p in sampled)
+
+
+def test_a_working_copy_the_run_made_itself_is_removed(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path / "temp"))
+    (tmp_path / "temp").mkdir()
+    folder = build(tmp_path / "set")
+    assert run.profile_inputs({"set": str(folder)}, "fixture")["dataset"]["name"] == "fixture"
+    assert not list((tmp_path / "temp").iterdir())

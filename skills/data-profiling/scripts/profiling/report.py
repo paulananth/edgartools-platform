@@ -69,7 +69,8 @@ def markdown(f: dict) -> str:
     for p in f["parts"]:
         passed = [t["test"] for t in p["tests"] if t["passed"]]
         failed = [t["test"] for t in p["tests"] if not t["passed"]]
-        lines.append(f"- **{p['part']}** is {p['class']}: " + "; ".join(passed)
+        found_in = f" (an entity found inside {p['derived_from']})" if p.get("derived_from") else ""
+        lines.append(f"- **{p['part']}**{found_in} is {p['class']}: " + "; ".join(passed)
                      + (f". Failed: {'; '.join(failed)}." if failed else "."))
     lines += ["", "## Relationships", "", "| From | To | Inclusion | Cardinality | Onboard | Why |", "|---|---|---|---|---|---|"]
     for r in f["relationships"]:

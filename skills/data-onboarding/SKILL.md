@@ -35,34 +35,27 @@ Read these before anything else. Breaking one is never the right call.
 
 ## Tell the discovery story as you work
 
-**Coordination note for every LLM (operator, 2026-10-09):** preserve this section
-and data-profiling's live narration requirements when revising either skill.
-Read the latest versions before editing; an older worktree or skill copy must
-not overwrite them. Changing or removing these requirements needs the
-operator's explicit instruction. Coordinate overlapping edits through the
-repository's ownership guard.
+**Coordination note for every LLM:** keep this section and data-profiling's
+narration when editing either skill; change them only on the operator's
+explicit instruction (operator, 2026-10-09: "more story telling ... i need to
+know what it is finding no more ... discussion and slop").
 
-Before the first investigation command, read and follow data-profiling's
-[Tell the discovery story as you work](../data-profiling/SKILL.md#tell-the-discovery-story-as-you-work).
-Its live-update cadence and long-command handling apply throughout onboarding,
-including discovery, mapping, quality checks, testing and activation. Keep the
-conversation updated while another skill or a command does the work.
+Narrate as data-profiling's
+[Tell the discovery story as you work](../data-profiling/SKILL.md#tell-the-discovery-story-as-you-work)
+says, through every step of onboarding: each update is a finding with its
+numbers and meaning, never a description of the step you are about to take.
+Onboarding's findings are fields, identifiers, defects, refusals and test
+results, and how each changes the proposed onboarding. Label each result for
+what it proves: explored, approved, tested locally or active. A command that
+succeeds proves only what it checks.
 
-At each phase transition, explain what the previous evidence established,
-which question the next phase answers, and why that check is needed. As you
-discover fields, identifiers, unsupported formats, defects or missing workers,
-tell the operator what you found and how it changes the proposed onboarding.
-Distinguish exploratory findings, approved mappings, local test results and
-verified activation. A successful command proves only what it actually checks.
+Not: "Next I'll reconcile the export with the workbook to confirm the counts."
+Instead: "The export has 3,022 rows; the workbook reader refuses the original
+file, so these counts are explored, not yet read by the contract."
 
-For example: “The exported rows profile successfully, but the original workbook
-reader still refuses this format. This establishes exploratory field counts;
-production reading remains unqualified. I’ll reconcile the export with the
-original cells next.” Use only facts established in the current investigation.
-
-At a question or approval pause, explain the evidence and your recommendation,
-then follow the existing approval gate. Record the discovery milestones and
-unresolved questions in the onboarding log as well as explaining them live.
+At a question or approval pause, give the evidence and your recommendation,
+then follow the approval gate. Record findings and open questions in the
+onboarding log as well.
 
 ## What you produce
 

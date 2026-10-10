@@ -41,6 +41,8 @@ NEW_CODE = {
     "hierarchy_invalid": "the row's parent exists, is not the row itself, is not on a cycle, and is the "
                          "parent its code has; each invalid row is in invalid_rows.jsonl",
     "no_natural_key": "the designed record key is filled and unique",
+    "carried_value_disagrees": "each record gives the entity's carried column the value kept for its identifier "
+                               "(args none; the rows that differ go to a steward)",
 }
 # A value each engine test refuses, for the planted record.
 TRIPS = {
