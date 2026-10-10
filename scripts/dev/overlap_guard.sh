@@ -8,7 +8,9 @@
 #     uncommitted files.
 # A branch is another runtime's when its prefix (before the first "/") differs
 # from this branch's prefix. A file counts as changed on a branch only if it
-# differs from origin/main now, so squash-merged branches do not count.
+# differs from origin/main now. A worktree whose branch still sits on the
+# commit its PR merged holds only its uncommitted files: after a squash merge
+# its commits look unmerged, and main may have changed their files since.
 #
 # Exit 0: no overlap. Exit 1: each overlapping file and who holds it.
 # Usage: bash scripts/dev/overlap_guard.sh  [--base origin/main]
@@ -59,11 +61,19 @@ else
   exit 1
 fi
 
+# Branch heads that a PR merged (lines: <branch>\t<commit>).
+gh pr list --state merged --limit 300 --json headRefName,headRefOid \
+  --jq '.[] | "\(.headRefName)\t\(.headRefOid)"' > "$tmp/merged" 2>/dev/null || : > "$tmp/merged"
+
 # Worktrees of other runtimes.
 git worktree list --porcelain | awk '/^worktree /{w=substr($0,10)} /^branch /{print w "\t" substr($0,19)}' \
   | while IFS=$'\t' read -r path ref; do
       [[ "$ref" == */* && "${ref%%/*}" != "$mine" ]] || continue
-      { branch_files "$ref"; dirty_files "$path"; } | sort -u \
+      if grep -qxF "$ref"$'\t'"$(git rev-parse "$ref")" "$tmp/merged"; then
+        dirty_files "$path"
+      else
+        { branch_files "$ref"; dirty_files "$path"; }
+      fi | sort -u \
         | sed "s|\$|\tworktree $path ($ref)|"
     done >> "$tmp/theirs"
 
