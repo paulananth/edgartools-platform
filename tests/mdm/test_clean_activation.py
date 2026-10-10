@@ -570,8 +570,10 @@ class TestTheCompanyPolicy:
         # profiling ticket 02 pinned the reference data in place of the table;
         # profiling ticket 04b named the relationship types as their sources do,
         # then gave the calculated ultimate parent its history and let a
-        # successor entity end parent links.
+        # successor entity end parent links; profiling ticket 07 declared the
+        # Form ADV sources and their three matching rules, switched off.
         assert policy_layers.digests(policy_layers.company_part(POLICY)) == [
+            "af0fa7cce9845419238d7ed23aa5fb7c1c8ccd576f2137e2b4ef3c732369a7cc",
             "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605",
             "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6",
             "058759172d1de36cc397ee89aa0c4630c11c86dcc29a4c6d5f42c96b0e4c8ee4",
