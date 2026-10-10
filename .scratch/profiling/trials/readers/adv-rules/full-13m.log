@@ -1,0 +1,290 @@
+{"advisers": 0, "filings": 46640, "custody_rows": 50152, "corpus_sha256": "53444e234c296cc1189af3751be39c1a816a9c44be816975a6c323fa9ceddbfb"}
+{"batch": "first iapd.adv.filings.v1 2025-06 0", "records": 500, "seconds": 8.7}
+{"batch": "first iapd.adv.filings.v1 2025-06 500", "records": 500, "seconds": 11.6}
+{"batch": "first iapd.adv.filings.v1 2025-06 1000", "records": 500, "seconds": 10.4}
+{"batch": "first iapd.adv.filings.v1 2025-06 1500", "records": 500, "seconds": 8.1}
+{"batch": "first iapd.adv.filings.v1 2025-06 2000", "records": 500, "seconds": 8.1}
+{"batch": "first iapd.adv.filings.v1 2025-06 2500", "records": 62, "seconds": 1.4}
+{"batch": "first iapd.adv.custodians.v1 2025-06 0", "records": 484, "seconds": 5.4}
+{"batch": "first iapd.adv.filings.v1 2025-07 0", "records": 500, "seconds": 9.5}
+{"batch": "first iapd.adv.filings.v1 2025-07 500", "records": 500, "seconds": 10.0}
+{"batch": "first iapd.adv.filings.v1 2025-07 1000", "records": 500, "seconds": 10.3}
+{"batch": "first iapd.adv.filings.v1 2025-07 1500", "records": 500, "seconds": 10.6}
+{"batch": "first iapd.adv.filings.v1 2025-07 2000", "records": 500, "seconds": 9.7}
+{"batch": "first iapd.adv.filings.v1 2025-07 2500", "records": 98, "seconds": 2.4}
+{"batch": "first iapd.adv.custodians.v1 2025-07 0", "records": 450, "seconds": 5.7}
+{"batch": "first iapd.adv.filings.v1 2025-08 0", "records": 500, "seconds": 8.4}
+{"batch": "first iapd.adv.filings.v1 2025-08 500", "records": 500, "seconds": 9.3}
+{"batch": "first iapd.adv.filings.v1 2025-08 1000", "records": 500, "seconds": 9.4}
+{"batch": "first iapd.adv.filings.v1 2025-08 1500", "records": 500, "seconds": 14.1}
+{"batch": "first iapd.adv.filings.v1 2025-08 2000", "records": 295, "seconds": 8.5}
+{"batch": "first iapd.adv.custodians.v1 2025-08 0", "records": 394, "seconds": 6.3}
+{"batch": "first iapd.adv.filings.v1 2025-09 0", "records": 500, "seconds": 10.4}
+{"batch": "first iapd.adv.filings.v1 2025-09 500", "records": 500, "seconds": 10.6}
+{"batch": "first iapd.adv.filings.v1 2025-09 1000", "records": 500, "seconds": 11.7}
+{"batch": "first iapd.adv.filings.v1 2025-09 1500", "records": 500, "seconds": 13.7}
+{"batch": "first iapd.adv.filings.v1 2025-09 2000", "records": 368, "seconds": 10.4}
+{"batch": "first iapd.adv.custodians.v1 2025-09 0", "records": 413, "seconds": 9.2}
+{"batch": "first iapd.adv.filings.v1 2025-10 0", "records": 500, "seconds": 12.1}
+{"batch": "first iapd.adv.filings.v1 2025-10 500", "records": 500, "seconds": 12.2}
+{"batch": "first iapd.adv.filings.v1 2025-10 1000", "records": 500, "seconds": 14.0}
+{"batch": "first iapd.adv.filings.v1 2025-10 1500", "records": 500, "seconds": 14.9}
+{"batch": "first iapd.adv.filings.v1 2025-10 2000", "records": 409, "seconds": 10.0}
+{"batch": "first iapd.adv.custodians.v1 2025-10 0", "records": 390, "seconds": 7.6}
+{"batch": "first iapd.adv.filings.v1 2025-11 0", "records": 500, "seconds": 12.7}
+{"batch": "first iapd.adv.filings.v1 2025-11 500", "records": 500, "seconds": 16.9}
+{"batch": "first iapd.adv.filings.v1 2025-11 1000", "records": 500, "seconds": 18.2}
+{"batch": "first iapd.adv.filings.v1 2025-11 1500", "records": 484, "seconds": 15.1}
+{"batch": "first iapd.adv.custodians.v1 2025-11 0", "records": 367, "seconds": 9.3}
+{"batch": "first iapd.adv.filings.v1 2025-12 0", "records": 500, "seconds": 17.6}
+{"batch": "first iapd.adv.filings.v1 2025-12 500", "records": 500, "seconds": 18.4}
+{"batch": "first iapd.adv.filings.v1 2025-12 1000", "records": 500, "seconds": 17.4}
+{"batch": "first iapd.adv.filings.v1 2025-12 1500", "records": 443, "seconds": 16.3}
+{"batch": "first iapd.adv.custodians.v1 2025-12 0", "records": 354, "seconds": 12.4}
+{"batch": "first iapd.adv.filings.v1 2026-01 0", "records": 500, "seconds": 17.4}
+{"batch": "first iapd.adv.filings.v1 2026-01 500", "records": 500, "seconds": 17.9}
+{"batch": "first iapd.adv.filings.v1 2026-01 1000", "records": 500, "seconds": 20.6}
+{"batch": "first iapd.adv.filings.v1 2026-01 1500", "records": 500, "seconds": 21.4}
+{"batch": "first iapd.adv.filings.v1 2026-01 2000", "records": 500, "seconds": 18.4}
+{"batch": "first iapd.adv.filings.v1 2026-01 2500", "records": 345, "seconds": 14.4}
+{"batch": "first iapd.adv.custodians.v1 2026-01 0", "records": 441, "seconds": 13.5}
+{"batch": "first iapd.adv.filings.v1 2026-02 0", "records": 500, "seconds": 19.3}
+{"batch": "first iapd.adv.filings.v1 2026-02 500", "records": 500, "seconds": 19.2}
+{"batch": "first iapd.adv.filings.v1 2026-02 1000", "records": 500, "seconds": 26.7}
+{"batch": "first iapd.adv.filings.v1 2026-02 1500", "records": 500, "seconds": 21.3}
+{"batch": "first iapd.adv.filings.v1 2026-02 2000", "records": 500, "seconds": 21.9}
+{"batch": "first iapd.adv.filings.v1 2026-02 2500", "records": 500, "seconds": 22.7}
+{"batch": "first iapd.adv.filings.v1 2026-02 3000", "records": 500, "seconds": 26.0}
+{"batch": "first iapd.adv.filings.v1 2026-02 3500", "records": 7, "seconds": 1.5}
+{"batch": "first iapd.adv.custodians.v1 2026-02 0", "records": 483, "seconds": 22.4}
+{"batch": "first iapd.adv.filings.v1 2026-03 0", "records": 500, "seconds": 24.4}
+{"batch": "first iapd.adv.filings.v1 2026-03 500", "records": 500, "seconds": 23.3}
+{"batch": "first iapd.adv.filings.v1 2026-03 1000", "records": 500, "seconds": 18.3}
+{"batch": "first iapd.adv.filings.v1 2026-03 1500", "records": 500, "seconds": 19.2}
+{"batch": "first iapd.adv.filings.v1 2026-03 2000", "records": 500, "seconds": 26.3}
+{"batch": "first iapd.adv.filings.v1 2026-03 2500", "records": 500, "seconds": 29.6}
+{"batch": "first iapd.adv.filings.v1 2026-03 3000", "records": 500, "seconds": 49.0}
+{"batch": "first iapd.adv.filings.v1 2026-03 3500", "records": 500, "seconds": 32.6}
+{"batch": "first iapd.adv.filings.v1 2026-03 4000", "records": 500, "seconds": 32.4}
+{"batch": "first iapd.adv.filings.v1 2026-03 4500", "records": 500, "seconds": 28.1}
+{"batch": "first iapd.adv.filings.v1 2026-03 5000", "records": 500, "seconds": 32.1}
+{"batch": "first iapd.adv.filings.v1 2026-03 5500", "records": 500, "seconds": 30.3}
+{"batch": "first iapd.adv.filings.v1 2026-03 6000", "records": 500, "seconds": 29.2}
+{"batch": "first iapd.adv.filings.v1 2026-03 6500", "records": 500, "seconds": 28.4}
+{"batch": "first iapd.adv.filings.v1 2026-03 7000", "records": 500, "seconds": 32.8}
+{"batch": "first iapd.adv.filings.v1 2026-03 7500", "records": 500, "seconds": 26.6}
+{"batch": "first iapd.adv.filings.v1 2026-03 8000", "records": 500, "seconds": 26.7}
+{"batch": "first iapd.adv.filings.v1 2026-03 8500", "records": 500, "seconds": 24.3}
+{"batch": "first iapd.adv.filings.v1 2026-03 9000", "records": 500, "seconds": 27.5}
+{"batch": "first iapd.adv.filings.v1 2026-03 9500", "records": 500, "seconds": 35.0}
+{"batch": "first iapd.adv.filings.v1 2026-03 10000", "records": 500, "seconds": 57.7}
+{"batch": "first iapd.adv.filings.v1 2026-03 10500", "records": 500, "seconds": 55.1}
+{"batch": "first iapd.adv.filings.v1 2026-03 11000", "records": 500, "seconds": 41.1}
+{"batch": "first iapd.adv.filings.v1 2026-03 11500", "records": 500, "seconds": 49.9}
+{"batch": "first iapd.adv.filings.v1 2026-03 12000", "records": 500, "seconds": 59.9}
+{"batch": "first iapd.adv.filings.v1 2026-03 12500", "records": 500, "seconds": 46.6}
+{"batch": "first iapd.adv.filings.v1 2026-03 13000", "records": 500, "seconds": 41.2}
+{"batch": "first iapd.adv.filings.v1 2026-03 13500", "records": 500, "seconds": 37.5}
+{"batch": "first iapd.adv.filings.v1 2026-03 14000", "records": 500, "seconds": 26.5}
+{"batch": "first iapd.adv.filings.v1 2026-03 14500", "records": 500, "seconds": 42.2}
+{"batch": "first iapd.adv.filings.v1 2026-03 15000", "records": 27, "seconds": 5.1}
+{"batch": "first iapd.adv.custodians.v1 2026-03 0", "records": 500, "seconds": 48.5}
+{"batch": "first iapd.adv.custodians.v1 2026-03 500", "records": 500, "seconds": 18.9}
+{"batch": "first iapd.adv.custodians.v1 2026-03 1000", "records": 500, "seconds": 20.3}
+{"batch": "first iapd.adv.custodians.v1 2026-03 1500", "records": 30, "seconds": 3.6}
+{"batch": "first iapd.adv.filings.v1 2026-04 0", "records": 500, "seconds": 74.6}
+{"batch": "first iapd.adv.filings.v1 2026-04 500", "records": 500, "seconds": 89.0}
+{"batch": "first iapd.adv.filings.v1 2026-04 1000", "records": 500, "seconds": 48.7}
+{"batch": "first iapd.adv.filings.v1 2026-04 1500", "records": 500, "seconds": 54.4}
+{"batch": "first iapd.adv.filings.v1 2026-04 2000", "records": 500, "seconds": 55.5}
+{"batch": "first iapd.adv.filings.v1 2026-04 2500", "records": 500, "seconds": 27.6}
+{"batch": "first iapd.adv.filings.v1 2026-04 3000", "records": 362, "seconds": 20.8}
+{"batch": "first iapd.adv.custodians.v1 2026-04 0", "records": 464, "seconds": 20.4}
+{"batch": "first iapd.adv.filings.v1 2026-05 0", "records": 500, "seconds": 36.4}
+{"batch": "first iapd.adv.filings.v1 2026-05 500", "records": 500, "seconds": 30.1}
+{"batch": "first iapd.adv.filings.v1 2026-05 1000", "records": 500, "seconds": 45.8}
+{"batch": "first iapd.adv.filings.v1 2026-05 1500", "records": 500, "seconds": 61.1}
+{"batch": "first iapd.adv.filings.v1 2026-05 2000", "records": 500, "seconds": 67.2}
+{"batch": "first iapd.adv.filings.v1 2026-05 2500", "records": 302, "seconds": 40.5}
+{"batch": "first iapd.adv.custodians.v1 2026-05 0", "records": 453, "seconds": 50.9}
+{"batch": "first iapd.adv.filings.v1 2026-06 0", "records": 500, "seconds": 53.5}
+{"batch": "first iapd.adv.filings.v1 2026-06 500", "records": 500, "seconds": 41.7}
+{"batch": "first iapd.adv.filings.v1 2026-06 1000", "records": 500, "seconds": 33.8}
+{"batch": "first iapd.adv.filings.v1 2026-06 1500", "records": 500, "seconds": 32.7}
+{"batch": "first iapd.adv.filings.v1 2026-06 2000", "records": 500, "seconds": 34.7}
+{"batch": "first iapd.adv.filings.v1 2026-06 2500", "records": 438, "seconds": 27.0}
+{"batch": "first iapd.adv.custodians.v1 2026-06 0", "records": 494, "seconds": 18.2}
+{"batch": "second iapd.adv.filings.v1 2025-06 0", "records": 500, "seconds": 7.3}
+{"batch": "second iapd.adv.filings.v1 2025-06 500", "records": 500, "seconds": 8.7}
+{"batch": "second iapd.adv.filings.v1 2025-06 1000", "records": 500, "seconds": 9.3}
+{"batch": "second iapd.adv.filings.v1 2025-06 1500", "records": 500, "seconds": 10.2}
+{"batch": "second iapd.adv.filings.v1 2025-06 2000", "records": 500, "seconds": 8.4}
+{"batch": "second iapd.adv.filings.v1 2025-06 2500", "records": 62, "seconds": 2.6}
+{"batch": "second iapd.adv.custodians.v1 2025-06 0", "records": 484, "seconds": 7.4}
+{"batch": "second iapd.adv.filings.v1 2025-07 0", "records": 500, "seconds": 11.5}
+{"batch": "second iapd.adv.filings.v1 2025-07 500", "records": 500, "seconds": 11.6}
+{"batch": "second iapd.adv.filings.v1 2025-07 1000", "records": 500, "seconds": 10.3}
+{"batch": "second iapd.adv.filings.v1 2025-07 1500", "records": 500, "seconds": 11.2}
+{"batch": "second iapd.adv.filings.v1 2025-07 2000", "records": 500, "seconds": 11.0}
+{"batch": "second iapd.adv.filings.v1 2025-07 2500", "records": 98, "seconds": 4.1}
+{"batch": "second iapd.adv.custodians.v1 2025-07 0", "records": 450, "seconds": 6.9}
+{"batch": "second iapd.adv.filings.v1 2025-08 0", "records": 500, "seconds": 10.3}
+{"batch": "second iapd.adv.filings.v1 2025-08 500", "records": 500, "seconds": 10.6}
+{"batch": "second iapd.adv.filings.v1 2025-08 1000", "records": 500, "seconds": 10.3}
+{"batch": "second iapd.adv.filings.v1 2025-08 1500", "records": 500, "seconds": 10.3}
+{"batch": "second iapd.adv.filings.v1 2025-08 2000", "records": 295, "seconds": 5.9}
+{"batch": "second iapd.adv.custodians.v1 2025-08 0", "records": 394, "seconds": 7.1}
+{"batch": "second iapd.adv.filings.v1 2025-09 0", "records": 500, "seconds": 12.2}
+{"batch": "second iapd.adv.filings.v1 2025-09 500", "records": 500, "seconds": 11.6}
+{"batch": "second iapd.adv.filings.v1 2025-09 1000", "records": 500, "seconds": 11.9}
+{"batch": "second iapd.adv.filings.v1 2025-09 1500", "records": 500, "seconds": 12.5}
+{"batch": "second iapd.adv.filings.v1 2025-09 2000", "records": 368, "seconds": 8.1}
+{"batch": "second iapd.adv.custodians.v1 2025-09 0", "records": 413, "seconds": 7.7}
+{"batch": "second iapd.adv.filings.v1 2025-10 0", "records": 500, "seconds": 17.8}
+{"batch": "second iapd.adv.filings.v1 2025-10 500", "records": 500, "seconds": 20.0}
+{"batch": "second iapd.adv.filings.v1 2025-10 1000", "records": 500, "seconds": 12.2}
+{"batch": "second iapd.adv.filings.v1 2025-10 1500", "records": 500, "seconds": 10.9}
+{"batch": "second iapd.adv.filings.v1 2025-10 2000", "records": 409, "seconds": 8.0}
+{"batch": "second iapd.adv.custodians.v1 2025-10 0", "records": 390, "seconds": 5.2}
+{"batch": "second iapd.adv.filings.v1 2025-11 0", "records": 500, "seconds": 10.7}
+{"batch": "second iapd.adv.filings.v1 2025-11 500", "records": 500, "seconds": 11.4}
+{"batch": "second iapd.adv.filings.v1 2025-11 1000", "records": 500, "seconds": 13.5}
+{"batch": "second iapd.adv.filings.v1 2025-11 1500", "records": 484, "seconds": 13.3}
+{"batch": "second iapd.adv.custodians.v1 2025-11 0", "records": 367, "seconds": 8.4}
+{"batch": "second iapd.adv.filings.v1 2025-12 0", "records": 500, "seconds": 15.7}
+{"batch": "second iapd.adv.filings.v1 2025-12 500", "records": 500, "seconds": 11.6}
+{"batch": "second iapd.adv.filings.v1 2025-12 1000", "records": 500, "seconds": 11.4}
+{"batch": "second iapd.adv.filings.v1 2025-12 1500", "records": 443, "seconds": 8.4}
+{"batch": "second iapd.adv.custodians.v1 2025-12 0", "records": 354, "seconds": 5.4}
+{"batch": "second iapd.adv.filings.v1 2026-01 0", "records": 500, "seconds": 9.6}
+{"batch": "second iapd.adv.filings.v1 2026-01 500", "records": 500, "seconds": 12.7}
+{"batch": "second iapd.adv.filings.v1 2026-01 1000", "records": 500, "seconds": 12.7}
+{"batch": "second iapd.adv.filings.v1 2026-01 1500", "records": 500, "seconds": 18.8}
+{"batch": "second iapd.adv.filings.v1 2026-01 2000", "records": 500, "seconds": 13.1}
+{"batch": "second iapd.adv.filings.v1 2026-01 2500", "records": 345, "seconds": 10.1}
+{"batch": "second iapd.adv.custodians.v1 2026-01 0", "records": 441, "seconds": 10.5}
+{"batch": "second iapd.adv.filings.v1 2026-02 0", "records": 500, "seconds": 12.6}
+{"batch": "second iapd.adv.filings.v1 2026-02 500", "records": 500, "seconds": 11.9}
+{"batch": "second iapd.adv.filings.v1 2026-02 1000", "records": 500, "seconds": 12.6}
+{"batch": "second iapd.adv.filings.v1 2026-02 1500", "records": 500, "seconds": 12.3}
+{"batch": "second iapd.adv.filings.v1 2026-02 2000", "records": 500, "seconds": 12.2}
+{"batch": "second iapd.adv.filings.v1 2026-02 2500", "records": 500, "seconds": 11.8}
+{"batch": "second iapd.adv.filings.v1 2026-02 3000", "records": 500, "seconds": 12.3}
+{"batch": "second iapd.adv.filings.v1 2026-02 3500", "records": 7, "seconds": 2.2}
+{"batch": "second iapd.adv.custodians.v1 2026-02 0", "records": 483, "seconds": 10.0}
+{"batch": "second iapd.adv.filings.v1 2026-03 0", "records": 500, "seconds": 11.9}
+{"batch": "second iapd.adv.filings.v1 2026-03 500", "records": 500, "seconds": 12.2}
+{"batch": "second iapd.adv.filings.v1 2026-03 1000", "records": 500, "seconds": 11.3}
+{"batch": "second iapd.adv.filings.v1 2026-03 1500", "records": 500, "seconds": 11.6}
+{"batch": "second iapd.adv.filings.v1 2026-03 2000", "records": 500, "seconds": 11.3}
+{"batch": "second iapd.adv.filings.v1 2026-03 2500", "records": 500, "seconds": 11.2}
+{"batch": "second iapd.adv.filings.v1 2026-03 3000", "records": 500, "seconds": 10.3}
+{"batch": "second iapd.adv.filings.v1 2026-03 3500", "records": 500, "seconds": 10.0}
+{"batch": "second iapd.adv.filings.v1 2026-03 4000", "records": 500, "seconds": 10.0}
+{"batch": "second iapd.adv.filings.v1 2026-03 4500", "records": 500, "seconds": 9.9}
+{"batch": "second iapd.adv.filings.v1 2026-03 5000", "records": 500, "seconds": 10.9}
+{"batch": "second iapd.adv.filings.v1 2026-03 5500", "records": 500, "seconds": 8.7}
+{"batch": "second iapd.adv.filings.v1 2026-03 6000", "records": 500, "seconds": 12.3}
+{"batch": "second iapd.adv.filings.v1 2026-03 6500", "records": 500, "seconds": 8.5}
+{"batch": "second iapd.adv.filings.v1 2026-03 7000", "records": 500, "seconds": 13.6}
+{"batch": "second iapd.adv.filings.v1 2026-03 7500", "records": 500, "seconds": 9.1}
+{"batch": "second iapd.adv.filings.v1 2026-03 8000", "records": 500, "seconds": 9.4}
+{"batch": "second iapd.adv.filings.v1 2026-03 8500", "records": 500, "seconds": 8.8}
+{"batch": "second iapd.adv.filings.v1 2026-03 9000", "records": 500, "seconds": 8.7}
+{"batch": "second iapd.adv.filings.v1 2026-03 9500", "records": 500, "seconds": 7.3}
+{"batch": "second iapd.adv.filings.v1 2026-03 10000", "records": 500, "seconds": 6.6}
+{"batch": "second iapd.adv.filings.v1 2026-03 10500", "records": 500, "seconds": 6.9}
+{"batch": "second iapd.adv.filings.v1 2026-03 11000", "records": 500, "seconds": 8.1}
+{"batch": "second iapd.adv.filings.v1 2026-03 11500", "records": 500, "seconds": 7.1}
+{"batch": "second iapd.adv.filings.v1 2026-03 12000", "records": 500, "seconds": 6.8}
+{"batch": "second iapd.adv.filings.v1 2026-03 12500", "records": 500, "seconds": 7.2}
+{"batch": "second iapd.adv.filings.v1 2026-03 13000", "records": 500, "seconds": 6.7}
+{"batch": "second iapd.adv.filings.v1 2026-03 13500", "records": 500, "seconds": 6.6}
+{"batch": "second iapd.adv.filings.v1 2026-03 14000", "records": 500, "seconds": 7.0}
+{"batch": "second iapd.adv.filings.v1 2026-03 14500", "records": 500, "seconds": 6.9}
+{"batch": "second iapd.adv.filings.v1 2026-03 15000", "records": 27, "seconds": 2.1}
+{"batch": "second iapd.adv.custodians.v1 2026-03 0", "records": 500, "seconds": 7.4}
+{"batch": "second iapd.adv.custodians.v1 2026-03 500", "records": 500, "seconds": 4.4}
+{"batch": "second iapd.adv.custodians.v1 2026-03 1000", "records": 500, "seconds": 4.7}
+{"batch": "second iapd.adv.custodians.v1 2026-03 1500", "records": 30, "seconds": 1.9}
+{"batch": "second iapd.adv.filings.v1 2026-04 0", "records": 500, "seconds": 9.4}
+{"batch": "second iapd.adv.filings.v1 2026-04 500", "records": 500, "seconds": 11.3}
+{"batch": "second iapd.adv.filings.v1 2026-04 1000", "records": 500, "seconds": 10.0}
+{"batch": "second iapd.adv.filings.v1 2026-04 1500", "records": 500, "seconds": 13.9}
+{"batch": "second iapd.adv.filings.v1 2026-04 2000", "records": 500, "seconds": 16.3}
+{"batch": "second iapd.adv.filings.v1 2026-04 2500", "records": 500, "seconds": 13.8}
+{"batch": "second iapd.adv.filings.v1 2026-04 3000", "records": 362, "seconds": 11.2}
+{"batch": "second iapd.adv.custodians.v1 2026-04 0", "records": 464, "seconds": 11.6}
+{"batch": "second iapd.adv.filings.v1 2026-05 0", "records": 500, "seconds": 17.5}
+{"batch": "second iapd.adv.filings.v1 2026-05 500", "records": 500, "seconds": 15.1}
+{"batch": "second iapd.adv.filings.v1 2026-05 1000", "records": 500, "seconds": 17.9}
+{"batch": "second iapd.adv.filings.v1 2026-05 1500", "records": 500, "seconds": 18.9}
+{"batch": "second iapd.adv.filings.v1 2026-05 2000", "records": 500, "seconds": 17.8}
+{"batch": "second iapd.adv.filings.v1 2026-05 2500", "records": 302, "seconds": 11.5}
+{"batch": "second iapd.adv.custodians.v1 2026-05 0", "records": 453, "seconds": 12.0}
+{"batch": "second iapd.adv.filings.v1 2026-06 0", "records": 500, "seconds": 19.1}
+{"batch": "second iapd.adv.filings.v1 2026-06 500", "records": 500, "seconds": 19.1}
+{"batch": "second iapd.adv.filings.v1 2026-06 1000", "records": 500, "seconds": 19.5}
+{"batch": "second iapd.adv.filings.v1 2026-06 1500", "records": 500, "seconds": 12.5}
+{"batch": "second iapd.adv.filings.v1 2026-06 2000", "records": 500, "seconds": 13.8}
+{"batch": "second iapd.adv.filings.v1 2026-06 2500", "records": 438, "seconds": 11.6}
+{"batch": "second iapd.adv.custodians.v1 2026-06 0", "records": 494, "seconds": 11.4}
+{
+ "policy_digest": "c577123396335f6129116b781239b6ac3e7939db55edb705c1bfc877fa6c5bdd",
+ "corpus_sha256": "53444e234c296cc1189af3751be39c1a816a9c44be816975a6c323fa9ceddbfb",
+ "deferred": {
+  "first:iapd.adv.custodians.v1:invalid_lei_checksum": 76,
+  "second:iapd.adv.custodians.v1:invalid_lei_checksum": 76
+ },
+ "after_first": {
+  "companies_open": 18370,
+  "stage_records": {
+   "iapd.adv.filings.v1": 46640,
+   "iapd.adv.custodians.v1": 6717
+  },
+  "stage_bound": {
+   "iapd.adv.custodians.v1": 2906,
+   "iapd.adv.filings.v1": 46640
+  },
+  "open_reviews": {
+   "binding_required": 3811
+  },
+  "decisions_by_rule": {
+   "iapd-adv-crd": 46640,
+   "iapd-adv-custodian-bd": 1497,
+   "iapd-adv-custodian-lei": 1409
+  },
+  "custodian_links": 0
+ },
+ "after_second": {
+  "companies_open": 18370,
+  "stage_records": {
+   "iapd.adv.filings.v1": 46640,
+   "iapd.adv.custodians.v1": 6717
+  },
+  "stage_bound": {
+   "iapd.adv.custodians.v1": 2906,
+   "iapd.adv.filings.v1": 46640
+  },
+  "open_reviews": {
+   "binding_required": 3811
+  },
+  "decisions_by_rule": {
+   "iapd-adv-crd": 46640,
+   "iapd-adv-custodian-bd": 1497,
+   "iapd-adv-custodian-lei": 1409
+  },
+  "custodian_links": 0
+ },
+ "second_pass_changed_nothing": true,
+ "advisers": 17646,
+ "advisers_on_one_company": 17646,
+ "custodian_ids_identified": 760,
+ "custodian_ids_on_one_company": 724,
+ "custodian_ids_on_two_or_more": [],
+ "custodian_ids_named_only": 1278,
+ "most_records_on_one_custodian_company": 13,
+ "most_records_on_one_adviser_company": 190,
+ "seconds": 4079.3
+}
+exit=0
