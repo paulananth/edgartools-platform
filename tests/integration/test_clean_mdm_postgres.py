@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,14 +20,6 @@ from edgar_warehouse.mdm.clean.store import (
 )
 from tests.support import pg16
 from tests.support.rules_authority import register_dataset
-
-IMAGE = "postgres:16-alpine"
-
-
-def docker(*args, input=None):
-    return subprocess.run(
-        ["docker", *args], input=input, text=True, capture_output=True, check=True
-    ).stdout.strip()
 
 
 @dataclass
