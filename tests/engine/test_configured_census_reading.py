@@ -1,4 +1,5 @@
-"""Actual census construction compared with its retired extraction/counting path."""
+"""Census construction from the configured complete reading, compared with its retired
+extraction/counting path (`tests/support/retired_name_census.py`)."""
 from copy import deepcopy
 import hashlib
 import io
@@ -7,7 +8,10 @@ import pytest
 
 from edgar_warehouse.mdm.clean import name_census
 from edgar_warehouse.rules.source_engine import SourceRejected
-from tests.mdm.test_clean_name_census import APPLE, WAYFAIR, archive, gleif, metadata, TestTheCascade as CascadeFixture
+from edgar_warehouse.rules import files
+from tests.mdm.test_clean_name_census import (
+    APPLE, COMPLETE_READING, WAYFAIR, archive, configured, gleif, metadata, TestTheCascade as CascadeFixture,
+)
 from tests.support import retired_name_census as retained
 
 
@@ -16,13 +20,14 @@ def no_custom_steps(monkeypatch):
     monkeypatch.setattr('edgar_warehouse.rules.source_engine.STEPS', {})
 
 
-def compare(filers, records, *, cascade=None):
+def compare(filers, records, *, cascade=None, recipe=None):
     raw = archive(records)
-    kwargs = dict(filers=filers, sec_population={'capture_run_id':'fixed', 'filers':len(filers)},
-                  gleif_metadata=metadata(len(records)), gleif_sha256=hashlib.sha256(raw).hexdigest(),
-                  cascade=cascade)
-    actual = name_census.build(gleif_archive=io.BytesIO(raw), **kwargs)
-    expected = retained.build(gleif_archive=io.BytesIO(raw), **kwargs)
+    population = {'capture_run_id':'fixed', 'filers':len(filers)}
+    actual = configured(filers, records, cascade=cascade, recipe=recipe, population=population,
+                        archive_sha256=hashlib.sha256(raw).hexdigest())
+    expected = retained.build(gleif_archive=io.BytesIO(raw), filers=filers, sec_population=population,
+                              gleif_metadata=metadata(len(records)), gleif_sha256=hashlib.sha256(raw).hexdigest(),
+                              cascade=cascade)
     assert actual == expected
     return actual
 
@@ -71,7 +76,7 @@ def test_configured_reading_preserves_actual_cascade_assignments():
                          place=cascade.place({'street':'1 APPLE PARK WAY','city':'CUPERTINO',
                                               'postcode':'95014','country':'US'}),
                          incorporated='US-CA', business_country='US')
-    spec = {'spec':cascade.spec(POLICY), 'filers':[filer], 'gleif_contract':dataset_contract('level1')}
+    spec = {'spec':cascade.spec(POLICY), 'filers':[filer], 'gleif_contract':dataset_contract('level1')}  # the oracle maps through the contract
     records = [helper.native('HWUPKR0MPOU8FGXBT394','Apple Inc.','1 Apple Park Way'),
                helper.native('5493001KJTIIGC8Y1R12','Fruit LLC','1 Rue de Paris', country='FR')]
     records[1]['Entity']['OtherEntityNames'] = {'OtherEntityName':{'$':'Apple Inc.'}}
@@ -79,18 +84,18 @@ def test_configured_reading_preserves_actual_cascade_assignments():
     assert found['cascade']['assignments'][APPLE[0]]['lei'] == 'HWUPKR0MPOU8FGXBT394'
 
 
-def test_deliberate_recipe_fault_fails_actual_census_counts(monkeypatch):
-    recipe = deepcopy(name_census.GLEIF_IDENTITY)
-    recipe['read']['tables']['mapped']['columns']['key'] = {'object':{'fields':{'value':{'const':{'value':'WRONG KEY'}}}}}
-    monkeypatch.setattr(name_census, 'GLEIF_IDENTITY', recipe)
+def test_deliberate_recipe_fault_fails_actual_census_counts():
+    recipe = deepcopy(files.load(COMPLETE_READING))
+    recipe['read']['tables']['a_legal']['columns']['key'] = {'const':{'value':'WRONG KEY'}}
     with pytest.raises(AssertionError):
-        compare([APPLE], [gleif('HWUPKR0MPOU8FGXBT394','Apple Inc.')])
+        compare([APPLE], [gleif('HWUPKR0MPOU8FGXBT394','Apple Inc.')], recipe=recipe)
 
 
 def test_retired_extractors_are_not_production_symbols_and_limits_fail_closed():
-    assert not any(hasattr(name_census, name) for name in ('_text','_other_names','sec_keys'))
-    with pytest.raises(SourceRejected, match='limit_exceeded'):
-        name_census._gleif_other_keys(gleif('LEI', 'A' * (1024**2)))
+    assert not any(hasattr(name_census, name) for name in
+                   ('_text','_other_names','sec_keys','build','cascade_entity','_gleif_other_keys'))
+    with pytest.raises(SourceRejected, match='exceeds encoded byte bound'):
+        configured([APPLE], [gleif('LEI', 'Apple Inc.', other=['A' * (1024**2)])])
 
 
 @pytest.mark.parametrize('container', ['OtherEntityNames', 'TransliteratedOtherEntityNames'])
@@ -134,13 +139,13 @@ def test_empty_registration_and_entity_containers_keep_historical_output(value):
 def test_cascade_skips_other_names_before_mapping_when_category_is_not_general(category):
     row = gleif('LEI', 'Apple Inc.', category=category)
     row['Entity']['OtherEntityNames'] = {'OtherEntityName':['x'] * 100001}
-    assert name_census.cascade_entity(row, {}, {'APPLE INC'}) is None
     assert retained.cascade_entity(row, {}, {'APPLE INC'}) is None
+    if category == 'BRANCH':  # never a legal entity: its other names are not read at all
+        compare([APPLE], [row])
 
 
 def test_cascade_missing_lei_does_not_read_truthy_non_object_entity():
     row = {'LEI':None, 'Entity':[{'EntityCategory':'GENERAL'}]}
-    assert name_census.cascade_entity(row, {}, {'APPLE INC'}) is None
     assert retained.cascade_entity(row, {}, {'APPLE INC'}) is None
 
 
@@ -157,13 +162,11 @@ def test_truthy_non_object_containers_still_refuse_eligible_records(container):
     with pytest.raises(AttributeError):
         retained.build(gleif_archive=io.BytesIO(raw), **kwargs)
     with pytest.raises(SourceRejected):
-        name_census.build(gleif_archive=io.BytesIO(raw), **kwargs)
+        configured([APPLE], [row])
 
 
 def test_census_name_transforms_equal_the_canonical_normalizer_recipes():
-    from edgar_warehouse.rules import files
-    for source, recipe in [('gleif',name_census.GLEIF_READING),
-                           ('gleif',name_census.GLEIF_IDENTITY),
+    for source, recipe in [('gleif',files.load(COMPLETE_READING)),
                            ('gleif',files.load(files.ROOT / 'sources/gleif/census-names-stream.yaml')),
                            ('sec.submissions.company',name_census.SEC_READING)]:
         canonical = files.load(files.ROOT / f'sources/{source}/name-key.yaml')
@@ -193,4 +196,4 @@ def test_matched_registration_refusal_precedes_other_name_shape_or_count_refusal
     with pytest.raises(AttributeError, match="'str' object has no attribute 'get'"):
         retained.build(gleif_archive=io.BytesIO(raw), **kwargs)
     with pytest.raises(SourceRejected, match='value_type'):
-        name_census.build(gleif_archive=io.BytesIO(raw), **kwargs)
+        configured([APPLE], [row])

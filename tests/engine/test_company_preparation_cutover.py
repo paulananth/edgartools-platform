@@ -105,7 +105,7 @@ def test_active_cli_has_no_retired_preparation_import():
         "_pin_evidence",
     ):
         assert not hasattr(company_source, name), name
-    assert callable(company_source.write_name_census)
+    assert not hasattr(company_source, "write_name_census")  # `mdm name-census` reads configured readings
 
 
 @pytest.mark.parametrize(
