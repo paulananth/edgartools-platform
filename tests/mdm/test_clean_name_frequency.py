@@ -52,11 +52,16 @@ def test_it_writes_the_census_the_retired_builder_writes(tmp_path, capture):
     census = json.loads(configured.read_text())
     filers = [("0000320193", "APPLE INC", ["Old Name Inc"]), ("0000000001", "OLD NAME INC", []),
               ("0000789019", "Apple Inc.", [])]
+    member = lambda path: hashlib.sha256((root / path).read_bytes()).hexdigest()  # noqa: E731
+    sec = {"captures": [
+        {"capture_run_id": "capture-1", "company_member_sha256": member("sec_company.parquet"),
+         "former_name_member_sha256": member("sec_company_former_name.parquet"), "filers": 2},
+        {"capture_run_id": "capture-2", "company_member_sha256": member("two/sec_company.parquet"),
+         "former_name_member_sha256": None, "filers": 1}], "filers": 3}
     expected = retired_name_census.build(
-        filers=filers, sec_population=census["sec"], gleif_archive=io.BytesIO(archive.read_bytes()),
+        filers=filers, sec_population=sec, gleif_archive=io.BytesIO(archive.read_bytes()),
         gleif_metadata=json.loads(metadata.read_text()), gleif_sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
     assert configured.read_bytes() == (canonical(expected) + "\n").encode()
-    assert [c["capture_run_id"] for c in census["sec"]["captures"]] == ["capture-1", "capture-2"]
     assert census["entries"]["APPLE INC"]["cik_count"] == 2  # both captures hold the name
     assert census["entries"]["APPLE INC"]["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-02T00:00:00Z"]]
     assert census["entries"]["APPLE INC"]["other_name_holders"] == 1
@@ -75,7 +80,7 @@ def test_a_delta_or_a_short_publication_is_refused(tmp_path, capture):
     root, manifests, archive, metadata, wanted = capture
     reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
     published = json.loads(metadata.read_text())
-    for change, message in [({"file_content": "GLEIF_DELTA_PUBLISHED"}, "never a delta"),
+    for change, message in [({"file_content": "GLEIF_DELTA_PUBLISHED", "delta_start": "2026-09-10T16:00:00+00:00"}, "never a delta"),
                             ({"record_count": len(RECORDS) + 1}, "record count")]:
         metadata.write_text(json.dumps({**published, **change}))
         with pytest.raises(Conflict, match=message):
@@ -88,4 +93,44 @@ def test_a_filer_in_two_captures_is_refused(tmp_path, capture):
     with pytest.raises(Conflict, match="two of the census's captures"):
         write_name_frequency(landing_root=str(root), landing_manifests=[manifests[0]] * 2,
                              gleif_reading=gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS)),
+                             gleif_metadata=str(metadata), output=str(tmp_path / "x.json"))
+
+
+def test_a_reading_made_by_another_recipe_is_refused(tmp_path, capture, monkeypatch):
+    from edgar_warehouse.mdm.clean import name_frequency
+    from edgar_warehouse.rules import files
+
+    root, manifests, archive, metadata, wanted = capture
+    altered = files.load(name_frequency.GLEIF_READING)
+    altered["read"]["limits"]["max_records"] = 99_999
+    original = files.load
+    monkeypatch.setattr(files, "load", lambda path: altered if path == name_frequency.GLEIF_READING else original(path))
+    reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
+    monkeypatch.setattr(files, "load", original)
+    with pytest.raises(Conflict, match="not made by census-complete-stream.yaml"):
+        write_name_frequency(landing_root=str(root), landing_manifests=manifests, gleif_reading=reading,
+                             gleif_metadata=str(metadata), output=str(tmp_path / "x.json"))
+
+
+def test_metadata_the_publisher_would_not_have_written_is_refused(tmp_path, capture):
+    root, manifests, archive, metadata, wanted = capture
+    reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
+    published = json.loads(metadata.read_text())
+    for change in ({"content_date": "yesterday"}, {"format": "csv.zip"}, {"cdf_version": "LEI_2.1"}):
+        metadata.write_text(json.dumps({**published, **change}))
+        with pytest.raises(Conflict):
+            write_name_frequency(landing_root=str(root), landing_manifests=manifests, gleif_reading=reading,
+                                 gleif_metadata=str(metadata), output=str(tmp_path / "x.json"))
+
+
+def test_a_cascade_over_several_captures_is_refused(tmp_path, capture, monkeypatch):
+    # The cascade's address counts span one capture until ticket 20 extends them.
+    from edgar_warehouse.mdm.clean import cascade, name_frequency
+
+    root, manifests, archive, metadata, wanted = capture
+    monkeypatch.setattr(name_frequency, "active_rules",
+                        lambda policy: [("on", {"when": [{"primitive": cascade.TEST}]})])
+    with pytest.raises(Conflict, match="one capture"):
+        write_name_frequency(landing_root=str(root), landing_manifests=manifests,
+                             gleif_reading={"uri": "file:///unused", "sha256": "0" * 64},
                              gleif_metadata=str(metadata), output=str(tmp_path / "x.json"))

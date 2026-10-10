@@ -27,7 +27,7 @@ common name look unique.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import replace
 
 from . import cascade as cascaded
@@ -61,6 +61,22 @@ def _sec_population(filers):
                     if table == "current":
                         wanted.add(key)
     return held, wanted
+
+
+def census(*, sec_population: dict, gleif: dict, held: dict, wanted: set, readings, cascade: dict | None = None) -> dict:
+    """The census from the SEC population counted (`held`, `wanted`) and the
+    configured Golden Copy reading's tables (`readings`, in source order).
+
+    With `cascade` ({"spec", "filers"}: the Company rules' passes and every SEC
+    filer as the cascade reads it) and at least one declared pass, it also runs
+    the cascade over both whole sources; otherwise the census holds names only.
+    """
+    on = bool(cascade and cascade["spec"]["passes"])
+    counts = cascaded.count_addresses(f.place for f in cascade["filers"]) if on else Counter()
+    legal, other, entities = fold_reading(
+        readings, cascade_wanted={f.key for f in cascade["filers"]} - {""} if on else set(), address_counts=counts)
+    return document(sec_population=sec_population, gleif=gleif, held=held, wanted=wanted, legal=legal, other=other,
+                    cascade=cascade if on else None, entities=entities, address_counts=counts if on else None)
 
 
 def fold_reading(readings, *, cascade_wanted: set, address_counts) -> tuple[dict, dict, list]:
@@ -102,6 +118,7 @@ def fold_reading(readings, *, cascade_wanted: set, address_counts) -> tuple[dict
         for row in tables["d_addresses"]:
             address_counts[(row["street"], row["postcode"], row["country"])] += 1
     return legal, other, list(entities.values())
+
 
 def document(
     *,
@@ -154,6 +171,7 @@ def document(
             ),
         }
     return result
+
 
 def entry(census: dict, name: str | None, *, census_digest: str) -> dict | None:
     """What one SEC record carries: its census entry, bound to the census.
