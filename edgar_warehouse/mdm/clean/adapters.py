@@ -256,11 +256,22 @@ def _matching_values(row: dict, mapping: dict) -> dict:
     }
 
 
+def _refuse(row: dict, mapping: dict) -> None:
+    """The contract's own record checks come first: a record they set aside
+    defers with their reason, before its kind, key or fields are read."""
+    if "reading" in mapping:
+        from edgar_warehouse.workers.source_mapping import record_refusal
+
+        if reason := record_refusal(row, mapping["reading"]):
+            raise UnsupportedRecord(reason)
+
+
 def mapped_values(row: dict, contract: dict) -> tuple[dict, dict, dict | None]:
     """A row's mapped fields and matching values, after the feed's data
     quality rule: what `normalize` puts on a record, read by the same parts,
     and what the cascade's census reads for every filer and entity, a Company
     or not (ticket 21), so the two cannot differ."""
+    _refuse(row, contract["adapter"])
     fields = _fields(row, contract["adapter"])
     matching = _matching_values(row, contract["adapter"])
     return fields, matching, _quality(contract, fields, matching)
@@ -309,6 +320,7 @@ def normalize(
     mapping = contract["adapter"]
     if not isinstance(row, dict):
         raise UnsupportedRecord("invalid_record_shape")
+    _refuse(row, mapping)
     labelled = None
     kind = mapping.get("kind")
     if mapping.get("classification"):

@@ -38,6 +38,24 @@ def read_record(row: dict, reading: dict):
     return _engine(key).read(json.dumps(row, ensure_ascii=False, allow_nan=False).encode())
 
 
+def record_refusal(row: dict, reading: dict) -> str | None:
+    """The reason a declared record check (`checks:` on the mapped table) sets
+    this record aside, or None. Only the checks run, never a column, so the
+    caller decides where a refusal falls in its own order."""
+    body = json.loads(json.dumps(reading, ensure_ascii=False, allow_nan=False))
+    tables = body.get("read", {}).get("tables", {})
+    if set(tables) != {"mapped"}:
+        raise SourceRejected("contract", "record mapping requires one mapped table")
+    if not tables["mapped"].get("checks"):
+        return None
+    tables["mapped"]["columns"] = {}
+    result = read_record(row, body)
+    if not result.deferred:
+        return None
+    (deferred,) = result.deferred
+    return deferred["reason"]
+
+
 def project_record(row: dict, reading: dict, *, column: str) -> dict:
     # Serialize a fresh subset: mutable Rules bodies never become cache keys.
     body = json.loads(json.dumps(reading, ensure_ascii=False, allow_nan=False))
