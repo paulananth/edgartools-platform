@@ -31,7 +31,7 @@ from edgar_warehouse.workers import source_read, source_readings
 from . import cascade as cascaded
 from . import name_census
 from .company_source import POLICY, _read_bounded, _read_manifest, _read_member, cascade_filer
-from .gleif_source import validate_metadata
+from .gleif_publication import validate_metadata
 from .matching import active_rules
 from .store import Conflict, canonical, digest
 

@@ -288,8 +288,10 @@ Rules:
   `FUND` → `fund_structure`, `BRANCH` → `branch`,
   `RESIDENT_GOVERNMENT_ENTITY` → `government`, `INTERNATIONAL_ORGANIZATION` →
   `international_organization`; `SOLE_PROPRIETOR` is left unnamed). A
-  record outside the approved Company scope still carries the kind its
-  category names.
+  record outside the approved Company scope never reaches the Stage: the
+  source reading selects by scope and drops it, and only the source file's
+  hash covers it (operator, 2026-10-10, when the older GLEIF reader that set
+  it aside with its kind was retired).
 
 - **`min_count` or `max_count` is required on `token_match`** (§5). Without
   one, the primitive returns true whatever the name holds, which is a

@@ -50,7 +50,7 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     """Bounded projection proof; no install or database population gate."""
     import copy
     from edgar_warehouse.mdm.clean import cascade, company_source, quality
-    from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+    from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
     from tests.support.retired_name_census import cascade_entity
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
@@ -967,9 +967,11 @@ from xml.etree import ElementTree as ET
 from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read
-from edgar_warehouse.mdm.clean import gleif_source
+from edgar_warehouse.mdm.clean import gleif_publication
 from edgar_warehouse.mdm.clean.gleif_publication import attest_publication
-assert not hasattr(gleif_source, "inspect_archive")
+import importlib.util
+assert importlib.util.find_spec("edgar_warehouse.mdm.clean.gleif_source") is None
+assert not hasattr(gleif_publication, "inspect_archive")
 store = Artifacts()
 lei = "5493001KJTIIGC8Y1R12"
 date = "2026-09-11T16:00:00+00:00"
@@ -1009,7 +1011,7 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
         raw = store.put_bytes((folder / "captured.zip").as_uri(),zipped.getvalue())
         seen = []
         attestation = attest_publication(io.BytesIO(zipped.getvalue()), member=member.replace("-","_"),
-            metadata={"format":format+".zip", "cdf_version":gleif_source.FORMATS[member.replace("-","_")][0],
+            metadata={"format":format+".zip", "cdf_version":gleif_publication.FORMATS[member.replace("-","_")][0],
                 "content_date":date, "file_content":"GLEIF_FULL_PUBLISHED", "delta_start":None, "record_count":1},
             expected_sha256=raw["sha256"], on_record=lambda record,index: seen.append((record,index)))
         assert seen == [(row,0)] and attestation["record_count"] == 1
@@ -1198,7 +1200,7 @@ from uuid import uuid4
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.mdm.clean import adapters, gleif_source, company_source
+from edgar_warehouse.mdm.clean import adapters, company_source
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
@@ -1249,14 +1251,13 @@ assert digest(sec_readings)==digest(body["readings"])
 contract=files.mdm_contract("gleif","gleif.level1.v1")
 retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
 assertions=[]
-for ordinal,row in enumerate(body["rows"]):
+for row in body["rows"]:
     publication={"publication_key":"installed-gleif-fixture","revision":1,
-                 "artifact_sha256":digest(row),"member":"level1"}
-    kwargs={"member":"level1","source_code":"gleif.level1.v1","eligible_leis":body["leis"],
-            "publication":publication,"ordinal":ordinal}
-    actual=gleif_source.record_evidence(row,contract=contract,**kwargs)
-    assert actual[0]=="assertion" and digest(actual)==digest(gleif_source.record_evidence(row,contract=retained,**kwargs))
-    assertions.append(actual[1])
+                 "artifact_sha256":digest(row),"member":"level1","effective_at":None}
+    kwargs={"source_code":"gleif.level1.v1","publication":publication}
+    actual=adapters.normalize(row,contract=contract,**kwargs)
+    assert digest(actual)==digest(adapters.normalize(row,contract=retained,**kwargs))
+    assertions.append(actual)
 store=Store(engine); stage=MergeStage(store); run=str(uuid4())
 command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-gleif-qualification",
          "policy_digest":body["policy"],"expected_checkpoint":0,"checkpoint":1,

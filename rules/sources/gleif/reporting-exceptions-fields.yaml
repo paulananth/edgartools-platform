@@ -14,7 +14,49 @@ read:
   tables:
     mapped:
       each: .
+      checks:
+      # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
+      # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
+      - check: lei
+        column: _lei
+        on_fail: defer
+      # A flag with a value blocks until someone decides (ticket 18).
+      - check: absent
+        column: _deletion
+        reason: gleif_deletion_flag
+        on_fail: defer
+      - check: in_set
+        column: _category
+        values: [DIRECT_ACCOUNTING_CONSOLIDATION_PARENT, ULTIMATE_ACCOUNTING_CONSOLIDATION_PARENT]
+        reason: unsupported_exception_category
+        on_fail: defer
       columns:
+        _lei:
+          value:
+            path: LEI.$
+            type: text
+            path_mode: literal
+        _deletion:
+          # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+          # keep failing closed): an object holds the flag, anything else is it.
+          choose:
+            condition:
+              test:
+                path: Extension
+                kind: object
+            then:
+              value:
+                path: Extension.gleif:Deletion
+                path_mode: literal
+            else:
+              value:
+                path: Extension
+                path_mode: literal
+        _category:
+          value:
+            path: ExceptionCategory.$
+            type: text
+            path_mode: literal
         fields:
           object:
             fields: {}

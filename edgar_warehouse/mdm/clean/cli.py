@@ -259,7 +259,6 @@ def execute_manifest(
     stage: str,
     limit: int,
     preview: bool = False,
-    publication_verifier=None,
 ) -> dict:
     if not 1 <= limit <= 1000:
         raise ValueError(
@@ -267,6 +266,9 @@ def execute_manifest(
         )
     UUID(run_id)
     manifest, manifest_hash, root = read_manifest(path)
+    if "native_source" in manifest:
+        # The native GLEIF path was retired (Issue 20 L6): GLEIF is read by its contract.
+        raise Conflict("Native publication manifests are retired; GLEIF is read by its contract")
     handled = 0
     committed = []
     with store.engine.connect() as conn:
@@ -284,28 +286,11 @@ def execute_manifest(
                 {"ids": [b["batch_id"] for b in manifest["batches"]]},
             )
         )
-    native_scope = None
-    native_batches = {}
-    if "native_source" in manifest:
-        from .native_consumption import prepare_native
-
-        if stage != "mastering":
-            raise ValueError("Native publication manifests run through mastering")
-        native_scope, native_batches = prepare_native(
-            manifest,
-            store,
-            coordinator,
-            publication_verifier,
-            observed=observed,
-            limit=limit,
-            run_id=run_id,
-        )
     if not preview:
         coordinator.start(
             run_id,
             [b["batch_id"] for b in manifest["batches"]],
             manifest_digest=manifest_hash,
-            native_consumption=native_scope,
         )
     prerequisites = set()
     quality: Counter = Counter()
@@ -318,18 +303,9 @@ def execute_manifest(
             continue
         if not prerequisites <= observed:
             raise Conflict("Complete preceding manifest batches before this stage")
-        if native_scope is not None:
-            if batch["batch_id"] not in native_batches:
-                break
-            native = native_batches[batch["batch_id"]]
-            assertions, deferred = native["assertions"], native["deferred"]
-            occurrences = native.get("occurrences", [])
-        else:
-            found = batch_input(
-                batch, root, store, policy_digest=manifest["policy_digest"]
-            )
-            assertions, deferred = found["assertions"], found["deferred"]
-            occurrences = found["occurrences"]
+        found = batch_input(batch, root, store, policy_digest=manifest["policy_digest"])
+        assertions, deferred = found["assertions"], found["deferred"]
+        occurrences = found["occurrences"]
         batch_quality = quality_counts(assertions, deferred)
         cost = (
             0
@@ -369,8 +345,6 @@ def execute_manifest(
         ):
             if key in batch:
                 command[key] = batch[key]
-        if native_scope is not None:
-            command.update(native_batches[batch["batch_id"]])
         if preview:
             result = MergeStage(store).apply(**command)
         else:

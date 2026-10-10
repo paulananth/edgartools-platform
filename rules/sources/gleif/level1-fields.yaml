@@ -14,7 +14,52 @@ read:
   tables:
     mapped:
       each: .
+      checks:
+      # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
+      # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM
+      # contract). A record a check sets aside defers in the Stage with that reason.
+      - check: lei
+        column: _lei
+        on_fail: defer
+      # GLEIF flags a deletion in delta files only; in a full file the field is present and empty
+      # on 4% of reporting exceptions (ticket 18). A flag with a value blocks until someone decides.
+      - check: absent
+        column: _deletion
+        reason: gleif_deletion_flag
+        on_fail: defer
+      # GLEIF's categories; one outside them is invalid, not "not a Company".
+      - check: in_set
+        column: _category
+        values: [GENERAL, BRANCH, FUND, SOLE_PROPRIETOR, INTERNATIONAL_ORGANIZATION, RESIDENT_GOVERNMENT_ENTITY]
+        reason: invalid_identity_kind
+        on_fail: defer
       columns:
+        _lei:
+          value:
+            path: LEI.$
+            type: text
+            path_mode: literal
+        _deletion:
+          # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+          # keep failing closed): an object holds the flag, anything else is it.
+          choose:
+            condition:
+              test:
+                path: Extension
+                kind: object
+            then:
+              value:
+                path: Extension.gleif:Deletion
+                path_mode: literal
+            else:
+              value:
+                path: Extension
+                path_mode: literal
+        _category:
+          value:
+            path: Entity.EntityCategory.$
+            type: text
+            path_mode: literal
         fields:
           object:
             fields:

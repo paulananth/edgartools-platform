@@ -153,7 +153,7 @@ def _cascade_pass(sec: dict, gleif: dict, args: dict) -> bool:
 
 
 def _eligible(_sec: dict, gleif: dict, args: dict) -> bool:
-    # The GLEIF contract admits only GENERAL as a Company (`gleif_source.py`),
+    # The GLEIF contract admits only GENERAL as a Company (its Level 1 contract),
     # so that is the one category this test can honour; any other fails closed.
     if args.get("categories") != ["GENERAL"]:
         raise Conflict("Name binding can require only the GENERAL category")

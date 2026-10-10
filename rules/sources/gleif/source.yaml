@@ -1,6 +1,6 @@
 # GLEIF: the MDM mappings of the three native Golden Copy members, one Dataset
 # Contract each. Native archive reading and mapped values use bundled
-# configuration. Release semantics remain in gleif_source.py until retired;
+# configuration. Publication checks live in gleif_publication.py;
 # field ranks live in the merge rules, not here.
 source: gleif
 bookkeeping:
@@ -58,7 +58,52 @@ mdm:
             tables:
               mapped:
                 each: .
+                checks:
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
+                # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM
+                # contract). A record a check sets aside defers in the Stage with that reason.
+                - check: lei
+                  column: _lei
+                  on_fail: defer
+                # GLEIF flags a deletion in delta files only; in a full file the field is present and empty
+                # on 4% of reporting exceptions (ticket 18). A flag with a value blocks until someone decides.
+                - check: absent
+                  column: _deletion
+                  reason: gleif_deletion_flag
+                  on_fail: defer
+                # GLEIF's categories; one outside them is invalid, not "not a Company".
+                - check: in_set
+                  column: _category
+                  values: [GENERAL, BRANCH, FUND, SOLE_PROPRIETOR, INTERNATIONAL_ORGANIZATION, RESIDENT_GOVERNMENT_ENTITY]
+                  reason: invalid_identity_kind
+                  on_fail: defer
                 columns:
+                  _lei:
+                    value:
+                      path: LEI.$
+                      type: text
+                      path_mode: literal
+                  _deletion:
+                    # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+                    # keep failing closed): an object holds the flag, anything else is it.
+                    choose:
+                      condition:
+                        test:
+                          path: Extension
+                          kind: object
+                      then:
+                        value:
+                          path: Extension.gleif:Deletion
+                          path_mode: literal
+                      else:
+                        value:
+                          path: Extension
+                          path_mode: literal
+                  _category:
+                    value:
+                      path: Entity.EntityCategory.$
+                      type: text
+                      path_mode: literal
                   fields:
                     object:
                       fields:
@@ -287,8 +332,11 @@ mdm:
           gleif_registration_authority: Entity.RegistrationAuthority.RegistrationAuthorityID.$
           gleif_registration_authority_entity_id: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
           gleif_entity_creation_date: Entity.EntityCreationDate.$
+        # The record as GLEIF published it, and the time it states for itself
+        # (L6: what the older reader kept and stamped, now the contract's own).
         provenance:
-          native_record: _native
+          native_record: .
+        effective_at: Registration.LastUpdateDate.$
         kind_field: Entity.EntityCategory.$
         kind_values:
           GENERAL: company
@@ -381,7 +429,67 @@ mdm:
             tables:
               mapped:
                 each: .
+                checks:
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
+                # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
+                - check: lei
+                  column: _start
+                  on_fail: defer
+                - check: lei
+                  column: _end
+                  on_fail: defer
+                - check: in_set
+                  column: _start_type
+                  values: [LEI]
+                  reason: unsupported_relationship_endpoint
+                  on_fail: defer
+                - check: in_set
+                  column: _end_type
+                  values: [LEI]
+                  reason: unsupported_relationship_endpoint
+                  on_fail: defer
+                # A flag with a value blocks until someone decides (ticket 18).
+                - check: absent
+                  column: _deletion
+                  reason: gleif_deletion_flag
+                  on_fail: defer
                 columns:
+                  _start:
+                    value:
+                      path: RelationshipRecord.Relationship.StartNode.NodeID.$
+                      type: text
+                      path_mode: literal
+                  _end:
+                    value:
+                      path: RelationshipRecord.Relationship.EndNode.NodeID.$
+                      type: text
+                      path_mode: literal
+                  _start_type:
+                    value:
+                      path: RelationshipRecord.Relationship.StartNode.NodeIDType.$
+                      type: text
+                      path_mode: literal
+                  _end_type:
+                    value:
+                      path: RelationshipRecord.Relationship.EndNode.NodeIDType.$
+                      type: text
+                      path_mode: literal
+                  _deletion:
+                    # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+                    # keep failing closed): an object holds the flag, anything else is it.
+                    choose:
+                      condition:
+                        test:
+                          path: RelationshipRecord.Extension
+                          kind: object
+                      then:
+                        value:
+                          path: RelationshipRecord.Extension.gleif:Deletion
+                          path_mode: literal
+                      else:
+                        value:
+                          path: RelationshipRecord.Extension
+                          path_mode: literal
                   fields:
                     object:
                       fields: {}
@@ -395,31 +503,50 @@ mdm:
         field_shape: nullable_text
         fields: {}
         provenance:
-          native_record: _native
+          native_record: .
         kind: company
+        # Read from the GLEIF record as published (L6: what the older reader built
+        # first, now the contract's own paths, with the record's own time).
+        effective_at: RelationshipRecord.Registration.LastUpdateDate.$
         record_key:
-        - start
-        - end
-        - relationship_type
+        - RelationshipRecord.Relationship.StartNode.NodeID.$
+        - RelationshipRecord.Relationship.EndNode.NodeID.$
+        - RelationshipRecord.Relationship.RelationshipType.$
         relationships:
-        - type_field: relationship_type
+        - type_field: RelationshipRecord.Relationship.RelationshipType.$
           type_values:
             IS_DIRECTLY_CONSOLIDATED_BY: IS_DIRECTLY_CONSOLIDATED_BY
             IS_ULTIMATELY_CONSOLIDATED_BY: IS_ULTIMATELY_CONSOLIDATED_BY
           # The link starts at the child's Level 1 record, not at this
           # relationship record (platform validation 06a).
           source_key:
-          - start
+          - RelationshipRecord.Relationship.StartNode.NodeID.$
           source_source: gleif.level1.v1
           target_key:
-          - end
+          - RelationshipRecord.Relationship.EndNode.NodeID.$
           target_source: gleif.level1.v1
-          valid_from: valid_from
-          valid_to: valid_to
+          # GLEIF lists several periods; the relationship's own is the one
+          # RELATIONSHIP_PERIOD, and a record with none or several waits.
+          find:
+            period:
+              in: RelationshipRecord.Relationship.RelationshipPeriods.RelationshipPeriod
+              where:
+                PeriodType.$: RELATIONSHIP_PERIOD
+              one: ambiguous_relationship_period
+          valid_from: period.StartDate.$
+          valid_to: period.EndDate.$
+          time_format: instant
+          interval:
+            reason: invalid_relationship_interval
+          status:
+            path: RelationshipRecord.Relationship.RelationshipStatus.$
+            values: [ACTIVE, INACTIVE]
+            need_end: [INACTIVE]
+            reason: invalid_relationship_status_interval
           scope: GLEIF accounting consolidation
           properties:
-            source_relationship_status: status
-            source_registration_status: registration_status
+            source_relationship_status: RelationshipRecord.Relationship.RelationshipStatus.$
+            source_registration_status: RelationshipRecord.Registration.RegistrationStatus.$
   gleif.reporting_exceptions.v1:
     contract:
       provider: GLEIF
@@ -454,7 +581,49 @@ mdm:
             tables:
               mapped:
                 each: .
+                checks:
+                # The checks the older reader made before mapping (`gleif_source.record_evidence`, retired in Issue 20 L6), in its
+                # order, now the contract's own (L6; operator, 2026-10-10: refusals live in the MDM contract).
+                - check: lei
+                  column: _lei
+                  on_fail: defer
+                # A flag with a value blocks until someone decides (ticket 18).
+                - check: absent
+                  column: _deletion
+                  reason: gleif_deletion_flag
+                  on_fail: defer
+                - check: in_set
+                  column: _category
+                  values: [DIRECT_ACCOUNTING_CONSOLIDATION_PARENT, ULTIMATE_ACCOUNTING_CONSOLIDATION_PARENT]
+                  reason: unsupported_exception_category
+                  on_fail: defer
                 columns:
+                  _lei:
+                    value:
+                      path: LEI.$
+                      type: text
+                      path_mode: literal
+                  _deletion:
+                    # The older reader read a non-object Extension as the flag itself (operator, 2026-10-10:
+                    # keep failing closed): an object holds the flag, anything else is it.
+                    choose:
+                      condition:
+                        test:
+                          path: Extension
+                          kind: object
+                      then:
+                        value:
+                          path: Extension.gleif:Deletion
+                          path_mode: literal
+                      else:
+                        value:
+                          path: Extension
+                          path_mode: literal
+                  _category:
+                    value:
+                      path: ExceptionCategory.$
+                      type: text
+                      path_mode: literal
                   fields:
                     object:
                       fields: {}
@@ -468,7 +637,20 @@ mdm:
         field_shape: nullable_text
         fields: {}
         provenance:
-          native_record: _native
+          native_record: .
+        # GLEIF's reasons for not reporting a parent (REPEX 2.1 ExceptionReasonEnum, with its
+        # deprecated values); each must be one, and a record states at least one.
+        every_in:
+        - path: ExceptionReason
+          item: $
+          values: [NO_LEI, NATURAL_PERSONS, NON_CONSOLIDATING, NO_KNOWN_PERSON, NON_PUBLIC,
+                   BINDING_LEGAL_COMMITMENTS, LEGAL_OBSTACLES, DISCLOSURE_DETRIMENTAL,
+                   DETRIMENT_NOT_EXCLUDED, CONSENT_NOT_OBTAINED]
+          missing: missing_exception_reason
+          reason: invalid_exception_reason
+        # An exception is retained source evidence, not a new Company binding or a
+        # fabricated parent edge: every record waits with this reason.
+        retained_as: reported_parent_exception
         kind: company
         record_key:
         - LEI.$

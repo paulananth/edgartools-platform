@@ -1,5 +1,10 @@
 # Source publication verification
 
+> **Retired (Issue 20 L6, 2026-10-10).** The code this page describes was deleted:
+> `source_publications.py` (`PublicationVerifier`, `plan_continuity`), whose only caller was the native GLEIF path. GLEIF records are read by their contracts (`rules/sources/gleif/`), and a
+> publication is attested by `gleif_publication.attest_publication`. The page stays as
+> the record of what was built; the code last ran at commit `68cc1240`.
+
 Ticket 11 implements a **source-only offline verification API** in
 `edgar_warehouse/mdm/clean/source_publications.py`. It creates no tables, roles,
 master records, consumer receipts or acquisition status flags. The fixture is

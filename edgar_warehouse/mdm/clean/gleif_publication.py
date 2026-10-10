@@ -1,6 +1,11 @@
-"""Bind authenticated GLEIF publication authority to generic attestation."""
+"""Bind authenticated GLEIF publication authority to generic attestation.
+
+A GLEIF record is read by its member's contract (`dataset_contract`); this module
+keeps only what a publication itself must prove: its member, format and times.
+"""
 from __future__ import annotations
 
+import copy
 import hashlib
 import zipfile
 
@@ -9,8 +14,58 @@ from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers.source_attestation import attest_zip
 
 from .evidence import instant
-from .gleif_source import VERSION, validate_metadata
 from .store import Conflict
+
+# Hashed into every attestation's `domain_content_hash`: never change the text.
+VERSION = "gleif-native-record-v1"
+FORMATS = {
+    "level1": ("LEI_3.1", "records"),
+    "relationships": ("RR_2.1", "relations"),
+    "reporting_exceptions": ("REPEX_2.1", "exceptions"),
+}
+
+
+def validate_metadata(member: str, metadata: dict) -> None:
+    if not isinstance(metadata, dict):
+        raise Conflict("Invalid GLEIF member metadata")
+    if member not in FORMATS or metadata.get("cdf_version") != FORMATS[member][0]:
+        raise Conflict("Unsupported GLEIF CDF version/member")
+    if metadata.get("format") not in {"json.zip", "xml.zip"}:
+        raise Conflict("Unsupported GLEIF archive format")
+    count = metadata.get("record_count")
+    if type(count) is not int or not 0 <= count <= 10_000_000:
+        raise Conflict("Invalid GLEIF record count")
+    try:
+        date = instant(metadata["content_date"])
+        mode = metadata["file_content"]
+        if mode == "GLEIF_FULL_PUBLISHED" and metadata.get("delta_start") is None:
+            return
+        if mode == "GLEIF_DELTA_PUBLISHED" and instant(metadata["delta_start"]) < date:
+            return
+    except (KeyError, ValueError, TypeError) as exc:
+        raise Conflict("Invalid GLEIF source time") from exc
+    raise Conflict("Unsupported GLEIF publication mode or predecessor time")
+
+
+def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
+    """Governance input, not registration or activation. Field ranks live in policy.
+
+    Each member's mapping is data in `rules/sources/gleif/source.yaml` (rules
+    skill ticket 01). A relationship points at the Level 1 source the file
+    names, at both ends; `level1_source` replaces it for a caller that
+    registers Level 1 under another code.
+    """
+    for entry in files.source("gleif")["mdm"].values():
+        contract = entry["contract"]
+        if contract["adapter"]["native_member"] == member:
+            if level1_source is not None:
+                contract = copy.deepcopy(contract)
+                for relationship in contract["adapter"].get("relationships", []):
+                    relationship["target_source"] = level1_source
+                    if relationship.get("source_key"):  # a link starts at Level 1 too
+                        relationship["source_source"] = level1_source
+            return contract
+    raise ValueError("Unknown GLEIF member")
 
 
 def attest_publication(stream, *, member, metadata, expected_sha256, on_record=None,

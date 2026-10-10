@@ -7,10 +7,12 @@ register different rules: the live Company policy is `983352e8…4049`.
 
 from __future__ import annotations
 
+import copy
+
 
 import pytest
 
-from edgar_warehouse.mdm.clean import company_source, gleif_source
+from edgar_warehouse.mdm.clean import company_source, gleif_publication
 from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import policy_layers
@@ -146,6 +148,77 @@ WITH_CONFIGURED_READING = {
 }
 
 
+# L6 (operator ruling 2026-10-10 13:20 ET: a non-object `Extension` fails closed as the
+# older reader did, "go with your recommendations" 17:55 ET): the deletion column reads
+# an object's `gleif:Deletion` and anything else as the flag itself. Approved by the
+# operator, 2026-10-10 18:06 ET: "approved" (evidence: no Golden Copy record has a
+# non-object `Extension`, so every member's whole-file comparison holds).
+WITH_EXTENSION_CHECK = {
+    "level1": "67fe1aaaa0aee2bafb1d1e234cfd147b9acd8058ad27deed9e3bb4c3572b1eac",
+    "relationships": "b9b1fd11129ea8ffb258989f076775377c94071d001be6a2e6c8d3621c294b1a",
+    "reporting_exceptions": "643e8335a449a9e4d516dcf219ae805f52a4c55ec57bb4d485cd570374a28ed2",
+}
+
+
+# L6 (operator ruling 2026-10-10: refusals live in the MDM contract): the checks
+# the older GLEIF reader made before mapping, as the contract's own record checks
+# with the columns they read; and what it kept and stamped, the record's own time
+# (`effective_at`) and the whole record (`native_record: .`). Level 1 approved by the
+# operator, 2026-10-10 14:13 ET: "Approved" (evidence: the first 20,000 Golden Copy records reach
+# the same outcome both ways; the whole-file comparison was running).
+WITH_REFUSALS = {
+    "level1": "fc104ef9284a9a4014e1a0149c683c9ae18169a6cb5dc651cd38396257aa7754",
+    # The relationships contract reads the GLEIF record as published: keys and ends by
+    # path, the one RELATIONSHIP_PERIOD by `find ... one`, ISO instants, the interval and
+    # status rules. Approved by the operator, 2026-10-10 17:55 ET: "approve both digests"
+    # (evidence: all 487,721 Golden Copy records reach the same outcome both ways).
+    "relationships": "78cb4dd50732ac563a65aa5fb4581237266be617307ac73519a378df6f02fb97",
+    # Reporting exceptions: the category, every reason in GLEIF's list (`every_in`), and
+    # each record retained as evidence (`retained_as`). Approved with relationships
+    # (evidence: all 6,351,397 records reach the same outcome both ways).
+    "reporting_exceptions": "8ec18c6d58eb8204e61cd6bbcbe9f673559b2a7cc7083a1fd32540c19d353d34",
+}
+
+
+def _without_extension_check(contract: dict) -> dict:
+    if "reading" not in contract["adapter"]:
+        return contract
+    adapter = copy.deepcopy(contract["adapter"])
+    columns = adapter["reading"]["read"]["tables"]["mapped"]["columns"]
+    if "choose" in columns.get("_deletion", {}):
+        columns["_deletion"] = {"value": columns["_deletion"]["choose"]["then"]["value"]}
+    return {**contract, "adapter": adapter}
+
+
+# What the relationships contract read before L6: the row the older reader built.
+BUILT_ROW_RELATIONSHIP = {
+    "type_field": "relationship_type",
+    "type_values": {"IS_DIRECTLY_CONSOLIDATED_BY": "IS_DIRECTLY_CONSOLIDATED_BY",
+                    "IS_ULTIMATELY_CONSOLIDATED_BY": "IS_ULTIMATELY_CONSOLIDATED_BY"},
+    "source_key": ["start"], "source_source": "gleif.level1.v1",
+    "target_key": ["end"], "target_source": "gleif.level1.v1",
+    "valid_from": "valid_from", "valid_to": "valid_to", "scope": "GLEIF accounting consolidation",
+    "properties": {"source_relationship_status": "status", "source_registration_status": "registration_status"},
+}
+
+
+def _without_refusals(contract: dict) -> dict:
+    if "reading" not in contract["adapter"]:
+        return contract
+    adapter = copy.deepcopy(contract["adapter"])
+    if adapter.get("native_member") == "relationships" and "effective_at" in adapter:
+        adapter["record_key"] = ["start", "end", "relationship_type"]
+        adapter["relationships"] = [copy.deepcopy(BUILT_ROW_RELATIONSHIP)]
+    if "effective_at" in adapter or "retained_as" in adapter:
+        for added in ("effective_at", "every_in", "retained_as"):
+            adapter.pop(added, None)
+        adapter["provenance"] = {"native_record": "_native"}
+    mapped = adapter["reading"]["read"]["tables"]["mapped"]
+    mapped.pop("checks", None)
+    mapped["columns"] = {k: v for k, v in mapped["columns"].items() if not k.startswith("_")}
+    return {**contract, "adapter": adapter}
+
+
 def _without_configured_reading(contract: dict) -> dict:
     return {**contract, "adapter": {k: v for k, v in contract["adapter"].items() if k != "reading"}}
 
@@ -173,7 +246,12 @@ def _without_invalid_lei(contract: dict) -> dict:
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
-    contract = gleif_source.dataset_contract(member)
+    contract = gleif_publication.dataset_contract(member)
+    if member in WITH_EXTENSION_CHECK:
+        assert digest(contract) == WITH_EXTENSION_CHECK[member]
+        contract = _without_extension_check(contract)
+    assert digest(contract) == WITH_REFUSALS.get(member, WITH_CONFIGURED_READING[member])
+    contract = _without_refusals(contract)
     assert digest(contract) == WITH_CONFIGURED_READING[member]
     contract = _without_configured_reading(contract)
     assert digest(contract) == WITH_SUCCESSOR.get(member, WITH_LINK_START.get(member, WITH_INVALID_LEI[member]))
@@ -187,17 +265,18 @@ def test_each_gleif_mapping_is_unchanged(member):
 
 
 def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
-    contract = gleif_source.dataset_contract("relationships", level1_source="x.level1")
+    contract = gleif_publication.dataset_contract("relationships", level1_source="x.level1")
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     assert [r["source_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    assert digest(gleif_source.dataset_contract("relationships")) == WITH_CONFIGURED_READING["relationships"]
-    assert digest(_without_configured_reading(gleif_source.dataset_contract("relationships"))) == WITH_LINK_START["relationships"]
+    contract = _without_extension_check(gleif_publication.dataset_contract("relationships"))
+    assert digest(contract) == WITH_REFUSALS["relationships"]
+    assert digest(_without_configured_reading(_without_refusals(contract))) == WITH_LINK_START["relationships"]
 
 
 def test_an_unknown_gleif_member_is_refused():
-    with pytest.raises(ValueError, match="Unknown native GLEIF member"):
-        gleif_source.dataset_contract("level2")
+    with pytest.raises(ValueError, match="Unknown GLEIF member"):
+        gleif_publication.dataset_contract("level2")
 
 
 @pytest.mark.parametrize(

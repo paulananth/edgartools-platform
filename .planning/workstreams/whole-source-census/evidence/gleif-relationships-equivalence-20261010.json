@@ -1,0 +1,23 @@
+{
+ "member": "relationships",
+ "records": 487721,
+ "read": 487721,
+ "shard": "0/1",
+ "complete": true,
+ "read_all": true,
+ "seconds": 2563.4,
+ "estimate_full_minutes": 42.7,
+ "outcomes": {
+  "deferred:unsupported_relationship_type": 227801,
+  "assertion:id": 259498,
+  "deferred:ambiguous_relationship_period": 75,
+  "deferred:invalid_relationship_status_interval": 130,
+  "deferred:invalid_lei_checksum": 1,
+  "deferred:invalid_relationship_interval": 216
+ },
+ "differences": [],
+ "equal": true,
+ "approved_contract": "b7493a71495dabcde680e31560a0d82393030ab0eb71334d6897ae98b0e0cc2e",
+ "configured_contract": "78cb4dd50732ac563a65aa5fb4581237266be617307ac73519a378df6f02fb97",
+ "archive_sha256": "089a2513d2b5d78fc6359c87ef4bc25a56ac7f58d6b3cb740b954e3ecd2bd0c3"
+}

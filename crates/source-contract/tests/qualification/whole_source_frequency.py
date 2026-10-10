@@ -7,7 +7,7 @@ from edgar_warehouse.rules import files,source_engine
 from edgar_warehouse.workers import source_stream,source_read
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import name_census,company_source,cascade,adapters
-from edgar_warehouse.mdm.clean.gleif_source import dataset_contract
+from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
 from tests.support import retired_name_census as oracle
 from tests.engine.test_census_names_stream import expected
 root=Path('/private/tmp/codex-census-eof-proof');store=Artifacts()

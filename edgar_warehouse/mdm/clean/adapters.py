@@ -135,6 +135,8 @@ def mapped_field(row: dict, name: str, spec: str | dict):
 
 
 def value(row: dict, path: str):
+    if path == ".":  # the whole record, as a provenance path names it
+        return row
     result: Any = row
     for part in path.split("."):
         if not isinstance(result, dict):
@@ -256,11 +258,39 @@ def _matching_values(row: dict, mapping: dict) -> dict:
     }
 
 
+def _refuse(row: dict, mapping: dict) -> None:
+    """The contract's own record checks come first: a record they set aside
+    defers with their reason, before its kind, key or fields are read.
+
+    After the reading's checks, `every_in` rules test each value of a list
+    (the engine's checks test one value): `{path, item, values, missing,
+    reason}` sets the record aside with `missing` when the path holds no
+    value and with `reason` when one is not in `values`. `retained_as` names
+    the reason every remaining record waits with: a source whose records are
+    evidence only, never an identity."""
+    if "reading" in mapping:
+        from edgar_warehouse.workers.source_mapping import record_refusal
+
+        if reason := record_refusal(row, mapping["reading"]):
+            raise UnsupportedRecord(reason)
+    for rule in mapping.get("every_in", []):
+        node = value(row, rule["path"])
+        found = _as_list(node) if node else []  # empty text, list or object: none
+        if not found:
+            raise UnsupportedRecord(rule["missing"])
+        if any(not isinstance(item, dict) or not isinstance(item.get(rule["item"]), str)
+               or item[rule["item"]] not in rule["values"] for item in found):
+            raise UnsupportedRecord(rule["reason"])
+    if mapping.get("retained_as"):
+        raise UnsupportedRecord(mapping["retained_as"])
+
+
 def mapped_values(row: dict, contract: dict) -> tuple[dict, dict, dict | None]:
     """A row's mapped fields and matching values, after the feed's data
     quality rule: what `normalize` puts on a record, read by the same parts,
     and what the cascade's census reads for every filer and entity, a Company
     or not (ticket 21), so the two cannot differ."""
+    _refuse(row, contract["adapter"])
     fields = _fields(row, contract["adapter"])
     matching = _matching_values(row, contract["adapter"])
     return fields, matching, _quality(contract, fields, matching)
@@ -309,6 +339,7 @@ def normalize(
     mapping = contract["adapter"]
     if not isinstance(row, dict):
         raise UnsupportedRecord("invalid_record_shape")
+    _refuse(row, mapping)
     labelled = None
     kind = mapping.get("kind")
     if mapping.get("classification"):
@@ -399,7 +430,9 @@ def normalize(
         record_key=key,
         publication_key=publication["publication_key"],
         revision=publication["revision"],
-        effective_at=publication.get("effective_at"),
+        # A contract may name where each record states its own time (GLEIF's
+        # LastUpdateDate); otherwise the publication states one for all.
+        effective_at=value(row, mapping["effective_at"]) if mapping.get("effective_at") else publication.get("effective_at"),
         kind=kind,
         fields=fields,
         identifiers=identifiers,
@@ -446,7 +479,8 @@ def _scopes(row: dict, spec: dict):
     another list whose `where` paths all match: a constant, or `{path: ...}`
     read from the scope; a list of constants matches any of them. A `where`
     path through a nested list matches when any element does. No match leaves
-    the name empty, so its paths read nothing.
+    the name empty, so its paths read nothing; with `one: <reason>`, anything
+    but exactly one match sets the record aside with that reason.
     """
     names = ({"item"} if "each" in spec else set()) | set(spec.get("find", {}))
     if names & set(row):
@@ -462,24 +496,62 @@ def _scopes(row: dict, spec: dict):
                 if isinstance(condition, dict):
                     condition = value(scope, condition["path"])
                 accepted[path] = set(condition) if isinstance(condition, list) else {condition} - {None}
-            scope[name] = next(
-                (
-                    candidate
-                    for candidate in _as_list(value(scope, lookup["in"]))
-                    if all(
-                        accepted[path].intersection(
-                            v for v in _reached(candidate, path.split(".")) if not isinstance(v, (dict, list))
-                        )
-                        for path in accepted
+            found = [
+                candidate
+                for candidate in _as_list(value(scope, lookup["in"]))
+                if all(
+                    accepted[path].intersection(
+                        v for v in _reached(candidate, path.split(".")) if not isinstance(v, (dict, list))
                     )
-                ),
-                None,
-            )
+                    for path in accepted
+                )
+            ]
+            if lookup.get("one") and len(found) != 1:
+                raise UnsupportedRecord(lookup["one"])
+            scope[name] = found[0] if found else None
         yield scope
+
+
+def _time(item, spec: dict):
+    """A link's time as the mapping writes it: as read, or `time_format: instant`
+    as an ISO 8601 instant; a time that is not one sets the record aside."""
+    if item is None or spec.get("time_format") != "instant":
+        return item
+    from .evidence import instant
+
+    try:
+        return instant(item).isoformat()
+    except (TypeError, ValueError):
+        raise UnsupportedRecord("invalid_time") from None
+
+
+def _refuse_link(scope: dict, spec: dict) -> None:
+    """A link's own rules, each with the reason it sets the record aside with:
+    `interval` (a start, before any end) and `status` (one of `values`, and an
+    end for each status in `need_end`)."""
+    if not (spec.get("interval") or spec.get("status")):
+        return
+    start = _time(value(scope, spec["valid_from"]), spec)
+    end = _time(value(scope, spec["valid_to"]), spec) if spec.get("valid_to") else None
+    if rule := spec.get("interval"):
+        from .evidence import instant
+
+        try:
+            if not start or (end and instant(start) >= instant(end)):
+                raise UnsupportedRecord(rule["reason"])
+        except (TypeError, ValueError) as error:
+            if isinstance(error, UnsupportedRecord):
+                raise
+            raise UnsupportedRecord("invalid_time") from None
+    if rule := spec.get("status"):
+        status = value(scope, rule["path"])
+        if status not in rule["values"] or (status in rule.get("need_end", []) and not end):
+            raise UnsupportedRecord(rule["reason"])
 
 
 def _link(scope: dict, spec: dict) -> dict | None:
     """One link a mapping states, read from its scope; none without its ends."""
+    _refuse_link(scope, spec)
     relationship_type = spec.get("type")
     if "type_field" in spec:
         relationship_type = spec["type_values"].get(value(scope, spec["type_field"]))
@@ -501,7 +573,7 @@ def _link(scope: dict, spec: dict) -> dict | None:
         "type": relationship_type,
         "target_subject": subject_key(spec["target_source"], target),
         "scope": spec.get("scope", ""),
-        "valid_from": value(scope, spec["valid_from"]),
-        "valid_to": value(scope, spec["valid_to"]) if spec.get("valid_to") else None,
+        "valid_from": _time(value(scope, spec["valid_from"]), spec),
+        "valid_to": _time(value(scope, spec["valid_to"]), spec) if spec.get("valid_to") else None,
         "properties": {name: value(scope, path) for name, path in spec.get("properties", {}).items()},
     }

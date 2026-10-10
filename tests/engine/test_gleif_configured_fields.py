@@ -15,6 +15,10 @@ def contract(member):
 
 def project(member, row):
     config=files.load(files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml')
+    # The field projection alone; the contract's record checks have their own tests.
+    mapped=config['read']['tables']['mapped']
+    mapped.pop('checks',None)
+    mapped['columns']={k:v for k,v in mapped['columns'].items() if not k.startswith('_')}
     engine=source_engine.SourceEngine(config)
     result=engine.read(json.dumps(row,ensure_ascii=False,allow_nan=False).encode())
     assert not result.deferred

@@ -9,7 +9,7 @@ import time
 import zipfile
 from urllib.parse import unquote, urlparse
 
-from edgar_warehouse.mdm.clean import name_census, names, gleif_source, store, evidence, primitives
+from edgar_warehouse.mdm.clean import name_census, names, gleif_publication, store, evidence, primitives
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.workers import source_mapping
 from tests.support import retired_name_census
@@ -45,7 +45,7 @@ def main():
     archive = Path(unquote(uri.path))
     receipts = args.capture / 'receipts.jsonl'
     pins = [Path(__file__), args.gleif_report, receipts, archive, Path(name_census.__file__),
-            Path(retired_name_census.__file__), Path(names.__file__), Path(gleif_source.__file__),
+            Path(retired_name_census.__file__), Path(names.__file__), Path(gleif_publication.__file__),
             Path(source_mapping.__file__), Path(files.__file__), Path(store.__file__),
             Path(evidence.__file__), Path(primitives.__file__), *source_engine.runtime_files(),
             *sorted((files.ROOT / 'sources/gleif').glob('*.yaml')),

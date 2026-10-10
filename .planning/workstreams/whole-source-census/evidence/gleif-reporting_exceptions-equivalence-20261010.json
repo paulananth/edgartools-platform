@@ -1,0 +1,19 @@
+{
+ "member": "reporting_exceptions",
+ "records": 6351397,
+ "read": 6351397,
+ "shard": "0/1",
+ "complete": true,
+ "read_all": true,
+ "seconds": 4440.9,
+ "estimate_full_minutes": 74.0,
+ "outcomes": {
+  "deferred:reported_parent_exception": 6351298,
+  "deferred:invalid_lei_checksum": 99
+ },
+ "differences": [],
+ "equal": true,
+ "approved_contract": "77bb3a8d3e9f9103168946b9e565b9e17264628e1d77923a06ee4cecbe75688d",
+ "configured_contract": "8ec18c6d58eb8204e61cd6bbcbe9f673559b2a7cc7083a1fd32540c19d353d34",
+ "archive_sha256": "f205fd8dfc8dc04587fcd2465b741562bf39af3835916314b96033982023e831"
+}
