@@ -101,8 +101,10 @@ and its score); on a column, `stored_type` (the type as stored; `type` is the
 logical type a full read proves), `shape`, `shape_share` (masked shapes), `pattern`, `pattern_share` (the shape with
 each run of one character class collapsed: `X-26740` and `X-123` are both `A-9`;
 a text pattern with a separator `-/_:` on 99% of values, one prefix before it on 90%
-(`prefix_share`) and not a date or time (`pattern_temporal_share`) makes a column
-identifier-shaped, as numbers issued under a prefix are) and
+(`prefix_share`) and fewer than half its values read as a date or a time
+(`pattern_temporal_share`) makes a column identifier-shaped, as numbers issued
+under a prefix are; both shares are written only for a column with such a
+pattern, so a look-alike shows why it failed) and
 `sensitivity_signals`; on an identifier, `local_counter` and `shape_test` (which
 test made it identifier-shaped: one length, one shape, or one pattern under one
 prefix, with its share); on a record key,
@@ -239,6 +241,10 @@ never inside the findings (it can be long):
  reason: parent not found|names itself as its parent|on a cycle of parents|several parents|<parent> differs,
  fix: <value|null>, fix_evidence: <words|null>, needs_steward: <bool>}
 ```
+
+A part whose record key is designed (no key column yet) gives its rows an empty
+`key`: the column, value and parent column find them. A row's place is no name
+for it, since a view has none and a sample's is not the source's.
 
 A fix is proposed only with evidence: the one key equal to the value once
 case, spaces and leading zeros are folded, or the parent most rows with the

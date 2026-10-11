@@ -34,6 +34,7 @@ def pattern(shape_expression: str) -> str:
 
 
 SEPARATORS = "-/_:"  # a pattern holding one may be a number issued under a prefix
+_PREFIX = f"^[^{SEPARATORS}]*"  # the text before the first separator ("-" first in the class, so literal)
 # Formats a separated value may be a date or a time in; such a value is never an identifier.
 DATE_FORMATS = ["%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%m-%d-%Y", "%d-%m-%Y", "%Y-%m-%dT%H:%M",
                 "%Y-%m-%d %H:%M", "%H:%M", "%H:%M:%S", "%m/%d/%y", "%Y%m%d"]
@@ -88,7 +89,7 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
         # A separated pattern: is the part before the first separator one prefix, and is
         # the value a date or a time written without padding?
         prefix_count, dated = con.execute(
-            f"SELECT (SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY regexp_extract({text}, '^[^-/_:]*') "
+            f"SELECT (SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY regexp_extract({text}, '{_PREFIX}') "
             f"ORDER BY 1 DESC LIMIT 1), (SELECT count(try_strptime({text}, {DATE_FORMATS})) FROM {t})").fetchone()
         profile.update({"prefix_share": round(prefix_count / non_null, 6), "pattern_temporal_share": round(dated / non_null, 6)})
     if kind == "VARCHAR" and (modal_shape or "").startswith("9999-99-99"):

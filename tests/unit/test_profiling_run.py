@@ -388,3 +388,16 @@ def test_an_unreadable_table_is_listed_and_the_run_goes_on(tmp_path, capsys):
     (missed,) = findings["dataset"]["not_read"]
     assert missed["location"].endswith("broken.csv") and missed["reason"]
     assert "broken.csv: not read" in capsys.readouterr().err
+
+
+def test_a_separated_pattern_writes_why_it_was_or_was_not_an_identifier(tmp_path):
+    folder = tmp_path / "set"
+    folder.mkdir()
+    rows = [f"{n},8-{1000 + n * 7},{n % 12 + 1}/{n % 28 + 1}/2022" for n in range(1, 61)]
+    (folder / "deal.csv").write_text("deal_id,reg,signed\n" + "\n".join(rows))
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "patterns", "--input", f"set={folder}", "--out", str(out)]) == 0
+    found = yaml.safe_load((out / "findings.yaml").read_text())
+    columns = {c["name"]: c for p in found["parts"] for c in p["columns"]}
+    assert columns["reg"]["prefix_share"] == 1.0 and columns["reg"]["pattern_temporal_share"] == 0.0
+    assert "prefix_share" not in columns["deal_id"]
