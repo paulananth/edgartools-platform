@@ -27,7 +27,8 @@ Clean MDM's Merge Stage already runs under a **policy document**:
 `mdm.policy (digest, body jsonb)` (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:10-13`),
 one immutable body pinned per batch and loaded at
 `edgar_warehouse/mdm/clean/merge.py:179-184`. Today that body is a Python
-dict (`clean/company_source.py:62-72`) whose only declarative content is
+dict (then in `clean/company_source.py`; today the policy is `rules/merge/`,
+read through `clean/sec_company.py`) whose only declarative content is
 per-field survivorship; its `automatic_rules` list must be empty or the
 batch is refused (accepted Q16).
 

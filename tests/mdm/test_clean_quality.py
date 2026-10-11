@@ -8,7 +8,7 @@ import pytest
 
 from edgar_warehouse.mdm.clean import quality
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
-from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
+from edgar_warehouse.mdm.clean.sec_company import CONTRACT, POLICY, SOURCE_CODE
 from edgar_warehouse.mdm.clean.matching import _read
 from edgar_warehouse.rules import files
 

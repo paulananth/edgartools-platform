@@ -69,7 +69,7 @@ def test_whole_archive_construction_counts_former_names_branches_duplicates_and_
 
 def test_configured_reading_preserves_actual_cascade_assignments():
     from edgar_warehouse.mdm.clean import cascade
-    from edgar_warehouse.mdm.clean.company_source import POLICY
+    from edgar_warehouse.mdm.clean.sec_company import POLICY
     from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
     helper = CascadeFixture()
     filer = cascade.Filer(cik=APPLE[0], key='APPLE INC',

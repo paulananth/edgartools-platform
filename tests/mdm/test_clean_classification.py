@@ -292,7 +292,7 @@ class TestTheReadPathRunsTheNamedRule:
     def contract(self):
         import copy
 
-        from edgar_warehouse.mdm.clean.company_source import CONTRACT
+        from edgar_warehouse.mdm.clean.sec_company import CONTRACT
 
         contract = copy.deepcopy(CONTRACT)
         contract["adapter"]["classification"] = {
@@ -364,7 +364,7 @@ class TestTheReadPathRunsTheNamedRule:
     def test_the_rule_is_part_of_the_record_identity(self):
         """Same claim, labelled by a rule instead of a table: a different id."""
         from edgar_warehouse.mdm.clean.adapters import normalize
-        from edgar_warehouse.mdm.clean.company_source import CONTRACT
+        from edgar_warehouse.mdm.clean.sec_company import CONTRACT
 
         by_rule = self.read(self.ROW, self.policy(active=True))
         legacy_contract = copy.deepcopy(CONTRACT)

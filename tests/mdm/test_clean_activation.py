@@ -28,7 +28,7 @@ from edgar_warehouse.mdm.clean.activation import (
     wilson_lower_bound,
 )
 from edgar_warehouse.mdm.clean.classification import fired
-from edgar_warehouse.mdm.clean.company_source import APPROVED_ACTIVATION, POLICY, PROOF
+from edgar_warehouse.mdm.clean.sec_company import APPROVED_ACTIVATION, POLICY, PROOF
 from edgar_warehouse.mdm.clean.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.clean.store import Conflict, digest
 from tests.mdm import policy_layers
@@ -803,7 +803,7 @@ class TestTheNameMatchingRules:
         "rule_id", ["sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
     )
     def test_the_proof_files_match_and_re_score(self, rule_id):
-        from edgar_warehouse.mdm.clean.company_source import NAME_PROOFS
+        from edgar_warehouse.mdm.clean.sec_company import NAME_PROOFS
 
         proof_body = NAME_PROOFS[rule_id]
         for name, expected in proof_body["cohort"]["files"].items():

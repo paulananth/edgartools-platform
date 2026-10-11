@@ -6,7 +6,7 @@ from collections import Counter,defaultdict
 from edgar_warehouse.rules import files,source_engine
 from edgar_warehouse.workers import source_stream,source_read
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import name_census,company_source,cascade,adapters
+from edgar_warehouse.mdm.clean import name_census,sec_company,cascade,adapters
 from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
 from tests.support import retired_name_census as oracle
 from tests.engine.test_census_names_stream import expected
@@ -14,7 +14,7 @@ root=Path('/private/tmp/codex-census-eof-proof');store=Artifacts()
 sec=json.loads((root/'sec-proof.json').read_bytes());pub=json.loads((root/'publication-proof.json').read_bytes())
 report=json.loads(Path('.planning/workstreams/company-census-evidence/gleif-runtime/level1-json-runtime-parity.json').read_bytes())
 archive=Path(unquote(urlparse(report['archive']['uri']).path));source=report['archive']
-policy=cascade.spec(company_source.POLICY);assert len(policy['passes'])==7
+policy=cascade.spec(sec_company.POLICY);assert len(policy['passes'])==7
 filers=[cascade.Filer(f['cik'],f['key'],cascade.Place(frozenset(f['place']['street']),f['place']['city'],f['place']['postcode'],f['place']['country'],tuple(f['place']['key']) if f['place']['key'] else None),f['incorporated'],f['business_country']) for f in sec['cascade_filers']]
 cascade_wanted={f.key for f in filers}-{''}
 recipe=files.load(files.ROOT/'sources/gleif/census-complete-stream.yaml')
@@ -41,7 +41,7 @@ def sha(p):
         while b:=f.read(1024**2):h.update(b)
     return h.hexdigest()
 
-pins=[Path(__file__),root/'sec-proof.json',root/'publication-proof.json',Path(source_read.__file__),*source_read.runtime_files(),Path(cascade.__file__),Path(adapters.__file__),Path(name_census.__file__),Path(oracle.__file__),*sorted((files.ROOT/'sources/gleif').glob('*.yaml')),*sorted((files.ROOT/'sources/sec.submissions.company').glob('census-landed*.yaml'))]
+pins=[Path(__file__),root/'sec-proof.json',root/'publication-proof.json',Path(source_read.__file__),*source_read.runtime_files(),Path(cascade.__file__),Path(adapters.__file__),Path(name_census.__file__),Path(oracle.__file__),*sorted((files.ROOT/'sources/gleif').glob('*.yaml')),files.ROOT/'sources/sec.submissions.company/census-raw.yaml']
 before={str(p.resolve()):sha(p) for p in pins}
 counts=[cascade.count_addresses(f.place for f in filers) for _ in range(2)]
 legal=[defaultdict(dict),defaultdict(dict)];other=[defaultdict(set),defaultdict(set)];entities=[{},{}];indices={}

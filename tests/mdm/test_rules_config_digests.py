@@ -12,7 +12,7 @@ import copy
 
 import pytest
 
-from edgar_warehouse.mdm.clean import company_source, gleif_publication
+from edgar_warehouse.mdm.clean import sec_company, gleif_publication
 from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import policy_layers
@@ -67,7 +67,7 @@ GLEIF_BEFORE = {
 
 # Company's part of the policy: a new kind does not move these pins
 # (platform validation 05a).
-COMPANY = policy_layers.company_part(company_source.POLICY)
+COMPANY = policy_layers.company_part(sec_company.POLICY)
 
 SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9be4"
 # Native mapped-value reading requires approval of new source digests. Removing
@@ -90,24 +90,24 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
-    assert digest(company_source.CONTRACT) == WITH_PINNED_PLACE_CHECK
-    assert digest(_with_yaml_place_check(company_source.CONTRACT)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
-    contract = _without_configured_reading(_with_yaml_place_check(company_source.CONTRACT))
+    assert digest(sec_company.CONTRACT) == WITH_PINNED_PLACE_CHECK
+    assert digest(_with_yaml_place_check(sec_company.CONTRACT)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
+    contract = _without_configured_reading(_with_yaml_place_check(sec_company.CONTRACT))
     assert digest(contract) == SEC_READING_V7
     v6 = {**contract, "adapter": {**contract["adapter"],
                                                   "version": "sec-company-landing-v6"}}
     assert digest(v6) == WITH_QUALITY["contract"]
     assert digest(_without_quality(v6)) == BEFORE["contract"]
-    assert digest(company_source.FIELDS) == BEFORE["fields"]
-    assert digest(company_source.PROOF) == BEFORE["proof"]
-    assert digest(company_source.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
-    assert digest(policy_layers.company_proofs(company_source.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]
+    assert digest(sec_company.FIELDS) == BEFORE["fields"]
+    assert digest(sec_company.PROOF) == BEFORE["proof"]
+    assert digest(sec_company.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
+    assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]
     # Each switched-on name rule carries its measured proof, unchanged, with
     # the operator's approval added.
     for entry in COMPANY["automatic_rules"]:
         if entry["rule_id"] in policy_layers.NAME_RULES:
             stamped = {"approved_by", "approved_at", "approved_words"}
-            measured = company_source.NAME_PROOFS[entry["rule_id"]]
+            measured = sec_company.NAME_PROOFS[entry["rule_id"]]
             assert {k: v for k, v in entry["proof"].items() if k not in stamped} == {
                 k: v for k, v in measured.items() if k not in stamped}
             assert (entry["proof"]["approved_by"], entry["proof"]["approved_words"]) == ("operator", "yes")

@@ -503,7 +503,7 @@ class TestWhatTheKindDigestCovers:
             self.recorded(self.block(invented_section={"a": 1}))
 
     def test_every_section_of_the_real_company_policy_is_declared(self):
-        from edgar_warehouse.mdm.clean.company_source import POLICY
+        from edgar_warehouse.mdm.clean.sec_company import POLICY
         from edgar_warehouse.mdm.clean.survivorship import (
             AUTHORITY_SECTIONS,
             NON_AUTHORITY_SECTIONS,

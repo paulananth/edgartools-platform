@@ -7,7 +7,7 @@ import pytest
 
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
 from edgar_warehouse.mdm.clean.adapters import normalize as _normalize
-from edgar_warehouse.mdm.clean.company_source import (
+from edgar_warehouse.mdm.clean.sec_company import (
     CONTRACT,
     POLICY,
     SOURCE_CODE,
@@ -215,14 +215,14 @@ class TestTheCompanyRule:
         assert fields["description"] == {"op": "unknown"}
 
     def test_the_company_rule_is_loaded_not_restated(self):
-        from edgar_warehouse.mdm.clean import company_source
+        from edgar_warehouse.mdm.clean import sec_company
         from edgar_warehouse.rules import files
 
         file = files.ROOT / "merge" / "kinds" / "company.yaml"
         # Other kinds may sit beside it (platform validation 05a).
-        assert "company" in company_source.POLICY["kinds"]
-        assert company_source.POLICY["kinds"]["company"] == files.load(file)
-        assert company_source.POLICY["kinds"]["company"]["defaults"]["sources"] == [
+        assert "company" in sec_company.POLICY["kinds"]
+        assert sec_company.POLICY["kinds"]["company"] == files.load(file)
+        assert sec_company.POLICY["kinds"]["company"]["defaults"]["sources"] == [
             "sec.submissions.company.v1",
             "gleif.level1.v1",
             "gleif.relationships.v1",

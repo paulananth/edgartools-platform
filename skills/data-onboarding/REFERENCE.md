@@ -327,7 +327,7 @@ writing a new one.
 
 The examples above in plain words, from today's sources:
 
-- Fields: Company's are `FIELDS` in `edgar_warehouse/mdm/clean/company_source.py`;
+- Fields: Company's are `FIELDS` in `edgar_warehouse/mdm/clean/sec_company.py`;
   Person's are in its consumer spec, `docs/specs/person/consumer.md`.
 - Joining identifiers: `cik`, the one Identifier Contract today; a ticker on a company's record belongs
   to the security's contract.

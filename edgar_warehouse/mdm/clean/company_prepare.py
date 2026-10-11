@@ -26,11 +26,9 @@ from edgar_warehouse.workers import source_read, source_combine, source_parquet
 from edgar_warehouse.workers.source_staging import StagedArtifacts
 from .evidence import instant
 from .name_frequency import BRONZE, _read_bounded
+from .sec_company import CONTRACT, POLICY, SOURCE_CODE  # noqa: F401  (named by callers)
 from .store import Conflict, canonical, digest
 
-SOURCE_CODE = "sec.submissions.company.v1"
-CONTRACT = rules_files.mdm_contract("sec.submissions.company", SOURCE_CODE)
-POLICY = rules_files.policy()
 _json_value = source_parquet.json_scalar
 ROOT = rules_files.ROOT / "sources/sec.submissions.company"
 RECEIPTS_BYTES = 64 * 1024**2

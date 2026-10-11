@@ -16,7 +16,10 @@ The scripts use the existing local captures below and write evidence under
    Rules for review, before starting qualification.
 2. `publication_population.py` reads the pinned publisher metadata and the
    separate publication authority binding already recorded in this repository.
-3. `sec_source_population.py` exhausts the 69 landed SEC captures in the
+3. *Retired with the landed Company reader (Issue 20 L4, 2026-10-11): the SEC
+   population is now counted from the raw capture by `mdm name-census`
+   (`rules/sources/sec.submissions.company/census-raw.yaml`).* It was
+   `sec_source_population.py`, which exhausted the 69 landed SEC captures in the
    existing `~/.local/share/edgartools/clean-mdm/proving/cm27` fixture. It executes
    and verifies Source Extracts before deriving wanted keys. Company and former
    name bytes must match historical Name Frequency pins; address and manifest
