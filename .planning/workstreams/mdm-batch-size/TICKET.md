@@ -23,5 +23,5 @@ Branch `claude/merge-size-split`, worktree `../edgartools-platform-claude-merge-
 - [x] CI: all six checks green on `95131ea3` (one engine test patched a removed alias; it now sets `limits.RECORDS_FILE_BYTES`). 2026-10-11 00:38 ET
 - [x] Affected tests locally: 218 MDM Postgres integration tests (217 passed, 1 xfailed) and 822 MDM and engine tests on the first commit; after the review fixes, 80 proposal, core, merge-worker and binding Postgres tests and 4 limits tests pass. One test read stored `effects`; it now takes them from `assess`. 2026-10-10 21:17 ET
 - [x] Three-axis review: GoF "leave it" (limits as plain constants, test holds SQL equal); Standards: 013 correct against 001, judgement calls fixed (each limit its own name, messages from the constants, aliases removed, retry-across-migration noted); Spec: early request check added, deferred bound tested, old-form refusal tested, Company preparation moved to L4. 2026-10-10 21:17 ET
-- [ ] PR #906 merge on the operator's word
+- [x] PR #906 merge on the operator's word: "merge one by one", 2026-10-11 06:40 ET; CI green on `61fd35fe`
 - [ ] L4's installed proof reruns on top: 6,414 Companies, 3,052 GLEIF bindings, bindings `9216cc18…`
