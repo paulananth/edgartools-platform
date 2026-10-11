@@ -137,7 +137,7 @@ def batch_input(
     with file.open("rb") as source:
         raw = source.read(limits.RECORDS_FILE_BYTES + 1)
     if len(raw) > limits.RECORDS_FILE_BYTES:
-        raise ValueError("Source member exceeds 16 MiB; partition the manifest")
+        raise ValueError(f"Source member exceeds {limits.RECORDS_FILE_BYTES:,} bytes; partition the manifest")
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     with store.engine.connect() as conn:
@@ -176,7 +176,7 @@ def batch_input(
             continue
         if len(result) + len(deferred) >= limits.BATCH_RECORDS:
             raise ValueError(
-                "Source member exceeds bounded 1000-record batch; partition the manifest"
+                f"Source member exceeds bounded {limits.BATCH_RECORDS}-record batch; partition the manifest"
             )
         publication = {
             **spec["publication"],
@@ -263,7 +263,7 @@ def execute_manifest(
 ) -> dict:
     if not 1 <= limit <= limits.BATCH_RECORDS:
         raise ValueError(
-            "Clean MDM --limit must be 1..1000 source records per invocation"
+            f"Clean MDM --limit must be 1..{limits.BATCH_RECORDS} source records per invocation"
         )
     UUID(run_id)
     manifest, manifest_hash, root = read_manifest(path)

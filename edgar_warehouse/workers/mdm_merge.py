@@ -29,9 +29,6 @@ from edgar_warehouse.mdm.clean import limits
 
 CHECK = "mdm.committed"
 STAGE = "mastering"
-# execute_manifest's own bound per call; the worker calls it until the run's
-# expected batches are all observed.
-LIMIT = limits.BATCH_RECORDS
 
 
 def runtime_files() -> list[Path]:
@@ -128,7 +125,7 @@ def execute(envelope: dict, artifacts) -> dict:
             coordinator = RunCoordinator(store)
             while True:
                 result = execute_manifest(store, coordinator, path=str(path), run_id=run_id, stage=STAGE,
-                                          limit=LIMIT)
+                                          limit=limits.BATCH_RECORDS)
                 if not result["missing_batches"]:
                     break
                 if not result["commits"]:

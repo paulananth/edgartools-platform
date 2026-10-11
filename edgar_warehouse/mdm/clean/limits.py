@@ -9,8 +9,10 @@ of one batch are cut well below the request bound.
 
 # Assertions (with deferred records), decisions and identities in one batch.
 BATCH_RECORDS = 1000
-# One save request, and one stored match proposal.
-BODY_BYTES = 16 * 1024**2
+# One save request (`save_batch`, `preview_batch`).
+REQUEST_BYTES = 16 * 1024**2
+# One match proposal as stored.
+PROPOSAL_BYTES = 16 * 1024**2
 # A match proposal as sent: its `effects` are stored as their hash.
 PROPOSAL_INPUT_BYTES = 64 * 1024**2
 # One batch's records file, as read back by the Stage and the workers.

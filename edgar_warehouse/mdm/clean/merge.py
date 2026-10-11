@@ -773,12 +773,19 @@ class MergeStage:
                     "total": len(assertions) + len(deferred),
                 },
             }
+            encoded = canonical(request)
+            if len(encoded.encode()) > limits.REQUEST_BYTES:
+                # Refused here, before any SQL, with the size and the remedy.
+                raise ValueError(
+                    f"Batch {batch_id} request is {len(encoded.encode()):,} bytes, over "
+                    f"{limits.REQUEST_BYTES:,}; prepare its records in smaller batches"
+                )
             if preview:
                 # Exercise the identical SQL validation/permissions boundary,
                 # through a capability that always rolls back its inner writes.
                 conn.execute(
                     text("SELECT mdm.preview_batch(:request,CAST(:run AS uuid))"),
-                    {"request": canonical(request), "run": run_id},
+                    {"request": encoded, "run": run_id},
                 )
                 candidate = None
                 if any(

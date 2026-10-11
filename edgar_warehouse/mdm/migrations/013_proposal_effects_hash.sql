@@ -13,6 +13,8 @@
 -- The hash compares jsonb text, which is stricter than jsonb equality only for
 -- numbers written two ways (1.0 and 1); the request and its effects are built
 -- from one Python object, so such a pair is refused, never wrongly accepted.
+-- A proposal recorded before this migration and recorded again after it (the
+-- same text) is refused as a digest collision; it is assessed again instead.
 
 CREATE OR REPLACE FUNCTION mdm.save_batch(request_text text, root_run uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER

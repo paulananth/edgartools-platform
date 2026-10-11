@@ -43,8 +43,6 @@ from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
-BATCH = limits.BATCH_RECORDS
-RECORD_BYTES = limits.RECORDS_FILE_BYTES
 MANIFEST_BYTES = 32 * 1024**2
 INPUT_BYTES = 32 * 1024**2
 INPUT_ROWS = 100_000
@@ -61,13 +59,13 @@ def _lines(rows: list[dict]) -> bytes:
 
 
 def _batches(rows: list[dict]) -> list[list[dict]]:
-    """Rows cut into batches of at most BATCH records and, past the first record,
-    BATCH_RECORD_BYTES: a batch grows several times over on its way through the
+    """Rows cut into batches of at most `limits.BATCH_RECORDS` records and, past the first record,
+    `limits.BATCH_RECORD_BYTES`: a batch grows several times over on its way through the
     Merge Stage, whose request and match proposal are bounded (`limits`)."""
     batches, current, size = [], [], 0
     for row in rows:
         length = len(_lines([row]))
-        if current and (len(current) == BATCH or size + length > limits.BATCH_RECORD_BYTES):
+        if current and (len(current) == limits.BATCH_RECORDS or size + length > limits.BATCH_RECORD_BYTES):
             batches.append(current)
             current, size = [], 0
         current.append(row)
@@ -115,7 +113,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
         for n, chunk in enumerate(_batches(rows)):
             data = _lines(chunk)
-            if len(data) > RECORD_BYTES:
+            if len(data) > limits.RECORDS_FILE_BYTES:
                 raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")
             name = f"{source}.{n}.jsonl"
             files[name] = data
@@ -211,6 +209,6 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if artifacts.verified(envelope["candidate"], max_bytes=MANIFEST_BYTES) != manifest:
         raise ValueError("The manifest differs from the reading")
     for name, data in files.items():
-        if artifacts.read(_beside(envelope["output"], name), max_bytes=RECORD_BYTES) != data:
+        if artifacts.read(_beside(envelope["output"], name), max_bytes=limits.RECORDS_FILE_BYTES) != data:
             raise ValueError(f"The records file {name} differs from the reading")
     return {CHECK: True}, []
