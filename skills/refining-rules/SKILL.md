@@ -205,7 +205,8 @@ Never invent a command.
 
 - A provider ruled out: `sec.gov`. A full pass over SEC submissions took
   about 3 minutes per 1,000 documents on a laptop.
-- Configured source extract not yet whole: Company fixture preparation covers catalog joins, Name Frequency joins, address, and pagination. Whole-capture equivalence and the installed 6,414 Company proof remain open. GLEIF archive streaming is built. Golden-copy equivalence of the older reader and deletion of `gleif_source.py` remain open.
+- Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
+  Examples, "Unfinished live pipelines" (one list, kept there).
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
   `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:
   `.scratch/company-mastering/research/27_proving_run.py`.

@@ -17,7 +17,7 @@ Nothing makes a request to SEC here.
    ```
 
    Each main document is read by `rules/sources/sec.submissions.company/census-main.yaml`,
-   the Name Census by `census.yaml` and the ticker catalog by `catalog.yaml`.
+   the Name Frequency file by `census.yaml` and the ticker catalog by `catalog.yaml`.
    Each unit is then combined by `combine-census.yaml`. Every `source.read` and
    `source.combine` unit is run, then verified, and kept in the bundle with
    the bytes it read, so a separate process can check the whole bundle again

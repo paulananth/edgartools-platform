@@ -286,26 +286,28 @@ capture must belong to its approved capture run.
 State what the blueprint keeps (sort order, distinctness, which value wins per
 key), which empty values it excludes, and what a missing collection becomes.
 Capture checks run before any row filtering or key skip. The composition is an
-input to the remaining census, classification and provenance qualification;
+input to the remaining Name Frequency, classification and provenance qualification;
 keep the active route until the installed population and replay/recovery gates
 pass.
 
-## Census evidence
+## Name Frequency evidence
 
-Bind the approved canonical census SHA into the source's census combine
-contract and use its matching census source-extract contract; replace capture and
+Bind the approved Name Frequency file's canonical SHA into the source's combine
+contract for it and use its matching source-extract contract; replace capture and
 catalog run placeholders with the approved runs. Supply the full source extracts the
-source's `combine.yaml` uses, plus a source-extract named `census`. Census groups use
-`one` and pin each row's census digest. Name evidence joins by the configured
+source's `combine.yaml` uses, plus a source-extract named `census`. Name Frequency groups use
+`one` and pin each row's Name Frequency digest. Name evidence joins by the configured
 name key; optional cascade evidence joins by the record key. Missing name
 evidence yields null, while a cascade answer can create a cascade-only object.
 The helper name key is dropped before MDM preparation.
 
-Compare complete prepared rows with the retained census helper, including
-missing/empty evidence and cascade-only cases. Authenticate the full census
-input even when its tables are empty. Approval of its construction, complete
-mastering provenance, installed population, replay and recovery must be
-proved before retiring active semantic consumers.
+Compare complete prepared rows with a reference result (the source's older
+reader or builder, while one exists), including missing/empty evidence and
+cascade-only cases.
+Authenticate the whole Name Frequency input even when its tables are empty.
+Approval of its construction, complete mastering provenance, installed
+population, replay and recovery must be proved before retiring active
+semantic consumers.
 
 ## Examples
 
@@ -314,11 +316,15 @@ proved before retiring active semantic consumers.
 The shipped Company blueprint has raw-JSON fixture qualification for main
 records, continuation pages, both ticker-catalog shapes and business-address
 conversion, followed by independently verified combination and MDM preparation.
-Census lookup/composition has exact fixture and pinned-census qualification.
-**Complete mastering provenance and full installed Company
-population/replay/recovery remain unqualified.**
-This profile does not authorize deletion of retained Company/GLEIF readers or
-activation of a source Rules version.
+Name Frequency lookup/composition has exact fixture and pinned-file qualification.
+
+### Qualification on 2026-10-11
+
+The installed proof qualifies the full Company population from the raw capture,
+replay and recovery: 6,414 Companies and 3,052 CIK+LEI bindings, a killed worker
+resumed, and a second pass that changes nothing (#905, #907). The older Company
+and GLEIF readers are deleted (#904, #905). Activating a source Rules version
+still needs the operator's approval.
 
 Offline evidence in [PR #819](https://github.com/paulananth/edgartools-platform/pull/819)
 records exact recent-form comparisons on 1,000 distinct receipt-pinned main
@@ -356,28 +362,25 @@ configured business address per CIK. Empty ticker/form text and null values
 are excluded explicitly. Missing collections become `[]`; a missing business
 address becomes null. Capture checks run before any row filtering or key skip.
 
-This composition is an input to the remaining census/classification/provenance
-qualification. Keep the active Company route until the installed empty-store
-6,414 Company / 3,052 CIK+LEI population and replay/recovery gates pass.
+Those installed empty-store gates passed (#905, #907), and the older Company
+reader is deleted.
 
-### The SEC Company census evidence
+### The SEC Company Name Frequency evidence
 
-Bind the approved canonical census SHA into `combine-census.yaml` and use
+Bind the approved Name Frequency file's canonical SHA into `combine-census.yaml` and use
 its matching source-extract contract `census.yaml`; replace capture/catalog run
 placeholders with the approved runs. Supply the full main/page/catalog
 source extracts used by `combine.yaml`, with main captures read through
-`census-main.yaml`, plus a source-extract named `census`. Both census groups use
-`one` and pin each row's census digest. Name evidence joins by the configured
+`census-main.yaml`, plus a source-extract named `census`. Both Name Frequency groups use
+`one` and pin each row's Name Frequency digest. Name evidence joins by the configured
 SEC name key; optional cascade evidence joins by integer CIK under
 `name_census.cascade`. Missing name evidence yields null, while a cascade
 answer can create a cascade-only object. The helper name key is dropped
 before MDM preparation.
 
-Compare complete prepared rows with the retained census helper, including
-missing/empty evidence and cascade-only cases. Authenticate the full census
-input even when its tables are empty. Approval of its construction, complete
-mastering provenance, installed population, replay and recovery must be
-proved before retiring active semantic consumers.
+Prepared rows were compared with the older Python Name Frequency builder and
+Company reader, including missing/empty evidence and cascade-only cases, before
+both were retired (#901, #905). The cascade itself stays in `name_census.py`.
 
 ## Whole-source Name Frequency qualification
 
