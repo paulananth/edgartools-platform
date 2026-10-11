@@ -37,16 +37,16 @@ Readers that the fix must keep working:
 ## Parts
 
 - [x] Root cause measured and written above. 2026-10-11 11:50 ET
-- [ ] GoF consult on the plan (`write_batch`, `merge.py` `_execute`/`assess`, `consumer.py`, `journal_delivery.py`)
-- [ ] Outbox rows name their batch, not a copy: a consumer's payload is built from the stored batch at delivery, its hash kept (`journal`, `graph`, `export`)
-- [ ] `batch.effects` keeps what only it holds; readings and decisions it names by id (their own tables hold them)
-- [ ] `stage_record` names its winning reading by `assertion_id`; readers join `source_reading`
-- [ ] `company.fields` is not stored beside `company.body` (or the reverse), one owner
-- [ ] A golden record's field keeps its winner once; the policy digest and kind version once per record, not per field
-- [ ] The write runs once: no `preview_batch` re-run of the whole write before a proposal, if the proposal can be checked without it
-- [ ] The publication key once per batch, not per reading
-- [ ] Each change tested on a populated store (stored rows of the old form still read); migration per change
-- [ ] Measured after: bytes per table and mastering time on chunk 1, against the numbers above
+- [x] GoF consult: one owner already exists (`batch`, every table carries `batch_id`); the root is copying at each handoff; the same problem was fixed piecemeal three times (#751, #772, #906). Order: outbox by batch, Company fields once, the write once. Leave: the Stage's reading (five tuned lookup indexes read it; joining every past reading risks matching speed for 2.75 MB), per-field constants (a shape change gives every Company one extra version; about 5%), the proposal's `command` (needed: the readings are not saved yet), the publication key (small). 2026-10-11 12:13 ET
+- [x] Outbox rows name their batch (014): a new row keeps only the hash; what it sends is the view `mdm.outbox_delivery`, built from the batch row (a view, because `migrate` revokes every function from PUBLIC and a verifier login holds SELECT only); a row stored before keeps and sends its own payload. The built payload and hash equal what the 001 write stored, for journal, export and graph (`test_clean_outbox_names_batch.py`). `4e82b555` 2026-10-11 12:13 ET
+- [ ] `batch.effects` keeps what only it holds; readings and decisions it names by id (their own tables hold them). Next: the journal and `consumer.py` read `effects`, so its shape is the Change Journal's contract; measure first (1.4 MB of the 16.5 MB left)
+- [ ] ~~`stage_record` names its winning reading by `assertion_id`; readers join `source_reading`~~ not recommended by the GoF consult: five tuned lookup indexes read `stage_record.reading` (`001:1472-1480`, `005:15`, `007:75`; #774, #894); a join to every past reading risks matching speed for 2.75 MB. Revisit with a measured matching benchmark
+- [x] `company.fields` dropped (015): it was `body->'fields'` again; `company_master_field` reads `body`; versions stored before read the same after (`test_clean_company_fields_once.py`). 2026-10-11 12:13 ET
+- [ ] ~~A golden record's field keeps its winner once; the policy digest and kind version once per record~~ deferred (GoF): changing the record's shape trips the no-change check (`001:998-999`), so every Company gets one extra version on its next touch, and the views need a fallback for old rows; about 5% of time measured
+- [x] The write runs once: `apply` with identity work assesses once (no `preview_batch`, no second computation), commits the proposal before any master write (Q13 kept; `save_batch` refuses a proposal from its own transaction), then saves the computed batch after re-checking its snapshot and each rule proposal under the lock (`_save_assessed`). A refused batch keeps a rejected proposal; a stale one is superseded and re-proposed (the concurrent-correction test injects its race at the save). `assess`/`apply_assessment` keep the preview for a proposal made on its own (`test_clean_assess_and_apply.py`). 2026-10-11 12:13 ET
+- [ ] ~~The publication key once per batch, not per reading~~ not recommended (GoF): 0.45 MB; it is part of each reading's identity
+- [x] Each change tested on a populated store: old outbox rows (014) and old Company versions (015) installed by the 001 functions, then read after the migration. 239 MDM Postgres tests pass (1 xfail), with the views and schema-comment tests. 2026-10-11 12:13 ET
+- [x] Measured after, chunk 1 (919 Companies), fresh PG16: mastering 11.3–11.4 s to 6.6 s (−42%; one `save_batch` 4.5–4.7 s, no preview); the store after one batch 36.2 MB to 16.5 MB (−54%): outbox 5.4 to under 0.2, `company` 5.1 to 1.9, `batch` 2.7 to 1.4, `stage_record` 11.7 to 6.1 and `source_reading` 7.4 to 4.3 (those two carried dead rows from the rolled-back preview). 2026-10-11 12:13 ET
 - [ ] Mastering equal before and after: chunk 1 golden records, bindings and reviews; the full installed proof (6,414 Companies, 3,052 GLEIF bindings, `9216cc18…`, unchanged second pass)
 - [ ] Three-axis review, CI green, merge on the operator's word
 
