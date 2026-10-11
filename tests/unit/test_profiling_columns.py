@@ -106,6 +106,22 @@ def test_personal_words_count_only_in_parts_about_people():
     assert sensitivity.tag("City", ["X"], people)["sensitivity"] == "none"
 
 
+def test_a_name_column_holding_peoples_names_makes_its_part_about_people():
+    people = ["Ann B. Cole", "COLE ANN", "Smith, John A", "O'Brien Mary-Kate", "/s/ Lee Park, Attorney-in-Fact",
+              "Acme Trust"]
+    firms = ["Acme Widgets, Inc.", "North River Capital LLC", "Blue Fund", "Zeta Holdings", "Lee Park, Inc.",
+             "Unit 9 Labs", "Nordwind", "Agro Plus s.r.o.", "Stavby Sever, a.s."]
+    assert [sensitivity.person_name(v) for v in people] == [True, True, True, True, True, False]
+    assert not any(sensitivity.person_name(v) for v in firms)
+    assert sensitivity.names_people("rptOwnerName", people)
+    assert not sensitivity.names_people("issuer_name", firms)
+    assert not sensitivity.names_people("owner", people)  # the vote counts only on a column named as a name
+    assert sensitivity.tag("signatureName", people, False) == {"sensitivity": "personal",
+                                                               "signals": ["values: people's names"]}
+    assert sensitivity.tag("LegalName", firms, False)["sensitivity"] == "none"
+    assert not sensitivity.names_people("Entity.OtherEntityName", people)  # a column named for organisations
+
+
 def test_sensitive_personal_from_words_and_values():
     assert sensitivity.tag("TaxId", ["1"], False)["sensitivity"] == "sensitive_personal"
     assert sensitivity.tag("Tax", ["1"], False)["sensitivity"] == "none"

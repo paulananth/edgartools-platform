@@ -401,3 +401,22 @@ def test_a_separated_pattern_writes_why_it_was_or_was_not_an_identifier(tmp_path
     columns = {c["name"]: c for p in found["parts"] for c in p["columns"]}
     assert columns["reg"]["prefix_share"] == 1.0 and columns["reg"]["pattern_temporal_share"] == 0.0
     assert "prefix_share" not in columns["deal_id"]
+
+
+def test_one_field_names_mark_their_part_personal_and_mask_its_address(tmp_path):
+    folder = tmp_path / "set"
+    folder.mkdir()
+    given, family = ["Ann", "Bo", "Cy", "Di", "Ed", "Flo"], ["Cole", "Park", "Reyes", "Stone", "Vale", "Wynn"]
+    holders = [f"{n},{family[n % 6]} {given[n // 6 % 6]},{n} Elm Rd,0{n:04d},{n % 9}" for n in range(1, 37)]
+    (folder / "holder.csv").write_text("holder_id,holder_name,holder_street,holder_zip,shares\n" + "\n".join(holders))
+    firms = [f"{n},{w} {k}" for n, (w, k) in enumerate(
+        ((w, k) for w in ("North", "Blue", "Zeta", "Delta", "Omni", "Apex") for k in ("Corp", "Holdings", "LLC")), 1)]
+    (folder / "firm.csv").write_text("firm_id,firm_name\n" + "\n".join(firms))
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "one-field names", "--input", f"set={folder}", "--out", str(out)]) == 0
+    found = yaml.safe_load((out / "findings.yaml").read_text())
+    tags = {(p["part"], c["name"]): c["sensitivity"] for p in found["parts"] for c in p["columns"]}
+    assert {tags[("holder", c)] for c in ("holder_name", "holder_street", "holder_zip")} == {"personal"}
+    assert tags[("firm", "firm_name")] == "none"
+    text = (out / "findings.yaml").read_text() + (out / "REPORT.md").read_text()
+    assert not [h for h in holders if h.split(",")[1] in text or h.split(",")[2] in text]
