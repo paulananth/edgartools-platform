@@ -363,7 +363,9 @@ def _tables(path: Path, work: Path) -> list[Table] | None:
             tables.append(Table(file, str(file)))
             continue
         with zipfile.ZipFile(file) as archive:
-            members = [i for i in archive.infolist() if not i.is_dir()]
+            # A zip made on a Mac carries `__MACOSX/._name` resource entries: no data.
+            members = [i for i in archive.infolist() if not i.is_dir()
+                       and not i.filename.startswith("__MACOSX/") and not Path(i.filename).name.startswith("._")]
             if not members or any(format_of(Path(i.filename)) not in TABULAR for i in members):
                 return None
             for info in members:
@@ -381,19 +383,24 @@ def _tables(path: Path, work: Path) -> list[Table] | None:
 
 
 def _name_tables(tables: list[Table]) -> None:
-    """Each table's part name: its file's stem, or its location's path when two share a stem."""
+    """Each table's part name: its file's stem, or, when two share a stem, the zip and the
+    member's path (`2025_06_sched`, `a_t`). Names are never empty and never repeat."""
     stems = [t.file.stem for t in tables]
     for table in tables:
         if stems.count(table.file.stem) == 1:
-            table.name = table.file.stem
+            name = table.file.stem
         else:
-            table.name = re.sub(r"\.(csv|parquet|zip|txt|tsv)(?=#|$)", "", table.location.split("/")[-1], flags=re.I)
-            table.name = re.sub(r"[^0-9A-Za-z]+", "_", table.name).strip("_")
-    seen: dict[str, int] = {}
-    for table in tables:  # still equal (same zip name in two folders): number them
-        seen[table.name] = seen.get(table.name, 0) + 1
-        if seen[table.name] > 1:
-            table.name = f"{table.name}_{seen[table.name]}"
+            outer, _, member = table.location.rpartition("#")
+            name = f"{Path(outer).stem}_{member}" if outer else "_".join(Path(table.location).parts[-2:])
+            name = re.sub(r"\.(csv|parquet|txt|tsv)$", "", name, flags=re.I)
+        table.name = re.sub(r"[^0-9A-Za-z]+", "_", name).strip("_") or "table"
+    taken: set[str] = set()
+    for table in tables:
+        name, n = table.name, 1
+        while table.name in taken:
+            n += 1
+            table.name = f"{name}_{n}"
+        taken.add(table.name)
 
 
 def _decode(table: Table, work: Path, index: int) -> None:
@@ -451,8 +458,17 @@ def _irregular(con, file: Path, rows: int | None) -> str | None:
     if len(delimiter) != 1:
         return None  # a delimiter of several characters: the standard library cannot check it
     def shape(**quoting) -> tuple[str | None, int, int | None]:
+        quote_char = quoting.get("quotechar")
+        quotes = 0
+
+        def lines(handle):
+            nonlocal quotes
+            for line in handle:
+                quotes += line.count(quote_char) if quote_char else 0
+                yield line
+
         with file.open(encoding="utf-8", newline="") as handle:
-            reader = csv.reader(handle, delimiter=delimiter, strict=True, **quoting)
+            reader = csv.reader(lines(handle), delimiter=delimiter, **quoting)
             width, records = None, 0
             try:
                 for record in reader:
@@ -463,6 +479,8 @@ def _irregular(con, file: Path, rows: int | None) -> str | None:
                     records += record != []
             except csv.Error as exc:
                 return f"line {reader.line_num}: {exc}", records, width
+        if quotes % 2:  # an escaped quote is doubled, so an odd count leaves one open
+            return f"a quote that does not close (an odd number of {quote_char} in the file)", records, width
         return None, records, width
 
     if len(quote or "") == 1 and quote != "\x00":
@@ -477,10 +495,10 @@ def _irregular(con, file: Path, rows: int | None) -> str | None:
         return why
     if width == 1:
         with file.open(encoding="utf-8", newline="") as handle:
-            first = handle.readline()
-        held = sorted(d for d in {",", ";", "|", "\t"} - {delimiter} if d in first)
+            first, second = handle.readline(), handle.readline()
+        held = sorted(d for d in {",", ";", "|", "\t"} - {delimiter} if d in first and d in second)
         if held:
-            return f"read as one column, but its first line holds {held[0]!r}; not one way to read it"
+            return f"read as one column, but its first two lines hold {held[0]!r}; not one way to read it"
     if rows is not None and records - (1 if header else 0) != rows:
         return f"{records} records, but {rows} rows loaded"
     return None

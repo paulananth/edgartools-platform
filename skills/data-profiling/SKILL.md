@@ -110,6 +110,8 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   count, quotes that close). A table that fails, or that the reader cannot
   read, is listed under `dataset.not_read` with the reason, and the rest is
   profiled. Report each one; never profile around it silently.
+  These checks read each CSV in full several times, even when it is sampled:
+  about three times as long as a plain read (88 MB, 2 million rows: 9 s, not 3 s).
 - **Size:** inputs up to `--limit-gb` (default 5) are read in full. A larger
   one is read once into a seeded sample, then read again in full for its key
   candidates. The run prints the estimate before it starts.

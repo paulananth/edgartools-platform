@@ -326,3 +326,30 @@ def test_a_table_duckdb_cannot_read_is_reported_and_the_rest_read(con, tmp_path)
     parts = {p.name: p for p in inputs.register(con, "d", str(tmp_path / "d"), tmp_path / "w")}
     assert parts["good"].not_read is None and rows(con, "good") == [(1, 2)]
     assert parts["bad"].not_read and "bad" not in {r[0] for r in con.execute("SELECT table_name FROM duckdb_tables()").fetchall()}
+
+
+def test_table_names_never_repeat_or_come_out_empty(tmp_path):
+    for folder in ("a", "b", "c", "d"):
+        (tmp_path / "s" / folder).mkdir(parents=True)
+    (tmp_path / "s" / "a" / "t.csv").write_text("x\n1\n")
+    (tmp_path / "s" / "b" / "t.csv").write_text("y\n1\n")
+    (tmp_path / "s" / "t_2.csv").write_text("z\n1\n")
+    (tmp_path / "s" / "c" / "@.csv").write_text("p\n1\n")
+    (tmp_path / "s" / "d" / "@.csv").write_text("q\n1\n")
+    tables = inputs._tables(tmp_path / "s", tmp_path / "w")
+    names = [t.name for t in tables]
+    assert len(set(names)) == len(names) and all(names)
+    assert {"a_t", "b_t", "t_2"} <= set(names)
+
+
+@pytest.mark.parametrize("data", [b"a;b\nx\ny\n", b'a,b\n"x" ,1\n'])
+def test_regular_files_the_shape_check_once_refused_are_read(con, tmp_path, data):
+    (part,) = inputs.register(con, "ok", str(_write(tmp_path / "ok.csv", data)), tmp_path / "w")
+    assert part.not_read is None
+
+
+def test_mac_resource_entries_in_a_zip_are_left_out(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "m.zip", "w") as archive:
+        archive.writestr("t.csv", "x\n1\n")
+        archive.writestr("__MACOSX/._t.csv", b"\x00\x05\x16\x07")
+    assert [(p.name, p.not_read) for p in inputs.register(con, "m", str(tmp_path / "m.zip"), tmp_path / "w")] == [("m", None)]
