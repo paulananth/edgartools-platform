@@ -12,14 +12,18 @@ Branch `claude/mdm-request-dedup`, worktree `../edgartools-platform-claude-reque
 - Decisions, identities, deferred records 0.7 MB
 - Mastering time is 87% database (`save_batch` 6.3 s, `preview_batch` 5.7 s over the 6 MB request): the bytes are also the time
 
+## Parked
+
+Operator, 2026-10-11 ("Yes" to parking): the fix buys about 5% of mastering time and the size headroom #906 already gives; the stored golden record format and its readers stay as they are. If mastering speed matters later, measure `save_batch`'s row work first, not bytes.
+
 ## Parts
 
 - [x] Do the bytes drive the time? Chunk 1 mastered into fresh PG16 stores, twice each, as today and with `winner.value` and the per-field policy digest and kind version removed (`.scratch/request-dedup/test_bytes_time.py`): request 6.09 MB to 5.21 MB (-14%); `save_batch` 4.63/4.75 s to 4.47/4.37 s; `preview_batch` 4.55/4.27 s to 3.98/4.21 s; merge 11.43/11.33 s to 10.64/10.85 s (about -5%). The bytes are not the time: the database's time goes to row work, not to reading the request. The fix buys size headroom (the request about 21% smaller), not speed. 2026-10-11 06:54 ET
 
-- [ ] GoF consult on `merge.py` (request assembly), the projection body and `save_batch`
-- [ ] The publication key once per batch, not per assertion (what reads it per assertion, and the stored `mdm.assertion` form)
-- [ ] Per-field constants (policy digest, kind version) once per golden record or batch; no second copy of the winning value
-- [ ] A migration for the stored forms, tested on a populated store (stored old-form rows still read)
-- [ ] Measured on chunk 1: request bytes and `save_batch`/`preview_batch` time, before and after
-- [ ] Mastering equal before and after: 6,414 Companies, 3,052 GLEIF bindings, bindings `9216cc18…`, a second pass changes nothing
-- [ ] Three-axis review, CI green, merge on the operator's word
+- [ ] ~~GoF consult on `merge.py` (request assembly), the projection body and `save_batch`~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
+- [ ] ~~The publication key once per batch, not per assertion (what reads it per assertion, and the stored `mdm.assertion` form)~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
+- [ ] ~~Per-field constants (policy digest, kind version) once per golden record or batch; no second copy of the winning value~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
+- [ ] ~~A migration for the stored forms, tested on a populated store (stored old-form rows still read)~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
+- [ ] ~~Measured on chunk 1: request bytes and `save_batch`/`preview_batch` time, before and after~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
+- [ ] ~~Mastering equal before and after: 6,414 Companies, 3,052 GLEIF bindings, bindings `9216cc18…`, a second pass changes nothing~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
+- [ ] ~~Three-axis review, CI green, merge on the operator's word~~ deferred: parked by the operator, 2026-10-11 (about 5% of time; #906 holds the size)
