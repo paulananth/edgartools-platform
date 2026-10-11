@@ -339,8 +339,9 @@ No AWS rollout, legacy database reset or retirement is performed here.
 ## Examples
 
 - Acquisition on 2026-09-29: only `sec.submissions.company/submissions` was
-  active. Its local caller and bounded generated-work migration are described
-  in `docs/company-only-acquisition.md`.
+  active. Its Company target was removed on 2026-10-11, unrun (Issue 20 20c);
+  capture returns with the configured capture worker (L8). Today's Company
+  route is in `docs/company-only-acquisition.md`.
 - Workers on 2026-10-02: `artifact.copy`, `jsonl.count`, `source.read`,
   `mdm.merge` and `mdm.publish`; the SEC Company and acquisition workers were
   mastering to-do 20c, Person 20d.

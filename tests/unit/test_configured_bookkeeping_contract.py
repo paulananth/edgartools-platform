@@ -5,7 +5,8 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, validate, worklist
-from edgar_warehouse.rules.files import source, pipeline
+from edgar_warehouse.rules.files import ROOT, source, pipeline
+from edgar_warehouse.workers import PROFILES
 
 
 @pytest.mark.parametrize("edit", ["unknown", "cycle", "bad_key", "empty_lease", "duration", "unknown_check", "unknown_op",
@@ -176,3 +177,18 @@ def test_empty_stage_requires_explicit_configuration_even_with_other_work():
     assert len(worklist(manifest, config)) == 1
     manifest["steps"]["capture"] = []
     assert worklist(manifest, config) == []
+
+
+def test_every_declared_target_names_registered_workers():
+    """A target whose steps name no worker profile can never run, and control
+    validates only the target a run selects (Issue 20 20c: a 12-step Company
+    target sat unused with four unregistered operations)."""
+    documents = {f"source {p.parent.name}": source(p.parent.name) for p in sorted(ROOT.glob("sources/*/source.yaml"))}
+    documents |= {f"pipeline {p.parent.name}": pipeline(p.parent.name) for p in sorted(ROOT.glob("pipelines/*/pipeline.yaml"))}
+    checked = 0
+    for name, body in documents.items():
+        for target in body.get("bookkeeping", {}).get("targets", {}):
+            for step in validate(body, target)["steps"]:
+                assert step["operation"] in PROFILES, f"{name} target {target} step {step['name']}: {step['operation']}"
+                checked += 1
+    assert checked
