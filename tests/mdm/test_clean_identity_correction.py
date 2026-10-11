@@ -133,3 +133,27 @@ def test_future_and_revoked_overrides_do_not_interpret_unused_expiry_metadata():
     undo = decision('revoke', actor='operator', reason='withdrawn',
                     at='2026-03-01T00:00:00Z', target=earlier['decision_id'])
     assert replay(IDENTITIES, [earlier, undo], AS_OF).overrides == []
+
+
+def test_future_decisions_leave_operands_uninterpreted_and_keep_override_references():
+    future = decision('merge', actor='operator', reason='pending',
+                      at='2027-01-01T00:00:00Z', left=AAON, right=OTHER,
+                      survivor=17, depends_on=None)
+    active = decision('override', actor='operator', reason='approved',
+                      at='2026-02-01T00:00:00Z', subject=SEC, field='name',
+                      value={'large': 10**80}, evidence=['a'])
+    state = replay(IDENTITIES, [future, active], AS_OF)
+    assert state.canonical == {AAON: AAON, OTHER: OTHER}
+    assert state.overrides == [active]
+    assert state.overrides[0] is active
+
+
+def test_reversed_merge_ignores_unused_survivor_and_dependency_metadata():
+    earlier = decision('merge', actor='operator', reason='withdrawn',
+                       at='2026-02-01T00:00:00Z', left=AAON, right=OTHER,
+                       survivor=17, depends_on=None, subject={'custom': 'metadata'})
+    undo = decision('reverse', actor='operator', reason='withdrawn',
+                    at='2026-03-01T00:00:00Z', target=earlier['decision_id'])
+    state = replay(IDENTITIES, [earlier, undo], AS_OF)
+    assert state.canonical == {AAON: AAON, OTHER: OTHER}
+    assert state.exclusions == [(AAON, OTHER)]

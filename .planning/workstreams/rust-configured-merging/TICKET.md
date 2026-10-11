@@ -45,7 +45,8 @@ Qualification is offline; performance claims require measured full caller paths.
 - [ ] Measure bounded offline computation and full MergeStage paths, including semantics and memory.
 - [x] Update only skill instructions affected by implemented capabilities; verify examples. Guard passed, responsibility note only; doctor resolves all 131 commands with engine loaded, no activation changes; 2026-10-11 16:20 ET.
 - [ ] Run regular Rust type checks, focused tests, then the complete maintained test suite once.
-- [ ] Review against baseline with Standards and Spec agents, and address findings.
+- [ ] Review against baseline with Standards, Spec and independent GoF agents, and address findings.
+- [x] Fix review finding: filter future decisions before native operand marshalling and preserve active override references. Verified red/green public regression and 14 identity passes; reversed merges also ignore unused survivor/dependency metadata; mypy clean; 2026-10-11 16:24 ET.
 - [ ] Guard and commit the verified implementation on this dedicated branch.
 
 Qualification note: 1,000 field/profile and 1,000 identity baseline comparisons pass.
