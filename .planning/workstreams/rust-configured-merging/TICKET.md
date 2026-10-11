@@ -63,3 +63,12 @@ a documentation commit/rebase command mistakenly proceeded before handling that
 result. No Claude files were written. Read-only recheck showed that worktree
 clean at main 9af45def (creation/reset in its reflog), and the refreshed guard
 passed before continuing. Future guards are checked before any following mutation.
+
+## Delivery and Claude unblock (operator, 2026-10-11)
+
+- [x] Refresh and publish the responsibility map with implemented reduction/merge owners and current prerequisites. Added current implementation map to the delivery branch; 44 links verified, reduction/native replay/ranking distinguished from later ports; 2026-10-11 19:24 ET.
+- [x] Verify release diff, examples and fresh affected tests; run pre-landing review. Fresh 110 affected tests pass, doctor resolves 131 commands, prior independent Standards/Spec/GoF reviews rechecked; shipping checklist finds no new data/transaction/FFI/enum/shell issues; 2026-10-11 19:24 ET.
+- [ ] Guard, push, create PR and verify all CI jobs.
+- [ ] Merge the qualified slice, verify the merge commit and release its edit surface.
+- [ ] Implement and land the configured collection/join port required by Claude's Company preparation handoff; tracked in its own ticket.
+- [ ] Record the precise delivered interfaces and remaining Claude-owned orchestration/fan-in work in a handoff.
