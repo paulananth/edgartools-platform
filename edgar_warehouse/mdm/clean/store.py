@@ -68,7 +68,6 @@ RUNTIME_FUNCTIONS = (
     "preview_batch(text,uuid)",
     "claim_outbox(text,text,integer)",
     "finish_outbox(text,text,bigint,text,text)",
-    "outbox_payload(text,text)",
     "record_attempt(uuid,uuid,text,text,jsonb)",
     "start_run(uuid,jsonb)",
     "finish_run(uuid,jsonb,boolean)",

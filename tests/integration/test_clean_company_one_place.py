@@ -198,8 +198,8 @@ def test_a_publication_carries_the_objects_the_merge_stage_computed(database):
     with database.application.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT p.batch_id, mdm.outbox_payload(p.batch_id, p.consumer)->'objects', b.effects->'projections' "
-                "FROM mdm.outbox p JOIN mdm.batch b USING (batch_id)"
+                "SELECT d.batch_id, d.payload->'objects', b.effects->'projections' "
+                "FROM mdm.outbox_delivery d JOIN mdm.batch b USING (batch_id)"
             )
         ).all()
     assert rows and all(objects == sent for _, objects, sent in rows)

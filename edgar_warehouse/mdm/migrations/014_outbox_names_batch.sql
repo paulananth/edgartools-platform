@@ -7,37 +7,34 @@
 -- 919-Company batch wrote 15 MB of outbox payloads beside its 6 MB batch row.
 -- What a consumer is sent is a function of its batch row (generation, run,
 -- policy digest, `effects`), so a new outbox row keeps only the hash of it;
--- `outbox_payload` builds it when a publisher claims, delivers or verifies the
+-- `outbox_delivery` builds it when a publisher claims, delivers or verifies the
 -- row. A row stored before this keeps its own payload, which is sent as stored.
 -- Built by the same expression the old write used, a new row's hash equals the
 -- hash its stored payload would have had.
 
 ALTER TABLE mdm.outbox ALTER COLUMN payload DROP NOT NULL;
 COMMENT ON COLUMN mdm.outbox.payload IS
-    'What to send, for a row saved before migration 014; NULL for a later row, whose payload is built from its batch (outbox_payload).';
+    'What to send, for a row saved before migration 014; NULL for a later row, whose payload is built from its batch (outbox_delivery).';
 
--- What a consumer is sent for a saved batch, from the batch row alone.
-CREATE OR REPLACE FUNCTION mdm.outbox_payload_of(batch_key text, destination text) RETURNS jsonb
-    LANGUAGE sql STABLE
-    SET search_path TO 'pg_catalog', 'mdm'
-    AS $$
-    SELECT jsonb_build_object('contract_version',2,'generation',b.generation,'run_id',b.run_id,
-               'policy_digest',b.effects->>'policy_digest','objects',b.effects->'projections')
-           || CASE WHEN destination='journal' THEN jsonb_build_object('effects',b.effects) ELSE '{}'::jsonb END
-    FROM mdm.batch b WHERE b.batch_id=batch_key;
-$$;
-COMMENT ON FUNCTION mdm.outbox_payload_of(text, text) IS
-    'What a consumer is sent for a saved batch, built from the batch row: its generation, run, policy digest and current records, and for journal the whole batch. Called by write_batch and outbox_payload.';
-
-CREATE OR REPLACE FUNCTION mdm.outbox_payload(batch_key text, destination text) RETURNS jsonb
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'pg_catalog', 'mdm'
-    AS $$
-    SELECT coalesce(o.payload, mdm.outbox_payload_of(o.batch_id,o.consumer))
-    FROM mdm.outbox o WHERE o.batch_id=batch_key AND o.consumer=destination;
-$$;
-COMMENT ON FUNCTION mdm.outbox_payload(text, text) IS
-    'What an outbox row sends: its stored payload when it has one (a row saved before migration 014), else the payload built from its batch. Read by claim_outbox and the publishers.';
+-- What each outbox row sends: its stored payload (a row saved before 014), else
+-- the payload built from its batch row. A view, so any login that may read the
+-- schema (a publisher's verifier holds SELECT only) reads it, and write_batch
+-- hashes the same expression.
+CREATE OR REPLACE VIEW mdm.outbox_delivery AS
+ SELECT o.batch_id,
+    o.consumer,
+    COALESCE(o.payload,
+        jsonb_build_object('contract_version', 2, 'generation', b.generation, 'run_id', b.run_id,
+                           'policy_digest', b.effects ->> 'policy_digest', 'objects', b.effects -> 'projections')
+        || CASE WHEN o.consumer = 'journal' THEN jsonb_build_object('effects', b.effects) ELSE '{}'::jsonb END)
+        AS payload
+   FROM mdm.outbox o
+     JOIN mdm.batch b USING (batch_id);
+COMMENT ON VIEW mdm.outbox_delivery IS
+    'What each outbox row sends: its stored payload (a row saved before migration 014), else built from its batch: generation, run, policy digest and current records, and for journal the whole batch. Read by claim_outbox and the publishers; write_batch keeps its hash.';
+COMMENT ON COLUMN mdm.outbox_delivery.payload IS 'What to send.';
+COMMENT ON COLUMN mdm.outbox_delivery.batch_id IS 'The saved batch that wrote this row (batch.batch_id).';
+COMMENT ON COLUMN mdm.outbox_delivery.consumer IS 'The reader the work is for, e.g. journal.';
 
 CREATE OR REPLACE FUNCTION mdm.write_batch(request_text text, root_run uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
@@ -153,11 +150,15 @@ BEGIN
             coalesce(r->>'publication_family',''),r->>'committed_publication',r->'continuity_proof')
         ON CONFLICT(consumer,source_family,publication_family) DO UPDATE SET position=excluded.position,
             batch_id=excluded.batch_id,committed_publication=excluded.committed_publication,continuity_proof=excluded.continuity_proof;
-        -- An outbox row names its batch; what it sends is built from the batch row (outbox_payload).
+        -- An outbox row names its batch; what it sends is built from the batch row
+        -- (outbox_delivery), and the row keeps the hash of that.
         FOR item IN SELECT value FROM jsonb_array_elements(required) LOOP
-            delivered := mdm.outbox_payload_of(r->>'batch_id',item#>>'{}');
             INSERT INTO mdm.outbox(batch_id,consumer,payload,payload_hash)
-            VALUES(r->>'batch_id',item#>>'{}',NULL,encode(sha256(convert_to(delivered::text,'UTF8')),'hex'));
+            VALUES(r->>'batch_id',item#>>'{}',NULL,'');
+            SELECT d.payload INTO delivered FROM mdm.outbox_delivery d
+              WHERE d.batch_id=r->>'batch_id' AND d.consumer=item#>>'{}';
+            UPDATE mdm.outbox SET payload_hash=encode(sha256(convert_to(delivered::text,'UTF8')),'hex')
+              WHERE batch_id=r->>'batch_id' AND consumer=item#>>'{}';
         END LOOP;
         result := jsonb_build_object('batch_id',r->>'batch_id','generation',next_generation,'duplicate',false);
     END core;
@@ -230,6 +231,7 @@ BEGIN
       WHERE batch_id=p.batch_id AND consumer=p.consumer RETURNING * INTO p;
     INSERT INTO mdm.outbox_event(batch_id,consumer,fence,event,detail)
       VALUES(p.batch_id,p.consumer,p.fence,'claimed',jsonb_build_object('worker',owner_name));
-    RETURN to_jsonb(p) || jsonb_build_object('payload',mdm.outbox_payload(p.batch_id,p.consumer));
+    RETURN to_jsonb(p) || jsonb_build_object('payload',
+        (SELECT d.payload FROM mdm.outbox_delivery d WHERE d.batch_id=p.batch_id AND d.consumer=p.consumer));
 END;
 $$;

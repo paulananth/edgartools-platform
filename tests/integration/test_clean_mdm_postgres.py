@@ -1483,19 +1483,20 @@ def test_automatic_progression_reassesses_a_concurrent_correction(
 ):
     stage = MergeStage(Store(database.application))
     command = assessment_command(database)
-    original = stage.apply_assessment
+    original = stage._save_assessed
     raced = False
 
-    def race_once(key, *, run_id):
+    def race_once(key, *args):
+        # Another run commits between the proposal's commit and the save.
         nonlocal raced
         if not raced:
             raced = True
             apply(
                 database, 1, assertions=[source(revision=2, fields={"name": "Current"})]
             )
-        return original(key, run_id=run_id)
+        return original(key, *args)
 
-    monkeypatch.setattr(stage, "apply_assessment", race_once)
+    monkeypatch.setattr(stage, "_save_assessed", race_once)
     result = stage.apply(**command)
     assert result["generation"] == 2
     entity = command["identities"][0]["entity_id"]

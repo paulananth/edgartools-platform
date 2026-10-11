@@ -34,8 +34,8 @@ class JournalPublisher:
                 conn.execute(
                     text("""SELECT b.created_at,s.payload,p.payload_hash,
                 encode(sha256(convert_to(s.payload::text,'UTF8')),'hex') AS actual_hash
-                FROM mdm.outbox p JOIN mdm.batch b USING(batch_id),
-                LATERAL (SELECT mdm.outbox_payload(p.batch_id,p.consumer) AS payload) s
+                FROM mdm.outbox p JOIN mdm.batch b USING(batch_id)
+                JOIN mdm.outbox_delivery s ON s.batch_id=p.batch_id AND s.consumer=p.consumer
                 WHERE p.batch_id=:b AND p.consumer='journal'"""),
                     {"b": batch},
                 )

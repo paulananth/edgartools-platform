@@ -318,7 +318,10 @@ class MergeStage:
             raise
         if "assessment_id" not in prepared:
             return prepared
-        key, request = prepared["assessment_id"], prepared["request"]
+        return self._save_assessed(prepared["assessment_id"], prepared["request"], command, automatic)
+
+    def _save_assessed(self, key: str, request: dict, command: dict, automatic: dict) -> dict:
+        """Save a batch its committed proposal computed, once the proposal still holds."""
         decisions = [*(command.get("decisions") or []), *(automatic or binding.nothing())["decisions"]]
         try:
             with self.store.engine.begin() as conn:

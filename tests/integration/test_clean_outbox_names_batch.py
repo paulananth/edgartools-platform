@@ -35,9 +35,10 @@ def journal_policy(database) -> str:
 def rows(database):
     with database.admin.connect() as conn:
         return [dict(r) for r in conn.execute(text(
-            "SELECT batch_id, consumer, payload, payload_hash, mdm.outbox_payload(batch_id, consumer) AS sent, "
-            "encode(sha256(convert_to(mdm.outbox_payload(batch_id, consumer)::text,'UTF8')),'hex') AS sent_hash "
-            "FROM mdm.outbox ORDER BY batch_id, consumer")).mappings()]
+            "SELECT o.batch_id, o.consumer, o.payload, o.payload_hash, d.payload AS sent, "
+            "encode(sha256(convert_to(d.payload::text,'UTF8')),'hex') AS sent_hash "
+            "FROM mdm.outbox o JOIN mdm.outbox_delivery d USING (batch_id, consumer) "
+            "ORDER BY o.batch_id, o.consumer")).mappings()]
 
 
 def test_a_new_row_keeps_only_the_hash_and_sends_what_its_batch_holds(database):
@@ -101,10 +102,9 @@ def test_what_014_builds_equals_what_001_stored(database):
     store = Store(database.application)
     with database.application.begin() as conn:
         store.commit(conn, core.request(database, policy_digest=policy), str(uuid4()))
-    with database.admin.connect() as conn:
-        found = conn.execute(text(
-            "SELECT consumer, payload = mdm.outbox_payload_of(batch_id, consumer) AS same, payload_hash = "
-            "encode(sha256(convert_to(mdm.outbox_payload_of(batch_id, consumer)::text,'UTF8')),'hex') AS same_hash "
-            "FROM mdm.outbox")).mappings().all()
-    assert {r["consumer"] for r in found} == {"journal", "export", "graph"}
-    assert all(r["same"] and r["same_hash"] for r in found)
+    stored = {r["consumer"]: (r["payload"], r["payload_hash"]) for r in rows(database)}
+    assert set(stored) == {"journal", "export", "graph"} and all(p is not None for p, _ in stored.values())
+    with database.admin.begin() as conn:
+        conn.exec_driver_sql("UPDATE mdm.outbox SET payload = NULL")
+    built = {r["consumer"]: (r["sent"], r["sent_hash"]) for r in rows(database)}
+    assert built == stored

@@ -93,7 +93,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     try:
         expected = receipt(store, batch_id, consumer)
         with store.engine.connect() as conn:
-            payload = conn.scalar(text("SELECT mdm.outbox_payload(:b,:c)"),
+            payload = conn.scalar(text("SELECT payload FROM mdm.outbox_delivery WHERE batch_id=:b AND consumer=:c"),
                                   {"b": batch_id, "c": consumer})
         publisher = _publisher(envelope, artifacts, store, consumer)
         publisher.verify(f"{consumer}/{batch_id}", payload, json.loads(expected)["payload_hash"])
