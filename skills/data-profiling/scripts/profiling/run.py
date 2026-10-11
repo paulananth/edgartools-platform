@@ -116,8 +116,10 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
                                  "reason": part.not_read})
                 continue
             if part.encoding:
-                say(f"{part.name}: its bytes are not UTF-8; read as {part.encoding}")
-            part.sha256 = sha if part.parent is None else None
+                say(f"{part.name}: its bytes are not UTF-8 (first at byte {part.encoding.get('first_invalid_byte_offset')}); "
+                    f"read as {part.encoding['read_as']}, inferred")
+            if part.sha256 is None:
+                part.sha256 = sha if part.parent is None else None
             parts[part.name] = part
     profiles = {p: profile.columns(con, p) for p in parts}
     say(_parts_found(parts, profiles))

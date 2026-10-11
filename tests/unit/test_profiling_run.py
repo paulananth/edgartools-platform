@@ -382,7 +382,7 @@ def test_an_unreadable_table_is_listed_and_the_run_goes_on(tmp_path, capsys):
     folder = tmp_path / "set"
     folder.mkdir()
     (folder / "orders.csv").write_text("order_id,amount\n" + "".join(f"{i},{i * 10}\n" for i in range(50)))
-    (folder / "broken.csv").write_bytes(bytes(range(256)) * 4)
+    (folder / "broken.csv").write_bytes(bytes(range(1, 256)) * 4)
     findings = run.profile_inputs({"set": str(folder)}, "partly readable")
     assert [p["part"] for p in findings["parts"]] == ["orders"]
     (missed,) = findings["dataset"]["not_read"]

@@ -20,6 +20,7 @@ records is kept, and `full_pass` reads it again for named columns only.
 from __future__ import annotations
 
 import codecs
+import csv
 import gzip
 import hashlib
 import io
@@ -58,7 +59,7 @@ class Part:
     source_sql: str | None = None  # a sampled table file, read again in full by this reader
     sha256: str | None = None
     derived_from: str | None = None  # an entity found inside this part (embedded.py), not an input
-    encoding: str | None = None  # a CSV read from bytes that are not UTF-8
+    encoding: dict | None = None  # a CSV read from bytes that are not UTF-8: as what, and the evidence
     not_read: str | None = None  # why DuckDB could not read this table; it has no table
 
     @property
@@ -342,97 +343,207 @@ def size_of(path: Path) -> int:
     return sum(size for _, size, _ in _open_streams(path))
 
 
-def _tabular_files(path: Path, work: Path) -> tuple[list[Path], dict[Path, str]] | None:
-    """The CSV or Parquet files of an input, a zip's members copied out to `work`
-    (with the member each copy came from); None when the input holds anything else."""
-    files, origin = [], {}
+@dataclass
+class Table:
+    """One CSV or Parquet table of an input: the file read, where it came from, its part name."""
+    file: Path  # on disk: the input's own file, or a zip member copied out to the work folder
+    location: str  # the input's file, or `<zip>#<member>`
+    name: str = ""
+    readable: Path | None = None  # the file DuckDB reads (a UTF-8 copy of a CSV that is not UTF-8)
+    encoding: dict | None = None
+    unreadable: str | None = None  # why the bytes are no text the reader can take
+
+
+def _tables(path: Path, work: Path) -> list[Table] | None:
+    """The CSV or Parquet tables of an input, a zip's members copied out to `work`;
+    None when the input holds anything else."""
+    tables = []
     for file in _members(path):
         if format_of(file) != "zip":
-            files.append(file)
+            tables.append(Table(file, str(file)))
             continue
         with zipfile.ZipFile(file) as archive:
             members = [i for i in archive.infolist() if not i.is_dir()]
             if not members or any(format_of(Path(i.filename)) not in TABULAR for i in members):
                 return None
             for info in members:
-                target = work / "members" / file.stem / Path(info.filename).name
-                if target.exists():
-                    raise ValueError(f"{file}: two members named {target.name}")
+                # One folder per member: two members (or two zips) may share a file name.
+                target = work / "members" / str(len(tables)) / Path(info.filename).name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(info) as source, target.open("wb") as copy:
                     shutil.copyfileobj(source, copy)
-                files.append(target)
-                origin[target] = f"{file}#{info.filename}"
-    formats = {format_of(f) for f in files}
-    return (files, origin) if len(formats) == 1 and formats <= TABULAR else None
+                tables.append(Table(target, f"{file}#{info.filename}"))
+    formats = {format_of(t.file) for t in tables}
+    if len(formats) != 1 or not formats <= TABULAR:
+        return None
+    _name_tables(tables)
+    return tables
 
 
-def _as_utf8(file: Path, work: Path) -> tuple[Path, str | None]:
-    """The file DuckDB reads, and the encoding it was copied from when not UTF-8.
+def _name_tables(tables: list[Table]) -> None:
+    """Each table's part name: its file's stem, or its location's path when two share a stem."""
+    stems = [t.file.stem for t in tables]
+    for table in tables:
+        if stems.count(table.file.stem) == 1:
+            table.name = table.file.stem
+        else:
+            table.name = re.sub(r"\.(csv|parquet|zip|txt|tsv)(?=#|$)", "", table.location.split("/")[-1], flags=re.I)
+            table.name = re.sub(r"[^0-9A-Za-z]+", "_", table.name).strip("_")
+    seen: dict[str, int] = {}
+    for table in tables:  # still equal (same zip name in two folders): number them
+        seen[table.name] = seen.get(table.name, 0) + 1
+        if seen[table.name] > 1:
+            table.name = f"{table.name}_{seen[table.name]}"
 
-    A CSV whose bytes are not UTF-8 is copied as UTF-8 from Windows-1252 when every
-    byte is one of its characters, else from Latin-1 (which reads any byte)."""
-    if format_of(file) != "csv":
-        return file, None
+
+def _decode(table: Table, work: Path, index: int) -> None:
+    """Set the file DuckDB reads. A CSV whose bytes are not UTF-8 is copied as UTF-8 from
+    Windows-1252 when every byte is one of its characters, else Latin-1, and the encoding
+    is recorded as inferred, with the first byte that is not UTF-8. A byte-order mark of
+    UTF-16 or UTF-32, or a NUL byte, is no text these read: the table is not read."""
+    table.readable = table.file
+    if format_of(table.file) != "csv":
+        return
     decoder = codecs.getincrementaldecoder("utf-8")()
-    try:
-        with file.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1 << 20), b""):
+    offset = 0
+    with table.file.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            if offset == 0 and chunk.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+                table.unreadable = "starts with a UTF-16 or UTF-32 byte-order mark; not read as text"
+                return
+            if b"\x00" in chunk:
+                table.unreadable = f"a NUL byte at offset {offset + chunk.index(b'\x00')}; binary or UTF-16, not read as text"
+                return
+            try:
                 decoder.decode(chunk)
-        decoder.decode(b"", final=True)
-        return file, None
-    except UnicodeDecodeError:
-        pass
+            except UnicodeDecodeError as exc:
+                if table.encoding is None:
+                    table.encoding = {"first_invalid_byte_offset": offset + exc.start}
+                decoder = codecs.getincrementaldecoder("utf-8")()  # keep scanning for NUL bytes
+            offset += len(chunk)
+    if table.encoding is None:
+        return
     for encoding in ("windows-1252", "latin-1"):
-        target = work / "utf8" / encoding / file.name
+        target = work / "utf8" / str(index) / table.file.name
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with file.open("r", encoding=encoding, newline="") as source, \
+            with table.file.open("r", encoding=encoding, newline="") as source, \
                     target.open("w", encoding="utf-8", newline="") as copy:
                 shutil.copyfileobj(source, copy, 1 << 20)
-            return target, encoding
         except UnicodeDecodeError:
             continue
+        table.readable = target
+        table.encoding = {"read_as": encoding, "inferred": True, **table.encoding}
+        return
     raise AssertionError("Latin-1 reads every byte")
 
 
-def _tabular(con, name: str, files: list[Path], size: int, limit: int, sample: int, seed: int,
-             utf8: dict[Path, tuple[Path, str | None]], origin: dict[Path, str]) -> list[Part]:
-    """CSV or Parquet: files with one header are one part; otherwise each file is its own part.
+def _irregular(con, file: Path, rows: int | None) -> str | None:
+    """Why a CSV DuckDB loaded does not have one shape, or None. DuckDB reads leniently
+    (a ragged file can load as one column, a preamble is skipped, an open quote kept),
+    so the file is read again with the standard library in the dialect DuckDB found:
+    every record must have the header's field count, a quote must close, nothing is
+    skipped, and (when the whole file was loaded) the record count must equal the rows."""
+    delimiter, quote, skipped, header = con.execute(
+        f"SELECT Delimiter, Quote, SkipRows, HasHeader FROM sniff_csv({sql_text(str(file))}, sample_size=-1)").fetchone()
+    if skipped:
+        return f"the reader would skip its first {skipped} lines; not one table"
+    if len(delimiter) != 1:
+        return None  # a delimiter of several characters: the standard library cannot check it
+    def shape(**quoting) -> tuple[str | None, int, int | None]:
+        with file.open(encoding="utf-8", newline="") as handle:
+            reader = csv.reader(handle, delimiter=delimiter, strict=True, **quoting)
+            width, records = None, 0
+            try:
+                for record in reader:
+                    if width is None:
+                        width = len(record)
+                    elif record and len(record) != width:
+                        return f"line {reader.line_num} has {len(record)} fields, the first line {width}", records, width
+                    records += record != []
+            except csv.Error as exc:
+                return f"line {reader.line_num}: {exc}", records, width
+        return None, records, width
+
+    if len(quote or "") == 1 and quote != "\x00":
+        why, records, width = shape(quotechar=quote)
+    else:
+        # The reader found no quoting; a double quote that does not close would then be data.
+        quoted, _, _ = shape(quotechar='"')
+        if quoted:
+            return f"read without quoting, but with double quotes {quoted}; not one way to read it"
+        why, records, width = shape(quoting=csv.QUOTE_NONE)
+    if why:
+        return why
+    if width == 1:
+        with file.open(encoding="utf-8", newline="") as handle:
+            first = handle.readline()
+        held = sorted(d for d in {",", ";", "|", "\t"} - {delimiter} if d in first)
+        if held:
+            return f"read as one column, but its first line holds {held[0]!r}; not one way to read it"
+    if rows is not None and records - (1 if header else 0) != rows:
+        return f"{records} records, but {rows} rows loaded"
+    return None
+
+
+def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed: int, location: str) -> list[Part]:
+    """CSV or Parquet: tables with one header are one part; otherwise each table is its own part.
 
     Over the size limit, a seeded reservoir sample of rows is kept; the full file
     stays readable through `source_sql` for the key candidates' full passes. A
-    file DuckDB cannot read is a part with `not_read` and no table.
+    table the reader cannot read, or reads as more than one shape, is a part with
+    `not_read` and no table.
     """
-    def header(file: Path) -> tuple:
-        readable = utf8[file][0]
-        return tuple(r[0] for r in con.execute(f"DESCRIBE SELECT * FROM {_reader(readable, str(readable))}").fetchall())
+    def header(table: Table) -> tuple:
+        return tuple(r[0] for r in con.execute(
+            f"DESCRIBE SELECT * FROM {_reader(table.readable, str(table.readable))}").fetchall())
 
     def each() -> list[Part]:
-        return [p for f in files for p in _tabular(con, f.stem, [f], f.stat().st_size, limit, sample, seed, utf8, origin)]
+        return [p for t in tables for p in _tabular(con, t.name, [t], limit, sample, seed, t.location)]
 
-    if len(files) > 1:
+    def unread(reason: str) -> list[Part]:
+        (table,) = tables
+        for t in tables:
+            reason = reason.replace(str(t.readable), t.location).replace(str(t.file), t.location)
+        return [Part(name, table.location, format_of(table.file), table.file.stat().st_size, not_read=reason[:300])]
+
+    if len(tables) == 1 and tables[0].unreadable:
+        return unread(tables[0].unreadable)
+    if len(tables) > 1:
+        if any(t.unreadable for t in tables):
+            return each()
         try:
-            if len({header(f) for f in files}) > 1:
+            if len({header(t) for t in tables}) > 1:
                 return each()
         except duckdb.Error:
             return each()
-    readable = [utf8[f] for f in files]
-    fmt = format_of(files[0])
-    where = origin.get(files[0])
-    location = (where or str(files[0])) if len(files) == 1 else (where.split("#")[0] if where else str(files[0].parent))
-    source = _reader(files[0], [str(r) for r, _ in readable])
+    fmt = format_of(tables[0].file)
+    size = sum(t.file.stat().st_size for t in tables)
+    source = _reader(tables[0].file, [str(t.readable) for t in tables])
     sampled = size > limit
     rows = f" USING SAMPLE reservoir({int(sample)} ROWS) REPEATABLE ({int(seed)})" if sampled else ""
     try:
         con.execute(f"CREATE TABLE {sql_name(name)} AS SELECT * FROM {source}{rows}")
+        problems = [] if fmt != "csv" else [
+            (t, why) for t in tables
+            if (why := _irregular(con, t.readable, None if sampled or len(tables) > 1 else
+                                  con.execute(f"SELECT count(*) FROM {sql_name(name)}").fetchone()[0]))]
     except duckdb.Error as exc:
-        if len(files) > 1:
+        if len(tables) > 1:
             return each()
-        return [Part(name, location, fmt, size, not_read=str(exc).splitlines()[0][:300])]
-    return [Part(name, location, fmt, size, scan="sampled" if sampled else "full",
-                 source_sql=source if sampled else None,
-                 encoding=", ".join(sorted({e for _, e in readable if e})) or None)]
+        return unread(str(exc).splitlines()[0])
+    if problems:
+        con.execute(f"DROP TABLE {sql_name(name)}")
+        if len(tables) > 1:
+            return each()
+        return unread(problems[0][1])
+    encodings = [t.encoding for t in tables if t.encoding]
+    part = Part(name, tables[0].location if len(tables) == 1 else location, fmt, size,
+                scan="sampled" if sampled else "full", source_sql=source if sampled else None,
+                encoding=encodings[0] if len(encodings) == 1 else ({"read_as": "mixed", "files": encodings} if encodings else None))
+    if len(tables) == 1 and tables[0].file != Path(tables[0].location):
+        part.sha256 = digest(tables[0].file)  # a zip member's own bytes
+    return [part]
 
 
 def _reader(file: Path, source) -> str:
@@ -453,11 +564,11 @@ def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Pat
     path = Path(location).expanduser()
     if format_of(path) in {"sqlite", "duckdb"}:
         return _attach_file(con, name, path, format_of(path))
-    tables = _tabular_files(path, work)
+    tables = _tables(path, work)
     if tables is not None:
-        files, origin = tables
-        utf8 = {f: _as_utf8(f, work) for f in files}
-        return _tabular(con, name, files, sum(f.stat().st_size for f in files), limit, sample, seed, utf8, origin)
+        for index, table in enumerate(tables):
+            _decode(table, work, index)
+        return _tabular(con, name, tables, limit, sample, seed, str(path))
     fmt, records, wrappers = _record_reader(path)
     size = size_of(path)
     scan = "sampled" if size > limit else "full"
