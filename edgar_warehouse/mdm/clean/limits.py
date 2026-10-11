@@ -17,6 +17,8 @@ PROPOSAL_BYTES = 16 * 1024**2
 PROPOSAL_INPUT_BYTES = 64 * 1024**2
 # One batch's records file, as read back by the Stage and the workers.
 RECORDS_FILE_BYTES = 16 * 1024**2
+# One batch manifest, as read back by the Stage and its verifier.
+MANIFEST_BYTES = 32 * 1024**2
 # Where mdm.prepare cuts a batch's records, as well as at BATCH_RECORDS.
 BATCH_RECORD_BYTES = 1024**2
 

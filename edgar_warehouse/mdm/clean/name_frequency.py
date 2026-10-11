@@ -26,6 +26,8 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
 from edgar_warehouse.workers import source_read, source_readings
 
+from . import raw_capture
+
 from . import cascade as cascaded
 from . import name_census
 from .gleif_publication import validate_metadata
@@ -42,38 +44,13 @@ GLEIF_BYTES = 1024**3
 GLEIF_ROWS = 10_000_000
 CONTRACT_BYTES = 1024**2
 METADATA_BYTES = 64 * 1024
-RECEIPTS_BYTES = 64 * 1024**2
 POPULATION_BYTES = 64 * 1024**2
-BRONZE = "warehouse/bronze/"
-
-
-def _read_bounded(path: Path, limit: int) -> bytes:
-    with path.open("rb") as stream:
-        data = stream.read(limit + 1)
-    if len(data) > limit:
-        raise ValueError(f"{path.name} exceeds {limit} bytes")
-    return data
-
-
-def read_verified(store: Artifacts, folder: Path, name: str, contract: dict, artifacts: list) -> list[dict]:
-    """One `source.read` unit, executed then verified; its artifacts' readings."""
-    request = store.put(folder.as_uri(), {"version": 2, "contract": store.put(folder.as_uri(), contract),
-                                          "artifacts": artifacts})
-    task = {"input": request, "output": (folder / f"{name}.reading.json").as_uri(), "checks": ["source.output"]}
-    candidate = source_read.execute(task, store)
-    if source_read.verify({**task, "candidate": candidate}, store) != ({"source.output": True}, []):
-        raise ValueError("Configured reading verification failed")
-    return store.json(candidate)["artifacts"]
 
 
 def _population(capture: Path, population: Path, store: Artifacts, folder: Path) -> tuple[list, dict]:
     """The filers of the population's documents, each read from the receipt-bound capture."""
-    receipts_raw = _read_bounded(capture / "receipts.jsonl", RECEIPTS_BYTES)
-    receipts = {}
-    for line in receipts_raw.decode("utf-8").splitlines():
-        receipt = json.loads(line)
-        receipts[receipt["key"]] = receipt["sha256"]
-    population_raw = _read_bounded(population, POPULATION_BYTES)
+    receipts_raw, receipts = raw_capture.receipts(capture)
+    population_raw = raw_capture.read_bounded(population, POPULATION_BYTES)
     keys = json.loads(population_raw)
     if not isinstance(keys, list) or not keys or len(set(keys)) != len(keys):
         raise Conflict("A population names one or more distinct receipt keys")
@@ -82,13 +59,14 @@ def _population(capture: Path, population: Path, store: Artifacts, folder: Path)
     for start in range(0, len(keys), contract["execution"]["max_artifacts"]):
         artifacts = []
         for key in keys[start:start + contract["execution"]["max_artifacts"]]:
-            if key not in receipts or not key.startswith(BRONZE) or "/main/" not in key:
+            if key not in receipts or not key.startswith(raw_capture.BRONZE) or "/main/" not in key:
                 raise Conflict(f"The population names a document the capture's receipts do not: {key}")
-            document = {"uri": (capture / "bronze" / key[len(BRONZE):]).as_uri(), "sha256": receipts[key]}
-            cik = int(key.split("/cik=", 1)[1].split("/", 1)[0])
-            context = store.put(folder.as_uri(), {"version": 1, "input": document, "values": {"cik": cik}})
+            document = raw_capture.document(capture, receipts, key)
+            context = store.put(folder.as_uri(), {"version": 1, "input": document,
+                                                  "values": {"cik": raw_capture.cik(key)}})
             artifacts.append({"input": document, "context": context})
-        for reading in read_verified(store, folder, f"population-{start}", deepcopy(contract), artifacts):
+        _, reading = raw_capture.read_unit(store, folder, f"population-{start}", deepcopy(contract), artifacts)
+        for reading in store.json(reading)["artifacts"]:
             (filer,) = reading["tables"]["filer"]
             former = [row["name"] for row in reading["tables"]["former"] if row["name"]]
             filers.append((f"{filer['cik']:010d}", filer["name"], former))
@@ -122,7 +100,7 @@ def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tupl
 
 
 def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, gleif_metadata: str,
-                         output: str, policy: dict | None = None) -> dict:
+                         output: str) -> dict:
     """Count the SEC population and the configured Golden Copy reading into a census file.
 
     A name is unique only if it is unique among all SEC filers (ticket 08), so
@@ -131,7 +109,7 @@ def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, 
     reading before it can run here; switched on, it is refused. An existing
     file is never overwritten with different content.
     """
-    policy = rules_files.policy() if policy is None else policy
+    policy = rules_files.policy()
     spec = cascaded.spec(policy)
     if spec["passes"] and any(t["primitive"] == cascaded.TEST for _, rule in active_rules(policy)
                               for t in rule["when"]):
@@ -142,13 +120,13 @@ def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, 
     if len({cik for cik, _, _ in filers}) != len(filers):
         raise Conflict("A filer is in the population twice")
     held, wanted = name_census._sec_population(filers)
-    metadata = json.loads(_read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
+    metadata = json.loads(raw_capture.read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
     gleif, readings = _gleif(gleif_reading, store, metadata, wanted)
     census = name_census.census(sec_population=sec, gleif=gleif, held=held, wanted=wanted, readings=readings)
     data = (canonical(census) + "\n").encode()
     target = Path(output).resolve()
     if target.exists():
-        if _read_bounded(target, len(data)) != data:
+        if raw_capture.read_bounded(target, len(data)) != data:
             raise Conflict("Existing Name Census has different content")
     else:
         target.parent.mkdir(parents=True, exist_ok=True)

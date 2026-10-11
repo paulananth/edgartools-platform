@@ -67,7 +67,7 @@ def _store(*, restricted: bool, envelope: dict | None = None):
 
 def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
     """The manifest and each input file it names, by their own digests."""
-    raw = artifacts.verified(envelope["input"], max_bytes=32 * 1024**2)
+    raw = artifacts.verified(envelope["input"], max_bytes=limits.MANIFEST_BYTES)
     manifest = json.loads(raw)
     path = folder / "manifest.json"
     path.write_bytes(raw)
@@ -144,6 +144,6 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         expected = receipt(store, manifest, mdm_run(envelope), envelope["input"]["sha256"])
     finally:
         store.engine.dispose()
-    if artifacts.verified(envelope["candidate"], max_bytes=32 * 1024**2) != expected:
+    if artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES) != expected:
         raise ValueError("The receipt differs from what MDM holds")
     return {CHECK: True}, []

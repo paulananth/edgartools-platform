@@ -24,7 +24,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     prepare = mdm_sub.add_parser("prepare-clean-company", help="Pin a bounded local Company sample from a raw SEC capture without writing master state")
     prepare.add_argument("--capture", required=True, help="An SEC submissions capture folder: receipts.jsonl and bronze/")
-    prepare.add_argument("--documents", required=True, help="JSON file: this bundle's main submissions documents by receipt key (1..1000)")
+    prepare.add_argument("--documents", required=True, help="JSON file: this bundle's main submissions documents by receipt key (at most 1,000)")
     prepare.add_argument("--population", required=True, help="The population file the Name Census counted")
     prepare.add_argument("--catalog", required=True, help="Receipt key of the SEC exchange ticker catalog")
     prepare.add_argument("--capture-run", required=True, help="Approved capture run ID, bound into every row")

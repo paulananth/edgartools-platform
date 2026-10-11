@@ -43,7 +43,6 @@ from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
-MANIFEST_BYTES = 32 * 1024**2
 INPUT_BYTES = 32 * 1024**2
 INPUT_ROWS = 100_000
 
@@ -115,7 +114,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     manifest = {"contract_version": 2, "as_of": keys["as_of"],
                 "policy_digest": keys["policy"], "batches": batches}
     encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
-    if len(encoded) > MANIFEST_BYTES:
+    if len(encoded) > limits.MANIFEST_BYTES:
         raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
     return files, encoded
 
@@ -189,7 +188,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     files, manifest = _documents(envelope, artifacts)
-    if artifacts.verified(envelope["candidate"], max_bytes=MANIFEST_BYTES) != manifest:
+    if artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES) != manifest:
         raise ValueError("The manifest differs from the reading")
     for name, data in files.items():
         if artifacts.read(_beside(envelope["output"], name), max_bytes=limits.RECORDS_FILE_BYTES) != data:

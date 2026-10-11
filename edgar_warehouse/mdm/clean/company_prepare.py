@@ -21,22 +21,21 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
-from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers import source_read, source_combine, source_parquet
 from edgar_warehouse.workers.source_staging import StagedArtifacts
 from .evidence import instant
-from .name_frequency import BRONZE, _read_bounded
-from .sec_company import CONTRACT, POLICY, SOURCE_CODE  # noqa: F401  (named by callers)
-from . import limits
+from . import limits, raw_capture
+from .raw_capture import read_bounded
+from .sec_company import CONTRACT, POLICY, SOURCE_CODE
 from .store import Conflict, canonical, digest
 
 _json_value = source_parquet.json_scalar
 ROOT = rules_files.ROOT / "sources/sec.submissions.company"
-RECEIPTS_BYTES = 64 * 1024**2
 DOCUMENTS_BYTES = 1024**2
 CENSUS_BYTES = 256 * 1024**2
-CATALOG_BYTES = 64 * 1024**2
-ZERO = "0" * 64
+POPULATION_BYTES = 64 * 1024**2
+# Where `census.yaml` and `combine-census.yaml` take the census digest.
+CENSUS_DIGEST = "0" * 64
 
 
 def _bind(value, bindings):
@@ -47,25 +46,6 @@ def _bind(value, bindings):
     if isinstance(value, dict):
         return {key: _bind(item, bindings) for key, item in value.items()}
     return value
-
-
-def _receipts(capture: Path) -> tuple[bytes, dict[str, str]]:
-    raw = _read_bounded(capture / "receipts.jsonl", RECEIPTS_BYTES)
-    return raw, {r["key"]: r["sha256"] for r in map(json.loads, raw.decode("utf-8").splitlines())}
-
-
-def _document(capture: Path, receipts: dict, key: str) -> bytes:
-    """A captured document's bytes, equal to its receipt."""
-    if key not in receipts or not key.startswith(BRONZE):
-        raise Conflict(f"The capture's receipts do not name {key}")
-    data = (capture / "bronze" / key[len(BRONZE):]).read_bytes()
-    if hashlib.sha256(data).hexdigest() != receipts[key]:
-        raise Conflict(f"Captured document differs from its receipt: {key}")
-    return data
-
-
-def _cik(key):
-    return int(key.split("/cik=", 1)[1].split("/", 1)[0])
 
 
 def _record(row, key, sha256):
@@ -79,8 +59,11 @@ def _payload(records):
 
 
 def _batch_payloads(records):
-    """The records files, cut as mdm.prepare cuts (`limits`): one consumer, in checkpoint order."""
-    return [_payload(chunk) for chunk in limits.batches(records, lambda row: _payload([row]))]
+    """The records files, cut and bounded as mdm.prepare's (`limits`): one consumer, in checkpoint order."""
+    payloads = [_payload(chunk) for chunk in limits.batches(records, lambda row: _payload([row]))]
+    if any(len(data) > limits.RECORDS_FILE_BYTES for data in payloads):
+        raise ValueError("A Company batch exceeds the records file byte budget")
+    return payloads
 
 
 def _configured_records(capture, receipts, keys, catalog_key, census, census_hash, pins, output):
@@ -102,13 +85,7 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
                     entry["context"] = store.put(root.as_uri(), {"version": 1, "input": source, "values": values})
                 artifacts.append(entry)
             contract["execution"]["input_sha256s"] = [a["input"]["sha256"] for a in artifacts]
-            version = 2 if all("context" in a for a in artifacts) else 1
-            request = store.put(root.as_uri(), {"version": version, "contract": store.put(root.as_uri(), contract),
-                                                "artifacts": artifacts if version == 2 else [a["input"] for a in artifacts]})
-            task = {"input": request, "output": (root / f"{name}.reading.json").as_uri(), "checks": ["source.output"]}
-            candidate = source_read.execute(task, store)
-            if source_read.verify({**task, "candidate": candidate}, store) != ({"source.output": True}, []):
-                raise ValueError("Configured reading verification failed")
+            task, candidate = raw_capture.read_unit(store, root, name, contract, artifacts)
             tasks.append({"profile": "source.read", "task": {**task, "candidate": candidate}})
             return candidate
 
@@ -116,14 +93,14 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
         units = []
         for start in range(0, len(keys), main_contract["execution"]["max_artifacts"]):
             unit = keys[start:start + main_contract["execution"]["max_artifacts"]]
-            inputs = [(_document(capture, receipts, key), {
-                "cik": _cik(key), "sync_run_id": pins["capture_run"],
+            inputs = [(raw_capture.document_bytes(capture, receipts, key), {
+                "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"],
                 "raw_object_id": receipts[key], "load_mode": pins["load_mode"], "recent_limit": None,
                 "last_synced_at": pins["observed_at"]}) for key in unit]
             units.append((unit, read(f"main-{start}", deepcopy(main_contract), inputs)))
         rows = [row for _, ref in units for artifact in store.json(ref)["artifacts"]
                 for row in artifact["tables"]["company"]]
-        census_contract = _bind(rules_files.load(ROOT / "census.yaml"), {ZERO: census_hash})
+        census_contract = _bind(rules_files.load(ROOT / "census.yaml"), {CENSUS_DIGEST: census_hash})
         census_contract["execution"]["max_input_bytes"] = CENSUS_BYTES
         census_contract["read"]["limits"]["max_bytes"] = CENSUS_BYTES
         census_contract["read"]["tables"]["names"]["each"]["entries"]["keys"] = sorted({r["_name_key"] for r in rows})
@@ -132,11 +109,11 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
         # The census is read as its canonical bytes, whose sha256 is the digest bound above.
         census_ref = read("census", census_contract, [(canonical(census).encode(), None)])
         catalog = read("catalog_exchange", rules_files.load(ROOT / "catalog.yaml"), [(
-            _document(capture, receipts, catalog_key),
+            raw_capture.document_bytes(capture, receipts, catalog_key),
             {"sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"], "source_name": "catalog_exchange"})])
         combine = _bind(rules_files.load(ROOT / "combine-census.yaml"), {
             "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
-            ZERO: census_hash})
+            CENSUS_DIGEST: census_hash})
         # This capture holds main documents and one ticker catalog only (L4 finding:
         # continuation pages and the second catalog are not captured).
         combine["combine"]["groups"]["forms"]["source"] = ["main"]
@@ -159,7 +136,7 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
             tasks.append({"profile": "source.combine", "task": {**task, "candidate": result}})
             combined = store.json(result)["artifacts"][0]["tables"]["company"]
             by_cik = {int(row["cik"]): row for row in combined}
-            records.extend(_record(by_cik[_cik(key)], key, receipts[key]) for key in unit)
+            records.extend(_record(by_cik[raw_capture.cik(key)], key, receipts[key]) for key in unit)
         proof = {"version": 1, "workers": tasks, "frozen_census_digest": census_hash}
         store.put_bytes((root / "proof.json").as_uri(), (canonical(proof) + "\n").encode())
         retained = {"workers/" + str(path.relative_to(staging)): path.read_bytes()
@@ -178,7 +155,7 @@ def verify_company_bundle(output, *, expected):
         path = (target / name).resolve()
         if not path.is_relative_to(target):
             raise ValueError("Prepared member escapes the bundle")
-        data = _read_bounded(path, pin["bytes"])
+        data = read_bounded(path, pin["bytes"])
         if (
             len(data) != pin["bytes"]
             or hashlib.sha256(data).hexdigest() != pin["sha256"]
@@ -202,13 +179,11 @@ def verify_company_bundle(output, *, expected):
             for row in store.json(entry["task"]["candidate"])["artifacts"][0]["tables"]["company"]:
                 by_cik[int(row["cik"])] = row
     keys = json.loads((target / "documents.json").read_bytes())
-    records = [_record(by_cik[_cik(key)], key, by_cik[_cik(key)]["raw_object_id"]) for key in keys]
+    records = [_record(by_cik[raw_capture.cik(key)], key, by_cik[raw_capture.cik(key)]["raw_object_id"]) for key in keys]
     batches = json.loads((target / "manifest.json").read_bytes())["batches"]
     if [(target / b["input"]["path"]).read_bytes() for b in batches] != _batch_payloads(records):
         raise Conflict("Prepared records differ from the verified workers")
     return {"source.output": True, "source.combined": True, "records": len(records)}
-
-
 
 
 def prepare_company_bundle(
@@ -241,17 +216,17 @@ def prepare_company_bundle(
     instant(as_of)
     instant(observed_at)
     folder = Path(capture).resolve()
-    receipts_raw, receipts = _receipts(folder)
-    documents_raw = _read_bounded(Path(documents).resolve(), DOCUMENTS_BYTES)
+    receipts_raw, receipts = raw_capture.receipts(folder)
+    documents_raw = read_bounded(Path(documents).resolve(), DOCUMENTS_BYTES)
     keys = json.loads(documents_raw)
     if (not isinstance(keys, list) or not 1 <= len(keys) <= limits.BATCH_RECORDS
             or len(set(keys)) != len(keys)):
         raise ValueError(f"A bundle names 1..{limits.BATCH_RECORDS} distinct main documents")
     if any("/main/" not in key for key in keys):
         raise ValueError("A bundle names main submissions documents only")
-    census_raw = _read_bounded(Path(name_census).resolve(), CENSUS_BYTES)
+    census_raw = read_bounded(Path(name_census).resolve(), CENSUS_BYTES)
     census = json.loads(census_raw)
-    population_raw = _read_bounded(Path(population).resolve(), 64 * 1024**2)
+    population_raw = read_bounded(Path(population).resolve(), POPULATION_BYTES)
     sec = census.get("sec") or {}
     if (sec.get("receipts_sha256") != hashlib.sha256(receipts_raw).hexdigest()
             or sec.get("population_sha256") != hashlib.sha256(population_raw).hexdigest()
@@ -303,6 +278,8 @@ def prepare_company_bundle(
         "policy.json": (canonical(POLICY) + "\n").encode(),
         "manifest.json": (canonical(manifest) + "\n").encode(),
     }
+    if len(files["manifest.json"]) > limits.MANIFEST_BYTES:
+        raise ValueError("A Company bundle's manifest exceeds the manifest byte budget")
     inventory = {name: {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)} for name, data in files.items()}
     report = {
         "contract_version": 2,

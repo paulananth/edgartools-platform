@@ -98,7 +98,7 @@ def test_worker_byte_budgets_fail_before_writing_unverifiable_output(tmp_path, m
     if stage == "records":
         monkeypatch.setattr(limits, "RECORDS_FILE_BYTES", 128)
     else:
-        monkeypatch.setattr(mdm_prepare, "MANIFEST_BYTES", 128)
+        monkeypatch.setattr(limits, "MANIFEST_BYTES", 128)
     keys = {"record_column": "record", "table": "submissions", "dataset": "person", "policy": "0"*64,
             "consumer": "qualified", "batch_id": "raw", "as_of": "2026-10-04T00:00:00Z"}
     target = tmp_path / "mdm" / "manifest.json"

@@ -155,7 +155,7 @@ This command needs local files and no database credentials:
 
 ```bash
 edgar-warehouse mdm prepare-clean-company \
-  --capture "$SEC_CAPTURE_DIRECTORY" \
+  --capture "$SEC_SUBMISSIONS_CAPTURE" \
   --documents "$BUNDLE_DOCUMENTS_JSON" \
   --population "$SEC_POPULATION_JSON" \
   --catalog warehouse/bronze/reference/sec/company_tickers_exchange/2026/09/02/company_tickers_exchange.json \
