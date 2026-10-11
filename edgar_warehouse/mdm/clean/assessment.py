@@ -14,11 +14,16 @@ class StaleAssessment(Conflict):
 def record(store, body: dict, run_id: str) -> dict:
     with store.engine.begin() as conn:
         store._authorize(conn)
-        key = conn.scalar(
-            text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
-            {"body": canonical(body), "run": run_id},
-        )
+        key = record_in(conn, body, run_id)
     return {"assessment_id": key, **body}
+
+
+def record_in(conn, body: dict, run_id: str) -> str:
+    """Record a proposal in the caller's transaction; its key."""
+    return conn.scalar(
+        text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
+        {"body": canonical(body), "run": run_id},
+    )
 
 
 def snapshot(conn, scope: dict) -> str:

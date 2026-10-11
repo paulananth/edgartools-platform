@@ -55,6 +55,8 @@ MIGRATIONS: tuple[str, ...] = (
     "011_key_list_plans.sql",
     "012_key_join_lookups.sql",
     "013_proposal_effects_hash.sql",
+    "014_outbox_names_batch.sql",
+    "015_company_fields_once.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond

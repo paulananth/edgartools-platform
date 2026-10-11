@@ -21,7 +21,7 @@ def versions(db):
     with db.application.connect() as conn:
         return conn.execute(
             text("""SELECT from_generation,to_generation,valid_from,valid_to,
-                   cik,lei,name,address,status,fields,body
+                   cik,lei,name,address,status,body->'fields' AS fields,body
                    FROM mdm.company ORDER BY from_generation""")
         ).mappings().all()
 
