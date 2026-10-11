@@ -492,7 +492,7 @@ Growth refuses with
 `text_transform_limit`. Contracts compile regexes once, including expressions
 in unselected branches. Literal reference rows and defaults remain data.
 
-For Name Census keys, start with each source's bundled `name-key.yaml`
+For Name Frequency keys, start with each source's bundled `name-key.yaml`
 (see Examples). Run the recipes on authenticated captured
 current/former names; compare exact retained keys and prove a deliberate
 recipe fault changes them. Record capture, contract, oracle and actual native
@@ -1077,11 +1077,11 @@ The sources this repository reads today, and where each rule above is applied.
   an object; its place lookup converts the selected SEC code with Python text
   semantics, keeping the historical mapping of nontext codes to unknown places.
 - The Person source read block keeps the complete submissions document. Company
-  raw-column qualification does not yet replace its catalog and census joins,
-  address derivation or full mastering.
+  preparation reads the raw capture (`census-main.yaml`, the Name Frequency file
+  through `census.yaml`, `catalog.yaml`) and joins them with `combine-census.yaml`.
 - The installed object-records trial assembles the two raw Person fixture records
   and verifies them through preparation and the actual Person MDM contract.
-- Name Census keys: `sec.submissions.company/name-key.yaml` and
+- Name Frequency keys: `sec.submissions.company/name-key.yaml` and
   `gleif/name-key.yaml` keep legal forms and unify their spelling; the SEC recipe
   removes the trailing state suffix before normalizing.
 - All 309 SEC place codes and their lowercase and whitespace variants are

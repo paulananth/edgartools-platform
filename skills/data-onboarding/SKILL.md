@@ -623,4 +623,4 @@ These name today's sources only as examples; nothing above depends on them.
   (`candidate()` stamps the copied policy); ticket 27's
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
   about 25 minutes, a second pass that changes nothing).
-- **Unfinished live pipelines:** Company whole-capture equivalence, active Name Frequency caller replacement, the installed 6,414 Company proof, and deletion of `gleif_source.py` remain open.
+- **Unfinished live pipelines:** Company preparation runs its workers in one process, not as Bookkeeping steps (Issue 20, 20c); record mapping still goes through `adapters.py` (Issue 20, L7); capture from SEC has no configured worker (Issue 20, L8).
