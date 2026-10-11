@@ -31,6 +31,7 @@ mod iteration;
 mod predicate;
 mod json_text;
 mod text_transform;
+pub mod reduction;
 #[cfg(feature = "python")]
 mod python;
 mod tree;

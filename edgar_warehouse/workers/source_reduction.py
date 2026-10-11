@@ -5,10 +5,8 @@ All streams must exhaust successfully before output is returned to the writer.
 """
 from __future__ import annotations
 
-import heapq
-import itertools
-
-from edgar_warehouse.control_contract import canonical, reference
+from edgar_warehouse.control_contract import reference
+from edgar_warehouse.rules.source_engine import ReductionEngine
 from . import source_readings
 
 
@@ -85,22 +83,16 @@ def contract(body, refs):
     return plan
 
 
-def _text(row, column):
-    if column not in row or not isinstance(row[column], str):
-        raise ValueError(f"Reduction column {column} must contain exact text")
-    return row[column]
-
-
 def tables(plan, refs, artifacts):
     """Exhaust every reading, then finalize uncapped counts and capped samples.
 
-    State byte accounting measures canonical UTF-8 payload, not interpreter
-    heap size. Separate key/member limits bound dictionary overhead. Last is
-    the last source occurrence for a specific key/member, including empty text.
+    Rust retains bounded generic state; Python authenticates every stream.
+    State byte accounting measures canonical UTF-8 payload, not heap size.
+    Last is the last source occurrence for a specific key/member.
     """
     groups = plan["groups"]
-    state = {name: {} for name in groups}
-    key_count = member_count = state_bytes = input_bytes = row_count = 0
+    engine = ReductionEngine(plan)
+    input_bytes = row_count = 0
     for source, ref in refs.items():
         selected = [(name, spec) for name, spec in groups.items() if spec["source"] == source]
         consumed = 0
@@ -116,67 +108,8 @@ def tables(plan, refs, artifacts):
                 names = _selected_tables(spec)
                 if any(table not in chunk["tables"] for table in names):
                     raise ValueError("Reduction selects a missing table")
-                for row in itertools.chain.from_iterable(chunk["tables"][table] for table in names):
-                    key = tuple(_text(row, column) for column in spec["keys"])
-                    group = state[name]
-                    new_key = key not in group
-                    members = {} if new_key else group[key]
-                    if spec["mode"] == "count":
-                        previous = 0 if new_key else members
-                        value = previous + 1
-                        delta = len(canonical(value).encode()) - (0 if new_key else len(canonical(previous).encode()))
-                        new_member = False
-                    else:
-                        member = _text(row, spec["member"])
-                        last = None
-                        if "last" in spec:
-                            if (spec["last"] in row and row[spec["last"]] is None and "last_null" in spec):
-                                last = spec["last_null"]
-                            else:
-                                last = _text(row, spec["last"])
-                        new_member = member not in members
-                        delta = len(canonical(last).encode())
-                        if new_member:
-                            delta += len(canonical(member).encode())
-                        else:
-                            delta -= len(canonical(members[member]).encode())
-                    if new_key:
-                        delta += len(canonical(key).encode())
-                    if (key_count + new_key > plan["max_keys"]
-                            or member_count + new_member > plan["max_members"]
-                            or state_bytes + delta > plan["max_state_bytes"]):
-                        raise ValueError("Reduction exceeds declared state budget")
-                    key_count += new_key
-                    member_count += new_member
-                    state_bytes += delta
-                    if spec["mode"] == "count":
-                        group[key] = value
-                    else:
-                        members[member] = last
-                        group[key] = members
+                for table in names:
+                    engine.push(name, chunk["tables"][table])
         input_bytes += consumed
-    # Only successful exhaustion reaches here. Exclusions use complete unique
-    # membership, before sample capping; record duplication affects count mode.
-    if key_count > plan["max_output_rows"]:
-        raise ValueError("Reduction exceeds output row budget")
-    result = {}
-    for name, spec in groups.items():
-        rows = []
-        for key, members in sorted(state[name].items()):
-            row = dict(zip(spec["keys"], key))
-            if spec["mode"] == "count":
-                row[spec["count"]] = members
-            else:
-                excluded = state[spec["exclude"]].get(key, {}) if "exclude" in spec else {}
-                row[spec["count"]] = len(members) - sum(member in excluded for member in members)
-                retained = (member for member in members if member not in excluded)
-                sample = []
-                for member in heapq.nsmallest(spec["sample_limit"], retained):
-                    value = {spec["member"]: member}
-                    if "last" in spec:
-                        value[spec["last"]] = members[member]
-                    sample.append(value)
-                row[spec["sample"]] = sample
-            rows.append(row)
-        result[name] = rows
-    return result
+    # Only successful exhaustion of every supplied reading permits finalization.
+    return engine.finish()

@@ -53,6 +53,16 @@ original materializing row/byte limits.
 
 ### Bounded complete-set reduction
 
+The configured reduction kernel runs in Rust through the Python source-engine
+facade. Python authenticates and exhausts every reading, passes transient row
+batches to the kernel, then encodes, writes and independently verifies the output.
+The Rust kernel retains group state, not complete input row history. The native
+binary participates in the worker's execution digest. Materialized `combine`
+collections and joins below still run in Python.
+New runs must pin the new runtime digest. Resume an existing frozen run with
+its originally pinned runtime; changing the native binary does not authorize
+replacing that run's execution identity.
+
 Use `execution: {profile: source.combine}` and `reduce` in place of `combine`.
 Pin the contract as JSON and use the same input manifest and verification check.
 Declare all limits: `max_rows` (1..40,000,000), `max_input_bytes`
@@ -62,7 +72,9 @@ Declare all limits: `max_rows` (1..40,000,000), `max_input_bytes`
 Input limits cover every supplied source extract, artifact, partition and table,
 including unselected rows. State limits cover all groups together. State bytes
 measure canonical UTF-8 key/member/value payload; key/member counts separately
-bound Python object overhead. They are not an RSS measurement or disk spill.
+bound native container allocations. Python still decodes one authenticated
+artifact chunk and materializes output rows; native conversion uses batches of
+at most 1,024 rows. These limits are not an RSS measurement or disk spill.
 
 `groups` names 1..32 output tables. Each group requires one declared `source`,
 `table` (one name or an ordered list of 1..8 distinct names), `keys`

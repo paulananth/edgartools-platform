@@ -26,8 +26,9 @@ ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
 
 
 def runtime_files() -> list[Path]:
+    from edgar_warehouse.rules.source_engine import runtime_files as engine_files
     return [Path(artifact_store.__file__), ARTIFACT_CODEC_FILE, Path(control_contract.__file__), Path(source_readings.__file__),
-            Path(source_reduction.__file__)]
+            Path(source_reduction.__file__), *engine_files()]
 
 
 def _name(value):
