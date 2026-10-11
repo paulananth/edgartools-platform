@@ -27,6 +27,7 @@ from edgar_warehouse.workers.source_staging import StagedArtifacts
 from .evidence import instant
 from .name_frequency import BRONZE, _read_bounded
 from .sec_company import CONTRACT, POLICY, SOURCE_CODE  # noqa: F401  (named by callers)
+from . import limits
 from .store import Conflict, canonical, digest
 
 _json_value = source_parquet.json_scalar
@@ -75,6 +76,11 @@ def _record(row, key, sha256):
 def _payload(records):
     return "".join(json.dumps(row, default=_json_value, sort_keys=True, separators=(",", ":"),
                               ensure_ascii=False, allow_nan=False) + "\n" for row in records).encode()
+
+
+def _batch_payloads(records):
+    """The records files, cut as mdm.prepare cuts (`limits`): one consumer, in checkpoint order."""
+    return [_payload(chunk) for chunk in limits.batches(records, lambda row: _payload([row]))]
 
 
 def _configured_records(capture, receipts, keys, catalog_key, census, census_hash, pins, output):
@@ -197,7 +203,8 @@ def verify_company_bundle(output, *, expected):
                 by_cik[int(row["cik"])] = row
     keys = json.loads((target / "documents.json").read_bytes())
     records = [_record(by_cik[_cik(key)], key, by_cik[_cik(key)]["raw_object_id"]) for key in keys]
-    if (target / "records.jsonl").read_bytes() != _payload(records):
+    batches = json.loads((target / "manifest.json").read_bytes())["batches"]
+    if [(target / b["input"]["path"]).read_bytes() for b in batches] != _batch_payloads(records):
         raise Conflict("Prepared records differ from the verified workers")
     return {"source.output": True, "source.combined": True, "records": len(records)}
 
@@ -237,8 +244,9 @@ def prepare_company_bundle(
     receipts_raw, receipts = _receipts(folder)
     documents_raw = _read_bounded(Path(documents).resolve(), DOCUMENTS_BYTES)
     keys = json.loads(documents_raw)
-    if not isinstance(keys, list) or not 1 <= len(keys) <= 1000 or len(set(keys)) != len(keys):
-        raise ValueError("A bundle names 1..1000 distinct main documents")
+    if (not isinstance(keys, list) or not 1 <= len(keys) <= limits.BATCH_RECORDS
+            or len(set(keys)) != len(keys)):
+        raise ValueError(f"A bundle names 1..{limits.BATCH_RECORDS} distinct main documents")
     if any("/main/" not in key for key in keys):
         raise ValueError("A bundle names main submissions documents only")
     census_raw = _read_bounded(Path(name_census).resolve(), CENSUS_BYTES)
@@ -253,8 +261,7 @@ def prepare_company_bundle(
     pins = {"capture_run": capture_run, "catalog_run": catalog_run, "observed_at": observed_at,
             "load_mode": load_mode}
     records, worker_files = _configured_records(folder, receipts, keys, catalog, census, census_hash, pins, output)
-    payload = _payload(records)
-    payload_hash = hashlib.sha256(payload).hexdigest()
+    payload_hash = hashlib.sha256(_payload(records)).hexdigest()
     documents_hash = hashlib.sha256(documents_raw).hexdigest()
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
                        f":name_census:{census_hash}")
@@ -268,25 +275,26 @@ def prepare_company_bundle(
         "ciks": [r["cik"] for r in records],
         "bronze_named": len(records),
     }
-    batch = digest([publication_key, revision, payload_hash, as_of])
+    bundle = digest([publication_key, revision, payload_hash, as_of])
+    payloads = _batch_payloads(records)
     manifest = {
         "contract_version": 2,
         "as_of": as_of,
         "policy_digest": digest(POLICY),
         "scope": scope,
         "batches": [{
-            "batch_id": "company:" + batch,
+            "batch_id": f"company:{bundle}:{n}",
             "stage": "mastering",
-            "consumer": f"{SOURCE_CODE}/{batch}",
-            "expected_checkpoint": 0,
-            "checkpoint": 1,
-            "input": {"path": "records.jsonl", "sha256": payload_hash, "record_count": len(records),
-                      "source_code": SOURCE_CODE,
+            "consumer": f"{SOURCE_CODE}/{bundle}",
+            "expected_checkpoint": n,
+            "checkpoint": n + 1,
+            "input": {"path": f"records.{n}.jsonl", "sha256": hashlib.sha256(data).hexdigest(),
+                      "record_count": data.count(b"\n"), "source_code": SOURCE_CODE,
                       "publication": {"publication_key": publication_key, "revision": revision, "effective_at": None}},
-        }],
+        } for n, data in enumerate(payloads)],
     }
     files = {
-        "records.jsonl": payload,
+        **{f"records.{n}.jsonl": data for n, data in enumerate(payloads)},
         **worker_files,
         "documents.json": documents_raw,
         "population.json": population_raw,

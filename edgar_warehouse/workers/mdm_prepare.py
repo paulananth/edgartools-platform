@@ -58,23 +58,6 @@ def _lines(rows: list[dict]) -> bytes:
                                allow_nan=False).encode() + b"\n" for r in rows)
 
 
-def _batches(rows: list[dict]) -> list[list[dict]]:
-    """Rows cut into batches of at most `limits.BATCH_RECORDS` records and, past the first record,
-    `limits.BATCH_RECORD_BYTES`: a batch grows several times over on its way through the
-    Merge Stage, whose request and match proposal are bounded (`limits`)."""
-    batches, current, size = [], [], 0
-    for row in rows:
-        length = len(_lines([row]))
-        if current and (len(current) == limits.BATCH_RECORDS or size + length > limits.BATCH_RECORD_BYTES):
-            batches.append(current)
-            current, size = [], 0
-        current.append(row)
-        size += length
-    if current:
-        batches.append(current)
-    return batches
-
-
 def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     """{name: bytes} of the records files, and the manifest's bytes."""
     keys = envelope["keys"]
@@ -111,7 +94,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             # One captured document may be read under distinct approved caller
             # facts. Keep their records, batches and publications independent.
             source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
-        for n, chunk in enumerate(_batches(rows)):
+        for n, chunk in enumerate(limits.batches(rows, lambda row: _lines([row]))):
             data = _lines(chunk)
             if len(data) > limits.RECORDS_FILE_BYTES:
                 raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")

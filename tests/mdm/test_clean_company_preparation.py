@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from edgar_warehouse.mdm.clean import limits
 from edgar_warehouse.mdm.clean.company_prepare import prepare_company_bundle, verify_company_bundle
 from edgar_warehouse.mdm.clean.name_census import _sec_population
 from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
@@ -65,7 +66,8 @@ def prepare(tmp_path, capture, ciks=(APPLE, MSFT, ACME), output="bundle", **chan
 
 
 def records(bundle):
-    return {r["cik"]: r for r in map(json.loads, (bundle / "records.jsonl").read_text().splitlines())}
+    batches = json.loads((bundle / "manifest.json").read_text())["batches"]
+    return {r["cik"]: r for b in batches for r in map(json.loads, (bundle / b["input"]["path"]).read_text().splitlines())}
 
 
 def test_the_bundle_is_pinned_verified_and_idempotent(tmp_path, capture):
@@ -74,6 +76,7 @@ def test_the_bundle_is_pinned_verified_and_idempotent(tmp_path, capture):
     assert prepare(tmp_path, capture)[0] == report
     manifest = json.loads((bundle / "manifest.json").read_text())
     (batch,) = manifest["batches"]
+    assert batch["input"]["path"] == "records.0.jsonl" and batch["checkpoint"] == 1
     assert batch["input"]["record_count"] == 3 and manifest["scope"]["ciks"] == [APPLE, MSFT, ACME]
     assert batch["input"]["publication"]["publication_key"].startswith("capture-1:sec_submissions:")
 
@@ -137,7 +140,7 @@ def test_an_existing_bundle_with_other_content_is_never_overwritten(tmp_path, ca
         prepare(tmp_path, capture, revision=1)
 
 
-@pytest.mark.parametrize("member", ["records.jsonl", "manifest.json", "name-census.json", "workers/proof.json"])
+@pytest.mark.parametrize("member", ["records.0.jsonl", "manifest.json", "name-census.json", "workers/proof.json"])
 def test_a_changed_member_fails_verification(tmp_path, capture, member):
     report, bundle = prepare(tmp_path, capture)
     path = bundle / member
@@ -155,3 +158,16 @@ def test_a_bundle_names_main_documents_only_and_at_most_a_thousand(tmp_path, cap
         with pytest.raises(ValueError, match=message):
             prepare_company_bundle(capture=str(folder), documents=str(listed), population=str(population),
                                    catalog=CATALOG, name_census=str(census), output=str(tmp_path / "x"), **PINS)
+
+
+def test_a_bundle_is_cut_by_the_records_byte_budget_and_still_verifies(tmp_path, capture, monkeypatch):
+    whole = prepare(tmp_path, capture, output="whole")[1]
+    monkeypatch.setattr(limits, "BATCH_RECORD_BYTES", 1)  # past its first record, every record its own batch
+    report, bundle = prepare(tmp_path, capture, output="cut")
+    batches = json.loads((bundle / "manifest.json").read_text())["batches"]
+    assert [b["input"]["record_count"] for b in batches] == [1, 1, 1]
+    assert [(b["expected_checkpoint"], b["checkpoint"]) for b in batches] == [(0, 1), (1, 2), (2, 3)]
+    assert len({b["consumer"] for b in batches}) == 1 and len({b["batch_id"] for b in batches}) == 3
+    assert len({b["input"]["publication"]["publication_key"] for b in batches}) == 1
+    assert verify_company_bundle(str(bundle), expected=report)["records"] == 3
+    assert records(bundle) == records(whole)
