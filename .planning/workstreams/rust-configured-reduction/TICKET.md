@@ -12,7 +12,7 @@ and profiling work, the existing materialized combination path and MDM merging.
 - [x] Qualify differential parity, bound violations, late-corruption refusal and retry/verification behavior using existing and native tests. Verified 120 targeted Python tests, full pre-existing cargo suite plus 3 native reduction tests; seeded differential expected tables, exact Unicode/control byte budgets, late faults and existing idempotency/verification pass; 2026-10-11 15:08 ET.
 - [x] Measure a bounded full-worker comparison against the prior Python implementation; record results without claiming production qualification. Verified five trials at 20k/100k rows per table with 1/2/4 workers, exact output hash parity; small workload repeated after test activity stopped. Recorded 3.17–4.74x median speedup and 10.3–33.4% higher peak RSS in RESULTS.md and raw benchmark JSON; 2026-10-11 15:13 ET.
 - [x] Update only affected skill guidance after local qualification and ownership checks. Verified COMBINING documents native state, unchanged budgets, Python authentication and pinned-runtime recovery; platform command/link checks pass; no parsing/onboarding/activation instructions changed; 2026-10-11 15:08 ET.
-- [ ] Recheck ownership/overlap, tests and checklist; commit on the dedicated Codex branch.
+- [x] Recheck ownership/overlap, tests and checklist; commit on the dedicated Codex branch. Verified fresh origin/main and open-PR checks, guard (13 files, no overlap), registered CLI profile/native runtime digest, diff checks and all listed local evidence; implementation committed as 965ea0a2 on codex/rust-configured-reduction; 2026-10-11 15:14 ET.
 
 Baseline: fetched origin/main `45525cd8bc1df550bfba10022bd5eead1f41359d`.
 Branch: `codex/rust-configured-reduction`; dedicated worktree. Claude's live
@@ -25,3 +25,8 @@ Python traversal/authentication and publish-after-EOF, move only generic state
 accumulation/finalization into Rust. No new GoF hierarchy: native adapter plus
 the current caller is sufficient. Costs to measure: Python/native text copying
 and batch calls; avoid retaining input rows in native reduction state.
+
+This first implementation slice is complete locally. See RESULTS.md for exact
+scope and measurements. No deployment/activation or full-pipeline production
+qualification is claimed. Materialized combination and configured merge kernels
+are subsequent slices, not unfinished parts of this bounded reduction ticket.
