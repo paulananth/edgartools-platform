@@ -564,16 +564,12 @@ def test_the_sql_refuses_a_backdated_new_company_too(database):
         record("m", cik="0000789019"),
         as_of="2026-01-01T00:00:00+00:00",
     )
-    key = stage.assess(**early, automatic=stage.propose(**early))["assessment_id"]
+    assessed = stage.assess(**early, automatic=stage.propose(**early))
+    # The store keeps the effects' hash (013); the assessment returns them.
+    key, effects = assessed["assessment_id"], assessed["effects"]
     # A later Company commits before the early batch applies.
     load(database, policy, "b1", record("a", cik=APPLE_CIK))
     with database.application.connect() as conn:
-        effects = conn.scalar(
-            text(
-                "SELECT body->'effects' FROM mdm.match_proposal WHERE assessment_id=:k"
-            ),
-            {"k": key},
-        )
         generation = conn.scalar(text("SELECT max(generation) FROM mdm.batch"))
     request = {**effects, "assessment_id": key, "expected_generation": generation}
     with (

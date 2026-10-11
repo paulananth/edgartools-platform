@@ -13,6 +13,7 @@ from uuid import UUID
 
 from sqlalchemy import create_engine, event, text
 
+from . import limits
 from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
 from .run import RunCoordinator
@@ -134,9 +135,9 @@ def batch_input(
         raise ValueError("Source member must be inside the manifest directory")
     # Hash and parse the same bounded bytes, even if the file changes in place.
     with file.open("rb") as source:
-        raw = source.read(16 * 1024 * 1024 + 1)
-    if len(raw) > 16 * 1024 * 1024:
-        raise ValueError("Source member exceeds 16 MiB; partition the manifest")
+        raw = source.read(limits.RECORDS_FILE_BYTES + 1)
+    if len(raw) > limits.RECORDS_FILE_BYTES:
+        raise ValueError(f"Source member exceeds {limits.RECORDS_FILE_BYTES:,} bytes; partition the manifest")
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     with store.engine.connect() as conn:
@@ -173,9 +174,9 @@ def batch_input(
     for ordinal, line in enumerate(raw.splitlines(), 1):
         if not line.strip():
             continue
-        if len(result) + len(deferred) >= 1000:
+        if len(result) + len(deferred) >= limits.BATCH_RECORDS:
             raise ValueError(
-                "Source member exceeds bounded 1000-record batch; partition the manifest"
+                f"Source member exceeds bounded {limits.BATCH_RECORDS}-record batch; partition the manifest"
             )
         publication = {
             **spec["publication"],
@@ -260,9 +261,9 @@ def execute_manifest(
     limit: int,
     preview: bool = False,
 ) -> dict:
-    if not 1 <= limit <= 1000:
+    if not 1 <= limit <= limits.BATCH_RECORDS:
         raise ValueError(
-            "Clean MDM --limit must be 1..1000 source records per invocation"
+            f"Clean MDM --limit must be 1..{limits.BATCH_RECORDS} source records per invocation"
         )
     UUID(run_id)
     manifest, manifest_hash, root = read_manifest(path)

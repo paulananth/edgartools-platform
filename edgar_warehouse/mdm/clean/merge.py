@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, correction, matching, relationships
+from . import assessment, binding, correction, limits, matching, relationships
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
@@ -386,9 +386,9 @@ class MergeStage:
         occurrences = _occurrences(occurrences or [], assertions)
         instant(as_of)
         if (
-            len(assertions) + len(deferred) > 1000
-            or len(decisions) > 1000
-            or len(identities) > 1000
+            len(assertions) + len(deferred) > limits.BATCH_RECORDS
+            or len(decisions) > limits.BATCH_RECORDS
+            or len(identities) > limits.BATCH_RECORDS
         ):
             raise ValueError("Unbounded batch")
         for a in assertions:
@@ -773,12 +773,19 @@ class MergeStage:
                     "total": len(assertions) + len(deferred),
                 },
             }
+            encoded = canonical(request)
+            if len(encoded.encode()) > limits.REQUEST_BYTES:
+                # Refused here, before any SQL, with the size and the remedy.
+                raise ValueError(
+                    f"Batch {batch_id} request is {len(encoded.encode()):,} bytes, over "
+                    f"{limits.REQUEST_BYTES:,}; prepare its records in smaller batches"
+                )
             if preview:
                 # Exercise the identical SQL validation/permissions boundary,
                 # through a capability that always rolls back its inner writes.
                 conn.execute(
                     text("SELECT mdm.preview_batch(:request,CAST(:run AS uuid))"),
-                    {"request": canonical(request), "run": run_id},
+                    {"request": encoded, "run": run_id},
                 )
                 candidate = None
                 if any(
