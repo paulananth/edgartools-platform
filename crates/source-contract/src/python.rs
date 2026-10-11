@@ -248,6 +248,8 @@ fn reading_to_py(py: Python<'_>, reading: &crate::Reading) -> PyResult<PyObject>
 fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
     m.add_class::<PyReduction>()?;
+    m.add_function(wrap_pyfunction!(rank_claims, m)?)?;
+    m.add_function(wrap_pyfunction!(replay_identity, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
     Ok(())
@@ -371,4 +373,21 @@ fn scan_json_array(py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_record
             .map_err(|error| crate::Rejected::new("stream_consumer", error))
     })).map_err(rejected)?;
     Ok((result.records, result.bytes))
+}
+
+#[pyfunction]
+fn rank_claims(
+    py: Python<'_>, sources: Vec<String>, clear_sources: Vec<String>,
+    allow_unknown_effective: bool, candidates: Vec<crate::survivorship::Candidate>,
+) -> (Vec<usize>, Vec<usize>) {
+    py.allow_threads(|| crate::survivorship::rank(&sources, &clear_sources, allow_unknown_effective, &candidates))
+}
+
+#[pyfunction]
+fn replay_identity(py: Python<'_>, identities: &str, decisions: &str, clock: i64) -> PyResult<String> {
+    let identities = serde_json::from_str(identities).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let decisions = serde_json::from_str(decisions).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let state = py.allow_threads(|| crate::identity::replay(identities, decisions, clock))
+        .map_err(PyValueError::new_err)?;
+    serde_json::to_string(&state).map_err(|e| PyValueError::new_err(e.to_string()))
 }

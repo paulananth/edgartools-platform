@@ -143,12 +143,14 @@ def test_unused_mapping_expressions_are_validated_before_fields_projection():
     assert failure.value.code=='contract'
 
 
-@pytest.mark.parametrize('part',['adapter','mapping','engine','steps','native'])
+@pytest.mark.parametrize('part',['adapter','mapping','engine','steps','native','identity','survivorship','evidence'])
 def test_mdm_worker_runtime_pins_configured_mapping_dependencies(part,monkeypatch):
     from pathlib import Path
     from edgar_warehouse.workers import mdm_merge,source_mapping
     from edgar_warehouse.workers.__main__ import runtime
-    paths={'adapter':Path(adapters.__file__),'mapping':Path(source_mapping.__file__),
+    from edgar_warehouse.mdm.clean import identity, survivorship, evidence
+    paths={**{m.__name__.rsplit('.',1)[1]:Path(m.__file__) for m in (identity,survivorship,evidence)},
+           'adapter':Path(adapters.__file__),'mapping':Path(source_mapping.__file__),
            **dict(zip(('engine','steps','native'),source_engine.runtime_files(),strict=True))}
     selected=paths[part]
     assert selected in mdm_merge.runtime_files()

@@ -692,3 +692,40 @@ class TestAKindLevelDefault:
         one = self.select({"defaults": {"sources": ["sec.company", "gleif.level1"]}})
         two = self.select({"defaults": {"sources": ["gleif.level1", "sec.company"]}})
         assert one["sic"]["policy_digest"] != two["sic"]["policy_digest"]
+
+
+def test_native_selection_preserves_python_payload_types_and_tie_order():
+    """Canonical disagreement differs from Python numeric equality for overrides."""
+    first = company(record_key='a', fields={'legal_name': 10**80})
+    second = company(record_key='b', fields={'legal_name': 1.0})
+    third = company(record_key='c', fields={'legal_name': True})
+    claims = current_claims([third, second, first], AS_OF, set())
+    subjects = sorted(claims)
+    policy = {'fields': rules('sec.company')}
+    fields, _, reviews = select_fields('company', subjects, claims, policy, [],
+                                      as_of=AS_OF, policy_digest='p')
+    value = fields['legal_name']
+    assert value['value'] == 10**80
+    assert value['winner']['record_key'] == 'a'
+    assert [c['value'] for c in value['conflicts']] == [1.0, True]
+    assert type(value['conflicts'][0]['value']) is float
+    assert type(value['conflicts'][1]['value']) is bool
+    assert reviews == []
+    # 1, 1.0 and True compare equal in Python, yet have distinct canonical bytes.
+    override = {'subject': second['subject'], 'field': 'legal_name', 'value': 1,
+                'decision_id': 'o', 'reason': 'reviewed'}
+    fields, _, reviews = select_fields('company', [second['subject'], third['subject']],
+                                      claims, policy, [override], as_of=AS_OF, policy_digest='p')
+    assert fields['legal_name']['value'] == 1
+    assert [type(c['value']) for c in fields['legal_name']['conflicts']] == [float, bool]
+    assert reviews == []
+
+
+def test_freshness_cutoff_is_inclusive_at_microsecond_resolution():
+    a = company(effective_at='2026-09-21T00:00:00+00:00')
+    claims = current_claims([a], AS_OF, set())
+    policy = {'fields': rules('sec.company', max_age_days=1)}
+    assert select_fields('company', [a['subject']], claims, policy, [], as_of=AS_OF,
+                         policy_digest='p')[0]['legal_name']['value'] == 'Apple Inc.'
+    assert select_fields('company', [a['subject']], claims, policy, [],
+                         as_of='2026-09-22T00:00:00.000001+00:00', policy_digest='p')[0] == {}

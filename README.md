@@ -198,6 +198,7 @@ retired execution paths.
 | --- | --- |
 | [skills/data-platform](skills/data-platform/SKILL.md) | Portable setup and onboard → parse → master → custom-step workflow |
 | [Configured source extract](skills/data-platform/READING.md) | Implemented parser grammar and qualification boundaries |
+| [Runtime responsibilities](docs/architecture/runtime-responsibilities.md) | Current Rust, Python and database owners, evidence and migration prerequisites |
 | [Combining source extracts](skills/data-platform/COMBINING.md) | Keyed collections and joins across source extracts |
 | [skills/data-profiling](skills/data-profiling/SKILL.md) | Classify a captured data set before onboarding |
 | [edgar_warehouse/silver_writer](edgar_warehouse/silver_writer) | Local PostgreSQL 16 landing from an approved silver spec |

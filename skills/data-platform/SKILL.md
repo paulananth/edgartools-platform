@@ -101,6 +101,21 @@ says whether a profile exists.
 
 ## 3. Master
 
+Author merge priorities in the policy by kind and field, including profile
+role fields, source order, authorized clears and freshness. Use the common
+Merge Stage for consolidation; field priority does not establish identity.
+The implemented Rust kernels replay accepted identity decisions and rank
+eligible field claims, including profile claims. Python retains policy
+approval, automatic matching, profile qualification, source-history folding,
+timestamps, canonical value comparisons, hashes and payload assembly. All
+custom code stays Python; add reusable generic primitives to the Rust core.
+Python also owns CLI, orchestration, integrations, retries, verification and
+database clients. The database owns storage, indexed retrieval, constraints,
+atomic commits, freshness/fencing, leases, durable history and recovery.
+Future kernel migrations require parity and caller-path qualification before
+changing operational instructions; this slice does not change approval or
+activation steps.
+
 Three worker profiles take parsed records into Clean MDM; a feed's rules
 file names them in its `mdm` target (or a pipeline's), after its `source.read`
 step:
