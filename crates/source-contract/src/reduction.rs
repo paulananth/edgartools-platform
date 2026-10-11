@@ -259,7 +259,7 @@ impl Reduction {
         let selected_rows = self.rows.entry(name.to_owned()).or_default();
         for row in rows {
             if *selected_rows >= self.plan.max_rows {
-                return Err("Reduction exceeds aggregate input row budget".into());
+                return Err("Reduction exceeds selected input row budget for group".into());
             }
             *selected_rows += 1;
             if row.key.len() != spec.keys.len()
@@ -465,5 +465,19 @@ mod tests {
             let key = vec![text.to_owned(), "z".to_owned()];
             assert_eq!(key_bytes(&key), serde_json::to_vec(&key).unwrap().len());
         }
+    }
+
+    #[test]
+    fn selected_row_bound_is_per_group_and_failure_is_terminal() {
+        let mut body = plan(serde_json::json!({"a": member(None), "b": member(None)}));
+        body["max_rows"] = Value::from(1);
+        let mut engine = Reduction::new(&body.to_string()).unwrap();
+        engine.push("a", vec![row("A", "")]).unwrap();
+        engine.push("b", vec![row("B", "")]).unwrap();
+        assert_eq!(
+            engine.push("a", vec![row("A", "")]).unwrap_err(),
+            "Reduction exceeds selected input row budget for group"
+        );
+        assert!(engine.finish().is_err());
     }
 }

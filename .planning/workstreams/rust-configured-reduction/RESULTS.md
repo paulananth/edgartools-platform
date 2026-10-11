@@ -65,8 +65,29 @@ The adoption tradeoff is explicit: faster generic execution with higher memory
 on these bounded synthetic workloads. No production workload or whole-pipeline
 performance qualification is claimed.
 
-Native binary SHA256: `3be1d73984d9504a3014935e8191e415e5844c9f5f613e29cdace47612990770`.
-Current source.combine execution digest: `3b76e542598f31a051e566ade1c056a121e44bc7fa0c2ef344cfe5b4015f8496`.
+Measured binary SHA256: `3be1d73984d9504a3014935e8191e415e5844c9f5f613e29cdace47612990770`.
+After review, the per-group native row-limit error was clarified and a native
+boundary test added. The computation is unchanged; the benchmark above records
+the measured binary rather than claiming a new measurement of this rebuild.
+Current native binary SHA256: `9119df3ef62dce8d2c3ccebff6e3efb744ede11d7dec4c08ba576743b61cb819`.
+Current source.combine execution digest: `5161dc76dfdd191b0aa696a4a64d69fd9b795444da215c5b8de20e46c202aee4`.
+
+## Pre-PR verification
+
+Main was refreshed to `70418146` (profiling documentation only). The affected
+Python suite passed again: **120 passed**, using the rebuilt native binding.
+The native reduction suite now has **4 passing tests**. Independent specialist
+review found no actionable issue; tool-less Claude review identified the error
+wording corrected above. Its output-order and configuration questions were
+resolved against `preserve_order` in Cargo.toml and the unchanged outer contract.
+
+The broader unit/architecture run produced **915 passes and 15 failures** from
+a missing `jq` on this session's PATH. After making a checksum-verified temporary
+CLI available, all **15 previously failing tests passed**. No repository test
+or system installation was changed to accommodate that prerequisite. The first
+collection attempt also required installing CI's existing MDM extras for duckdb.
+Platform skill command/link checks and the registered source.combine profile
+resolve successfully. Repository CI remains the landing gate.
 
 ## Scope limits and next work
 
