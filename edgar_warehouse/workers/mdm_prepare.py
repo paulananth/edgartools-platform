@@ -38,24 +38,43 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.control_contract import reference
+from edgar_warehouse.mdm.clean import limits
 from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
-BATCH = 1000
-RECORD_BYTES = 16 * 1024**2
+BATCH = limits.BATCH_RECORDS
+RECORD_BYTES = limits.RECORDS_FILE_BYTES
 MANIFEST_BYTES = 32 * 1024**2
 INPUT_BYTES = 32 * 1024**2
 INPUT_ROWS = 100_000
 
 
 def runtime_files():
-    return [Path(artifact_store.__file__), Path(control_contract.__file__), Path(source_readings.__file__)]
+    return [Path(artifact_store.__file__), Path(control_contract.__file__), Path(source_readings.__file__),
+            Path(limits.__file__)]
 
 
 def _lines(rows: list[dict]) -> bytes:
     return b"".join(json.dumps(r, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                                allow_nan=False).encode() + b"\n" for r in rows)
+
+
+def _batches(rows: list[dict]) -> list[list[dict]]:
+    """Rows cut into batches of at most BATCH records and, past the first record,
+    BATCH_RECORD_BYTES: a batch grows several times over on its way through the
+    Merge Stage, whose request and match proposal are bounded (`limits`)."""
+    batches, current, size = [], [], 0
+    for row in rows:
+        length = len(_lines([row]))
+        if current and (len(current) == BATCH or size + length > limits.BATCH_RECORD_BYTES):
+            batches.append(current)
+            current, size = [], 0
+        current.append(row)
+        size += length
+    if current:
+        batches.append(current)
+    return batches
 
 
 def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
@@ -94,15 +113,14 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             # One captured document may be read under distinct approved caller
             # facts. Keep their records, batches and publications independent.
             source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
-        for start in range(0, len(rows), BATCH):
-            chunk = rows[start:start + BATCH]
+        for n, chunk in enumerate(_batches(rows)):
             data = _lines(chunk)
             if len(data) > RECORD_BYTES:
                 raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")
-            name = f"{source}.{start // BATCH}.jsonl"
+            name = f"{source}.{n}.jsonl"
             files[name] = data
             batches.append({
-                "batch_id": f"{keys['batch_id']}:{source[:16]}:{start // BATCH}",
+                "batch_id": f"{keys['batch_id']}:{source[:16]}:{n}",
                 "stage": "mastering", "consumer": keys["consumer"],
                 "input": {"path": name, "sha256": hashlib.sha256(data).hexdigest(),
                           "record_count": len(chunk), "source_code": keys["dataset"],

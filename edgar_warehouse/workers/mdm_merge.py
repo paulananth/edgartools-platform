@@ -25,11 +25,13 @@ from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import text
 
+from edgar_warehouse.mdm.clean import limits
+
 CHECK = "mdm.committed"
 STAGE = "mastering"
 # execute_manifest's own bound per call; the worker calls it until the run's
 # expected batches are all observed.
-LIMIT = 1000
+LIMIT = limits.BATCH_RECORDS
 
 
 def runtime_files() -> list[Path]:
@@ -38,7 +40,7 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.rules import source_engine
     from . import source_mapping
 
-    return [*[Path(m.__file__) for m in (adapters, cli, merge, run, store, source_mapping)],
+    return [*[Path(m.__file__) for m in (adapters, cli, limits, merge, run, store, source_mapping)],
             *source_engine.runtime_files()]
 
 
@@ -83,7 +85,7 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
         target = folder / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(artifacts.verified({"uri": f"{base}/{name.as_posix()}", "sha256": spec["sha256"]},
-                                              max_bytes=16 * 1024**2))
+                                              max_bytes=limits.RECORDS_FILE_BYTES))
     return path, manifest
 
 
