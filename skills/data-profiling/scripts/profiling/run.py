@@ -244,6 +244,7 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
         column_findings.append({
             "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
+            "pattern": sensitivity.mask(c["pattern"]) if c["pattern"] else None, "pattern_share": c["pattern_share"],
             "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
             # A personal column's values are never written out, so it has no distribution.
             "distribution": None if tagged["sensitivity"] != "none" else profile.distribution(

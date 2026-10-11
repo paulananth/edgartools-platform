@@ -148,3 +148,18 @@ def test_dates_written_in_two_formats_are_still_dates():
                    ELSE '2022-03-14T17:34:27.107Z' END AS at_time FROM range(10) r(i)""")
     col = profile.columns(con, "d")[0]
     assert col["shape_share"] == 0.5 and col["temporal_share"] == 1.0 and profile.is_temporal(col)
+
+
+def test_numbers_issued_under_a_prefix_are_identifier_shaped_but_amounts_are_not():
+    con = duckdb.connect()
+    rng = random.Random(7)
+    registered = [f"8-{rng.randint(10, 999999)}" for _ in range(300)]  # 4 to 8 characters
+    amounts = [str(rng.randint(1, 10**rng.randint(1, 9))) for _ in range(300)]
+    decimals = [f"{rng.randint(1, 99999)}.{rng.randint(0, 99)}" for _ in range(300)]
+    con.execute("CREATE TABLE r (reg VARCHAR, amount VARCHAR, price VARCHAR)")
+    con.executemany("INSERT INTO r VALUES (?, ?, ?)", list(zip(registered, amounts, decimals)))
+    cols = {c["name"]: c for c in profile.columns(con, "r")}
+    assert cols["reg"]["pattern"] == "9-9" and cols["reg"]["length_share"] < 0.99
+    assert identifiers.identifier_shaped(cols["reg"])
+    assert not identifiers.identifier_shaped(cols["amount"])  # digits of any length: no separator
+    assert not identifiers.identifier_shaped(cols["price"])  # a decimal point is no separator

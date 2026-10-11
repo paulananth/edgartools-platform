@@ -105,12 +105,19 @@ def check_digits(values: list[str], seed: int = 0) -> dict:
             "chance_rate": round(FAMILIES[best][1], 6) if best else None, "rates": rates, "tested": len(values)}
 
 
+SEPARATORS = set("-/_:")  # a pattern holding one is a registration-style number, not an amount
+
+
 def identifier_shaped(profile: dict) -> bool:
-    """One length or one shape for (nearly) every value, and more than a handful of values."""
+    """One length or one shape for (nearly) every value, and more than a handful of values.
+    A text pattern with a separator counts too: `8-26740` and `8-1234` differ in length
+    and shape but share `9-9`, as numbers issued in sequence under a prefix do."""
     from .profile import is_temporal
     if not profile["non_null"] or profile["structure"] or profile.get("tokens", 0) > 1.0 or is_temporal(profile):
         return False
-    return profile["distinct"] >= 20 and max(profile["shape_share"], profile["length_share"]) >= 0.99 \
+    patterned = profile.get("type") == "VARCHAR" and profile.get("pattern_share", 0.0) >= 0.99 \
+        and bool(SEPARATORS & set(profile.get("pattern") or ""))
+    return profile["distinct"] >= 20 and (max(profile["shape_share"], profile["length_share"]) >= 0.99 or patterned) \
         and (profile["min_length"] or 0) >= 3
 
 

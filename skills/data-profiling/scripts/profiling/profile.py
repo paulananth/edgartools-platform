@@ -27,6 +27,12 @@ def shape(expression: str) -> str:
             "'[a-z]', 'a', 'g'), '[0-9]', '9', 'g')")
 
 
+def pattern(expression: str) -> str:
+    """SQL for a value's pattern: its shape with each run of one class collapsed
+    (`8-26740` and `8-123` are both `9-9`)."""
+    return f"regexp_replace(regexp_replace(regexp_replace({shape(expression)}, '9+', '9', 'g'), 'A+', 'A', 'g'), 'a+', 'a', 'g')"
+
+
 def columns(con: duckdb.DuckDBPyConnection, part: str) -> list[dict]:
     """One profile per column of `part`, in table order."""
     described = con.execute(f"DESCRIBE {sql_name(part)}").fetchall()
@@ -51,9 +57,12 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
         "structure": name in STRUCTURE,
     }
     if not non_null:
-        return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0}
+        return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0,
+                "pattern": None, "pattern_share": 0.0}
     modal_shape, shape_count = con.execute(
         f"SELECT {shape(text)}, count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
+    modal_pattern, pattern_count = con.execute(
+        f"SELECT {pattern(text)}, count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
     length_count = con.execute(
         f"SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY length({text}) ORDER BY 1 DESC LIMIT 1").fetchone()[0]
     tokens = con.execute(
@@ -63,6 +72,7 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
     profile.update({
         "shape": modal_shape, "shape_share": round(shape_count / non_null, 6),
         "length_share": round(length_count / non_null, 6),
+        "pattern": modal_pattern, "pattern_share": round(pattern_count / non_null, 6),
         "tokens": round(float(tokens), 3),
         "top": [{"value": v, "rows": n} for v, n in top],
     })
