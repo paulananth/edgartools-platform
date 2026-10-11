@@ -376,3 +376,15 @@ def test_a_working_copy_the_run_made_itself_is_removed(tmp_path, monkeypatch):
     folder = build(tmp_path / "set")
     assert run.profile_inputs({"set": str(folder)}, "fixture")["dataset"]["name"] == "fixture"
     assert not list((tmp_path / "temp").iterdir())
+
+
+def test_an_unreadable_table_is_listed_and_the_run_goes_on(tmp_path, capsys):
+    folder = tmp_path / "set"
+    folder.mkdir()
+    (folder / "orders.csv").write_text("order_id,amount\n" + "".join(f"{i},{i * 10}\n" for i in range(50)))
+    (folder / "broken.csv").write_bytes(bytes(range(256)) * 4)
+    findings = run.profile_inputs({"set": str(folder)}, "partly readable")
+    assert [p["part"] for p in findings["parts"]] == ["orders"]
+    (missed,) = findings["dataset"]["not_read"]
+    assert missed["location"].endswith("broken.csv") and missed["reason"]
+    assert "broken.csv: not read" in capsys.readouterr().err

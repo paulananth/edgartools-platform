@@ -24,7 +24,9 @@ dataset:
   name: <operator's name for the data set>
   inputs:                       # every file or table read
     - {kind: file|table, location: <path or db.schema.table>, format: csv|json|jsonl|xml|parquet|zip|postgres|sqlite|duckdb|snowflake,
-       bytes: <n>, rows: <n>, sha256: <files only>}
+       bytes: <n>, rows: <n>, sha256: <files only>, encoding: <a CSV not in UTF-8: windows-1252|latin-1; absent otherwise>}
+  not_read:                     # tables the reader could not read; the rest of the input is profiled
+    - {location: <path or zip#member>, format: csv|parquet, bytes: <n>, reason: <the reader's first error line>}
   scan: {mode: full|sampled, reason: <e.g. "6.2 GB > 5 GB">, seed: <n|null>, elapsed_seconds: <n>}
   profiled_at: <ISO time>
   profiled_by: <agent and skill version>

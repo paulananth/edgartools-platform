@@ -99,8 +99,13 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 ```
 
 - **Formats:** CSV, Parquet, JSON (an array, one object per file, or an object
-  wrapping one list), JSON Lines, XML, zip members, a SQLite or DuckDB file, or
-  a read-only database whose address is in an environment variable.
+  wrapping one list), JSON Lines, XML, zip members (a zip of CSV or Parquet
+  files gives each member as its own file), a SQLite or DuckDB file, or a
+  read-only database whose address is in an environment variable.
+- **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
+  Latin-1), and its input says `encoding`. A table the reader cannot read is
+  listed under `dataset.not_read` with the reason, and the rest is profiled.
+  Report each one; never profile around it silently.
 - **Size:** inputs up to `--limit-gb` (default 5) are read in full. A larger
   one is read once into a seeded sample, then read again in full for its key
   candidates. The run prints the estimate before it starts.

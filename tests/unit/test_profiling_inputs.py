@@ -229,3 +229,43 @@ def test_lists_of_plain_values_of_one_length_are_a_table_stored_by_column(con, t
     parts = {p.name for p in inputs.register(con, "c", str(f), tmp_path / "w")}
     assert "c.m" in parts
     assert con.execute('SELECT x, y FROM "c.m" ORDER BY 1').fetchall() == [(1, "p"), (2, "q")]
+
+
+def test_a_zip_of_csv_tables_gives_one_part_per_member(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "bulk.zip", "w") as archive:
+        archive.writestr("one.csv", "a,b\n1,x\n2,y\n")
+        archive.writestr("sub/two.csv", "c,d,e\n1,2,3\n")
+    parts = inputs.register(con, "bulk", str(tmp_path / "bulk.zip"), tmp_path / "w")
+    assert sorted(p.name for p in parts) == ["one", "two"]
+    assert rows(con, "one") == [(1, "x"), (2, "y")]
+    assert {p.location for p in parts} == {f"{tmp_path / 'bulk.zip'}#one.csv", f"{tmp_path / 'bulk.zip'}#sub/two.csv"}
+
+
+def test_a_zip_holding_records_is_still_read_as_records(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "r.zip", "w") as archive:
+        archive.writestr("r.jsonl", '{"id": 1}\n{"id": 2}\n')
+    assert [p.name for p in inputs.register(con, "r", str(tmp_path / "r.zip"), tmp_path / "w")] == ["r"]
+    assert rows(con, "r")[0][-1] == 1
+
+
+def test_a_csv_that_is_not_utf8_is_read_and_its_encoding_stated(con, tmp_path):
+    (tmp_path / "w1252.csv").write_bytes(b"id,name,note\n1,Caf\xe9,\x93quoted\x94\n2,Beta,ok\n")
+    (part,) = inputs.register(con, "w1252", str(tmp_path / "w1252.csv"), tmp_path / "w")
+    assert part.encoding == "windows-1252" and part.finding(2)["encoding"] == "windows-1252"
+    assert rows(con, "w1252")[0][1:] == ("Café", "“quoted”")
+    (latin,) = inputs.register(con, "latin", str(_write(tmp_path / "latin.csv", b"id,n\n1,\x81x\n")), tmp_path / "w2")
+    assert latin.encoding == "latin-1"  # 0x81 is no Windows-1252 character
+
+
+def _write(path, data):
+    path.write_bytes(data)
+    return path
+
+
+def test_a_table_duckdb_cannot_read_is_reported_and_the_rest_read(con, tmp_path):
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "good.csv").write_text("x,y\n1,2\n")
+    (tmp_path / "d" / "bad.csv").write_bytes(bytes(range(256)) * 4)
+    parts = {p.name: p for p in inputs.register(con, "d", str(tmp_path / "d"), tmp_path / "w")}
+    assert parts["good"].not_read is None and rows(con, "good") == [(1, 2)]
+    assert parts["bad"].not_read and "bad" not in {r[0] for r in con.execute("SELECT table_name FROM duckdb_tables()").fetchall()}

@@ -3,7 +3,10 @@
 Each part is read once into a table (a remote database stays a read-only view),
 and later steps read tables only, never asking what format a part came from.
 
-- CSV and Parquet are read by DuckDB directly, with a full type scan.
+- CSV and Parquet are read by DuckDB directly, with a full type scan; a zip of
+  CSV or Parquet files gives each member as a file. A CSV that is not UTF-8 is
+  read as Windows-1252 (or Latin-1), and the findings say so. A table DuckDB
+  cannot read is reported as not read, and the rest of the input is profiled.
 - JSON, JSON Lines, XML and zip members are read by the Python standard
   library, flattened (nested objects become dotted columns, lists become child
   parts) and written as JSON Lines for DuckDB.
@@ -16,6 +19,7 @@ records is kept, and `full_pass` reads it again for named columns only.
 
 from __future__ import annotations
 
+import codecs
 import gzip
 import hashlib
 import io
@@ -23,6 +27,7 @@ import json
 import os
 import random
 import re
+import shutil
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +42,7 @@ SAMPLE_RECORDS = 100_000
 ROW = "_row"  # the row number a flattened record gets in its part
 PARENT = "_parent_row"  # a child row's parent row number
 POSITION = "_position"  # a child row's place in its list
+TABULAR = {"csv", "parquet"}
 
 
 @dataclass
@@ -52,6 +58,8 @@ class Part:
     source_sql: str | None = None  # a sampled table file, read again in full by this reader
     sha256: str | None = None
     derived_from: str | None = None  # an entity found inside this part (embedded.py), not an input
+    encoding: str | None = None  # a CSV read from bytes that are not UTF-8
+    not_read: str | None = None  # why DuckDB could not read this table; it has no table
 
     @property
     def is_input(self) -> bool:
@@ -61,7 +69,7 @@ class Part:
     def finding(self, rows: int) -> dict:
         return {"kind": "table" if self.format in {"sqlite", "postgres", "duckdb"} else "file",
                 "location": self.location, "format": self.format, "bytes": self.bytes, "rows": rows,
-                "sha256": self.sha256}
+                "sha256": self.sha256} | ({"encoding": self.encoding} if self.encoding else {})
 
 
 def digest(path: Path) -> str:
@@ -334,24 +342,97 @@ def size_of(path: Path) -> int:
     return sum(size for _, size, _ in _open_streams(path))
 
 
-def _tabular(con, name: str, files: list[Path], size: int, limit: int, sample: int, seed: int) -> list[Part]:
+def _tabular_files(path: Path, work: Path) -> tuple[list[Path], dict[Path, str]] | None:
+    """The CSV or Parquet files of an input, a zip's members copied out to `work`
+    (with the member each copy came from); None when the input holds anything else."""
+    files, origin = [], {}
+    for file in _members(path):
+        if format_of(file) != "zip":
+            files.append(file)
+            continue
+        with zipfile.ZipFile(file) as archive:
+            members = [i for i in archive.infolist() if not i.is_dir()]
+            if not members or any(format_of(Path(i.filename)) not in TABULAR for i in members):
+                return None
+            for info in members:
+                target = work / "members" / file.stem / Path(info.filename).name
+                if target.exists():
+                    raise ValueError(f"{file}: two members named {target.name}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as source, target.open("wb") as copy:
+                    shutil.copyfileobj(source, copy)
+                files.append(target)
+                origin[target] = f"{file}#{info.filename}"
+    formats = {format_of(f) for f in files}
+    return (files, origin) if len(formats) == 1 and formats <= TABULAR else None
+
+
+def _as_utf8(file: Path, work: Path) -> tuple[Path, str | None]:
+    """The file DuckDB reads, and the encoding it was copied from when not UTF-8.
+
+    A CSV whose bytes are not UTF-8 is copied as UTF-8 from Windows-1252 when every
+    byte is one of its characters, else from Latin-1 (which reads any byte)."""
+    if format_of(file) != "csv":
+        return file, None
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    try:
+        with file.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                decoder.decode(chunk)
+        decoder.decode(b"", final=True)
+        return file, None
+    except UnicodeDecodeError:
+        pass
+    for encoding in ("windows-1252", "latin-1"):
+        target = work / "utf8" / encoding / file.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with file.open("r", encoding=encoding, newline="") as source, \
+                    target.open("w", encoding="utf-8", newline="") as copy:
+                shutil.copyfileobj(source, copy, 1 << 20)
+            return target, encoding
+        except UnicodeDecodeError:
+            continue
+    raise AssertionError("Latin-1 reads every byte")
+
+
+def _tabular(con, name: str, files: list[Path], size: int, limit: int, sample: int, seed: int,
+             utf8: dict[Path, tuple[Path, str | None]], origin: dict[Path, str]) -> list[Part]:
     """CSV or Parquet: files with one header are one part; otherwise each file is its own part.
 
     Over the size limit, a seeded reservoir sample of rows is kept; the full file
-    stays readable through `source_sql` for the key candidates' full passes.
+    stays readable through `source_sql` for the key candidates' full passes. A
+    file DuckDB cannot read is a part with `not_read` and no table.
     """
     def header(file: Path) -> tuple:
-        return tuple(r[0] for r in con.execute(f"DESCRIBE SELECT * FROM {_reader(file, str(file))}").fetchall())
+        readable = utf8[file][0]
+        return tuple(r[0] for r in con.execute(f"DESCRIBE SELECT * FROM {_reader(readable, str(readable))}").fetchall())
 
-    if len(files) > 1 and len({header(f) for f in files}) > 1:
-        return [p for f in files for p in _tabular(con, f.stem, [f], f.stat().st_size, limit, sample, seed)]
+    def each() -> list[Part]:
+        return [p for f in files for p in _tabular(con, f.stem, [f], f.stat().st_size, limit, sample, seed, utf8, origin)]
+
+    if len(files) > 1:
+        try:
+            if len({header(f) for f in files}) > 1:
+                return each()
+        except duckdb.Error:
+            return each()
+    readable = [utf8[f] for f in files]
     fmt = format_of(files[0])
-    source = _reader(files[0], [str(f) for f in files])
+    where = origin.get(files[0])
+    location = (where or str(files[0])) if len(files) == 1 else (where.split("#")[0] if where else str(files[0].parent))
+    source = _reader(files[0], [str(r) for r, _ in readable])
     sampled = size > limit
     rows = f" USING SAMPLE reservoir({int(sample)} ROWS) REPEATABLE ({int(seed)})" if sampled else ""
-    con.execute(f"CREATE TABLE {sql_name(name)} AS SELECT * FROM {source}{rows}")
-    return [Part(name, str(files[0]) if len(files) == 1 else str(files[0].parent), fmt, size,
-                 scan="sampled" if sampled else "full", source_sql=source if sampled else None)]
+    try:
+        con.execute(f"CREATE TABLE {sql_name(name)} AS SELECT * FROM {source}{rows}")
+    except duckdb.Error as exc:
+        if len(files) > 1:
+            return each()
+        return [Part(name, location, fmt, size, not_read=str(exc).splitlines()[0][:300])]
+    return [Part(name, location, fmt, size, scan="sampled" if sampled else "full",
+                 source_sql=source if sampled else None,
+                 encoding=", ".join(sorted({e for _, e in readable if e})) or None)]
 
 
 def _reader(file: Path, source) -> str:
@@ -372,9 +453,11 @@ def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Pat
     path = Path(location).expanduser()
     if format_of(path) in {"sqlite", "duckdb"}:
         return _attach_file(con, name, path, format_of(path))
-    files = _members(path)
-    if {format_of(f) for f in files} <= {"csv", "parquet"} and len({format_of(f) for f in files}) == 1:
-        return _tabular(con, name, files, sum(f.stat().st_size for f in files), limit, sample, seed)
+    tables = _tabular_files(path, work)
+    if tables is not None:
+        files, origin = tables
+        utf8 = {f: _as_utf8(f, work) for f in files}
+        return _tabular(con, name, files, sum(f.stat().st_size for f in files), limit, sample, seed, utf8, origin)
     fmt, records, wrappers = _record_reader(path)
     size = size_of(path)
     scan = "sampled" if size > limit else "full"
