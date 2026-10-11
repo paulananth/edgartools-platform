@@ -486,6 +486,22 @@ def _irregular(con, file: Path, rows: int | None) -> str | None:
     return None
 
 
+def _encoding(tables: list[Table]) -> dict | None:
+    """How a part's CSV files not in UTF-8 were read, and the `read.encoding` a reading
+    contract declares for them: the engine reads utf-8 and windows-1252 only."""
+    found = [t.encoding for t in tables if t.encoding]
+    if not found:
+        return None
+    read_as = sorted({e["read_as"] for e in found})
+    if read_as != ["windows-1252"]:
+        declare = "none: a byte no encoding the engine reads defines; ask the publisher"
+    else:
+        declare = "windows-1252" if len(found) == len(tables) else ["utf-8", "windows-1252"]
+    return {"read_as": read_as[0] if len(read_as) == 1 else read_as, "inferred": True,
+            "files_not_utf8": len(found), "files": len(tables),
+            "first_invalid_byte_offset": found[0]["first_invalid_byte_offset"], "declare": declare}
+
+
 def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed: int, location: str) -> list[Part]:
     """CSV or Parquet: tables with one header are one part; otherwise each table is its own part.
 
@@ -537,10 +553,9 @@ def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed:
         if len(tables) > 1:
             return each()
         return unread(problems[0][1])
-    encodings = [t.encoding for t in tables if t.encoding]
     part = Part(name, tables[0].location if len(tables) == 1 else location, fmt, size,
                 scan="sampled" if sampled else "full", source_sql=source if sampled else None,
-                encoding=encodings[0] if len(encodings) == 1 else ({"read_as": "mixed", "files": encodings} if encodings else None))
+                encoding=_encoding(tables))
     if len(tables) == 1 and tables[0].file != Path(tables[0].location):
         part.sha256 = digest(tables[0].file)  # a zip member's own bytes
     return [part]

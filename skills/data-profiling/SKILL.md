@@ -104,7 +104,8 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   read-only database whose address is in an environment variable.
 - **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
   Latin-1); its input's `encoding` says so, marked inferred, with the first byte
-  that is not UTF-8. Each CSV is read once more with the standard library to
+  that is not UTF-8, and `declare` gives the reading contract's `read.encoding`
+  (none when only Latin-1 reads it). Each CSV is read once more with the standard library to
   prove it has one shape (no skipped preamble, every row the header's field
   count, quotes that close). A table that fails, or that the reader cannot
   read, is listed under `dataset.not_read` with the reason, and the rest is

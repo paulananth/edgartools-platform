@@ -251,11 +251,13 @@ def test_a_zip_holding_records_is_still_read_as_records(con, tmp_path):
 def test_a_csv_that_is_not_utf8_is_read_and_its_encoding_stated(con, tmp_path):
     (tmp_path / "w1252.csv").write_bytes(b"id,name,note\n1,Caf\xe9,\x93quoted\x94\n2,Beta,ok\n")
     (part,) = inputs.register(con, "w1252", str(tmp_path / "w1252.csv"), tmp_path / "w")
-    assert part.encoding == {"read_as": "windows-1252", "inferred": True, "first_invalid_byte_offset": 18}
+    assert part.encoding == {"read_as": "windows-1252", "inferred": True, "files_not_utf8": 1, "files": 1,
+                             "first_invalid_byte_offset": 18, "declare": "windows-1252"}
     assert part.finding(2)["encoding"]["read_as"] == "windows-1252"
     assert rows(con, "w1252")[0][1:] == ("Café", "\u201cquoted\u201d")
     (latin,) = inputs.register(con, "latin", str(_write(tmp_path / "latin.csv", b"id,n\n1,\x81x\n")), tmp_path / "w2")
     assert latin.encoding["read_as"] == "latin-1"  # 0x81 is no Windows-1252 character
+    assert latin.encoding["declare"].startswith("none")
 
 
 def test_utf16_or_binary_text_is_not_read(con, tmp_path):
@@ -290,8 +292,11 @@ def test_members_of_one_name_in_two_zips_stay_apart(con, tmp_path):
     for month, header, text in (("2025-06", "id,name", b"1,Caf\xe9 June\n"), ("2025-07", "id,name", b"1,Caf\xe9 July\n")):
         with zipfile.ZipFile(tmp_path / "d" / f"{month}.zip", "w") as archive:
             archive.writestr("sched.csv", header.encode() + b"\n" + text)
+    with zipfile.ZipFile(tmp_path / "d" / "2025-08.zip", "w") as archive:
+        archive.writestr("sched.csv", "id,name\n1,Café August\n".encode())
     (part,) = inputs.register(con, "d", str(tmp_path / "d"), tmp_path / "w")
-    assert sorted(r[1] for r in rows(con, part.name)) == ["Café July", "Café June"]
+    assert sorted(r[1] for r in rows(con, part.name)) == ["Café August", "Café July", "Café June"]
+    assert part.encoding["declare"] == ["utf-8", "windows-1252"]  # publications changed encoding
     with zipfile.ZipFile(tmp_path / "e.zip", "w") as archive:
         archive.writestr("a/s.csv", "x\n1\n")
         archive.writestr("b/s.csv", "y,z\n1,2\n")
