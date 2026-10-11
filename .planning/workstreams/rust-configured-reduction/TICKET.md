@@ -35,6 +35,6 @@ are subsequent slices, not unfinished parts of this bounded reduction ticket.
 
 - [x] Refresh main, review the final diff and rerun affected tests on the updated branch. Verified main 70418146 merged without source conflict, specialist and Claude review, rebuilt native binding and 120 affected Python passes; full Rust suite and 4 reduction tests pass; 915 broader passes plus all 15 jq-prerequisite reruns pass; 2026-10-11 15:24 ET.
 - [x] Clarify native per-group row-limit wording found during review and test terminal failure at that boundary. Verified 4 native reduction tests and rebuilt binding's 120 Python tests; benchmark binary and rebuilt runtime identities distinguished in RESULTS.md; 2026-10-11 15:24 ET.
-- [ ] Publish a PR with output parity, performance and memory evidence; check repository overlap before pushing.
+- [x] Publish a PR with output parity, performance and memory evidence; check repository overlap before pushing. Verified PR #911 includes the full slice, tests, benchmark speedup/RSS tradeoff and rollout limits; guard passed before commit and push; documentation-release audit found no further edits; 2026-10-11 15:26 ET.
 - [ ] Verify all CI jobs, review results and the final PR contents before reporting merge readiness.
 - [ ] Merge after the final readiness gate and verify GitHub's merge commit; preserve the shared dirty checkout.
