@@ -229,3 +229,127 @@ def test_lists_of_plain_values_of_one_length_are_a_table_stored_by_column(con, t
     parts = {p.name for p in inputs.register(con, "c", str(f), tmp_path / "w")}
     assert "c.m" in parts
     assert con.execute('SELECT x, y FROM "c.m" ORDER BY 1').fetchall() == [(1, "p"), (2, "q")]
+
+
+def test_a_zip_of_csv_tables_gives_one_part_per_member(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "bulk.zip", "w") as archive:
+        archive.writestr("one.csv", "a,b\n1,x\n2,y\n")
+        archive.writestr("sub/two.csv", "c,d,e\n1,2,3\n")
+    parts = inputs.register(con, "bulk", str(tmp_path / "bulk.zip"), tmp_path / "w")
+    assert sorted(p.name for p in parts) == ["one", "two"]
+    assert rows(con, "one") == [(1, "x"), (2, "y")]
+    assert {p.location for p in parts} == {f"{tmp_path / 'bulk.zip'}#one.csv", f"{tmp_path / 'bulk.zip'}#sub/two.csv"}
+
+
+def test_a_zip_holding_records_is_still_read_as_records(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "r.zip", "w") as archive:
+        archive.writestr("r.jsonl", '{"id": 1}\n{"id": 2}\n')
+    assert [p.name for p in inputs.register(con, "r", str(tmp_path / "r.zip"), tmp_path / "w")] == ["r"]
+    assert rows(con, "r")[0][-1] == 1
+
+
+def test_a_csv_that_is_not_utf8_is_read_and_its_encoding_stated(con, tmp_path):
+    (tmp_path / "w1252.csv").write_bytes(b"id,name,note\n1,Caf\xe9,\x93quoted\x94\n2,Beta,ok\n")
+    (part,) = inputs.register(con, "w1252", str(tmp_path / "w1252.csv"), tmp_path / "w")
+    assert part.encoding == {"read_as": "windows-1252", "inferred": True, "files_not_utf8": 1, "files": 1,
+                             "first_invalid_byte_offset": 18, "declare": "windows-1252"}
+    assert part.finding(2)["encoding"]["read_as"] == "windows-1252"
+    assert rows(con, "w1252")[0][1:] == ("Café", "\u201cquoted\u201d")
+    (latin,) = inputs.register(con, "latin", str(_write(tmp_path / "latin.csv", b"id,n\n1,\x81x\n")), tmp_path / "w2")
+    assert latin.encoding["read_as"] == "latin-1"  # 0x81 is no Windows-1252 character
+    assert latin.encoding["declare"].startswith("none")
+
+
+def test_utf16_or_binary_text_is_not_read(con, tmp_path):
+    (tmp_path / "u16.csv").write_bytes("id,name\n1,a\n".encode("utf-16"))
+    (tmp_path / "nul.csv").write_bytes(b"id,name\n1,a\x00b\n")
+    for name in ("u16", "nul"):
+        (part,) = inputs.register(con, name, str(tmp_path / f"{name}.csv"), tmp_path / f"w{name}")
+        assert part.not_read and part.encoding is None
+
+
+@pytest.mark.parametrize("data, reason", [
+    (b"a,b,c\n1,2,3\n4,5\n6,7,8,9\n", "skip"),  # the reader takes the last line as the header
+    (b"id,name\n1,\"x\n2,y\n", "double quotes"),
+    (b"a,b\n1,2\n3,4,5\n6,7\n", "one column"),  # the reader picks another delimiter
+    (b"a,b,c\n1,2,3\n4,5,6\n7,8\n9,10,11\n", "not one way"),  # a short row: the reader again picks another delimiter
+    (b"Report generated\n\nid,name\n1,a\n2,b\n", "skip"),
+])
+def test_a_csv_of_more_than_one_shape_is_not_read(con, tmp_path, data, reason):
+    (part,) = inputs.register(con, "odd", str(_write(tmp_path / "odd.csv", data)), tmp_path / "w")
+    assert part.not_read and reason in part.not_read
+    assert "odd" not in {r[0] for r in con.execute("SELECT table_name FROM duckdb_tables()").fetchall()}
+
+
+def test_a_regular_csv_with_quoted_delimiters_is_read(con, tmp_path):
+    (part,) = inputs.register(con, "ok", str(_write(tmp_path / "ok.csv", b'id,name,note\n1,"A, Inc","say ""hi"""\n2,B,\n')),
+                              tmp_path / "w")
+    assert part.not_read is None and rows(con, "ok")[0] == (1, "A, Inc", 'say "hi"')
+
+
+def test_members_of_one_name_in_two_zips_stay_apart(con, tmp_path):
+    (tmp_path / "d").mkdir()
+    for month, header, text in (("2025-06", "id,name", b"1,Caf\xe9 June\n"), ("2025-07", "id,name", b"1,Caf\xe9 July\n")):
+        with zipfile.ZipFile(tmp_path / "d" / f"{month}.zip", "w") as archive:
+            archive.writestr("sched.csv", header.encode() + b"\n" + text)
+    with zipfile.ZipFile(tmp_path / "d" / "2025-08.zip", "w") as archive:
+        archive.writestr("sched.csv", "id,name\n1,Café August\n".encode())
+    (part,) = inputs.register(con, "d", str(tmp_path / "d"), tmp_path / "w")
+    assert sorted(r[1] for r in rows(con, part.name)) == ["Café August", "Café July", "Café June"]
+    assert part.encoding["declare"] == ["utf-8", "windows-1252"]  # publications changed encoding
+    with zipfile.ZipFile(tmp_path / "e.zip", "w") as archive:
+        archive.writestr("a/s.csv", "x\n1\n")
+        archive.writestr("b/s.csv", "y,z\n1,2\n")
+    parts = inputs.register(con, "e", str(tmp_path / "e.zip"), tmp_path / "w2")
+    assert len({p.name for p in parts}) == 2 and not any(p.not_read for p in parts)
+    assert {p.location for p in parts} == {f"{tmp_path / 'e.zip'}#a/s.csv", f"{tmp_path / 'e.zip'}#b/s.csv"}
+
+
+def test_a_member_has_its_own_checksum_and_no_work_path_in_a_reason(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "z.zip", "w") as archive:
+        archive.writestr("good.csv", "x,y\n1,2\n")
+        archive.writestr("bad.csv", bytes(range(1, 256)) * 4)
+    parts = {p.name: p for p in inputs.register(con, "z", str(tmp_path / "z.zip"), tmp_path / "w")}
+    assert parts["good"].sha256 == __import__("hashlib").sha256(b"x,y\n1,2\n").hexdigest()
+    assert parts["bad"].not_read and str(tmp_path / "w") not in parts["bad"].not_read
+
+
+def _write(path, data):
+    path.write_bytes(data)
+    return path
+
+
+def test_a_table_duckdb_cannot_read_is_reported_and_the_rest_read(con, tmp_path):
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "good.csv").write_text("x,y\n1,2\n")
+    (tmp_path / "d" / "bad.csv").write_bytes(bytes(range(1, 256)) * 4)
+    parts = {p.name: p for p in inputs.register(con, "d", str(tmp_path / "d"), tmp_path / "w")}
+    assert parts["good"].not_read is None and rows(con, "good") == [(1, 2)]
+    assert parts["bad"].not_read and "bad" not in {r[0] for r in con.execute("SELECT table_name FROM duckdb_tables()").fetchall()}
+
+
+def test_table_names_never_repeat_or_come_out_empty(tmp_path):
+    for folder in ("a", "b", "c", "d"):
+        (tmp_path / "s" / folder).mkdir(parents=True)
+    (tmp_path / "s" / "a" / "t.csv").write_text("x\n1\n")
+    (tmp_path / "s" / "b" / "t.csv").write_text("y\n1\n")
+    (tmp_path / "s" / "t_2.csv").write_text("z\n1\n")
+    (tmp_path / "s" / "c" / "@.csv").write_text("p\n1\n")
+    (tmp_path / "s" / "d" / "@.csv").write_text("q\n1\n")
+    tables = inputs._tables(tmp_path / "s", tmp_path / "w")
+    names = [t.name for t in tables]
+    assert len(set(names)) == len(names) and all(names)
+    assert {"a_t", "b_t", "t_2"} <= set(names)
+
+
+@pytest.mark.parametrize("data", [b"a;b\nx\ny\n", b'a,b\n"x" ,1\n'])
+def test_regular_files_the_shape_check_once_refused_are_read(con, tmp_path, data):
+    (part,) = inputs.register(con, "ok", str(_write(tmp_path / "ok.csv", data)), tmp_path / "w")
+    assert part.not_read is None
+
+
+def test_mac_resource_entries_in_a_zip_are_left_out(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "m.zip", "w") as archive:
+        archive.writestr("t.csv", "x\n1\n")
+        archive.writestr("__MACOSX/._t.csv", b"\x00\x05\x16\x07")
+    assert [(p.name, p.not_read) for p in inputs.register(con, "m", str(tmp_path / "m.zip"), tmp_path / "w")] == [("m", None)]

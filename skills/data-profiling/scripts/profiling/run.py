@@ -98,6 +98,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     database.unlink(missing_ok=True)
     con = duckdb.connect(str(database))  # parts are tables on disk, not in memory
     parts: dict[str, inputs.Part] = {}
+    not_read: list[dict] = []
     for input_name, location in sources.items():
         if not location.startswith("env:"):
             path = Path(location).expanduser()
@@ -109,7 +110,16 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         registered = inputs.register(con, input_name, location, work / input_name, limit, sample, seed)
         sha = inputs.digest(Path(location).expanduser()) if not location.startswith("env:") else None
         for part in registered:
-            part.sha256 = sha if part.parent is None else None
+            if part.not_read:
+                say(f"{part.location}: not read, {part.not_read}; the rest of {input_name} is profiled")
+                not_read.append({"location": part.location, "format": part.format, "bytes": part.bytes,
+                                 "reason": part.not_read})
+                continue
+            if part.encoding:
+                say(f"{part.name}: its bytes are not UTF-8 (first at byte {part.encoding.get('first_invalid_byte_offset')}); "
+                    f"read as {part.encoding['read_as']}, inferred")
+            if part.sha256 is None:
+                part.sha256 = sha if part.parent is None else None
             parts[part.name] = part
     profiles = {p: profile.columns(con, p) for p in parts}
     say(_parts_found(parts, profiles))
@@ -186,6 +196,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         "dataset": {"name": name,
                     "inputs": [parts[p].finding(_rows(profiles, p)) for p in parts
                                if parts[p].is_input],
+                    "not_read": not_read,
                     "scan": {"mode": "sampled" if any(x.scan == "sampled" for x in parts.values()) else "full",
                              "reason": f"an input over {limit / inputs.GB:.0f} GB" if any(
                                  x.scan == "sampled" for x in parts.values()) else None,
