@@ -57,8 +57,23 @@ The configured reduction kernel runs in Rust through the Python source-engine
 facade. Python authenticates and exhausts every reading, passes transient row
 batches to the kernel, then encodes, writes and independently verifies the output.
 The Rust kernel retains group state, not complete input row history. The native
-binary participates in the worker's execution digest. Materialized `combine`
-collections and joins below still run in Python.
+binary participates in the worker's execution digest.
+
+Materialized `combine` collections and joins also run in Rust through the same
+Python facade. Rust performs configured checks/filtering, typed-key grouping,
+stable ordering, distinctness, first/last/one selection, missing-match policy,
+nested joins and drops. Payloads remain opaque Python objects, preserving exact
+integer/float/Unicode values and canonical JSON spelling. Python authenticates
+all inputs, enforces original aggregate row/byte bounds, encodes output within
+its byte limit and publishes only after complete success; the verifier rebuilds
+it independently. The grammar and limits below are unchanged.
+
+Materialized combination still retains decoded Python input rows and output
+objects. Rust indexes and payload references add bounded-by-row allocations;
+this port does not imply streaming, disk spill or a fixed RSS cap. Canonical
+checks and distinct tokens call Python, and Python-object access holds the GIL.
+Native scalar sorts release it. Measure decoding, callbacks, allocation and
+encoding alongside computation before claiming full-path improvement.
 New runs must pin the new runtime digest. Resume an existing frozen run with
 its originally pinned runtime; changing the native binary does not authorize
 replacing that run's execution identity.

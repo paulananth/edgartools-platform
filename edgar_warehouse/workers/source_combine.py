@@ -104,86 +104,6 @@ def _contract(body, inputs):
     return plan
 
 
-def _column(row, name):
-    if name not in row:
-        raise ValueError(f"Combination row has no column {name}")
-    return row[name]
-
-
-def _key(value):
-    if value is None:
-        return None
-    if type(value) not in (str, int):
-        raise ValueError("Combination keys must be text, integer or null; no implicit conversion")
-    return type(value).__name__, value
-
-
-def _rows(spec, inputs):
-    for source in _sources(spec):
-        for artifact in inputs[source]["artifacts"]:
-            rows = artifact["tables"].get(spec["table"])
-            if rows is None:
-                raise ValueError(f"Combination reading has no table {spec['table']}")
-            for row in rows:
-                for column, expected in spec["checks"].items():
-                    if canonical(_column(row, column)) != canonical(expected):
-                        raise ValueError(f"Combination row check failed: {column}")
-                selected = [canonical(_column(row, column)) == canonical(expected)
-                            for column, expected in spec["where"].items()]
-                if all(selected):
-                    yield row
-
-
-def _group(spec, inputs, maximum=MAX_ROWS):
-    grouped, kinds = {}, {}
-    flattened = 0
-    for row in _rows(spec, inputs):
-        key = _key(_column(row, spec["key"]))
-        if key is None:
-            continue
-        value = row if spec["value"] == "." else _column(row, spec["value"])
-        if value is None and spec["skip_null_values"]:
-            continue
-        if spec["mode"] == "collect_flat" and not isinstance(value, list):
-            raise ValueError("collect_flat requires list values; it flattens exactly one level")
-        if spec["mode"] == "collect_flat":
-            flattened += len(value)
-            if flattened > maximum:
-                raise ValueError("collect_flat exceeds the declared element budget")
-        order = []
-        for column in spec["order_by"]:
-            item = _column(row, column)
-            if type(item) not in (str, int, float, bool) or kinds.setdefault(column, type(item)) is not type(item):
-                raise ValueError("Ordering columns must have one exact scalar type and no nulls")
-            order.append(item)
-        grouped.setdefault(key, []).append((order, value))
-    result = {}
-    for key, pairs in grouped.items():
-        if spec["order_by"]:
-            pairs.sort(key=lambda pair: pair[0])
-        values, seen = [], set()
-        for _, value in pairs:
-            items = value if spec["mode"] == "collect_flat" else [value]
-            for item in items:
-                if spec.get("skip_empty_text", False) and type(item) is str and item == "":
-                    continue
-                if spec["distinct"]:
-                    token = canonical(item)
-                    if token in seen:
-                        continue
-                    seen.add(token)
-                values.append(item)
-        if spec.get('sort_values', False):
-            if values and (type(values[0]) not in (str, int, float, bool)
-                           or any(type(item) is not type(values[0]) for item in values)):
-                raise ValueError('sort_values requires one exact scalar type and no nulls')
-            values.sort()
-        if spec['mode'] == 'one' and len(values) != 1:
-            raise ValueError("Group one requires exactly one value per key")
-        result[key] = values if spec["mode"] in COLLECTION_MODES else values[0 if spec["mode"] == "first" else -1]
-    return result
-
-
 def _reading(data):
     body = artifact_store.json_value(data)
     return _reading_body(body)
@@ -218,22 +138,6 @@ def _encode(body, max_bytes=None):
             raise ValueError("Combined reading exceeds output byte budget; partition inputs")
         buffer.write(data)
     return buffer.getvalue()
-
-
-def _join_field(output, field, join, value):
-    """Copy only the modified path; input/group rows remain immutable."""
-    path = join.get('path', [field])
-    parent = output
-    for part in path[:-1]:
-        child = parent.get(part)
-        if child is not None and not isinstance(child,dict):
-            raise ValueError('Nested join parent must be an object or null')
-        parent[part] = dict(child or {})
-        parent = parent[part]
-    leaf = path[-1]
-    if leaf in parent and not join['replace']:
-        raise ValueError(f'Join would overwrite column {leaf}; declare replace explicitly')
-    parent[leaf] = value
 
 
 def _documents(envelope, artifacts):
@@ -281,35 +185,8 @@ def _documents(envelope, artifacts):
         if count > plan["max_rows"]:
             raise ValueError("Combination exceeds input row budget")
         inputs[name] = reading
-    groups = {name: _group(spec, inputs, plan['max_rows']) for name, spec in plan["groups"].items()}
-    tables, count = {}, 0
-    for name, spec in plan["tables"].items():
-        result = []
-        for row in _rows(spec, inputs):
-            output = dict(row)
-            for field, join in sorted(spec["joins"].items(), key=lambda item: len(item[1].get("path", [item[0]]))):
-                if 'path' not in join and join['on_missing'] != 'skip' and field in output and not join['replace']:
-                    raise ValueError(f'Join would overwrite column {field}; declare replace explicitly')
-                key = _key(_column(row, join["key"]))
-                group = groups[join["group"]]
-                if key not in group:
-                    if join["on_missing"] == "error":
-                        raise ValueError(f"No combination group match for {field}")
-                    if join['on_missing'] == 'skip':
-                        continue
-                    value = [] if plan["groups"][join["group"]]["mode"] in COLLECTION_MODES else None
-                else:
-                    value = group[key]
-                _join_field(output,field,join,value)
-            for column in spec.get('drop', []):
-                if column not in output:
-                    raise ValueError(f'Drop names missing output column {column}')
-                del output[column]
-            result.append(output)
-            count += 1
-            if count > plan["max_rows"]:
-                raise ValueError("Combination exceeds output row budget")
-        tables[name] = result
+    from edgar_warehouse.rules.source_engine import combine_tables
+    tables = combine_tables(plan, inputs, canonical)
     return _output(envelope, manifest, refs, tables)
 
 

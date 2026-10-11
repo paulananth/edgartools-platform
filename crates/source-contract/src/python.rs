@@ -249,6 +249,7 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
     m.add_class::<PyReduction>()?;
     m.add_function(wrap_pyfunction!(rank_claims, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::combination::combine_tables, m)?)?;
     m.add_function(wrap_pyfunction!(replay_identity, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
