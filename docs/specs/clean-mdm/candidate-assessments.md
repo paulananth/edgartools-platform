@@ -8,10 +8,12 @@ candidate generation, fuzzy scoring or automatic-rule qualification.
 ## Execution contract
 
 `MergeStage.apply(**command)` preserves its existing command arguments. For a
-new `bind` or `merge`, it evaluates the bounded command using rollback preview,
-commits an immutable assessment in a separate transaction, then immediately
-recomputes and applies it through the existing master transaction. No human
-pause is added. Field-only refreshes retain the existing path.
+new `bind` or `merge`, it computes the bounded batch once and commits an
+immutable assessment of it in its own transaction, then applies that same
+batch through the master transaction (no rollback preview and no second
+computation, 2026-10-11). No human pause is added. Field-only refreshes retain
+the existing path. `MergeStage.assess` alone, for inspection before
+application, still checks the batch through a rollback preview.
 
 The assessment includes the proposed command, policy digest, validation rule
 version, retained assertion and decision IDs, component identities, affected
@@ -20,9 +22,12 @@ effects. Source assertion bodies retain publication identity and provenance.
 Rejected well-formed proposals retain their command, available replay context
 and veto. Invalid/unbounded input is still rejected at the API boundary.
 
-The final transaction holds the existing advisory lock, repeats projection and
-hard-veto validation, checks that effects match the assessment, and fences its
-dependencies in PostgreSQL. Master changes, the applied event, journal effects,
+The final transaction holds the existing advisory lock, checks the
+assessment's dependency snapshot and each rule proposal against concurrent
+runs, saves at the current generation, and has PostgreSQL check that the batch
+equals the assessed effects (by their hash) and fence its dependencies. A batch
+PostgreSQL refuses at this point keeps a rejected assessment beside the ready
+one, which stays open until its batch is saved. Master changes, the applied event, journal effects,
 checkpoint and publication intent commit together. The SQL capability rejects
 an assessment created in that same transaction: the assessment must already
 be durable. Installed migrations 023–027 remain unchanged.

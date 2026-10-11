@@ -301,10 +301,10 @@ class MergeStage:
         written once, with no preview write and no second computation.
 
         The proposal is committed before any master write (Q13); the save then
-        re-checks it under the lock (its snapshot, and each rule proposal against
-        concurrent runs) and save_batch checks the batch against its effects. A
-        batch the assessment refuses keeps a rejected proposal, as `assess` does;
-        a stale one is superseded and re-proposed."""
+        re-checks it under the lock (its dependency snapshot, and each rule
+        proposal against concurrent runs) and save_batch checks the batch against
+        its effects. A batch refused when assessed or when saved keeps a rejected
+        proposal, as `assess` does; a stale one is superseded and re-proposed."""
         proposal, kept, context = _proposal(command), _kept(automatic), {}
         try:
             prepared = self._execute(
@@ -312,31 +312,61 @@ class MergeStage:
                 _record={"command": proposal, **kept},
             )
         except assessment.StaleAssessment:
-            raise
+            raise  # A Conflict too, but re-proposed, never recorded as rejected.
         except (Conflict, DBAPIError) as exc:
             self._reject(proposal, kept, context, exc, command["run_id"])
             raise
         if "assessment_id" not in prepared:
             return prepared
-        return self._save_assessed(prepared["assessment_id"], prepared["request"], command, automatic)
-
-    def _save_assessed(self, key: str, request: dict, command: dict, automatic: dict) -> dict:
-        """Save a batch its committed proposal computed, once the proposal still holds."""
-        decisions = [*(command.get("decisions") or []), *(automatic or binding.nothing())["decisions"]]
+        key = prepared["assessment_id"]
         try:
-            with self.store.engine.begin() as conn:
-                conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
-                assessment.check(conn, key)
-                policy = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:digest"),
-                                     {"digest": command["policy_digest"]})
-                if binding.proposal_is_stale(conn, policy, automatic, correction.released(conn, decisions)):
-                    raise assessment.StaleAssessment("A rule's proposal no longer holds; re-assess")
-                return self.store.commit(conn, {**request, "assessment_id": key}, command["run_id"])
+            return self._save_assessed(key, prepared["request"], command, automatic)
         except assessment.StaleAssessment:
             assessment.supersede(self.store, key, command["run_id"])
             raise
+        except (Conflict, DBAPIError) as exc:
+            # The ready proposal is left as an orphan, closed when its batch saves.
+            self._reject(proposal, kept, context, exc, command["run_id"])
+            raise
 
-    def _reject(self, proposal, kept, context, exc, run_id) -> None:
+    def _save_assessed(self, key: str, request: dict, command: dict, automatic: dict) -> dict:
+        """Save a batch its committed proposal computed, once the proposal still holds.
+
+        An unrelated batch saved since the assessment does not make it stale
+        (its snapshot covers what the batch depends on), so the batch is saved
+        at the current generation."""
+        decisions = [*(command.get("decisions") or []), *(automatic or binding.nothing())["decisions"]]
+        with self.store.engine.begin() as conn:
+            conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
+            assessment.check(conn, key)
+            self._check_rule_proposals(conn, command["policy_digest"], automatic, decisions)
+            generation = conn.scalar(text("SELECT coalesce(max(generation),0) FROM mdm.batch"))
+            return self.store.commit(
+                conn, {**request, "expected_generation": generation, "assessment_id": key}, command["run_id"])
+
+    @staticmethod
+    def _check_rule_proposals(conn, policy_digest: str, automatic: dict | None, decisions: list[dict]) -> dict:
+        """Under the lock, every rule proposal is re-checked: a concurrent run may
+        have bound its identifier, given it to another Company, or published a
+        newer Company of its kind since it was assessed. Re-assess rather than
+        mint twice, join the wrong Company, or publish a new Company before one
+        already stored. A preview passes no proposals and checks only the policy.
+        Returns the policy."""
+        policy = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:digest"),
+                             {"digest": policy_digest})
+        if policy is None:
+            raise Conflict("Unknown or unqualified policy")
+        # Again per batch, not only at registration: a body that reached
+        # the store another way, or a build that no longer holds a named
+        # primitive, is refused here the same way (`policy-language.md` §10).
+        check_policy(policy)
+        if automatic is not None and binding.proposal_is_stale(
+            conn, policy, automatic, correction.released(conn, decisions)
+        ):
+            raise assessment.StaleAssessment("A rule's proposal no longer holds; re-assess")
+        return policy
+
+    def _reject(self, proposal: dict, kept: dict, context: dict, exc: Exception, run_id: str) -> None:
         # SQL driver exceptions can contain source values/connection details;
         # retain the SQLSTATE, never its full rendered query/parameters.
         veto = (
@@ -498,27 +528,9 @@ class MergeStage:
                 return self.store.commit(conn, previous, run_id)
             if assessment_id is not None:
                 assessment.check(conn, assessment_id)
-            policy = conn.scalar(
-                text("SELECT body FROM mdm.policy WHERE digest=:digest"),
-                {"digest": policy_digest},
+            policy = self._check_rule_proposals(
+                conn, policy_digest, None if preview else automatic, decisions
             )
-            if policy is None:
-                raise Conflict("Unknown or unqualified policy")
-            # Again per batch, not only at registration: a body that reached
-            # the store another way, or a build that no longer holds a named
-            # primitive, is refused here the same way (`policy-language.md` §10).
-            check_policy(policy)
-            # Under the lock, every rule proposal is re-checked: a concurrent
-            # run may have bound its identifier, given it to another Company,
-            # or published a newer Company of its kind since it was assessed.
-            # Re-assess rather than mint twice, join the wrong Company, or
-            # publish a new Company before one already stored.
-            if not preview and binding.proposal_is_stale(
-                conn, policy, automatic, correction.released(conn, decisions)
-            ):
-                raise assessment.StaleAssessment(
-                    "A rule's proposal no longer holds; re-assess"
-                )
             stored_a, stored_d, stored_ids = load_closure(
                 conn, assertions, decisions, limit=self.closure_limit
             )
@@ -849,10 +861,7 @@ class MergeStage:
             if candidate is not None:
                 # Committed with this transaction; the caller saves the batch in the next.
                 self.store._authorize(conn)
-                key = conn.scalar(
-                    text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
-                    {"body": canonical({**candidate, **_record}), "run": run_id},
-                )
+                key = assessment.record_in(conn, {**candidate, **_record}, run_id)
                 return {"assessment_id": key, "request": request}
             if assessment_id is not None:
                 request["assessment_id"] = assessment_id
