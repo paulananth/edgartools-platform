@@ -198,7 +198,7 @@ def test_a_publication_carries_the_objects_the_merge_stage_computed(database):
     with database.application.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT p.batch_id, p.payload->'objects', b.effects->'projections' "
+                "SELECT p.batch_id, mdm.outbox_payload(p.batch_id, p.consumer)->'objects', b.effects->'projections' "
                 "FROM mdm.outbox p JOIN mdm.batch b USING (batch_id)"
             )
         ).all()

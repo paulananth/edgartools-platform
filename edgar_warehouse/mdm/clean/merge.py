@@ -219,14 +219,8 @@ class MergeStage:
             automatic = self.propose(**command)
             if not _identity_work(command.get("decisions"), automatic):
                 return self._execute(**command, automatic=automatic)
-            prepared = self.assess(**command, automatic=automatic)
-            if not prepared.get("assessment_id"):
-                # Duplicate delivery or decisions retained in an earlier batch.
-                return self._execute(**command, automatic=automatic)
             try:
-                return self.apply_assessment(
-                    prepared["assessment_id"], run_id=command["run_id"]
-                )
+                return self._assess_and_apply(command, automatic)
             except assessment.StaleAssessment:
                 if attempt == 2:
                     raise
@@ -287,58 +281,78 @@ class MergeStage:
         """
         if not _identity_work(command.get("decisions"), automatic):
             raise ValueError("Assessment requires an identity proposal")
-        run_id = command["run_id"]
-        proposal = {k: v for k, v in command.items() if k not in {"run_id", "preview"}}
-        for key, order in (
-            ("assertions", "assertion_id"),
-            ("identities", "entity_id"),
-            ("deferred", "deferred_id"),
-            ("occurrences", "assertion_id"),
-        ):
-            if proposal.get(key):
-                proposal[key] = sorted(proposal[key], key=lambda item: item[order])
-        if proposal.get("decisions"):
-            # A load batch whose only identity work is a rule's has none.
-            proposal["decisions"] = sorted(
-                proposal["decisions"], key=lambda d: (d["at"], d["decision_id"])
-            )
-        context = {}
+        proposal, kept, context = _proposal(command), _kept(automatic), {}
         try:
             result = self._execute(
                 **{**command, "preview": True}, automatic=automatic, _context=context
             )
         except (Conflict, DBAPIError) as exc:
-            # SQL driver exceptions can contain source values/connection details;
-            # retain the SQLSTATE, never its full rendered query/parameters.
-            veto = (
-                str(exc)
-                if isinstance(exc, Conflict)
-                else f"database_validation:{getattr(exc.orig, 'pgcode', None)}"
-            )
-            assessment.record(
-                self.store,
-                {
-                    "version": 1,
-                    "command": proposal,
-                    "outcome": "rejected",
-                    "rule_version": "merge-validation-v1",
-                    "vetoes": [veto],
-                    **(
-                        {"automatic": automatic}
-                        if _identity_work([], automatic)
-                        else {}
-                    ),
-                    **context,
-                },
-                run_id,
-            )
+            self._reject(proposal, kept, context, exc, command["run_id"])
             raise
         body = result.get("assessment")
         if body is None:
             return result
-        kept = {"automatic": automatic} if _identity_work([], automatic) else {}
         return assessment.record(
-            self.store, {**body, "command": proposal, **kept}, run_id
+            self.store, {**body, "command": proposal, **kept}, command["run_id"]
+        )
+
+    def _assess_and_apply(self, command: dict, automatic: dict) -> dict:
+        """Assess, then save the batch the assessment computed: computed and
+        written once, with no preview write and no second computation.
+
+        The proposal is committed before any master write (Q13); the save then
+        re-checks it under the lock (its snapshot, and each rule proposal against
+        concurrent runs) and save_batch checks the batch against its effects. A
+        batch the assessment refuses keeps a rejected proposal, as `assess` does;
+        a stale one is superseded and re-proposed."""
+        proposal, kept, context = _proposal(command), _kept(automatic), {}
+        try:
+            prepared = self._execute(
+                **command, automatic=automatic, _context=context,
+                _record={"command": proposal, **kept},
+            )
+        except assessment.StaleAssessment:
+            raise
+        except (Conflict, DBAPIError) as exc:
+            self._reject(proposal, kept, context, exc, command["run_id"])
+            raise
+        if "assessment_id" not in prepared:
+            return prepared
+        key, request = prepared["assessment_id"], prepared["request"]
+        decisions = [*(command.get("decisions") or []), *(automatic or binding.nothing())["decisions"]]
+        try:
+            with self.store.engine.begin() as conn:
+                conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
+                assessment.check(conn, key)
+                policy = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:digest"),
+                                     {"digest": command["policy_digest"]})
+                if binding.proposal_is_stale(conn, policy, automatic, correction.released(conn, decisions)):
+                    raise assessment.StaleAssessment("A rule's proposal no longer holds; re-assess")
+                return self.store.commit(conn, {**request, "assessment_id": key}, command["run_id"])
+        except assessment.StaleAssessment:
+            assessment.supersede(self.store, key, command["run_id"])
+            raise
+
+    def _reject(self, proposal, kept, context, exc, run_id) -> None:
+        # SQL driver exceptions can contain source values/connection details;
+        # retain the SQLSTATE, never its full rendered query/parameters.
+        veto = (
+            str(exc)
+            if isinstance(exc, Conflict)
+            else f"database_validation:{getattr(exc.orig, 'pgcode', None)}"
+        )
+        assessment.record(
+            self.store,
+            {
+                "version": 1,
+                "command": proposal,
+                "outcome": "rejected",
+                "rule_version": "merge-validation-v1",
+                "vetoes": [veto],
+                **kept,
+                **context,
+            },
+            run_id,
         )
 
     def apply_assessment(self, assessment_id: str, *, run_id: str) -> dict:
@@ -378,6 +392,7 @@ class MergeStage:
         assessment_id: str | None = None,
         automatic: dict | None = None,
         _context: dict | None = None,
+        _record: dict | None = None,
     ) -> dict:
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
@@ -506,7 +521,8 @@ class MergeStage:
             )
             check_company_sources(policy, [*stored_a, *assertions])
             context = _context if _context is not None else {}
-            if preview and any(d["operation"] in {"bind", "merge"} for d in decisions):
+            proposing = preview or _record is not None
+            if proposing and any(d["operation"] in {"bind", "merge"} for d in decisions):
                 all_assertions = [*stored_a, *assertions]
                 keys = {a["subject"] for a in all_assertions}
                 keys.update(i["entity_id"] for i in [*stored_ids, *identities])
@@ -787,38 +803,39 @@ class MergeStage:
                     text("SELECT mdm.preview_batch(:request,CAST(:run AS uuid))"),
                     {"request": encoded, "run": run_id},
                 )
-                candidate = None
-                if any(
-                    d["operation"] in {"bind", "merge"} for d in request["decisions"]
-                ):
-                    before = old + rows(
-                        conn,
-                        """SELECT 'entity' AS object_type,object_id,body
-                        FROM mdm.current_entity
-                        WHERE object_id=ANY(:ids) LIMIT :lim""",
-                        ids=sorted(all_ids),
-                        lim=self.closure_limit + 1,
+            candidate = None
+            if proposing and any(
+                d["operation"] in {"bind", "merge"} for d in request["decisions"]
+            ):
+                before = old + rows(
+                    conn,
+                    """SELECT 'entity' AS object_type,object_id,body
+                    FROM mdm.current_entity
+                    WHERE object_id=ANY(:ids) LIMIT :lim""",
+                    ids=sorted(all_ids),
+                    lim=self.closure_limit + 1,
+                )
+                if len(before) > self.closure_limit:
+                    raise Conflict(
+                        "Assessment projection history exceeds bounded budget"
                     )
-                    if len(before) > self.closure_limit:
-                        raise Conflict(
-                            "Assessment projection history exceeds bounded budget"
-                        )
-                    candidate = {
-                        "version": 1,
-                        "command": command,
-                        "outcome": "ready",
-                        "rule_version": "merge-validation-v1",
-                        "vetoes": [],
-                        **context,
-                        "before": sorted(
-                            before, key=lambda p: (p["object_type"], p["object_id"])
-                        ),
-                        "effects": {
-                            k: v
-                            for k, v in request.items()
-                            if k != "expected_generation"
-                        },
-                    }
+                candidate = {
+                    "version": 1,
+                    "command": command,
+                    "outcome": "ready",
+                    "rule_version": "merge-validation-v1",
+                    "vetoes": [],
+                    **context,
+                    "before": sorted(
+                        before, key=lambda p: (p["object_type"], p["object_id"])
+                    ),
+                    "effects": {
+                        k: v
+                        for k, v in request.items()
+                        if k != "expected_generation"
+                    },
+                }
+            if preview:
                 conn.rollback()
                 return {
                     "preview": True,
@@ -826,9 +843,41 @@ class MergeStage:
                     "effects": request,
                     "assessment": candidate,
                 }
+            if candidate is not None:
+                # Committed with this transaction; the caller saves the batch in the next.
+                self.store._authorize(conn)
+                key = conn.scalar(
+                    text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
+                    {"body": canonical({**candidate, **_record}), "run": run_id},
+                )
+                return {"assessment_id": key, "request": request}
             if assessment_id is not None:
                 request["assessment_id"] = assessment_id
             return self.store.commit(conn, request, run_id)
+
+
+def _proposal(command: dict) -> dict:
+    """The caller's command as a proposal keeps it: its lists in a fixed order."""
+    proposal = {k: v for k, v in command.items() if k not in {"run_id", "preview"}}
+    for key, order in (
+        ("assertions", "assertion_id"),
+        ("identities", "entity_id"),
+        ("deferred", "deferred_id"),
+        ("occurrences", "assertion_id"),
+    ):
+        if proposal.get(key):
+            proposal[key] = sorted(proposal[key], key=lambda item: item[order])
+    if proposal.get("decisions"):
+        # A load batch whose only identity work is a rule's has none.
+        proposal["decisions"] = sorted(
+            proposal["decisions"], key=lambda d: (d["at"], d["decision_id"])
+        )
+    return proposal
+
+
+def _kept(automatic: dict | None) -> dict:
+    """A rule's proposals are kept beside the caller's command, never inside it."""
+    return {"automatic": automatic} if _identity_work([], automatic) else {}
 
 
 def _occurrences(occurrences: list[dict], assertions: list[dict]) -> list[dict]:
