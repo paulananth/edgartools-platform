@@ -11,7 +11,7 @@ import pytest
 from edgar_warehouse.mdm.clean.name_census import _sec_population
 from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
 from edgar_warehouse.mdm.clean.store import Conflict, canonical
-from tests.mdm.test_clean_company_source import gleif_archive, gleif_reading
+from tests.support.name_census_inputs import gleif_archive, gleif_reading
 from tests.mdm.test_clean_name_census import gleif
 from tests.support.sec_capture import key, write_capture
 

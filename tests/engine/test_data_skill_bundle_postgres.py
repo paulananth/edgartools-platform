@@ -1375,49 +1375,43 @@ engine.dispose()
 
 
 def test_active_company_preparation_caller_runs_from_installed_bundle(installed, tmp_path):
-    """Frozen input is produced once; installed CLI and verifier cannot use checkout."""
-    from tests.mdm.test_clean_company_source import landing, source_row, ticker_row, filing_row
-    from tests.support.retired_company_preparation import prepare_company_bundle as historical
-    from edgar_warehouse.mdm.clean.company_source import bronze_receipts
+    """The installed CLI prepares a Company bundle from a raw capture, byte for byte as the
+    checkout does, and the installed verifier accepts it; neither can use the checkout."""
+    from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, census_capture, documents, prepare
+    from tests.support.sec_capture import CATALOG
     python, root = installed
-    selected = "a" * 64
-    args = landing(tmp_path, [source_row(123,raw_object_id=selected)], tickers=[ticker_row(123,"A")],
-                   filings=[filing_row(123,"10-Q"),filing_row(123,"10-K")])
-    receipts = tmp_path / "receipts.json"
-    receipts.write_text(json.dumps(bronze_receipts("capture-1",
-        [{"sha256":f"{n:064x}","path":f"s3://bronze/{n}.json"} for n in range(10001)]
-        + [{"sha256":selected,"path":"s3://bronze/selected.json"}])))
-    args["bronze_receipts_path"] = str(receipts)
-    original = historical(**{**args,"output":str(tmp_path/"historical")})
-    arguments = ["mdm","prepare-clean-company"]
-    for name,value in args.items():
-        option = "bronze-receipts" if name == "bronze_receipts_path" else name.replace("_","-")
-        arguments.extend(["--"+option,str(value)])
-    run = _run(python,"-c", """
+    capture = census_capture(tmp_path, documents(), CATALOG_ROWS)
+    original, expected = prepare(tmp_path, capture, output="checkout")
+    folder, population, census = capture
+    listed = tmp_path / "documents-checkout.json"
+    arguments = ["mdm", "prepare-clean-company", "--capture", str(folder), "--documents", str(listed),
+                 "--population", str(population), "--catalog", CATALOG,
+                 "--capture-run", PINS["capture_run"], "--catalog-run", PINS["catalog_run"],
+                 "--observed-at", PINS["observed_at"], "--name-census", str(census),
+                 "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"])]
+    run = _run(python, "-c", """
 import sys
 from edgar_warehouse.rules import source_engine
-from edgar_warehouse.mdm.clean import company_source
 from edgar_warehouse.cli import main
 source_engine.STEPS = {}
-assert not hasattr(company_source,'prepare_company_bundle')
-assert not hasattr(company_source,'_filed_forms')
-assert not hasattr(company_source,'_catalog_tickers')
 sys.exit(main(sys.argv[1:]))
-""", *arguments,cwd=root)
+""", *arguments, cwd=root)
     assert run.returncode == 0, run.stderr
     report = json.loads(run.stdout)
-    assert report['scope'] == original['scope']
-    for name in original['files']:
-        assert (tmp_path/'historical'/name).read_bytes() == (tmp_path/'pinned'/name).read_bytes(),name
-    verified = _run(python,"-c", """
+    assert report["scope"] == original["scope"]
+    # Worker receipts name the bundle's own folder, so only they (and the inventory listing them) differ.
+    for name in original["files"]:
+        if not name.startswith("workers/"):
+            assert (expected / name).read_bytes() == (tmp_path / "pinned" / name).read_bytes(), name
+    verified = _run(python, "-c", """
 import json,sys
 from edgar_warehouse.rules import source_engine
 from edgar_warehouse.mdm.clean.company_prepare import verify_company_bundle
 source_engine.STEPS = {}
 print(json.dumps(verify_company_bundle(sys.argv[1],expected=json.load(sys.stdin))))
-""",str(tmp_path/'pinned'),cwd=root,document=report)
-    assert verified.returncode == 0,verified.stderr
-    assert json.loads(verified.stdout)['records'] == 1
+""", str(tmp_path / "pinned"), cwd=root, document=report)
+    assert verified.returncode == 0, verified.stderr
+    assert json.loads(verified.stdout)["records"] == 3
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
