@@ -45,12 +45,15 @@ Qualification is offline; performance claims require measured full caller paths.
 - [ ] Measure bounded offline computation and full MergeStage paths, including semantics and memory.
 - [x] Update only skill instructions affected by implemented capabilities; verify examples. Guard passed, responsibility note only; doctor resolves all 131 commands with engine loaded, no activation changes; 2026-10-11 16:20 ET.
 - [ ] Run regular Rust type checks, focused tests, then the complete maintained test suite once.
-- [ ] Review against baseline with Standards, Spec and independent GoF agents, and address findings.
+- [x] Review against baseline with Standards, Spec and independent GoF agents, and address findings. Independent reviews and rechecks confirm future-operand finding resolved in bf2278e3, no remaining findings; see REVIEW.md; 2026-10-11 16:25 ET.
 - [x] Fix review finding: filter future decisions before native operand marshalling and preserve active override references. Verified red/green public regression and 14 identity passes; reversed merges also ignore unused survivor/dependency metadata; mypy clean; 2026-10-11 16:24 ET.
 - [ ] Guard and commit the verified implementation on this dedicated branch.
+- [ ] Rebase onto freshly fetched main, preserve qualification notes, and verify upstream profiling/skill changes.
 
 Qualification note: 1,000 field/profile and 1,000 identity baseline comparisons pass.
 200/600-record real MergeStage business hashes match; small workloads can be slower.
 Timing while broad tests run is noisy; final measurements will run without that load.
-Full maintained suite is in progress. Installed-bundle tests use committed HEAD,
+Full maintained suite completed in 35m06s: 2,828 passes, one existing xfail,
+one future-expiry failure from the earlier in-process adapter snapshot. Fresh
+MDM rerun at the committed correction passes all 648 tests, including that case. Installed-bundle tests use committed HEAD,
 so a guarded implementation checkpoint precedes that portion and final review.
