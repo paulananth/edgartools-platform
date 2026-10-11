@@ -170,3 +170,21 @@ class SourceEngine:
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
         return Reading(tables=result["tables"], deferred=result["deferred"])
+
+
+class ReductionEngine:
+    """Generic native accumulation; caller authenticates and exhausts inputs.
+
+    Only call finish after successful EOF of every supplied reading. Rows are
+    transient; Rust retains bounded group state, not complete input history.
+    All custom parsing remains in the existing Python STEPS interface.
+    """
+
+    def __init__(self, plan: Mapping):
+        self._engine = source_contract.Reduction(json.dumps(plan, ensure_ascii=False, allow_nan=False))
+
+    def push(self, group: str, rows: list[dict]) -> None:
+        self._engine.push(group, rows)
+
+    def finish(self) -> dict[str, list[dict]]:
+        return self._engine.finish()

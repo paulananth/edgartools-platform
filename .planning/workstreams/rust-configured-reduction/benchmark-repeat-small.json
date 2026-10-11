@@ -1,0 +1,153 @@
+{
+  "baseline_commit": "45525cd8bc1df550bfba10022bd5eead1f41359d",
+  "trials": 5,
+  "scope": "offline source.combine reduce execute + verify; local artifact I/O",
+  "production_qualified": false,
+  "python_version": "3.12.13 (main, May 10 2026, 19:20:48) [Clang 22.1.3 ]",
+  "machine": "x86_64",
+  "native_binary_sha256": "3be1d73984d9504a3014935e8191e415e5844c9f5f613e29cdace47612990770",
+  "workloads": [
+    {
+      "selected_rows_per_table": 20000,
+      "input_rows_per_worker": 40000,
+      "groups": 3,
+      "partition_count": 4,
+      "runs": [
+        {
+          "workers": 1,
+          "python": {
+            "mode": "python",
+            "workers": 1,
+            "seconds": [
+              1.088531871791929,
+              1.1000093650072813,
+              1.1158552933484316,
+              1.1723721399903297,
+              1.2129476126283407
+            ],
+            "median_seconds": 1.1158552933484316,
+            "worker_runs_per_second": 0.8961735504244678,
+            "peak_rss_bytes": 36585472,
+            "output_sha256": [
+              "362eb607270da5d05a4ec5c5bbe150eb247af691b9a061b2ad042904295d6fde"
+            ],
+            "baseline_source_sha256": "310629cb3f86f2fc18d5e2e4a75931b355023d60e056d13105518bdd1277f41f"
+          },
+          "rust": {
+            "mode": "rust",
+            "workers": 1,
+            "seconds": [
+              0.36596332117915154,
+              0.351505508646369,
+              0.34938106685876846,
+              0.4119448331184685,
+              0.34063144214451313
+            ],
+            "median_seconds": 0.351505508646369,
+            "worker_runs_per_second": 2.844905628509074,
+            "peak_rss_bytes": 45735936,
+            "output_sha256": [
+              "362eb607270da5d05a4ec5c5bbe150eb247af691b9a061b2ad042904295d6fde"
+            ],
+            "baseline_source_sha256": "310629cb3f86f2fc18d5e2e4a75931b355023d60e056d13105518bdd1277f41f"
+          },
+          "exact_output_parity": true,
+          "speedup": 3.1745030046485967,
+          "rss_ratio": 1.2501119570085086
+        },
+        {
+          "workers": 2,
+          "python": {
+            "mode": "python",
+            "workers": 2,
+            "seconds": [
+              2.427153313998133,
+              2.3869457892142236,
+              2.441425120923668,
+              2.533755279146135,
+              2.558773644734174
+            ],
+            "median_seconds": 2.441425120923668,
+            "worker_runs_per_second": 0.8191936680176932,
+            "peak_rss_bytes": 54452224,
+            "output_sha256": [
+              "362eb607270da5d05a4ec5c5bbe150eb247af691b9a061b2ad042904295d6fde",
+              "6e358b27916c9729998af46bfeda71d231bd716ba84e621872dbaca115565277"
+            ],
+            "baseline_source_sha256": "310629cb3f86f2fc18d5e2e4a75931b355023d60e056d13105518bdd1277f41f"
+          },
+          "rust": {
+            "mode": "rust",
+            "workers": 2,
+            "seconds": [
+              0.7096043592318892,
+              0.6949908309616148,
+              0.7067768471315503,
+              0.6968856281600893,
+              0.6927505233325064
+            ],
+            "median_seconds": 0.6968856281600893,
+            "worker_runs_per_second": 2.8699113874401183,
+            "peak_rss_bytes": 67911680,
+            "output_sha256": [
+              "362eb607270da5d05a4ec5c5bbe150eb247af691b9a061b2ad042904295d6fde",
+              "6e358b27916c9729998af46bfeda71d231bd716ba84e621872dbaca115565277"
+            ],
+            "baseline_source_sha256": "310629cb3f86f2fc18d5e2e4a75931b355023d60e056d13105518bdd1277f41f"
+          },
+          "exact_output_parity": true,
+          "speedup": 3.503336878060601,
+          "rss_ratio": 1.2471791785768016
+        },
+        {
+          "workers": 4,
+          "python": {
+            "mode": "python",
+            "workers": 4,
+            "seconds": [
+              5.336070905905217,
+              5.2326570940203965,
+              6.026433184277266,
+              5.883317224215716,
+              6.135437401942909
+            ],
+            "median_seconds": 5.883317224215716,
+            "worker_runs_per_second": 0.6798885471509188,
+            "peak_rss_bytes": 73400320,
+            "output_sha256": [
+              "362eb607270da5d05a4ec5c5bbe150eb247af691b9a061b2ad042904295d6fde",
+              "6e358b27916c9729998af46bfeda71d231bd716ba84e621872dbaca115565277",
+              "2a2c7d02958562c4d9fac88013881ab1d198b3401b88bd0df1d414ea365d434d",
+              "dbe06583d8a956afcc0972731da7fff3250e329101d63d7b74bd5a0abb70e7b2"
+            ],
+            "baseline_source_sha256": "310629cb3f86f2fc18d5e2e4a75931b355023d60e056d13105518bdd1277f41f"
+          },
+          "rust": {
+            "mode": "rust",
+            "workers": 4,
+            "seconds": [
+              1.4731042329221964,
+              1.4702105480246246,
+              1.517190634738654,
+              1.5635899705812335,
+              1.5274919848889112
+            ],
+            "median_seconds": 1.517190634738654,
+            "worker_runs_per_second": 2.636451813248258,
+            "peak_rss_bytes": 97923072,
+            "output_sha256": [
+              "362eb607270da5d05a4ec5c5bbe150eb247af691b9a061b2ad042904295d6fde",
+              "6e358b27916c9729998af46bfeda71d231bd716ba84e621872dbaca115565277",
+              "2a2c7d02958562c4d9fac88013881ab1d198b3401b88bd0df1d414ea365d434d",
+              "dbe06583d8a956afcc0972731da7fff3250e329101d63d7b74bd5a0abb70e7b2"
+            ],
+            "baseline_source_sha256": "310629cb3f86f2fc18d5e2e4a75931b355023d60e056d13105518bdd1277f41f"
+          },
+          "exact_output_parity": true,
+          "speedup": 3.8777705909245586,
+          "rss_ratio": 1.334095982142857
+        }
+      ]
+    }
+  ]
+}

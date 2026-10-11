@@ -3,6 +3,7 @@
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
@@ -246,9 +247,77 @@ fn reading_to_py(py: Python<'_>, reading: &crate::Reading) -> PyResult<PyObject>
 #[pymodule]
 fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
+    m.add_class::<PyReduction>()?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
     Ok(())
+}
+
+// Only selected text columns cross this boundary. Input history is never
+// retained; bounded conversion batches release the GIL for native accumulation.
+#[pyclass(name = "Reduction", module = "source_contract")]
+struct PyReduction {
+    inner: crate::reduction::Reduction,
+}
+
+fn reduction_text(row: &Bound<'_, PyDict>, column: &str) -> PyResult<String> {
+    let error = || PyValueError::new_err(format!("Reduction column {column} must contain exact text"));
+    let value = row.get_item(column)?.ok_or_else(error)?;
+    let text = value.downcast::<PyString>().map_err(|_| error())?;
+    Ok(text.to_str()?.to_owned())
+}
+
+#[pymethods]
+impl PyReduction {
+    #[new]
+    fn new(plan: &str) -> PyResult<Self> {
+        Ok(Self { inner: crate::reduction::Reduction::new(plan).map_err(PyValueError::new_err)? })
+    }
+
+    fn push(&mut self, py: Python<'_>, group: &str, rows: &Bound<'_, PyList>) -> PyResult<()> {
+        let result = (|| {
+            let spec = self.inner.spec(group).map_err(PyValueError::new_err)?.clone();
+            let mut input = rows.iter();
+            loop {
+                let mut batch = Vec::with_capacity(1024);
+                let mut fault = None;
+                for _ in 0..1024 {
+                    let Some(row) = input.next() else { break; };
+                    let converted = (|| {
+                        let row = row.downcast::<PyDict>()
+                            .map_err(|_| PyValueError::new_err("Reduction row must be an object"))?;
+                        let key = spec.keys.iter().map(|column| reduction_text(row, column))
+                            .collect::<PyResult<Vec<_>>>()?;
+                        let member = spec.member.as_ref().map(|column| reduction_text(row, column)).transpose()?;
+                        let last = if let Some(column) = &spec.last {
+                            if row.get_item(column)?.is_some_and(|value| value.is_none()) && spec.last_null.is_some() {
+                                spec.last_null.clone()
+                            } else { Some(reduction_text(row, column)?) }
+                        } else { None };
+                        Ok(crate::reduction::Row { key, member, last })
+                    })();
+                    match converted {
+                        Ok(row) => batch.push(row),
+                        Err(error) => { fault = Some(error); break; }
+                    }
+                }
+                let empty = batch.is_empty();
+                // Process the valid prefix first to preserve state-budget error
+                // precedence over a later malformed row in the same batch.
+                py.allow_threads(|| self.inner.push(group, batch)).map_err(PyValueError::new_err)?;
+                if let Some(error) = fault { return Err(error); }
+                if empty { break; }
+            }
+            Ok(())
+        })();
+        if result.is_err() { self.inner.invalidate(); }
+        result
+    }
+
+    fn finish(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let tables = py.allow_threads(|| self.inner.finish()).map_err(PyValueError::new_err)?;
+        json_to_py(py, &tables)
+    }
 }
 
 struct PythonReader(Py<PyAny>);
