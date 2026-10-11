@@ -99,10 +99,13 @@ Beyond the schema above, data-profiling 1 writes these, for the operator and
 for drift: on a part, `scan` (full or sampled) and `runner_up` (the next class
 and its score); on a column, `stored_type` (the type as stored; `type` is the
 logical type a full read proves), `shape`, `shape_share` (masked shapes), `pattern`, `pattern_share` (the shape with
-each run of one character class collapsed: `8-26740` and `8-123` are both `9-9`;
-a text pattern with a separator `-/_:` on 99% of values makes a column
+each run of one character class collapsed: `X-26740` and `X-123` are both `A-9`;
+a text pattern with a separator `-/_:` on 99% of values, one prefix before it on 90%
+(`prefix_share`) and not a date or time (`pattern_temporal_share`) makes a column
 identifier-shaped, as numbers issued under a prefix are) and
-`sensitivity_signals`; on an identifier, `local_counter`; on a record key,
+`sensitivity_signals`; on an identifier, `local_counter` and `shape_test` (which
+test made it identifier-shaped: one length, one shape, or one pattern under one
+prefix, with its share); on a record key,
 `alternatives` (other unique keys) and, for a sampled part, `evidence.full_pass`.
 A column's `role` may also be `link` (it points at another part's key).
 `persistence`, `delivery` and `refresh` stay null and `unknown` until

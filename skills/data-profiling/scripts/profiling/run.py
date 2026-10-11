@@ -372,6 +372,7 @@ def _identifier(con, p, c, record_key) -> dict | None:
     else:
         proposal, why = "none", "repeats or is a local counter"
     return {"column": c["name"], "shape": sensitivity.mask(c["shape"]) if c["shape"] else None,
+            "shape_test": identifiers.shape_test(c),
             "check_digit": checked["family"], "pass_rate": checked["pass_rate"], "chance_rate": checked["chance_rate"],
             "fill": c["fill"], "unique": c["unique"], "local_counter": dense, "proposal": proposal, "why": why}
 

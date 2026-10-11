@@ -228,6 +228,9 @@ class _Marking:
         present = {r[0] for r in con.execute(f"DESCRIBE {sql_name(part)}").fetchall()}
         own = [k for k in record_key if k in present]
         self.record_key = own if len(own) == len(record_key) or PARENT not in present else [PARENT, *own]
+        if not self.record_key:
+            # A designed key (a surrogate) is not a column yet: name each row by its place in the table.
+            self.record_key = ["rowid"]
 
     def row(self, key: tuple, value, column: str, parent_column: str, reason: str, fix=None, support=None,
             fix_evidence=None) -> dict:

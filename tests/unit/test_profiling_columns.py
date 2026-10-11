@@ -153,13 +153,26 @@ def test_dates_written_in_two_formats_are_still_dates():
 def test_numbers_issued_under_a_prefix_are_identifier_shaped_but_amounts_are_not():
     con = duckdb.connect()
     rng = random.Random(7)
-    registered = [f"8-{rng.randint(10, 999999)}" for _ in range(300)]  # 4 to 8 characters
-    amounts = [str(rng.randint(1, 10**rng.randint(1, 9))) for _ in range(300)]
-    decimals = [f"{rng.randint(1, 99999)}.{rng.randint(0, 99)}" for _ in range(300)]
-    con.execute("CREATE TABLE r (reg VARCHAR, amount VARCHAR, price VARCHAR)")
-    con.executemany("INSERT INTO r VALUES (?, ?, ?)", list(zip(registered, amounts, decimals)))
+    n = 300
+    columns = {
+        "reg": [f"8-{rng.randint(10, 999999)}" for _ in range(n)],  # 4 to 8 characters, one prefix
+        "amount": [str(rng.randint(1, 10**rng.randint(1, 9))) for _ in range(n)],
+        "price": [f"{rng.randint(1, 99999)}.{rng.randint(0, 99)}" for _ in range(n)],
+        "day": [f"{rng.randint(1, 12)}/{rng.randint(1, 28)}/20{rng.randint(10, 26)}" for _ in range(n)],
+        "one_month": [f"3/{rng.randint(1, 28)}/20{rng.randint(10, 26)}" for _ in range(n)],  # one prefix, still dates
+        "iso_day": [f"20{rng.randint(10, 26)}-{rng.randint(1, 12)}-{rng.randint(1, 28)}" for _ in range(n)],
+        "time": [f"{rng.randint(0, 23)}:{rng.randint(0, 59):02d}" for _ in range(n)],
+        "range": [f"{rng.randint(1, 999)}-{rng.randint(1000, 99999)}" for _ in range(n)],
+        "fraction": [f"{rng.randint(1, 9)}/{rng.randint(10, 999)}" for _ in range(n)],
+        "words": [f"{rng.choice(['smith', 'lee', 'ng', 'garcia'])}-{''.join(rng.choices('abcdefgh', k=rng.randint(2, 9)))}"
+                  for _ in range(n)],
+    }
+    con.execute("CREATE TABLE r (" + ", ".join(f"{name} VARCHAR" for name in columns) + ")")
+    con.executemany(f"INSERT INTO r VALUES ({', '.join('?' * len(columns))})", list(zip(*columns.values())))
     cols = {c["name"]: c for c in profile.columns(con, "r")}
     assert cols["reg"]["pattern"] == "9-9" and cols["reg"]["length_share"] < 0.99
+    assert identifiers.shape_test(cols["reg"])["test"] == "one pattern under one prefix"
     assert identifiers.identifier_shaped(cols["reg"])
-    assert not identifiers.identifier_shaped(cols["amount"])  # digits of any length: no separator
-    assert not identifiers.identifier_shaped(cols["price"])  # a decimal point is no separator
+    for name in columns:
+        if name != "reg":
+            assert not identifiers.identifier_shaped(cols[name]), name

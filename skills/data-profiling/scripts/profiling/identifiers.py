@@ -105,20 +105,35 @@ def check_digits(values: list[str], seed: int = 0) -> dict:
             "chance_rate": round(FAMILIES[best][1], 6) if best else None, "rates": rates, "tested": len(values)}
 
 
-SEPARATORS = set("-/_:")  # a pattern holding one is a registration-style number, not an amount
+PREFIX = 0.9  # a number issued under a prefix: one text before its first separator on 90% of values
+
+
+def shape_test(profile: dict) -> dict | None:
+    """Which shape test a column passes as an identifier, with its share; None if none.
+
+    One length, or one character shape, on 99% of values; or one pattern (each run of
+    one character class collapsed, so `X-1234` and `X-12` are both `A-9`) holding a
+    separator on 99% of text values, one prefix before that separator on 90%, and not
+    a date or a time (`3/4/2022`, `9:30`, ranges like `12-4000` fail the prefix)."""
+    from .profile import SEPARATORS
+    if profile["length_share"] >= 0.99:
+        return {"test": "one length", "share": profile["length_share"]}
+    if profile["shape_share"] >= 0.99:
+        return {"test": "one shape", "share": profile["shape_share"]}
+    if profile.get("type") == "VARCHAR" and profile.get("pattern_share", 0.0) >= 0.99 \
+            and any(s in (profile.get("pattern") or "") for s in SEPARATORS) \
+            and profile.get("prefix_share", 0.0) >= PREFIX and profile.get("pattern_temporal_share", 1.0) < 0.5:
+        return {"test": "one pattern under one prefix", "share": profile["pattern_share"],
+                "prefix_share": profile["prefix_share"]}
+    return None
 
 
 def identifier_shaped(profile: dict) -> bool:
-    """One length or one shape for (nearly) every value, and more than a handful of values.
-    A text pattern with a separator counts too: `8-26740` and `8-1234` differ in length
-    and shape but share `9-9`, as numbers issued in sequence under a prefix do."""
+    """One length, shape or prefixed pattern for (nearly) every value, and more than a handful of values."""
     from .profile import is_temporal
     if not profile["non_null"] or profile["structure"] or profile.get("tokens", 0) > 1.0 or is_temporal(profile):
         return False
-    patterned = profile.get("type") == "VARCHAR" and profile.get("pattern_share", 0.0) >= 0.99 \
-        and bool(SEPARATORS & set(profile.get("pattern") or ""))
-    return profile["distinct"] >= 20 and (max(profile["shape_share"], profile["length_share"]) >= 0.99 or patterned) \
-        and (profile["min_length"] or 0) >= 3
+    return profile["distinct"] >= 20 and shape_test(profile) is not None and (profile["min_length"] or 0) >= 3
 
 
 def dense_sequence(profile: dict) -> bool:

@@ -277,3 +277,15 @@ def test_two_names_of_one_thing_are_one_level_even_with_a_stray_spelling(con):
     rejected = []
     found = hierarchy.by_dependency(con, "n", [cols["name"], cols["id"], cols["grp"]], ["id"], rejected)
     assert len(found) == 1 and len(found[0]["levels"]) == 2 and found[0]["levels"][0]["column"] == "grp"
+
+
+def test_a_hierarchy_in_a_part_with_a_designed_key_marks_rows_by_their_place(tmp_path):
+    import duckdb
+    from profiling import hierarchy
+    con = duckdb.connect()
+    con.execute("CREATE TABLE p (city VARCHAR, state VARCHAR)")
+    rows = [("Austin", "TX")] * 30 + [("Dallas", "TX")] * 30 + [("Boston", "MA")] * 30 + [("Austin", "MA")]
+    con.executemany("INSERT INTO p VALUES (?, ?)", rows)
+    record = hierarchy._record(con, "p", ["city", "state"], 0.99, "functional_dependency", ["p_id"])
+    (marked,) = record["marked"]
+    assert list(marked["key"]) == ["rowid"] and marked["key"]["rowid"] == "90"
