@@ -1,6 +1,7 @@
 # Configured merging and field survivorship
 
-Qualification in progress; no deployment or policy activation.
+Locally implemented and qualified on main 9af45def plus this slice.
+No deployment or policy activation.
 
 ## Implemented ownership
 
@@ -18,7 +19,7 @@ execution identity now also pins identity, survivorship and evidence modules,
 besides the existing facade, STEPS and installed native binary. Runtime identity
 changes intentionally; business output/assertion/policy hashes must not.
 
-## Verified so far
+## Verification
 
 - 60 focused native/public computation tests; later regressions bring identity
   tests to 14. Python mypy checks both adapters; Rust feature type checks pass.
@@ -37,7 +38,9 @@ one failure in the future-expiry regression. That long-running process had
 loaded the adapter before its correction; the fresh full MDM rerun at the
 committed correction passed all 648 tests, including that failure. Installed
 bundle acceptance in the broad run used correction commit bf2278e3. Final
-uncontended timings and post-rebase upstream checks remain pending.
+timings below were taken after the broad suite and upstream tests finished.
+Post-rebase: 77 affected upstream checks and doctor pass; range-diff proves both
+runtime implementation commits unchanged from the independently reviewed code.
 
 ## Qualification method
 
@@ -60,12 +63,43 @@ or relationship workload; those behaviors are covered by the acceptance suite.
 1,000-decision batch limit. A 1,000-record attempt correctly failed `Unbounded
 batch` at the unchanged MergeStage entry gate.
 
-Measurements taken while broad tests ran showed substantial timing variation;
-those observations do not establish full-path performance. Final measurements
-will run after the suites finish. No production corpus or deployed-path
-qualification is claimed. Further native work includes source-history folding
-and canonical comparison/materialization where measured costs justify it;
-custom rules remain Python and database transaction authority remains enforced.
+## Final measurements
+
+Median of three samples per mode; separate processes and fresh restricted-role
+PostgreSQL 16 stores. No concurrent pytest/rustc processes were present when this
+final sequential pair began. Whole-process peak RSS includes Python imports,
+metadata, materialized outputs and database clients, not just native state.
+
+| Records | Mode | Computation ms | Commit s | Retry s | Peak RSS MiB |
+|---|---|---:|---:|---:|---:|
+| 200 | python | 31.54 | 3.449 | 0.320 | 64.06 |
+| 200 | native | 27.01 | 2.514 | 0.273 | 63.70 |
+| 600 | python | 188.92 | 9.201 | 0.744 | 85.63 |
+| 600 | native | 82.21 | 8.311 | 0.680 | 85.57 |
+
+At 600 records, native computation is 2.30x faster and the observed commit median
+is 1.11x faster; at 200 records the observed ratios are 1.17x and 1.37x. Full
+commit samples overlap, database work dominates, and earlier small-sample timing
+can regress. These fixtures establish parity and an observed CPU benefit, not a
+guaranteed production or full-pipeline speedup. Peak RSS in these samples is
+roughly unchanged; this does not establish a lower native memory bound.
+
+Both files record 1,000 field/profile and 1,000 identity parity cases with zero
+differences, identical business projection hashes, identical stored request and
+policy digests/checkpoints/generations, fresh-replay parity and lost-ack retry.
+Runtime digest: `8023919f275ec74a16c1ea1783a0014088d71d2147e249c597108a1119efeccc`.
+Raw data: [200 records](measurements-200.json), [600 records](measurements-600.json).
+Reproduce from this worktree with:
+
+```bash
+uv run --no-sync python scripts/dev/qualify_configured_merging.py --limit 200 --cases 1000 --output /tmp/merging-200.json
+uv run --no-sync python scripts/dev/qualify_configured_merging.py --limit 600 --cases 1000 --output /tmp/merging-600.json
+```
+
+No production corpus or deployed-path qualification is claimed. Further native
+work includes source-history folding and canonical comparison/materialization
+where measured costs justify it. Custom rules remain Python; database transaction
+authority remains enforced.
 
 ## Skill impact
 

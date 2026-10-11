@@ -33,3 +33,9 @@ in Python with shared selection. Additional State/Command/Strategy classes would
 add review and debugging cost without reducing demonstrated current costs.
 
 Summary: initial findings Standards 1, Spec 1, GoF 0; remaining 0 on each axis.
+
+Rebase verification: main advanced to 9af45def with profiling/docs changes.
+`git range-diff e4be3019..bf2278e3 9af45def..1d88d874` shows both runtime
+implementation commits unchanged (now 9715bd2f and 1d88d874). No new runtime
+code or review findings from the rebase. All 77 affected upstream checks and
+doctor pass after it.

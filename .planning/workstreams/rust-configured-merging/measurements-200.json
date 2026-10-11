@@ -1,0 +1,80 @@
+{
+  "baseline": "e4be301962e0c2c1b6ab6efc0eb500747b7c718e",
+  "native_runtime_digest": "8023919f275ec74a16c1ea1783a0014088d71d2147e249c597108a1119efeccc",
+  "parity": {
+    "field_profile_cases": 1000,
+    "identity_cases": 1000
+  },
+  "runs": [
+    {
+      "commit_samples": [
+        3.448659099172801,
+        3.53816686430946,
+        2.4616492581553757
+      ],
+      "commit_seconds": 3.448659099172801,
+      "max_rss_bytes": 67170304,
+      "mode": "python",
+      "projection_hashes": {
+        "entity": "f3c75f3357097701c7e1024628baf79c4fb3865efcbe3bed1f1c09a3c66dcb47",
+        "relationship": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "review": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "pure_seconds": 0.03153720498085022,
+      "receipt": {
+        "checkpoint": 1,
+        "consumer": "fixture",
+        "generation": 1,
+        "policy_digest": "cec3e91e18b25c5bb6f752dbb8f0fdd327bef734986c09f5b4e67762e147559f",
+        "request_hash": "3808a599b24735fb2e4964e210078ed730467fd81a356c1a05d01b8218cb03ba"
+      },
+      "records": 200,
+      "result": {
+        "batch_id": "work-1",
+        "duplicate": false,
+        "generation": 1
+      },
+      "retry_samples": [
+        0.3202214129269123,
+        0.3337216437794268,
+        0.26413431391119957
+      ],
+      "retry_seconds": 0.3202214129269123
+    },
+    {
+      "commit_samples": [
+        2.513739155139774,
+        2.4842358832247555,
+        2.590697701089084
+      ],
+      "commit_seconds": 2.513739155139774,
+      "max_rss_bytes": 66797568,
+      "mode": "native",
+      "projection_hashes": {
+        "entity": "f3c75f3357097701c7e1024628baf79c4fb3865efcbe3bed1f1c09a3c66dcb47",
+        "relationship": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "review": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "pure_seconds": 0.027014453895390034,
+      "receipt": {
+        "checkpoint": 1,
+        "consumer": "fixture",
+        "generation": 1,
+        "policy_digest": "cec3e91e18b25c5bb6f752dbb8f0fdd327bef734986c09f5b4e67762e147559f",
+        "request_hash": "3808a599b24735fb2e4964e210078ed730467fd81a356c1a05d01b8218cb03ba"
+      },
+      "records": 200,
+      "result": {
+        "batch_id": "work-1",
+        "duplicate": false,
+        "generation": 1
+      },
+      "retry_samples": [
+        0.2728560399264097,
+        0.30353705817833543,
+        0.24125668685883284
+      ],
+      "retry_seconds": 0.2728560399264097
+    }
+  ]
+}
