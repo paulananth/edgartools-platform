@@ -71,11 +71,11 @@ def main():
     args = parser.parse_args()
     old = baseline()
     rng = random.Random(911920)
-    corpus = [None, False, True, 0, 0.0, -0.0, 1, 1.0, 10**80, -(10**80), '', '雪', [], {}, ['x'], {'b': 0, 'a': 1}]
+    corpus = [None, False, True, 0, 0.0, -0.0, 1, 1.0, 10**80, -(10**80), '', '雪', '\ud800', 'a\udfff', {'\ud800':'escaped'}, [], {}, ['x'], {'b': 0, 'a': 1}]
     errors = 0
     for case in range(1500):
         mode = rng.choice(['collect', 'collect_flat', 'first', 'last', 'one'])
-        rows = [{'id': rng.choice([0, 1, '1', None, 10**80]), 'value': deepcopy(rng.choice(corpus)),
+        rows = [{'id': rng.choice([0, 1, '1', '\ud800', None, 10**80]), 'value': deepcopy(rng.choice(corpus)),
                  'rank': rng.randrange(4), 'fence': 'ok'} for _ in range(rng.randrange(1, 20))]
         if mode == 'collect_flat':
             for row in rows:

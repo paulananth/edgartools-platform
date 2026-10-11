@@ -30,6 +30,7 @@ The existing worker's execute/verify tests provide the characterization seam.
 - [ ] Qualify bounded offline Company inputs with whole census and measure computation plus full execute/verify and memory.
 - [ ] Update COMBINING and responsibility map for implemented boundaries; verify commands/examples.
 - [ ] Run Rust checks and applicable maintained tests, including installed bundle and real PostgreSQL acceptance where affected.
-- [ ] Independent Standards, Spec and GoF review; resolve all findings.
+- [x] Independent Standards, Spec and GoF review; resolve all findings. Standards escaped-surrogate metadata finding corrected; independent recheck validates 2,025 code-point pairs; Spec/GoF clear; REVIEW records all axes; 2026-10-11 19:54 ET.
+- [x] Fix review finding: preserve Python code points for keys, ordering, canonical tokens and empty-text handling. Public red/green regression and all 60 focused tests pass on corrected release binding; expanded 1,500 parity cases including 1,137 matching failures pass; 2026-10-11 19:54 ET.
 - [ ] Rebase onto delivered merge/survivorship main; guard, commit, push, PR and all CI green.
 - [ ] Merge and verify delivery, and hand off precise available interfaces/remaining Claude-owned fan-in.

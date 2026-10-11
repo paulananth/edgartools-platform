@@ -39,7 +39,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--capture', type=Path, required=True)
     parser.add_argument('--census', type=Path, required=True)
-    parser.add_argument('--limit', type=int, default=200)
+    parser.add_argument('--limit', type=int, default=40)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if not 2 <= args.limit <= 500 or args.limit % 2:

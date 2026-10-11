@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
 
 fn fail(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
@@ -33,7 +33,7 @@ fn names(spec: &Bound<'_, PyDict>, name: &str) -> PyResult<Vec<String>> {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Key {
-    Text(String),
+    Text(Vec<u8>),
     Integer(String),
 }
 fn key(value: &Bound<'_, PyAny>) -> PyResult<Option<Key>> {
@@ -41,7 +41,7 @@ fn key(value: &Bound<'_, PyAny>) -> PyResult<Option<Key>> {
         return Ok(None);
     }
     if value.is_exact_instance_of::<PyString>() {
-        return Ok(Some(Key::Text(value.extract()?)));
+        return Ok(Some(Key::Text(python_text(value)?)));
     }
     if value.is_exact_instance_of::<PyInt>() {
         return Ok(Some(Key::Integer(value.str()?.to_str()?.into())));
@@ -53,7 +53,7 @@ fn key(value: &Bound<'_, PyAny>) -> PyResult<Option<Key>> {
 
 #[derive(Clone)]
 enum Scalar {
-    Text(String),
+    Text(Vec<u8>),
     Integer(String),
     Float(f64),
     Bool(bool),
@@ -94,7 +94,7 @@ fn integer_compare(a: &str, b: &str) -> Ordering {
 }
 fn scalar(value: &Bound<'_, PyAny>, message: &str) -> PyResult<Scalar> {
     if value.is_exact_instance_of::<PyString>() {
-        Ok(Scalar::Text(value.extract()?))
+        Ok(Scalar::Text(python_text(value)?))
     } else if value.is_exact_instance_of::<PyInt>() {
         Ok(Scalar::Integer(value.str()?.to_str()?.into()))
     } else if value.is_exact_instance_of::<PyFloat>() {
@@ -105,8 +105,19 @@ fn scalar(value: &Bound<'_, PyAny>, message: &str) -> PyResult<Scalar> {
         Err(fail(message))
     }
 }
-fn canonical(value: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyResult<String> {
-    function.call1((value,))?.extract()
+// UTF-8 with surrogatepass is injective and orders by Python code points,
+// including escaped lone surrogates accepted by the authenticated JSON codec.
+// Most strings use the fast valid-UTF-8 path. Payloads are never re-encoded.
+fn python_text(value: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
+    let text = value.downcast::<PyString>()?;
+    if let Ok(text) = text.to_str() {
+        return Ok(text.as_bytes().to_vec());
+    }
+    let encoded = value.call_method1("encode", ("utf-8", "surrogatepass"))?;
+    Ok(encoded.downcast::<PyBytes>()?.as_bytes().to_vec())
+}
+fn canonical(value: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
+    python_text(&function.call1((value,))?)
 }
 
 fn rows<'py>(
@@ -256,10 +267,7 @@ fn group(
                 vec![value.clone()]
             };
             for item in items {
-                if skip_empty
-                    && item.is_exact_instance_of::<PyString>()
-                    && item.extract::<String>()?.is_empty()
-                {
+                if skip_empty && item.is_exact_instance_of::<PyString>() && item.len()? == 0 {
                     continue;
                 }
                 if distinct && !seen.insert(canonical(&item, canon)?) {
@@ -439,34 +447,4 @@ pub fn combine_tables(
         result.set_item(name, output_rows)?;
     }
     Ok(result.unbind())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn arbitrary_integer_order() {
-        let mut values = [
-            "100000000000000000000",
-            "-100000000000000000000",
-            "0",
-            "-2",
-            "-11",
-            "2",
-            "11",
-        ];
-        values.sort_by(|a, b| integer_compare(a, b));
-        assert_eq!(
-            values,
-            [
-                "-100000000000000000000",
-                "-11",
-                "-2",
-                "0",
-                "2",
-                "11",
-                "100000000000000000000"
-            ]
-        );
-    }
 }

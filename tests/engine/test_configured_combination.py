@@ -50,3 +50,30 @@ def test_worker_preserves_first_failure_before_later_check_and_has_no_publicatio
     with pytest.raises(ValueError, match='keys must be text, integer or null'):
         source_combine.execute(work, store)
     assert not (tmp_path / 'output').exists()
+
+
+def test_worker_keeps_escaped_surrogate_metadata_until_unused_columns_are_dropped(tmp_path):
+    import json
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.workers import source_combine
+    store = Artifacts()
+    captured = store.put(tmp_path.as_uri(), {'fixture': 'escaped metadata'})
+    rows = [{'id': '\ud800', 'rank': '\ud900', 'fence': '\udfff', 'value': 'B'},
+            {'id': '\ud800', 'rank': '\ud800', 'fence': '\udfff', 'value': 'A'}]
+    body = {'version': 1, 'artifacts': [{'input': captured, 'tables': {'rows': rows}, 'deferred': []}]}
+    raw = store.put_bytes((tmp_path / 'escaped-reading.json').as_uri(), json.dumps(body, ensure_ascii=True).encode())
+    selected = group('raw', 'rows', 'id', 'value', order_by=('rank',), distinct=True,
+                     checks={'fence': '\udfff'}, where={'fence': '\udfff'})
+    unused = group('raw', 'rows', 'id', 'id', distinct=True)
+    unused['skip_empty_text'] = True
+    output = table('raw', 'rows', {'chosen': join('v', 'id')})
+    output['drop'] = ['id', 'rank', 'fence']
+    config = {'execution': {'profile': 'source.combine'}, 'combine': {'max_rows': 10,
+              'groups': {'v': selected, 'unused': unused}, 'tables': {'out': output}}}
+    contract = store.put_bytes((tmp_path / 'escaped-contract.json').as_uri(), json.dumps(config, ensure_ascii=True).encode())
+    manifest = store.put(tmp_path.as_uri(), {'version': 1, 'contract': contract, 'readings': {'raw': raw}})
+    work = {'input': manifest, 'output': (tmp_path / 'output.json').as_uri(), 'checks': ['source.combined'], 'keys': {}}
+    result = source_combine.execute(work, store)
+    assert source_combine.verify({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
+    assert store.json(result)['artifacts'][0]['tables'] == {'out': [
+        {'value': 'B', 'chosen': ['A', 'B']}, {'value': 'A', 'chosen': ['A', 'B']}]}

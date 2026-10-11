@@ -2,7 +2,7 @@
   "baseline": "cd27767713ba651b6531b3ebb6ba61192d105905",
   "seed": 911920,
   "cases": 1500,
-  "matching_failures": 1100,
+  "matching_failures": 1137,
   "exact_values_types_order_and_errors": true,
   "inputs_unchanged": true
 }
