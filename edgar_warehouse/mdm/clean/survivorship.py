@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import timedelta
 
+from edgar_warehouse.rules.source_engine import rank_claims
+
 from .evidence import PROFILE_KINDS, instant
 from .store import Conflict, canonical, digest
 
@@ -27,13 +29,13 @@ def current_claims(
             groups[a["subject"]].append(a)
     result = {}
     for subject, versions in groups.items():
-        claims = {}
+        claims: dict[str, dict] = {}
         ids = {}
         profiles = []
-        profile_fields = {}
+        profile_fields: dict[str, dict] = {}
         relationships = []
         kind = None
-        seen = {}
+        seen: dict[tuple[int, int], str] = {}
         for a in sorted(
             versions,
             key=lambda a: (
@@ -133,9 +135,9 @@ def select_fields(
     policy_digest: str,
     entity_id: str = "",
 ) -> tuple[dict, list[dict], list[dict]]:
-    profiles = {}
-    profile_claims = defaultdict(dict)
-    reviews = []
+    profiles: dict[str, dict] = {}
+    profile_claims: dict[str, dict] = defaultdict(dict)
+    reviews: list[dict] = []
     for subject in subjects:
         record = claims.get(subject)
         if not record:
@@ -378,39 +380,36 @@ def _select_values(
         for name, claim in record["fields"].items():
             candidates[name].append(claim)
     fields = {}
-    reviews = []
+    reviews: list[dict] = []
     names = list(rules)
     if default:
         names += sorted(set(candidates) - set(rules))
     for name in names:
         rule = {**(default or {}), **rules.get(name, {})}
-        eligible = []
-        for c in candidates.get(name, []):
-            if c["source_code"] not in rule["sources"]:
-                continue
-            if c["op"] == "clear" and c["source_code"] not in rule.get(
-                "clear_sources", []
-            ):
-                reviews.append(
-                    {
-                        "reason": "unauthorized_clear",
-                        "field": name,
-                        "assertion_id": c["assertion_id"],
-                    }
-                )
-                continue
-            if c["effective_at"] is None and not rule.get(
-                "allow_unknown_effective", False
-            ):
-                continue
-            if (
-                c["effective_at"] is not None
-                and rule.get("max_age_days") is not None
-                and instant(c["effective_at"]) + timedelta(days=rule["max_age_days"])
-                < instant(as_of)
-            ):
-                continue
-            eligible.append(c)
+        supplied = candidates.get(name, [])
+        metadata = []
+        for c in supplied:
+            effective = None
+            fresh = True
+            # Parse only eligible, authorized claims, as the existing API does.
+            # Python owns timezone/timedelta semantics; Rust owns ranking.
+            if (c["source_code"] in rule["sources"]
+                    and (c["op"] != "clear" or c["source_code"] in rule.get("clear_sources", []))
+                    and c["effective_at"] is not None):
+                moment = instant(c["effective_at"])
+                effective = moment.timestamp()
+                if rule.get("max_age_days") is not None:
+                    fresh = moment + timedelta(days=rule["max_age_days"]) >= instant(as_of)
+            metadata.append((c["source_code"], c["op"], effective, fresh,
+                             c["record_key"], c["assertion_id"]))
+        indices, unauthorized = rank_claims(
+            rule["sources"], rule.get("clear_sources", []),
+            rule.get("allow_unknown_effective", False), metadata,
+        )
+        eligible = [supplied[index] for index in indices]
+        reviews.extend({"reason": "unauthorized_clear", "field": name,
+                        "assertion_id": supplied[index]["assertion_id"]}
+                       for index in unauthorized)
         active = [
             o
             for o in overrides
@@ -422,17 +421,6 @@ def _select_values(
         # last-writer-wins. Do not use ingest time to resolve steward intent.
         if len(active) > 1:
             raise Conflict("Conflicting active steward overrides")
-        eligible.sort(
-            key=lambda c: (
-                rule["sources"].index(c["source_code"]),
-                -instant(c["effective_at"]).timestamp()
-                if c["effective_at"] is not None
-                else float("inf"),
-                c["source_code"],
-                c["record_key"],
-                c["assertion_id"],
-            )
-        )
         if active:
             chosen = {
                 "op": "value",

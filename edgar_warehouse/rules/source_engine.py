@@ -188,3 +188,26 @@ class ReductionEngine:
 
     def finish(self) -> dict[str, list[dict]]:
         return self._engine.finish()
+
+
+def rank_claims(sources: list[str], clear_sources: list[str], allow_unknown_effective: bool,
+                candidates: list[tuple[str, str, float | None, bool, str, str]]) -> tuple[list[int], list[int]]:
+    """Rank opaque claim references by configured authority and recency.
+
+    Candidate metadata is (source, operation, effective timestamp, fresh, record
+    key, assertion id). Return eligible indices and unauthorized-clear indices.
+    Timestamp/age preparation preserves Python's existing datetime semantics;
+    native ranking releases the GIL and never converts field payload values.
+    """
+    return source_contract.rank_claims(sources, clear_sources, allow_unknown_effective, candidates)
+
+
+def replay_identity(identities: list[dict], decisions: list[dict], clock: int) -> dict:
+    """Replay accepted identity commands with integer microsecond timestamps.
+
+    Only graph/decision metadata crosses this boundary. Override indices refer
+    to the original caller list; arbitrary evidence and values stay Python.
+    """
+    return json.loads(source_contract.replay_identity(
+        json.dumps(identities, ensure_ascii=False, separators=(",", ":")),
+        json.dumps(decisions, ensure_ascii=False, separators=(",", ":")), clock))

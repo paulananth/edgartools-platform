@@ -32,6 +32,8 @@ mod predicate;
 mod json_text;
 mod text_transform;
 pub mod reduction;
+pub mod survivorship;
+pub mod identity;
 #[cfg(feature = "python")]
 mod python;
 mod tree;

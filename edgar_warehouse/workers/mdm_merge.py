@@ -33,11 +33,11 @@ STAGE = "mastering"
 
 def runtime_files() -> list[Path]:
     """The Merge Stage is part of what a run pins for this profile."""
-    from edgar_warehouse.mdm.clean import adapters, cli, merge, run, store
+    from edgar_warehouse.mdm.clean import adapters, cli, evidence, identity, merge, run, store, survivorship
     from edgar_warehouse.rules import source_engine
     from . import source_mapping
 
-    return [*[Path(m.__file__) for m in (adapters, cli, limits, merge, run, store, source_mapping)],
+    return [*[Path(m.__file__) for m in (adapters, cli, evidence, identity, limits, merge, run, store, survivorship, source_mapping)],
             *source_engine.runtime_files()]
 
 

@@ -106,3 +106,30 @@ def test_a_quarantined_record_never_binds_until_lifted():
     after = bind(GLEIF, OTHER, at="2026-06-01T00:00:00+00:00")
     state = replay(IDENTITIES, [wrong, revoke(wrong), held, lift, after], AS_OF)
     assert state.quarantined == {} and state.bindings == {GLEIF: OTHER}
+
+
+def test_distant_subsecond_decisions_keep_exact_time_order_and_default_survivor():
+    # f64 epoch seconds cannot distinguish these microseconds in year 9999.
+    ids = [{'entity_id': i, 'kind': 'company', 'published_at': '2026-01-01T00:00:00Z'}
+           for i in ('a', 'b')]
+    merge = decision('merge', actor='operator', reason='reviewed',
+                     at='9999-01-01T00:00:00.000001Z', left='b', right='a')
+    reverse = decision('reverse', actor='operator', reason='corrected',
+                       at='9999-01-01T00:00:00.000002Z', target=merge['decision_id'])
+    assert replay(ids, [merge], '9999-01-01T00:00:00.000001Z').canonical == {'a': 'a', 'b': 'a'}
+    state = replay(ids, [reverse, merge], '9999-01-01T00:00:00.000002Z')
+    assert state.canonical == {'a': 'a', 'b': 'b'}
+    assert state.exclusions == [('b', 'a')]
+
+
+def test_future_and_revoked_overrides_do_not_interpret_unused_expiry_metadata():
+    future = decision('override', actor='operator', reason='pending',
+                      at='2026-12-01T00:00:00Z', expires_at='not-yet-interpreted',
+                      subject=SEC, field='name', value='future', evidence=['a'])
+    assert replay(IDENTITIES, [future], AS_OF).overrides == []
+    earlier = decision('override', actor='operator', reason='withdrawn',
+                       at='2026-02-01T00:00:00Z', expires_at='not-interpreted',
+                       subject=SEC, field='name', value='withdrawn', evidence=['a'])
+    undo = decision('revoke', actor='operator', reason='withdrawn',
+                    at='2026-03-01T00:00:00Z', target=earlier['decision_id'])
+    assert replay(IDENTITIES, [earlier, undo], AS_OF).overrides == []
