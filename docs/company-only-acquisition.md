@@ -1,68 +1,52 @@
-# Local SEC Company acquisition
+# Local SEC Company route
 
-`sec.submissions.company/submissions` is the sole active acquisition feed.
-The `company` Rules target captures a bounded CIK scope through fresh
-Bookkeeping and Change Journal control. Other acquisition feed declarations
-and old acquisition command registrations are retired. GLEIF's MDM mapping
-contracts and historical audit stores remain available.
+SEC Company records reach MDM in two steps, both through configured workers.
+Nothing makes a request to SEC here.
 
-Prepare an immutable input manifest with:
+1. **Prepare** a bundle of at most 1,000 Companies from a raw submissions
+   capture (a folder holding `receipts.jsonl` and the `bronze/` documents it
+   names):
 
-```bash
-uv run --extra mdm --extra s3 edgar-warehouse bookkeeping prepare \
-  --source sec.submissions.company --feed submissions \
-  --scope-manifest <URI> --scope-sha256 <SHA256> \
-  --support-manifest <URI> --support-sha256 <SHA256> \
-  --output-root <unique-run-file-URI>
-```
+   ```bash
+   uv run --extra mdm --extra s3 edgar-warehouse mdm prepare-clean-company \
+     --capture <capture folder> --documents <documents.json> \
+     --population <population.json> --name-census <name-census.json> \
+     --catalog <ticker catalog receipt key> \
+     --capture-run <run id> --catalog-run <run id> --observed-at <instant> \
+     --output <new bundle folder> --as-of <instant> --revision 0
+   ```
 
-The scope JSON is `{"version":1,"ciks":["0000320193"],"prior":{}}`.
-The scope is limited to 1,000 distinct CIKs; each main submission may declare
-at most 124 pagination files so the complete source evidence stays within the
-Journal's bounded reference inventory.
-`prior` may pin a verified prior capture by CIK for conditional requests.
-For a later source revision, `revisions` may pin each CIK's last committed
-`revision`, `position`, and prior immutable source revision receipt. The
-first revision defaults to revision `0`, position `-1`, and no predecessor.
-Use a new output root and scope document for each new root run; retained
-outputs are immutable.
-The support JSON pins a `ticker_manifest` reference and `name_census` and
-`bindings` maps from each CIK to fixture references, plus a timezone-aware
-`as_of` timestamp for the MDM bundle. Name Census fixtures
-carry local name counts; the Company stage checks their SEC names against
-landed rows. Each reviewed binding fixture names an entity UUID, actor,
-reason and time. Place the ticker fixture under the run's `landing/` root so
-the existing Company bundle adapter can read it with the Silver manifest.
-This qualifies only these local inputs; it does not approve
-future upstream ticker, GLEIF or binding supply.
+   Each main document is read by `rules/sources/sec.submissions.company/census-main.yaml`,
+   the Name Census by `census.yaml` and the ticker catalog by `catalog.yaml`.
+   Each unit is then combined by `combine-census.yaml`. Every `source.read` and
+   `source.combine` unit is run, then verified, and kept in the bundle with
+   the bytes it read, so a separate process can check the whole bundle again
+   (`verify_company_bundle`). The bundle's `manifest.json` lists the
+   records files, cut by the shared batch limits.
 
-After the exact Rules version has separate proof, approval, activation and
-MDM registration in isolated PostgreSQL 16 stores, submit:
+2. **Merge** the bundle with the source's `mdm` target: one `mdm.merge` unit
+   per manifest, checked by a separate verifier:
 
-```bash
-uv run --extra mdm --extra s3 edgar-warehouse rules run \
-  --source sec.submissions.company --feed submissions --target company \
-  --input-manifest <PREPARED_URI> --input-sha256 <PREPARED_SHA256> --limit 100
-```
+   ```bash
+   uv run --extra mdm --extra s3 edgar-warehouse rules run \
+     --source sec.submissions.company --target mdm \
+     --input-manifest <URI> --input-sha256 <SHA256>
+   ```
 
-The returned Bookkeeping run ID is the recovery handle. Use `bookkeeping
-resume <run-id>` for work and `change-journal recover bookkeeping <run-id>`
-for committed undelivered Journal intent. The target verifies generated
-pagination, immutable Silver Parquet bytes and business keys, source producer
-inventories, MDM commit effects and local publication readback. This route is
-local qualification only; it performs no AWS deployment or merge.
+## Not here yet
+
+- **Capture.** `provider.capture`, the worker that fetches from SEC under
+  Change Journal authority, is not built (Issue 20 L8). Its live proof needs
+  the operator's permission. The capture target returns with it, and so do the
+  assertions it must prove again: authorization before the request, a lost
+  acknowledgement never refetches, and unchanged links reuse verified bytes.
+- **Continuation pages.** The raw capture holds main documents and one
+  ticker catalog only. Pages named in `filings.files` arrive with capture.
 
 ## Local acceptance
 
-`tests/integration/test_company_only_postgres.py` uses restricted PostgreSQL
-16 roles and two Company fixtures. It verifies a conditional 304, two page
-captures (including an empty page), exact landed filing keys, two current MDM
-Company rows, all Journal receipts, zero pending deliveries and publication
-backlog, and refusal to resume after destination Parquet corruption.
-`test_generated_bookkeeping_postgres.py` verifies atomic child insertion,
-idempotent replay, changed-child rejection, stale lease rejection and unsealed
-root blocking. The configured Bookkeeping and Change Journal PostgreSQL suites
-exercise approval, lease takeover, checkpoint contention, lost
-acknowledgements, Journal outage, duplicate delivery, version drift and
-evidence corruption. These fixtures do not qualify AWS promotion or the
-future upstream supply of ticker and Name Census artifacts.
+`.planning/workstreams/whole-source-census/installed_proof.py` loads an empty
+PostgreSQL 16 store only through the installed bundle's workers. Each step is
+checked by a verifier in a separate process with its own login. It also kills
+a worker mid-run and recovers. On the seven raw-capture bundles it gives
+6,414 Companies and 3,052 GLEIF bindings, and a second pass changes nothing.

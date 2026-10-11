@@ -1,7 +1,8 @@
 # SEC Company: the MDM mapping of SEC submissions records (the Dataset Contract
-# registered as sec.submissions.company.v1). The Company target reuses the
-# retained Silver/MDM preparation pending census, catalog, pagination and full
-# installed qualification. The read block below is locally qualified only.
+# registered as sec.submissions.company.v1). Company preparation reads the raw
+# capture through the configured workers (`mdm prepare-clean-company`); the
+# `mdm` target merges its bundles. Capture returns as a target with the
+# configured capture worker (Issue 20 L8).
 source: sec.submissions.company
 acquisition:
   version: 1
@@ -38,99 +39,6 @@ acquisition:
 bookkeeping:
   version: 1
   targets:
-    company:
-      steps:
-      - name: capture_main
-        operation: provider.capture
-        requires: []
-        key: '{candidate_id}'
-        leases:
-        - source:{source}:{feed}:{cik}
-        checks:
-        - input.hash
-        - output.receipt
-      - name: expand_pages
-        operation: company.expand
-        requires: [capture_main]
-        key: '{cik}'
-        leases:
-        - source:sec.submissions.company:submissions:{cik}
-        checks: [input.hash, output.receipt]
-      - name: capture_page
-        operation: provider.capture
-        requires: [expand_pages]
-        key: '{candidate_id}'
-        leases:
-        - source:{source}:{feed}:{cik}
-        checks: [input.hash, output.receipt]
-      - name: revision
-        operation: source.evidence
-        requires: [capture_main, capture_page]
-        key: '{cik}'
-        leases:
-        - source:sec.submissions.company:submissions:{cik}
-        checks: [input.hash, output.receipt]
-      - name: silver
-        operation: company.silver
-        requires: [capture_main, revision, capture_page]
-        key: '{cik}'
-        leases:
-        - silver:sec.submissions.company:{cik}
-        checks: [input.hash, output.receipt]
-      - name: capture
-        operation: source.evidence
-        requires: [capture_main, revision]
-        key: '{cik}'
-        leases:
-        - source:sec.submissions.company:submissions:{cik}
-        checks: [input.hash, output.receipt]
-      - name: sec_company
-        operation: source.evidence
-        requires: [silver]
-        key: '{cik}'
-        leases:
-        - silver:sec.submissions.company:{cik}
-        checks: [input.hash, output.receipt]
-      - name: sec_company_filing
-        operation: source.evidence
-        requires: [silver]
-        key: '{cik}'
-        leases:
-        - silver:sec.submissions.company:{cik}
-        checks: [input.hash, output.receipt]
-      - name: prepare_mdm
-        operation: company.prepare
-        requires: [silver, sec_company, sec_company_filing]
-        key: '{cik}'
-        leases:
-        - mdm:company-prepare:{cik}
-        checks: [input.hash, output.receipt]
-      - name: ingest
-        operation: mdm.merge
-        requires: [prepare_mdm]
-        key: '{batch_id}'
-        leases:
-        - mdm:consumer:{consumer}
-        checks: [input.hash, output.receipt, mdm.committed]
-      - name: expand_publish
-        operation: company.publish_expand
-        requires: [prepare_mdm, ingest]
-        key: '{cik}'
-        leases:
-        - mdm:publication-plan:{cik}
-        checks: [input.hash, output.receipt]
-      - name: publish
-        operation: mdm.publish
-        requires: [expand_publish]
-        key: '{batch_id}:{consumer}'
-        leases:
-        - mdm:publication:{consumer}
-        checks: [input.hash, output.receipt, mdm.published]
-      allow_zero_work: true
-      checks:
-      - manifest.hash
-      - work.accounting
-      - journal.delivered
     capture:
       steps:
         - name: capture
