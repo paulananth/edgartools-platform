@@ -303,9 +303,9 @@ format handling as top-level calls. Literal const/default/reference data
 never enables a feature. Existing scalar `const` behavior is unchanged.
 
 Use `record_column: record` in `mdm.prepare` to send the constructed object
-unchanged. This does not supply a source's catalog or census joins or qualify
+unchanged. This does not supply a source's catalog or Name Frequency joins or qualify
 its full preparation; compare those operations and assertion identities before
-retiring the retained reader. Prove it by assembling fixture records from
+retiring a source's retained reader, where one exists. Prove it by assembling fixture records from
 explicit fields and verifying them through preparation and the kind's actual
 MDM contract.
 
@@ -496,7 +496,7 @@ For Name Frequency keys, start with each source's bundled `name-key.yaml`
 (see Examples). Run the recipes on authenticated captured
 current/former names; compare exact retained keys and prove a deliberate
 recipe fault changes them. Record capture, contract, oracle and actual native
-binary hashes. Recipe parity completes the name-key step only; census population,
+binary hashes. Recipe parity completes the name-key step only; the Name Frequency population,
 classification, provenance, installed mastering/replay/recovery and active
 consumer replacement remain independent requirements.
 
@@ -770,7 +770,7 @@ a fallback.
 A configured address comparison can freeze place reference rows into the
 contract, preserve raw street and region text, derive country from the
 approved ISO reference and keep region only for subdivisions. This proves
-raw address derivation separately from census, complete provenance, pagination
+raw address derivation separately from Name Frequency, complete provenance, pagination
 and full mastering; those remain required before parser retirement.
 
 ### A main document with continuation pages
@@ -785,7 +785,7 @@ receipts. The context document binds explicit caller facts (the record key,
 capture run, raw object id, load mode, sync time, any item limit) to that exact
 input receipt; the worker verifies their binding and the native engine their
 types. An input hash does not independently prove a supplied capture identifier
-or observation time: the acquisition or census provenance gates must prove those.
+or observation time: the acquisition or Name Frequency provenance gates must prove those.
 
 Join the resulting tables with a declared `source.combine` contract, then use
 `mdm.prepare` to write immutable input batches. The read block alone is neither
@@ -1008,24 +1008,24 @@ Read the format's source structures as captured; XML and JSON may represent
 singleton lists or attributes differently, so do not infer cross-format raw
 record equality from their common member name.
 
-## Reuse an authenticated census
+## Reuse an authenticated Name Frequency file
 
-For census reuse, import the approved JSON through `Artifacts.put` so its
-artifact SHA matches the canonical census digest used in evidence. Bind that
-SHA to every placeholder in the source's census contract before freezing it. Optional `execution.input_sha256s` pins every
+To reuse a Name Frequency file, import the approved JSON through `Artifacts.put` so its
+artifact SHA matches the canonical digest used in evidence. Bind that
+SHA to every placeholder in the source's Name Frequency contract before freezing it. Optional `execution.input_sha256s` pins every
 input artifact in manifest order (one or two lowercase SHA-256 values).
 Both source.read worker and verifier check these pins before reading or
 publishing, including when the source yields no rows. The standalone native
 engine does not enforce execution pins.
 
-Read the captures through the source's census main contract, then combine with
-its census combine contract as described in COMBINING.md. Census version,
+Read the captures through the source's main contract for it, then combine with
+its Name Frequency combine contract as described in COMBINING.md. The file's version,
 normalizers, FULL publication and optional cascade version must match the
 contract; unexpected reserved metadata collisions refuse. Constants are
 scalar values; use scalar assertions for metadata fields and `test`/`equal`
 for typed boolean conditions.
 
-This reuses approved global counts. Constructing the complete census,
+This reuses approved global counts. Constructing the complete Name Frequency file,
 qualifying its current source population and proving installed mastering
 remain separate completion requirements.
 
@@ -1053,15 +1053,15 @@ nothing would be selected. `test.kind: text` tests the original JSON type
 without numeric or boolean coercion. Nested `choose` expressions can select
 an object's `$` text member or a scalar text value explicitly.
 
-Bundled census contracts use these primitives for census name extraction and
+Bundled Name Frequency contracts use these primitives for name extraction and
 canonical keys: they project eligibility and legal keys selectively and read
 registration only for a wanted legal key. Preserve the caller's column order.
 Empty falsey containers yield no names; truthy non-object containers refuse.
 Skipped records must not evaluate name counts or registration. Qualification
 disables custom steps and includes paired faults that prove refusal order.
-Holder aggregation and cascade decisions remain in the census implementation.
-Whole-source census construction, complete source provenance and installed
-population qualification are still required before removing that implementation.
+Holder aggregation and cascade decisions may stay in a source's custom
+implementation. Remove it only after whole-source construction, complete source
+provenance and installed population qualification are proved.
 
 ## Examples
 
@@ -1109,13 +1109,10 @@ receipts. The context document binds its values to that exact input receipt:
 (text), and `recent_limit` (integer or null). These are explicit caller facts;
 the worker verifies their binding and the native engine verifies their types.
 An input hash does not independently prove a supplied capture identifier or
-observation time: the acquisition/census provenance gates must prove those.
+observation time: the acquisition/Name Frequency provenance gates must prove those.
 
 Join the resulting tables with a declared `source.combine` contract, then use
-`mdm.prepare` to write immutable input batches. The current Company target
-still uses retained preparation until census, ticker catalog, pagination,
-classification/provenance and installed full-population replay are qualified.
-The read block alone is neither a source activation nor complete mastering.
+`mdm.prepare` to write immutable input batches. The read block alone is neither a source activation nor complete mastering.
 
 For a captured continuation page, use the packaged
 `rules/sources/sec.submissions.company/pagination.yaml` contract. It reads
@@ -1164,25 +1161,25 @@ belong to the approved scope. Scope selection makes no identity or binding
 decision and does not replace the later MDM checks.
 
 
-### Census contracts
+### Name Frequency contracts
 
-- Census reuse binds the census SHA into `sources/sec.submissions.company/census.yaml`;
+- Name Frequency reuse binds the file's SHA into `sources/sec.submissions.company/census.yaml`;
   Company captures are read through `census-main.yaml` and combined with
   `combine-census.yaml`.
 
 The bundled `gleif/census-record.yaml` and
-`sec.submissions.company/census-filer.yaml` use these primitives for census
+`sec.submissions.company/census-filer.yaml` use these primitives for Name Frequency
 name extraction and canonical keys. `gleif/census-identity.yaml` projects
 eligibility and legal keys selectively; `gleif/census-update.yaml` reads
-registration only for a wanted legal key. Preserve the caller order: census
+registration only for a wanted legal key. Preserve the caller order: Name Frequency
 category, LEI, legal key, wanted-key timestamp, other names; cascade LEI,
 category, mapped quality, names. Empty falsey containers yield no names;
 truthy non-object containers refuse. Skipped records must not evaluate name
 counts or registration. Qualification disables custom steps and includes
 paired faults that prove refusal order. Holder aggregation and
-cascade decisions remain in the census implementation. Whole-source census
-construction, complete source provenance and installed population qualification
-are still required before removing that implementation.
+cascade decisions remain in `edgar_warehouse/mdm/clean/name_census.py`, which
+Name Frequency and matching still import. Whole-source construction (#901) and
+the installed population (#905, #907) are qualified.
 
 ## Bounded Parquet framing and sparse object entries
 
@@ -1213,13 +1210,14 @@ An empty key list still validates document shape and assertions.
 
 ## Examples: configured preparation caller
 
-`mdm prepare-clean-company` now binds immutable configured Parquet source extract and
-combination contracts, reuses the authenticated frozen census and verifies each
-worker before publishing its existing bundle. It retains complete worker
-inputs/contracts/outputs and proof beside the original pinned members. Readback
-requires the approved inventory report and reproduces the configured outputs.
-The independent `mdm name-census` caller remains active; this change does not
-qualify a new census construction or full population mastering.
+`mdm prepare-clean-company` reads the receipt-bound raw capture through the
+registered workers (#905): main documents through `census-main.yaml`, the
+authenticated frozen Name Frequency file through `census.yaml`, the exchange
+catalog through `catalog.yaml`, joined by `combine-census.yaml`. It runs and
+verifies each worker before publishing the bundle, and retains every worker's
+inputs, contracts, outputs and proof in it. `mdm name-census` builds the Name
+Frequency file from configured readings of the same capture (#901, #905). The
+installed proof masters the full population from these bundles (#905, #907).
 
 ## Derived scopes from authenticated source extracts
 

@@ -301,8 +301,9 @@ name key; optional cascade evidence joins by the record key. Missing name
 evidence yields null, while a cascade answer can create a cascade-only object.
 The helper name key is dropped before MDM preparation.
 
-Compare complete prepared rows with a reference result (the retained helper,
-while one exists), including missing/empty evidence and cascade-only cases.
+Compare complete prepared rows with a reference result (the source's older
+reader or builder, while one exists), including missing/empty evidence and
+cascade-only cases.
 Authenticate the whole Name Frequency input even when its tables are empty.
 Approval of its construction, complete mastering provenance, installed
 population, replay and recovery must be proved before retiring active
@@ -316,10 +317,14 @@ The shipped Company blueprint has raw-JSON fixture qualification for main
 records, continuation pages, both ticker-catalog shapes and business-address
 conversion, followed by independently verified combination and MDM preparation.
 Name Frequency lookup/composition has exact fixture and pinned-file qualification.
-Since 2026-10-11 (#905, #907) the installed proof also qualifies the full
-Company population, replay and recovery (6,414 Companies, 3,052 GLEIF bindings).
-This profile does not authorize deletion of retained Company/GLEIF readers or
-activation of a source Rules version.
+
+### Qualification on 2026-10-11
+
+The installed proof qualifies the full Company population from the raw capture,
+replay and recovery: 6,414 Companies and 3,052 CIK+LEI bindings, a killed worker
+resumed, and a second pass that changes nothing (#905, #907). The older Company
+and GLEIF readers are deleted (#904, #905). Activating a source Rules version
+still needs the operator's approval.
 
 Offline evidence in [PR #819](https://github.com/paulananth/edgartools-platform/pull/819)
 records exact recent-form comparisons on 1,000 distinct receipt-pinned main
@@ -373,8 +378,9 @@ SEC name key; optional cascade evidence joins by integer CIK under
 answer can create a cascade-only object. The helper name key is dropped
 before MDM preparation.
 
-Prepared rows were compared with the retained helper, including missing/empty
-evidence and cascade-only cases, before it was retired (#901, #905).
+Prepared rows were compared with the older Python Name Frequency builder and
+Company reader, including missing/empty evidence and cascade-only cases, before
+both were retired (#901, #905). The cascade itself stays in `name_census.py`.
 
 ## Whole-source Name Frequency qualification
 

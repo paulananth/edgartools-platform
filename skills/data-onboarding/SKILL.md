@@ -623,4 +623,13 @@ These name today's sources only as examples; nothing above depends on them.
   (`candidate()` stamps the copied policy); ticket 27's
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
   about 25 minutes, a second pass that changes nothing).
-- **Unfinished live pipelines:** Company preparation runs its workers in one process, not as Bookkeeping steps (Issue 20, 20c); record mapping still goes through `adapters.py` (Issue 20, L7); capture from SEC has no configured worker (Issue 20, L8).
+- **Unfinished live pipelines** (the one list; other skills point here). Done
+  2026-10-11: SEC Company main documents equal the older reader on all 76,230
+  captured submissions and GLEIF's three Golden Copy members equal it record for
+  record; both older readers are deleted (#904, #905); the installed proof masters
+  6,414 Companies with 3,052 CIK+LEI bindings through separate workers and
+  verifiers, resumes a killed worker, and a second pass changes nothing (#905,
+  #907). Open: Company preparation runs its workers in one process, not as
+  Bookkeeping steps (Issue 20, 20c); record mapping still goes through
+  `adapters.py` (Issue 20, L7); capture from SEC has no configured worker
+  (Issue 20, L8).
