@@ -1,8 +1,9 @@
 # Source registry and evidence contract
 
-Current acquisition boundary (2026-09-29):
-`sec.submissions.company/submissions` is the sole active feed, controlled by
-Rules, fresh Bookkeeping and Change Journal. See
+Acquisition boundary: on 2026-09-29 `sec.submissions.company/submissions`
+was the sole active feed, controlled by Rules, fresh Bookkeeping and Change
+Journal. Since 2026-10-11 no configured capture worker exists (Issue 20 L8);
+Company records reach MDM from a raw capture by
 [the local Company route](../../company-only-acquisition.md). The registry-ledger
 extension discussed below is historical design context, not an active caller.
 

@@ -33,6 +33,10 @@ Nothing makes a request to SEC here.
      --input-manifest <URI> --input-sha256 <SHA256>
    ```
 
+   The returned Bookkeeping run ID is the recovery handle: `bookkeeping
+   resume <run-id>` for its work and `change-journal recover bookkeeping
+   <run-id>` for committed, undelivered Journal intent.
+
 ## Not here yet
 
 - **Capture.** `provider.capture`, the worker that fetches from SEC under

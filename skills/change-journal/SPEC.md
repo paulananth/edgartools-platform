@@ -243,7 +243,8 @@ remains separate and legacy audit retention is indefinite by default.
 ## Examples
 
 - Acquisition on 2026-09-29: `sec.submissions.company/submissions` was the sole
-  active feed. Its locally qualified caller is described in
-  `docs/company-only-acquisition.md`. The other SEC and GLEIF acquisition
-  callers were retired.
+  active feed. The other SEC and GLEIF acquisition callers were retired. Its
+  Company target was removed on 2026-10-11, unrun (Issue 20 20c); capture
+  returns with the configured capture worker (L8). Today's Company route, from
+  a raw capture, is in `docs/company-only-acquisition.md`.
 - Ungated provider transport refused by the marker: SEC transport.
