@@ -6,7 +6,8 @@ Type: task. Phase: B. Blocked by: 07; the cross-checks also wait for Codex's Rus
 
 Asked by the operator, 2026-10-11: "should 07c be done in rust?" Recorded on
 the operator's request ("write that into the 07c ticket", 2026-10-11 17:46 ET)
-as the recommendation, not yet a ruling.
+as the recommendation, then approved as the ruling (operator, 2026-10-11 17:52 ET: "approve
+the 07c table").
 
 The rule is Codex's responsibility map (`docs/architecture/runtime-responsibilities.md`,
 `codex/responsibility-map`): generic configured computation runs in Rust through
@@ -27,7 +28,7 @@ cross-check gate.
 
 ## Checklist
 
-- [ ] The operator rules on where each part runs (the table above)
+- [x] The operator rules on where each part runs (the table above): approved, "approve the 07c table" 2026-10-11 17:52 ET
 - [ ] HTML and iXBRL deterministic + cross-checked
   - [ ] iXBRL first: a reading contract on one captured filing's inline XBRL; record whether the engine reads it unchanged, and any primitive it lacks (a GoF consult and an operator ruling before any engine change)
   - [ ] HTML tables and labelled sections: a Python custom step, or an engine primitive once a second source needs it
