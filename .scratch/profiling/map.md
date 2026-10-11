@@ -29,7 +29,7 @@ Any data set can be profiled, classified into master, reference, relationship, t
 | 05 | [Agent context views and command](issues/05-agent-context-views-and-command.md) | A (MDM) / B (RDM) | 03, 04 (02 for RDM) | done: MDM (#837), RDM (#847), silver (`silver.table_context`, #879) |
 | 05b | [Relationships at a past recording time (`--as-at`)](issues/05b-relationship-as-at.md) | A | 05 | done (#868) |
 | 06 | [Silver writer (rules-skill ticket 05)](issues/06-silver-writer.md) | B | 01a (started before Codex's gate on the operator's word, 2026-10-08) | done (#879); re-check against Codex's final design waits for Issue 20 L7/L8 |
-| 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open |
+| 07 | [Readers and custom parsing steps per feed](issues/07-readers-per-feed.md) | B | 01b inventory, Codex retirement merged | open: Form ADV rules (#896, not switched on), READING section (#897) and profiler fixes (#915) merged; insider ownership profiled, operator review next |
 | 07b | [Name-based matching](issues/07b-name-based-matching.md) | A | 03, 04 | done (#838) |
 | 07c | [Unstructured extraction](issues/07c-unstructured-extraction.md) | B | 07 | open |
 | 08 | [Recreation proof](issues/08-recreation-proof.md) | B | all above | cohort (#859), slice, rulings file and sandbox done; baseline and cold agent wait for Codex's retirement (SEC reading into MDM); 13F rows unblocked (06 merged, #879) |
