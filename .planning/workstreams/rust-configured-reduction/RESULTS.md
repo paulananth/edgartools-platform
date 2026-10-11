@@ -89,6 +89,13 @@ collection attempt also required installing CI's existing MDM extras for duckdb.
 Platform skill command/link checks and the registered source.combine profile
 resolve successfully. Repository CI remains the landing gate.
 
+The installed MacPorts jq was subsequently confirmed at `/opt/local/bin/jq`;
+all **35 tests** in the three related shell-test modules passed using it.
+GitHub [run 38168144545](https://github.com/paulananth/edgartools-platform/actions/runs/38168144545)
+passed all six checks on `51b97dce`: unit/architecture, MDM, PostgreSQL
+integration, Rust/engine, shell lint and the aggregate CI gate. The final
+evidence/checklist commit must also pass its head checks before merge.
+
 ## Scope limits and next work
 
 No AWS operations, deployment, operator activation or database migrations were
