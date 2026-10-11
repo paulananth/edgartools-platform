@@ -7,10 +7,10 @@ import pytest
 from edgar_warehouse.cli import build_parser
 from edgar_warehouse.mdm.clean import cli as clean_cli
 
-CENSUS = ["--landing-root", "r", "--landing-manifest", "m", "--gleif-reading", "a",
+CENSUS = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
           "--gleif-reading-sha256", "s", "--gleif-metadata", "x", "--output", "o"]
-PREPARE = ["--landing-root", "r", "--landing-manifest", "m", "--ticker-manifest", "t",
-           "--name-census", "c", "--output", "o", "--as-of", "2026-09-30T00:00:00Z", "--revision", "0"]
+PREPARE = ["--capture", "c", "--documents", "d", "--population", "p", "--catalog", "k", "--capture-run", "r",
+           "--catalog-run", "t", "--observed-at", "2026-09-30T00:00:00Z", "--name-census", "c", "--output", "o", "--as-of", "2026-09-30T00:00:00Z", "--revision", "0"]
 
 
 @pytest.mark.parametrize("argv,function", [

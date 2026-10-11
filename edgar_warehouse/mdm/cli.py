@@ -22,24 +22,27 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     migrate.add_argument("--application-role", default="application")
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
 
-    prepare = mdm_sub.add_parser("prepare-clean-company", help="Pin a bounded local Company landing snapshot without writing master state")
-    prepare.add_argument("--landing-root", required=True)
-    prepare.add_argument("--landing-manifest", required=True)
-    prepare.add_argument("--ticker-manifest", required=True, help="Landing manifest of the SEC ticker catalog run (sec_company_ticker)")
-    prepare.add_argument("--name-census", required=True, help="Name Census file that counted this capture (mdm name-census)")
+    prepare = mdm_sub.add_parser("prepare-clean-company", help="Pin a bounded local Company sample from a raw SEC capture without writing master state")
+    prepare.add_argument("--capture", required=True, help="An SEC submissions capture folder: receipts.jsonl and bronze/")
+    prepare.add_argument("--documents", required=True, help="JSON file: this bundle's main submissions documents by receipt key (at most 1,000)")
+    prepare.add_argument("--population", required=True, help="The population file the Name Census counted")
+    prepare.add_argument("--catalog", required=True, help="Receipt key of the SEC exchange ticker catalog")
+    prepare.add_argument("--capture-run", required=True, help="Approved capture run ID, bound into every row")
+    prepare.add_argument("--catalog-run", required=True, help="Approved ticker catalog run ID")
+    prepare.add_argument("--observed-at", required=True, help="When the capture was observed (ISO 8601 instant)")
+    prepare.add_argument("--name-census", required=True, help="Name Census file that counted this population (mdm name-census)")
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)
-    prepare.add_argument("--limit", type=int, default=100)
-    prepare.add_argument("--bronze-receipts", help="Bronze receipts of this same capture run: each record names its bronze object")
     prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
 
-    census = mdm_sub.add_parser("name-census", help="Count SEC captures and one configured full GLEIF Golden Copy "
+    census = mdm_sub.add_parser("name-census", help="Count an SEC population and one configured full GLEIF Golden Copy "
                                 "reading into a Name Census file")
-    census.add_argument("--landing-root", required=True)
-    census.add_argument("--landing-manifest", dest="landing_manifests", required=True, action="append",
-                        help="Landing manifest of an SEC capture (sec_company, sec_company_former_name); repeat it "
-                             "for each capture of the population, which together must be every SEC filer")
+    census.add_argument("--capture", required=True,
+                        help="An SEC submissions capture folder: receipts.jsonl and the bronze/ documents it names")
+    census.add_argument("--population", required=True,
+                        help="JSON file: the receipt keys of the main submissions documents counted, which together "
+                             "must be every SEC filer")
     census.add_argument("--gleif-reading", required=True,
                         help="The verified source.read output of rules/sources/gleif/census-complete-stream.yaml "
                              "over a full Golden Copy (its reading.json)")

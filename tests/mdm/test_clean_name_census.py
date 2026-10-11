@@ -159,7 +159,7 @@ class TestTheCascade:
 
     def run(self, records):
         from edgar_warehouse.mdm.clean import cascade
-        from edgar_warehouse.mdm.clean.company_source import POLICY
+        from edgar_warehouse.mdm.clean.sec_company import POLICY
 
         filer = cascade.Filer(cik="0000320193", key="APPLE INC",
                               place=cascade.place({"street": "1 APPLE PARK WAY", "city": "CUPERTINO",

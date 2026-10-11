@@ -7,12 +7,12 @@ that while its record key and its CIK are one column in one format; a mapping
 that separates them fails here first.
 """
 
-from edgar_warehouse.mdm.clean import company_source
+from edgar_warehouse.mdm.clean import sec_company
 from edgar_warehouse.rules import files
 
 
 def test_the_sec_record_key_is_its_cik():
-    adapter = company_source.CONTRACT["adapter"]
+    adapter = sec_company.CONTRACT["adapter"]
     assert adapter["record_key"] == ["cik"]
     assert adapter["identifiers"] == {"cik": "cik"}
     assert adapter["record_key_format"] == adapter["identifier_formats"]["cik"] == "sec_cik"
@@ -24,7 +24,7 @@ def _issuers() -> dict[str, set[str]]:
     as the Merge Stage reads them (platform validation 05a). The LEI has no
     contract yet; GLEIF's Level 1 issues it."""
     issuers: dict[str, set[str]] = {"lei": {"gleif.level1.v1"}}
-    for block in company_source.POLICY["kinds"].values():
+    for block in sec_company.POLICY["kinds"].values():
         for namespace, contract in (block.get("identifiers") or {}).items():
             issuers.setdefault(namespace, set()).update(contract["sources"])
     return issuers

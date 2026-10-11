@@ -1,0 +1,29 @@
+# Name Frequency's SEC population from a raw main submissions document: the
+# filer's current name and its former names in document order. `cik` is the
+# receipt-bound context; `census-filer.yaml` then makes the name keys.
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 2
+read:
+  format: json
+  context:
+    cik:
+      type: integer
+  assertions:
+  - test: {test: {path: '.', kind: object}}
+    reason: Company submissions must be a JSON object
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    filer:
+      each: .
+      columns:
+        cik: {context: {name: cik}}
+        name: {value: {path: name}}
+    former:
+      each: formerNames
+      columns:
+        cik: {context: {name: cik}}
+        name: {value: {path: name}}

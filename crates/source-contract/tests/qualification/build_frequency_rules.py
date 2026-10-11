@@ -4,7 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 import re
 from edgar_warehouse.rules import files
-from edgar_warehouse.mdm.clean import company_source, cascade
+from edgar_warehouse.mdm.clean import sec_company, cascade
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--check', action='store_true')
 args = parser.parse_args()
@@ -31,7 +31,7 @@ identity=files.load(root/'census-identity.yaml')['read']['tables']['mapped']['co
 extract=lambda name:identity[name]['object']['fields']['value']
 mapped=files.load(root/'level1-fields.yaml')['read']['tables']['mapped']['columns']
 quality=files.load(root/'quality.yaml')['quality']['gleif.level1.v1']
-spec=cascade.spec(company_source.POLICY)
+spec=cascade.spec(sec_company.POLICY)
 assert len(spec['passes'])==7
 words={'STREET':'ST','AVENUE':'AVE','ROAD':'RD','DRIVE':'DR','BOULEVARD':'BLVD','LANE':'LN','PLACE':'PL','COURT':'CT','PARKWAY':'PKWY','HIGHWAY':'HWY','SUITE':'STE','FLOOR':'FL','ROOM':'RM','NORTH':'N','SOUTH':'S','EAST':'E','WEST':'W'}
 ops=[{'case':'upper'},{'unicode':'nfkd'},{'strip_combining':True}, {'regex_replace':{'pattern':r'[^\p{L}\p{N}_#/& -]+|_','with':' '}}]

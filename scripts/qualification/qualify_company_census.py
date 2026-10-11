@@ -10,7 +10,7 @@ import time
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean import company_source, name_census, names
+from edgar_warehouse.mdm.clean import sec_company, name_census, names
 from tests.support.retired_company_preparation import _census_evidence
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
@@ -53,7 +53,7 @@ def main():
     receipts = args.capture / 'receipts.jsonl'
     pinned = [Path(__file__), args.census, receipts,
               rules / 'census.yaml', rules / 'name-key.yaml', rules / 'combine-census.yaml',
-              Path(company_source.__file__), Path(name_census.__file__), Path(names.__file__),
+              Path(sec_company.__file__), Path(name_census.__file__), Path(names.__file__),
               Path(name_census.cascaded.__file__),
               Path(source_combine.__file__), Path(mdm_prepare.__file__),
               Path(source_read.__file__), *source_read.runtime_files(),

@@ -2,7 +2,7 @@
 ticket 15).
 
 Ticket 04 proved the mechanics on fixture rules. These tests run the
-production Mastering Policy (`company_source.POLICY`), which carries the
+production Mastering Policy (`sec_company.POLICY`), which carries the
 operator's approval (2026-09-29 07:27 ET): the Identifier Contract's three
 stamps and one `deterministic` activation for `company-cik`.
 """
@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean import company_source
+from edgar_warehouse.mdm.clean import sec_company
 from edgar_warehouse.mdm.clean.activation import check_policy
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
@@ -32,8 +32,8 @@ APPLE, MICROSOFT = "0000320193", "0000789019"
 
 def approved() -> dict:
     """The production policy, which carries the operator's approval."""
-    check_policy(company_source.POLICY)
-    return company_source.POLICY
+    check_policy(sec_company.POLICY)
+    return sec_company.POLICY
 
 
 def register(database, body) -> str:
@@ -82,7 +82,7 @@ def operations(database):
 
 
 def test_without_the_approval_the_policy_matches_nothing(database):
-    policy = register(database, policy_layers.without_cik_approval(company_source.POLICY))
+    policy = register(database, policy_layers.without_cik_approval(sec_company.POLICY))
     load(database, policy, "b1", sec(APPLE))
     assert companies(database) == {}
     assert operations(database) == []

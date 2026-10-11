@@ -1,0 +1,82 @@
+{
+ "what": "Issue 20 L4: the configured Company main reading (rules/sources/sec.submissions.company/source.yaml read:) against the retained loader (tests/support/retired_submission_loaders, plus the two run-context columns) over the whole pinned capture, in 4 shards",
+ "script": "scripts/qualification/qualify_company_main.py --limit 0 --shard k/4",
+ "code": "b0aba7de + the script change in 7f7c84bd",
+ "started": "2026-10-10 17:51 ET",
+ "finished": "2026-10-10 18:43 ET",
+ "receipts_sha256": "3aee020551b37090e638b4e73d24a0119cc59456548557c883d1c032b6d5c247",
+ "whole_source_contract_sha256": "8d55c1689f7f5dd72b4d79473c2d9e6bf69990ea87eeb52eaa4dc45bd640301b",
+ "read_digest": "18903901e467bd211e2663a9ed6f01c7b5ca462f20b170778ca583976702460e",
+ "pinned_submissions": 76230,
+ "distinct_documents_compared": 76230,
+ "company_rows": 76230,
+ "filing_rows": 8065661,
+ "all_main_tables_match": true,
+ "not_proven_here": {
+  "full_company_mastering": false,
+  "census_provenance_qualified": false,
+  "pagination_qualified": false
+ },
+ "execution_sha256s": {
+  "source_read.py": "54490c19286c10bed71e305242c3f2b8ff45662692c99a099f715d936c68afac",
+  "source_engine.py": "45149f6e18faea09c6498fc5a2dd78d5f4bc582b485af72fc37bc4d4c056b1a5",
+  "steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+  "source_contract.abi3.so": "4d93f3ea40b4fca450378948bfa4393f1f809aaa17cf90d7d9276ffe3d579fc4",
+  "files.py": "529ca2885d49d60303b38704a03bc3cd421e998f814052b3d89415c2150044a4",
+  "artifacts.py": "4d343e841ea61a015c36cb75e7136735d296d14c211bf5e6f37557636a514c19",
+  "source_stream.py": "5629afea256757e6d67cf3e3f0730949c17bda33e274e45402d0d68b678a19fc",
+  "source_readings.py": "9387feff548fdaf12a8b1e2184caa474c6d8ef2edada239fb5f67328996e33a8",
+  "source_parquet.py": "e3b3f347b60167d9540206f0a43ac72694b1496a45d15ac7864fbe135f621339",
+  "__init__.py": "e16eb809bbf0bceeb4b46e7c9df36dc82c0c5427ee3ee9adbbcda9fa48863da1",
+  "_parquet.cpython-312-darwin.so": "d97f352ce4c7e6af43332f7383c9d380cf412046532159a78f62c29e9dcb52df",
+  "config.py": "b6e373f66e0b3df59faa7ad15fe42b8e12d00d88c145e94a66f75d88286734ef",
+  "control_contract.py": "c0bc2c794a2382041065fd7a8ec4c4ce6681fb4aaea1d4b78354729772a0d792"
+ },
+ "shards": [
+  {
+   "shard": "0/4",
+   "company_rows": 19058,
+   "filing_rows": 2057740,
+   "source_read_units": 9529,
+   "all_main_tables_match": true,
+   "elapsed_seconds": 3132.114,
+   "report_sha256": "3e20d8f3eaa60ad14a2cde905c7423d1dc44b98463e9a7a45c6f93ae169fb24b",
+   "evidence_rows": 19058,
+   "evidence_keys_sha256": "fb2b407541d0b5fba1243fc670d886e3c4e7e238dddddbe8ba48bb9a7ceb45a0"
+  },
+  {
+   "shard": "1/4",
+   "company_rows": 19058,
+   "filing_rows": 2022366,
+   "source_read_units": 9529,
+   "all_main_tables_match": true,
+   "elapsed_seconds": 3124.544,
+   "report_sha256": "91eea9531d65f586ff7ba36aefdacd4c42500c642f2b7144f3f96ed377ddd14b",
+   "evidence_rows": 19058,
+   "evidence_keys_sha256": "2c032be794756f55f63f76548e01e82853e482642076020b4a6160915128ac99"
+  },
+  {
+   "shard": "2/4",
+   "company_rows": 19057,
+   "filing_rows": 2031819,
+   "source_read_units": 9529,
+   "all_main_tables_match": true,
+   "elapsed_seconds": 3126.44,
+   "report_sha256": "3a764c2f2b584c14394a4068da70aa30197269e26d4b0e01cae22cf0cf480261",
+   "evidence_rows": 19057,
+   "evidence_keys_sha256": "49cbba60b2b327b2abcbf49e14426852a1211c38a8b78fe9bec02fd213c3861c"
+  },
+  {
+   "shard": "3/4",
+   "company_rows": 19057,
+   "filing_rows": 1953736,
+   "source_read_units": 9529,
+   "all_main_tables_match": true,
+   "elapsed_seconds": 3094.96,
+   "report_sha256": "5a7bc789c547f7f9fbd819bfe779fd248f4787cb24993e1342f67eac466b4982",
+   "evidence_rows": 19057,
+   "evidence_keys_sha256": "e76c11ea0e49d5443632f5f6c4a422fb4dc85aed94ae40b1df4d9f7d0464bad7"
+  }
+ ],
+ "full_reports": "~/.local/share/edgartools/clean-mdm/research/l4-company-main-20261010/shard{0..3}.json (per-document hashes; report_sha256 above)"
+}

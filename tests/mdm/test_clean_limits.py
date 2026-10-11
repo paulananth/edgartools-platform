@@ -6,6 +6,11 @@ from pathlib import Path
 from edgar_warehouse.mdm.clean import limits
 from edgar_warehouse.workers import mdm_prepare
 
+
+def _one(row):
+    return mdm_prepare._lines([row])
+
+
 MIGRATIONS = Path(limits.__file__).parents[1] / "migrations"
 
 
@@ -43,10 +48,10 @@ def test_the_match_proposal_bounds_equal_the_limits():
 
 def test_prepare_cuts_a_batch_by_bytes_as_well_as_by_count():
     small = [{"n": i} for i in range(2500)]
-    assert [len(b) for b in mdm_prepare._batches(small)] == [1000, 1000, 500]
+    assert [len(b) for b in limits.batches(small, _one)] == [1000, 1000, 500]
     large = [{"n": i, "pad": "x" * 300_000} for i in range(10)]
-    batches = mdm_prepare._batches(large)
+    batches = limits.batches(large, _one)
     assert [len(b) for b in batches] == [3, 3, 3, 1]
     assert all(len(mdm_prepare._lines(b)) <= limits.BATCH_RECORD_BYTES for b in batches)
     # A record larger than the budget is a batch of its own.
-    assert [len(b) for b in mdm_prepare._batches([{"pad": "x" * 2 * 1024**2}, {"n": 1}])] == [1, 1]
+    assert [len(b) for b in limits.batches([{"pad": "x" * 2 * 1024**2}, {"n": 1}], _one)] == [1, 1]

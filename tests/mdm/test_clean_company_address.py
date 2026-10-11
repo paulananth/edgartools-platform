@@ -1,6 +1,6 @@
 """A Company address is one governed value, never mixed source components."""
 
-from edgar_warehouse.mdm.clean.company_source import POLICY
+from edgar_warehouse.mdm.clean.sec_company import POLICY
 from edgar_warehouse.mdm.clean.evidence import assertion
 from edgar_warehouse.mdm.clean.store import digest
 from edgar_warehouse.mdm.clean.survivorship import current_claims, select_fields

@@ -41,8 +41,10 @@ unchanged Source Contract engine, without registering custom callbacks.
 | Company grouping, ordering and distinct selection | Proposed mapping operators are rejected; Rust also rejects `group_by`. | Keep Company preparation. A future aggregation vocabulary needs separate design and verification. |
 | Rust configured GLEIF XML projection | Both readers match the same six scalar columns on two ordinary records, against a shared golden file. Rust additionally projects language. | Useful prototype for flat projection; not a replacement for the authenticated native reader. |
 
-Python source: [executable comparisons](experiments/custom-parsing/test_python_candidates.py)
-and [candidate YAML](experiments/custom-parsing/python-candidates.yaml).
+Python source: executable comparisons (`experiments/custom-parsing/test_python_candidates.py`)
+and candidate YAML (`python-candidates.yaml`). Both were removed on 2026-10-11, once the
+Python they compared against (`company_source.py`, `gleif_source.py`) was retired
+(Issue 20 L4, L6); they remain in git history (`git log --all -- docs/research/experiments/custom-parsing/`).
 Rust source: [executable probes](../../crates/source-contract/tests/config_replacement_research.rs)
 and [fixture, grammar and detailed results](experiments/custom-parsing/rust/README.md).
 

@@ -9,7 +9,7 @@ import copy
 import pytest
 
 from edgar_warehouse.mdm.clean import cascade as _cascade
-from edgar_warehouse.mdm.clean.company_source import POLICY as _POLICY
+from edgar_warehouse.mdm.clean.sec_company import POLICY as _POLICY
 from edgar_warehouse.mdm.clean.matching import HELD_LEI_TEST, PAIR_TESTS, _passes, _refused_by_flag
 from edgar_warehouse.mdm.clean.name_census import VERSION
 from edgar_warehouse.mdm.clean.primitives import REGISTRY

@@ -1,13 +1,12 @@
 """Name Frequency from configured readings, never from a Python re-read.
 
 The census (`name_census.py`) counts who else carries a name across the whole
-SEC capture population and the whole GLEIF Golden Copy. Here each SEC capture
-is read through its configured Rules (`census-landed-company.yaml`,
-`census-landed-former.yaml`, the business address of
-`landed-preparation.yaml`) by the `source.read` worker and its verifier, and
-the Golden Copy arrives as one verified configured reading
-(`census-complete-stream.yaml`). Both are folded and written by the same
-`name_census.document` the original builder uses.
+SEC capture population and the whole GLEIF Golden Copy. Each SEC main
+submissions document the population names is read from the receipt-bound raw
+capture through `census-raw.yaml` by the `source.read` worker and its verifier,
+two documents a unit, and the Golden Copy arrives as one verified configured
+reading (`census-complete-stream.yaml`). Both are folded and written by
+`name_census.census`.
 
 The GLEIF reading projected only the names the SEC population holds, so its
 `wanted` lookup must equal the name keys counted here; its archive and record
@@ -20,7 +19,6 @@ import hashlib
 import json
 import os
 import tempfile
-from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
 
@@ -28,14 +26,15 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
 from edgar_warehouse.workers import source_read, source_readings
 
+from . import raw_capture
+
 from . import cascade as cascaded
 from . import name_census
-from .company_source import POLICY, _read_bounded, _read_manifest, _read_member, cascade_filer
 from .gleif_publication import validate_metadata
 from .matching import active_rules
 from .store import Conflict, canonical, digest
 
-SEC = rules_files.ROOT / "sources/sec.submissions.company"
+SEC_READING = rules_files.ROOT / "sources/sec.submissions.company/census-raw.yaml"
 GLEIF_READING = rules_files.ROOT / "sources/gleif/census-complete-stream.yaml"
 # The saved Golden Copy reading: 13.25 GB expanded projects to about 211 MB
 # and 3.3 million rows (whole-source census ticket, 2026-10-09).
@@ -45,64 +44,35 @@ GLEIF_BYTES = 1024**3
 GLEIF_ROWS = 10_000_000
 CONTRACT_BYTES = 1024**2
 METADATA_BYTES = 64 * 1024
+POPULATION_BYTES = 64 * 1024**2
 
 
-def _read(store: Artifacts, folder: Path, name: str, raw: bytes, contract: dict) -> dict:
-    """One member through its configured reading, executed then verified."""
-    source = store.put_bytes((folder / f"{name}.input").as_uri(), raw)
-    contract["execution"]["input_sha256s"] = [source["sha256"]]
-    request = store.put(folder.as_uri(), {"version": 1, "contract": store.put(folder.as_uri(), contract),
-                                          "artifacts": [source]})
-    task = {"input": request, "output": (folder / f"{name}.reading.json").as_uri(), "checks": ["source.output"]}
-    candidate = source_read.execute(task, store)
-    if source_read.verify({**task, "candidate": candidate}, store) != ({"source.output": True}, []):
-        raise ValueError("Configured reading verification failed")
-    (artifact,) = store.json(candidate)["artifacts"]
-    return artifact
-
-
-def _capture(root: Path, manifest: str, store: Artifacts, folder: Path) -> tuple[list, list, dict, str]:
-    """One capture's filers, its cascade filers, its population and address digest."""
-    landing, _ = _read_manifest(root, manifest)
-    run = landing["run_id"]
-    _, company_raw, _ = _read_member(root, landing, "sec_company", {"cik", "entity_name", "last_sync_run_id"})
-    company = _read(store, folder, f"{run}-company", company_raw,
-                    rules_files.load(SEC / "census-landed-company.yaml"))["tables"]["company"]
-    earlier: dict[int, list[str]] = defaultdict(list)
-    former_sha256 = None
-    # A capture written before #764 has no former-name member when no filer had
-    # one: that is none, not an error (mastering to-do 05).
-    if any(t["table_name"] == "sec_company_former_name" for t in landing["tables"]):
-        _, former_raw, _ = _read_member(root, landing, "sec_company_former_name",
-                                        {"cik", "former_name", "last_sync_run_id"})
-        former_sha256 = hashlib.sha256(former_raw).hexdigest()
-        for row in _read(store, folder, f"{run}-former", former_raw,
-                         rules_files.load(SEC / "census-landed-former.yaml"))["tables"]["former"]:
-            row = row["row"]
-            if row["last_sync_run_id"] != run:
-                raise Conflict("Former-name row belongs to a different capture run")
-            if row["cik"] is not None and row["former_name"]:
-                earlier[int(row["cik"])].append(row["former_name"])
-    _, address_raw, address = _read_member(root, landing, "sec_company_address",
-                                           {"cik", "address_type", "last_sync_run_id"})
-    contract = deepcopy(rules_files.load(SEC / "landed-preparation.yaml")["business_address"])
-    if "country_code" in address.schema_arrow.names:
-        contract["read"]["parquet"]["columns"].append("country_code")
-    business = {int(row["cik"]): row["business_address"]
-                for row in _read(store, folder, f"{run}-address", address_raw, contract)["tables"]["business_address"]
-                if row["business_address"] is not None}
-    filers, candidates = [], []
-    for row in company:
-        landed = row["row"]
-        if landed["last_sync_run_id"] != run:
-            raise Conflict("Company row belongs to a different capture run")
-        cik = int(landed["cik"])
-        filers.append((f"{cik:010d}", landed["entity_name"], earlier.get(cik, [])))
-        if found := cascade_filer(landed, business.get(cik)):
-            candidates.append(found)
-    population = {"capture_run_id": run, "company_member_sha256": hashlib.sha256(company_raw).hexdigest(),
-                  "former_name_member_sha256": former_sha256, "filers": len(filers)}
-    return filers, candidates, population, hashlib.sha256(address_raw).hexdigest()
+def _population(capture: Path, population: Path, store: Artifacts, folder: Path) -> tuple[list, dict]:
+    """The filers of the population's documents, each read from the receipt-bound capture."""
+    receipts_raw, receipts = raw_capture.receipts(capture)
+    population_raw = raw_capture.read_bounded(population, POPULATION_BYTES)
+    keys = json.loads(population_raw)
+    if not isinstance(keys, list) or not keys or len(set(keys)) != len(keys):
+        raise Conflict("A population names one or more distinct receipt keys")
+    contract = rules_files.load(SEC_READING)
+    filers = []
+    for start in range(0, len(keys), contract["execution"]["max_artifacts"]):
+        artifacts = []
+        for key in keys[start:start + contract["execution"]["max_artifacts"]]:
+            if key not in receipts or not key.startswith(raw_capture.BRONZE) or "/main/" not in key:
+                raise Conflict(f"The population names a document the capture's receipts do not: {key}")
+            document = raw_capture.document(capture, receipts, key)
+            context = store.put(folder.as_uri(), {"version": 1, "input": document,
+                                                  "values": {"cik": raw_capture.cik(key)}})
+            artifacts.append({"input": document, "context": context})
+        _, reading = raw_capture.read_unit(store, folder, f"population-{start}", deepcopy(contract), artifacts)
+        for reading in store.json(reading)["artifacts"]:
+            (filer,) = reading["tables"]["filer"]
+            former = [row["name"] for row in reading["tables"]["former"] if row["name"]]
+            filers.append((f"{filer['cik']:010d}", filer["name"], former))
+    sec = {"receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
+           "population_sha256": hashlib.sha256(population_raw).hexdigest(), "filers": len(filers)}
+    return filers, sec
 
 
 def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tuple[dict, object]:
@@ -129,49 +99,34 @@ def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tupl
         reading, store, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS, allow_lookup_receipts=True))
 
 
-def write_name_frequency(*, landing_root: str, landing_manifests: list[str], gleif_reading: dict,
-                         gleif_metadata: str, output: str) -> dict:
-    """Count the SEC captures and the configured Golden Copy reading into a census file.
+def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, gleif_metadata: str,
+                         output: str) -> dict:
+    """Count the SEC population and the configured Golden Copy reading into a census file.
 
     A name is unique only if it is unique among all SEC filers (ticket 08), so
-    every capture given is counted; a filer in two captures would make its own
-    name look shared and is refused. With the Company rules' cascade switched
-    on, it runs every declared pass over one capture (ticket 20 extends the
-    cascade's addresses to several). An existing file is never overwritten
-    with different content.
+    the population names every main submissions document counted, each by its
+    receipt in the capture. The matching cascade needs a configured cascade
+    reading before it can run here; switched on, it is refused. An existing
+    file is never overwritten with different content.
     """
-    if not landing_manifests:
-        raise Conflict("A Name Census counts at least one SEC capture")
-    spec = cascaded.spec(POLICY)
-    on = bool(spec["passes"]) and any(t["primitive"] == cascaded.TEST for _, rule in active_rules(POLICY)
-                                      for t in rule["when"])
-    if on and len(landing_manifests) != 1:
-        raise Conflict("A cascade pass needs a census of one capture")
-    root = Path(landing_root).resolve()
+    policy = rules_files.policy()
+    spec = cascaded.spec(policy)
+    if spec["passes"] and any(t["primitive"] == cascaded.TEST for _, rule in active_rules(policy)
+                              for t in rule["when"]):
+        raise Conflict("The matching cascade is switched on; Name Frequency has no configured cascade reading yet")
     store = Artifacts()
-    filers, candidates, captures, addresses = [], [], [], []
     with tempfile.TemporaryDirectory(prefix=".name-frequency-") as scratch:
-        folder = Path(scratch)
-        for manifest in landing_manifests:
-            counted, found, population, address = _capture(root, manifest, store, folder)
-            filers.extend(counted)
-            candidates.extend(found)
-            captures.append(population)
-            addresses.append(address)
-    if len(captures) > 1 and len({cik for cik, _, _ in filers}) != len(filers):
-        raise Conflict("A filer is in two of the census's captures")
-    sec = captures[0] if len(captures) == 1 else {"captures": captures, "filers": len(filers)}
-    if on:
-        sec = {**sec, "address_member_sha256": addresses[0]}
+        filers, sec = _population(Path(capture).resolve(), Path(population).resolve(), store, Path(scratch))
+    if len({cik for cik, _, _ in filers}) != len(filers):
+        raise Conflict("A filer is in the population twice")
     held, wanted = name_census._sec_population(filers)
-    metadata = json.loads(_read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
+    metadata = json.loads(raw_capture.read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
     gleif, readings = _gleif(gleif_reading, store, metadata, wanted)
-    census = name_census.census(sec_population=sec, gleif=gleif, held=held, wanted=wanted, readings=readings,
-                                cascade={"spec": spec, "filers": candidates} if on else None)
+    census = name_census.census(sec_population=sec, gleif=gleif, held=held, wanted=wanted, readings=readings)
     data = (canonical(census) + "\n").encode()
     target = Path(output).resolve()
     if target.exists():
-        if _read_bounded(target, len(data)) != data:
+        if raw_capture.read_bounded(target, len(data)) != data:
             raise Conflict("Existing Name Census has different content")
     else:
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -122,18 +122,22 @@ missing generations return 404. An unconfigured v2 API has no v2 routes.
 
 The SEC-to-GLEIF matching rules (ticket 08) bind only a name no other SEC
 filer or GLEIF legal entity carries. The census counts that once, over the
-whole SEC capture (`sec_company` current names and `sec_company_former_name`)
-and a full GLEIF Level 1 Golden Copy (legal and other names, branches
-excluded). It refuses a delta. Each SEC capture is read through its configured
-Rules by the `source.read` worker and its verifier. The Golden Copy arrives as
+whole SEC population (each filer's current and former names) and a full GLEIF
+Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
+delta. The population file lists the receipt keys of the main submissions
+documents counted; each is read from the capture folder (`receipts.jsonl` and
+`bronze/`) through `rules/sources/sec.submissions.company/census-raw.yaml` by the
+`source.read` worker and its verifier, two documents a unit, and must match its
+receipt. The matching cascade is refused while switched on: it has no configured
+reading here yet. The Golden Copy arrives as
 one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
 (about an hour for 3.4 million records); the command checks that the reading
-projected exactly the names these captures hold. It needs local files only:
+projected exactly the names this population holds. It needs local files only:
 
 ```bash
 edgar-warehouse mdm name-census \
-  --landing-root "$COMPANY_LANDING_ROOT" \
-  --landing-manifest "$COMPANY_LANDING_MANIFEST" \
+  --capture "$SEC_SUBMISSIONS_CAPTURE" \
+  --population "$SEC_POPULATION_JSON" \
   --gleif-reading "$GLEIF_CENSUS_READING_JSON" \
   --gleif-reading-sha256 "$GLEIF_CENSUS_READING_SHA256" \
   --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
@@ -151,30 +155,34 @@ This command needs local files and no database credentials:
 
 ```bash
 edgar-warehouse mdm prepare-clean-company \
-  --landing-root "$COMPANY_LANDING_ROOT" \
-  --landing-manifest "$COMPANY_LANDING_MANIFEST" \
-  --ticker-manifest "$TICKER_LANDING_MANIFEST" \
+  --capture "$SEC_SUBMISSIONS_CAPTURE" \
+  --documents "$BUNDLE_DOCUMENTS_JSON" \
+  --population "$SEC_POPULATION_JSON" \
+  --catalog warehouse/bronze/reference/sec/company_tickers_exchange/2026/09/02/company_tickers_exchange.json \
+  --capture-run "$CAPTURE_RUN_ID" --catalog-run "$CATALOG_RUN_ID" \
+  --observed-at 2026-09-30T02:20:28+00:00 \
   --name-census "$NAME_CENSUS_JSON" \
   --output "$CLEAN_MDM_INPUT_DIRECTORY" \
-  --as-of 2026-09-19T00:00:00Z --revision 0 --limit 3
+  --as-of 2026-09-19T00:00:00Z --revision 0
 ```
 
-It copies and hashes the original Company Parquet and landing manifest, emits
-bounded JSONL, and writes reviewable dataset/policy/manifest/inventory files.
-SEC publishes tickers in a catalog of its own, landed by a separate run as
-`sec_company_ticker`, so `--ticker-manifest` names that run's landing manifest
-under the same root. Its member is copied and hashed too
-(`tickers.parquet`), each record carries its CIK's catalog tickers and the
-member's digest, and the digest is part of the publication key. The Company
-landing manifest must also name `sec_company_filing`, the forms the same
-capture landed: each record carries its CIK's distinct forms (`forms`) and
-that member's digest (`filings.parquet`), also part of the key. The Company
-rule reads both (ticket 12). The matching rules read the business address
-(`sec_company_address`, pinned as `addresses.parquet`) and the Name Census
-(`--name-census`, pinned as `name-census.json`), which must have counted this
-same capture; both digests are part of the key, and each record carries its
-postcode, country and census entry in `provenance.matching` (ticket 08).
-An existing different bundle is rejected; identical preparation is idempotent.
+It reads the raw capture: each main submissions document named in
+`--documents` (at most 1,000 receipt keys, all in the population the Name
+Census counted), by its receipt in `receipts.jsonl`, and SEC's exchange
+ticker catalog (`--catalog`, a receipt key). The configured workers read each
+document in units of one or two (`census-main.yaml`), read the census once
+narrowed to the bundle's name keys (`census.yaml`, bound to the census's
+digest), read the catalog once (`catalog.yaml`), and combine them per Company
+(`combine-census.yaml`): forms from the document's recent filings, tickers
+from the catalog in rank order, the business address and the census entry.
+Every worker is executed and verified, and its inputs and outputs are kept
+under `workers/`. The capture and catalog run IDs and the observation time
+are the caller's facts, bound into every row. Each record names its bronze
+document (`_origin.bronze`: key, receipt sha256). The bundle's publication
+key names the capture run, the documents' digest, the catalog run and
+receipt, and the census digest; a different catalog or census is a different
+publication. An existing different bundle is rejected; identical preparation
+is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 SEC `operating` filers and qualifying `other` filers can become Companies;
 nullable text fields are supported.
@@ -188,23 +196,11 @@ Unknown effective time remains unknown; a sample never retires absent records.
 ### Name each record's bronze object
 
 The latest-only Stage keeps, for each source record, the bronze object its
-winning source extract came from (ticket 10). A Company row's `raw_object_id` is the
-sha256 of its SEC submissions document, and the capture run recorded where
-it wrote each document (`pipeline_run.raw_writes_json` in bookkeeping). Write
-that run's receipts once, then pass them to the preparation:
-
-`mdm bronze-receipts`, which read those receipts from the legacy Bookkeeping
-store, is deleted with that store (platform validation slice 2a). A receipts
-file already written can still be passed with `--bronze-receipts`; nothing
-writes a new one until the configured Bookkeeping path records bronze
-receipts.
-
-The receipts must come from the landing's own run, and that run must have
-succeeded; writes with no sha256 (filing attachments, ADV manifests) are left
-out. Each record whose document
-they name carries `_origin.bronze` (object, sha256, locator `$`: the whole
-document); the scope counts `bronze_named`, and the file is pinned as
-`bronze-receipts.json`. The record itself is unchanged. A GLEIF record's
-bronze object comes from its verified native publication.
+winning source extract came from (ticket 10). Preparation reads each document
+by its receipt in the capture's `receipts.jsonl`, so every Company record
+carries `_origin.bronze` (object key, sha256, locator `$`: the whole
+document), and its `raw_object_id` is that sha256. The record itself is
+unchanged. A GLEIF record's bronze object comes from its verified native
+publication.
 Apply owner migrations and approved registry/dataset/policy registration before
 using its manifest with the normal bounded Clean MDM commands.

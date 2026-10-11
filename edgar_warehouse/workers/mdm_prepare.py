@@ -43,7 +43,6 @@ from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
-MANIFEST_BYTES = 32 * 1024**2
 INPUT_BYTES = 32 * 1024**2
 INPUT_ROWS = 100_000
 
@@ -56,23 +55,6 @@ def runtime_files():
 def _lines(rows: list[dict]) -> bytes:
     return b"".join(json.dumps(r, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                                allow_nan=False).encode() + b"\n" for r in rows)
-
-
-def _batches(rows: list[dict]) -> list[list[dict]]:
-    """Rows cut into batches of at most `limits.BATCH_RECORDS` records and, past the first record,
-    `limits.BATCH_RECORD_BYTES`: a batch grows several times over on its way through the
-    Merge Stage, whose request and match proposal are bounded (`limits`)."""
-    batches, current, size = [], [], 0
-    for row in rows:
-        length = len(_lines([row]))
-        if current and (len(current) == limits.BATCH_RECORDS or size + length > limits.BATCH_RECORD_BYTES):
-            batches.append(current)
-            current, size = [], 0
-        current.append(row)
-        size += length
-    if current:
-        batches.append(current)
-    return batches
 
 
 def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
@@ -111,7 +93,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
             # One captured document may be read under distinct approved caller
             # facts. Keep their records, batches and publications independent.
             source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
-        for n, chunk in enumerate(_batches(rows)):
+        for n, chunk in enumerate(limits.batches(rows, lambda row: _lines([row]))):
             data = _lines(chunk)
             if len(data) > limits.RECORDS_FILE_BYTES:
                 raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")
@@ -132,7 +114,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     manifest = {"contract_version": 2, "as_of": keys["as_of"],
                 "policy_digest": keys["policy"], "batches": batches}
     encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
-    if len(encoded) > MANIFEST_BYTES:
+    if len(encoded) > limits.MANIFEST_BYTES:
         raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
     return files, encoded
 
@@ -206,7 +188,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     files, manifest = _documents(envelope, artifacts)
-    if artifacts.verified(envelope["candidate"], max_bytes=MANIFEST_BYTES) != manifest:
+    if artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES) != manifest:
         raise ValueError("The manifest differs from the reading")
     for name, data in files.items():
         if artifacts.read(_beside(envelope["output"], name), max_bytes=limits.RECORDS_FILE_BYTES) != data:

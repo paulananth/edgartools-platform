@@ -1,4 +1,8 @@
-"""Bounded offline configured Company main reading; no full mastering claim."""
+"""Offline configured Company main reading against the retained loaders; no full mastering claim.
+
+`--limit 0` reads every receipt-pinned submission of the capture; `--shard k/n` keeps every
+n-th one from position k, so n processes cover the whole capture. Each `source.read` unit
+reads two submissions, the contract's `max_artifacts`."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -33,24 +37,31 @@ def main():
     parser.add_argument('--capture', type=Path, required=True)
     parser.add_argument('--limit', type=int, default=100)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--shard', default='0/1')
     args = parser.parse_args()
-    if not 1 <= args.limit <= 1000:
-        parser.error('--limit must be 1..1000')
+    if not 0 <= args.limit <= 1000:
+        parser.error('--limit must be 0 (the whole capture) or 1..1000')
+    shard, shards = map(int, args.shard.split('/'))
+    if not 0 <= shard < shards:
+        parser.error('--shard must be k/n with 0 <= k < n')
     started = time.monotonic()
     root = args.capture.resolve()
     receipts = (root / 'receipts.jsonl').read_bytes()
     refs = [json.loads(line) for line in receipts.splitlines() if line.strip()]
     refs = [ref for ref in refs if '/submissions/' in ref['key'] and '/main/' in ref['key']]
     refs.sort(key=lambda ref: hashlib.sha256(ref['key'].encode()).hexdigest())
-    selected = refs[:args.limit]
-    if len(selected) != args.limit or len({ref['key'] for ref in selected}) != args.limit:
+    if len({ref['key'] for ref in refs}) != len(refs):
+        raise ValueError('Receipts name a submission twice')
+    selected = (refs[:args.limit] if args.limit else refs)[shard::shards]
+    if args.limit and shards == 1 and len(selected) != args.limit:
         raise ValueError('Need requested distinct receipt-pinned captures')
     store, evidence, filing_count = Artifacts(), [], 0
     contract_body = files.source('sec.submissions.company')
-    with tempfile.TemporaryDirectory(prefix='codex-company-main-') as folder:
-        scratch = Path(folder)
-        contract = store.put(scratch.as_uri(), contract_body)
-        for n in range(0, len(selected), 2):
+    for n in range(0, len(selected), 2):
+        # Each unit's artifacts are removed once it is verified: a whole capture's readings exceed the disk.
+        with tempfile.TemporaryDirectory(prefix='company-main-unit-') as folder:
+            scratch = Path(folder)
+            contract = store.put(scratch.as_uri(), contract_body)
             entries, expected_rows = [], []
             for ref in selected[n:n + 2]:
                 path = (root / 'bronze' / ref['key'].removeprefix('warehouse/bronze/')).resolve()
@@ -84,7 +95,8 @@ def main():
                     raise ValueError(f"Company main reading differs: {ref['key']}")
                 require_tables(artifact['tables'], tables)
                 evidence.append({'key': ref['key'], 'input_sha256': ref['sha256'], 'context_sha256': entry['context']['sha256'], 'tables_sha256': digest(tables)})
-    result = {'captures': len(selected), 'company_rows': len(selected), 'filing_rows': filing_count, 'source_read_units': (len(selected) + 1) // 2,
+    result = {'captures': len(selected), 'shard': args.shard, 'whole_capture': not args.limit, 'pinned_submissions': len(refs),
+              'company_rows': len(selected), 'filing_rows': filing_count, 'source_read_units': (len(selected) + 1) // 2,
               'all_main_tables_match': True, 'full_company_mastering': False, 'census_provenance_qualified': False, 'pagination_qualified': False,
               'receipts_sha256': hashlib.sha256(receipts).hexdigest(), 'contract_sha256': digest(contract_body),
               'execution_sha256s': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(source_read.__file__), *source_read.runtime_files()]},

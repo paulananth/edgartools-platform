@@ -49,7 +49,7 @@ DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-pyt
 def test_complete_census_general_projection_matches_active_cascade_without_install(case):
     """Bounded projection proof; no install or database population gate."""
     import copy
-    from edgar_warehouse.mdm.clean import cascade, company_source, quality
+    from edgar_warehouse.mdm.clean import cascade, sec_company, quality
     from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
     from tests.support.retired_name_census import cascade_entity
     from edgar_warehouse.rules.source_engine import SourceEngine
@@ -70,7 +70,7 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     if case == "bad_field": entity["LegalJurisdiction"] = {"$": []}
     if case == "bad_lines": entity["LegalAddress"]["AdditionalAddressLine"] = [42]
     if case == "branch": entity["EntityCategory"] = {"$": "BRANCH"}
-    spec = cascade.spec(company_source.POLICY)
+    spec = cascade.spec(sec_company.POLICY)
     assert len(spec["passes"]) == 7
     contract = dataset_contract("level1")
     expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
@@ -1048,13 +1048,6 @@ with_census = WITH_CENSUS
 folder = Path("company-composition-census" if with_census else "company-composition").resolve()
 folder.mkdir()
 blueprints = files.ROOT / "sources/sec.submissions.company"
-from edgar_warehouse.workers.source_mapping import project_record
-from edgar_warehouse.mdm.clean import company_source
-assert not hasattr(company_source,"business_address")
-landed={"street1":"  Raw  ","street2":None,"city":"City","zip_code":"12345",
-        "state_or_country":" de ","country_code":None}
-assert project_record(landed,files.load(blueprints/"landed-address.yaml"),column="fields")=={
-    "street":"  Raw  ","street2":None,"city":"City","postal_code":"12345","region":" de ","country":"US"}
 date = "2026-10-04T00:00:00Z"
 context = {"cik":1,"sync_run_id":"capture","raw_object_id":"0"*64,"load_mode":"default"}
 def read(name, template, payload, context):
@@ -1166,14 +1159,12 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
         ]
         from tests.support.retired_company_address import business_address
         from edgar_warehouse.mdm.clean.adapters import normalize
-        landed_addresses=[]
         for record in sec_records:
             if record["source"]!="sec.submissions.company":continue
             row=record["row"]
             landed={"cik":row["cik"],"address_type":"business","last_sync_run_id":"installed-addresses",
                     "street1":"  Source Street  ","street2":None,"city":"City","zip_code":"12345",
                     "state_or_country":" de ","country_code":None}
-            landed_addresses.append(landed)
             row["business_address"]=business_address(landed)
         readings=[]
         for record in sec_records:
@@ -1200,7 +1191,7 @@ from uuid import uuid4
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.mdm.clean import adapters, company_source
+from edgar_warehouse.mdm.clean import adapters, sec_company
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
@@ -1218,19 +1209,6 @@ for member in ("level1","relationships","reporting_exceptions"):
     recipe=files.load(files.ROOT/"sources/gleif"/f"{member.replace('_','-')}-fields.yaml")
     assert digest(mapping["reading"]) == digest(recipe)
     assert isinstance(source_mapping.project_record({},mapping["reading"],column="fields"),dict)
-# Exercise the actual retained preparation/census caller, with the custom
-# derivation removed. Its configured address becomes the published SEC field.
-import pyarrow as pa
-import pyarrow.parquet as pq
-from io import BytesIO
-assert not hasattr(company_source,"business_address")
-stream=BytesIO()
-pq.write_table(pa.Table.from_pylist(body["landed_addresses"]),stream)
-landed=company_source._business_addresses({"run_id":"installed-addresses"},pq.ParquetFile(BytesIO(stream.getvalue())))
-for record in body["sec_records"]:
-    if record["source"]=="sec.submissions.company":
-        assert landed[record["row"]["cik"]]==record["row"]["business_address"]
-        record["row"]["business_address"]=landed[record["row"]["cik"]]
 # Rebuild SEC assertions from raw fixture documents inside the installation.
 # Host-built assertions are only an oracle, never publication input.
 sec_readings=[]
@@ -1350,16 +1328,16 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
       for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
                    files.ROOT/"sources/gleif/source.yaml",
                    files.ROOT/"sources/sec.submissions.company/source.yaml",
-                   files.ROOT/"sources/sec.submissions.person/source.yaml",Path(company_source.__file__),
-                   files.ROOT/"sources/sec.submissions.company/landed-address.yaml",Path(name_census.__file__),
+                   files.ROOT/"sources/sec.submissions.person/source.yaml",Path(sec_company.__file__),
+                   Path(name_census.__file__),
                    files.ROOT/"sources/gleif/census-complete-stream.yaml",
                    files.ROOT/"sources/sec.submissions.company/census-filer.yaml"]}
 print(json.dumps({"pins":pins,"generation":census_result["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_address_caller":True,"installed_census_caller":True,"census_digest":digest(census),"publication_recovery":True,"full_population":False}))
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_census_caller":True,"census_digest":digest(census),"publication_recovery":True,"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
-                         "landed_addresses": landed_addresses, "census_arguments": census_arguments,
+                         "census_arguments": census_arguments,
                          "historical_census": historical_census,
                          "census_archive": base64.b64encode(census_archive).decode(),
                          "historical_entries": {str(r['row']['cik']): retired_name_census.entry(historical_census,r['row']['entity_name'],census_digest=digest(historical_census))
@@ -1367,7 +1345,7 @@ engine.dispose()
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_address_caller"] and proof["installed_census_caller"] and proof["publication_recovery"]
+        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_census_caller"] and proof["publication_recovery"]
         (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
     finally:
         admin.dispose()
@@ -1375,49 +1353,43 @@ engine.dispose()
 
 
 def test_active_company_preparation_caller_runs_from_installed_bundle(installed, tmp_path):
-    """Frozen input is produced once; installed CLI and verifier cannot use checkout."""
-    from tests.mdm.test_clean_company_source import landing, source_row, ticker_row, filing_row
-    from tests.support.retired_company_preparation import prepare_company_bundle as historical
-    from edgar_warehouse.mdm.clean.company_source import bronze_receipts
+    """The installed CLI prepares a Company bundle from a raw capture, byte for byte as the
+    checkout does, and the installed verifier accepts it; neither can use the checkout."""
+    from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, census_capture, documents, prepare
+    from tests.support.sec_capture import CATALOG
     python, root = installed
-    selected = "a" * 64
-    args = landing(tmp_path, [source_row(123,raw_object_id=selected)], tickers=[ticker_row(123,"A")],
-                   filings=[filing_row(123,"10-Q"),filing_row(123,"10-K")])
-    receipts = tmp_path / "receipts.json"
-    receipts.write_text(json.dumps(bronze_receipts("capture-1",
-        [{"sha256":f"{n:064x}","path":f"s3://bronze/{n}.json"} for n in range(10001)]
-        + [{"sha256":selected,"path":"s3://bronze/selected.json"}])))
-    args["bronze_receipts_path"] = str(receipts)
-    original = historical(**{**args,"output":str(tmp_path/"historical")})
-    arguments = ["mdm","prepare-clean-company"]
-    for name,value in args.items():
-        option = "bronze-receipts" if name == "bronze_receipts_path" else name.replace("_","-")
-        arguments.extend(["--"+option,str(value)])
-    run = _run(python,"-c", """
+    capture = census_capture(tmp_path, documents(), CATALOG_ROWS)
+    original, expected = prepare(tmp_path, capture, output="checkout")
+    folder, population, census = capture
+    listed = tmp_path / "documents-checkout.json"
+    arguments = ["mdm", "prepare-clean-company", "--capture", str(folder), "--documents", str(listed),
+                 "--population", str(population), "--catalog", CATALOG,
+                 "--capture-run", PINS["capture_run"], "--catalog-run", PINS["catalog_run"],
+                 "--observed-at", PINS["observed_at"], "--name-census", str(census),
+                 "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"])]
+    run = _run(python, "-c", """
 import sys
 from edgar_warehouse.rules import source_engine
-from edgar_warehouse.mdm.clean import company_source
 from edgar_warehouse.cli import main
 source_engine.STEPS = {}
-assert not hasattr(company_source,'prepare_company_bundle')
-assert not hasattr(company_source,'_filed_forms')
-assert not hasattr(company_source,'_catalog_tickers')
 sys.exit(main(sys.argv[1:]))
-""", *arguments,cwd=root)
+""", *arguments, cwd=root)
     assert run.returncode == 0, run.stderr
     report = json.loads(run.stdout)
-    assert report['scope'] == original['scope']
-    for name in original['files']:
-        assert (tmp_path/'historical'/name).read_bytes() == (tmp_path/'pinned'/name).read_bytes(),name
-    verified = _run(python,"-c", """
+    assert report["scope"] == original["scope"]
+    # Worker receipts name the bundle's own folder, so only they (and the inventory listing them) differ.
+    for name in original["files"]:
+        if not name.startswith("workers/"):
+            assert (expected / name).read_bytes() == (tmp_path / "pinned" / name).read_bytes(), name
+    verified = _run(python, "-c", """
 import json,sys
 from edgar_warehouse.rules import source_engine
 from edgar_warehouse.mdm.clean.company_prepare import verify_company_bundle
 source_engine.STEPS = {}
 print(json.dumps(verify_company_bundle(sys.argv[1],expected=json.load(sys.stdin))))
-""",str(tmp_path/'pinned'),cwd=root,document=report)
-    assert verified.returncode == 0,verified.stderr
-    assert json.loads(verified.stdout)['records'] == 1
+""", str(tmp_path / "pinned"), cwd=root, document=report)
+    assert verified.returncode == 0, verified.stderr
+    assert json.loads(verified.stdout)["records"] == 3
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
