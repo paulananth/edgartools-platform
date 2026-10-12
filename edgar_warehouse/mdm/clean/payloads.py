@@ -5,13 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from edgar_warehouse.rules.source_engine import postgres_jsonb_object
+from edgar_warehouse.rules.source_engine import postgres_jsonb_object_bytes
 
 
-def payload_text(row) -> str:
+def payload_bytes(row) -> bytes:
     """Keep raw numeric scale until the original PostgreSQL hash is checked."""
     if row["payload_text"] is not None:
-        return row["payload_text"]
+        return row["payload_text"].encode()
     parts = {
         "contract_version": "2",
         "generation": str(row["generation"]),
@@ -21,14 +21,19 @@ def payload_text(row) -> str:
     }
     if row["consumer"] == "journal":
         parts["effects"] = row["effects_text"]
-    return postgres_jsonb_object(parts, canonical_inputs=True)
+    return postgres_jsonb_object_bytes(parts, canonical_inputs=True)
+
+
+def payload_text(row) -> str:
+    """Text oracle for qualification; active hashing uses bytes directly."""
+    return payload_bytes(row).decode()
 
 
 def prepare(row) -> dict:
     """Refuse a mismatching preparation before any external publication."""
     from .store import Conflict
 
-    raw = payload_text(row)
-    if hashlib.sha256(raw.encode()).hexdigest() != row["payload_hash"]:
+    raw = payload_bytes(row)
+    if hashlib.sha256(raw).hexdigest() != row["payload_hash"]:
         raise Conflict("Publication preparation disagrees with committed payload hash")
     return json.loads(raw)

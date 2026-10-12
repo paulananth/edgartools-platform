@@ -169,6 +169,13 @@ then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application rol
 with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
 since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
 
+For an existing Clean MDM store, before starting the new publication runtime,
+rerun `edgar-warehouse mdm migrate --application-role <MDM application role>`
+with the migration owner's `MDM_DATABASE_URL`. This applies the checksummed
+publication-input migration and preserves existing publication readers' SELECT
+grants. Already frozen runs retain their original code/native binary; their
+SQL claim and delivery APIs remain compatible.
+
 1. For a combined run already submitted in Parse, retain its `run_id` and
    continue its declared steps. Otherwise submit:
    `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.

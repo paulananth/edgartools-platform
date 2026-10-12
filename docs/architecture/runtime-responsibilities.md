@@ -1,11 +1,15 @@
 # Rust, Python, and database responsibilities
 
 Status: agreed architecture and current implementation map. Evidence refreshed
-on main `3a75cfd1`, 2026-10-11. Complete-set
+against main `9bed91fd`, 2026-10-12, plus the locally qualified publication
+preparation slice (delivery status in its ticket). Complete-set
 reduction is merged (#911); accepted merge replay and field ranking are merged
 and CI-qualified (#920). Materialized collections/joins are merged and
 CI-qualified (#921), with exact cached Company/whole-census parity. The local
 and installed qualifications are recorded separately. Deployment and activation are separate gates.
+Publication preparation now uses native object construction and UTF-8 bytes
+through Python callers; its PostgreSQL qualification is recorded separately
+from CI/merge in [its ticket](../../.planning/workstreams/database-computation-preparation/TICKET.md).
 Current owners describe code execution, not production qualification.
 
 ## Responsibility map

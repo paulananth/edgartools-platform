@@ -82,7 +82,7 @@ def test_new_inputs_match_old_view_without_numeric_roundtrip(database):
 def test_reconstructed_hash_mismatch_is_refused_before_any_send_and_releases_claim(database, monkeypatch):
     save(database)
     sent = Destination()
-    monkeypatch.setattr(payloads, "postgres_jsonb_object", lambda *_, **__: '{"corrupt": true}')
+    monkeypatch.setattr(payloads, "postgres_jsonb_object_bytes", lambda *_, **__: b'{"corrupt": true}')
     with pytest.raises(Conflict, match="committed payload hash"):
         Store(database.application).deliver_one("export", "native", sent)
     assert not sent.sent
@@ -143,7 +143,7 @@ def test_journal_still_reports_the_original_conflict_type_before_append(database
         def append(self, _):
             raise AssertionError("Invalid preparation must never reach the Journal")
     publisher = JournalPublisher(NeverAppend(), database.application, {"run_id": str(uuid4()), "source": "fixture", "feed": "fixture"})
-    monkeypatch.setattr(payloads, "postgres_jsonb_object", lambda *_, **__: '{"corrupt": true}')
+    monkeypatch.setattr(payloads, "postgres_jsonb_object_bytes", lambda *_, **__: b'{"corrupt": true}')
     with pytest.raises(JournalConflict, match="committed local evidence"):
         publisher.publish("journal/batch-1", payload, row["payload_hash"])
 
@@ -201,3 +201,43 @@ def test_input_retrieval_uses_the_existing_batch_and_outbox_indexes(database):
             relations.add(node["Relation Name"])
         pending.extend(node.get("Plans", []))
     assert relations == {"batch", "outbox"}
+
+
+def test_public_worker_recovers_a_lost_reply_after_durable_publication_without_resending(database, tmp_path, monkeypatch):
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.workers import mdm_publish
+
+    save(database)
+    class CountingSink(LocalContractSink):
+        sent = 0
+        def publish(self, *args):
+            self.sent += 1
+            return super().publish(*args)
+    sink = CountingSink(tmp_path / "consumer")
+    store = Store(database.application)
+    monkeypatch.setattr(mdm_publish, "_store", lambda **_: store)
+    monkeypatch.setattr(mdm_publish, "_publisher", lambda *_: sink)
+    deliver = store.deliver_one
+    lost = False
+    def lose_reply(*args, **kwargs):
+        nonlocal lost
+        result = deliver(*args, **kwargs)
+        if result and not lost:
+            lost = True
+            raise RuntimeError("Lost publication acknowledgement after commit")
+        return result
+    monkeypatch.setattr(store, "deliver_one", lose_reply)
+    task = {"checks": [mdm_publish.CHECK], "keys": {"batch_id": "batch-1", "consumer": "export"},
+            "claim": {"attempt": str(uuid4())}, "output": (tmp_path / "receipt.json").as_uri()}
+    artifacts = Artifacts()
+    with pytest.raises(RuntimeError, match="after commit"):
+        mdm_publish.execute(task, artifacts)
+    assert not (tmp_path / "receipt.json").exists()
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT verified_at IS NOT NULL FROM mdm.outbox WHERE consumer='export'"))
+    receipt = mdm_publish.execute(task, artifacts)
+    assert sink.sent == 1
+    assert mdm_publish.verify({**task, "candidate": receipt}, artifacts) == ({mdm_publish.CHECK: True}, [])
+    assert mdm_publish.execute(task, artifacts) == receipt
+    assert sink.sent == 1

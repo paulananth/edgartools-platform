@@ -53,6 +53,11 @@ def postgres_jsonb_object(fields: Mapping[str, str], *, canonical_inputs: bool =
     return source_contract.postgres_jsonb_object(dict(fields), canonical_inputs=canonical_inputs)
 
 
+def postgres_jsonb_object_bytes(fields: Mapping[str, str], *, canonical_inputs: bool = False) -> bytes:
+    """Same JSONB object protocol as above, without a wide Python Unicode copy."""
+    return source_contract.postgres_jsonb_object_bytes(dict(fields), canonical_inputs=canonical_inputs)
+
+
 class SourceRejected(Exception):
     """The artifact, or the contract, failed. `code` is stable; `detail` is for people."""
 

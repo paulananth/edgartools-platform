@@ -41,3 +41,11 @@ def test_authenticated_stored_parts_preserve_the_existing_publication_domain():
         source_engine.postgres_jsonb_text(raw)
     prepared = source_engine.postgres_jsonb_object({"x": raw}, canonical_inputs=True)
     assert prepared == '{"x": ' + raw + '}'
+
+
+def test_bytes_path_has_identical_unicode_numeric_and_hash_protocol():
+    parts = {"objects": '[{"é𝄞": 1.2300}]', "version": "2"}
+    expected = source_engine.postgres_jsonb_object(parts, canonical_inputs=True).encode()
+    assert source_engine.postgres_jsonb_object_bytes(parts, canonical_inputs=True) == expected
+    with pytest.raises(ValueError):
+        source_engine.postgres_jsonb_object_bytes({"x": '1,"injected":2'}, canonical_inputs=True)
