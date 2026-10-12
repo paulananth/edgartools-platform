@@ -1,9 +1,10 @@
 # Rust, Python, and database responsibilities
 
 Status: agreed architecture and current implementation map. Evidence refreshed
-on main `9af45def` plus the configured-merging slice, 2026-10-11. Complete-set
-reduction is merged (#911); accepted merge replay and field ranking are locally
-qualified in this change. Deployment and activation are separate gates.
+on main `cd277677` plus the configured-joins slice, 2026-10-11. Complete-set
+reduction is merged (#911); accepted merge replay and field ranking are merged
+and CI-qualified (#920). Materialized collections/joins are implemented in this
+slice; its local and installed qualification is recorded separately. Deployment and activation are separate gates.
 Current owners describe code execution, not production qualification.
 
 ## Responsibility map
@@ -44,13 +45,14 @@ does not acquire authority to approve or activate it.
 
 Parsing and complete-set reduction use the Rust engine. Accepted identity
 replay and configured field/profile eligibility and ranking now use native
-kernels through Python. Materialized collections/joins, source revision folding,
+kernels through Python. Materialized collections/joins now use native configured
+computation and opaque Python payloads. Source revision folding,
 canonical value comparison/materialization, matching/quality and relationship
 projection remain Python pending their qualified ports. Python retains timestamp
 and age preparation, policy authority, profile qualification and orchestration.
 All custom code stays Python. New non-parsing custom extension points require
 separate implementation and qualification; no such interface is added here.
-See [merge qualification](../../.planning/workstreams/rust-configured-merging/RESULTS.md)
+See [merge qualification](../../.planning/workstreams/rust-configured-merging/RESULTS.md), [join qualification](../../.planning/workstreams/rust-configured-joins/RESULTS.md)
 and [reduction qualification](../../.planning/workstreams/rust-configured-reduction/RESULTS.md).
 
 All evidence links are repository-relative; names identify the inspected
@@ -60,7 +62,7 @@ functions. Migration prerequisites apply before replacing the current owner.
 |---|---|---|---|
 | Configured parsing, projection, coercion, assertions and record deferral | Rust: [source-contract](../../crates/source-contract/src/lib.rs), `Engine`; Python boundary: [SourceEngine](../../edgar_warehouse/rules/source_engine.py) | Rust kernel behind Python facade | Preserve types, rejection codes, ordinals, context and lookup bounds. Update READING only when interface, configuration, limits or verification changes. |
 | JSON/XML framing and native record projection | Rust scans through [PyO3](../../crates/source-contract/src/python.rs), `scan_json_array` / `scan_xml_records`; Python supplies streams and callbacks | Rust computation; Python transport, authentication and publication | Exhaust valid EOF and authenticate all input before publishing. GIL release does not remove callback or row-materialization costs. No interface change here. |
-| Keyed collection, sorting, distinctness and local joins | Python: [source_combine](../../edgar_warehouse/workers/source_combine.py), `_group`, `_documents` | Rust configured core; Python worker/caller | Profile full path to order migration; preserve stable sorting, first/last/one, exact typed identities, null policy and aggregate budgets. COMBINING changes only after a qualified port. |
+| Keyed collection, sorting, distinctness and local joins | Rust: [combination](../../crates/source-contract/src/combination.rs), `combine_tables`; Python [source_combine](../../edgar_warehouse/workers/source_combine.py), `_documents`, authenticates and bounds input/output | Rust configured core; Python worker/caller | Preserve stable sorting, first/last/one, exact typed identities, null policy and aggregate budgets. Python canonical callbacks/payload access still hold the GIL; Rust scalar sorts release it. COMBINING records retained Python object overhead. See join qualification before performance claims. |
 | Complete-set grouping, counts, member exclusion and samples | Rust: [reduction kernel](../../crates/source-contract/src/reduction.rs); Python [source_reduction](../../edgar_warehouse/workers/source_reduction.py), `tables`, authenticates/traverses inputs | Rust configured core; Python worker/caller | Preserve complete-input authentication, last source occurrence, lexical output, uncapped counts, state/key/member budgets and late-failure behavior. COMBINING documents native state and 1,024-row conversion batches; payload limits do not establish an RSS bound. |
 | CLI, AWS/S3/SEC integrations, workers, retries, artifacts and independent verification | Python: [CLI](../../edgar_warehouse/cli.py), [source_read](../../edgar_warehouse/workers/source_read.py), [Store](../../edgar_warehouse/mdm/clean/store.py), `deliver_one` | Python | Preserve command surfaces, authenticated receipts, retry identity and verifier independence. No new operational commands. |
 | All custom steps | Python functions registered in [STEPS](../../edgar_warehouse/rules/steps.py); Rust callback bridge in `python.rs` | Python only; Rust invokes supported callbacks | Preserve callback types, errors, execution identity and Mode 6 approval. Measure GIL/conversion overhead. New non-parsing extension points need their own implementation; source-specific custom code remains Python. |
@@ -133,7 +135,7 @@ Moving SQL text into a Python module still executes that computation in SQL.
 |---|---|---|
 | [data-platform/SKILL.md](../../skills/data-platform/SKILL.md) | Add architecture boundaries, placement guidance and qualification requirement | Update capability statements only after implementation and installed-path proof. |
 | [READING.md](../../skills/data-platform/READING.md) | None: native interfaces, configuration, limits and verifier behavior are unchanged | A reading interface/configuration/bounds/authentication change requires corresponding examples and qualification. |
-| [COMBINING.md](../../skills/data-platform/COMBINING.md) | Reduction guidance already reflects Rust state and Python conversion; materialized collections/joins remain Python | The next qualified collection/join port requires updated execution and memory-accounting explanations, unchanged bounds and verification evidence. |
+| [COMBINING.md](../../skills/data-platform/COMBINING.md) | Reduction and materialized collections/joins reflect Rust computation, Python payload/canonical overhead, unchanged bounds and independent verification | Update when grammar, bounds, authentication, materialization or verification actually change. |
 | [data-onboarding](../../skills/data-onboarding/SKILL.md) and [refining-rules](../../skills/refining-rules/SKILL.md) | None: authoring, test qualification, operator approval and activation steps are unchanged | Change only when those actual steps change; implementation language alone does not change Rules authority. |
 
 Architecture boundaries guide new work; current kernel capabilities and their qualification are recorded separately. Existing Mode 6

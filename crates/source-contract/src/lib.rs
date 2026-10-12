@@ -36,6 +36,8 @@ pub mod survivorship;
 pub mod identity;
 #[cfg(feature = "python")]
 mod python;
+#[cfg(feature = "python")]
+mod combination;
 mod tree;
 mod xml;
 

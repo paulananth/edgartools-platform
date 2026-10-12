@@ -211,3 +211,14 @@ def replay_identity(identities: list[dict], decisions: list[dict], clock: int) -
     return json.loads(source_contract.replay_identity(
         json.dumps(identities, ensure_ascii=False, separators=(",", ":")),
         json.dumps(decisions, ensure_ascii=False, separators=(",", ":")), clock))
+
+
+def combine_tables(plan: Mapping, inputs: Mapping, canonical) -> dict[str, list[dict]]:
+    """Apply a validated combination plan to authenticated bounded readings.
+
+    Native configured grouping, ordering and joins retain opaque payloads. The
+    caller supplies existing canonical equality, then encodes, bounds and
+    publishes the complete result. Native stable sorts release the GIL; Python
+    object access and canonical callbacks hold it. No receipt authority here.
+    """
+    return source_contract.combine_tables(dict(plan), dict(inputs), canonical)
