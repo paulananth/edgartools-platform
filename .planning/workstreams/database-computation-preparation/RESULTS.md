@@ -77,16 +77,16 @@ Fault-injected lost acknowledgements are tested separately, not timed here.
 
 | Records / consumer | SQL median | Native median | Client RSS SQL / native | PG sum RSS SQL / native |
 |---|---:|---:|---:|---:|
-| 200 / export | 0.192 s | 0.230 s | 88.6 / 101.7 MiB | 113.1 / 110.0 MiB |
-| 200 / journal | 0.803 s | 0.595 s | 90.0 / 103.5 MiB | 161.0 / 113.4 MiB |
-| 600 / export | 0.457 s | 0.537 s | 150.8 / 198.1 MiB | 141.9 / 138.4 MiB |
-| 600 / journal | 2.146 s | 1.536 s | 165.9 / 211.6 MiB | 288.4 / 155.1 MiB |
+| 200 / export | 0.197 s | 0.259 s | 89.0 / 101.7 MiB | 112.4 / 111.7 MiB |
+| 200 / journal | 0.854 s | 0.645 s | 90.2 / 103.4 MiB | 161.3 / 113.9 MiB |
+| 600 / export | 0.467 s | 0.567 s | 159.0 / 216.1 MiB | 143.5 / 138.2 MiB |
+| 600 / journal | 2.275 s | 1.593 s | 165.1 / 218.5 MiB | 288.7 / 156.0 MiB |
 
 All fixed placement criteria pass: median time/client RSS/server summed RSS
 at most 1.5x SQL, claim bytes at most 1.1x, and unchanged SQL call counts.
 Measured claim response bytes increase about 5.1%; export takes 5 MDM calls,
 journal 8 MDM + 6 journal calls in both modes. Native preparation alone takes
-about 1.6–10.5 ms on these inputs. Export costs 18–20% more wall time; accepting
+about 1.5–11.8 ms on these inputs. Export costs 21–31% more wall time; accepting
 that bounded cost moves preparation ownership into programs. Journal timings
 are lower in these samples, without a production-speedup claim.
 
@@ -115,3 +115,17 @@ The qualifier bounds `--limit` to 1..1000 and repeats to 1..10. Its acceptance
 failure preserves the JSON evidence and exits nonzero. Remaining SQL
 dispositions/prerequisites are explicit in DECISIONS.md; this is not blanket
 retirement of every database expression or an analytics consumer cutover.
+
+## CI correction
+
+The initial PR CI run `38247132901` passed 941 engine tests and its unit,
+architecture, MDM and shell jobs; integration reported 351 passes and one
+expected failure, but failed the required self-describing-schema check. The
+new view had its relation comment but lacked ten column comments and its new
+claim function comment. Root reproduced that exact failure locally, added
+comments without changing SQL logic, and all 25 maintained schema/new-publication
+PG16 checks pass. Qualification was rerun for the changed migration checksum;
+all four comparisons and runtime hashes were independently rechecked by
+Standards/Spec. The table above is this refreshed evidence, not the earlier
+18–20% export timing sample. Timing variation reinforces the local/shared-host
+limitation. Final PR CI is required before merge.

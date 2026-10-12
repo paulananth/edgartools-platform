@@ -13,6 +13,17 @@ CREATE VIEW mdm.outbox_input AS
 COMMENT ON VIEW mdm.outbox_input IS
  'Indexed immutable publication inputs. Programs shape/hash them against the committed payload_hash before sending. Raw JSON text preserves numeric precision/scale. Previously stored payloads are sent as stored.';
 
+COMMENT ON COLUMN mdm.outbox_input.batch_id IS 'Saved batch that owns this immutable publication intent (batch.batch_id).';
+COMMENT ON COLUMN mdm.outbox_input.consumer IS 'Destination reader, such as journal; together with batch_id identifies the outbox row.';
+COMMENT ON COLUMN mdm.outbox_input.payload_hash IS 'Expected SHA-256 of publication JSONB text, independently derived by the database at commit; programs must match it before sending.';
+COMMENT ON COLUMN mdm.outbox_input.created_at IS 'Original batch commit time; journal publication uses this durable event time.';
+COMMENT ON COLUMN mdm.outbox_input.payload_text IS 'Stored publication JSONB text for pre-014 intent; NULL for newer intent prepared from the fields below.';
+COMMENT ON COLUMN mdm.outbox_input.generation IS 'Committed batch generation; claims deliver a consumer in this order.';
+COMMENT ON COLUMN mdm.outbox_input.run_id IS 'Run that committed the batch, exposed as text for envelope preparation.';
+COMMENT ON COLUMN mdm.outbox_input.policy_digest IS 'Approved policy digest from the immutable batch request; NULL when a legacy stored payload is used.';
+COMMENT ON COLUMN mdm.outbox_input.projections_text IS 'Committed golden records as raw JSONB text, preserving numeric precision and scale; NULL when a legacy stored payload is used.';
+COMMENT ON COLUMN mdm.outbox_input.effects_text IS 'Whole committed batch request as raw JSONB text for the journal envelope; NULL for other consumers or legacy stored payloads.';
+
 -- Preserve existing publication readers on upgrade, including SELECT granted
 -- to a group role. Copy only SELECT, never any write or function authority.
 DO $$
@@ -54,3 +65,6 @@ BEGIN
        WHERE i.batch_id=p.batch_id AND i.consumer=p.consumer);
 END;
 $$;
+
+COMMENT ON FUNCTION mdm.claim_outbox_input(text,text,integer,text) IS
+ 'Claims the earliest unverified consumer generation with the shared outbox lease/fence/history and returns immutable inputs for program preparation; an optional batch restriction cannot jump earlier work. Runtime writers use it; frozen writers retain claim_outbox.';

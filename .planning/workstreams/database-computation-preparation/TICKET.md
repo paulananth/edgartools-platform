@@ -20,11 +20,13 @@ Configured core computation belongs in Rust, callers/custom code in Python.
 - [ ] Guard, commit, publish PR, verify CI, merge and report exact delivery with no deployment claim.
 - [x] Preserve publication's original byte domain by deriving the native output budget from immutable stored parts, including JSONB numeric expansion beyond compact request size. Verified: Authenticated stored-part budget and greater-than-64-MiB native publication test pass; 2026-10-12 08:01 ET.
 - [x] Rebase onto freshly fetched main after Claude's profiling PR #923, preserving both workstreams and rechecking changed upstream tests. Verified: Conflict-free rebase onto #923 with identical range-diff; 110 affected/upstream tests pass; latest #924 synchronization tracked below; 2026-10-12 08:01 ET.
-- [x] Resolve measured client-memory acceptance failure: 600-record export initially samples 1.526x SQL RSS; use UTF-8 bytes at the native hashing boundary and requalify against unchanged 1.5x limit. Verified: Final 600-record export client RSS 1.313x and journal 1.276x; both pass unchanged 1.5x limit; 2026-10-12 08:01 ET.
+- [x] Resolve measured client-memory acceptance failure: 600-record export initially samples 1.526x SQL RSS; use UTF-8 bytes at the native hashing boundary and requalify against unchanged 1.5x limit. Verified: Refreshed 600-record export client RSS 1.359x and journal 1.323x; both pass unchanged 1.5x limit; 2026-10-12 08:01 ET.
 - [x] Prove public publication worker recovery after an injected lost acknowledgement following committed verification, with no resend and unchanged receipt; distinguish this from benchmark completed/no-work retry. Verified: 20 final PG16 cases include injected post-commit lost reply; retry/verify return unchanged receipt and sink sends once; 2026-10-12 08:01 ET.
 
 - [x] Synchronize with latest Claude profiling PR #924 and verify its changed tests. Conflict-free rebase onto 7dd6f5ab preserves both implementation commits by range-diff; all 58 affected profiling tests pass; 2026-10-12 08:07 ET.
 - [x] Install final committed byte-return runtime without checkout; verify publication helper, doctor and configured publication/recovery. All 3 installed checks at a9cb9938 pass; combined installed/upstream run: 61 passed in 6m07s; 2026-10-12 08:07 ET.
+
+- [x] Resolve CI schema-description failure for migration 016, reproduce the failing maintained test, and refresh checksum-pinned qualification evidence. Failure reproduced; ten column and one function comments added with no logic change; all 25 schema/new-publication PG16 checks pass, both fresh artifacts pass fixed limits with matching hashes, Standards/Spec/GoF clear; 2026-10-12 08:18 ET.
 
 ## Acceptance
 

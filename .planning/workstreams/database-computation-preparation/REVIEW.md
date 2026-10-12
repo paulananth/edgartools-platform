@@ -58,3 +58,11 @@ grants, atomic shared-row claims, independent committed hashes and unchanged
 legacy APIs remain intact. No issues found. Redaction matches in the diff are
 measurement decimals, PostgreSQL numeric bounds and Git object hashes; no
 credentials or personal records are added. The PR body scans clean.
+
+## CI follow-up
+
+CI found missing schema-description comments, reproduced locally. Ten column
+comments and one function comment were added to the new, not-deployed migration.
+GoF confirms no SQL logic change; Standards and Spec independently verify the
+comments and all refreshed runtime hashes/acceptance calculations. All 25 focused
+PG16 cases pass. No findings remain; final CI must pass before merge.
