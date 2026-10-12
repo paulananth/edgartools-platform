@@ -84,7 +84,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | classify | The five classes, each from named tests; "unknown" when the tests do not decide | `class`, `confidence`, `tests` |
 | hierarchies | Per source: parent columns, functional dependencies, code nesting, separate level tables (a list naming its coarser list); a yes/no flag, or a dependency that holds by coincidence (a near-constant parent, or child values seen once), is listed apart, never a hierarchy | `hierarchies`, `dependencies_not_hierarchies` |
 | time | As of (valid from/to), as at (record time), event time, time series | `time` |
-| sensitivity | none, personal, sensitive personal; samples masked | `sensitivity` |
+| sensitivity | none, personal, sensitive personal, each with its signals: words in the column's name, detectors on its values, a vote over its values (a column named for people whose values are mostly people's names), and whether the part describes people (then its address counts too); samples masked | `sensitivity`, `sensitivity_signals` |
 | quality | Defects found on the way, with exact rows and masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec for transaction and reference parts | `store_suggestion`, `silver` |
 | report | `REPORT.md` and `findings.yaml` | files |

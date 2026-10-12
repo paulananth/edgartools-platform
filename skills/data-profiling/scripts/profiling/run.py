@@ -163,9 +163,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
         within = keys.unique_within_parent(con, p, profiles[p]) if parent and not unique[p] else None
         basis = None
         if not parent and not unique[p]:
-            people = sensitivity.person_part([c["name"] for c in profiles[p] if not c["structure"]])
-            personal = {c["name"] for c in profiles[p]
-                        if sensitivity.tag(c["name"], [], people)["sensitivity"] != "none"}
+            personal = {n for n, t in _tags(con, p, profiles[p]).items() if t["sensitivity"] != "none"}
             basis = names.name_basis(con, p, profiles[p], personal)
         record_keys[p] = keys.choose_record_key(p, unique[p], profiles[p], found_links, parent_key, within, basis)
 
@@ -218,8 +216,7 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
     left out of its own name-like text and attributes."""
     columns = profiles[p]
     names = [c["name"] for c in columns if not c["structure"]]
-    people = sensitivity.person_part(names)
-    tags = {c["name"]: sensitivity.tag(c["name"], _values(con, p, c), people) for c in columns if not c["structure"]}
+    tags = _tags(con, p, columns)
     personal = {n for n, t in tags.items() if t["sensitivity"] != "none"}
     identity = {n for n in personal if set(sensitivity.words(n)) & sensitivity.IDENTITY}
     code_list = codes.code_lists(con, p, columns, record_key["columns"], identity)
@@ -325,6 +322,14 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             links=out, identifiers=[i for i in identifier_findings if i], code_lists=code_list))
         + quality.no_natural_key(record_key),
     }
+
+
+def _tags(con, p: str, columns: list[dict]) -> dict[str, dict]:
+    """Each column's sensitivity tag. The part describes people by its column names or by a name column whose
+    values are mostly people's names; then its other personal words (an address) count too."""
+    values = {c["name"]: _values(con, p, c) for c in columns if not c["structure"]}
+    people = sensitivity.person_part(list(values)) or any(sensitivity.names_people(n, v) for n, v in values.items())
+    return {n: sensitivity.tag(n, v, people) for n, v in values.items()}
 
 
 def _values(con, p: str, c: dict) -> list[str]:

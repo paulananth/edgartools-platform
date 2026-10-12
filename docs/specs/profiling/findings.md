@@ -14,6 +14,15 @@ same in prose for the operator. Both are generic: any data set, any domain.
 - A claim without evidence is `unknown`, never a guess.
 - Samples of fields tagged `personal` or `sensitive_personal` are masked to
   their shape (`Aaaa Aaaaa`, `999-99-9999`).
+- A column's tag comes from its `sensitivity_signals`: words in its name,
+  detectors on its values (email, a card or account number with a valid
+  check digit), a vote over its values (a column named for people or names,
+  and not for organisations, places or things, whose distinct sampled values
+  are at least half people's names), and whether its part describes people
+  (its column names carry given-name or birth words, or a column wins the
+  vote). In a part that describes people, an address and other personal
+  words count too. The vote errs toward masking: a firm name with no legal
+  form may read as a person's.
 - Plain words, and the next step named, so an agent can act without asking.
 
 ## 2. Top level

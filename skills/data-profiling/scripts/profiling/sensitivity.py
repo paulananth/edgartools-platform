@@ -3,7 +3,11 @@
 A column is tagged from four signals: its name's words, detectors on its
 values, a vote over its values, and whether its part describes people. Contact
 details (email, phone) are personal in any part; other personal words count
-only in a part that describes people.
+only in a part that describes people. A part describes people when its column
+names carry given-name or birth words, or when a column named for people or
+names holds mostly people's names (one field holding a whole name, as a filer
+or signer): at least half its distinct sampled values are two to five words of
+letters with no legal form or organisation word.
 Sensitive personal means GDPR Article 9 special categories, government
 identifiers and financial account numbers (operator ruling, 2026-10-05).
 
@@ -36,6 +40,30 @@ SENSITIVE = {"ssn", "passport", "national", "tax", "health", "diagnosis", "medic
 SENSITIVE_PAIRED = {"tax": {"id", "number", "no"}, "card": {"number", "no"}, "account": {"number", "no"},
                     "national": {"id", "number", "no"}, "union": {"member", "membership"}}
 
+# Words that make a name an organisation's: legal forms (written with or without dots) and the common English
+# nouns organisations name themselves by. Incomplete across languages by nature; a miss over-masks, never leaks.
+ORGANISATION = {"inc", "incorporated", "corp", "corporation", "co", "llc", "llp", "lp", "lllp", "ltd", "limited",
+                "plc", "ag", "sa", "se", "nv", "bv", "gmbh", "kg", "kgaa", "mbh", "spa", "srl", "sarl", "sas",
+                "ab", "as", "asa", "oy", "oyj", "aps", "pte", "pty", "bhd", "kk", "sro", "spol", "kft", "doo",
+                "jsc", "ltda", "sl", "trust", "trustee", "trustees", "fund", "funds", "bank", "holdings",
+                "holding", "group", "partners", "partnership", "capital", "management", "advisors", "advisers",
+                "associates", "investments", "investment", "securities", "foundation", "university",
+                "association", "society", "international", "services", "technologies", "technology", "the", "of",
+                "and", "for", "&", "estate", "family", "ventures", "equity", "financial", "insurance", "systems",
+                "industries", "energy", "global", "office", "council", "authority", "department", "ministry",
+                "municipality", "church", "school", "hospital", "club"}
+# A column whose name carries one of these words may hold people's names; its values decide.
+NAMING = {"name", "signer", "signatory", "holder", "owner", "filer", "person", "individual", "beneficiary"}
+# Words in a column's name that say what else it names (organisations, places, things), so its values are never
+# read as people's names: "New York" or "Common Stock" is two capitalised words, like a person's name.
+NOT_PEOPLE_COLUMN = {"entity", "firm", "business", "organisation", "organization", "issuer", "institution",
+                     "employer", "city", "town", "country", "state", "region", "province", "county", "place",
+                     "location", "street", "product", "brand", "category", "item", "security", "instrument",
+                     "title", "model", "store"}
+# A name column describes people when at least this share of its distinct values are people's names.
+PEOPLE = 0.5
+_NAME_WORD = re.compile(r"^[^\W\d_][^\W\d_.'\-]*(?:[.'\-][^\W\d_]*)*\.?$")
+_SIGNED = re.compile(r"^/s/\s*", re.I)  # a conformed signature: "/s/ <name>"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 
 
@@ -54,6 +82,48 @@ def person_part(column_names: list[str]) -> bool:
         found |= said & PERSON_PART
         found |= {"+".join(sorted(pair)) for pair in PERSON_PAIRS if pair <= said}
     return len(found) >= 2
+
+
+def _name_words(text: str) -> list[str]:
+    return [w for w in re.split(r"[\s,]+", text) if w]
+
+
+def _bare(word: str) -> str:
+    """`S.r.o.,` → `sro`: legal forms are written with and without dots."""
+    return word.lower().replace(".", "").strip(",")
+
+
+def _words_of_a_person(text: str) -> bool:
+    found = _name_words(text)
+    return (2 <= len(found) <= 5 and all(_NAME_WORD.match(w) for w in found)
+            and not any(_bare(w) in ORGANISATION for w in found))
+
+
+def person_name(value) -> bool:
+    """A value shaped like a person's name: two to five words of letters (initials, hyphens and apostrophes
+    allowed), no digits and no organisation word. A signed name keeps the words before its first comma
+    ("/s/ Ann Cole, Attorney-in-Fact"); a name whose words after the comma are all organisation words
+    ("Acme Widgets, Inc.") is an organisation's."""
+    if value is None:
+        return False
+    text = _SIGNED.sub("", str(value).strip())
+    head, comma, tail = text.partition(",")
+    if not comma:
+        return _words_of_a_person(text)
+    after = [_bare(w) for w in _name_words(tail) if _bare(w)]
+    if after and all(w in ORGANISATION for w in after):
+        return False
+    return _words_of_a_person(text) or _words_of_a_person(head)
+
+
+def names_people(column: str, values: list[str]) -> bool:
+    """A column named for people or names (not for organisations, places or things) whose distinct sampled values
+    are mostly people's names."""
+    said = set(words(column))
+    if not said & NAMING or said & NOT_PEOPLE_COLUMN:
+        return False
+    distinct = {str(v).strip() for v in values if v is not None and str(v).strip()}
+    return bool(distinct) and sum(map(person_name, distinct)) / len(distinct) >= PEOPLE
 
 
 def _sensitive_word(found: list[str]) -> bool:
@@ -91,7 +161,9 @@ def tag(column: str, values: list[str], people: bool) -> dict:
         signals.append("values: account number with valid check digit")
     if signals:
         return {"sensitivity": "sensitive_personal", "signals": signals}
-    if people and set(found) & PERSONAL:
+    if names_people(column, values):
+        signals.append("values: people's names")
+    elif people and set(found) & PERSONAL:
         signals.append("name: personal word in a part describing people")
     if set(found) & CONTACT:
         signals.append("name: contact detail")
