@@ -107,11 +107,16 @@ Merge Stage for consolidation; field priority does not establish identity.
 The implemented Rust kernels replay accepted identity decisions and rank
 eligible field claims, including profile claims. Python retains policy
 approval, automatic matching, profile qualification, source-history folding,
-timestamps, canonical value comparisons, hashes and payload assembly. All
+timestamps and canonical value comparisons. Publication envelopes now use Rust
+object preparation from immutable database JSONB text; Python checks the
+committed hash before sending and retains previously stored payload bytes. All
 custom code stays Python; add reusable generic primitives to the Rust core.
 Python also owns CLI, orchestration, integrations, retries, verification and
 database clients. The database owns storage, indexed retrieval, constraints,
-atomic commits, freshness/fencing, leases, durable history and recovery.
+atomic commits, freshness/fencing, leases, durable history and recovery. The
+database independently derives the commit's expected publication hash; program
+preparation does not replace that authority. New executions pin the payload
+adapter, facade and native binary; frozen runs retain their original runtime.
 Future kernel migrations require parity and caller-path qualification before
 changing operational instructions; this slice does not change approval or
 activation steps.
@@ -163,6 +168,13 @@ Before the first run, once per MDM database: `edgar-warehouse mdm migrate`,
 then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application role>`
 with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
 since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
+
+For an existing Clean MDM store, before starting the new publication runtime,
+rerun `edgar-warehouse mdm migrate --application-role <MDM application role>`
+with the migration owner's `MDM_DATABASE_URL`. This applies the checksummed
+publication-input migration and preserves existing publication readers' SELECT
+grants. Already frozen runs retain their original code/native binary; their
+SQL claim and delivery APIs remain compatible.
 
 1. For a combined run already submitted in Parse, retain its `run_id` and
    continue its declared steps. Otherwise submit:

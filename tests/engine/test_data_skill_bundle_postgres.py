@@ -194,6 +194,29 @@ def _stores(databases):
             "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
 
 
+def test_publication_preparation_runs_from_installed_bundle_without_checkout(installed):
+    python, root = installed
+    result = _run(python, "-c", '''
+import hashlib
+from pathlib import Path
+from edgar_warehouse.rules import source_engine
+from edgar_warehouse.mdm.clean import payloads, store
+from edgar_warehouse.workers import mdm_publish
+raw = source_engine.postgres_jsonb_text('{"a":1e-7,"bbb":1.2300}')
+assert raw == '{"a": 0.0000001, "bbb": 1.2300}'
+row = {"payload_text": None, "generation": 1, "run_id": "00000000-0000-0000-0000-000000000001",
+       "policy_digest": "a"*64, "consumer": "export", "projections_text": '[{"x": 1.2300}]', "effects_text": None}
+row["payload_hash"] = hashlib.sha256(payloads.payload_text(row).encode()).hexdigest()
+assert payloads.prepare(row)["objects"] == [{"x":1.23}]
+assert set(source_engine.runtime_files()) <= set(mdm_publish.runtime_files())
+assert Path(payloads.__file__) in mdm_publish.runtime_files()
+assert (Path(store.__file__).parents[1]/"migrations/016_publication_inputs.sql").is_file()
+print("publication preparation installed")
+''', cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "publication preparation installed"
+
+
 def test_streaming_boundary_runs_from_installed_bundle_without_checkout(installed):
     python, root = installed
     result = _run(python, "-c", '''

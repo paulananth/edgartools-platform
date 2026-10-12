@@ -8,6 +8,9 @@ from sqlalchemy import text
 
 from edgar_warehouse.change_journal.store import ChangeJournal, JournalConflict, envelope
 
+from .payloads import prepare
+from .store import Conflict
+
 
 class JournalPublisher:
     """Deliver one committed `journal` outbox row as a Change Journal event.
@@ -32,20 +35,22 @@ class JournalPublisher:
         with self.owner_engine.connect() as conn:
             row = (
                 conn.execute(
-                    text("""SELECT b.created_at,s.payload,p.payload_hash,
-                encode(sha256(convert_to(s.payload::text,'UTF8')),'hex') AS actual_hash
-                FROM mdm.outbox p JOIN mdm.batch b USING(batch_id)
-                JOIN mdm.outbox_delivery s ON s.batch_id=p.batch_id AND s.consumer=p.consumer
-                WHERE p.batch_id=:b AND p.consumer='journal'"""),
+                    text("""SELECT * FROM mdm.outbox_input
+                WHERE batch_id=:b AND consumer='journal'"""),
                     {"b": batch},
                 )
                 .mappings()
                 .one()
             )
+        try:
+            committed = prepare(row)
+        except Conflict as exc:
+            raise JournalConflict(
+                "MDM publication disagrees with committed local evidence"
+            ) from exc
         if (
-            row["payload"] != payload
+            committed != payload
             or row["payload_hash"] != expected_hash
-            or row["actual_hash"] != expected_hash
         ):
             raise JournalConflict(
                 "MDM publication disagrees with committed local evidence"

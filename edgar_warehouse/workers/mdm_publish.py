@@ -2,7 +2,7 @@
 
 The unit's keys name the batch and the consumer. The worker claims that
 outbox row through MDM's own publication fence, in the consumer's generation
-order (`bookkeeping_guard.claim_publication`, fenced by the envelope's live
+order (`mdm.claim_outbox_input`, fenced by the envelope's live
 lease), delivers it, reads it back, and marks it verified. The `journal`
 consumer becomes a Change Journal event under the envelope's run and the
 Rules document's source and feed; any other consumer is written to its
@@ -28,9 +28,10 @@ CHECK = "mdm.published"
 
 
 def runtime_files() -> list[Path]:
-    from edgar_warehouse.mdm.clean import journal_delivery, publication, store
+    from edgar_warehouse.mdm.clean import journal_delivery, payloads, publication, store
+    from edgar_warehouse.rules import source_engine
 
-    return [Path(m.__file__) for m in (journal_delivery, publication, store)]
+    return [Path(m.__file__) for m in (journal_delivery, payloads, publication, store)] + source_engine.runtime_files()
 
 
 def _keys(envelope: dict) -> tuple[str, str]:
@@ -93,8 +94,11 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     try:
         expected = receipt(store, batch_id, consumer)
         with store.engine.connect() as conn:
-            payload = conn.scalar(text("SELECT payload FROM mdm.outbox_delivery WHERE batch_id=:b AND consumer=:c"),
-                                  {"b": batch_id, "c": consumer})
+            row = conn.execute(text("SELECT * FROM mdm.outbox_input WHERE batch_id=:b AND consumer=:c"),
+                               {"b": batch_id, "c": consumer}).mappings().one()
+        from edgar_warehouse.mdm.clean.payloads import prepare
+
+        payload = prepare(row)
         publisher = _publisher(envelope, artifacts, store, consumer)
         publisher.verify(f"{consumer}/{batch_id}", payload, json.loads(expected)["payload_hash"])
     finally:

@@ -5,7 +5,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::types::{PyBytes, PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
 use crate::{Engine, Lookups, Raw, Rejected, Step, Steps, Val};
@@ -253,7 +253,28 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(replay_identity, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
+    m.add_function(wrap_pyfunction!(postgres_jsonb_text, m)?)?;
+    m.add_function(wrap_pyfunction!(postgres_jsonb_object, m)?)?;
+    m.add_function(wrap_pyfunction!(postgres_jsonb_object_bytes, m)?)?;
     Ok(())
+}
+
+#[pyfunction]
+fn postgres_jsonb_text(py: Python<'_>, raw: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::postgres_jsonb::text(raw)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (fields, *, canonical_inputs=false))]
+fn postgres_jsonb_object(py: Python<'_>, fields: std::collections::HashMap<String, String>, canonical_inputs: bool) -> PyResult<String> {
+    py.allow_threads(|| crate::postgres_jsonb::object(fields, canonical_inputs)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (fields, *, canonical_inputs=false))]
+fn postgres_jsonb_object_bytes(py: Python<'_>, fields: std::collections::HashMap<String, String>, canonical_inputs: bool) -> PyResult<Py<PyBytes>> {
+    let raw = py.allow_threads(|| crate::postgres_jsonb::object(fields, canonical_inputs)).map_err(PyValueError::new_err)?;
+    Ok(PyBytes::new(py, raw.as_bytes()).unbind())
 }
 
 // Only selected text columns cross this boundary. Input history is never
