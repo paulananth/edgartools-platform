@@ -1,10 +1,11 @@
 # Rust, Python, and database responsibilities
 
 Status: agreed architecture and current implementation map. Evidence refreshed
-on main `cd277677` plus the configured-joins slice, 2026-10-11. Complete-set
+on main `3a75cfd1`, 2026-10-11. Complete-set
 reduction is merged (#911); accepted merge replay and field ranking are merged
-and CI-qualified (#920). Materialized collections/joins are implemented in this
-slice; its local and installed qualification is recorded separately. Deployment and activation are separate gates.
+and CI-qualified (#920). Materialized collections/joins are merged and
+CI-qualified (#921), with exact cached Company/whole-census parity. The local
+and installed qualifications are recorded separately. Deployment and activation are separate gates.
 Current owners describe code execution, not production qualification.
 
 ## Responsibility map

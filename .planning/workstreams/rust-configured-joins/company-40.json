@@ -1,0 +1,295 @@
+{
+  "baseline": "cd27767713ba651b6531b3ebb6ba61192d105905",
+  "company_documents": 40,
+  "units": 20,
+  "whole_census_names": 43245,
+  "census_input_sha256": "84522f67c6d61c8ab115130ac96677320f5307a4f40dbf077a6693e59cec44cf",
+  "canonical_census_sha256": "0ce1457999f29db0aab9f2572a9bec456a0a0b0fdf1a079c18339d6612a02bd1",
+  "receipts_sha256": "b8553e6f16bd758239bff49187d83420c79de47c954abd09aed4dff0aa06b446",
+  "census_reading_bytes": 17003378,
+  "exact_receipt_and_table_parity": true,
+  "execute_verify_lost_ack_retry": true,
+  "full_pipeline_or_activation": false,
+  "pure_seconds": {
+    "python": [
+      2.3185779829509556,
+      1.4081338550895452,
+      1.4504325380548835,
+      1.885314917191863,
+      2.5463300133123994,
+      1.6266445368528366,
+      1.445565478876233,
+      1.356114171911031,
+      1.553416471928358,
+      1.7538521587848663,
+      1.642802129033953,
+      2.874146953225136,
+      3.98920318717137,
+      1.6524755330756307,
+      1.6427158671431243,
+      1.7192616271786392,
+      1.5697842142544687,
+      1.6150003243237734,
+      1.4781930800527334,
+      5.105213771108538
+    ],
+    "native": [
+      1.1178788137622178,
+      1.1393714747391641,
+      1.243248890619725,
+      0.9688295912928879,
+      1.1981956083327532,
+      1.2106707273051143,
+      0.838645142968744,
+      0.8210136913694441,
+      0.9781568818725646,
+      0.9380710208788514,
+      0.8672725791111588,
+      1.2677940493449569,
+      1.2007239190861583,
+      1.9135936899110675,
+      1.2015583449974656,
+      1.1349777821451426,
+      1.0689873080700636,
+      0.8314456129446626,
+      1.0953256459906697,
+      0.9975002277642488
+    ]
+  },
+  "execute_verify_retry_seconds": {
+    "python": [
+      10.999688393902034,
+      10.177720496896654,
+      12.052851281128824,
+      11.791977668181062,
+      13.983021626248956,
+      10.001040084753186,
+      9.076701359823346,
+      11.105220125056803,
+      9.233351840171963,
+      9.037578030955046,
+      9.129373313859105,
+      12.047311815898865,
+      16.116338765714318,
+      10.790516562759876,
+      11.212521520908922,
+      9.102415622211993,
+      9.62653278093785,
+      10.297128363978118,
+      10.680169511120766,
+      18.34395046811551
+    ],
+    "native": [
+      6.971976805012673,
+      6.940630964003503,
+      8.271070357877761,
+      9.191050752066076,
+      7.913770268205553,
+      7.807288655079901,
+      7.632367949001491,
+      7.361177624203265,
+      7.7319944081828,
+      7.214687862899154,
+      7.757622975856066,
+      7.539979632943869,
+      8.990966483019292,
+      8.958519506268203,
+      7.547746690921485,
+      6.96164703508839,
+      6.958770711906254,
+      6.965747442096472,
+      6.49324348801747,
+      13.370891090948135
+    ]
+  },
+  "medians": {
+    "pure": {
+      "python": 1.6427589980885386,
+      "native": 1.1066022298764437
+    },
+    "execute_verify_retry": {
+      "python": 10.735343036940321,
+      "native": 7.590057319961488
+    }
+  },
+  "peak_rss_bytes": 703520768,
+  "elapsed_seconds": 482.2562965648249,
+  "evidence": [
+    {
+      "inputs": [
+        "91e034c560b74902b3ccbde95a6706f5af0cb59dd25174137e134d820ec1aaa8",
+        "5ab48675d18f4b485452283cf58d251b119b56a1224bd48d80366944b3f033a0"
+      ],
+      "tables_sha256": "175f60ced87ff1c205406e57e635a17437acc2cade4b3ca7bd3ebe137efebf49",
+      "output_sha256": "220220faad6ff02d48672fb40c36da580dff0ee53ddb69265f90b5284311d4bc"
+    },
+    {
+      "inputs": [
+        "a00057f988dd0fdfcff332508c647e6efd378290a84b62d85e1da7cb5324bc42",
+        "55c3a8cc09b7b971328ecf1d4c91648f8ecd0ea88606dfc9b57a10096bff694a"
+      ],
+      "tables_sha256": "24fb3a2d92b236f99a30cbfc565cfd05afc967f07b5401512ecd4dab1b8dcd2f",
+      "output_sha256": "a7fbcd0c0b3470641a1aa4ea55264ab19c123bb6a5da74b379ca3ec5d626913f"
+    },
+    {
+      "inputs": [
+        "464e65509739879b670cae734a6b5568fb857a3da1cc0ba20cccb9ce44ae4766",
+        "c6fb527c89af26ff01ccbbf853f8a8fc50c24683bda6341eed4c923983cf2da5"
+      ],
+      "tables_sha256": "bfbc17d00185e1ab1f0ac24201594d85d33d24af124ddba33dd539216b0455f7",
+      "output_sha256": "bc57665f224d0afa0dd461626966c1446a21a329985f9cdcbb8b031b434f782d"
+    },
+    {
+      "inputs": [
+        "cdf2f90db52d9dac308e339ed0bc3e818e9713b23431eeb821134fd58fb4ce47",
+        "2b191050df379c8530cfb00d386d46da6c1737de6cc7f9d6e8babceeedcf691c"
+      ],
+      "tables_sha256": "25e631bc4b1135cdcc9fec3787775ceac03da8ea05ce14be0be25bdd3fc4ff2b",
+      "output_sha256": "46aa3f731ee5a50ad68195065898d9b39de9024930d42eafea358dd9c8a77e48"
+    },
+    {
+      "inputs": [
+        "143002ac76fe75416bfb5a073147423eceba5631fbaa688914cc550365e163b5",
+        "56fa778394a4ec6a55a99062257aefae17d0d87dfb0b6ca8958910e2bc5f7a0d"
+      ],
+      "tables_sha256": "72be767d094220177b67c7e542f28b77d59e6e56ace34aad77d4e0d71ba813ec",
+      "output_sha256": "c7548c45552a2dad491c7f7683fe131497c41797b2e123feeff8ec8ed73052e9"
+    },
+    {
+      "inputs": [
+        "1433031302732432a3b5b0d4770060e32fe7c889466a8e7b18dcfa1834941450",
+        "f689a79bbc9022f467d4f290e55a1af0df696bddcba552f6851718eb515778f1"
+      ],
+      "tables_sha256": "b47a254ebe97bf92074d98c63a53b29d4ff3a75d96bbcaa477e41e202815b843",
+      "output_sha256": "8ff116d2df6ebd0a3613568cd82b76dd03292eb9418d7ee81975ae160f34c31e"
+    },
+    {
+      "inputs": [
+        "5e98083c8f5e163a1cfe5802bb5122a947d12d2a3098471f279740acdf817472",
+        "7e07e9f56c8e37ae9f93f406e0138c8e6c40d3aae19a868288adee6220a77eae"
+      ],
+      "tables_sha256": "edf4e8a162f644da8eeb88fb8caf9222698c86b822b46588a7bfe8eeb8d6556b",
+      "output_sha256": "e6cb1d602b7717c292b254ad4138f075803a66c210f4586d825089260e065f27"
+    },
+    {
+      "inputs": [
+        "0185bf023d0fcc828e6f74cd4d1dece95fd8603a1ac48e22dd21ee26071c5c80",
+        "92838643d8efbea8413a334ecd1d1ca92c5b75ef235d97cf694f7e407b32b648"
+      ],
+      "tables_sha256": "77f493251c19abc961480e4b1712174553b12a9878a46d0566322b31407f81e9",
+      "output_sha256": "fc1fa5158f1caa3716c1a1168c79bffaf2d312a3c266fbb593a8b9ed6b869b53"
+    },
+    {
+      "inputs": [
+        "9f9c8f5cad0811d1c535634d26f22e10d47cf8669bdd2500da82291905725b03",
+        "f7b4ee517b15b5f736a8a4f88261171f6d32110aa3fabea88449d2971760a479"
+      ],
+      "tables_sha256": "a76951a46082e262d36d863dd0c5657f310b84dae2b41dc8f799b5f9f4b655a6",
+      "output_sha256": "1d7d6aca37814d530b46f5937e4eb94f9ebac9583ff99ec9b313133753b50c8b"
+    },
+    {
+      "inputs": [
+        "9ba8d5169f8f3b201db118235aba7d683621495c4d29117e140f9ad186908e04",
+        "1cf7b9083f85910307f5b067763250b9bafe81631c0e2c1ba5220288dd73d1fa"
+      ],
+      "tables_sha256": "a4bfa310b970b4bdea2ef8635060afb6d9755cdeb8868dc5486a6591920a1744",
+      "output_sha256": "f40bc95e20781dcdfa773cc2c641ea10b37d3636881c8dd4eba0215425bfa535"
+    },
+    {
+      "inputs": [
+        "0bec950c248436b6dab4ee4c8b94bfc169915feb955be5f7c16974efb3ca9c8d",
+        "0f2de7da237eae0035a2c25be0fa1ed2214d31ca24b4ab781d2329356ac684a0"
+      ],
+      "tables_sha256": "9e465f3215f919cb83cba37c2c74956e882b4917d590dbcb6b21527371e22999",
+      "output_sha256": "4e4aed7c6c05f024925cbac177d131258027fce3424d6971368cb1c3e727816d"
+    },
+    {
+      "inputs": [
+        "a08b8a6add1b6231de76637c2dd44b5620b2824af3de92923f368a01c7289796",
+        "7638c2934b5838fc811523eb86f17d17d4014360965535f17f3c6667d7d62ada"
+      ],
+      "tables_sha256": "838d31fef526f998be51562074d52af29a901842ff29dc1c664ae71760d03bec",
+      "output_sha256": "246ed79b7e69b57aa0eefcaf7c1a8e4520524beeaf3e4d561a543d4231e02163"
+    },
+    {
+      "inputs": [
+        "b35f73a1b2488b1674117c6f3d29eaa1ffc5dfa90662a026be76f9961b522b38",
+        "6a1024134eda794839112e4eed5fd7b526f562d49579389cc4cf6f5b950bdc51"
+      ],
+      "tables_sha256": "cbf6ec312de3e7ed23c29d3bb78967be806ec8a08e1046367f80969b6497abbc",
+      "output_sha256": "6e613d54ccdf53ee9dc93589e48f5c7c8f97ec2aa60882d63c941a9ee93c9120"
+    },
+    {
+      "inputs": [
+        "0e56bd2a4f677e8dbec4fe3a6e5e6be7dfe7a83d1089135cecdec05bf02f4ae0",
+        "db473e4ccd93e7fe3001d58227264f434a63a1dc48c2beada0ec6abab57d4285"
+      ],
+      "tables_sha256": "38ab182a67fb480a755f2ac0d97a45bebe57a69dd118e959611652aa5410ab8a",
+      "output_sha256": "f2d66e21c21795d438d34825b1825ddf49523160d04d025e45dd374e12957fb7"
+    },
+    {
+      "inputs": [
+        "de5278b22f2e0dee74d88330fc53d8d2436aff5849873fe27e5c84f0a8881133",
+        "5acec692adc893844434a4739890cf13fc4da474cb564263d4e649893752a61a"
+      ],
+      "tables_sha256": "70b6deee405815bc84a104e13133df3b169f0d7a15c7bfc5151d0d66742d3a8a",
+      "output_sha256": "fe03031640f1f989bd665005fc54b9a3cabe8663238d4bd51a38e1c78d3b2569"
+    },
+    {
+      "inputs": [
+        "9d602db58f6506236699c97a7562e049ab86ee2358dff6258ee4e614ab2e7fca",
+        "6b0f538062bf32019631b3ab083618f5478040bab31d18a63823f9535e3e68ea"
+      ],
+      "tables_sha256": "d2b7a55dcaae18182b291b993295f6b835317e6adbd2e71183fd3c1fc3d23965",
+      "output_sha256": "c412aa3e4d33d4e9699cf656e31dbf3f573d191cae43e0db3866743c53d5f422"
+    },
+    {
+      "inputs": [
+        "ed3de7940f32334caca6206dc14acb07aea7c3f5e182399a1145328b9a51db38",
+        "b570e49e0b77d44ae24b3fbb543d853f4899b7c274075b8aef35f5250b7b8eef"
+      ],
+      "tables_sha256": "171646c1436ab5c8ab59b6aa8339400c7e3dca2566150140bd7a7231d38bb9dd",
+      "output_sha256": "248333900510dfdefb8a2ffd4266964618cdf59a2dcd8433d4dffd80dded8b0c"
+    },
+    {
+      "inputs": [
+        "a364d2624a0113ace2323dd1a08d8d09c85051098296492aa2d419614159c890",
+        "ab1e3953a19d6dc31ec8c1d5ddda3da6c6cdc3a64b57c7dc9a9accd134a31a80"
+      ],
+      "tables_sha256": "3bf8ffa0395ba2a1e2d956cacfc28329449576ac710d8849e16aaf4446829703",
+      "output_sha256": "4ac88be515fe322bb86f822aa79d24639ec3c09214d5a32dffae52f7dd86f5f2"
+    },
+    {
+      "inputs": [
+        "b51e2a957447e1850bf196e99dda823e9bf1a9136b3a9aa2bcc1b2925f08761a",
+        "81e8baa43bc80d93f95cccdf54d1416776b77aa87d4d74b4db4f6cde5e7ecbaf"
+      ],
+      "tables_sha256": "f08542a981ee48159910f2993b1016d958770577737fa32ec38c44cfb82c8bdb",
+      "output_sha256": "636fab9b55a2f39dd5baacd960a8659865ab8bfc98d4a17072aec8ccc0f7b1a6"
+    },
+    {
+      "inputs": [
+        "fbca6409658ca8c5782df7d26602640b9d5cac468d4d090c961362ff2cbc5107",
+        "e25f6bc6f8f2ece9f93a9c668fa6069290425387606daeccff8b42cb436b6062"
+      ],
+      "tables_sha256": "ab3479610c4ee5669533b303d3f33d2408739707e3a321ba51fc995c0ee784e5",
+      "output_sha256": "7ec28ecf7392da84f9deaeb8099a92820d770e69637c2b3588c092460c65ceee"
+    }
+  ],
+  "code_commit": "5a823c48e7aa749df2008e613ec45b0a6ec0cce1",
+  "merged_commit": "3a75cfd15882d3cf8fcec520077c2a72ccbaa47d",
+  "qualification_script_sha256": "c473e97a551c917abce2945a9d9944996e5762b9032478c5d3fe21d1e4687e43",
+  "runtime_sha256s": {
+    "edgar_warehouse/workers/source_combine.py": "4d6df7a22d5224fd6e4e2ec6ce44ec1f0dde8817d89648d939e33723fc86aa13",
+    "edgar_warehouse/bookkeeping/clean/artifacts.py": "4d343e841ea61a015c36cb75e7136735d296d14c211bf5e6f37557636a514c19",
+    "edgar_warehouse/bookkeeping/clean/config.py": "b6e373f66e0b3df59faa7ad15fe42b8e12d00d88c145e94a66f75d88286734ef",
+    "edgar_warehouse/control_contract.py": "c0bc2c794a2382041065fd7a8ec4c4ce6681fb4aaea1d4b78354729772a0d792",
+    "edgar_warehouse/workers/source_readings.py": "9387feff548fdaf12a8b1e2184caa474c6d8ef2edada239fb5f67328996e33a8",
+    "edgar_warehouse/workers/source_reduction.py": "576b0bf8c4785dd9f24ebed147690ee70d036d1f218bef3f2231a119a1340879",
+    "edgar_warehouse/rules/source_engine.py": "9ae4c37ef9c0fd58492c81a92f870adedb1d48e4492cfa22f1f467dc239601e3",
+    "edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    ".venv/lib/python3.12/site-packages/source_contract/source_contract.abi3.so": "18728bbdacf2002eb367de6904270b1787079c3352d5e95b3ad3ea09b6ca6e95"
+  },
+  "memory_scope": "combined-process peak: source reading plus both baseline/native; not a per-engine comparison or RSS bound",
+  "timing_scope": "paired alternating order on a shared developer host with other work active; provisional, serial only"
+}

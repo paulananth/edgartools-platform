@@ -1,6 +1,6 @@
 # Configured merging and field survivorship
 
-Status: complete locally by Codex. Branch: `codex/rust-configured-merging`.
+Status: delivered and CI-qualified by Codex (PR #920, main cd277677). Branch: `codex/rust-configured-merging`.
 Baseline: `e4be301962e0c2c1b6ab6efc0eb500747b7c718e` (original starting main and review fixed point).
 
 ## Contract
@@ -68,7 +68,7 @@ passed before continuing. Future guards are checked before any following mutatio
 
 - [x] Refresh and publish the responsibility map with implemented reduction/merge owners and current prerequisites. Added current implementation map to the delivery branch; 44 links verified, reduction/native replay/ranking distinguished from later ports; 2026-10-11 19:24 ET.
 - [x] Verify release diff, examples and fresh affected tests; run pre-landing review. Fresh 110 affected tests pass, doctor resolves 131 commands, prior independent Standards/Spec/GoF reviews rechecked; shipping checklist finds no new data/transaction/FFI/enum/shell issues; 2026-10-11 19:24 ET.
-- [ ] Guard, push, create PR and verify all CI jobs.
-- [ ] Merge the qualified slice, verify the merge commit and release its edit surface.
-- [ ] Implement and land the configured collection/join port required by Claude's Company preparation handoff; tracked in its own ticket.
-- [ ] Record the precise delivered interfaces and remaining Claude-owned orchestration/fan-in work in a handoff.
+- [x] Guard, push, create PR and verify all CI jobs. PR #920, all six jobs pass in CI 38184910534 at 03b8f46a; guards passed; 2026-10-11 20:07 ET.
+- [x] Merge the qualified slice, verify the merge commit and release its edit surface. PR #920 merged cd277677, clean merged-head worktree holds no uncommitted claims; old responsibility-map archive preserved and worktree moved to delivered main-based branch; 2026-10-11 20:07 ET.
+- [x] Implement and land the configured collection/join port required by Claude's Company preparation handoff; tracked in its own ticket. PR #921 merged 3a75cfd1, all six CI jobs and exact cached Company parity pass; 2026-10-11 20:07 ET.
+- [x] Record the precise delivered interfaces and remaining Claude-owned orchestration/fan-in work in a handoff. See rust-configured-joins/HANDOFF-TO-CLAUDE.md; source.combine API unchanged, frozen runtime identity preserved, fan-in remains with Claude; 2026-10-11 20:07 ET.
