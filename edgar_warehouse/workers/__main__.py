@@ -59,17 +59,13 @@ class Renewal:
 
 def one_at_a_time(fetch, limit: int):
     """Take units one at a time, up to `limit`: a unit is claimed only when its
-    work starts, so no claimed unit waits while its lease runs out. A unit that
-    comes back (it failed this call) ends the call, as a batch would have."""
-    seen = set()
+    work starts, so no claimed unit waits while its lease runs out. The caller
+    stops at its first failure: the failed unit waits again at once, and asking
+    for the next would claim it again and leave it held."""
     for _ in range(limit):
         found = fetch(1)
         if not found:
             return
-        unit = (found[0]["claim"]["step"], found[0]["claim"]["key"])
-        if unit in seen:
-            return
-        seen.add(unit)
         yield found[0]
 
 
@@ -90,6 +86,7 @@ def work(name: str, run_id: str, limit: int) -> int:
                 control.fail(envelope, type(exc).__name__)
             except control.ControlError:
                 pass  # a stale attempt cannot change the current one
+            break  # see one_at_a_time
     return 1 if failed else 0
 
 
@@ -114,6 +111,7 @@ def verify(name: str, run_id: str, reports: str, limit: int) -> int:
                 control.fail(verification, type(exc).__name__)
             except control.ControlError:
                 pass
+            break  # see one_at_a_time
     return 1 if failed else 0
 
 
