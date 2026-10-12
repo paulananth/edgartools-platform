@@ -42,9 +42,13 @@ TARGET = "mastering"
 DOCUMENTS_BYTES = 1024**2
 CENSUS_BYTES = 256 * 1024**2
 POPULATION_BYTES = 64 * 1024**2
-KEY_READING_BYTES = 16 * 1024**2  # every census-keys reading of one bundle
-# A census read derives its lookup sets from at most 256 key readings of 2 documents.
+KEY_READING_BYTES = 16 * 1024**2  # the bundle's one census-keys reading
+# One key reading names a bundle's documents (`census-keys.yaml` max_artifacts).
 BUNDLE_DOCUMENTS = 512
+# A main unit reads documents up to this many bytes: about 3x as reading output (24.6 MiB
+# for 7.9 MiB, 96 documents) and at most 7,423 filings rows a MiB, inside the combination's
+# 32 MiB reading and 100,000 rows with the catalog's 10,391 (measured 2026-10-12, cm27).
+MAIN_READING_BYTES = 8 * 1024**2
 # The contracts the target's readings and combination run.
 RULES = ("census-main.yaml", "census-keys.yaml", "catalog.yaml", "census.yaml", "combine-census-captured.yaml")
 # Where `census.yaml` and the combination take the census digest.
@@ -61,6 +65,18 @@ def _bind(value, bindings):
     return value
 
 
+def _slices(sized: list[tuple[str, int]], max_bytes: int, max_documents: int) -> list[list[str]]:
+    """Consecutive documents cut where the next would pass either bound; a larger document reads alone."""
+    found, current, total = [], [], 0
+    for key, size in sized:
+        if current and (total + size > max_bytes or len(current) == max_documents):
+            found.append(current)
+            current, total = [], 0
+        current.append(key)
+        total += size
+    return found + [current] if current else found
+
+
 def _unit(output: str, keys: dict, source: dict) -> dict:
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
@@ -73,22 +89,22 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
     main_rules = rules_files.load(ROOT / "census-main.yaml")
     main_contract = put(main_rules)
     keys_contract = put(rules_files.load(ROOT / "census-keys.yaml"))
-    per_unit = main_rules["execution"]["max_artifacts"]
-    main, readers = [], []
-    for start in range(0, len(keys), per_unit):
-        name = f"main-{start}"
-        documents = [raw_capture.document(folder, receipts, key) for key in keys[start:start + per_unit]]
-        for key in keys[start:start + per_unit]:
-            raw_capture.document_bytes(folder, receipts, key)  # equal to its receipt before it is frozen
+    # Each document equal to its receipt before it is frozen; its size cuts the main units.
+    sized = [(key, len(raw_capture.document_bytes(folder, receipts, key))) for key in keys]
+    main, start = [], 0
+    for unit in _slices(sized, MAIN_READING_BYTES, main_rules["execution"]["max_artifacts"]):
+        documents = [raw_capture.document(folder, receipts, key) for key in unit]
         contexts = [put({"version": 1, "input": ref, "values": {
             "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],
             "load_mode": pins["load_mode"], "recent_limit": None, "last_synced_at": pins["observed_at"],
-            "bronze_object": key}}) for key, ref in zip(keys[start:start + per_unit], documents)]
-        main.append(_unit(f"{root}/main/{start}.reading.json", {"unit": name}, put({
+            "bronze_object": key}}) for key, ref in zip(unit, documents)]
+        main.append(_unit(f"{root}/main/{start}.reading.json", {"unit": f"main-{start}"}, put({
             "version": 2, "contract": main_contract,
             "artifacts": [{"input": ref, "context": c} for ref, c in zip(documents, contexts)]})))
-        readers.append(_unit(f"{root}/keys/{start}.reading.json", {"unit": f"keys-{start}"}, put({
-            "version": 1, "contract": keys_contract, "artifacts": documents})))
+        start += len(unit)
+    readers = [_unit(f"{root}/keys.reading.json", {"unit": "keys"}, put({
+        "version": 1, "contract": keys_contract,
+        "artifacts": [raw_capture.document(folder, receipts, key) for key in keys]}))]
     catalog_ref = raw_capture.document(folder, receipts, catalog)
     raw_capture.document_bytes(folder, receipts, catalog)
     catalog_unit = _unit(f"{root}/catalog.reading.json", {"unit": "catalog"}, put({

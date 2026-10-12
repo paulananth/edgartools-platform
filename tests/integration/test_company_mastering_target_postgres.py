@@ -58,8 +58,8 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
     state = drive(book, rid, databases.ledger, workers=WORKERS)
-    # Two main and two key units (3 documents, 2 a unit), catalog, census, two combines, records.
-    assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 9}
+    # One main unit (3 small documents, under the byte budget), one key reading, catalog, census, combine, records.
+    assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
 
     prepared = json.loads((tmp_path / "bundle/records/manifest.json").read_bytes())
     oracle_report = prepare_company_bundle(output=str(tmp_path / "oracle"), **args)
@@ -76,7 +76,7 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     assert [b["consumer"] for b in prepared["batches"]] == [report["publication"]["consumer"]]
 
     book.resume(rid)  # nothing is redone: every receipt and composed input is reverified
-    assert drive(book, rid, databases.ledger, workers=WORKERS)["counts"] == {"verified": 9}
+    assert drive(book, rid, databases.ledger, workers=WORKERS)["counts"] == {"verified": 6}
 
 
 def test_the_manifest_freezes_documents_by_receipt_and_composes_census_and_combine(tmp_path):
@@ -87,11 +87,10 @@ def test_the_manifest_freezes_documents_by_receipt_and_composes_census_and_combi
                                     catalog=CATALOG, name_census=str(census), output=str(tmp_path / "b"), **PINS)
     steps = json.loads(Path(report["manifest"]["uri"].removeprefix("file://")).read_bytes())["steps"]
     assert {name: len(units) for name, units in steps.items()} == {
-        "main": 2, "keys": 2, "catalog": 1, "census": 1, "combine": 2, "records": 1, "merge": 1}
+        "main": 1, "keys": 1, "catalog": 1, "census": 1, "combine": 1, "records": 1, "merge": 1}
     census_input = steps["census"][0]["input"]["compose"]
-    assert census_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [
-        {"step": "keys", "key": "keys-0"}, {"step": "keys", "key": "keys-2"}]
-    assert set(steps["combine"][1]["input"]["compose"]["slots"]) == {"main", "census", "catalog"}
+    assert census_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [{"step": "keys", "key": "keys"}]
+    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "census", "catalog"}
     assert steps["merge"][0]["input"] == {"from": {"step": "records", "key": "records"}}
     assert steps["records"][0]["keys"]["revision"] == str(PINS["revision"])
     assert not list((tmp_path / "b").rglob("*.jsonl"))  # documents stay in the capture, by receipt
@@ -129,6 +128,16 @@ def test_forms_tickers_address_origin_and_census_entry_come_from_configured_read
         assert record["raw_object_id"] == receipts[key(cik)]
     assert found[APPLE]["name_census"]["leis"][0][0] == "HWUPKR0MPOU8FGXBT394"
     assert "_name_key" not in found[APPLE]
+
+
+def test_main_units_are_cut_by_document_bytes_and_still_prepare_the_same_records(databases, tmp_path, monkeypatch):
+    from edgar_warehouse.mdm.clean import company_prepare
+    monkeypatch.setattr(company_prepare, "MAIN_READING_BYTES", 1)  # every document its own main unit
+    found, _, folder = mastered(databases, tmp_path)
+    (manifest,) = [p for p in (tmp_path / "bundle").glob("*.json") if len(p.stem) == 64]  # the input manifest
+    steps = json.loads(manifest.read_bytes())["steps"]
+    assert (len(steps["main"]), len(steps["combine"]), len(steps["keys"])) == (3, 3, 1)
+    assert set(found) == set(CIKS) and found[APPLE]["tickers"] == ["AAPL", "APLE"]
 
 
 def test_a_filer_without_a_business_address_carries_none(databases, tmp_path):

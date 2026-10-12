@@ -92,3 +92,25 @@ def test_manifest_cannot_expand_the_bounded_worklist(tmp_path):
     with pytest.raises(ValueError, match="bounded artifact count"):
         source_read.execute(envelope, store)
     assert not (tmp_path / "rows.json").exists()
+
+
+def test_one_reading_reads_up_to_512_documents_and_no_more(tmp_path):
+    """A reading is one unit for many documents, not one per document or two."""
+    from edgar_warehouse.rules import files
+    store = Artifacts()
+    body = files.load(CONTRACT)
+
+    def reading(count, max_artifacts):
+        contract = store.put(tmp_path.as_uri(), {**body, "execution": {**body["execution"], "max_artifacts": max_artifacts}})
+        refs = [store.put_bytes((tmp_path / f"{i}.xml").as_uri(), FIXTURE.read_bytes()) for i in range(count)]
+        manifest = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": refs})
+        return {"input": manifest, "output": (tmp_path / f"rows-{count}.json").as_uri(), "checks": ["source.output"]}
+
+    work = reading(5, 5)
+    candidate = source_read.execute(work, store)
+    assert len(store.json(candidate)["artifacts"]) == 5
+    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
+    with pytest.raises(ValueError, match="1..512 artifacts"):
+        source_read.execute(reading(1, 513), store)
+    with pytest.raises(ValueError, match="bounded artifact count"):
+        source_read.execute(reading(6, 5), store)
