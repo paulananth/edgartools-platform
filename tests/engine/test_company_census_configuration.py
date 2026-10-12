@@ -13,6 +13,7 @@ from tests.engine.test_source_combine import envelope
 
 ROOT=files.ROOT/'sources/sec.submissions.company'
 ZERO='0'*64
+ORIGIN='bronze/sec/cik=1/main/document.json'  # the main document's bronze object
 
 
 def bind(value,sha):
@@ -70,10 +71,11 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
     if case=='empty_name': baseline_refs['main'],_=read(store,tmp_path,'baseline-empty',files.source('sec.submissions.company'),payload,context)
     baseline=source_combine.execute(envelope(store,tmp_path/'baseline',blueprint(),baseline_refs),store)
     expected=store.json(baseline)['artifacts'][0]['tables']['company'][0]
-    refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,context)
+    refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
     census=fixture_census(case)
     refs['census'],raw=census_read(store,tmp_path,census)
     expected['name_census']=_census_evidence(census,expected,raw['sha256'])
+    expected['_origin']={'bronze':{'object':ORIGIN,'sha256':expected['raw_object_id'],'locator':'$'}}
     task=envelope(store,tmp_path/'composed',combination(raw['sha256']),refs)
     result=source_combine.execute(task,store)
     assert source_combine.verify({**task,'candidate':result},store)==({'source.combined':True},[])
@@ -116,7 +118,7 @@ def test_unbound_census_blueprint_and_substituted_digest_refuse(tmp_path, case):
 def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
     store=Artifacts()
     refs,payload,_,_,context=captures(store,tmp_path)
-    refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,context)
+    refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
     refs['census'],raw=census_read(store,tmp_path,fixture_census())
     rules=combination(raw['sha256'])
     if fault=='census_pin':
@@ -136,6 +138,8 @@ def test_census_main_inherits_company_reading_and_canonical_name_recipe():
     source = files.source('sec.submissions.company')
     census = deepcopy(files.load(ROOT/'census-main.yaml'))
     recipe = census['read']['tables']['company']['columns'].pop('_name_key')
+    census['read']['tables']['company']['columns'].pop('_origin')  # each row's bronze origin (20c)
+    census['read']['context'].pop('bronze_object')
     assert census == {key: source[key] for key in ('source', 'execution', 'read')}
     assert recipe == files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
 
@@ -157,3 +161,14 @@ def test_census_keys_carry_the_canonical_name_recipe_and_an_unpadded_cik():
     assert columns['_name_key']==files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
     assert columns['_name_key']==files.load(ROOT/'census-main.yaml')['read']['tables']['company']['columns']['_name_key']
     assert set(columns)=={'_name_key','_cik_key'}
+
+
+def test_the_captured_combination_differs_only_in_the_sources_a_capture_holds():
+    """Fail when combine-census.yaml changes without updating its captured copy."""
+    full=files.load(ROOT/'combine-census.yaml')
+    captured=deepcopy(files.load(ROOT/'combine-census-captured.yaml'))
+    assert (captured['combine']['groups']['forms']['source'],captured['combine']['groups']['tickers']['source'])==(
+        ['main'],['catalog_exchange'])
+    for name in ('forms','tickers'):
+        captured['combine']['groups'][name]['source']=full['combine']['groups'][name]['source']
+    assert captured==full

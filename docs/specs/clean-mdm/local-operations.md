@@ -166,25 +166,30 @@ edgar-warehouse mdm prepare-clean-company \
   --as-of 2026-09-19T00:00:00Z --revision 0
 ```
 
-It reads the raw capture: each main submissions document named in
-`--documents` (at most 512 receipt keys, all in the population the Name
-Census counted), by its receipt in `receipts.jsonl`, and SEC's exchange
-ticker catalog (`--catalog`, a receipt key). The configured workers read each
-document in units of one or two (`census-main.yaml`) and again for its name
-key and CIK only (`census-keys.yaml`), read the census once narrowed to the
-bundle's names and CIKs (`census.yaml`, bound to the census's digest; its two
-lookup sets are derived from the key readings, at most 256 of them, hence 512
-documents), read the catalog once (`catalog.yaml`), and combine them per Company
-(`combine-census.yaml`): forms from the document's recent filings, tickers
-from the catalog in rank order, the business address and the census entry.
-Every worker is executed and verified, and its inputs and outputs are kept
-under `workers/`. The capture and catalog run IDs and the observation time
-are the caller's facts, bound into every row. Each record names its bronze
-document (`_origin.bronze`: key, receipt sha256). The bundle's publication
-key names the capture run, the documents' digest, the catalog run and
-receipt, and the census digest; a different catalog or census is a different
-publication. An existing different bundle is rejected; identical preparation
-is idempotent.
+It writes the input manifest of the source's `mastering` target and prints
+its report (`manifest`, `publication`, `scope`); `rules run --source
+sec.submissions.company --target mastering --input-manifest <uri>
+--input-sha256 <sha>` then runs it (`docs/company-only-acquisition.md`). The
+manifest names each main submissions document in `--documents` (at most 512
+receipt keys, all in the population the Name Census counted) by its receipt
+in `receipts.jsonl`, in place, and SEC's exchange ticker catalog
+(`--catalog`, a receipt key). The target's workers read each document in
+units of one or two (`census-main.yaml`) and again for its name key and CIK
+only (`census-keys.yaml`), read the census once narrowed to the bundle's
+names and CIKs (`census.yaml`, bound to the census's digest; its two lookup
+sets are derived from the key readings, at most 256 of them, hence 512
+documents), read the catalog once (`catalog.yaml`), combine them per unit
+(`combine-census-captured.yaml`): forms from the document's recent filings,
+tickers from the catalog in rank order, the business address and the census
+entry; prepare the bundle's rows as one publication (`mdm.prepare`) and merge
+it (`mdm.merge`). Every step is executed by a worker and checked by a
+verifier; Bookkeeping keeps each receipt. The capture and catalog run IDs and
+the observation time are the caller's facts, bound into every row. Each
+record names its bronze document (`_origin.bronze`: `object`, the receipt key; `sha256`; `locator`),
+from the main reading. The publication key names the capture run, the
+documents' digest, the catalog run and receipt, and the census digest; a
+different catalog or census is a different publication. Every frozen input
+is named by its content, so identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 SEC `operating` filers and qualifying `other` filers can become Companies;
 nullable text fields are supported.

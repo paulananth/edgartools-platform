@@ -1,11 +1,12 @@
 # Local SEC Company route
 
-SEC Company records reach MDM in two steps, both through configured workers.
-Nothing makes a request to SEC here.
+SEC Company records reach MDM through the source's `mastering` target: one
+Bookkeeping run per bundle, every step done by a registered worker and
+checked by a separate verifier. Nothing makes a request to SEC here.
 
-1. **Prepare** a bundle of at most 512 Companies from a raw submissions
-   capture (a folder holding `receipts.jsonl` and the `bronze/` documents it
-   names):
+1. **Write the input manifest** of a bundle of at most 512 Companies from a
+   raw submissions capture (a folder holding `receipts.jsonl` and the
+   `bronze/` documents it names):
 
    ```bash
    uv run --extra mdm --extra s3 edgar-warehouse mdm prepare-clean-company \
@@ -13,29 +14,36 @@ Nothing makes a request to SEC here.
      --population <population.json> --name-census <name-census.json> \
      --catalog <ticker catalog receipt key> \
      --capture-run <run id> --catalog-run <run id> --observed-at <instant> \
-     --output <new bundle folder> --as-of <instant> --revision 0
+     --output <bundle folder> --as-of <instant> --revision 0
    ```
 
-   Each main document is read by `rules/sources/sec.submissions.company/census-main.yaml`,
-   the Name Frequency file by `census.yaml` and the ticker catalog by `catalog.yaml`.
-   Each unit is then combined by `combine-census.yaml`. Every `source.read` and
-   `source.combine` unit is run, then verified, and kept in the bundle with
-   the bytes it read, so a separate process can check the whole bundle again
-   (`verify_company_bundle`). The bundle's `manifest.json` lists the
-   records files, cut by the shared batch limits.
+   It checks the inputs, binds the approved run IDs and the census digest
+   into the contracts and freezes every unit's input; the documents stay in
+   the capture, named by their receipts. Its report names the manifest
+   (`manifest.uri`, `manifest.sha256`) and the publication.
 
-2. **Merge** the bundle with the source's `mdm` target: one `mdm.merge` unit
-   per manifest, checked by a separate verifier:
+2. **Run the target** with that manifest:
 
    ```bash
    uv run --extra mdm --extra s3 edgar-warehouse rules run \
-     --source sec.submissions.company --target mdm \
+     --source sec.submissions.company --target mastering \
      --input-manifest <URI> --input-sha256 <SHA256>
    ```
 
-   The returned Bookkeeping run ID is the recovery handle: `bookkeeping
-   resume <run-id>` for its work and `change-journal recover bookkeeping
-   <run-id>` for committed, undelivered Journal intent.
+   Its steps, in `rules/sources/sec.submissions.company/source.yaml`:
+   `main` and `keys` read each document (`census-main.yaml`,
+   `census-keys.yaml`, two a unit); `catalog` reads the ticker catalog
+   (`catalog.yaml`); `census` reads the Name Frequency file narrowed to the
+   bundle's names and CIKs (`census.yaml`, lookup sets derived from the key
+   readings); `combine` joins each main unit with the census and the catalog
+   (`combine-census-captured.yaml`); `records` prepares the bundle's rows as
+   one publication (`mdm.prepare`); `merge` runs it through the Merge Stage
+   (`mdm.merge`). The census, combine and records inputs are composed from the
+   steps' verified readings. The returned Bookkeeping run ID is the recovery
+   handle: `bookkeeping resume <run-id>` for its work and `change-journal
+   recover bookkeeping <run-id>` for committed, undelivered Journal intent.
+
+The `mdm` target still merges a manifest prepared elsewhere.
 
 ## Not here yet
 

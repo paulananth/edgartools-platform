@@ -372,9 +372,9 @@ def execute_manifest(
 
 
 def prepare_clean_company(args) -> int:
-    from .company_prepare import prepare_company_bundle
+    from .company_prepare import write_company_manifest
 
-    report = prepare_company_bundle(
+    report = write_company_manifest(
         capture=args.capture,
         documents=args.documents,
         population=args.population,

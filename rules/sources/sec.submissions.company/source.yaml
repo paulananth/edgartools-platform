@@ -48,6 +48,54 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt]
       checks: [manifest.hash, work.accounting, journal.delivered]
+    # Company preparation and mastering of one bundle (Issue 20 slice 20c): the
+    # input manifest is written by `mdm prepare-clean-company`; census and
+    # combine inputs are composed from the steps' verified readings.
+    mastering:
+      steps:
+        - name: main
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+        - name: keys
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+        - name: catalog
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+        - name: census
+          operation: source.read
+          requires: [keys]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+        - name: combine
+          operation: source.combine
+          requires: [main, catalog, census]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+        - name: records
+          operation: mdm.prepare
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+        - name: merge
+          operation: mdm.merge
+          requires: [records]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+      checks: [manifest.hash, work.accounting, journal.delivered]
     mdm:
       steps:
         - name: merge
