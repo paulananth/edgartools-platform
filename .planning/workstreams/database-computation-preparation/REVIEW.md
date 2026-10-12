@@ -47,7 +47,7 @@ status, and accurate completed/no-work retry terminology. All are corrected;
 lost-ack recovery is separately fault-injected in the public worker test.
 Portable instructions stay self-contained. Reading/combining grammar and
 onboarding/approval/activation instructions remain unchanged. Final CI/merge
-is pending; final committed-runtime installed proof passes as recorded in
+passes and is verified in RESULTS; final committed-runtime installed proof passes as recorded in
 TICKET/RESULTS.
 
 ## Pre-landing checklist
@@ -65,4 +65,4 @@ CI found missing schema-description comments, reproduced locally. Ten column
 comments and one function comment were added to the new, not-deployed migration.
 GoF confirms no SQL logic change; Standards and Spec independently verify the
 comments and all refreshed runtime hashes/acceptance calculations. All 25 focused
-PG16 cases pass. No findings remain; final CI must pass before merge.
+PG16 cases pass. No findings remain; all six final CI checks passed before verified PR #925 merge.

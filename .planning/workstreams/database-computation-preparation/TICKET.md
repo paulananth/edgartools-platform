@@ -1,6 +1,6 @@
 # Database computation and publication preparation
 
-Status: in progress, Codex; starting main 7f1e8856.
+Status: complete, Codex; runtime delivered by PR #925 as 7217f9c7; starting main 7f1e8856.
 
 Operator: qualify moving pure transformations and payload preparation into
 programs; retain indexed retrieval and transaction/concurrency enforcement.
@@ -17,7 +17,7 @@ Configured core computation belongs in Rust, callers/custom code in Python.
 - [x] Update architecture/skill guidance only where implemented behavior changes; verify affected commands/examples and runtime identity. Guard passes; skill validator passes; doctor resolves all 131 commands, native engine loads; publication runtime pins adapter/facade/binary; 2026-10-11 20:44 ET.
 - [x] Run maintained affected tests and real PostgreSQL 16 upgrade, concurrency and recovery acceptance. Verified: 1,019 maintained initial tests, 110 post-rebase tests, 39 final byte-path tests and 20 final PG16 cases pass; installed final-head check tracked separately; 2026-10-12 08:01 ET.
 - [x] Review Standards, Spec and GoF independently; resolve findings. Verified: All three independent final reviews clear; prior P2 evidence findings resolved and documented in REVIEW.md; 2026-10-12 08:01 ET.
-- [ ] Guard, commit, publish PR, verify CI, merge and report exact delivery with no deployment claim.
+- [x] Guard, commit, publish PR, verify CI, merge and report exact delivery with no deployment claim. Guards pass; PR #925 merged reviewed head d1cb80e2 as 7217f9c7; all six checks pass in CI run 38248186788, including installed-engine and real PG16 suites; main ancestry/clean own worktree verified; no deployment or activation; 2026-10-12 08:24 ET.
 - [x] Preserve publication's original byte domain by deriving the native output budget from immutable stored parts, including JSONB numeric expansion beyond compact request size. Verified: Authenticated stored-part budget and greater-than-64-MiB native publication test pass; 2026-10-12 08:01 ET.
 - [x] Rebase onto freshly fetched main after Claude's profiling PR #923, preserving both workstreams and rechecking changed upstream tests. Verified: Conflict-free rebase onto #923 with identical range-diff; 110 affected/upstream tests pass; latest #924 synchronization tracked below; 2026-10-12 08:01 ET.
 - [x] Resolve measured client-memory acceptance failure: 600-record export initially samples 1.526x SQL RSS; use UTF-8 bytes at the native hashing boundary and requalify against unchanged 1.5x limit. Verified: Refreshed 600-record export client RSS 1.359x and journal 1.323x; both pass unchanged 1.5x limit; 2026-10-12 08:01 ET.
