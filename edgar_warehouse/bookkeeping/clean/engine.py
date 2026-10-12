@@ -7,6 +7,7 @@ to-do 20a, after Codex's design of 2026-10-02).
 """
 from __future__ import annotations
 
+import hashlib
 import random
 import time
 from dataclasses import dataclass
@@ -200,22 +201,35 @@ class Bookkeeping:
                           r=claim.run_id, s=claim.step, k=claim.key)
         if not found:
             raise Blocked("Unknown unit")
-        return self._resolve_item(found[0])
+        return self._resolve_item(found[0], store=True)
 
-    def _resolve_item(self, item: dict, *, context: dict | None = None) -> dict:
+    def _resolve_item(self, item: dict, *, context: dict | None = None, store: bool = False) -> dict:
         """Materialize an input from immutable, reverified prerequisite evidence.
 
         The stored unit retains the frozen selector. Capabilities receive an
         ordinary URI/hash, so their business interface and versions stay the
         same. A missing receipt never triggers upstream discovery or replay.
+        A composed input is filled from its slots' receipts; its document is
+        written only when `store` (work handed to a worker), never on a check.
         """
         source = item["unit"]["input"]
-        if "from" not in source:
+        if isinstance(source, dict) and set(source) == {"from"}:
+            context = context or self._context(item)
+            resolved = self._receipt(item, source["from"], context)
+        elif isinstance(source, dict) and set(source) == {"compose"}:
+            context = context or self._context(item)
+            resolved = self._compose(item, source["compose"], context, store)
+        else:
+            reference(source)  # a frozen reference; anything else is not an input
             return item
-        if context is None:
-            run, config, manifest, _ = self._frozen(str(item["run_id"]))
-            context = {"run": run, "config": config, "manifest": manifest}
-        dependency = source["from"]
+        return {**item, "unit": {**item["unit"], "input": resolved}}
+
+    def _context(self, item: dict) -> dict:
+        run, config, manifest, _ = self._frozen(str(item["run_id"]))
+        return {"run": run, "config": config, "manifest": manifest}
+
+    def _receipt(self, item: dict, dependency: dict, context: dict) -> dict:
+        """One prerequisite unit's verified output, after reverifying its chain."""
         with self.engine.connect() as conn:
             found = _rows(conn, """SELECT * FROM bookkeeping.work_item
                 WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k AND state='verified'""",
@@ -227,7 +241,32 @@ class Bookkeeping:
         receipt = upstream["receipt"]
         resolved = reference({"uri": receipt["uri"], "sha256": receipt["sha256"]})
         self.artifacts.verified(resolved)
-        return {**item, "unit": {**item["unit"], "input": resolved}}
+        return resolved
+
+    def _compose(self, item: dict, body: dict, context: dict, store: bool) -> dict:
+        """Fill a composed document's slots with verified receipts; the same receipts give the same bytes."""
+        filled = {}
+        for name, value in body["slots"].items():
+            if isinstance(value, list):
+                filled[name] = [self._receipt(item, dependency, context) for dependency in value]
+            elif set(value) == {"compose"}:
+                filled[name] = self._compose(item, value["compose"], context, store)
+            else:
+                filled[name] = self._receipt(item, value, context)
+
+        def fill(node):
+            if isinstance(node, dict):
+                return filled[node["slot"]] if set(node) == {"slot"} else {k: fill(v) for k, v in node.items()}
+            return [fill(value) for value in node] if isinstance(node, list) else node
+
+        document = fill(body["document"])
+        # Beside the unit's output, named by content: a resume writes the same object.
+        root = item["unit"]["output"].rsplit("/", 1)[0] + "/inputs"
+        if store:
+            return self.artifacts.put(root, document)
+        data = canonical(document).encode()
+        return reference({"uri": f"{root}/{hashlib.sha256(data).hexdigest()}.json",
+                          "sha256": hashlib.sha256(data).hexdigest()})
 
     def _row(self, run_id: str, step: str, key: str) -> dict:
         with self.engine.connect() as conn:
@@ -277,14 +316,14 @@ class Bookkeeping:
     # and reports a candidate; a separate verifier reads the destination and
     # reports its checks. Nothing here imports, names or calls a worker.
 
-    def envelope(self, claim: Claim) -> dict:
+    def envelope(self, claim: Claim, *, store: bool = True) -> dict:
         """Everything a worker may know: the frozen work, its live authority
         and the domain checks its verifier must report. No connection, no
         engine, no private method crosses this boundary."""
         run, config, _, _ = self._frozen(claim.run_id)
         step = next(s for s in config["steps"] if s["name"] == claim.step)
         row = self._row(claim.run_id, claim.step, claim.key)
-        item = self._resolve_item(row)
+        item = self._resolve_item(row, store=store)
         rules = run["submission"]["rules"]
         return {"protocol": PROTOCOL, "profile": step["operation"],
                 "claim": {"run_id": claim.run_id, "step": claim.step, "key": claim.key,
@@ -309,7 +348,7 @@ class Bookkeeping:
             raise Blocked("Malformed task envelope") from exc
 
     def _same_work(self, envelope: dict, claim: Claim) -> dict:
-        current = self.envelope(claim)
+        current = self.envelope(claim, store=False)  # a check compares; it writes nothing
         if {k: v for k, v in envelope.items() if k not in ("claim", "candidate", "deadline")} != {
                 k: v for k, v in current.items() if k not in ("claim", "deadline")}:
             raise Blocked("Envelope differs from the frozen work")
