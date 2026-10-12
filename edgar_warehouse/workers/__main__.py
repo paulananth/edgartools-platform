@@ -59,11 +59,17 @@ class Renewal:
 
 def one_at_a_time(fetch, limit: int):
     """Take units one at a time, up to `limit`: a unit is claimed only when its
-    work starts, so no claimed unit waits while its lease runs out."""
+    work starts, so no claimed unit waits while its lease runs out. A unit that
+    comes back (it failed this call) ends the call, as a batch would have."""
+    seen = set()
     for _ in range(limit):
         found = fetch(1)
         if not found:
             return
+        unit = (found[0]["claim"]["step"], found[0]["claim"]["key"])
+        if unit in seen:
+            return
+        seen.add(unit)
         yield found[0]
 
 

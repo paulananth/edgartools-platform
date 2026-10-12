@@ -150,7 +150,7 @@ def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=Fals
                 body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
             yield _event(body, private_ref, index, chunk, size, part)
         return
-    # Inline readings retain their small authenticated document boundary.
+    # Inline readings retain their authenticated document boundary (at most MAX_ARTIFACTS documents).
     if not isinstance(body.get("artifacts"), list) or not 1 <= len(body["artifacts"]) <= MAX_ARTIFACTS:
         raise ValueError(f"Incremental inline reading requires 1..{MAX_ARTIFACTS} original artifacts")
     rows = 0

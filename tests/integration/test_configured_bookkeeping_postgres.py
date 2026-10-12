@@ -1044,3 +1044,17 @@ def _provision(server, monkeypatch, runpy):
     finally:
         for engine in engines:
             engine.dispose()
+
+
+def test_a_claim_of_one_passes_a_unit_another_attempt_holds(databases, tmp_path):
+    """Workers take one unit at a time: the first unit in order, held under
+    another attempt's live lease, must not hide the ready one after it."""
+    book, rid, _, _ = submit(databases, tmp_path, count=2)
+    held = book.claim(rid, "s0", "0")
+    (envelope,) = book.tasks(rid, "artifact.copy", limit=1)
+    assert envelope["claim"]["key"] == "1"
+    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+    first = book.envelope(held)
+    book.report(first, copy.execute(first, book.artifacts), RUNTIME)
+    reported = book.verifier.verifications(rid, "artifact.copy", limit=1)
+    assert len(reported) == 1

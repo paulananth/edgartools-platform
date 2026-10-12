@@ -16,7 +16,6 @@ from edgar_warehouse.control_contract import canonical, reference
 from . import source_stream, source_readings, source_parquet
 
 OUTPUT_BYTES = 128 * 1024**2
-MAX_ARTIFACTS = source_readings.MAX_ARTIFACTS  # documents one reading reads: one unit, not one per document
 # Capture the actual loaded codec location; later wrapper metadata changes
 # do not relocate this dependency.
 ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
@@ -46,8 +45,8 @@ def _documents(envelope: dict, artifacts):
             or set(execution) - required - {"input_sha256s", "max_input_bytes"}
             or execution["profile"] != "source.read"
             or type(execution["workers"]) is not int or not 1 <= execution["workers"] <= 2
-            or type(execution["max_artifacts"]) is not int or not 1 <= execution["max_artifacts"] <= MAX_ARTIFACTS):
-        raise ValueError(f"Source execution requires source.read with 1..2 workers and 1..{MAX_ARTIFACTS} artifacts")
+            or type(execution["max_artifacts"]) is not int or not 1 <= execution["max_artifacts"] <= source_readings.MAX_ARTIFACTS):
+        raise ValueError(f"Source execution requires source.read with 1..2 workers and 1..{source_readings.MAX_ARTIFACTS} artifacts")
     if "max_input_bytes" in execution and (type(execution['max_input_bytes']) is not int
             or not 1 <= execution['max_input_bytes'] <= 256*1024**2):
         raise ValueError('Source max_input_bytes is 1..256 MiB')

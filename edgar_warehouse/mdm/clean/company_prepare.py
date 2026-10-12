@@ -8,8 +8,9 @@ contracts, and freezes every unit's input. Bookkeeping runs the target's steps
 (`rules run --source sec.submissions.company --target mastering`) and the
 registered workers do the work:
 
-- `main` and `keys`: each document read by `census-main.yaml` and
-  `census-keys.yaml`, two a unit;
+- `main`: the documents read by `census-main.yaml`, cut into units of at most
+  8 MiB of documents; `keys`: the bundle's name and CIK keys read once
+  (`census-keys.yaml`);
 - `catalog`: the exchange ticker catalog read once (`catalog.yaml`);
 - `census`: the Name Census read once, narrowed to the bundle's names and CIKs
   by lookup sets derived from the key readings (`census.yaml`);

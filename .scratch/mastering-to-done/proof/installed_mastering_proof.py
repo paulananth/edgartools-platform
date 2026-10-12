@@ -198,6 +198,17 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         with mdm_reader.connect() as conn:
             return old.counts(conn), old.bindings(conn)
 
+    def writes() -> dict:
+        """Rows each MDM table and the change journal hold: what a pass wrote."""
+        with mdm_reader.connect() as conn:
+            found = {t: conn.execute(text(f"SELECT count(*) FROM mdm.{t}")).scalar() for t in (
+                "batch", "source_reading", "decision", "company", "current_record", "outbox", "checkpoint",
+                "match_proposal", "set_aside_record")}
+        journal = create_engine(databases.admin.url.set(database=databases.ledger.engine.url.database))
+        with journal.connect() as conn:
+            found["journal_events"] = conn.execute(text("SELECT count(*) FROM journal.event")).scalar()
+        return found
+
     # First SEC pass: preparation two bundles at a time; merges one at a time, in bundle order.
     runs = {name: submit("sec", reports[name]["manifest"]) for name in names}
     preparation = [step["name"] for step in MASTERING[:-1]]
@@ -230,7 +241,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         finalize(gleif_run)
         timings["gleif_first"] = minutes()
     first, first_bindings = snapshot()
-    old.say(stage="first pass", **first)
+    first_writes = writes()
+    old.say(stage="first pass", writes=first_writes, **first)
 
     # Second pass: every bundle's verified records merged again under new batch ids and consumers.
     for name in names:
@@ -252,6 +264,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         drive(run_id, ("mdm.prepare", "mdm.merge"))
         finalize(run_id)
     second, second_bindings = snapshot()
+    second_writes = writes()
+    old.say(stage="second pass", writes=second_writes)
     timings["second_pass"] = minutes()
 
     report = {
@@ -259,7 +273,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         "only": only, "bundles": names, "policy": policy, "gleif_scope_leis": scope,
         "after_first_pass": first, "bindings": first_bindings,
         "second_pass_changed_nothing": first == second and first_bindings == second_bindings,
-        "recovery": recovery, "timings_minutes": timings,
+        "writes": {"after_first_pass": first_writes, "after_second_pass": second_writes},
+        "recovery": recovery, "minutes_since_start": timings,  # cumulative: each stage's end
         "bindings_equal_checkout_replay": first_bindings == old.CHECKOUT_BINDINGS if only != "sec" and whole else None,
         "checkout_replay": {k: v for k, v in PIN["after_first_pass"].items() if k in first},
         "minutes": minutes(),
@@ -273,6 +288,12 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         assert report["bindings_equal_checkout_replay"] in (True, None)
         if only != "sec":
             assert first["companies_open"] == 6414 and first["stage_bound"].get(GLEIF) == 3052
+            assert report["bindings_equal_checkout_replay"] is True
+            replay = PIN["after_first_pass"]
+            for key in ("companies_open", "stage_records", "stage_bound", "decisions_by_rule"):
+                assert first[key] == replay[key], key
+            # The replay counted the records GLEIF cannot bind apart; here they are open reviews.
+            assert first["open_reviews"] == {**replay["open_reviews"], **PIN["gleif_set_aside"]}
 
 
 def kill_and_recover(python, entry, worker, root, run_id, items, snapshot) -> dict:
