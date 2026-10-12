@@ -36,11 +36,18 @@ def fixture_census(case='both'):
     return body
 
 
-def census_read(store,root,body,*,config=None):
+def census_read(store,root,body,*,config=None,sets=None):
+    """Read the census narrowed to `sets` (every name and CIK in the body when omitted)."""
     raw=store.put(root.as_uri(),body)
     rules=bind(files.load(ROOT/'census.yaml'),raw['sha256']) if config is None else config
     contract=store.put(root.as_uri(),rules)
-    manifest=store.put(root.as_uri(),{'version':1,'contract':contract,'artifacts':[raw]})
+    if sets is None:
+        entries=body.get('entries') if isinstance(body.get('entries'),dict) else {}
+        cascade=(body.get('cascade') or {}).get('assignments') if isinstance(body.get('cascade'),dict) else {}
+        sets={'names':sorted(entries),'ciks':sorted(k.lstrip('0') for k in (cascade if isinstance(cascade,dict) else {}))}
+    entry={'input':raw,'context':store.put(root.as_uri(),{'version':1,'input':raw,'values':{}}),
+           'lookups':store.put(root.as_uri(),{'version':1,'input':raw,'sets':sets})}
+    manifest=store.put(root.as_uri(),{'version':3,'contract':contract,'artifacts':[entry]})
     task={'input':manifest,'output':(root/'census-reading.json').as_uri(),'checks':['source.output']}
     receipt=source_read.execute(task,store)
     assert source_read.verify({**task,'candidate':receipt},store)==({'source.output':True},[])
@@ -131,3 +138,22 @@ def test_census_main_inherits_company_reading_and_canonical_name_recipe():
     recipe = census['read']['tables']['company']['columns'].pop('_name_key')
     assert census == {key: source[key] for key in ('source', 'execution', 'read')}
     assert recipe == files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
+
+
+def test_the_census_is_narrowed_to_the_bundles_names_and_ciks(tmp_path):
+    store=Artifacts()
+    body=fixture_census()
+    body['entries']['OTHER']=deepcopy(body['entries']['EXAMPLE'])
+    body['cascade']['assignments']['0000000002']=deepcopy(body['cascade']['assignments']['0000000001'])
+    receipt,_=census_read(store,tmp_path,body,sets={'names':['OTHER'],'ciks':['1']})
+    tables=store.json(receipt)['artifacts'][0]['tables']
+    assert [row['name_key'] for row in tables['names']]==['OTHER']
+    assert [row['cik'] for row in tables['cascade']]==[1]
+
+
+def test_census_keys_carry_the_canonical_name_recipe_and_an_unpadded_cik():
+    """Fail when the name-key recipe changes without updating this copy."""
+    columns=files.load(ROOT/'census-keys.yaml')['read']['tables']['keys']['columns']
+    assert columns['_name_key']==files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
+    assert columns['_name_key']==files.load(ROOT/'census-main.yaml')['read']['tables']['company']['columns']['_name_key']
+    assert set(columns)=={'_name_key','_cik_key'}

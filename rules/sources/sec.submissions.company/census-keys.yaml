@@ -1,0 +1,103 @@
+# The census keys of one bundle's main documents: the name key (the bundled
+# name-key.yaml recipe) and the CIK without leading zeros. Two rows a reading;
+# census.yaml derives its lookup sets from these readings (Issue 20 slice 20c).
+source: sec.submissions.company
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 2
+read:
+  format: json
+  assertions:
+  - test:
+      test:
+        path: .
+        kind: object
+    reason: Company submissions must be a JSON object
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    keys:
+      each: .
+      columns:
+        _name_key:
+          text:
+            path: name
+            coerce: python
+            trim: false
+            default: ''
+            transforms:
+            - case: upper
+            - regex_replace:
+                pattern: '[\s\x1c-\x1f]*/[A-Z0-9 .]{1,6}/?[\s\x1c-\x1f]*$'
+                with: ''
+            - unicode: nfkd
+            - strip_combining: true
+            - case: upper
+            - replace:
+                from: '&'
+                to: ' AND '
+            - regex_replace:
+                pattern: '[^A-Z0-9]+'
+                with: ' '
+            - trim: true
+            - pad:
+                left: ' '
+                right: ' '
+            - replace:
+                from: ' L L C '
+                to: ' LLC '
+            - replace:
+                from: ' L L P '
+                to: ' LLP '
+            - replace:
+                from: ' L P '
+                to: ' LP '
+            - replace:
+                from: ' P L C '
+                to: ' PLC '
+            - replace:
+                from: ' N V '
+                to: ' NV '
+            - replace:
+                from: ' S A '
+                to: ' SA '
+            - replace:
+                from: ' A G '
+                to: ' AG '
+            - replace:
+                from: ' S E '
+                to: ' SE '
+            - replace:
+                from: ' B V '
+                to: ' BV '
+            - replace:
+                from: ' CORPORATION '
+                to: ' CORP '
+            - replace:
+                from: ' INCORPORATED '
+                to: ' INC '
+            - replace:
+                from: ' COMPANY '
+                to: ' CO '
+            - replace:
+                from: ' LIMITED '
+                to: ' LTD '
+            - replace:
+                from: ' HOLDINGS '
+                to: ' HLDGS '
+            - replace:
+                from: ' INTERNATIONAL '
+                to: ' INTL '
+            - trim: true
+            - remove_prefix: 'THE '
+        _cik_key:
+          text:
+            path: cik
+            coerce: python
+            trim: false
+            transforms:
+            - regex_replace:
+                pattern: ^0+
+                with: ''
