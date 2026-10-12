@@ -57,56 +57,112 @@ def _lines(rows: list[dict]) -> bytes:
                                allow_nan=False).encode() + b"\n" for r in rows)
 
 
-def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
-    """{name: bytes} of the records files, and the manifest's bytes."""
-    keys = envelope["keys"]
-    if not KEYS <= set(keys):
-        raise ValueError(f"mdm.prepare needs the unit keys {sorted(KEYS)}")
+READINGS = 256  # as many as a composed input lists
+
+
+def _readings(envelope: dict, artifacts) -> list[dict]:
+    """The unit's readings: one source.read output, or a readings list
+    `{"version": 1, "readings": [ref, ...]}` (a composed input naming many);
+    the byte and row budgets are spent across all of them."""
+    document = artifacts.json(envelope["input"])
+    refs = [envelope["input"]]
+    if set(document) == {"version", "readings"}:
+        if (document["version"] != 1 or not isinstance(document["readings"], list)
+                or not 1 <= len(document["readings"]) <= READINGS):
+            raise ValueError(f"mdm.prepare reads a readings list of 1 to {READINGS} readings (version 1)")
+        refs = [reference(ref) for ref in document["readings"]]
+    readings, consumed, rows = [], 0, 0
+    for ref in refs:
+        reading, size = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES - consumed,
+                                             max_rows=INPUT_ROWS - rows)
+        if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
+            raise ValueError("mdm.prepare reads a source.read output (version 1)")
+        consumed += size
+        rows += sum(len(t) for a in reading["artifacts"] for t in a["tables"].values() if isinstance(t, list))
+        if rows > INPUT_ROWS:
+            raise ValueError("mdm.prepare readings exceed their row budget")
+        readings.append(reading)
+    return readings
+
+
+def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
+    """One artifact's records, checked: its source digest, its rows and its publication facts."""
     record_column = _optional_text(keys, "record_column")
     effective_column = _optional_text(keys, "effective_column")
     distinct_on = _distinct_columns(keys)
-    reading, _ = source_readings.load(envelope["input"], artifacts,
-                                      max_bytes=INPUT_BYTES, max_rows=INPUT_ROWS)
-    if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
-        raise ValueError("mdm.prepare reads a source.read output (version 1)")
-    files, batches = {}, []
-    for artifact in reading["artifacts"]:
-        rows = artifact["tables"].get(keys["table"])
-        if rows is None:
-            raise ValueError(f"The reading has no table {keys['table']}")
-        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-            raise ValueError("mdm.prepare table rows must be objects")
-        # Every row is checked before duplicates are dropped, so a dropped
-        # row cannot hide a bad time or shape.
-        publication = {}
-        if effective_column is not None and rows:
-            publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
-        if record_column is not None and any(not isinstance(row.get(record_column), dict) for row in rows):
-            raise ValueError("mdm.prepare record_column must hold an object in every row")
-        if distinct_on is not None:
-            rows = _first_of_each(rows, distinct_on)
-        if record_column is not None:
-            rows = [row[record_column] for row in rows]
-        source = artifact["input"]["sha256"]
-        if "context" in artifact:
-            reference(artifact["context"])
-            # One captured document may be read under distinct approved caller
-            # facts. Keep their records, batches and publications independent.
-            source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
-        for n, chunk in enumerate(limits.batches(rows, lambda row: _lines([row]))):
-            data = _lines(chunk)
-            if len(data) > limits.RECORDS_FILE_BYTES:
-                raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")
-            name = f"{source}.{n}.jsonl"
-            files[name] = data
-            batches.append({
-                "batch_id": f"{keys['batch_id']}:{source[:16]}:{n}",
-                "stage": "mastering", "consumer": keys["consumer"],
-                "input": {"path": name, "sha256": hashlib.sha256(data).hexdigest(),
-                          "record_count": len(chunk), "source_code": keys["dataset"],
-                          "publication": {"publication_key": f"{keys['dataset']}:{source}", "revision": 1,
-                                          **publication}},
-            })
+    rows = artifact["tables"].get(keys["table"])
+    if rows is None:
+        raise ValueError(f"The reading has no table {keys['table']}")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise ValueError("mdm.prepare table rows must be objects")
+    # Every row is checked before duplicates are dropped, so a dropped
+    # row cannot hide a bad time or shape.
+    publication = {}
+    if effective_column is not None and rows:
+        publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
+    if record_column is not None and any(not isinstance(row.get(record_column), dict) for row in rows):
+        raise ValueError("mdm.prepare record_column must hold an object in every row")
+    if distinct_on is not None:
+        rows = _first_of_each(rows, distinct_on)
+    if record_column is not None:
+        rows = [row[record_column] for row in rows]
+    source = artifact["input"]["sha256"]
+    if "context" in artifact:
+        reference(artifact["context"])
+        # One captured document may be read under distinct approved caller
+        # facts. Keep their records, batches and publications independent.
+        source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
+    return source, rows, publication
+
+
+def _published(keys: dict) -> dict | None:
+    """Optional `publication_key` and `revision`: the caller's one publication for every row of the unit."""
+    if "publication_key" not in keys and "revision" not in keys:
+        return None
+    if (not isinstance(keys.get("publication_key"), str) or not keys["publication_key"]
+            or type(keys.get("revision")) is not int or keys["revision"] < 0):
+        raise ValueError("mdm.prepare publication_key and revision come together: text and a nonnegative integer")
+    if "effective_column" in keys:
+        raise ValueError("mdm.prepare states one publication's time; effective_column states one per artifact")
+    return {"publication_key": keys["publication_key"], "revision": keys["revision"], "effective_at": None}
+
+
+def _batch(keys: dict, name: str, batch_id: str, chunk: list[dict], publication: dict) -> tuple[bytes, dict]:
+    data = _lines(chunk)
+    if len(data) > limits.RECORDS_FILE_BYTES:
+        raise ValueError("mdm.prepare records exceed the verifier byte budget; partition the input")
+    return data, {"batch_id": batch_id, "stage": "mastering", "consumer": keys["consumer"],
+                  "input": {"path": name, "sha256": hashlib.sha256(data).hexdigest(),
+                            "record_count": len(chunk), "source_code": keys["dataset"], "publication": publication}}
+
+
+def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
+    """{name: bytes} of the records files, and the manifest's bytes.
+
+    Without `publication_key` each artifact is its own publication (revision 1) and its own batches;
+    with it, the unit's rows, in reading and artifact order, are one publication cut into batches once."""
+    keys = envelope["keys"]
+    if not KEYS <= set(keys):
+        raise ValueError(f"mdm.prepare needs the unit keys {sorted(KEYS)}")
+    published = _published(keys)
+    files, batches, pooled = {}, [], []
+    for reading in _readings(envelope, artifacts):
+        for artifact in reading["artifacts"]:
+            source, rows, publication = _artifact_rows(artifact, keys)
+            if published is not None:
+                pooled.extend(rows)
+                continue
+            for n, chunk in enumerate(limits.batches(rows, lambda row: _lines([row]))):
+                name = f"{source}.{n}.jsonl"
+                files[name], batch = _batch(keys, name, f"{keys['batch_id']}:{source[:16]}:{n}", chunk,
+                                            {"publication_key": f"{keys['dataset']}:{source}", "revision": 1,
+                                             **publication})
+                batches.append(batch)
+    if published is not None:
+        for n, chunk in enumerate(limits.batches(pooled, lambda row: _lines([row]))):
+            name = f"records.{n}.jsonl"
+            files[name], batch = _batch(keys, name, f"{keys['batch_id']}:{n}", chunk, published)
+            batches.append(batch)
     if not batches:
         raise ValueError(f"The reading's {keys['table']} table holds no rows")
     for n, batch in enumerate(batches):
