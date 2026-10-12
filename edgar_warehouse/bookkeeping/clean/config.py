@@ -91,12 +91,65 @@ def validate(document: dict, target: str) -> dict:
         raise Blocked("Malformed bookkeeping configuration") from exc
 
 
+# A composed input (to-do 20c): a frozen document whose slots each name verified
+# prerequisite output, so one unit can read many (Bookkeeping fan-in).
+COMPOSE_SLOTS = 16
+COMPOSE_LIST = 256  # as many producer readings as a derived lookup set takes
+COMPOSE_BYTES = 1024**2
+COMPOSE_DEPTH = 2
+
+
+def _dependency(dependency, step: dict, identities: set):
+    if (not isinstance(dependency, dict) or set(dependency) != {"step", "key"}
+            or not isinstance(dependency["step"], str) or not isinstance(dependency["key"], str)
+            or dependency["step"] not in step["requires"]
+            or (dependency["step"], dependency["key"]) not in identities):
+        raise Blocked("Input must name an existing unit in a preceding prerequisite")
+
+
+def slot_names(document) -> list[str]:
+    """The slots a template uses: every value that is exactly {"slot": <name>}."""
+    if isinstance(document, dict):
+        if set(document) == {"slot"}:
+            return [document["slot"]]
+        return [name for value in document.values() for name in slot_names(value)]
+    if isinstance(document, list):
+        return [name for value in document for name in slot_names(value)]
+    return []
+
+
+def _composed(body, step: dict, identities: set, depth: int = 1):
+    """`{"document": <template>, "slots": {name: unit | [units] | {"compose": ...}}}`: every slot used, every
+    used slot declared, every unit an existing unit of a declared prerequisite."""
+    if (not isinstance(body, dict) or set(body) != {"document", "slots"} or not isinstance(body["document"], dict)
+            or not isinstance(body["slots"], dict) or not 1 <= len(body["slots"]) <= COMPOSE_SLOTS):
+        raise Blocked(f"A composed input names a document and 1..{COMPOSE_SLOTS} slots")
+    if len(canonical(body).encode()) > COMPOSE_BYTES:
+        raise Blocked("A composed input exceeds its byte bound")
+    used = slot_names(body["document"])
+    if (any(not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in used)
+            or set(used) != set(body["slots"])):
+        raise Blocked("A composed document uses exactly its declared slots")
+    for value in body["slots"].values():
+        if isinstance(value, list):
+            if not 1 <= len(value) <= COMPOSE_LIST:
+                raise Blocked(f"A slot lists 1..{COMPOSE_LIST} units")
+            for dependency in value:
+                _dependency(dependency, step, identities)
+        elif isinstance(value, dict) and set(value) == {"compose"}:
+            if depth >= COMPOSE_DEPTH:
+                raise Blocked("Composed documents nest at most once")
+            _composed(value["compose"], step, identities, depth + 1)
+        else:
+            _dependency(value, step, identities)
+
+
 def worklist(manifest: dict, config: dict) -> list[dict]:
     """Freeze stage scope; version 1 retains its original worklist digest.
 
     Version 2 lists units separately for every configured step. An input may
-    name a preceding prerequisite's unit; only its verified output can be
-    resolved at execution time. No paths or work are discovered on resume.
+    name a preceding prerequisite's unit, or compose a document from several;
+    only verified output can be resolved at execution time. No paths or work are discovered on resume.
     """
     if not isinstance(manifest, dict) or type(manifest.get("version")) is not int:
         raise Blocked("Unsupported input manifest")
@@ -120,12 +173,9 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
                 raise Blocked("Units contain keys, input/output references and an opaque cursor only")
             source = unit["input"]
             if manifest["version"] == 2 and isinstance(source, dict) and set(source) == {"from"}:
-                dependency = source["from"]
-                if (not isinstance(dependency, dict) or set(dependency) != {"step", "key"}
-                        or not isinstance(dependency["step"], str) or not isinstance(dependency["key"], str)
-                        or dependency["step"] not in step["requires"]
-                        or (dependency["step"], dependency["key"]) not in identities):
-                    raise Blocked("Input must name an existing unit in a preceding prerequisite")
+                _dependency(source["from"], step, identities)
+            elif manifest["version"] == 2 and isinstance(source, dict) and set(source) == {"compose"}:
+                _composed(source["compose"], step, identities)
             else:
                 reference(source)
             # Output URI names intent; verified content hash is supplied by the

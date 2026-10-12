@@ -1,5 +1,8 @@
 # Creator blueprint: export the authenticated census using Artifacts.put,
 # then bind its canonical SHA-256 everywhere the 64-zero placeholder occurs.
+# Narrowed to one bundle by two lookup sets derived from the bundle's
+# census-keys.yaml readings (`_name_key`, `_cik_key`): at most 256 readings
+# of 2 documents, so a bundle names at most 512 documents.
 # The execution pin authenticates the complete input, including empty tables.
 # Reusing a proven census is not proof of configured whole-source construction.
 source: sec.submissions.company
@@ -7,13 +10,23 @@ execution:
   profile: source.read
   workers: 1
   max_artifacts: 1
+  max_input_bytes: 268435456
   input_sha256s:
   - "0000000000000000000000000000000000000000000000000000000000000000"
 read:
   format: json
   limits:
-    max_bytes: 33554432
+    max_bytes: 268435456
     max_records: 100000
+  lookup_sets:
+    names:
+      max_values: 512
+      max_bytes: 2097152
+      max_value_bytes: 4096
+    ciks:
+      max_values: 512
+      max_bytes: 8192
+      max_value_bytes: 10
   require:
   - entries
   - sec
@@ -131,13 +144,25 @@ read:
       select:
         choose:
           condition:
-            test:
-              path: map_key
-              kind: truthy
+            member:
+              lookup: names
+              key:
+                text:
+                  path: map_key
+                  trim: false
           then:
-            test:
-              path: entry
-              kind: not_null
+            choose:
+              condition:
+                test:
+                  path: map_key
+                  kind: truthy
+              then:
+                test:
+                  path: entry
+                  kind: not_null
+              else:
+                const:
+                  value: null
           else:
             const:
               value: null
@@ -170,6 +195,22 @@ read:
                   path: cascade.version
                   from: document
       select:
-        test:
-          path: entry
-          kind: not_null
+        choose:
+          condition:
+            member:
+              lookup: ciks
+              key:
+                text:
+                  path: map_key
+                  trim: false
+                  transforms:
+                  - regex_replace:
+                      pattern: "^0+"
+                      with: ""
+          then:
+            test:
+              path: entry
+              kind: not_null
+          else:
+            const:
+              value: null

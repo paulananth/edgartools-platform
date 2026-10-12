@@ -1108,7 +1108,10 @@ if with_census:
         if isinstance(value,dict): return {key:bind(item) for key,item in value.items()}
         return value
     config = bind(files.load(blueprints / "census.yaml"))
-    scope = store.put(folder.as_uri(),{"version":1,"contract":store.put(folder.as_uri(),config),"artifacts":[raw]})
+    # Narrowed to the bundle's name and CIK keys (20c): a version-3 request with its lookup sets.
+    entry = {"input":raw,"context":store.put(folder.as_uri(),{"version":1,"input":raw,"values":{}}),
+             "lookups":store.put(folder.as_uri(),{"version":1,"input":raw,"sets":{"names":["EXAMPLE"],"ciks":["1"]}})}
+    scope = store.put(folder.as_uri(),{"version":3,"contract":store.put(folder.as_uri(),config),"artifacts":[entry]})
     task = {"input":scope,"output":(folder / "census-reading.json").as_uri(),"checks":["source.output"]}
     refs["census"] = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":refs["census"]},store) == ({"source.output":True},[])

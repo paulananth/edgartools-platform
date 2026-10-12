@@ -167,12 +167,14 @@ edgar-warehouse mdm prepare-clean-company \
 ```
 
 It reads the raw capture: each main submissions document named in
-`--documents` (at most 1,000 receipt keys, all in the population the Name
+`--documents` (at most 512 receipt keys, all in the population the Name
 Census counted), by its receipt in `receipts.jsonl`, and SEC's exchange
 ticker catalog (`--catalog`, a receipt key). The configured workers read each
-document in units of one or two (`census-main.yaml`), read the census once
-narrowed to the bundle's name keys (`census.yaml`, bound to the census's
-digest), read the catalog once (`catalog.yaml`), and combine them per Company
+document in units of one or two (`census-main.yaml`) and again for its name
+key and CIK only (`census-keys.yaml`), read the census once narrowed to the
+bundle's names and CIKs (`census.yaml`, bound to the census's digest; its two
+lookup sets are derived from the key readings, at most 256 of them, hence 512
+documents), read the catalog once (`catalog.yaml`), and combine them per Company
 (`combine-census.yaml`): forms from the document's recent filings, tickers
 from the catalog in rank order, the business address and the census entry.
 Every worker is executed and verified, and its inputs and outputs are kept

@@ -31,7 +31,7 @@ from tests.support.bookkeeping_protocol import RUNTIME, complete, drive, verific
 from tests.support.rules_approval import approve
 
 
-PROFILES = ("artifact.copy", "jsonl.count", "fixture.transform")
+PROFILES = ("artifact.copy", "jsonl.count", "fixture.transform", "fixture.gather")
 
 
 @dataclass
@@ -415,6 +415,88 @@ def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(d
         book.resume(rid)
     assert book.status(rid)["run"]["state"] == "blocked"
     assert executions == ["parsed0", "parsed1", "parsed2"]
+
+
+def fan_in_submission(databases, tmp_path):
+    """A gathering step whose one input is a document composed from many verified outputs (to-do 20c)."""
+    book, _, manifest, executions = staged_submission(databases, tmp_path)
+    gathered = []
+
+    class Gather:
+        """Reads every receipt its composed document names; Bookkeeping filled them."""
+        @staticmethod
+        def expected(envelope, artifacts):
+            document = artifacts.json(envelope["input"])
+            inner = artifacts.json(document["inner"])
+            parts = [artifacts.verified(ref) for ref in [document["one"], *document["all"], inner["raw"]]]
+            return b"+".join(parts)
+
+        @classmethod
+        def execute(cls, envelope, artifacts):
+            gathered.append(envelope["input"])
+            return artifacts.put_bytes(envelope["output"], cls.expected(envelope, artifacts))
+
+        @classmethod
+        def verify(cls, envelope, artifacts):
+            if artifacts.verified(envelope["candidate"]) != cls.expected(envelope, artifacts):
+                raise ValueError("Gathered output differs from its composed inputs")
+            return {name: True for name in envelope["checks"]}, []
+
+    body = config(3)
+    steps = body["bookkeeping"]["targets"]["silver"]["steps"]
+    for step, name, requires in zip(steps, ("z_capture", "a_transform", "b_gather"),
+                                    ([], ["z_capture"], ["z_capture", "a_transform"])):
+        step.update(name=name, requires=requires)
+    steps[1]["operation"] = "fixture.transform"
+    steps[2]["operation"] = "fixture.gather"
+    output = (tmp_path / "gather" / "all").as_uri()
+    compose = {"document": {"version": 1, "one": {"slot": "first"}, "all": {"slot": "parts"}, "inner": {"slot": "nested"}},
+               "slots": {"first": {"step": "a_transform", "key": "parsed1"},
+                         "parts": [{"step": "a_transform", "key": f"parsed{n}"} for n in (2, 0)],
+                         "nested": {"compose": {"document": {"raw": {"slot": "raw"}},
+                                                "slots": {"raw": {"step": "z_capture", "key": "raw1"}}}}}}
+    manifest["steps"]["b_gather"] = [{"keys": {"id": "all", "destination": output}, "input": {"compose": compose},
+                                      "output": output, "cursor": {"key": "all"}}]
+    del manifest["steps"]["b_finish"]
+    inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", manifest)
+    name = "fan-in-" + uuid4().hex
+    saved = databases.rules.save("pipeline", name, "1", body)
+    databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    databases.rules.activate("pipeline", name, "1")
+    rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
+    rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
+    book.workers = {**book.workers, "fixture.gather": Gather}
+    return book, rid, output, executions, gathered
+
+
+def test_a_composed_input_gathers_many_verified_outputs(databases, tmp_path):
+    book, rid, output, executions, gathered = fan_in_submission(databases, tmp_path)
+    assert book.claim(rid, "b_gather", "all", sleep=lambda _: None) is None  # waits for every prerequisite unit
+    state = drive(book, rid, databases.ledger, workers=book.workers)
+    assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
+    assert book.artifacts.read(output) == b"+".join(
+        [b"INPUT-1|transformed", b"INPUT-0|transformed", b"INPUT-0|transformed", b"input-1"])
+    (document,) = gathered
+    assert document["uri"].startswith((tmp_path / "gather" / "inputs").as_uri())  # beside the output, by content
+    assert book.artifacts.json(document)["all"] == [
+        {k: i["receipt"][k] for k in ("uri", "sha256")} for key in ("parsed2", "parsed0")
+        for i in state["items"] if i["unit_key"] == key]
+    with databases.runtime.connect() as conn:
+        frozen = conn.scalar(text("SELECT unit->'input' FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND step='b_gather'"), {"r": rid})
+    assert set(frozen) == {"compose"}  # the frozen work keeps its slots, never a filled document
+    book.resume(rid)
+    drive(book, rid, databases.ledger, workers=book.workers)
+    assert len(gathered) == 1 and executions == ["parsed0", "parsed1", "parsed2"]
+
+
+def test_a_composed_input_with_a_corrupt_slot_blocks_without_execution(databases, tmp_path):
+    book, rid, output, executions, gathered = fan_in_submission(databases, tmp_path)
+    state = drive(book, rid, databases.ledger, workers=book.workers, limit=5)
+    upstream = next(i for i in state["items"] if i["unit_key"] == "parsed0")
+    Path(upstream["receipt"]["uri"].removeprefix("file://")).write_bytes(b"corrupt")
+    with pytest.raises(Blocked):
+        drive(book, rid, databases.ledger, workers=book.workers)
+    assert book.status(rid)["run"]["state"] == "blocked" and gathered == []
 
 
 def test_independent_concurrency_and_shared_contention(databases, tmp_path):

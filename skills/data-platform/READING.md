@@ -1211,8 +1211,11 @@ An empty key list still validates document shape and assertions.
 ## Examples: configured preparation caller
 
 `mdm prepare-clean-company` reads the receipt-bound raw capture through the
-registered workers (#905): main documents through `census-main.yaml`, the
-authenticated frozen Name Frequency file through `census.yaml`, the exchange
+registered workers (#905): main documents through `census-main.yaml`, and their
+name and CIK keys through `census-keys.yaml`; the authenticated frozen Name
+Frequency file through `census.yaml`, narrowed by two lookup sets derived from
+the key readings (a version-3 request; at most 256 readings, so 512 documents a
+bundle); the exchange
 catalog through `catalog.yaml`, joined by `combine-census.yaml`. It runs and
 verifies each worker before publishing the bundle, and retains every worker's
 inputs, contracts, outputs and proof in it. `mdm name-census` builds the Name

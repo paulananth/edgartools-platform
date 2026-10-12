@@ -33,6 +33,9 @@ _json_value = source_parquet.json_scalar
 ROOT = rules_files.ROOT / "sources/sec.submissions.company"
 DOCUMENTS_BYTES = 1024**2
 CENSUS_BYTES = 256 * 1024**2
+KEY_READING_BYTES = 16 * 1024**2  # every census-keys reading of one bundle
+# A census read derives its lookup sets from at most 256 key readings of 2 documents.
+BUNDLE_DOCUMENTS = 512
 POPULATION_BYTES = 64 * 1024**2
 # Where `census.yaml` and `combine-census.yaml` take the census digest.
 CENSUS_DIGEST = "0" * 64
@@ -75,14 +78,17 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
         store = StagedArtifacts(root, staging)
         tasks = []
 
-        def read(name, contract, inputs):
-            """One `source.read` unit over (bytes, context values) inputs, executed then verified."""
+        def read(name, contract, inputs, sets=None):
+            """One `source.read` unit over (bytes, context values) inputs, executed then verified;
+            `sets` derives its lookup sets from earlier readings."""
             artifacts = []
             for index, (data, values) in enumerate(inputs):
                 source = store.put_bytes((root / f"{name}-{index}.input").as_uri(), data)
                 entry = {"input": source}
                 if values is not None:
                     entry["context"] = store.put(root.as_uri(), {"version": 1, "input": source, "values": values})
+                if sets is not None:
+                    entry["lookups"] = store.put(root.as_uri(), {"version": 2, "input": source, "sets": sets})
                 artifacts.append(entry)
             contract["execution"]["input_sha256s"] = [a["input"]["sha256"] for a in artifacts]
             task, candidate = raw_capture.read_unit(store, root, name, contract, artifacts)
@@ -90,7 +96,8 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
             return candidate
 
         main_contract = rules_files.load(ROOT / "census-main.yaml")
-        units = []
+        keys_contract = rules_files.load(ROOT / "census-keys.yaml")
+        units, key_readings = [], []
         for start in range(0, len(keys), main_contract["execution"]["max_artifacts"]):
             unit = keys[start:start + main_contract["execution"]["max_artifacts"]]
             inputs = [(raw_capture.document_bytes(capture, receipts, key), {
@@ -98,16 +105,15 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
                 "raw_object_id": receipts[key], "load_mode": pins["load_mode"], "recent_limit": None,
                 "last_synced_at": pins["observed_at"]}) for key in unit]
             units.append((unit, read(f"main-{start}", deepcopy(main_contract), inputs)))
-        rows = [row for _, ref in units for artifact in store.json(ref)["artifacts"]
-                for row in artifact["tables"]["company"]]
+            key_readings.append(read(f"keys-{start}", deepcopy(keys_contract),
+                                     [(data, None) for data, _ in inputs]))
+        # The census is read as its canonical bytes, whose sha256 is the digest bound above,
+        # narrowed by the bundle's census keys (lookup sets derived from the key readings).
         census_contract = _bind(rules_files.load(ROOT / "census.yaml"), {CENSUS_DIGEST: census_hash})
-        census_contract["execution"]["max_input_bytes"] = CENSUS_BYTES
-        census_contract["read"]["limits"]["max_bytes"] = CENSUS_BYTES
-        census_contract["read"]["tables"]["names"]["each"]["entries"]["keys"] = sorted({r["_name_key"] for r in rows})
-        census_contract["read"]["tables"]["cascade"]["each"]["entries"]["keys"] = sorted(
-            {f"{int(r['cik']):010d}" for r in rows})
-        # The census is read as its canonical bytes, whose sha256 is the digest bound above.
-        census_ref = read("census", census_contract, [(canonical(census).encode(), None)])
+        sets = {name: {"readings": key_readings, "table": "keys", "column": column,
+                       "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
+                for name, column in (("names", "_name_key"), ("ciks", "_cik_key"))}
+        census_ref = read("census", census_contract, [(canonical(census).encode(), {})], sets)
         catalog = read("catalog_exchange", rules_files.load(ROOT / "catalog.yaml"), [(
             raw_capture.document_bytes(capture, receipts, catalog_key),
             {"sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"], "source_name": "catalog_exchange"})])
@@ -204,7 +210,7 @@ def prepare_company_bundle(
     """Pin a bounded Company sample from a raw capture, with the evidence its rules read.
 
     `documents` lists this bundle's main submissions documents by receipt key
-    (at most 1,000); `population` is the population the Name Census counted,
+    (at most 512); `population` is the population the Name Census counted,
     which must hold them. The Company rule reads the forms a filer files (its
     main document's recent filings) and its tickers (SEC's exchange catalog,
     `catalog` by receipt key); the SEC-to-GLEIF matching rules read the
@@ -219,9 +225,9 @@ def prepare_company_bundle(
     receipts_raw, receipts = raw_capture.receipts(folder)
     documents_raw = read_bounded(Path(documents).resolve(), DOCUMENTS_BYTES)
     keys = json.loads(documents_raw)
-    if (not isinstance(keys, list) or not 1 <= len(keys) <= limits.BATCH_RECORDS
+    if (not isinstance(keys, list) or not 1 <= len(keys) <= BUNDLE_DOCUMENTS
             or len(set(keys)) != len(keys)):
-        raise ValueError(f"A bundle names 1..{limits.BATCH_RECORDS} distinct main documents")
+        raise ValueError(f"A bundle names 1..{BUNDLE_DOCUMENTS} distinct main documents")
     if any("/main/" not in key for key in keys):
         raise ValueError("A bundle names main submissions documents only")
     census_raw = read_bounded(Path(name_census).resolve(), CENSUS_BYTES)

@@ -3,7 +3,7 @@
 SEC Company records reach MDM in two steps, both through configured workers.
 Nothing makes a request to SEC here.
 
-1. **Prepare** a bundle of at most 1,000 Companies from a raw submissions
+1. **Prepare** a bundle of at most 512 Companies from a raw submissions
    capture (a folder holding `receipts.jsonl` and the `bronze/` documents it
    names):
 

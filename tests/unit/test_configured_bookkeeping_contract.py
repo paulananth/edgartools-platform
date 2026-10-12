@@ -162,6 +162,56 @@ def test_invalid_stage_scope_blocks_before_execution(edit):
         worklist(manifest, config)
 
 
+def composed(manifest):
+    return {"document": {"version": 1, "readings": {"main": {"slot": "main"}}, "lookups": {"slot": "names"}},
+            "slots": {"main": {"step": "capture", "key": "one"},
+                      "names": {"compose": {"document": {"readings": {"slot": "producers"}},
+                                            "slots": {"producers": [{"step": "capture", "key": "one"}]}}}}}
+
+
+def test_a_composed_input_is_frozen_as_its_slots():
+    config, manifest = stage_manifest()
+    manifest["steps"]["parse"][0]["input"] = {"compose": composed(manifest)}
+    items = worklist(manifest, config)
+    assert items[1]["unit"]["input"] == {"compose": composed(manifest)}
+
+
+@pytest.mark.parametrize("edit", ["unused_slot", "undeclared_slot", "forward_slot", "missing_unit", "empty_list",
+                                  "long_list", "too_deep", "no_slots", "extra_key", "bad_slot_name", "v1"])
+def test_invalid_composed_inputs_block_before_execution(edit):
+    config, manifest = stage_manifest()
+    body = composed(manifest)
+    inner = body["slots"]["names"]["compose"]
+    if edit == "unused_slot":
+        body["slots"]["spare"] = {"step": "capture", "key": "one"}
+    elif edit == "undeclared_slot":
+        body["document"]["extra"] = {"slot": "nowhere"}
+    elif edit == "forward_slot":
+        body["slots"]["main"] = {"step": "parse", "key": "parsed"}
+    elif edit == "missing_unit":
+        inner["slots"]["producers"][0]["key"] = "missing"
+    elif edit == "empty_list":
+        inner["slots"]["producers"] = []
+    elif edit == "long_list":
+        inner["slots"]["producers"] *= 257
+    elif edit == "too_deep":
+        inner["slots"]["producers"] = {"compose": {"document": {"x": {"slot": "y"}},
+                                                   "slots": {"y": {"step": "capture", "key": "one"}}}}
+    elif edit == "no_slots":
+        body["slots"] = {}
+        body["document"] = {"version": 1}
+    elif edit == "extra_key":
+        body["guess"] = True
+    elif edit == "bad_slot_name":
+        body["document"]["readings"]["main"] = {"slot": "Main"}
+        body["slots"]["Main"] = body["slots"].pop("main")
+    manifest["steps"]["parse"][0]["input"] = {"compose": body}
+    if edit == "v1":
+        manifest = {"version": 1, "units": [manifest["steps"]["parse"][0]]}
+    with pytest.raises(Blocked):
+        worklist(manifest, config)
+
+
 def test_version_one_worklist_remains_identical_for_frozen_runs():
     config, manifest = stage_manifest()
     unit = manifest["steps"]["capture"][0]

@@ -57,10 +57,11 @@ def cik(key: str) -> int:
 
 def read_unit(store, folder: Path, name: str, contract: dict, artifacts: list) -> tuple[dict, dict]:
     """One `source.read` unit, executed then verified: its task and its reading's reference.
-    Artifacts that all carry a context are sent as a version-2 request, others as version 1."""
-    version = 2 if all("context" in a for a in artifacts) else 1
+    Artifacts that carry lookups go as a version-3 request, those that all carry a context as
+    version 2, others as version 1."""
+    version = 3 if all("lookups" in a for a in artifacts) else 2 if all("context" in a for a in artifacts) else 1
     request = store.put(folder.as_uri(), {"version": version, "contract": store.put(folder.as_uri(), contract),
-                                          "artifacts": artifacts if version == 2 else [a["input"] for a in artifacts]})
+                                          "artifacts": artifacts if version > 1 else [a["input"] for a in artifacts]})
     task = {"input": request, "output": (folder / f"{name}.reading.json").as_uri(), "checks": ["source.output"]}
     candidate = source_read.execute(task, store)
     if source_read.verify({**task, "candidate": candidate}, store) != ({"source.output": True}, []):
