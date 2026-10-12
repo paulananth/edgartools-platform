@@ -244,6 +244,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
         column_findings.append({
             "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
+            "pattern": sensitivity.mask(c["pattern"]) if c["pattern"] else None, "pattern_share": c["pattern_share"],
+            # Measured only for a separated pattern: why it was, or was not, one under one prefix.
+            **{k: c[k] for k in ("prefix_share", "pattern_temporal_share") if k in c},
             "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
             # A personal column's values are never written out, so it has no distribution.
             "distribution": None if tagged["sensitivity"] != "none" else profile.distribution(
@@ -371,6 +374,7 @@ def _identifier(con, p, c, record_key) -> dict | None:
     else:
         proposal, why = "none", "repeats or is a local counter"
     return {"column": c["name"], "shape": sensitivity.mask(c["shape"]) if c["shape"] else None,
+            "shape_test": identifiers.shape_test(c),
             "check_digit": checked["family"], "pass_rate": checked["pass_rate"], "chance_rate": checked["chance_rate"],
             "fill": c["fill"], "unique": c["unique"], "local_counter": dense, "proposal": proposal, "why": why}
 

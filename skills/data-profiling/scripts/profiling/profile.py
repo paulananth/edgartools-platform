@@ -27,6 +27,19 @@ def shape(expression: str) -> str:
             "'[a-z]', 'a', 'g'), '[0-9]', '9', 'g')")
 
 
+def pattern(shape_expression: str) -> str:
+    """SQL for a shape's pattern: each run of one class collapsed (`9-99999` and
+    `9-999` are both `9-9`)."""
+    return f"regexp_replace(regexp_replace(regexp_replace({shape_expression}, '9+', '9', 'g'), 'A+', 'A', 'g'), 'a+', 'a', 'g')"
+
+
+SEPARATORS = "-/_:"  # a pattern holding one may be a number issued under a prefix
+_PREFIX = f"^[^{SEPARATORS}]*"  # the text before the first separator ("-" first in the class, so literal)
+# Formats a separated value may be a date or a time in; such a value is never an identifier.
+DATE_FORMATS = ["%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%m-%d-%Y", "%d-%m-%Y", "%Y-%m-%dT%H:%M",
+                "%Y-%m-%d %H:%M", "%H:%M", "%H:%M:%S", "%m/%d/%y", "%Y%m%d"]
+
+
 def columns(con: duckdb.DuckDBPyConnection, part: str) -> list[dict]:
     """One profile per column of `part`, in table order."""
     described = con.execute(f"DESCRIBE {sql_name(part)}").fetchall()
@@ -51,9 +64,14 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
         "structure": name in STRUCTURE,
     }
     if not non_null:
-        return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0}
-    modal_shape, shape_count = con.execute(
-        f"SELECT {shape(text)}, count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 1").fetchone()
+        return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0,
+                "pattern": None, "pattern_share": 0.0}
+    # The pattern comes from the shapes' counts, not another pass over the rows.
+    modal_shape, shape_count, modal_pattern, pattern_count = con.execute(
+        f"WITH s AS (SELECT {shape(text)} AS s, count(*) AS n FROM {t} WHERE {c} IS NOT NULL GROUP BY 1), "
+        f"p AS (SELECT {pattern('s')} AS p, sum(n) AS n FROM s GROUP BY 1) "
+        "SELECT * FROM (SELECT s, n FROM s ORDER BY n DESC, s LIMIT 1), (SELECT p, n FROM p ORDER BY n DESC, p LIMIT 1)"
+    ).fetchone()
     length_count = con.execute(
         f"SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY length({text}) ORDER BY 1 DESC LIMIT 1").fetchone()[0]
     tokens = con.execute(
@@ -63,9 +81,17 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
     profile.update({
         "shape": modal_shape, "shape_share": round(shape_count / non_null, 6),
         "length_share": round(length_count / non_null, 6),
+        "pattern": modal_pattern, "pattern_share": round(pattern_count / non_null, 6),
         "tokens": round(float(tokens), 3),
         "top": [{"value": v, "rows": n} for v, n in top],
     })
+    if kind == "VARCHAR" and pattern_count >= 0.99 * non_null and any(s in modal_pattern for s in SEPARATORS):
+        # A separated pattern: is the part before the first separator one prefix, and is
+        # the value a date or a time written without padding?
+        prefix_count, dated = con.execute(
+            f"SELECT (SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY regexp_extract({text}, '{_PREFIX}') "
+            f"ORDER BY 1 DESC LIMIT 1), (SELECT count(try_strptime({text}, {DATE_FORMATS})) FROM {t})").fetchone()
+        profile.update({"prefix_share": round(prefix_count / non_null, 6), "pattern_temporal_share": round(dated / non_null, 6)})
     if kind == "VARCHAR" and (modal_shape or "").startswith("9999-99-99"):
         # Dates written in more than one format: count what reads as a timestamp at all.
         converts = con.execute(f"SELECT count(TRY_CAST({c} AS TIMESTAMP)) FROM {t}").fetchone()[0]

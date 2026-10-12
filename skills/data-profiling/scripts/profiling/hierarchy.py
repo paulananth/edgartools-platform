@@ -183,12 +183,12 @@ def _off_parent(marking: "_Marking", child: str, parent: str) -> list[dict]:
     """Rows whose parent code is not the one most rows with the same code have. The fix is that parent
     when more than half the code's rows have it; the counts are the evidence."""
     t, c, p = sql_name(marking.part), sql_name(child), sql_name(parent)
-    keys = ", ".join(f"CAST(t.{sql_name(k)} AS VARCHAR)" for k in marking.record_key)
+    keys = "".join(f"CAST(t.{sql_name(k)} AS VARCHAR), " for k in marking.record_key)  # none for a designed key
     rows = marking.con.execute(f"""
         WITH pairs AS (SELECT CAST({c} AS VARCHAR) code, CAST({p} AS VARCHAR) up, count(*) n FROM {t}
                        WHERE {c} IS NOT NULL AND {p} IS NOT NULL GROUP BY 1, 2),
         usual AS (SELECT code, arg_max(up, n) up, max(n) top, sum(n) total FROM pairs GROUP BY code HAVING count(*) > 1)
-        SELECT {keys}, CAST(t.{c} AS VARCHAR), u.up, u.top, u.total FROM {t} t JOIN usual u ON CAST(t.{c} AS VARCHAR) = u.code
+        SELECT {keys}CAST(t.{c} AS VARCHAR), u.up, u.top, u.total FROM {t} t JOIN usual u ON CAST(t.{c} AS VARCHAR) = u.code
         WHERE t.{p} IS NOT NULL AND CAST(t.{p} AS VARCHAR) <> u.up ORDER BY 1""").fetchall()
     n = len(marking.record_key)
     return [marking.row(r[:n], r[n], child, parent, f"{parent} differs",
@@ -227,6 +227,8 @@ class _Marking:
         # A child part's key starts with its parent's key, which its table holds as the parent's row number.
         present = {r[0] for r in con.execute(f"DESCRIBE {sql_name(part)}").fetchall()}
         own = [k for k in record_key if k in present]
+        # A designed key (a surrogate) is not a column yet: its rows carry no key, only their value and parent
+        # column. A row's place is no name for it: a view has none, and a sample's is not the source's.
         self.record_key = own if len(own) == len(record_key) or PARENT not in present else [PARENT, *own]
 
     def row(self, key: tuple, value, column: str, parent_column: str, reason: str, fix=None, support=None,
