@@ -1179,7 +1179,9 @@ counts or registration. Qualification disables custom steps and includes
 paired faults that prove refusal order. Holder aggregation and
 cascade decisions remain in `edgar_warehouse/mdm/clean/name_census.py`, which
 Name Frequency and matching still import. Whole-source construction (#901) and
-the installed population (#905, #907) are qualified.
+the installed population through the earlier in-process bundles (#905, #907)
+are qualified; the `mastering` target's installed proof is Issue 20 slice 20c
+part 4.
 
 ## Bounded Parquet framing and sparse object entries
 
@@ -1224,8 +1226,9 @@ capture holds today); then `mdm.prepare` makes the bundle's rows one
 publication and `mdm.merge` merges it. The census, combine and records inputs
 are composed by Bookkeeping from the verified readings. `mdm name-census`
 builds the Name Frequency file from configured readings of the same capture
-(#901, #905). The installed proof masters the full population from these
-bundles (#905, #907).
+(#901, #905). The installed proofs #905 and #907 mastered the full population
+from the in-process bundles this target replaced; the target's own installed
+proof is Issue 20 slice 20c part 4.
 
 ## Derived scopes from authenticated source extracts
 

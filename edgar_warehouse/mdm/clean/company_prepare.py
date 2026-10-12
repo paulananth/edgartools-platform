@@ -45,6 +45,8 @@ POPULATION_BYTES = 64 * 1024**2
 KEY_READING_BYTES = 16 * 1024**2  # every census-keys reading of one bundle
 # A census read derives its lookup sets from at most 256 key readings of 2 documents.
 BUNDLE_DOCUMENTS = 512
+# The contracts the target's readings and combination run.
+RULES = ("census-main.yaml", "census-keys.yaml", "catalog.yaml", "census.yaml", "combine-census-captured.yaml")
 # Where `census.yaml` and the combination take the census digest.
 CENSUS_DIGEST = "0" * 64
 
@@ -63,19 +65,20 @@ def _unit(output: str, keys: dict, source: dict) -> dict:
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
 
-def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], catalog: str, census: dict,
+def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], catalog: str, census: bytes,
            census_hash: str, pins: dict, publication: dict) -> dict:
     """Every step's units, inputs frozen: contracts bound, documents by receipt, inputs composed."""
     inputs = root + "/inputs"
     put = lambda value: store.put(inputs, value)  # noqa: E731
-    main_contract = put(rules_files.load(ROOT / "census-main.yaml"))
+    main_rules = rules_files.load(ROOT / "census-main.yaml")
+    main_contract = put(main_rules)
     keys_contract = put(rules_files.load(ROOT / "census-keys.yaml"))
-    per_unit = rules_files.load(ROOT / "census-main.yaml")["execution"]["max_artifacts"]
+    per_unit = main_rules["execution"]["max_artifacts"]
     main, readers = [], []
     for start in range(0, len(keys), per_unit):
         name = f"main-{start}"
         documents = [raw_capture.document(folder, receipts, key) for key in keys[start:start + per_unit]]
-        for key, ref in zip(keys[start:start + per_unit], documents):
+        for key in keys[start:start + per_unit]:
             raw_capture.document_bytes(folder, receipts, key)  # equal to its receipt before it is frozen
         contexts = [put({"version": 1, "input": ref, "values": {
             "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],
@@ -94,9 +97,7 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
             "sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"],
             "source_name": "catalog_exchange"}})}]}))
     # The census is read as its canonical bytes, whose sha256 is the digest bound into the contracts.
-    census_ref = store.put_bytes(f"{inputs}/name-census.json", canonical(census).encode())
-    if census_ref["sha256"] != census_hash:
-        raise Conflict("The Name Census's canonical bytes differ from its digest")
+    census_ref = store.put_bytes(f"{inputs}/name-census.json", census)
     readings = [{"step": "keys", "key": unit["keys"]["unit"]} for unit in readers]
     sets = {name: {"readings": {"slot": "keys"}, "table": "keys", "column": column,
                    "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
@@ -178,18 +179,22 @@ def write_company_manifest(
             or sec.get("population_sha256") != hashlib.sha256(population_raw).hexdigest()
             or not set(keys) <= set(json.loads(population_raw))):
         raise Conflict("The Name Census did not count this capture's documents")
-    census_hash = digest(census)
+    canonical_census = canonical(census).encode()
+    census_hash = hashlib.sha256(canonical_census).hexdigest()  # the census's digest
     documents_hash = hashlib.sha256(documents_raw).hexdigest()
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
                        f":name_census:{census_hash}")
-    bundle = digest([publication_key, revision, as_of])
+    # The consumer and batch ids name everything that shapes the rows: a rerun with another
+    # observation time, load mode or rules version is a new consumer, not a reused batch key.
+    rules = [rules_files.load(ROOT / name) for name in RULES]
+    bundle = digest([publication_key, revision, as_of, observed_at, load_mode, rules])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{SOURCE_CODE}/{bundle}", "batch_id": f"company:{bundle}"}
     pins = {"capture_run": capture_run, "catalog_run": catalog_run, "observed_at": observed_at,
             "load_mode": load_mode}
     store = Artifacts()
     root = Path(output).resolve().as_uri()
-    steps = _units(store, root, folder, receipts, keys, catalog, census, census_hash, pins, publication)
+    steps = _units(store, root, folder, receipts, keys, catalog, canonical_census, census_hash, pins, publication)
     manifest = store.put(root, {"version": 2, "steps": steps})
     scope = {
         "mode": "bounded_sample",

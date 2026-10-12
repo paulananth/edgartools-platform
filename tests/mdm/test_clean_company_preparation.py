@@ -111,3 +111,13 @@ def test_a_bundle_names_main_documents_only_and_at_most_512(tmp_path, capture):
         with pytest.raises(ValueError, match=message):
             write_company_manifest(capture=str(folder), documents=str(listed), population=str(population),
                                    catalog=CATALOG, name_census=str(census), output=str(tmp_path / "x"), **PINS)
+
+
+def test_another_observation_time_or_load_mode_is_another_consumer(tmp_path, capture):
+    """The consumer and batch ids name what shapes the rows, so a changed rerun never reuses a batch key."""
+    first = prepare(tmp_path, capture)[0]["publication"]
+    later = prepare(tmp_path, capture, observed_at="2026-10-01T00:00:00+00:00")[0]["publication"]
+    reloaded = prepare(tmp_path, capture, load_mode="full")[0]["publication"]
+    assert first["publication_key"] == later["publication_key"] == reloaded["publication_key"]
+    assert len({first["consumer"], later["consumer"], reloaded["consumer"]}) == 3
+    assert len({first["batch_id"], later["batch_id"], reloaded["batch_id"]}) == 3

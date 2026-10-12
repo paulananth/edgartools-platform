@@ -151,7 +151,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     for reading in _readings(envelope, artifacts):
         for artifact in reading["artifacts"]:
             source, rows, publication = _artifact_rows(artifact, keys)
-            if published is not None:
+            if published is not None:  # one publication: _published refused per-artifact times
                 pooled.extend(rows)
                 continue
             for n, chunk in enumerate(limits.batches(rows, lambda row: _lines([row]))):
