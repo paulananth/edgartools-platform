@@ -21,6 +21,8 @@ from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, genera
                      validate, worklist)
 
 PROTOCOL = 1
+# Units a claim looks over: one another attempt holds is passed for the next.
+SCAN = 1000
 
 
 @dataclass(frozen=True)
@@ -364,8 +366,10 @@ class Bookkeeping:
                     WHERE run_id=CAST(:r AS uuid) AND step=:s AND state NOT IN ('verified','reported')
                     AND NOT EXISTS(SELECT 1 FROM bookkeeping.lease l WHERE l.run_id=w.run_id
                         AND l.attempt=w.attempt AND l.expires_at>clock_timestamp())
-                    ORDER BY ordinal LIMIT :n"""), {"r": run_id, "s": step["name"], "n": limit - len(found)}).all()
+                    ORDER BY ordinal LIMIT :n"""), {"r": run_id, "s": step["name"], "n": SCAN}).all()
             for key in keys:
+                if len(found) >= limit:
+                    break
                 claim = self.claim(run_id, step["name"], key, sleep=lambda _: None)
                 if claim is None:
                     continue
@@ -407,9 +411,11 @@ class Bookkeeping:
         with self.engine.connect() as conn:
             rows = _rows(conn, """SELECT step,unit_key,attempt,candidate FROM bookkeeping.work_item
                 WHERE run_id=CAST(:r AS uuid) AND step = ANY(:s) AND state='reported'
-                ORDER BY step,ordinal LIMIT :n""", r=run_id, s=steps, n=limit)
+                ORDER BY step,ordinal LIMIT :n""", r=run_id, s=steps, n=SCAN)
         found = []
         for row in rows:
+            if len(found) >= limit:
+                break
             try:
                 proof = self._call("SELECT bookkeeping.verify_claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d)",
                                    r=run_id, s=row["step"], k=row["unit_key"], a=str(row["attempt"]),

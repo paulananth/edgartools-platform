@@ -5,7 +5,7 @@ source: sec.submissions.company
 execution:
   profile: source.read
   workers: 1
-  max_artifacts: 2
+  max_artifacts: 512
 read:
   format: json
   context:

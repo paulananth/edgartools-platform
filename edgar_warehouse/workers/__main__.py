@@ -57,10 +57,22 @@ class Renewal:
         self.thread.join()
 
 
+def one_at_a_time(fetch, limit: int):
+    """Take units one at a time, up to `limit`: a unit is claimed only when its
+    work starts, so no claimed unit waits while its lease runs out. The caller
+    stops at its first failure: the failed unit waits again at once, and asking
+    for the next would claim it again and leave it held."""
+    for _ in range(limit):
+        found = fetch(1)
+        if not found:
+            return
+        yield found[0]
+
+
 def work(name: str, run_id: str, limit: int) -> int:
     module, artifacts, failed = load_profile(name), Artifacts(), 0
     digest = runtime(module)
-    for envelope in control.claim(run_id, name, limit):
+    for envelope in one_at_a_time(lambda n: control.claim(run_id, name, n), limit):
         try:
             with Renewal(envelope) as renewal:
                 candidate = module.execute(envelope, artifacts)
@@ -74,13 +86,14 @@ def work(name: str, run_id: str, limit: int) -> int:
                 control.fail(envelope, type(exc).__name__)
             except control.ControlError:
                 pass  # a stale attempt cannot change the current one
+            break  # see one_at_a_time
     return 1 if failed else 0
 
 
 def verify(name: str, run_id: str, reports: str, limit: int) -> int:
     module, artifacts, failed = load_profile(name), Artifacts(), 0
     digest = runtime(module)
-    for verification in control.verifications(run_id, name, limit):
+    for verification in one_at_a_time(lambda n: control.verifications(run_id, name, n), limit):
         claim = verification["claim"]
         try:
             with Renewal(verification) as renewal:
@@ -98,6 +111,7 @@ def verify(name: str, run_id: str, reports: str, limit: int) -> int:
                 control.fail(verification, type(exc).__name__)
             except control.ControlError:
                 pass
+            break  # see one_at_a_time
     return 1 if failed else 0
 
 

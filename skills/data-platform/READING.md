@@ -1219,7 +1219,7 @@ documents through `census-main.yaml` (each row's bronze origin from the
 caller's `bronze_object` context) and their name and CIK keys through
 `census-keys.yaml`; the authenticated frozen Name Frequency file through
 `census.yaml`, narrowed by two lookup sets derived from the key readings (a
-version-3 request; at most 256 readings, so 512 documents a bundle); the
+version-3 request; one key reading of at most 512 documents a bundle); the
 exchange catalog through `catalog.yaml`; joined by
 `combine-census-captured.yaml` (`combine-census.yaml` with the sources a
 capture holds today); then `mdm.prepare` makes the bundle's rows one

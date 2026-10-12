@@ -1,11 +1,12 @@
 # The census keys of one bundle's main documents: the name key (the bundled
-# name-key.yaml recipe) and the CIK without leading zeros. Two rows a reading;
-# census.yaml derives its lookup sets from these readings (Issue 20 slice 20c).
+# name-key.yaml recipe) and the CIK without leading zeros, one row a document;
+# one reading names a bundle (at most 512); census.yaml derives its lookup sets
+# from it (Issue 20 slice 20c).
 source: sec.submissions.company
 execution:
   profile: source.read
   workers: 1
-  max_artifacts: 2
+  max_artifacts: 512
 read:
   format: json
   assertions:

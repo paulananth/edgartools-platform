@@ -369,7 +369,8 @@ starting from its "Defaults".
 - Write `source`, `bronze`, `execution`, `read` and `mdm` for a configured
   captured-file path. The source worker requires
   `execution: {profile: source.read, workers: 1, max_artifacts: 1}`; workers
-  and max_artifacts may each be 1 or 2. Declare `read.limits.max_bytes` at
+  may be 1 or 2 and max_artifacts 1 to 512 (one reading reads many documents:
+  a unit per document wastes a worker start on each). Declare `read.limits.max_bytes` at
   most 33554432 and `read.limits.max_records` from 1 to 100000. Choose bounds
   from measured inputs and split oversized captures into explicit units;
   see [READING.md](../data-platform/READING.md) for output and preparation limits. The `acquisition` section (how

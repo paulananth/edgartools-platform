@@ -173,12 +173,12 @@ sec.submissions.company --target mastering --input-manifest <uri>
 manifest names each main submissions document in `--documents` (at most 512
 receipt keys, all in the population the Name Census counted) by its receipt
 in `receipts.jsonl`, in place, and SEC's exchange ticker catalog
-(`--catalog`, a receipt key). The target's workers read each document in
-units of one or two (`census-main.yaml`) and again for its name key and CIK
-only (`census-keys.yaml`), read the census once narrowed to the bundle's
-names and CIKs (`census.yaml`, bound to the census's digest; its two lookup
-sets are derived from the key readings, at most 256 of them, hence 512
-documents), read the catalog once (`catalog.yaml`), combine them per unit
+(`--catalog`, a receipt key). The target's workers read the documents in
+units of at most 8 MiB (`census-main.yaml`) and once more for their name keys
+and CIKs only (`census-keys.yaml`, one reading of the bundle), read the census
+once narrowed to the bundle's names and CIKs (`census.yaml`, bound to the
+census's digest; its two lookup sets are derived from the key reading, so a
+bundle names at most 512 documents), read the catalog once (`catalog.yaml`), combine them per unit
 (`combine-census-captured.yaml`): forms from the document's recent filings,
 tickers from the catalog in rank order, the business address and the census
 entry; prepare the bundle's rows as one publication (`mdm.prepare`) and merge

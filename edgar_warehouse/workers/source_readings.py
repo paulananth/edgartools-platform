@@ -15,6 +15,7 @@ from edgar_warehouse.control_contract import reference
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
 PART_BYTES = 8 * 1024**2
 INDEX_BYTES = 32 * 1024**2
+MAX_ARTIFACTS = 512  # documents one reading may hold (`source.read`); byte and row budgets bound the rest
 
 
 def _integer(value, minimum, maximum):
@@ -46,8 +47,8 @@ def _index(ref, artifacts, max_bytes, allow_lookup_receipts):
     if body["version"] == 1:
         return body, size
     if (set(body) != {"version", "contract", "artifacts"}
-            or not isinstance(body["artifacts"], list) or not 1 <= len(body["artifacts"]) <= 2):
-        raise ValueError("Partitioned reading requires contract and one or two artifacts")
+            or not isinstance(body["artifacts"], list) or not 1 <= len(body["artifacts"]) <= MAX_ARTIFACTS):
+        raise ValueError(f"Partitioned reading requires contract and 1..{MAX_ARTIFACTS} artifacts")
     reference(body["contract"])
     return body, size
 
@@ -149,9 +150,9 @@ def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=Fals
                 body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
             yield _event(body, private_ref, index, chunk, size, part)
         return
-    # Inline readings retain their small authenticated document boundary.
-    if not isinstance(body.get("artifacts"), list) or not 1 <= len(body["artifacts"]) <= 2:
-        raise ValueError("Incremental inline reading requires one or two original artifacts")
+    # Inline readings retain their authenticated document boundary (at most MAX_ARTIFACTS documents).
+    if not isinstance(body.get("artifacts"), list) or not 1 <= len(body["artifacts"]) <= MAX_ARTIFACTS:
+        raise ValueError(f"Incremental inline reading requires 1..{MAX_ARTIFACTS} original artifacts")
     rows = 0
     for index, artifact in enumerate(body["artifacts"]):
         if (not isinstance(artifact, dict) or not isinstance(artifact.get("tables"), dict)

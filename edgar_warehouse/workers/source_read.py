@@ -44,9 +44,9 @@ def _documents(envelope: dict, artifacts):
     if (not isinstance(execution, dict) or not required <= set(execution)
             or set(execution) - required - {"input_sha256s", "max_input_bytes"}
             or execution["profile"] != "source.read"
-            or any(type(execution[key]) is not int or not 1 <= execution[key] <= 2
-                   for key in ("workers", "max_artifacts"))):
-        raise ValueError("Source execution requires source.read with 1..2 workers and artifacts")
+            or type(execution["workers"]) is not int or not 1 <= execution["workers"] <= 2
+            or type(execution["max_artifacts"]) is not int or not 1 <= execution["max_artifacts"] <= source_readings.MAX_ARTIFACTS):
+        raise ValueError(f"Source execution requires source.read with 1..2 workers and 1..{source_readings.MAX_ARTIFACTS} artifacts")
     if "max_input_bytes" in execution and (type(execution['max_input_bytes']) is not int
             or not 1 <= execution['max_input_bytes'] <= 256*1024**2):
         raise ValueError('Source max_input_bytes is 1..256 MiB')

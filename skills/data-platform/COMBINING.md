@@ -25,7 +25,7 @@ decoded rows, the runtime supplies `source_readings.iter_load(receipt,
 artifacts, max_bytes=..., max_rows=...)`. It yields a header, original artifact
 index, one artifact chunk and cumulative bytes. The header names `version`,
 the original `reading` receipt and, when present, its `contract` receipt.
-An inline source extract yields one chunk per original artifact (one or two). A partitioned
+An inline source extract yields one chunk per original artifact (1 to 512). A partitioned
 source extract retains its input/context/lookup receipts and current `partition`
 range/receipt on each chunk; its tables contain only that partition's rows.
 The header's source-extract receipt binds the complete index, including all partition

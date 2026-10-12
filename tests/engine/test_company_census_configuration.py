@@ -140,7 +140,11 @@ def test_census_main_inherits_company_reading_and_canonical_name_recipe():
     recipe = census['read']['tables']['company']['columns'].pop('_name_key')
     census['read']['tables']['company']['columns'].pop('_origin')  # each row's bronze origin (20c)
     census['read']['context'].pop('bronze_object')
-    assert census == {key: source[key] for key in ('source', 'execution', 'read')}
+    # A main unit reads a bundle's documents up to a byte budget, not two at a time (20c part 4).
+    assert census['execution'].pop('max_artifacts') == 512
+    expected = deepcopy({key: source[key] for key in ('source', 'execution', 'read')})
+    expected['execution'].pop('max_artifacts')
+    assert census == expected
     assert recipe == files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
 
 
