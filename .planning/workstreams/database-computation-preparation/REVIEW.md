@@ -1,7 +1,8 @@
 # Independent review
 
 Baseline: starting main `7f1e8856`; reviewed implementation `af100aa7` rebased
-onto `9bed91fd`, plus final byte-return refinement. Standards, Spec and GoF
+onto `9bed91fd`, plus final byte-return refinement. Final rebase onto
+`7dd6f5ab` preserves both implementation commits unchanged by range-diff. Standards, Spec and GoF
 ran as independent read-only agents; no reviewer changed implementation files.
 
 ## Standards
@@ -46,4 +47,14 @@ status, and accurate completed/no-work retry terminology. All are corrected;
 lost-ack recovery is separately fault-injected in the public worker test.
 Portable instructions stay self-contained. Reading/combining grammar and
 onboarding/approval/activation instructions remain unchanged. Final CI/merge
-and final-head installed proof are recorded separately in TICKET/RESULTS.
+is pending; final committed-runtime installed proof passes as recorded in
+TICKET/RESULTS.
+
+## Pre-landing checklist
+
+Root rechecked the SQL/data, concurrency, injection, type-boundary and distribution
+items against the final rebased diff. Parameterized caller queries, role-quoted
+grants, atomic shared-row claims, independent committed hashes and unchanged
+legacy APIs remain intact. No issues found. Redaction matches in the diff are
+measurement decimals, PostgreSQL numeric bounds and Git object hashes; no
+credentials or personal records are added. The PR body scans clean.

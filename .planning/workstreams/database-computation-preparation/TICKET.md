@@ -23,8 +23,8 @@ Configured core computation belongs in Rust, callers/custom code in Python.
 - [x] Resolve measured client-memory acceptance failure: 600-record export initially samples 1.526x SQL RSS; use UTF-8 bytes at the native hashing boundary and requalify against unchanged 1.5x limit. Verified: Final 600-record export client RSS 1.313x and journal 1.276x; both pass unchanged 1.5x limit; 2026-10-12 08:01 ET.
 - [x] Prove public publication worker recovery after an injected lost acknowledgement following committed verification, with no resend and unchanged receipt; distinguish this from benchmark completed/no-work retry. Verified: 20 final PG16 cases include injected post-commit lost reply; retry/verify return unchanged receipt and sink sends once; 2026-10-12 08:01 ET.
 
-- [ ] Synchronize with latest Claude profiling PR #924 and verify its changed tests.
-- [ ] Install final committed byte-return runtime without checkout; verify publication helper, doctor and configured publication/recovery.
+- [x] Synchronize with latest Claude profiling PR #924 and verify its changed tests. Conflict-free rebase onto 7dd6f5ab preserves both implementation commits by range-diff; all 58 affected profiling tests pass; 2026-10-12 08:07 ET.
+- [x] Install final committed byte-return runtime without checkout; verify publication helper, doctor and configured publication/recovery. All 3 installed checks at a9cb9938 pass; combined installed/upstream run: 61 passed in 6m07s; 2026-10-12 08:07 ET.
 
 ## Acceptance
 

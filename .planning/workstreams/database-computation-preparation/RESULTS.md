@@ -2,7 +2,8 @@
 
 Status: locally qualified, independent review completed; PR/CI/merge tracked
 in TICKET.md. Starting main `7f1e8856`; rebased without conflicts onto
-`9bed91fd`, with identical implementation range-diff. No production deployment
+`9bed91fd` and then `7dd6f5ab` (Claude profiling PRs #923/#924), with
+identical implementation range-diffs. No production deployment
 or activation is claimed.
 
 ## Implemented boundary
@@ -49,7 +50,11 @@ size. Neither this nor a byte limit establishes an RSS cap.
 - Installed bundle at initial rebased `af100aa7`: 3 checks passed in 4m32s,
   covering installation without checkout, doctor, and real configured GLEIF
   publication/recovery. This precedes the byte-return refinement; final-head
-  installed qualification is required separately before delivery.
+  installed qualification is recorded separately below.
+- Final code commit `a9cb9938` installed without checkout: all 3 publication
+  preparation, doctor and configured GLEIF publication/recovery checks pass.
+  Combined with all 58 upstream profiling checks, 61 passed in 6m07s. Later
+  documentation-only evidence commits do not change this runtime.
 - Doctor resolves 132 commands with engine loaded; store URLs unset during
   this command check. Skill validator passes; migration command help confirms
   `--application-role`. Operational instructions now include existing-store
