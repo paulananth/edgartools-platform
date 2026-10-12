@@ -51,11 +51,6 @@ def _bind(value, bindings):
     return value
 
 
-def _record(row, key, sha256):
-    # Where the record was delivered, beside what it says (ticket 10).
-    return {**row, "_origin": {"bronze": {"object": key, "sha256": sha256, "locator": "$"}}}
-
-
 def _payload(records):
     return "".join(json.dumps(row, default=_json_value, sort_keys=True, separators=(",", ":"),
                               ensure_ascii=False, allow_nan=False) + "\n" for row in records).encode()
@@ -103,7 +98,7 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
             inputs = [(raw_capture.document_bytes(capture, receipts, key), {
                 "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"],
                 "raw_object_id": receipts[key], "load_mode": pins["load_mode"], "recent_limit": None,
-                "last_synced_at": pins["observed_at"]}) for key in unit]
+                "last_synced_at": pins["observed_at"], "bronze_object": key}) for key in unit]
             units.append((unit, read(f"main-{start}", deepcopy(main_contract), inputs)))
             key_readings.append(read(f"keys-{start}", deepcopy(keys_contract),
                                      [(data, None) for data, _ in inputs]))
@@ -117,13 +112,9 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
         catalog = read("catalog_exchange", rules_files.load(ROOT / "catalog.yaml"), [(
             raw_capture.document_bytes(capture, receipts, catalog_key),
             {"sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"], "source_name": "catalog_exchange"})])
-        combine = _bind(rules_files.load(ROOT / "combine-census.yaml"), {
+        combine = _bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
             "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
             CENSUS_DIGEST: census_hash})
-        # This capture holds main documents and one ticker catalog only (L4 finding:
-        # continuation pages and the second catalog are not captured).
-        combine["combine"]["groups"]["forms"]["source"] = ["main"]
-        combine["combine"]["groups"]["tickers"]["source"] = ["catalog_exchange"]
         rule = store.put(root.as_uri(), combine)
         records = []
         for n, (unit, main) in enumerate(units):
@@ -142,7 +133,7 @@ def _configured_records(capture, receipts, keys, catalog_key, census, census_has
             tasks.append({"profile": "source.combine", "task": {**task, "candidate": result}})
             combined = store.json(result)["artifacts"][0]["tables"]["company"]
             by_cik = {int(row["cik"]): row for row in combined}
-            records.extend(_record(by_cik[raw_capture.cik(key)], key, receipts[key]) for key in unit)
+            records.extend(by_cik[raw_capture.cik(key)] for key in unit)  # each row names its bronze origin
         proof = {"version": 1, "workers": tasks, "frozen_census_digest": census_hash}
         store.put_bytes((root / "proof.json").as_uri(), (canonical(proof) + "\n").encode())
         retained = {"workers/" + str(path.relative_to(staging)): path.read_bytes()
@@ -185,7 +176,7 @@ def verify_company_bundle(output, *, expected):
             for row in store.json(entry["task"]["candidate"])["artifacts"][0]["tables"]["company"]:
                 by_cik[int(row["cik"])] = row
     keys = json.loads((target / "documents.json").read_bytes())
-    records = [_record(by_cik[raw_capture.cik(key)], key, by_cik[raw_capture.cik(key)]["raw_object_id"]) for key in keys]
+    records = [by_cik[raw_capture.cik(key)] for key in keys]
     batches = json.loads((target / "manifest.json").read_bytes())["batches"]
     if [(target / b["input"]["path"]).read_bytes() for b in batches] != _batch_payloads(records):
         raise Conflict("Prepared records differ from the verified workers")

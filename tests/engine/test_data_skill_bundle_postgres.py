@@ -1087,7 +1087,7 @@ def read(name, template, payload, context):
 main = read("main","census-main.yaml" if with_census else "source.yaml",{"name":"Example","filings":{"recent":{
     "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
     "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
-    {**context,"recent_limit":None,"last_synced_at":date})
+    {**context,"recent_limit":None,"last_synced_at":date,**({"bronze_object":"bronze/main.json"} if with_census else {})})
 pages = read("pages","pagination.yaml",{"accessionNumber":["p1","p2"],"form":["20-F","10-K"]},context)
 catalog_context = {"sync_run_id":"catalog","last_synced_at":date,"source_name":"exchange"}
 exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"data":[[1,"B"],[1,"A"]]},catalog_context)
