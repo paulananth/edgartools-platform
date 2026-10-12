@@ -57,6 +57,7 @@ MIGRATIONS: tuple[str, ...] = (
     "013_proposal_effects_hash.sql",
     "014_outbox_names_batch.sql",
     "015_company_fields_once.sql",
+    "016_publication_inputs.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -67,6 +68,7 @@ RUNTIME_FUNCTIONS = (
     "save_batch(text,uuid)",
     "preview_batch(text,uuid)",
     "claim_outbox(text,text,integer)",
+    "claim_outbox_input(text,text,integer,text)",
     "finish_outbox(text,text,bigint,text,text)",
     "record_attempt(uuid,uuid,text,text,jsonb)",
     "start_run(uuid,jsonb)",
@@ -491,21 +493,19 @@ class Store:
     ) -> bool:
         with self.engine.begin() as conn:
             self._authorize(conn)
-            claim_function = (
-                "SELECT mdm.claim_outbox(:c,:w,:seconds)"
-                if batch_id is None else
-                "SELECT bookkeeping_guard.claim_publication(:c,:w,:seconds,:batch)"
-            )
             claim = conn.scalar(
-                text(claim_function),
+                text("SELECT mdm.claim_outbox_input(:c,:w,:seconds,:batch)"),
                 {"c": consumer, "w": worker, "seconds": lease_seconds, "batch": batch_id},
             )
         if claim is None:
             return False
         key = f"{consumer}/{claim['batch_id']}"
         try:
-            publisher.publish(key, claim["payload"], claim["payload_hash"])
-            receipt = publisher.verify(key, claim["payload"], claim["payload_hash"])
+            from .payloads import prepare
+
+            payload = prepare(claim)
+            publisher.publish(key, payload, claim["payload_hash"])
+            receipt = publisher.verify(key, payload, claim["payload_hash"])
         except Exception as exc:
             with self.engine.begin() as conn:
                 self._authorize(conn)

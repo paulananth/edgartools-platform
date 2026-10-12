@@ -253,7 +253,20 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(replay_identity, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
+    m.add_function(wrap_pyfunction!(postgres_jsonb_text, m)?)?;
+    m.add_function(wrap_pyfunction!(postgres_jsonb_object, m)?)?;
     Ok(())
+}
+
+#[pyfunction]
+fn postgres_jsonb_text(py: Python<'_>, raw: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::postgres_jsonb::text(raw)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (fields, *, canonical_inputs=false))]
+fn postgres_jsonb_object(py: Python<'_>, fields: std::collections::HashMap<String, String>, canonical_inputs: bool) -> PyResult<String> {
+    py.allow_threads(|| crate::postgres_jsonb::object(fields, canonical_inputs)).map_err(PyValueError::new_err)
 }
 
 // Only selected text columns cross this boundary. Input history is never

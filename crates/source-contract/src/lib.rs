@@ -34,6 +34,7 @@ mod text_transform;
 pub mod reduction;
 pub mod survivorship;
 pub mod identity;
+pub mod postgres_jsonb;
 #[cfg(feature = "python")]
 mod python;
 #[cfg(feature = "python")]

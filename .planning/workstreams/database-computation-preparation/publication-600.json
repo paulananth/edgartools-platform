@@ -1,0 +1,110 @@
+{
+  "baseline": "7f1e8856952d574da6a9b13aa6a40bee83139989",
+  "limit": 600,
+  "repeats": 3,
+  "request_bytes": 2810802,
+  "preparation": {
+    "export": {
+      "payload_bytes": 3024328,
+      "expected_hash": "b9d2ba470f2d80a17a4a6001969bd743ca1f9f71381abf904cddc76b36197b5d",
+      "native_prepare_seconds": [
+        0.02010081708431244,
+        0.020274613983929157,
+        0.019563313107937574
+      ],
+      "median_native_prepare_seconds": 0.02010081708431244,
+      "claim_wire_old_bytes": 3024540,
+      "claim_wire_native_bytes": 3178209,
+      "median_sql_full_seconds": 0.6584449331276119,
+      "median_native_full_seconds": 0.6619126331061125
+    },
+    "journal": {
+      "payload_bytes": 6048761,
+      "expected_hash": "b78bc9e8e6e38c446ce2f8cae55e93bb9ddfde8cfd6835330730a0ead6ad6d3e",
+      "native_prepare_seconds": [
+        0.031094418838620186,
+        0.03376911859959364,
+        0.027166491840034723
+      ],
+      "median_native_prepare_seconds": 0.031094418838620186,
+      "claim_wire_old_bytes": 6048974,
+      "claim_wire_native_bytes": 6356254,
+      "median_sql_full_seconds": 1.5569732440635562,
+      "median_native_full_seconds": 1.3349334867671132
+    }
+  },
+  "full": {
+    "export": {
+      "sql": [
+        {
+          "seconds": 0.6486229943111539,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 0.7047285200096667,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 0.6584449331276119,
+          "sql_calls": 4
+        }
+      ],
+      "native": [
+        {
+          "seconds": 0.6619126331061125,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 0.5770751386880875,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 0.6697236690670252,
+          "sql_calls": 4
+        }
+      ]
+    },
+    "journal": {
+      "sql": [
+        {
+          "seconds": 1.681945308111608,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 1.549562418833375,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 1.5569732440635562,
+          "sql_calls": 4
+        }
+      ],
+      "native": [
+        {
+          "seconds": 1.3349334867671132,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 1.3618493266403675,
+          "sql_calls": 4
+        },
+        {
+          "seconds": 1.2828253339976072,
+          "sql_calls": 4
+        }
+      ]
+    }
+  },
+  "elapsed_seconds": 20.17627678439021,
+  "combined_peak_rss_bytes": 307511296,
+  "runtime_hashes": {
+    ".planning/workstreams/database-computation-preparation/qualify.py": "1c59e4dfdd2db6d07bfa0406533c1e9600719f5e40ddc2f18d047344a3130405",
+    "crates/source-contract/src/postgres_jsonb.rs": "11b9de71e25404520fe4d3643e092e29b381c3bf78cc836b162e20345f4bd0e9",
+    "edgar_warehouse/mdm/migrations/016_publication_inputs.sql": "6183725a9cc195e1d0511502fe8c5ea514f0a7249b3aa7f6afecace40b804b72",
+    "edgar_warehouse/mdm/clean/payloads.py": "83963cc1d2f3c9e5474035d1ef8b3ebac9668cd2006d6b88f367f66a38b4698b",
+    "edgar_warehouse/rules/source_engine.py": "48c44ca4cff3b2034ec61d7ae4d57251d7ec7d98bba6267ca2839c796a6e9750",
+    "edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    ".venv/lib/python3.12/site-packages/source_contract/source_contract.abi3.so": "7c399e02aab8c0c2615bdf3e2fea053a915e06364066ee86fecbb5bd27ec28cd"
+  },
+  "limits": "Synthetic bounded local serial proof; combined-process RSS, not per-engine memory or production performance."
+}

@@ -32,6 +32,27 @@ def runtime_files() -> list[Path]:
     return [Path(__file__), Path(steps.__file__), Path(source_contract.source_contract.__file__)]
 
 
+def postgres_jsonb_text(raw: str) -> str:
+    """PostgreSQL 16 JSONB text/hash bytes from raw JSON, bounded to 64 MiB.
+
+    Retains arbitrary numeric precision/scale. This protocol is separate from
+    compact Python JSON. Preparation never replaces destination validation.
+    """
+    return source_contract.postgres_jsonb_text(raw)
+
+
+def postgres_jsonb_object(fields: Mapping[str, str], *, canonical_inputs: bool = False) -> str:
+    """Shape a JSONB object without numeric conversion.
+
+    canonical_inputs=True reuses authenticated PostgreSQL JSONB text verbatim;
+    the caller must compare the result to its committed hash before use. It
+    checks each part's JSON syntax, not the canonicality of that trusted text.
+    Its output budget derives from those stored parts, preserving the original
+    publication bounds. The general normalization mode is bounded to 64 MiB.
+    """
+    return source_contract.postgres_jsonb_object(dict(fields), canonical_inputs=canonical_inputs)
+
+
 class SourceRejected(Exception):
     """The artifact, or the contract, failed. `code` is stable; `detail` is for people."""
 
