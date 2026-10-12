@@ -7,7 +7,6 @@ to-do 20a, after Codex's design of 2026-10-02).
 """
 from __future__ import annotations
 
-import hashlib
 import random
 import time
 from dataclasses import dataclass
@@ -195,14 +194,6 @@ class Bookkeeping:
                            r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof), d=config["lease_seconds"])
         return Claim(claim.run_id, claim.step, claim.key, claim.attempt, proof)
 
-    def item(self, claim: Claim) -> dict:
-        with self.engine.connect() as conn:
-            found = _rows(conn, "SELECT * FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k",
-                          r=claim.run_id, s=claim.step, k=claim.key)
-        if not found:
-            raise Blocked("Unknown unit")
-        return self._resolve_item(found[0], store=True)
-
     def _resolve_item(self, item: dict, *, context: dict | None = None, store: bool = False) -> dict:
         """Materialize an input from immutable, reverified prerequisite evidence.
 
@@ -218,7 +209,7 @@ class Bookkeeping:
             resolved = self._receipt(item, source["from"], context)
         elif isinstance(source, dict) and set(source) == {"compose"}:
             context = context or self._context(item)
-            resolved = self._compose(item, source["compose"], context, store)
+            resolved = self._compose(item, source["compose"], context, store, {})
         else:
             reference(source)  # a frozen reference; anything else is not an input
             return item
@@ -243,16 +234,23 @@ class Bookkeeping:
         self.artifacts.verified(resolved)
         return resolved
 
-    def _compose(self, item: dict, body: dict, context: dict, store: bool) -> dict:
-        """Fill a composed document's slots with verified receipts; the same receipts give the same bytes."""
+    def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict) -> dict:
+        """Fill a composed document's slots with verified receipts; the same receipts give the same bytes.
+        `seen` holds each unit's receipt once per fill: a unit named in several slots is verified once."""
+        def receipt(dependency):
+            unit = (dependency["step"], dependency["key"])
+            if unit not in seen:
+                seen[unit] = self._receipt(item, dependency, context)
+            return seen[unit]
+
         filled = {}
         for name, value in body["slots"].items():
             if isinstance(value, list):
-                filled[name] = [self._receipt(item, dependency, context) for dependency in value]
+                filled[name] = [receipt(dependency) for dependency in value]
             elif set(value) == {"compose"}:
-                filled[name] = self._compose(item, value["compose"], context, store)
+                filled[name] = self._compose(item, value["compose"], context, store, seen)
             else:
-                filled[name] = self._receipt(item, value, context)
+                filled[name] = receipt(value)
 
         def fill(node):
             if isinstance(node, dict):
@@ -262,11 +260,7 @@ class Bookkeeping:
         document = fill(body["document"])
         # Beside the unit's output, named by content: a resume writes the same object.
         root = item["unit"]["output"].rsplit("/", 1)[0] + "/inputs"
-        if store:
-            return self.artifacts.put(root, document)
-        data = canonical(document).encode()
-        return reference({"uri": f"{root}/{hashlib.sha256(data).hexdigest()}.json",
-                          "sha256": hashlib.sha256(data).hexdigest()})
+        return self.artifacts.put(root, document) if store else reference(self.artifacts.address(root, document))
 
     def _row(self, run_id: str, step: str, key: str) -> dict:
         with self.engine.connect() as conn:

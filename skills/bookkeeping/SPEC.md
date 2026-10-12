@@ -162,6 +162,29 @@ name a unit in one of its declared prerequisites:
 }
 ```
 
+A unit that needs many prerequisite outputs (a fan-in) composes its input:
+a frozen document in which every value that is exactly `{"slot": "<name>"}`
+is filled with that slot's verified output. A slot names one unit, an ordered
+list of 1 to 256 units, or a nested composed document (one level), whose
+filled document's reference fills it:
+
+```json
+{"compose": {
+  "document": {"version": 1, "contract": {"uri": "...", "sha256": "..."},
+               "readings": {"main": {"slot": "main"}, "census": {"slot": "census"}}},
+  "slots": {"main": {"step": "read_main", "key": "unit-0"},
+            "census": {"step": "read_census", "key": "bundle"}}
+}}
+```
+
+Every slot is used and every used slot is declared; each unit is an existing
+unit of a declared prerequisite (1..16 slots, 1 MiB). Control fills it from
+reverified receipts and stores the filled document, named by its sha256,
+under `inputs/` beside the unit's output, only when it hands the work to a
+worker; a check recomputes the same reference without writing. Workers
+receive an ordinary input reference. An input that is none of a reference,
+`from` or `compose` blocks.
+
 This example requires corresponding configured `archive` and `merge` steps;
 `merge.requires` must include `archive`. Input selectors use the rendered
 work-unit key, not a position or latest-output query. Missing or unknown

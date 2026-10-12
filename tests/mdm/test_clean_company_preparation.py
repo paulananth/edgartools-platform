@@ -153,7 +153,9 @@ def test_a_changed_member_fails_verification(tmp_path, capture, member):
 def test_a_bundle_names_main_documents_only_and_at_most_512(tmp_path, capture):
     folder, population, census = capture
     listed = tmp_path / "documents.json"
-    for keys, message in [([CATALOG], "main submissions documents only"), ([], "1..512 distinct")]:
+    too_many = [f"bronze/main/{n}.json" for n in range(513)]
+    for keys, message in [([CATALOG], "main submissions documents only"), ([], "1..512 distinct"),
+                          (too_many, "1..512 distinct")]:
         listed.write_text(json.dumps(keys))
         with pytest.raises(ValueError, match=message):
             prepare_company_bundle(capture=str(folder), documents=str(listed), population=str(population),

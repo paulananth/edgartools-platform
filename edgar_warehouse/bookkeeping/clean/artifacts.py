@@ -130,11 +130,14 @@ class Artifacts:
         except (ValueError, UnicodeError) as exc:
             raise Blocked("Corrupt control document") from exc
 
+    @staticmethod
+    def address(root: str, value: dict) -> dict:
+        """Where `put` stores a document: named by its canonical bytes' sha256 under `root`."""
+        sha = hashlib.sha256(canonical(value).encode()).hexdigest()
+        return {"uri": f"{root.rstrip('/')}/{sha}.json", "sha256": sha}
+
     def put(self, root: str, value: dict) -> dict:
-        data = canonical(value).encode()
-        sha = hashlib.sha256(data).hexdigest()
-        uri = f"{root.rstrip('/')}/{sha}.json"
-        return self.put_bytes(uri, data)
+        return self.put_bytes(self.address(root, value)["uri"], canonical(value).encode())
 
     def put_bytes(self, uri: str, data: bytes) -> dict:
         """Immutable output: a conflicting existing object is never overwritten."""
