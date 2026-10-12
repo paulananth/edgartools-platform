@@ -1,7 +1,7 @@
 # Publication preparation qualification
 
-Status: locally qualified, independent review completed; PR/CI/merge tracked
-in TICKET.md. Starting main `7f1e8856`; rebased without conflicts onto
+Status: delivered by PR #925, merged as `7217f9c7` after all six CI checks
+passed on reviewed head `d1cb80e2`. Independent review and qualification complete. Starting main `7f1e8856`; rebased without conflicts onto
 `9bed91fd` and then `7dd6f5ab` (Claude profiling PRs #923/#924), with
 identical implementation range-diffs. No production deployment
 or activation is claimed.
@@ -128,4 +128,13 @@ PG16 checks pass. Qualification was rerun for the changed migration checksum;
 all four comparisons and runtime hashes were independently rechecked by
 Standards/Spec. The table above is this refreshed evidence, not the earlier
 18–20% export timing sample. Timing variation reinforces the local/shared-host
-limitation. Final PR CI is required before merge.
+limitation. Final PR CI run `38248186788` passes all six checks; merge verified below.
+
+## Verified delivery
+
+PR #925 merged reviewed head `d1cb80e2` as `7217f9c7` on 2026-10-12
+08:24 ET. CI run `38248186788` passed all six jobs: 697 unit, 258 architecture,
+648 MDM, 352 PostgreSQL integration (one maintained expected failure), 941 engine
+tests including the installed bundle, and 168 Rust tests. Shell lint and the
+aggregate CI gate pass. The fetched main commit matches GitHub merge evidence.
+No deployment, activation or live-store migration was performed.
