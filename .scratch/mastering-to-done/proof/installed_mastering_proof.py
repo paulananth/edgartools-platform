@@ -235,8 +235,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     # Second pass: every bundle's verified records merged again under new batch ids and consumers.
     for name in names:
         source, target = tmp_path / "sec-first" / name / "records", tmp_path / "sec-second" / name
-        shutil.copytree(source, target)
-        manifest = json.loads((target / "manifest.json").read_text())
+        shutil.copytree(source, target, ignore=shutil.ignore_patterns("manifest.json"))  # written below
+        manifest = json.loads((source / "manifest.json").read_text())
         for batch in manifest["batches"]:
             batch["batch_id"], batch["consumer"] = f"{batch['batch_id']}:sec-second", f"{batch['consumer']}:sec-second"
         ref = store.put_bytes((target / "manifest.json").as_uri(), json.dumps(manifest).encode())
