@@ -22,7 +22,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     migrate.add_argument("--application-role", default="application")
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
 
-    prepare = mdm_sub.add_parser("prepare-clean-company", help="Pin a bounded local Company sample from a raw SEC capture without writing master state")
+    prepare = mdm_sub.add_parser("prepare-clean-company", help="Write the Company mastering target's input manifest for a bounded local sample from a raw SEC capture")
     prepare.add_argument("--capture", required=True, help="An SEC submissions capture folder: receipts.jsonl and bronze/")
     prepare.add_argument("--documents", required=True, help="JSON file: this bundle's main submissions documents by receipt key (at most 512)")
     prepare.add_argument("--population", required=True, help="The population file the Name Census counted")

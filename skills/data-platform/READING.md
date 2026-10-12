@@ -1210,17 +1210,22 @@ An empty key list still validates document shape and assertions.
 
 ## Examples: configured preparation caller
 
-`mdm prepare-clean-company` reads the receipt-bound raw capture through the
-registered workers (#905): main documents through `census-main.yaml`, and their
-name and CIK keys through `census-keys.yaml`; the authenticated frozen Name
-Frequency file through `census.yaml`, narrowed by two lookup sets derived from
-the key readings (a version-3 request; at most 256 readings, so 512 documents a
-bundle); the exchange
-catalog through `catalog.yaml`, joined by `combine-census.yaml`. It runs and
-verifies each worker before publishing the bundle, and retains every worker's
-inputs, contracts, outputs and proof in it. `mdm name-census` builds the Name
-Frequency file from configured readings of the same capture (#901, #905). The
-installed proof masters the full population from these bundles (#905, #907).
+`mdm prepare-clean-company` writes the input manifest of the Company source's
+`mastering` target (Issue 20 slice 20c), and `rules run --target mastering`
+runs it: registered workers read the receipt-bound raw capture's main
+documents through `census-main.yaml` (each row's bronze origin from the
+caller's `bronze_object` context) and their name and CIK keys through
+`census-keys.yaml`; the authenticated frozen Name Frequency file through
+`census.yaml`, narrowed by two lookup sets derived from the key readings (a
+version-3 request; at most 256 readings, so 512 documents a bundle); the
+exchange catalog through `catalog.yaml`; joined by
+`combine-census-captured.yaml` (`combine-census.yaml` with the sources a
+capture holds today); then `mdm.prepare` makes the bundle's rows one
+publication and `mdm.merge` merges it. The census, combine and records inputs
+are composed by Bookkeeping from the verified readings. `mdm name-census`
+builds the Name Frequency file from configured readings of the same capture
+(#901, #905). The installed proof masters the full population from these
+bundles (#905, #907).
 
 ## Derived scopes from authenticated source extracts
 

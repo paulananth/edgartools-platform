@@ -1379,13 +1379,14 @@ engine.dispose()
 
 
 def test_active_company_preparation_caller_runs_from_installed_bundle(installed, tmp_path):
-    """The installed CLI prepares a Company bundle from a raw capture, byte for byte as the
-    checkout does, and the installed verifier accepts it; neither can use the checkout."""
+    """The installed CLI writes the Company `mastering` target's input manifest from a raw capture,
+    as the checkout does, and the installed Bookkeeping control freezes it against the installed
+    target; neither can use the checkout (Issue 20 slice 20c)."""
     from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, census_capture, documents, prepare
     from tests.support.sec_capture import CATALOG
     python, root = installed
     capture = census_capture(tmp_path, documents(), CATALOG_ROWS)
-    original, expected = prepare(tmp_path, capture, output="checkout")
+    original, _ = prepare(tmp_path, capture, output="checkout")
     folder, population, census = capture
     listed = tmp_path / "documents-checkout.json"
     arguments = ["mdm", "prepare-clean-company", "--capture", str(folder), "--documents", str(listed),
@@ -1402,24 +1403,27 @@ sys.exit(main(sys.argv[1:]))
 """, *arguments, cwd=root)
     assert run.returncode == 0, run.stderr
     report = json.loads(run.stdout)
-    assert report["scope"] == original["scope"]
-    # Worker receipts name the bundle's own folder, so only they (and the inventory listing them) differ.
-    for name in original["files"]:
-        if not name.startswith("workers/"):
-            assert (expected / name).read_bytes() == (tmp_path / "pinned" / name).read_bytes(), name
-    verified = _run(python, "-c", """
+    assert {k: v for k, v in report.items() if k != "manifest"} == {k: v for k, v in original.items() if k != "manifest"}
+    # Only the output folder differs: the same steps hold the same units under the same keys.
+    def units(manifest):
+        steps = json.loads(Path(manifest["uri"].removeprefix("file://")).read_bytes())["steps"]
+        return {step: [{k: v for k, v in u["keys"].items() if k != "destination"} for u in found]
+                for step, found in steps.items()}
+    assert units(report["manifest"]) == units(original["manifest"])
+    frozen = _run(python, "-c", """
 import json,sys
-from edgar_warehouse.rules import source_engine
-from edgar_warehouse.mdm.clean.company_prepare import verify_company_bundle
-source_engine.STEPS = {}
-print(json.dumps(verify_company_bundle(sys.argv[1],expected=json.load(sys.stdin))))
-""", str(tmp_path / "pinned"), cwd=root, document=report)
-    assert verified.returncode == 0, verified.stderr
-    assert json.loads(verified.stdout)["records"] == 3
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.bookkeeping.clean.config import validate, worklist
+from edgar_warehouse.rules import files
+config = validate(files.source("sec.submissions.company"), "mastering")
+items = worklist(Artifacts().json(json.load(sys.stdin)["manifest"]), config)
+print(json.dumps(sorted({i["step"] for i in items})))
+""", cwd=root, document=report)
+    assert frozen.returncode == 0, frozen.stderr
+    assert json.loads(frozen.stdout) == ["catalog", "census", "combine", "keys", "main", "merge", "records"]
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
-
 
 from pathlib import Path
 from urllib.parse import urlparse

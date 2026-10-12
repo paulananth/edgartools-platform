@@ -33,7 +33,7 @@ def prepare(store, root, keys, ciks=(3, 1, 2)):
 
 def test_a_readings_list_with_a_publication_is_one_publication_in_reading_order(tmp_path):
     store = Artifacts()
-    manifest = prepare(store, tmp_path, {**KEYS, "publication_key": "capture:bundle", "revision": 7})
+    manifest = prepare(store, tmp_path, {**KEYS, "publication_key": "capture:bundle", "revision": "7"})
     (batch,) = manifest["batches"]
     assert batch["batch_id"] == "company:bundle:0" and batch["input"]["path"] == "records.0.jsonl"
     assert batch["input"]["publication"] == {"publication_key": "capture:bundle", "revision": 7, "effective_at": None}
@@ -48,9 +48,10 @@ def test_a_readings_list_without_a_publication_keeps_one_per_artifact(tmp_path):
     assert len({b["input"]["publication"]["publication_key"] for b in manifest["batches"]}) == 3
 
 
-@pytest.mark.parametrize("edit", [{"publication_key": "p"}, {"revision": 1}, {"publication_key": "p", "revision": -1},
-                                  {"publication_key": "", "revision": 1},
-                                  {"publication_key": "p", "revision": 1, "effective_column": "at"}])
+@pytest.mark.parametrize("edit", [{"publication_key": "p"}, {"revision": "1"}, {"publication_key": "p", "revision": "-1"},
+                                  {"publication_key": "p", "revision": 1}, {"publication_key": "p", "revision": "01"},
+                                  {"publication_key": "", "revision": "1"},
+                                  {"publication_key": "p", "revision": "1", "effective_column": "at"}])
 def test_a_publication_needs_its_key_and_revision_and_states_one_time(tmp_path, edit):
     with pytest.raises(ValueError):
         prepare(Artifacts(), tmp_path, {**KEYS, **edit})

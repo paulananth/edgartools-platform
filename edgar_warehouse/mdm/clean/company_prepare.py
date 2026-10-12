@@ -1,43 +1,51 @@
-"""Company preparation boundary; transformations execute authenticated Rules workers.
+"""Company preparation: the input manifest of the Company `mastering` target.
 
-A bundle is a bounded set of SEC main submissions documents from one
-receipt-bound raw capture. Each document is read by `census-main.yaml`, two a
-unit; the Name Census (which must have counted this capture's population) is
-read once, narrowed to the bundle's name keys; the exchange ticker catalog is
-read once; and each unit is combined by `combine-census.yaml`. Every worker
-runs with its verifier and is retained in the bundle, with the documents it
-read, so the bundle verifies on its own. This creator binds the approved run
-IDs and inputs; it collects no domain evidence in Python.
+A bundle is up to 512 SEC main submissions documents from one receipt-bound
+raw capture. This writer checks the caller's inputs (the documents are main
+documents the capture's receipts name, in the population the Name Census
+counted), binds the approved run IDs and the census digest into the
+contracts, and freezes every unit's input. Bookkeeping runs the target's steps
+(`rules run --source sec.submissions.company --target mastering`) and the
+registered workers do the work:
+
+- `main` and `keys`: each document read by `census-main.yaml` and
+  `census-keys.yaml`, two a unit;
+- `catalog`: the exchange ticker catalog read once (`catalog.yaml`);
+- `census`: the Name Census read once, narrowed to the bundle's names and CIKs
+  by lookup sets derived from the key readings (`census.yaml`);
+- `combine`: each main unit with the census and the catalog
+  (`combine-census-captured.yaml`);
+- `records`: the bundle's combined rows as one publication (`mdm.prepare`);
+- `merge`: that manifest through the Merge Stage (`mdm.merge`).
+
+The census and combine inputs are composed: Bookkeeping fills them with the
+verified readings they name. Python collects no domain evidence and edits no
+rules settings; it only binds the caller's approved facts.
 """
 
 from __future__ import annotations
-from copy import deepcopy
+
 import hashlib
 import json
-import os
-import shutil
-import tempfile
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
-from edgar_warehouse.workers import source_read, source_combine, source_parquet
-from edgar_warehouse.workers.source_staging import StagedArtifacts
 from .evidence import instant
-from . import limits, raw_capture
+from . import raw_capture
 from .raw_capture import read_bounded
 from .sec_company import CONTRACT, POLICY, SOURCE_CODE
 from .store import Conflict, canonical, digest
 
-_json_value = source_parquet.json_scalar
 ROOT = rules_files.ROOT / "sources/sec.submissions.company"
+TARGET = "mastering"
 DOCUMENTS_BYTES = 1024**2
 CENSUS_BYTES = 256 * 1024**2
+POPULATION_BYTES = 64 * 1024**2
 KEY_READING_BYTES = 16 * 1024**2  # every census-keys reading of one bundle
 # A census read derives its lookup sets from at most 256 key readings of 2 documents.
 BUNDLE_DOCUMENTS = 512
-POPULATION_BYTES = 64 * 1024**2
-# Where `census.yaml` and `combine-census.yaml` take the census digest.
+# Where `census.yaml` and the combination take the census digest.
 CENSUS_DIGEST = "0" * 64
 
 
@@ -51,139 +59,79 @@ def _bind(value, bindings):
     return value
 
 
-def _payload(records):
-    return "".join(json.dumps(row, default=_json_value, sort_keys=True, separators=(",", ":"),
-                              ensure_ascii=False, allow_nan=False) + "\n" for row in records).encode()
+def _unit(output: str, keys: dict, source: dict) -> dict:
+    return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
 
-def _batch_payloads(records):
-    """The records files, cut and bounded as mdm.prepare's (`limits`): one consumer, in checkpoint order."""
-    payloads = [_payload(chunk) for chunk in limits.batches(records, lambda row: _payload([row]))]
-    if any(len(data) > limits.RECORDS_FILE_BYTES for data in payloads):
-        raise ValueError("A Company batch exceeds the records file byte budget")
-    return payloads
+def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], catalog: str, census: dict,
+           census_hash: str, pins: dict, publication: dict) -> dict:
+    """Every step's units, inputs frozen: contracts bound, documents by receipt, inputs composed."""
+    inputs = root + "/inputs"
+    put = lambda value: store.put(inputs, value)  # noqa: E731
+    main_contract = put(rules_files.load(ROOT / "census-main.yaml"))
+    keys_contract = put(rules_files.load(ROOT / "census-keys.yaml"))
+    per_unit = rules_files.load(ROOT / "census-main.yaml")["execution"]["max_artifacts"]
+    main, readers = [], []
+    for start in range(0, len(keys), per_unit):
+        name = f"main-{start}"
+        documents = [raw_capture.document(folder, receipts, key) for key in keys[start:start + per_unit]]
+        for key, ref in zip(keys[start:start + per_unit], documents):
+            raw_capture.document_bytes(folder, receipts, key)  # equal to its receipt before it is frozen
+        contexts = [put({"version": 1, "input": ref, "values": {
+            "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],
+            "load_mode": pins["load_mode"], "recent_limit": None, "last_synced_at": pins["observed_at"],
+            "bronze_object": key}}) for key, ref in zip(keys[start:start + per_unit], documents)]
+        main.append(_unit(f"{root}/main/{start}.reading.json", {"unit": name}, put({
+            "version": 2, "contract": main_contract,
+            "artifacts": [{"input": ref, "context": c} for ref, c in zip(documents, contexts)]})))
+        readers.append(_unit(f"{root}/keys/{start}.reading.json", {"unit": f"keys-{start}"}, put({
+            "version": 1, "contract": keys_contract, "artifacts": documents})))
+    catalog_ref = raw_capture.document(folder, receipts, catalog)
+    raw_capture.document_bytes(folder, receipts, catalog)
+    catalog_unit = _unit(f"{root}/catalog.reading.json", {"unit": "catalog"}, put({
+        "version": 2, "contract": put(rules_files.load(ROOT / "catalog.yaml")),
+        "artifacts": [{"input": catalog_ref, "context": put({"version": 1, "input": catalog_ref, "values": {
+            "sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"],
+            "source_name": "catalog_exchange"}})}]}))
+    # The census is read as its canonical bytes, whose sha256 is the digest bound into the contracts.
+    census_ref = store.put_bytes(f"{inputs}/name-census.json", canonical(census).encode())
+    if census_ref["sha256"] != census_hash:
+        raise Conflict("The Name Census's canonical bytes differ from its digest")
+    readings = [{"step": "keys", "key": unit["keys"]["unit"]} for unit in readers]
+    sets = {name: {"readings": {"slot": "keys"}, "table": "keys", "column": column,
+                   "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
+            for name, column in (("names", "_name_key"), ("ciks", "_cik_key"))}
+    census_unit = _unit(f"{root}/census.reading.json", {"unit": "census"}, {"compose": {
+        "document": {"version": 3, "contract": put(_bind(rules_files.load(ROOT / "census.yaml"),
+                                                         {CENSUS_DIGEST: census_hash})),
+                     "artifacts": [{"input": census_ref,
+                                    "context": put({"version": 1, "input": census_ref, "values": {}}),
+                                    "lookups": {"slot": "lookups"}}]},
+        "slots": {"lookups": {"compose": {"document": {"version": 2, "input": census_ref, "sets": sets},
+                                          "slots": {"keys": readings}}}}}})
+    combine_contract = put(_bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
+        "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
+        CENSUS_DIGEST: census_hash}))
+    combine = [_unit(f"{root}/combine/{n}.reading.json", {"unit": f"combine-{n}"}, {"compose": {
+        "document": {"version": 1, "contract": combine_contract,
+                     "readings": {"main": {"slot": "main"}, "census": {"slot": "census"},
+                                  "catalog_exchange": {"slot": "catalog"}}},
+        "slots": {"main": {"step": "main", "key": unit["keys"]["unit"]},
+                  "census": {"step": "census", "key": "census"}, "catalog": {"step": "catalog", "key": "catalog"}}}})
+               for n, unit in enumerate(main)]
+    records = _unit(f"{root}/records/manifest.json", {
+        "unit": "records", "table": "company", "dataset": SOURCE_CODE, "policy": digest(POLICY),
+        "consumer": publication["consumer"], "batch_id": publication["batch_id"], "as_of": publication["as_of"],
+        "publication_key": publication["publication_key"], "revision": str(publication["revision"])}, {"compose": {
+            "document": {"version": 1, "readings": {"slot": "combined"}},
+            "slots": {"combined": [{"step": "combine", "key": unit["keys"]["unit"]} for unit in combine]}}})
+    merge = {"keys": {"batch_id": publication["batch_id"], "consumer": publication["consumer"]},
+             "input": {"from": {"step": "records", "key": "records"}}, "output": f"{root}/merge.json", "cursor": {}}
+    return {"main": main, "keys": readers, "catalog": [catalog_unit], "census": [census_unit],
+            "combine": combine, "records": [records], "merge": [merge]}
 
 
-def _configured_records(capture, receipts, keys, catalog_key, census, census_hash, pins, output):
-    # The workers' inputs are private copies of bytes already checked against
-    # their receipts; every contract, input and output is retained in the bundle.
-    with tempfile.TemporaryDirectory(prefix=".company-workers-") as folder:
-        root = Path(output).resolve() / "workers"
-        staging = Path(folder)
-        store = StagedArtifacts(root, staging)
-        tasks = []
-
-        def read(name, contract, inputs, sets=None):
-            """One `source.read` unit over (bytes, context values) inputs, executed then verified;
-            `sets` derives its lookup sets from earlier readings."""
-            artifacts = []
-            for index, (data, values) in enumerate(inputs):
-                source = store.put_bytes((root / f"{name}-{index}.input").as_uri(), data)
-                entry = {"input": source}
-                if values is not None:
-                    entry["context"] = store.put(root.as_uri(), {"version": 1, "input": source, "values": values})
-                if sets is not None:
-                    entry["lookups"] = store.put(root.as_uri(), {"version": 2, "input": source, "sets": sets})
-                artifacts.append(entry)
-            contract["execution"]["input_sha256s"] = [a["input"]["sha256"] for a in artifacts]
-            task, candidate = raw_capture.read_unit(store, root, name, contract, artifacts)
-            tasks.append({"profile": "source.read", "task": {**task, "candidate": candidate}})
-            return candidate
-
-        main_contract = rules_files.load(ROOT / "census-main.yaml")
-        keys_contract = rules_files.load(ROOT / "census-keys.yaml")
-        units, key_readings = [], []
-        for start in range(0, len(keys), main_contract["execution"]["max_artifacts"]):
-            unit = keys[start:start + main_contract["execution"]["max_artifacts"]]
-            inputs = [(raw_capture.document_bytes(capture, receipts, key), {
-                "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"],
-                "raw_object_id": receipts[key], "load_mode": pins["load_mode"], "recent_limit": None,
-                "last_synced_at": pins["observed_at"], "bronze_object": key}) for key in unit]
-            units.append((unit, read(f"main-{start}", deepcopy(main_contract), inputs)))
-            key_readings.append(read(f"keys-{start}", deepcopy(keys_contract),
-                                     [(data, None) for data, _ in inputs]))
-        # The census is read as its canonical bytes, whose sha256 is the digest bound above,
-        # narrowed by the bundle's census keys (lookup sets derived from the key readings).
-        census_contract = _bind(rules_files.load(ROOT / "census.yaml"), {CENSUS_DIGEST: census_hash})
-        sets = {name: {"readings": key_readings, "table": "keys", "column": column,
-                       "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
-                for name, column in (("names", "_name_key"), ("ciks", "_cik_key"))}
-        census_ref = read("census", census_contract, [(canonical(census).encode(), {})], sets)
-        catalog = read("catalog_exchange", rules_files.load(ROOT / "catalog.yaml"), [(
-            raw_capture.document_bytes(capture, receipts, catalog_key),
-            {"sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"], "source_name": "catalog_exchange"})])
-        combine = _bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
-            "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
-            CENSUS_DIGEST: census_hash})
-        rule = store.put(root.as_uri(), combine)
-        records = []
-        for n, (unit, main) in enumerate(units):
-            request = store.put(root.as_uri(), {"version": 1, "contract": rule, "readings": {
-                "main": main, "catalog_exchange": catalog, "census": census_ref}})
-            task = {"input": request, "output": (root / f"combined-{n}.reading.json").as_uri(),
-                    "checks": ["source.combined"]}
-            try:
-                result = source_combine.execute(task, store)
-            except ValueError as exc:
-                if "row check failed: last_sync_run_id" in str(exc):
-                    raise Conflict("Evidence row belongs to a different capture run or different catalog run") from exc
-                raise
-            if source_combine.verify({**task, "candidate": result}, store) != ({"source.combined": True}, []):
-                raise ValueError("Configured combination verification failed")
-            tasks.append({"profile": "source.combine", "task": {**task, "candidate": result}})
-            combined = store.json(result)["artifacts"][0]["tables"]["company"]
-            by_cik = {int(row["cik"]): row for row in combined}
-            records.extend(by_cik[raw_capture.cik(key)] for key in unit)  # each row names its bronze origin
-        proof = {"version": 1, "workers": tasks, "frozen_census_digest": census_hash}
-        store.put_bytes((root / "proof.json").as_uri(), (canonical(proof) + "\n").encode())
-        retained = {"workers/" + str(path.relative_to(staging)): path.read_bytes()
-                    for path in staging.rglob("*") if path.is_file()}
-        return records, retained
-
-
-def verify_company_bundle(output, *, expected):
-    """Re-read published inputs and reproduce every configured worker output."""
-    target = Path(output).resolve()
-    if (target / "inventory.json").read_bytes() != (
-        canonical(expected) + "\n"
-    ).encode():
-        raise Conflict("Prepared inventory differs from approved report")
-    for name, pin in expected["files"].items():
-        path = (target / name).resolve()
-        if not path.is_relative_to(target):
-            raise ValueError("Prepared member escapes the bundle")
-        data = read_bounded(path, pin["bytes"])
-        if (
-            len(data) != pin["bytes"]
-            or hashlib.sha256(data).hexdigest() != pin["sha256"]
-        ):
-            raise Conflict("Prepared member differs from approved report: " + name)
-    store = Artifacts()
-    proof = json.loads((target / "workers/proof.json").read_bytes())
-    if (
-        set(proof) != {"version", "workers", "frozen_census_digest"}
-        or proof["version"] != 1
-    ):
-        raise ValueError("Unsupported Company worker proof")
-    profiles = {"source.read": source_read, "source.combine": source_combine}
-    for entry in proof["workers"]:
-        if set(entry) != {"profile", "task"} or entry["profile"] not in profiles:
-            raise ValueError("Unsupported Company worker profile")
-        profiles[entry["profile"]].verify(entry["task"], store)
-    by_cik = {}
-    for entry in proof["workers"]:
-        if entry["profile"] == "source.combine":
-            for row in store.json(entry["task"]["candidate"])["artifacts"][0]["tables"]["company"]:
-                by_cik[int(row["cik"])] = row
-    keys = json.loads((target / "documents.json").read_bytes())
-    records = [by_cik[raw_capture.cik(key)] for key in keys]
-    batches = json.loads((target / "manifest.json").read_bytes())["batches"]
-    if [(target / b["input"]["path"]).read_bytes() for b in batches] != _batch_payloads(records):
-        raise Conflict("Prepared records differ from the verified workers")
-    return {"source.output": True, "source.combined": True, "records": len(records)}
-
-
-def prepare_company_bundle(
+def write_company_manifest(
     *,
     capture: str,
     documents: str,
@@ -198,7 +146,7 @@ def prepare_company_bundle(
     revision: int,
     load_mode: str = "default",
 ) -> dict:
-    """Pin a bounded Company sample from a raw capture, with the evidence its rules read.
+    """The `mastering` target's input manifest for a bounded Company sample from a raw capture.
 
     `documents` lists this bundle's main submissions documents by receipt key
     (at most 512); `population` is the population the Name Census counted,
@@ -207,6 +155,7 @@ def prepare_company_bundle(
     `catalog` by receipt key); the SEC-to-GLEIF matching rules read the
     business address and the Name Census. The approved capture and catalog run
     IDs and the observation time are the caller's facts, bound into every row.
+    Returns the report: the manifest's reference and the publication's scope.
     """
     if type(revision) is not int or revision < 0:
         raise ValueError("Require a nonnegative explicit publication revision")
@@ -230,82 +179,36 @@ def prepare_company_bundle(
             or not set(keys) <= set(json.loads(population_raw))):
         raise Conflict("The Name Census did not count this capture's documents")
     census_hash = digest(census)
-    pins = {"capture_run": capture_run, "catalog_run": catalog_run, "observed_at": observed_at,
-            "load_mode": load_mode}
-    records, worker_files = _configured_records(folder, receipts, keys, catalog, census, census_hash, pins, output)
-    payload_hash = hashlib.sha256(_payload(records)).hexdigest()
     documents_hash = hashlib.sha256(documents_raw).hexdigest()
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
                        f":name_census:{census_hash}")
+    bundle = digest([publication_key, revision, as_of])
+    publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
+                   "consumer": f"{SOURCE_CODE}/{bundle}", "batch_id": f"company:{bundle}"}
+    pins = {"capture_run": capture_run, "catalog_run": catalog_run, "observed_at": observed_at,
+            "load_mode": load_mode}
+    store = Artifacts()
+    root = Path(output).resolve().as_uri()
+    steps = _units(store, root, folder, receipts, keys, catalog, census, census_hash, pins, publication)
+    manifest = store.put(root, {"version": 2, "steps": steps})
     scope = {
         "mode": "bounded_sample",
-        "selected_records": len(records),
+        "selected_records": len(keys),
         "whole_source_complete": False,
         "capture_run_id": capture_run,
         "ticker_run_id": catalog_run,
         "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
-        "ciks": [r["cik"] for r in records],
-        "bronze_named": len(records),
+        "ciks": [raw_capture.cik(key) for key in keys],
+        "bronze_named": len(keys),
     }
-    bundle = digest([publication_key, revision, payload_hash, as_of])
-    payloads = _batch_payloads(records)
-    manifest = {
-        "contract_version": 2,
-        "as_of": as_of,
+    return {
+        "contract_version": 3,
+        "source_code": SOURCE_CODE,
+        "target": TARGET,
+        "manifest": manifest,
+        "publication": publication,
+        "dataset_digest": digest(CONTRACT),
         "policy_digest": digest(POLICY),
         "scope": scope,
-        "batches": [{
-            "batch_id": f"company:{bundle}:{n}",
-            "stage": "mastering",
-            "consumer": f"{SOURCE_CODE}/{bundle}",
-            "expected_checkpoint": n,
-            "checkpoint": n + 1,
-            "input": {"path": f"records.{n}.jsonl", "sha256": hashlib.sha256(data).hexdigest(),
-                      "record_count": data.count(b"\n"), "source_code": SOURCE_CODE,
-                      "publication": {"publication_key": publication_key, "revision": revision, "effective_at": None}},
-        } for n, data in enumerate(payloads)],
-    }
-    files = {
-        **{f"records.{n}.jsonl": data for n, data in enumerate(payloads)},
-        **worker_files,
-        "documents.json": documents_raw,
-        "population.json": population_raw,
-        "name-census.json": census_raw,
-        "dataset.json": (canonical(CONTRACT) + "\n").encode(),
-        "policy.json": (canonical(POLICY) + "\n").encode(),
-        "manifest.json": (canonical(manifest) + "\n").encode(),
-    }
-    if len(files["manifest.json"]) > limits.MANIFEST_BYTES:
-        raise ValueError("A Company bundle's manifest exceeds the manifest byte budget")
-    inventory = {name: {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)} for name, data in files.items()}
-    report = {
-        "contract_version": 2,
-        "source_code": SOURCE_CODE,
-        "scope": scope,
-        "files": inventory,
         "governance": "Dataset coverage and policy registration required; no identity bindings included",
     }
-    files["inventory.json"] = (canonical(report) + "\n").encode()
-    target = Path(output).resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        if not target.is_dir() or any(
-            not (target / name).is_file() or (target / name).read_bytes() != data
-            for name, data in files.items()
-        ):
-            raise Conflict("Existing pinned bundle has different content")
-        return report
-    stage = Path(tempfile.mkdtemp(prefix=".company-bundle-", dir=target.parent))
-    try:
-        for name, data in files.items():
-            (stage / name).parent.mkdir(parents=True, exist_ok=True)
-            with (stage / name).open("xb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-        # A complete directory is exposed at once; an existing bundle is never overwritten.
-        os.rename(stage, target)
-    finally:
-        if stage.exists():
-            shutil.rmtree(stage)
-    return report

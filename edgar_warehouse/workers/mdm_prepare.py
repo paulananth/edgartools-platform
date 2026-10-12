@@ -119,12 +119,14 @@ def _published(keys: dict) -> dict | None:
     """Optional `publication_key` and `revision`: the caller's one publication for every row of the unit."""
     if "publication_key" not in keys and "revision" not in keys:
         return None
+    revision = keys.get("revision")  # unit keys are text: the revision is written in decimal digits
     if (not isinstance(keys.get("publication_key"), str) or not keys["publication_key"]
-            or type(keys.get("revision")) is not int or keys["revision"] < 0):
+            or not isinstance(revision, str) or not revision.isascii() or not revision.isdigit()
+            or revision != str(int(revision))):
         raise ValueError("mdm.prepare publication_key and revision come together: text and a nonnegative integer")
     if "effective_column" in keys:
         raise ValueError("mdm.prepare states one publication's time; effective_column states one per artifact")
-    return {"publication_key": keys["publication_key"], "revision": keys["revision"], "effective_at": None}
+    return {"publication_key": keys["publication_key"], "revision": int(revision), "effective_at": None}
 
 
 def _batch(keys: dict, name: str, batch_id: str, chunk: list[dict], publication: dict) -> tuple[bytes, dict]:
