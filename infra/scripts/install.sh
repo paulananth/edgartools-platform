@@ -711,47 +711,49 @@ cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql
     "Uploads the Streamlit dashboard artifacts to the Snowflake dashboard stage." \
     "SNOW_CONNECTION=${snow_q} DASHBOARD_DATABASE=${db_name} bash infra/snowflake/streamlit/deploy.sh"
 
-  # Source data work stays disabled until its Rules/feed baseline qualifies.
-  # Phase: stores -- the five PostgreSQL 16 stores the configured platform runs on
-  # (skills/data-platform/SKILL.md, "Stores"), each reached through its own
-  # variable, set to its migration owner's address outside this script (never on
-  # its command line). Each schema is created once and upgraded in place: init
-  # changes nothing when rerun, migrate applies migration files that landed since.
+  # Phase: stores -- the PostgreSQL 16 stores the configured platform runs on
+  # (skills/data-platform/SKILL.md, "Stores"): Rules, Bookkeeping, Change Journal,
+  # RDM, silver and Clean MDM. Each init and migrate connects as the store's
+  # schema owner, through its own *_MIGRATION_DATABASE_URL (MDM: MDM_DATABASE_URL
+  # set to its owner), set outside this script, never on its command line; the
+  # runtime logins use the plain *_DATABASE_URL. Each schema is created once and
+  # upgraded in place: init changes nothing when rerun, migrate applies the
+  # migration files that landed since.
   # The runtime logins are named by INSTALL_*_ROLE variables; the defaults are
   # placeholders for the environment's own names.
   add_stage \
     "Stores: Rules Database" \
-    "Creates and upgrades the Rules Database (RULES_DATABASE_URL): the versioned rules files, their test runs and the operator's approvals. The agent login (${rules_role}) may save drafts; only the approver login approves." \
+    "Creates and upgrades the Rules Database (as its owner, RULES_MIGRATION_DATABASE_URL): the versioned rules files, their test runs and the operator's approvals. The agent login (${rules_role}) may save drafts; only the approver login approves." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse rules init --agent-role ${rules_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse rules migrate --agent-role ${rules_role}"
 
   add_stage \
     "Stores: Bookkeeping" \
-    "Creates and upgrades Bookkeeping (BOOKKEEPING_CLEAN_DATABASE_URL): frozen runs, leases, retries and the verifier's admissions, so a load restarts where it stopped. ${bookkeeping_role} is the runtime login; each worker profile's own logins are granted later with bookkeeping grant-profile." \
+    "Creates and upgrades Bookkeeping (as its owner, BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL): frozen runs, leases, retries and the verifier's admissions, so a load restarts where it stopped. ${bookkeeping_role} is the runtime login; each worker profile's own logins are granted later with bookkeeping grant-profile." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping init --runtime-role ${bookkeeping_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping migrate --runtime-role ${bookkeeping_role}"
 
   add_stage \
     "Stores: Change Journal" \
-    "Creates and upgrades the Change Journal (CHANGE_JOURNAL_DATABASE_URL): the append-only record, beside Bookkeeping, of what each step processed, so a run takes only the files that changed (and the MDM Change Journal's delivery history)." \
+    "Creates and upgrades the Change Journal (as its owner, CHANGE_JOURNAL_MIGRATION_DATABASE_URL): the append-only record, beside Bookkeeping, of what each step processed, so a run takes only the files that changed (and the MDM Change Journal's delivery history)." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse change-journal init --runtime-role ${journal_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse change-journal migrate --runtime-role ${journal_role}"
 
   add_stage \
     "Stores: RDM" \
-    "Creates and upgrades Reference Data Management (RDM_DATABASE_URL): code sets, their approved and published versions, hierarchies and crosswalks. Published versions are written under rules/reference/published/, where readings pin them by sha256." \
+    "Creates and upgrades Reference Data Management (as its owner, RDM_MIGRATION_DATABASE_URL): code sets, their approved and published versions, hierarchies and crosswalks. Published versions are written under rules/reference/published/, where readings pin them by sha256." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse rdm init --runtime-role ${rdm_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse rdm migrate --runtime-role ${rdm_role}"
 
   add_stage \
     "Stores: silver" \
-    "Creates and upgrades the silver store (SILVER_DATABASE_URL): tables registered from approved silver table specs, each row with its source key and MDM id." \
+    "Creates and upgrades the silver store (as its owner, SILVER_MIGRATION_DATABASE_URL): tables registered from approved silver table specs, each row with its source key and MDM id." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse silver init --runtime-role ${silver_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse silver migrate --runtime-role ${silver_role}"
 
   add_stage \
     "MDM: clean migration and connectivity" \
-    "Applies the Clean MDM migrations (MDM_DATABASE_URL, its migration owner) for the application login ${mdm_role}, installs Bookkeeping's destination guard so every MDM commit is checked against the worker's live lease (DESTINATION_MIGRATION_DATABASE_URL, the MDM owner), then checks connectivity: the check reads mdm.migration, which the migrations create. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
+    "Applies the Clean MDM migrations (MDM_DATABASE_URL, its migration owner) for the application login ${mdm_role}, installs Bookkeeping's destination guard so every MDM commit is checked against the worker's live lease (DESTINATION_MIGRATION_DATABASE_URL, the MDM owner), then checks connectivity: the check reads mdm.migration, which the migrations create. Source data work stays disabled until its Rules/feed baseline qualifies (configured Rules and Bookkeeping qualification)." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate --application-role ${mdm_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping init-guard --runtime-role ${mdm_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity"

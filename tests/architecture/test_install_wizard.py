@@ -1056,7 +1056,9 @@ def test_each_store_is_created_and_upgraded_for_its_runtime_login(tmp_path: Path
         "edgar-warehouse bookkeeping migrate --runtime-role 'bk_login'",
         "edgar-warehouse change-journal init --runtime-role 'change_journal_runtime'",
         "edgar-warehouse change-journal migrate --runtime-role 'change_journal_runtime'",
+        "edgar-warehouse rdm init --runtime-role 'rdm_runtime'",
         "edgar-warehouse rdm migrate --runtime-role 'rdm_runtime'",
+        "edgar-warehouse silver init --runtime-role 'silver_runtime'",
         "edgar-warehouse silver migrate --runtime-role 'silver_runtime'",
         "edgar-warehouse mdm migrate --application-role 'application'",
         "edgar-warehouse bookkeeping init-guard --runtime-role 'application'",
@@ -1064,3 +1066,7 @@ def test_each_store_is_created_and_upgraded_for_its_runtime_login(tmp_path: Path
     ):
         assert command in combined, command
     assert "postgresql://" not in combined
+    # Within a store, init (creates, changes nothing when rerun) comes before migrate.
+    for store in ("rules", "bookkeeping", "change-journal", "rdm", "silver"):
+        assert combined.index(f"edgar-warehouse {store} init") < combined.index(f"edgar-warehouse {store} migrate")
+    assert "MIGRATION_DATABASE_URL" in combined

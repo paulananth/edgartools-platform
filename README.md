@@ -182,7 +182,7 @@ empty-store replay matches the mastered result.
 
 | Source | Read by | Mastered |
 | --- | --- | --- |
-| SEC submissions, Company | `rules/sources/sec.submissions.company` | Company (by CIK), on the `mastering` target |
+| SEC submissions, Company | `rules/sources/sec.submissions.company` | Company (by CIK), on the `mastering` target (also `capture`, `mdm`) |
 | SEC submissions, Person | `rules/sources/sec.submissions.person` | Person (by CIK), on the `mastering` target |
 | GLEIF Golden Copy (Level 1, relationships, reporting exceptions) | `rules/sources/gleif` | Company (by LEI) and its parents |
 | IAPD Form ADV (filings, custodians) | `rules/sources/iapd.adv` | drafted, not switched on |
@@ -197,13 +197,20 @@ code sets, each pinned by sha256).
 install plan (`plan`), checks the workstation (`doctor`) and, with `deploy
 --apply`, runs each stage after a yes. Its stages provision AWS and Snowflake,
 publish the images, build dbt gold and the dashboard, then create and upgrade
-the five PostgreSQL 16 stores the configured platform runs on: Rules,
-Bookkeeping, Change Journal, RDM and silver, and Clean MDM with Bookkeeping's
-lease guard. Each store is reached through its own variable
-(`RULES_DATABASE_URL`, `BOOKKEEPING_CLEAN_DATABASE_URL`,
+the six PostgreSQL 16 stores the configured platform runs on: Rules,
+Bookkeeping, Change Journal, RDM, silver, and Clean MDM with Bookkeeping's
+lease guard. Each schema is created and upgraded as its owner, through the
+store's own migration variable (`RULES_MIGRATION_DATABASE_URL`,
+`BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL`,
+`CHANGE_JOURNAL_MIGRATION_DATABASE_URL`, `RDM_MIGRATION_DATABASE_URL`,
+`SILVER_MIGRATION_DATABASE_URL`; for MDM, `MDM_DATABASE_URL` set to its owner,
+and `DESTINATION_MIGRATION_DATABASE_URL` for the guard). The runtime logins use
+the plain variables (`RULES_DATABASE_URL`, `BOOKKEEPING_CLEAN_DATABASE_URL`,
 `CHANGE_JOURNAL_DATABASE_URL`, `RDM_DATABASE_URL`, `SILVER_DATABASE_URL`,
-`MDM_DATABASE_URL`), set outside the script; `edgar-warehouse doctor` must
-then print `"ok": true`.
+`MDM_DATABASE_URL`). All are set outside the script; `edgar-warehouse doctor`
+must then print `"ok": true`. The four stores every feed needs are Rules,
+Bookkeeping, Change Journal and MDM; RDM and silver are needed by the readings
+that pin code sets and by silver landing.
 
 Not yet in the plan: the worker runtime on AWS. The old pipeline's ECS task
 definitions and Step Functions were retired with its commands (platform
