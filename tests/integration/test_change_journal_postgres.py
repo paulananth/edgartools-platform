@@ -331,3 +331,26 @@ def test_bookkeeping_producer_timezone_retains_identical_retry_receipt(
         assert databases.ledger.append(other_timezone.journal_event(same)) == receipt
     finally:
         timezone_engine.dispose()
+
+
+def test_found_names_only_the_recorded_keys_of_its_producer_by_the_index(databases):
+    # Ticket 22: "was this file processed?" for many files at once.
+    recorded = [{**event(), "event_key": f"found-{uuid4().hex}"} for _ in range(3)]
+    for value in recorded:
+        databases.ledger.append(value)
+    keys = [value["event_key"] for value in recorded]
+    unseen = f"found-{uuid4().hex}"
+    assert databases.ledger.found("fixture", [*keys, unseen, keys[0]]) == set(keys)
+    assert databases.ledger.found("another", keys) == set()
+    assert databases.ledger.found("fixture", []) == set()
+    with pytest.raises(ValueError):
+        databases.ledger.found("fixture", ["k"] * 10_001)
+    with databases.ledger_admin.begin() as conn:
+        conn.exec_driver_sql("SET LOCAL enable_seqscan = off")
+        plan = "\n".join(conn.execute(text(
+            "EXPLAIN SELECT e.event_key FROM (SELECT DISTINCT key FROM unnest(CAST(:k AS text[])) AS u(key)) u "
+            "JOIN journal.event e ON e.producer='fixture' AND e.event_key=u.key"), {"k": keys}).scalars())
+        assert "Seq Scan on event" not in plan and "event_producer_event_key_key" in plan, plan
+        settings = conn.scalar(text("SELECT proconfig FROM pg_proc WHERE proname='found' "
+                                    "AND pronamespace='journal'::regnamespace"))
+        assert "plan_cache_mode=force_custom_plan" in settings

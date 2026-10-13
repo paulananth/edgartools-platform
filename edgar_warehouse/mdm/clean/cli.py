@@ -386,6 +386,7 @@ def prepare_clean_company(args) -> int:
         output=args.output,
         as_of=args.as_of,
         revision=args.revision,
+        force=args.all,
     )
     print(json.dumps(report, sort_keys=True))
     return 0
@@ -402,6 +403,7 @@ def prepare_capture(args) -> int:
         output=args.output,
         as_of=args.as_of,
         revision=args.revision,
+        force=args.all,
     )
     print(json.dumps(report, sort_keys=True))
     return 0

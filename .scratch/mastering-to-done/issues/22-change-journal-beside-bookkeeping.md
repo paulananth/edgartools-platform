@@ -63,21 +63,29 @@ unless an operator passes an explicit `--force` repair flag.
 ## Checklist
 
 
-- [ ] Map today's change handling per step: what each step uses now to skip
-  unchanged input (receipts, content hashes, migration 017's "unchanged batches
-  queue nothing", the Person and Company document selection), and where the
-  Change Journal's events are written and read today (`skills/change-journal`,
-  `docs/architecture/runtime-responsibilities.md`)
-- [ ] Decide with the operator: what the journal records per file and step
-  (the file's identity, the rules or reading version that processed it) so
-  "identical or process it" is one question for every step; and how a rules or
-  reading change marks every file of that source to process. No field-level or
-  record-level tracking (operator: "it doesn't decide at field level")
+- [x] Map today's change handling per step 2026-10-13 09:10 ET (operator: "Start item 1"; branch `claude/ticket22-change-journal`):
+  - **Capture** (`provider.capture`, #933): skips unchanged provider bytes with a conditional request; a 304 reuses the previous 200 capture's bytes (`workers/provider_capture.py:162-220`). File-level, but only at capture.
+  - **Manifest writers** (`mdm prepare-capture`, `mdm prepare-clean-company`): name every document of the list they are given; nothing compares a document with what an earlier run processed. So a new run reads, combines and prepares every document again.
+  - **Bookkeeping**: within one run, a verified unit is never redone and a resume re-checks its receipts (`engine.py` `_verify_completed`). Across runs, only resource checkpoints (`bookkeeping.checkpoint`, a revision and position per leased resource) carry over, used by ordered capture work, not by preparation.
+  - **MDM**: a batch that changes nothing queues nothing (migration 017, #931): record-level, inside `mdm.merge`.
+  - **Change Journal** (one append-only `journal.event` table; unique on `(producer, event_key)`; indexes on `(source, feed, id)` and `(run_id, id)`): today it receives `work.verified` (one per Bookkeeping unit, from the outbox), `capture.*` (provider capture) and `mdm.committed`. No event names the files a run processed or the rules version that processed them, and nothing reads the journal to decide what to process.
+- [x] Proposed design, decided by the operator 2026-10-13 09:17 ET: "Rules + shared inputs", "Change Journal events", "--all flag, recorded" (each the recommended answer to its question):
+  - **What "identical" means.** A file is identical when the Change Journal already holds, for this source, a record that this file key with this content hash (its receipt sha256) was processed under the same **processing identity**: the digest of the source's rules version together with every shared input the run reads (for Company: the Name Census and the ticker catalog). A rules or reading change, or a new census, changes the processing identity, so every file of the source is processed again (the operator's rule). Nothing finer than a file.
+  - **How it is recorded.** A generic last step of a source's target, after its merge is verified, appends one `file.processed` event per file to the Change Journal. The event key spells the identity (`<source>:<processing identity>:<file key>:<sha256>`), so "was it processed?" is an exact lookup on the existing unique `(producer, event_key)` index: no new table, no table scan.
+  - **How it is used.** The manifest writers look up their document list in one indexed query and name only the files without such an event; a bundle with none left starts no run. `--all` processes every file anyway (a forced run, recorded as forced).
+- [x] ~~Decide with the operator: what the journal records per file and step~~ decided above, 2026-10-13 09:17 ET
 - [ ] Redraw the README flow with Bookkeeping and the Change Journal side by
   side over all steps; widen the `CONTEXT.md` term (Change Journal, with the
   MDM Change Journal as its mastering part)
-- [ ] Build it: steps ask the journal for what changed, and a reading or rules
-  version change replays the whole source; tests per step
+- [ ] Build it (branch `claude/ticket22-change-journal`):
+  - [ ] GoF consult on the manifest writers (`capture_prepare.py`, `company_prepare.py`), the worker registry and the journal store
+  - [ ] The processing identity: one digest of the source's rules version (its reading, Dataset Contract and policy) and every shared input's receipt (Company: Name Census, ticker catalog)
+  - [ ] The journal's exact lookup of many event keys at once (a migration: one function joining the keys on the unique `(producer, event_key)` index; plan test, no sequential scan)
+  - [ ] A generic last step, `journal.record`, after the merge: appends one `file.processed` event per file the run named; its verifier reads each back
+  - [ ] The manifest writers name only files without such an event; a bundle with none left starts no run; `--all` names every file and the run and its events say forced
+  - [ ] Each source's target gains the step (Company, Person): digests to the operator, explained
+  - [ ] Proof on the installed workers: a repeat of an unchanged capture processes no file; one changed file processes only that file; a new rules version processes every file; `--all` processes every file
+  - [ ] Three-axis review, PR, CI, merge on the operator's word
 - [ ] `mdm.publish` as change data capture: map what it publishes today and
   what migration 017 already skips; publish only records and relationships
   whose published values changed (insert, update, retire), with a test that a

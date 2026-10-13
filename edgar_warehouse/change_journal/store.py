@@ -135,6 +135,23 @@ class ChangeJournal:
                 text("SELECT journal.get(:p,:k)"), {"p": producer, "k": event_key}
             )
 
+    def found(self, producer: str, event_keys: list[str]) -> set[str]:
+        """Which of these event keys the producer has recorded: one indexed
+        lookup per key, at most 10,000 keys a call."""
+        if not isinstance(event_keys, list) or len(event_keys) > 10_000 or any(
+            type(key) is not str for key in event_keys
+        ):
+            raise ValueError("Journal lookup requires at most 10000 text keys")
+        if not event_keys:
+            return set()
+        with self.engine.connect() as conn:
+            return set(
+                conn.scalar(
+                    text("SELECT journal.found(:p,CAST(:k AS text[]))"),
+                    {"p": producer, "k": event_keys},
+                )
+            )
+
     def list(
         self,
         *,

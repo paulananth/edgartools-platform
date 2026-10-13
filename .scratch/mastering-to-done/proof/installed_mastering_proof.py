@@ -75,11 +75,12 @@ MIN_FREE = 3 * 1024**3
 PIN = json.loads(Path("/private/tmp/counts-pin-20261009.json").read_text())  # the checkout replay's counts
 
 MASTERING = files.source("sec.submissions.company")["bookkeeping"]["targets"]["mastering"]["steps"]
-assert [s["name"] for s in MASTERING][-1] == "merge"
+assert [s["name"] for s in MASTERING][-2:] == ["merge", "processed"]  # ticket 22: then the Change Journal
+MERGE = next(s for s in MASTERING if s["name"] == "merge")
 PIPELINE = {"pipeline": "installed-mastering-proof", "bookkeeping": {"version": 1, "targets": {
     **old.PIPELINE["bookkeeping"]["targets"],
     "sec": old.TARGET(MASTERING),
-    "sec-replay": old.TARGET([{**MASTERING[-1], "requires": []}])}}}
+    "sec-replay": old.TARGET([{**MERGE, "requires": []}])}}}
 
 
 def bundles() -> list[str]:
@@ -106,7 +107,7 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         assert free > MIN_FREE, f"disk: {free / 1024**3:.1f} GB free"
 
     # Provisioning (harness): an empty MDM store with its fence, the policy and the two contracts.
-    for profile in (*PROFILES, "mdm.merge"):
+    for profile in (*PROFILES, "mdm.merge", "journal.record"):
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql("CREATE DATABASE mdm_proof")
@@ -228,7 +229,7 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
             run_id = runs[name]
             if not recovery:  # the first bundle's merge worker is killed while it holds the item
                 recovery = kill_and_recover(python, entry, worker, root, run_id, items, snapshot)
-            drive(run_id, ("mdm.merge",))
+            drive(run_id, ("mdm.merge", "journal.record"))
             finalize(run_id)
             old.say(bundle=name, merged=True, minutes=minutes())
     resumed = next(i for i in items(runs[names[0]]) if i["unit_key"] == recovery["item_at_kill"]["unit_key"])

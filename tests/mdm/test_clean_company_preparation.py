@@ -14,6 +14,7 @@ from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
 from edgar_warehouse.mdm.clean.store import Conflict
 from tests.mdm.test_clean_name_census import gleif
 from tests.support.name_census_inputs import gleif_archive, gleif_reading
+from tests.support.memory_journal import MemoryJournal
 from tests.support.sec_capture import CATALOG, address, catalog, document, key, write_capture
 
 APPLE, MSFT, ACME = 320193, 789019, 42
@@ -61,7 +62,7 @@ def prepare(tmp_path, capture, ciks=(APPLE, MSFT, ACME), output="bundle", **chan
     listed = tmp_path / f"documents-{output}.json"
     listed.write_text(json.dumps([key(c) for c in ciks]))
     args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
-            "name_census": str(census), "output": str(tmp_path / output), **PINS, **changes}
+            "name_census": str(census), "output": str(tmp_path / output), "journal": MemoryJournal(), **PINS, **changes}
     return write_company_manifest(**args), Path(args["output"])
 
 
