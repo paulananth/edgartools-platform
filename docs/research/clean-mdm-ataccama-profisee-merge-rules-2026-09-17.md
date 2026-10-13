@@ -1,6 +1,6 @@
 # Clean MDM: Ataccama and Profisee merge rules
 
-Researched 2026-09-17. Status: research and design recommendations, not accepted policy or implementation evidence. Terminology follows [CONTEXT.md](../../CONTEXT.md); proposed policy is [Shared Merge Stage](../specs/clean-mdm/merge-stage.md).
+Researched 2026-09-17. Status: research and design recommendations, not accepted policy or implementation evidence. Terminology follows [CONTEXT.md](../../CONTEXT.md); proposed policy is [Shared Merge Stage](../specs/mdm/merge-stage.md).
 
 ## Evidence scope
 

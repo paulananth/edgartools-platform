@@ -33,7 +33,7 @@ per `git diff --stat`, empty).
   `tests/application/test_parse_adv_bronze.py`; `tests/unit/test_adv_and_evidence_landing_passthrough.py`.
 - Prior evidence: `.planning/workstreams/fix-pipelines/phases/06-relationship-investigation-and-population/06-PHASE-CLOSURE-LEDGER.md` 34-35;
   `docs/data-architecture.md:95`; `docs/aws-mdm-source-to-mdm.md` 71-79.
-- Clean MDM target: `docs/specs/clean-mdm/pipeline-inventory.md` rows 21, 29; `docs/specs/clean-mdm/domain-model.md` 12, 62, 87.
+- Clean MDM target: `docs/specs/mdm/pipeline-inventory.md` rows 21, 29; `docs/specs/mdm/domain-model.md` 12, 62, 87.
 
 ## Findings
 

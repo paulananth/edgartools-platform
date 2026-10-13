@@ -1,4 +1,4 @@
-# Clean MDM delivery record
+# MDM delivery record
 
 Status: Q1–Q16 accepted; local shared-core implementation in progress.
 No hosted qualification or consumer cutover has occurred.

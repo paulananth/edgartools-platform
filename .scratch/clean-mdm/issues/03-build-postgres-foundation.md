@@ -11,4 +11,4 @@ Implement real versioned migrations, retained assertions, stable IDs, journal/ch
 
 ## Evidence
 
-Implemented migrations 023/025 and mirror 024, protected runtime capabilities, immutable evidence/decisions, atomic bounded batches, checkpoint and generation fencing, publication leases/receipts, and existing Bookkeeping integration. The 19-test real PostgreSQL suite has zero skips. Installed schemas in the user-supplied local databases without changing legacy counts. See [evidence](../../../docs/specs/clean-mdm/evidence.md).
+Implemented migrations 023/025 and mirror 024, protected runtime capabilities, immutable evidence/decisions, atomic bounded batches, checkpoint and generation fencing, publication leases/receipts, and existing Bookkeeping integration. The 19-test real PostgreSQL suite has zero skips. Installed schemas in the user-supplied local databases without changing legacy counts. See [evidence](../../../docs/specs/mdm/evidence.md).

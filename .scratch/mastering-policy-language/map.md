@@ -45,7 +45,7 @@ any Clean MDM file.
   (`.scratch/gleif-company-augmentation/spec.md`); Person tickets 02
   (Tiers A–D, cross-reference ids) and 03 (rule C-J) in
   `.scratch/person-consumer-contract/`; Clean MDM accepted Q1–Q16
-  (`docs/specs/clean-mdm/merge-stage.md`), which this map does not reopen —
+  (`docs/specs/mdm/merge-stage.md`), which this map does not reopen —
   it gives them a data shape.
 - Skills: `/grilling` (operator preference: **one question at a time**),
   `/domain-modeling`, `/research` (primary sources, `path:line`), `/wait-what`.
@@ -188,7 +188,7 @@ against this map and the repository before it is treated as verified.
 - Relationship publication rules (Clean MDM `domain-model.md` relationship
   table).
 - Implementation, migrations, the interpreter itself — Codex/Grok's.
-- Any edit to `.scratch/clean-mdm/`, `docs/specs/clean-mdm/`,
+- Any edit to `.scratch/clean-mdm/`, `docs/specs/mdm/`,
   `edgar_warehouse/mdm/clean/`.
 - Reopening Clean MDM's accepted Q1–Q16.
 - Legacy MDM's config tables in any form.

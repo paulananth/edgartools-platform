@@ -1,6 +1,6 @@
 # Rules file reference
 
-What a `rules/sources/<source>/source.yaml` file may say, and how Clean MDM
+What a `rules/sources/<source>/source.yaml` file may say, and how MDM
 reads it (`edgar_warehouse/mdm/clean/adapters.py`, `normalize`).
 
 ## The file

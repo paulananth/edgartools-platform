@@ -66,7 +66,7 @@ Use the resolved GLEIF decisions rather than reopening the architecture:
   jurisdiction are not blindly collapsed into one field.
 - [Binding lifecycle](../../../.scratch/gleif-company-augmentation/issues/13-decide-accepted-link-publication-policy.md):
   retain decisions and source history when a link closes; successors require a
-  new decision. The later Clean MDM Q16 rule still disables every unqualified
+  new decision. The later MDM Q16 rule still disables every unqualified
   automatic rule. The later Company interview requires demonstrated qualified
   automatic multisource matching for completion; review-only execution alone
   no longer satisfies that milestone. Q14 permits identifier-only binding to

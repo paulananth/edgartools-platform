@@ -117,7 +117,7 @@ same filer; tickers point at a filer by CIK (same entity, not another record).
 
 Sources read (repo docs and code):
 - `CONTEXT.md` (Dataset Contract, Probable Kind, Source Stage, Fund Company).
-- `docs/specs/clean-mdm/source-evidence.md`, `company-policy.md`,
+- `docs/specs/mdm/source-evidence.md`, `company-policy.md`,
   `state-of-build.md` ("`last_synced_at` is observation time, not source
   effective time; the candidate policy explicitly permits unknown effective
   time"), `security-identity.md` (ADR 0015: a Security is one 13F CUSIP; a

@@ -38,7 +38,7 @@ distinct-CIK count borrowed from a different study. Detail on
 
 ## Notes
 
-- **Why now**: Codex's `docs/specs/clean-mdm/company-completion.md` line 80
+- **Why now**: Codex's `docs/specs/mdm/company-completion.md` line 80
   forbids starting Person *integration* until the local Company gate
   passes. That is an implementation ordering on their side. Planning the
   Person contract in parallel is the same move that produced the Company
@@ -49,7 +49,7 @@ distinct-CIK count borrowed from a different study. Detail on
   being decommissioned (operator directive, 2026-09-19) and is cited here
   only as evidence of current behavior. Person is already one of Clean
   MDM's two first identities (`mdm_v2.identity.kind = 'person'`,
-  `docs/specs/clean-mdm/domain-model.md` line 25), and their
+  `docs/specs/mdm/domain-model.md` line 25), and their
   `pipeline-inventory.md` rows 23/26/29 already sketch target designs for
   each Person source — this map's contract cites those, never redefines
   them, exactly as the Company contract does.
@@ -400,7 +400,7 @@ distinct-CIK count borrowed from a different study. Detail on
 
 - Implementation, migrations, schedules, deployment — Codex/Grok's, after
   their Company gate.
-- Any edit to `.scratch/clean-mdm/`, `docs/specs/clean-mdm/`, or
+- Any edit to `.scratch/clean-mdm/`, `docs/specs/mdm/`, or
   `edgar_warehouse/mdm/clean/`. Disagreements go back by handover note.
 - Person evidence from GLEIF or any LEI source — excluded by the MDM
   Enrichment Program; the sole-proprietor boundary stays in its workstream.

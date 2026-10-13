@@ -12,7 +12,7 @@ Every `file:line` either ticket names, opened and read on this branch. The full
 `edgar_warehouse/mdm/clean/` module (`evidence.py`, `store.py`, `survivorship.py`,
 `consumer.py`, `adapters.py`, `merge.py`, `company_source.py`), migrations `023`
 through `030` plus the migration list on `origin/main`, and the accepted specs
-(`docs/specs/clean-mdm/company-policy.md`, `company-completion.md`, `merge-stage.md`,
+(`docs/specs/mdm/company-policy.md`, `company-completion.md`, `merge-stage.md`,
 `acceptance.md`, `docs/specs/mdm/policy-language.md`, `docs/specs/person/consumer.md`)
 and `.scratch/handover/2026-09-20-codex-policy-language-reconciliation.md`.
 
@@ -293,7 +293,7 @@ deterministic-activation section:
 - `:384-387` — "Measured: never trips on 72,981 real decisions."
 
 The 99.9% bar is §9.2 `measured` activation, on labelled held-out decisions
-(`:328-353`, `docs/specs/clean-mdm/acceptance.md:40`). Different event, different
+(`:328-353`, `docs/specs/mdm/acceptance.md:40`). Different event, different
 unit, different class of rule. **In the spec the two numbers do not conflict.**
 
 **Where the conflict comes from.** Ticket 02 relocates the line twice over: it keys
@@ -466,10 +466,10 @@ silent contract change that deserves a version bump or a distinct key name.
 
 | Figure | Where it actually appears |
 |---|---|
-| Company 99.9% at one-sided 95% | `docs/specs/clean-mdm/company-policy.md:21` (Q11); also `merge-stage.md:69`, `acceptance.md:40`, `policy-language.md:325-326` |
+| Company 99.9% at one-sided 95% | `docs/specs/mdm/company-policy.md:21` (Q11); also `merge-stage.md:69`, `acceptance.md:40`, `policy-language.md:325-326` |
 | Person 99% at one-sided 97.5% | `docs/specs/person/consumer.md:167`, `:622`; `policy-language.md:325` |
 | `warm_up_decisions: 10000`, `max_per_10k: 5` | `policy-language.md:269`, `:384` |
-| Q14 identifier-only activation without a precision study | `docs/specs/clean-mdm/company-policy.md:24` |
+| Q14 identifier-only activation without a precision study | `docs/specs/mdm/company-policy.md:24` |
 | "A rule with no bar for its family cannot be activated" | `policy-language.md:326` |
 
 Quoting `company-policy.md:21` in full, since it is the load-bearing line:
@@ -479,7 +479,7 @@ Quoting `company-policy.md:21` in full, since it is the load-bearing line:
 > zero hard-veto violations in adversarial tests. …
 
 **Note for the record:** the brief asked whether the Company figure appears in
-`docs/specs/clean-mdm/company-completion.md`. **It does not** — `grep` for `99.9`
+`docs/specs/mdm/company-completion.md`. **It does not** — `grep` for `99.9`
 in that file returns nothing. What it does say is `:65-68`: "Choose an approved
 cohort containing real linked records … **Pin the cohort before measuring
 acceptance.**" The bar lives in `company-policy.md`, `merge-stage.md` and
@@ -516,7 +516,7 @@ working." (`02-...md:23-24`).
 mention of publication time is "within one source the later publication wins",
 scoped *inside* a group.
 
-**What the repo says is missing.** `docs/specs/clean-mdm/merge-stage.md:139-145`
+**What the repo says is missing.** `docs/specs/mdm/merge-stage.md:139-145`
 gives the accepted total order:
 
 ```

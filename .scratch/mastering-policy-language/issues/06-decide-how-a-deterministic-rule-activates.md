@@ -72,7 +72,7 @@ warm-up.
 
 Clean MDM's own hook: "An identifier has authority, namespace, normalized
 value, scope/jurisdiction, valid interval, and source assertion.
-**Exclusivity is policy-specific.**" (`docs/specs/clean-mdm/domain-model.md:46-48`).
+**Exclusivity is policy-specific.**" (`docs/specs/mdm/domain-model.md:46-48`).
 The contract is where exclusivity is declared:
 
 | Field | Meaning | `sec.cik` (Person) | `crd.individual` (Person) |

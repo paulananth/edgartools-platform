@@ -22,9 +22,9 @@ stale assessments and preserve rejected/superseded history.
 
 ## Evidence and prior decisions
 
-- [Rebased Claude handoff review](../../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md)
+- [Rebased Claude handoff review](../../../docs/specs/mdm/design-reconciliation-2026-09-19.md)
   corrects the claims about preview and existing durable reviews.
-- [Accepted Company Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md)
+- [Accepted Company Q1–Q13](../../../docs/specs/mdm/company-policy.md)
   sets automatic processing, deferred outcomes and separate consolidation gates.
 - Company Q13 accepted by the user ("yes"), 2026-09-19. Implement the
   recommended coverage; other accepted decisions are not reopened.

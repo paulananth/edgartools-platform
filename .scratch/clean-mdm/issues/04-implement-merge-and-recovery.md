@@ -28,4 +28,4 @@ SQL requires blocking reviews in every observing batch and rejects premature
 closure. Independent Standards/Spec/GoF reviews of this increment completed,
 and their findings were fixed. Reviewed deferred resolution, complete source
 publication accounting and staged large-component reversal still block closure.
-See [build state](../../../docs/specs/clean-mdm/state-of-build.md).
+See [build state](../../../docs/specs/mdm/state-of-build.md).

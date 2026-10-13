@@ -1,4 +1,4 @@
-# Clean MDM evidence report
+# MDM evidence report
 
 Date: 2026-09-18
 Status: policy gate resolved; local foundation and shared merge core implemented.
@@ -106,7 +106,7 @@ records both outcomes, the exact tests, image digest and test-file hash.
 
 These tests cover the existing acquisition ledger, permissions, fencing,
 source revisions and processing settlement. They do not prove the proposed
-Clean MDM identities, Merge Stage, consumer contracts or reversal behavior.
+MDM identities, Merge Stage, consumer contracts or reversal behavior.
 
 ## Evidence still required
 

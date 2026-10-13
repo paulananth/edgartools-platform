@@ -58,7 +58,7 @@ pre-approved questions.
 - **Sequencing, set 2026-09-19**: the MDM Postgres backend is this map's
   near-term target. The Snowflake half (gold, graph Native App) is
   deferred, not decided against — following the sequencing
-  [Clean MDM](../../clean-mdm/map.md) already established for MDM
+  [Clean MDM](../../mdm/map.md) already established for MDM
   itself ("The user selected local PostgreSQL for the current target
   and a 30-day legacy rollback window; Snowflake qualification is
   deferred"). `.scratch/clean-mdm/` is Codex/Grok-owned, active work

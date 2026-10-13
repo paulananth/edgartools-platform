@@ -26,7 +26,7 @@ does not implement anything and does not touch Clean MDM's own files.
   the foundation map — same ownership reasoning as the
   [pre-merge staging proposal](../clean-mdm-premerge-staging-proposal/map.md).
 - **Ownership boundary, deliberately kept**: `.scratch/clean-mdm/`,
-  `docs/specs/clean-mdm/`, and `edgar_warehouse/mdm/clean/` are Codex/Grok-
+  `docs/specs/mdm/`, and `edgar_warehouse/mdm/clean/` are Codex/Grok-
   owned, active work. Read-only reference only; nothing there was edited.
 - Checked live against `origin/codex/clean-mdm-integration` on 2026-09-19.
 - Skills: `/wayfinder`. No grilling round needed — the decision to propose

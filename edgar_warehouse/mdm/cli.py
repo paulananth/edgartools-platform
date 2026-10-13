@@ -1,4 +1,4 @@
-"""CLI subcommand: `edgar-warehouse mdm ...`, Clean MDM only.
+"""CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Seven commands: migrate, check-connectivity, counts, prepare-clean-company,
 prepare-capture, name-census and force-publish. The legacy MDM commands and their tables are
@@ -15,10 +15,10 @@ from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 
 
 def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
-    mdm = subparsers.add_parser("mdm", help="Clean MDM: migration, connectivity, counts, and preparation")
+    mdm = subparsers.add_parser("mdm", help="MDM: migration, connectivity, counts, and preparation")
     mdm_sub = mdm.add_subparsers(dest="mdm_command", required=True)
 
-    migrate = mdm_sub.add_parser("migrate", help="Create or upgrade the Clean MDM schema")
+    migrate = mdm_sub.add_parser("migrate", help="Create or upgrade the MDM schema")
     migrate.add_argument("--application-role", default="application")
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
 
@@ -76,10 +76,10 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     force.add_argument("--step", default="graph-publication", help="The publish target's step name")
     force.set_defaults(handler=_logged_handler("force-publish", _clean("force_publish")))
 
-    counts = mdm_sub.add_parser("counts", help="Print Clean MDM entity and record counts")
+    counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
     counts.set_defaults(handler=_logged_handler("counts", _clean("counts")))
 
-    check = mdm_sub.add_parser("check-connectivity", help="Check the Clean MDM database connection and schema")
+    check = mdm_sub.add_parser("check-connectivity", help="Check the MDM database connection and schema")
     check.set_defaults(handler=_logged_handler("check-connectivity", _clean("check_connectivity")))
 
 
@@ -97,7 +97,7 @@ def _handle_migrate(args: argparse.Namespace) -> int:
 
 
 def _clean(name: str) -> Callable[[argparse.Namespace], int]:
-    """The Clean MDM command function, imported when the command runs."""
+    """The MDM command function, imported when the command runs."""
     def run(args: argparse.Namespace) -> int:
         from edgar_warehouse.mdm.clean import cli
 

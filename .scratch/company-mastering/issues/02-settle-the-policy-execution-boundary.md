@@ -27,7 +27,7 @@ runtime executes it. Settle each, and amend the spec:
 
 [Policy language](../../../docs/specs/mdm/policy-language.md),
 [Codex's reconciliation list](../../handover/2026-09-20-codex-policy-language-reconciliation.md),
-[Company policy](../../../docs/specs/clean-mdm/company-policy.md).
+[Company policy](../../../docs/specs/mdm/company-policy.md).
 
 ## Answer
 

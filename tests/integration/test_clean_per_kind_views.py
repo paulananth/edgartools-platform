@@ -1,6 +1,6 @@
 """Per-kind Stage and Master views over the one evidence and master table.
 
-Clean MDM keeps every kind in one table with the kind as a value inside it.
+MDM keeps every kind in one table with the kind as a value inside it.
 Migration 033 presents that as one pair of views per kind, so a reader can ask
 for the Company stage without repeating the filter and without a second copy of
 the data to keep in step; 034 gave the source-side pair the Stage name.

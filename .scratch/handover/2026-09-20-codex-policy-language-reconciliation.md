@@ -23,7 +23,7 @@ design rather than accumulating source-specific matching code in that draft.
 
 ## Research reverified
 
-[Machine-readable evidence](../clean-mdm/research-reverification-20260920.json)
+[Machine-readable evidence](../mdm/research-reverification-20260920.json)
 records artifact hashes, sizes, counts, replay results and limitations.
 
 All three original September 11 16:00 UTC Golden Copy archives were restored

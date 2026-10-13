@@ -1,4 +1,4 @@
-"""mdm.merge: one Clean MDM input manifest through the Merge Stage (mastering to-do 20e).
+"""mdm.merge: one MDM input manifest through the Merge Stage (mastering to-do 20e).
 
 The envelope's input names a version-2 MDM manifest; a batch's `input.path`
 is a file beside it, fetched by its own sha256. The worker runs the existing

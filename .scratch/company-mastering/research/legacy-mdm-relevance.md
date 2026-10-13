@@ -29,7 +29,7 @@ question isn't just "no". Legacy is the entire running MDM.** It is what
 `edgartools-prod-mdm` executes on every `load_history` and `daily_incremental`
 run (F1); it owns every published entity id there is; and no automated path
 installs `mdm_v2` at all — only a deliberate manual command does (F2). Clean MDM is a replacement
-with a written, accepted cutover plan (`docs/specs/clean-mdm/acceptance.md`),
+with a written, accepted cutover plan (`docs/specs/mdm/acceptance.md`),
 and that plan names legacy rows as a **migration input and a crosswalk
 obligation** — not as a design input:
 
@@ -72,7 +72,7 @@ nineteen modules of `edgar_warehouse/mdm/clean/` by grep for legacy table names,
 `clean/store.py` line by line; `023_clean_mdm.sql`, `024_clean_mdm_mirror.sql`,
 `001_initial_schema.sql`, `034_clean_mdm_stage_view_naming.sql`.
 
-Docs: `docs/adr/0013`, `docs/specs/clean-mdm/{README,acceptance,pipeline-inventory,state-of-build}.md`,
+Docs: `docs/adr/0013`, `docs/specs/mdm/{README,acceptance,pipeline-inventory,state-of-build}.md`,
 `.scratch/company-mastering/{map.md,issues/07-per-kind-read-views.md}`,
 `.scratch/clean-mdm/{map.md,local-mdm-schema-evidence.json}`,
 `.scratch/person-consumer-contract/{map.md,issues/06,issues/22}`,
@@ -289,7 +289,7 @@ tests on the other.
 -- Clean MDM v1. Explicit opt-in migration; the legacy MDM remains untouched.
 ```
 
-`docs/specs/clean-mdm/README.md:3` — "Q1–Q16 accepted; local shared-core
+`docs/specs/mdm/README.md:3` — "Q1–Q16 accepted; local shared-core
 implementation in progress. No hosted qualification or consumer cutover has
 occurred." And `:54-56`:
 
@@ -301,7 +301,7 @@ That last sentence is the most precise statement of the answer to the operator's
 question, and it cuts both ways: legacy is not an error to be repudiated, and it
 is not an authority to be deferred to. It is the description of what runs.
 
-**The written plan is `docs/specs/clean-mdm/acceptance.md`,** and it commits to
+**The written plan is `docs/specs/mdm/acceptance.md`,** and it commits to
 these things specifically (quoting its own words):
 
 - **A gated sequence, not a date.** Local PostgreSQL 16 acceptance (a 16-row
@@ -329,7 +329,7 @@ these things specifically (quoting its own words):
   consumer routing mechanism, acceptable pause/lag, legacy catch-up method and
   rollback triggers."
 
-**`docs/specs/clean-mdm/pipeline-inventory.md` is the per-path migration map** —
+**`docs/specs/mdm/pipeline-inventory.md` is the per-path migration map** —
 a 17-row table of "Current identity / role / relationship effects" against
 "Target routing and publication", covering Company, ADV Adviser, ADV Fund,
 Person, Security, 13F, proxy, audit, hierarchy, relationships, stewardship,
@@ -548,7 +548,7 @@ Worth flagging so the next session does not over-read either.
   `.scratch/person-consumer-contract/map.md:49` and, restated, at
   `issues/06-...md:12-13, :19`. That is the repo's issue tracker and therefore a
   primary decision record (`docs/agents/issue-tracker.md`) — but it is *not* in
-  `docs/specs/clean-mdm/` or an ADR, and `acceptance.md`, which is the accepted
+  `docs/specs/mdm/` or an ADR, and `acceptance.md`, which is the accepted
   cutover contract, says the opposite-sounding thing in its own voice ("Retain
   old MDM …; this is not an automatic deletion schedule"). These reconcile
   (decommission the *path*, retain the *store* through rollback), but a reader
@@ -601,7 +601,7 @@ them:
    could ever have to reach `mdm_v2`, so settling it closes the question for
    good.
 2. **Whether the 2026-09-19 decommission directive should be promoted out of
-   `.scratch`** (F8) — into `docs/specs/clean-mdm/state-of-build.md` or an ADR,
+   `.scratch`** (F8) — into `docs/specs/mdm/state-of-build.md` or an ADR,
    beside `acceptance.md`'s retention language, so the two are read together.
 3. **Whether `mdm_v2` is expected to exist in `EDGARTOOLS_PROD_MDM` at all**
    (F2). Nothing installs it; if someone believes it is there, that belief needs

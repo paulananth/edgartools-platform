@@ -2,7 +2,7 @@
 
 A configuration-driven platform for decision-support facts used by trading
 agents and by people auditing those facts. Agents profile a captured data set
-and onboard it, generically, into Clean MDM (identities and relationships),
+and onboard it, generically, into MDM (identities and relationships),
 reference data, or silver. SEC EDGAR and GLEIF are the current
 source-completion focus. AWS S3 and Snowflake are the analytics deployment
 target. A local mastering proof does not authorize that deployment.
@@ -13,7 +13,7 @@ are examples, not hardcoded steps. A proven name rule may bind only with
 measured proof and operator approval. A name lookup id never binds.
 
 The current executable is `edgar-warehouse`. It runs Rules, Bookkeeping, Change
-Journal, Clean MDM and local silver operations, plus independent parsing and
+Journal, MDM and local silver operations, plus independent parsing and
 mastering workers.
 
 The [configured capture guide](docs/configured-capture.md) documents the
@@ -26,7 +26,7 @@ Ingest acquires one source file and keeps the verified bytes as bronze.
 An approved Rules version says how to read that file. Bookkeeping freezes
 the work, hands each unit to a worker, and admits a verifier's read-back
 before the unit is complete. Silver is the flat landing of those rows.
-Clean MDM masters identities from the source extract. Reference data is
+MDM masters identities from the source extract. Reference data is
 its own landing. The analytics path reads warehouse objects and does not
 decide an identity.
 
@@ -72,7 +72,7 @@ S3 warehouse objects --> Snowflake native pull --> dbt gold --> Streamlit
 
 Rules own the versioned contracts. Bookkeeping owns work and recovery, and
 starts without a parser or a master record. Workers read and write. A separate
-verifier rereads the destination. Clean MDM owns identities, evidence, merge
+verifier rereads the destination. MDM owns identities, evidence, merge
 decisions and publication intent, and each commit checks the worker's live
 lease. Bookkeeping and the Change Journal are peers over every step:
 Bookkeeping restarts a load where it stopped, and the Change Journal decides,
@@ -90,7 +90,7 @@ the platform chose one engine, built before the next per-source parser, with
 Rust under the cover and Python as the only caller. An approved rules file
 states the format, the container, the document checks, the tables, the
 columns, and the record checks. `edgar_warehouse/rules/source_engine.py` is
-the facade. Bookkeeping, the rules commands, and Clean MDM reach a source extract
+the facade. Bookkeeping, the rules commands, and MDM reach a source extract
 through that facade. Calls into the edgartools package stay in Python. A
 custom step is a named Python function, used when the rules file cannot state
 the field.
@@ -198,7 +198,7 @@ install plan (`plan`), checks the workstation (`doctor`) and, with `deploy
 --apply`, runs each stage after a yes. Its stages provision AWS and Snowflake,
 publish the images, build dbt gold and the dashboard, then create and upgrade
 the six PostgreSQL 16 stores the configured platform runs on: Rules,
-Bookkeeping, Change Journal, RDM, silver, and Clean MDM with Bookkeeping's
+Bookkeeping, Change Journal, RDM, silver, and MDM with Bookkeeping's
 lease guard. Each schema is created and upgraded as its owner, through the
 store's own migration variable (`RULES_MIGRATION_DATABASE_URL`,
 `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL`,
@@ -260,7 +260,7 @@ retired execution paths.
 | [crates/source-contract](crates/source-contract) | Rust source engine; Python is the only caller |
 | [edgar_warehouse/workers](edgar_warehouse/workers) | External workers and destination verifiers |
 | [rules](rules) | Versioned source, dataset and pipeline definitions |
-| [Clean MDM specifications](docs/specs/clean-mdm/README.md) | Domain policies, evidence, Company and recovery requirements |
+| [MDM specifications](docs/specs/mdm/README.md) | Domain policies, evidence, Company and recovery requirements |
 | [Reference data (RDM)](docs/specs/rdm/spec.md) | Code sets, approved versions, hierarchies and crosswalks |
 | [infra/terraform](infra/terraform) | AWS/Snowflake passive and access roots |
 | [infra/snowflake](infra/snowflake) | Native pull, dbt gold and dashboard assets |

@@ -10,7 +10,7 @@ Clean MDM's `adapter` block is the Source Contract's mapping into MDM (Q8),
 but it is specified only by code: `edgar_warehouse/mdm/clean/adapters.py:49-158`
 and one instance, `edgar_warehouse/mdm/clean/company_source.py:32-61`. The
 Dataset Contract around it has one line in
-`docs/specs/clean-mdm/source-evidence.md:23`.
+`docs/specs/mdm/source-evidence.md:23`.
 
 Produce the reference from primary sources (the code, its tests, the
 clean-mdm specs), citing `path:line` for every claim:

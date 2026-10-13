@@ -21,7 +21,7 @@ explain.
 
 Read directly from `origin/codex/clean-mdm-integration`
 (`edgar_warehouse/mdm/clean/merge.py`, `edgar_warehouse/mdm/clean/survivorship.py`)
-and `docs/specs/clean-mdm/merge-stage.md`:
+and `docs/specs/mdm/merge-stage.md`:
 
 | Legacy pattern (operator's description) | Clean MDM equivalent |
 | --- | --- |
@@ -116,8 +116,8 @@ becoming) a second master-state writer is Clean MDM's call, not this map's.
 
 - `origin/codex/clean-mdm-integration:edgar_warehouse/mdm/clean/merge.py`
   (read live, this session)
-- `docs/specs/clean-mdm/merge-stage.md` (read live, this session)
-- `docs/specs/clean-mdm/state-of-build.md` (read live, this session)
+- `docs/specs/mdm/merge-stage.md` (read live, this session)
+- `docs/specs/mdm/state-of-build.md` (read live, this session)
 - Legacy comparison:
   [agent-open-query-interface research 05](../agent-open-query-interface/research/05-mdm-postgres-ddl-inventory.md),
   [research 06](../agent-open-query-interface/research/06-mdm-postgres-call-sequence.md),

@@ -1,4 +1,4 @@
-"""The images carry `rules/`: production loads its Clean MDM rules from there."""
+"""The images carry `rules/`: production loads its MDM rules from there."""
 
 from __future__ import annotations
 

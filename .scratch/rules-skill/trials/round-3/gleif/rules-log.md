@@ -14,7 +14,7 @@ Provenance tags used below: [files] = profile of inputs/, [code] = repo code,
 - Not new. The repo already names it [code]:
   - reader: `edgar_warehouse/mdm/clean/gleif_source.py` (`dataset_contract` loads `rules_files.source("gleif")`, so the folder name is fixed: `rules/sources/gleif/`; its docstring says the mapping lives in `rules/sources/gleif/source.yaml`, "rules skill ticket 01").
   - source code `gleif.level1.v1` in `rules/merge/kinds/company.yaml` (`defaults.sources`, and the `source` of both SEC-to-GLEIF name rules).
-  - `docs/specs/clean-mdm/source-evidence.md:84` names `gleif.reporting_exception` (a spec name, not code).
+  - `docs/specs/mdm/source-evidence.md:84` names `gleif.reporting_exception` (a spec name, not code).
 - The rules file `rules/sources/gleif/source.yaml` is missing, so per the skill: every step, full profile, keep the repo's names.
 - `edgar-warehouse rules status` (to tell whether the source code is registered): NOT BUILT. Question for the operator.
 
@@ -97,11 +97,11 @@ Repo code [code]:
 
 Repo docs [docs]:
 - `docs/specs/mdm/policy-language.md` (~l.286): GLEIF kind table: `FUND -> fund_structure`, `BRANCH -> branch`, `RESIDENT_GOVERNMENT_ENTITY -> government`, `INTERNATIONAL_ORGANIZATION -> international_organization`, `SOLE_PROPRIETOR` left unnamed. With `matching.py:109`: `kind_values: {GENERAL: company}`. Not a question.
-- `docs/specs/clean-mdm/company-completion.md` (2026-09-19): project LEI/link status, legal form/jurisdiction, entity/registration status, registration dates/authority, managing LOU, validation source, creation date; "initially retain GLEIF names, addresses, legal events, expiration and successor LEIs as separate source evidence". Later decisions disagree for `name`: the name rules (2026-09-25, `company.yaml`) read GLEIF's `name` field, so name is a field. Per the hard rule the later operator decision wins; both cited. For `address` no later decision exists: question.
-- `docs/specs/clean-mdm/company-policy.md` Q1 (2026-09-19): Company scope = SEC universe plus approved GLEIF-only parents; not all of GLEIF. Q7: unsupported kinds remain evidence.
-- `docs/specs/clean-mdm/source-evidence.md` (2026-09-19) proposes codes `gleif.lei`, `gleif.relationship`, `gleif.reporting_exception`. The later `company.yaml` (company-2026-09-25.13) and the reader use `gleif.level1.v1`, so for Level 1 the later name wins (both cited). For RR and REPEX nothing later names a code: question.
+- `docs/specs/mdm/company-completion.md` (2026-09-19): project LEI/link status, legal form/jurisdiction, entity/registration status, registration dates/authority, managing LOU, validation source, creation date; "initially retain GLEIF names, addresses, legal events, expiration and successor LEIs as separate source evidence". Later decisions disagree for `name`: the name rules (2026-09-25, `company.yaml`) read GLEIF's `name` field, so name is a field. Per the hard rule the later operator decision wins; both cited. For `address` no later decision exists: question.
+- `docs/specs/mdm/company-policy.md` Q1 (2026-09-19): Company scope = SEC universe plus approved GLEIF-only parents; not all of GLEIF. Q7: unsupported kinds remain evidence.
+- `docs/specs/mdm/source-evidence.md` (2026-09-19) proposes codes `gleif.lei`, `gleif.relationship`, `gleif.reporting_exception`. The later `company.yaml` (company-2026-09-25.13) and the reader use `gleif.level1.v1`, so for Level 1 the later name wins (both cited). For RR and REPEX nothing later names a code: question.
 - `CONTEXT.md`: Accounting Direct Parent (GLEIF RR is the evidence; a missing parent is not proof of none), GLEIF Fund Link (IS_FUND-MANAGED_BY, IS_SUBFUND_OF, IS_FEEDER_TO, keep GLEIF's direction), IS_INTERNATIONAL_BRANCH_OF (Branch to head office). `company-completion.md` delivery boundary: no Fund/Person integration before the Company gate passes.
-- Referenced but absent in this repo copy: `docs/specs/clean-mdm/native-gleif.md`, every `.scratch/...` link (e.g. `gleif-company-augmentation/issues/15-...`).
+- Referenced but absent in this repo copy: `docs/specs/mdm/native-gleif.md`, every `.scratch/...` link (e.g. `gleif-company-augmentation/issues/15-...`).
 - No bronze family name for GLEIF exists anywhere in the repo (no acquisition registry entry): question.
 
 Public docs [web; gleif.org documentation pages and the GLEIF RA code list CSV only; no data API, no sec.gov]:

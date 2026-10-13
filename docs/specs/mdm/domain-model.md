@@ -1,4 +1,4 @@
-# Clean MDM identity and relationship model
+# MDM identity and relationship model
 
 Status: target design. Company/Person separation and governed profiles are
 user-directed. Q12–Q15 accept Fund Structure, Branch, Government Entity and

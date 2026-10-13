@@ -9,12 +9,12 @@ complete.** Every decision below is resolved and cited; the things that are
 not decided are marked *Open* and are not hidden. Nothing here authorizes
 implementation — the [release gates](#release-gates) do.
 
-**Implementation owner.** Clean MDM (`edgar_warehouse/mdm/clean/`,
-`docs/specs/clean-mdm/`, Codex/Grok-owned and read-only from here). Their
-[Company completion gate](../clean-mdm/company-completion.md) line 80 forbids
+**Implementation owner.** MDM (`edgar_warehouse/mdm/clean/`,
+`docs/specs/mdm/`, Codex/Grok-owned and read-only from here). Their
+[Company completion gate](../mdm/company-completion.md) line 80 forbids
 starting Person integration until the local Company gate passes; this spec is
 the contract that integration must satisfy when it starts, not a delivery
-plan. Where this spec and a Clean MDM document disagree, the disagreement is a
+plan. Where this spec and an MDM document disagree, the disagreement is a
 defect in one of them, raised by a note under `.scratch/handover/` — never by
 editing their files.
 
@@ -52,7 +52,7 @@ of one natural person, distinct from a Company and shared with an applicable
 individual Adviser profile"; *avoid*: employer identity, **role as identity**,
 same name as proof of sameness. **Mastering Policy** and **Identifier
 Contract** are as defined there and in
-[policy-language.md](../mdm/policy-language.md). Clean MDM's own terms —
+[policy-language.md](../mdm/policy-language.md). MDM's own terms —
 assertion, decision, projection, deferred record, Steward, Merge Stage,
 candidate assessment — are used in their sense and never redefined.
 
@@ -163,7 +163,7 @@ as amended by
 
 | Tier | Evidence | Action |
 | --- | --- | --- |
-| A | shared cross-reference id | automatic, deterministic — activates through a verified Identifier Contract (Clean MDM Q14, accepted 2026-09-20), not a precision study |
+| A | shared cross-reference id | automatic, deterministic — activates through a verified Identifier Contract (MDM Q14, accepted 2026-09-20), not a precision study |
 | B | compound context key (below) | automatic **only** once a held-out calibration proves ≥ 99% precision at a one-sided **97.5%** Wilson lower bound. **Not met today** |
 | C | fuzzy name, or a name across different issuers | Steward review, through the candidate assessment |
 | D | below the review floor | reject, disposition recorded |
@@ -250,8 +250,8 @@ and CRD are two typed identifiers, not one mergeable key (research 15).
 | Relationship | `mdm.current_record` (`object_type = 'relationship'`) |
 | Evidence | `mdm.source_reading` — including compensation, which is never projected |
 | Waiting edge / unclassified owner | `mdm.set_aside_record` (migration 027) |
-| Pre-commit proposal | durable candidate assessment (migration 028, [candidate-assessments.md](../clean-mdm/candidate-assessments.md)) |
-| Checkpoint | `mdm.checkpoint` keyed `(consumer, source_family, publication_family)` (migration 029, [family-checkpoints.md](../clean-mdm/family-checkpoints.md)) |
+| Pre-commit proposal | durable candidate assessment (migration 028, [candidate-assessments.md](../mdm/candidate-assessments.md)) |
+| Checkpoint | `mdm.checkpoint` keyed `(consumer, source_family, publication_family)` (migration 029, [family-checkpoints.md](../mdm/family-checkpoints.md)) |
 | Rules | `mdm.policy` body, per [policy-language.md](../mdm/policy-language.md) |
 
 ### The Person projection
@@ -464,7 +464,7 @@ version over-merged.
 
 ## Observability
 
-Per run: records read, normalized, deferred, total (Clean MDM's
+Per run: records read, normalized, deferred, total (MDM's
 `source_accounting` invariant); classification verdicts by rule step, including
 deferred owners; candidates by tier and disposition, including
 `distinct_identified` vetoes; Persons created, bound, split, merged, retired;
@@ -527,7 +527,7 @@ classification. Classification needs **zero SEC requests** once ticket 19 feeds
 it the bronze `submissions.json` — 4,831/4,831 owner CIKs already had one.
 
 *Open*: runtime, memory and storage per wave, and the incremental cost of the
-monthly reconciliation, which are measurable only against Clean MDM's
+monthly reconciliation, which are measurable only against MDM's
 implementation. Approved cost is a release gate.
 
 ## Migration and rollback
@@ -551,7 +551,7 @@ under `reconciliation_mode=True` (`base.py:263-266`).
 
 Silver's `sec_ownership_reporting_owner.mdm_entity_id` and
 `sec_adv_filing.mdm_entity_id` are **frozen as legacy**: never read, never
-rewritten by Clean MDM. Dropping the columns is the silver owner's call
+rewritten by MDM. Dropping the columns is the silver owner's call
 (ticket 22).
 
 **Rollback**: a wave is reversible because every proposal is a durable
@@ -615,8 +615,8 @@ Plus the foundation's own gates, inherited.
 
 | Dependency | State |
 | --- | --- |
-| Clean MDM Company completion gate (`company-completion.md:80`) | Person integration may not start before it passes |
-| Durable candidate assessments (migration 028) | **accepted and implemented** by Clean MDM Q13 — required by this contract's replay rule |
+| MDM Company completion gate (`company-completion.md:80`) | Person integration may not start before it passes |
+| Durable candidate assessments (migration 028) | **accepted and implemented** by MDM Q13 — required by this contract's replay rule |
 | Per-family checkpoints (migration 029) | **accepted and implemented** |
 | Rules-as-data policy body + Identifier Contract | **accepted for Company** as Q14 (2026-09-20); Person needs the same activation path for Tier A |
 | Person amendment to Q11 — ≥ 99% at one-sided 97.5%, with the identifier veto | **open with Codex**; Company's Q11 (99.9% at 95%) is explicitly not to be applied to other kinds |
@@ -643,11 +643,11 @@ Plus the foundation's own gates, inherited.
 
 ## Non-goals
 
-- Implementation, migrations, schedules, deployment — Clean MDM's.
-- Any edit to `.scratch/clean-mdm/`, `docs/specs/clean-mdm/` or
+- Implementation, migrations, schedules, deployment — MDM's.
+- Any edit to `.scratch/clean-mdm/`, `docs/specs/mdm/` or
   `edgar_warehouse/mdm/clean/`.
 - Person evidence from GLEIF or any LEI source.
-- Reopening Clean MDM's accepted Q1–Q16 merge policy, beyond the one Person
+- Reopening MDM's accepted Q1–Q16 merge policy, beyond the one Person
   amendment named in Dependencies.
 - Legacy MDM in any form.
 - ADV Part 2B supervised persons and IARs — a capture decision, not this

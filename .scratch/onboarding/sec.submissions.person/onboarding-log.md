@@ -94,7 +94,7 @@ copied into `rules/` and corrected (comments only, see map).
   `rules/merge/policy.yaml`; `rules/merge/pending-proofs.yaml`;
   `rules/sources/sec.submissions.company/*`; `edgar_warehouse/mdm/clean/activation.py`
   (`ACCEPTED_BARS`, `_check_proof`); `classification.py`; `adapters.py`
-  (`_classify`). Not re-read: `CONTEXT.md`, `docs/specs/clean-mdm/source-evidence.md`
+  (`_classify`). Not re-read: `CONTEXT.md`, `docs/specs/mdm/source-evidence.md`
   (the trial read the rest; no new decision depends on them).
 - Reader: none for Person. The paths are the raw submissions JSON.
 - **Written** (copied from the trial draft, then edited as text, comments only; no value changed):

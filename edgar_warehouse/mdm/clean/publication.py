@@ -1,4 +1,4 @@
-"""Idempotent consumer adapters for the versioned Clean MDM contract."""
+"""Idempotent consumer adapters for the versioned MDM contract."""
 
 from __future__ import annotations
 

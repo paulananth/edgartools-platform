@@ -9,7 +9,7 @@ Blocked by: none (05 resolved)
 The GoF review's Appendix C item 3: the exact transaction boundary between
 accepted decision, current MDM projection, and checkpoint advancement.
 
-Read against Clean MDM's `docs/specs/clean-mdm/recovery.md` ("Transaction
+Read against Clean MDM's `docs/specs/mdm/recovery.md` ("Transaction
 boundary" section, read-only on `origin/codex/clean-mdm-integration`), this
 is already decided there for the MDM side: one Postgres transaction holds
 the accepted decision, source assertions, identity/profile/relationship

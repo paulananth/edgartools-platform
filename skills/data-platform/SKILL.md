@@ -1,13 +1,13 @@
 ---
 name: data-platform
-description: The whole data skill, installed as one package. Use it to set up a machine, then to take a feed from its captured files all the way through - onboarding its rules, parsing it with the configured engine, mastering it into Clean MDM - and to write a custom parsing step only when the engine cannot state something. Start here; it sends you to data-onboarding, refining-rules, bookkeeping or change-journal for each step's detail.
+description: The whole data skill, installed as one package. Use it to set up a machine, then to take a feed from its captured files all the way through - onboarding its rules, parsing it with the configured engine, mastering it into MDM - and to write a custom parsing step only when the engine cannot state something. Start here; it sends you to data-onboarding, refining-rules, bookkeeping or change-journal for each step's detail.
 ---
 
 # Data Platform
 
 One installed package, `edgartools-data`, holds everything this skill runs:
 the rules creator, the configured engine, the workers, Bookkeeping, the
-Change Journal, Clean MDM, and these skills. No checkout of the repository is
+Change Journal, MDM, and these skills. No checkout of the repository is
 needed, except to write a custom parsing step (Mode 6).
 
 ## Hard stops
@@ -27,7 +27,7 @@ question at a time, with your recommendation.
 | 1b | Change a live feed's rules | [refining-rules](../refining-rules/SKILL.md) |
 | 2 | Parse: read captured files with the configured engine | this file, then [bookkeeping RUN](../bookkeeping/RUN.md) |
 | 2b | Combine keyed collections and join configured source extracts | [COMBINING.md](COMBINING.md) |
-| 3 | Master: the parsed records into Clean MDM | this file |
+| 3 | Master: the parsed records into MDM | this file |
 | 4 | Approve and switch on | [APPROVE](../data-onboarding/APPROVE.md) |
 | 5 | Recover a run | [bookkeeping RECOVERY](../bookkeeping/RECOVERY.md), [change-journal](../change-journal/SKILL.md) |
 | 6 | Custom parsing, only when the engine cannot state a field | this file |
@@ -121,11 +121,11 @@ Future kernel migrations require parity and caller-path qualification before
 changing operational instructions; this slice does not change approval or
 activation steps.
 
-Three worker profiles take parsed records into Clean MDM; a feed's rules
+Three worker profiles take parsed records into MDM; a feed's rules
 file names them in its `mdm` target (or a pipeline's), after its `source.read`
 step:
 
-- `mdm.prepare`: a source extract from `source.read` into a Clean MDM input manifest. Its
+- `mdm.prepare`: a source extract from `source.read` into an MDM input manifest. Its
   unit's keys say which `table` of the source extract, which MDM `dataset` (source
   code) reads the rows, the `policy` digest the batches pin, the `consumer`
   they advance (its own, from checkpoint 0), a `batch_id` prefix and the
@@ -153,7 +153,7 @@ step:
   and first-N rows").
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
   manifest. Its verifier rebuilds them and reports `mdm.prepared`.
-- `mdm.merge`: one Clean MDM input manifest (contract version 2) through the
+- `mdm.merge`: one MDM input manifest (contract version 2) through the
   Merge Stage; its verifier reads the batches back from MDM and reports
   `mdm.committed`.
 - `mdm.publish`: one committed batch to one consumer (`journal`, `export`,
@@ -169,7 +169,7 @@ then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application rol
 with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
 since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
 
-For an existing Clean MDM store, before starting the new publication runtime,
+For an existing MDM store, before starting the new publication runtime,
 rerun `edgar-warehouse mdm migrate --application-role <MDM application role>`
 with the migration owner's `MDM_DATABASE_URL`. This applies the checksummed
 publication-input migration and preserves existing publication readers' SELECT

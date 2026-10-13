@@ -29,7 +29,7 @@ Content the proposal must carry:
 - **Why**: [ticket 02](02-decide-gleif-publication-family-taxonomy.md)'s
   ~8 independent publication families and [ticket 03](03-decide-delta-continuity-and-recovery-order.md)'s
   "never advance a sibling family's checkpoint" cannot be expressed with one
-  scalar position per consumer. Clean MDM's own `docs/specs/clean-mdm/recovery.md`
+  scalar position per consumer. Clean MDM's own `docs/specs/mdm/recovery.md`
   line 20 already describes the checkpoint as carrying "family/epoch and
   source position" — the DDL lags their spec; this proposal asks them to
   close that gap, not to change direction.
@@ -60,6 +60,6 @@ Done, 2026-09-19:
   awaiting review and that the two together complete the GoF 7-record
   contract on their side.
 
-Nothing under `.scratch/clean-mdm/`, `docs/specs/clean-mdm/`, or
+Nothing under `.scratch/clean-mdm/`, `docs/specs/mdm/`, or
 `edgar_warehouse/mdm/clean/` was touched. The operator must point the next
 Codex session at the handover file manually.

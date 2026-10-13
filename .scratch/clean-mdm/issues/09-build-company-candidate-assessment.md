@@ -46,5 +46,5 @@ work. This ticket must not claim completion of multisource Company mastering.
 architecture), with zero skips. The final assessment changes passed 9 targeted
 PostgreSQL tests, zero skips; these counts overlap. Ruff and diff checks pass.
 [Evidence](../company-assessment-acceptance.json) pins source and report hashes.
-[Operation and recovery](../../../docs/specs/clean-mdm/candidate-assessments.md).
+[Operation and recovery](../../../docs/specs/mdm/candidate-assessments.md).
 Persistent local and hosted databases were not changed.

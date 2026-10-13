@@ -53,9 +53,9 @@ and [machine-readable evidence](../research-reverification-20260920.json).
 
 ## Inputs
 
-[Publication verifier contract](../../../docs/specs/clean-mdm/source-publications.md),
-[Company policy](../../../docs/specs/clean-mdm/company-policy.md),
-[Company completion gate](../../../docs/specs/clean-mdm/company-completion.md),
+[Publication verifier contract](../../../docs/specs/mdm/source-publications.md),
+[Company policy](../../../docs/specs/mdm/company-policy.md),
+[Company completion gate](../../../docs/specs/mdm/company-completion.md),
 [Claude pickup reconciliation](../../handover/2026-09-20-codex-company-enrichment-reconciliation.md).
 
 ## Implementation — 2026-09-22
@@ -72,7 +72,7 @@ representative fixture/fault qualification, not a full real XML publication. Ful
 raw re-verification per invocation remains a production throughput limit.
 
 See [acceptance](../ticket12-acceptance.md), [review](../ticket12-review.md),
-[native contract](../../../docs/specs/clean-mdm/native-gleif.md), and
+[native contract](../../../docs/specs/mdm/native-gleif.md), and
 [Claude handover](../../handover/2026-09-22-company-mastering-to-claude.md).
 Company matching/mastering is the next workstream; settle the shared Dataset
 Contract versioning and policy execution boundary before its implementation ticket.

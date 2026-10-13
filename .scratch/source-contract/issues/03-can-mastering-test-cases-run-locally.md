@@ -11,7 +11,7 @@ small declared set of existing identities, a fixture's records must bind,
 create, or defer as expected. That means running `normalize` and the Merge
 Stage locally, inside one command (check 8), with no network (check 4).
 
-From the code and `docs/specs/clean-mdm/` (especially `local-operations.md`,
+From the code and `docs/specs/mdm/` (especially `local-operations.md`,
 `merge-stage.md`, `evidence.md`), establish:
 
 1. What the Merge Stage needs to run: store (Postgres only, or can it run on

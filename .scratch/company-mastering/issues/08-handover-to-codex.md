@@ -53,7 +53,7 @@ Company its SEC record already holds by CIK; it never creates a Company.
   back from the design.
 
 Full detail: `08-qualify-sec-to-gleif-fuzzy-binding.md` (checklist, Design,
-"Decisions made while building"); operation: `docs/specs/clean-mdm/local-operations.md`
+"Decisions made while building"); operation: `docs/specs/mdm/local-operations.md`
 (the `mdm name-census` command, the `--name-census` bundle input).
 
 ## Limits Codex inherits
@@ -100,6 +100,6 @@ writing them; do not record them as decided.
 1. Confirm #713 is merged and `main`'s `digest(POLICY)` is `983352e8…4049`.
 2. Put the open decision above to the operator.
 3. Continue the Company milestone from `.scratch/company-mastering/remaining-work.md`
-   and `docs/specs/clean-mdm/company-completion.md`: the dated Company table
+   and `docs/specs/mdm/company-completion.md`: the dated Company table
    (ticket 09), latest-only Stage (10), ticket 04's safety items, then the
    whole Proving Run and final approval (05, 06).

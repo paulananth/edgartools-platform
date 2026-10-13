@@ -344,7 +344,7 @@ Snowflake Postgres cutover and RDS removal runbook:
 docs/aws-mdm-snowflake-postgres-cutover.md
 ```
 
-MDM CLI commands (Clean MDM only; the legacy MDM commands are deleted,
+MDM CLI commands (MDM only; the legacy MDM commands are deleted,
 platform validation slice 2a):
 
 ```bash

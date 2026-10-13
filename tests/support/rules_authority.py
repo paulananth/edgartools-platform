@@ -1,4 +1,4 @@
-"""Isolated approved Rules source fixture for Clean MDM registration tests.
+"""Isolated approved Rules source fixture for MDM registration tests.
 
 The production registrar still validates the complete frozen source envelope.
 These tests synthesize that envelope because their subject is the MDM reading,

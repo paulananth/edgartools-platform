@@ -82,7 +82,7 @@ edgar-warehouse rules activate --source <name> --version <v>
 
 Use `--merge <name>` for merge rules. It needs `RULES_DATABASE_URL` and
 `RULES_MDM_ACTIVATION_DATABASE_URL` (the MDM governance login). It registers
-the approved version in Clean MDM and records the handoff receipt.
+the approved version in MDM and records the handoff receipt.
 
 - **Worked:** `rules status --source <name>` shows the version `active`.
 - **Refused:** there is no approval, or no proof. Go back one step.

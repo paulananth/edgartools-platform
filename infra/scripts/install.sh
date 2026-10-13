@@ -713,7 +713,7 @@ cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql
 
   # Phase: stores -- the PostgreSQL 16 stores the configured platform runs on
   # (skills/data-platform/SKILL.md, "Stores"): Rules, Bookkeeping, Change Journal,
-  # RDM, silver and Clean MDM. Each init and migrate connects as the store's
+  # RDM, silver and MDM. Each init and migrate connects as the store's
   # schema owner, through its own *_MIGRATION_DATABASE_URL (MDM: MDM_DATABASE_URL
   # set to its owner), set outside this script, never on its command line; the
   # runtime logins use the plain *_DATABASE_URL. Each schema is created once and
@@ -753,7 +753,7 @@ uv run --extra s3 --extra mdm-runtime edgar-warehouse silver migrate --runtime-r
 
   add_stage \
     "MDM: clean migration and connectivity" \
-    "Applies the Clean MDM migrations (MDM_DATABASE_URL, its migration owner) for the application login ${mdm_role}, installs Bookkeeping's destination guard so every MDM commit is checked against the worker's live lease (DESTINATION_MIGRATION_DATABASE_URL, the MDM owner), then checks connectivity: the check reads mdm.migration, which the migrations create. Source data work stays disabled until its Rules/feed baseline qualifies (configured Rules and Bookkeeping qualification)." \
+    "Applies the MDM migrations (MDM_DATABASE_URL, its migration owner) for the application login ${mdm_role}, installs Bookkeeping's destination guard so every MDM commit is checked against the worker's live lease (DESTINATION_MIGRATION_DATABASE_URL, the MDM owner), then checks connectivity: the check reads mdm.migration, which the migrations create. Source data work stays disabled until its Rules/feed baseline qualifies (configured Rules and Bookkeeping qualification)." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate --application-role ${mdm_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping init-guard --runtime-role ${mdm_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity"

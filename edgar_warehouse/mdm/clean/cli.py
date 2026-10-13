@@ -1,4 +1,4 @@
-"""Opt-in Clean MDM handlers on the existing MDM command entry points."""
+"""Opt-in MDM handlers on the existing MDM command entry points."""
 
 from __future__ import annotations
 
@@ -263,7 +263,7 @@ def execute_manifest(
 ) -> dict:
     if not 1 <= limit <= limits.BATCH_RECORDS:
         raise ValueError(
-            f"Clean MDM --limit must be 1..{limits.BATCH_RECORDS} source records per invocation"
+            f"MDM --limit must be 1..{limits.BATCH_RECORDS} source records per invocation"
         )
     UUID(run_id)
     manifest, manifest_hash, root = read_manifest(path)

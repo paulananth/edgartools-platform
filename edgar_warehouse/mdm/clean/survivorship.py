@@ -364,7 +364,7 @@ def _select_values(
     kind_version: str | None = None,
     default: dict | None = None,
 ) -> tuple[dict, list[dict]]:
-    """Clean MDM's five-step order over one set of field rules.
+    """MDM's five-step order over one set of field rules.
 
     With a kind-level `default`, the master takes **every** field any source
     supplies, not only the declared ones (operator, 2026-09-24): a field only

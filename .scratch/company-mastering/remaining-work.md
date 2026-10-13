@@ -2,7 +2,7 @@
 
 Created 2026-09-24 21:55 ET at the operator's request. Kept current per the
 task-checklist rule (CLAUDE.md): tick a line with the ET time and how it was
-verified. The end state is the [completion gate](../../docs/specs/clean-mdm/company-completion.md):
+verified. The end state is the [completion gate](../../docs/specs/mdm/company-completion.md):
 **one master record per real Company, holding its CIK from SEC and its LEI
 from GLEIF**, decided by approved rules, proven locally on real PostgreSQL 16.
 

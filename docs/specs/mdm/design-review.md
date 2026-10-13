@@ -1,4 +1,4 @@
-# GoF review of the Clean MDM change boundary
+# GoF review of the MDM change boundary
 
 Reviewed with the available `gof-refactor-reviewer` skill against code and git
 history at `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.

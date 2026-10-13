@@ -36,8 +36,8 @@ depends on it, and so does every later projection claim.
 ## Inputs
 
 [Codex response](../../handover/2026-09-22-codex-source-contract-response.md),
-[source evidence contract](../../../docs/specs/clean-mdm/source-evidence.md),
-[merge stage](../../../docs/specs/clean-mdm/merge-stage.md),
+[source evidence contract](../../../docs/specs/mdm/source-evidence.md),
+[merge stage](../../../docs/specs/mdm/merge-stage.md),
 [policy language §11 change and replay](../../../docs/specs/mdm/policy-language.md),
 research 01 on the Source Contract map (the immutability finding).
 

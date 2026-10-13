@@ -26,7 +26,7 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 - 2026-09-20: ticket 11 implemented on `codex/company-publication-verification`
   in `../edgartools-platform-company-publication-verification`, based on
   `codex/sec-gleif-company` at `7784c0e3`. This is an isolated stacked branch;
-  the parent has not merged. [Source-publication contract](../../docs/specs/clean-mdm/source-publications.md)
+  the parent has not merged. [Source-publication contract](../../docs/specs/mdm/source-publications.md)
   and [review](company-publication-review.md) describe the source-only fixture.
   Next: [ticket 12](issues/12-integrate-native-gleif-company-publications.md),
   native metadata/normalization, verified batch membership and consumption
@@ -38,18 +38,18 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
   Next: [ticket 11](issues/11-verify-enrichment-publication-inventory.md), source
   inventory/continuity verification before GLEIF consumer integration.
 
-- Current design review: [Claude handoff reconciliation](../../docs/specs/clean-mdm/design-reconciliation-2026-09-19.md).
-  [Company Q1–Q13](../../docs/specs/clean-mdm/company-policy.md) are accepted.
+- Current design review: [Claude handoff reconciliation](../../docs/specs/mdm/design-reconciliation-2026-09-19.md).
+  [Company Q1–Q13](../../docs/specs/mdm/company-policy.md) are accepted.
   [Gate 08](issues/08-confirm-company-candidate-assessment.md) is accepted:
   persist every proposed binding/consolidation before application, without
   a manual pause for qualified proposals.
   [Ticket 09](issues/09-build-company-candidate-assessment.md) implements the foundation.
 
 - User priority, 2026-09-19: complete SEC + GLEIF multisource Company mastering
-  before other entity integrations. [Company completion gate](../../docs/specs/clean-mdm/company-completion.md)
+  before other entity integrations. [Company completion gate](../../docs/specs/mdm/company-completion.md)
   defines the required scope and evidence; the SEC-only sample is insufficient.
 
-- Latest handoff: [state of the build](../../docs/specs/clean-mdm/state-of-build.md).
+- Latest handoff: [state of the build](../../docs/specs/mdm/state-of-build.md).
 
 - This map carries execution after the explicit design gates. The user's
   delivery sequence is domain model and inventory, merge/recovery contracts,
@@ -75,7 +75,7 @@ Snowflake Postgres, and cut over only after consumer and rollback acceptance.
 - Local Postgres DSNs, start commands, and last observed state:
   [local-postgres.md](local-postgres.md).
 - Inspected base: `b1babd8bbd0e04044fcacbbab822d480c97c01bc`.
-- [Delivery index](../../docs/specs/clean-mdm/README.md).
+- [Delivery index](../../docs/specs/mdm/README.md).
 
 ## Decisions so far
 

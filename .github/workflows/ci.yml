@@ -71,7 +71,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
-      # Clean MDM exercises the authenticated API as well as database runtime
+      # MDM exercises the authenticated API as well as database runtime
       # behavior. Match the locked local acceptance dependencies.
       - name: Install dependencies
         run: uv sync --frozen --extra s3 --extra mdm-runtime --extra mdm

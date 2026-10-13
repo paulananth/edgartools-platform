@@ -14,7 +14,7 @@ Every `file:line` either ticket names, opened on this branch. The whole of
 `adapters.py`, `cli.py`, `assessment.py`, `identity.py`, `survivorship.py`,
 `native_consumption.py`, `company_source.py`, `gleif_source.py`. Migrations
 `023`, `028` and `030` where the tickets cite them, and `store.CLEAN_MDM_MIGRATIONS`.
-The accepted specs (`docs/specs/clean-mdm/company-policy.md`,
+The accepted specs (`docs/specs/mdm/company-policy.md`,
 `company-completion.md`, `docs/specs/mdm/policy-language.md`) and the committed
 prototype (`interpret.mjs`, `policy-person.json`, `policy-company.json`),
 which I parsed rather than read, so the rule/step/argument counts below are

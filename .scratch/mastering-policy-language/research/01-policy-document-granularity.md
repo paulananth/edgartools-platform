@@ -66,7 +66,7 @@ per-source.** Survivorship sorts eligible claims by
 filtering to `c["source_code"] in rule["sources"]` (`survivorship.py:203`). A
 rank is a comparison across sources; the spec keys it as "versioned source rank
 for `(identity kind, optional profile type, field)`"
-(`docs/specs/clean-mdm/merge-stage.md:127`). Splitting the document by source
+(`docs/specs/mdm/merge-stage.md:127`). Splitting the document by source
 would copy the whole ordering into every source's copy. Option (b) dies here on
 its own, independent of reason 1.
 
@@ -83,7 +83,7 @@ long before `merge.py:179` loads the policy. The Company adapter today is
 exactly this shape: `"kind_field": "entity_type", "kind_values": {"operating":
 "company"}` (`edgar_warehouse/mdm/clean/company_source.py:48-49`). Clean MDM's
 own spec says the dataset contract carries "supported kinds/roles/fields"
-(`docs/specs/clean-mdm/source-evidence.md:21`) and that "`source_code`
+(`docs/specs/mdm/source-evidence.md:21`) and that "`source_code`
 identifies a dataset, not a provider or entity kind"
 (`source-evidence.md:15-17`). Rule C-J (Person ticket 03) is a richer
 `kind_values` — a step list over one source's rows that emits

@@ -195,7 +195,7 @@ problem entirely.
 | dbt gold models (23 dynamic tables — the actual gold layer) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
 | MDM graph tables (Snowflake `NEO4J_GRAPH_MIGRATION`, still read by the live dashboard; their writers and the graph review dashboard were retired, platform validation 2a/2b, 2026-09-30) | `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`, `infra/scripts/install-neo4j-graph-app.sh` |
-| Clean MDM rules (source mappings, merge rules) | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py`; map `.scratch/rules-skill/` |
+| MDM rules (source mappings, merge rules) | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py`; map `.scratch/rules-skill/` |
 | Onboard a new feed or domain / refine live rules (the `data-onboarding` and `refining-rules` skills) | `skills/data-onboarding/SKILL.md` (+ shared `REFERENCE.md`, `APPROVE.md`) and `skills/refining-rules/SKILL.md`; link each with its `link.sh`; trials and their evidence in `.scratch/platform-validation/trials/` (and the earlier `.scratch/rules-skill/trials/`) |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
@@ -1185,7 +1185,7 @@ docker push "${ECR}/${REPO}:mdm-dev"
 |---------------|---------|
 | `edgar_warehouse/**` (excluding `edgar_warehouse/mdm/`) | warehouse only |
 | `edgar_warehouse/mdm/**` | MDM only |
-| `rules/**` or `edgar_warehouse/rules/**` | MDM (Clean MDM loads its mappings and merge rules from `rules/`); both images copy `rules/`, so rebuild both to keep them equal |
+| `rules/**` or `edgar_warehouse/rules/**` | MDM (MDM loads its mappings and merge rules from `rules/`); both images copy `rules/`, so rebuild both to keep them equal |
 | Both (e.g. `orchestrator.py` + `mdm/cli.py`) | both |
 | `Dockerfile` / `Dockerfile.warehouse-deps` | warehouse (+ deps if lock changed) |
 | `Dockerfile.mdm-neo4j` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |

@@ -1,4 +1,4 @@
-"""The `mdm` command offers five Clean MDM commands, each bound to one
+"""The `mdm` command offers five MDM commands, each bound to one
 function (platform validation slice 2a)."""
 from __future__ import annotations
 

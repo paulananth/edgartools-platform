@@ -1,4 +1,4 @@
-"""Direct tests for Clean MDM's field selection and claim collapse.
+"""Direct tests for MDM's field selection and claim collapse.
 
 `clean/survivorship.py` had no test of its own: everything reaching it went
 through `MergeStage.apply` in the Docker-backed integration suite, so a

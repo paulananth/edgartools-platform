@@ -72,7 +72,7 @@ master Company; ticket 08 remains the critical next matching gate.
    merge. Do not merge draft #710.
 3. Resume the wider Company milestone from
    `.scratch/company-mastering/remaining-work.md` and
-   `docs/specs/clean-mdm/company-completion.md`. The SEC-to-GLEIF matching
+   `docs/specs/mdm/company-completion.md`. The SEC-to-GLEIF matching
    rule (ticket 08), dated Company table (09), latest-only Stage (10), whole
    proving run (05), and consumer/recovery acceptance are still open. Verify
    ownership of Claude's ticket-08 worktree before editing it.

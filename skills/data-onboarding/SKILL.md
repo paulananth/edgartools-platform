@@ -1,6 +1,6 @@
 ---
 name: data-onboarding
-description: Bring a NEW data feed or a NEW domain (a kind with no merge rules yet) into Clean MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
+description: Bring a NEW data feed or a NEW domain (a kind with no merge rules yet) into MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
 ---
 
 # Data Onboarding
@@ -9,7 +9,7 @@ description: Bring a NEW data feed or a NEW domain (a kind with no merge rules y
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
 > and for the whole flow; this skill holds one step's detail.
 
-Brings something **new** into Clean MDM (and silver): a feed with no rules
+Brings something **new** into MDM (and silver): a feed with no rules
 file yet, or a domain (a kind) with no merge rules yet.
 
 **Use the other skill when:**
@@ -284,7 +284,7 @@ blocks; do not ask whether it does.
   (read only, at most 8 KB; [REFERENCE.md](REFERENCE.md), "Reading MDM's context").
   Check a kind's existing records, a relationship type's links, or a code set's
   codes before you map onto them.
-- `docs/specs/clean-mdm/`: start with `source-evidence.md` and the policy
+- `docs/specs/mdm/`: start with `source-evidence.md` and the policy
   spec of the kind you map onto.
 - MDM kinds: `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`.
 - The fields MDM keeps for a kind: `edgar-warehouse context <kind> --search`
@@ -490,7 +490,7 @@ contract's `nonblocking_deferred_reasons`.
    approves differs only in those fields (an earlier proving run does
    exactly this; see Examples).
 
-   Write it as a pytest file that uses the Clean MDM fixtures, and it gets
+   Write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:
    ```python
    from tests.integration import test_clean_mdm_postgres as core

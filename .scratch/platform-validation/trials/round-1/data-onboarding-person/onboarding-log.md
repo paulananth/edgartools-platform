@@ -47,7 +47,7 @@ All outputs under work/. Rules files the skill says to write under rules/ are wr
 
 ## map
 Research:
-- CONTEXT.md read (Person Identity; Company vs Person). docs/specs/clean-mdm/source-evidence.md and company-policy.md exist (skimmed only for time).
+- CONTEXT.md read (Person Identity; Company vs Person). docs/specs/mdm/source-evidence.md and company-policy.md exist (skimmed only for time).
 - **Missing document:** `docs/specs/database-design-review-2026-09-30.md` does not exist. SKILL-GAP: skill line "the `company` table (`docs/specs/database-design-review-2026-09-30.md`)" -- file absent.
 - **Missing symbol:** REFERENCE.md says "Use the names MDM already has for the kind (for Company, `COMPANY_NAMED_FIELDS` in `edgar_warehouse/mdm/clean/store.py`)". `COMPANY_NAMED_FIELDS` exists nowhere in edgar_warehouse. SKILL-GAP.
 - **No Person field list anywhere in code.** SKILL-GAP: map says "The fields MDM keeps for a kind. For Company, see ..." -- nothing for any other kind, while the skill targets new domains. The only written Person field names are in docs/specs/person/consumer.md "The Person projection" (`legal_name`, `display_name`, `name_variants[]`, ...). The skill should name that spec as the field list for Person, or say "a kind with no field list in code: take the names from its consumer spec and ask".

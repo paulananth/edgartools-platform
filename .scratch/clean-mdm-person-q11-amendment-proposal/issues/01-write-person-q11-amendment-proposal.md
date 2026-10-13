@@ -12,7 +12,7 @@ Write the proposal for Codex/Grok.
 
 ### What is accepted today
 
-`docs/specs/clean-mdm/merge-stage.md` (your branch, read-only), lines 53–60:
+`docs/specs/mdm/merge-stage.md` (your branch, read-only), lines 53–60:
 
 > No universal automatic or review score is specified. Accepted Q11 requires
 > at least 99.9% precision, demonstrated by a one-sided 95% lower confidence

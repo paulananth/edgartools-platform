@@ -6,7 +6,7 @@ A second design proposal for Clean MDM is ready for your review: widen
 `mdm_v2.checkpoint`'s key from `(consumer)` to
 **`(consumer, source_family, publication_family)`** and add the consumed
 publication identity and continuity proof to the row. Nothing under
-`.scratch/clean-mdm/`, `docs/specs/clean-mdm/`, or
+`.scratch/clean-mdm/`, `docs/specs/mdm/`, or
 `edgar_warehouse/mdm/clean/` was touched — it's a standalone recommendation
 on its own map, for you to accept, adapt, or decline.
 

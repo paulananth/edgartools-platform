@@ -40,7 +40,7 @@ owner-only and forbids the runtime from changing policy activation, so
 referenced by SHA-256. Option (b) is rejected: it needs its own table, its own
 status machine and its own uniqueness guarantee, all of which the digest already
 provides for free, and Clean MDM explicitly warns against building "a competing
-activation registry" (`docs/specs/clean-mdm/recovery.md:51`).
+activation registry" (`docs/specs/mdm/recovery.md:51`).
 
 Three ideas carry the whole design.
 
@@ -194,7 +194,7 @@ than implying the predicate is a truth check.
 ### What activation does *not* cover
 
 Q11's bar is about *automatic binding/consolidation decisions*
-(`docs/specs/clean-mdm/merge-stage.md:53-57`). Field survivorship has no
+(`docs/specs/mdm/merge-stage.md:53-57`). Field survivorship has no
 precision bar and needs no activation entry — a field rule is live the moment its
 kind section declares it (`survivorship.py:200-203`). Only the Classification and
 Binding/Consolidation families take `automatic_rules` entries.
@@ -208,11 +208,11 @@ Binding/Consolidation families take `automatic_rules` entries.
 | **Clean MDM's existing idiom is already option (a): copy the external authority's evidence *into* the immutable body, then re-verify it on every commit** — this is the single strongest precedent for the recommendation | `store.py:205` (`body = {**body, "registry_evidence": authority[0]}` inside `register_dataset`); re-checked at every batch in `023_clean_mdm.sql:155-158` (status `active`, matching `version_id`, matching `source_family`) |
 | The policy row is immutable and the digest is `sha256` of the whole canonical body — a proof inside it cannot drift from the rule it activates | `023:102-103` (append-only trigger over `policy` among others); `store.py:33-34`, `store.py:164` |
 | One batch pins one digest by FK; an old batch replays under the policy it pinned | `023:24`; `merge.py:179-184`; re-running a `batch_id` returns the stored effects rather than recomputing (`merge.py:173-178`) |
-| **Who activates is already answered by privilege, not by a new role**: policy registration is owner-only and the runtime cannot change policy activation | `store.py:154` docstring ("Migration/governance owner only; runtime has no INSERT privilege"); `store.py:105-145` (runtime gets `SELECT` + four `EXECUTE` grants, and the migration *asserts* it has no INSERT/UPDATE/DELETE); `docs/specs/clean-mdm/recovery.md:111`; `docs/specs/clean-mdm/local-operations.md:40-42` ("Do not manufacture activation authority to make a run pass") |
+| **Who activates is already answered by privilege, not by a new role**: policy registration is owner-only and the runtime cannot change policy activation | `store.py:154` docstring ("Migration/governance owner only; runtime has no INSERT privilege"); `store.py:105-145` (runtime gets `SELECT` + four `EXECUTE` grants, and the migration *asserts* it has no INSERT/UPDATE/DELETE); `docs/specs/mdm/recovery.md:111`; `docs/specs/mdm/local-operations.md:40-42` ("Do not manufacture activation authority to make a run pass") |
 | Steward overrides already carry reviewer / reason / evidence / scope / expiry, hashed into their own id — the proof block reuses this vocabulary so the operator reads one idiom | `evidence.py:155-166` (`decision()`: `actor`, `reason`, `at`, `decision_id = digest(body)`); `023:175-177` (commit refuses a decision without actor and reason); `identity.py:116-119` (override requires `evidence`; honours `expires_at` against `as_of`); scope is the override's `subject`/`field`/`profile_id`, matched at `survivorship.py:228-232`; `merge-stage.md:151-157` |
 | "Do not invent automatic expiry schedules" — so the proof gets **no** default expiry | `merge-stage.md:155-157` |
 | A policy change mid-batch is already a rejected stale activation; policy upgrades are explicit replay operations | `recovery.md:102`; `merge-stage.md:192-194` |
-| The bar is per `(entity kind, rule family)` in the accepted policy — matching the per-kind `bars` block above | `merge-stage.md:53-57`; `docs/specs/clean-mdm/acceptance.md:40` |
+| The bar is per `(entity kind, rule family)` in the accepted policy — matching the per-kind `bars` block above | `merge-stage.md:53-57`; `docs/specs/mdm/acceptance.md:40` |
 | Zero hard-veto violations in adversarial fixtures, plus *measured* recall and review volume, are part of the same gate | `merge-stage.md:57-58`; `acceptance.md:40` |
 | The `fields` block is already keyed by kind, and the digest is stamped on every selected field | `company_source.py:62-72`; `survivorship.py:200`, `:274` |
 

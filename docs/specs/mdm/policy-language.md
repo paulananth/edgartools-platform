@@ -1,6 +1,6 @@
 # Mastering Policy Language
 
-Status: proposed to Clean MDM (Codex/Grok) 2026-09-20; **partly implemented
+Status: proposed to MDM (Codex/Grok) 2026-09-20; **partly implemented
 from 2026-09-22** under the
 [Company mastering map](../../../.scratch/company-mastering/map.md). Written
 from the resolved tickets of the
@@ -23,7 +23,7 @@ code is what runs and this document is the defect.
 
 ## 1. Purpose
 
-Clean MDM's Merge Stage already runs under a **policy document**:
+MDM's Merge Stage already runs under a **policy document**:
 `mdm.policy (digest, body jsonb)` (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:10-13`),
 one immutable body pinned per batch and loaded at
 `edgar_warehouse/mdm/clean/merge.py:179-184`. Today that body is a Python
@@ -53,8 +53,8 @@ for classification, binding/consolidation, survivorship/projection
 (§6–§8); activation with its two kinds of proof (§9); the checks a
 registration performs (§10); replay and change (§11); worked examples (§12).
 
-**Out**: relationship publication (Clean MDM's own relationship table in
-`docs/specs/clean-mdm/domain-model.md`); the interpreter, migrations and
+**Out**: relationship publication (MDM's own relationship table in
+`docs/specs/mdm/domain-model.md`); the interpreter, migrations and
 any implementation (Codex/Grok's); reopening accepted Q1–Q16 — this
 document gives them a data shape, and where it asks for an amendment it
 says so (§13); legacy MDM's `mdm_match_threshold` and normalization seeds,
@@ -103,7 +103,7 @@ identity is re-projected under the batch's one digest
 missing a kind silently projects that kind with zero fields. A per-(kind,
 source) document dies on survivorship alone: source rank is an ordered
 list inside a per-(kind, field) rule (`survivorship.py:203, 240`;
-`docs/specs/clean-mdm/merge-stage.md:127`). Golden-record tools (Informatica,
+`docs/specs/mdm/merge-stage.md:127`). Golden-record tools (Informatica,
 Reltio, Tamr) scope match rules per entity type and survivorship per
 attribute; none scopes by (entity, source).
 Evidence: [research 01](../../../.scratch/mastering-policy-language/research/01-policy-document-granularity.md).
@@ -123,7 +123,7 @@ Evidence: [research 01](../../../.scratch/mastering-policy-language/research/01-
 }
 ```
 
-`required_consumers` and `fields` are Clean MDM's existing keys, unchanged.
+`required_consumers` and `fields` are MDM's existing keys, unchanged.
 `kinds.<kind>.version` is the authored kind document's own version, carried
 so that a Person-only edit is attributable even though the composite
 digest changes (§13, item 1).
@@ -194,7 +194,7 @@ Why the line sits here: the same words (`TRUST`, `FUND`, `CO`, `HOLDINGS`)
 are entity *evidence* in rule C-J (`18-classify.py:64-80`) and are
 *deleted* by the legacy normalizer (`002_seed_data.sql:73-98`) — one
 primitive, two declared lists, opposite uses. Survivorship needs one
-primitive because Clean MDM's accepted five-step order
+primitive because MDM's accepted five-step order
 (`merge-stage.md:123-130`) is fixed; the document supplies only the rank
 list and eligibility parameters.
 
@@ -358,7 +358,7 @@ Its decision and measurement:
 ### 7.2 The Identifier Contract
 
 Declared once per namespace under `kinds.<kind>.identifiers`. This is
-where Clean MDM's *"Exclusivity is policy-specific"*
+where MDM's *"Exclusivity is policy-specific"*
 (`domain-model.md:46-48`) is made concrete.
 
 | Field | Meaning | `sec.cik` (Person) | `crd.individual` (Person) |
@@ -387,7 +387,7 @@ Consolidation with its own evidence.
 
 ## 8. Survivorship and projection
 
-Clean MDM's existing `fields` block is the survivorship declaration and is
+MDM's existing `fields` block is the survivorship declaration and is
 kept as is: per kind, per field, an ordered `sources` list plus
 eligibility (`clear_sources`, `allow_unknown_effective`, `max_age_days`),
 under the accepted five-step order (`merge-stage.md:123-130`). **Implemented
@@ -449,7 +449,7 @@ This is what lets C-J's `person` verdict run automatically while its
 `entity_undetermined` verdict stays review-only — Person ticket 03's
 release gates 1 and 2 as data. No new table, no status column, no new
 role: policy registration is already owner-only and the runtime is already
-forbidden to change activation (`docs/specs/clean-mdm/recovery.md:51, 111`).
+forbidden to change activation (`docs/specs/mdm/recovery.md:51, 111`).
 Evidence: [research 02](../../../.scratch/mastering-policy-language/research/02-rule-activation-and-proof.md).
 
 ### 9.1 Bars
@@ -458,7 +458,7 @@ Declared per `(kind, family)` under `kinds.<kind>.bars`:
 `{ "min_precision": 0.99, "method": "wilson_lower_bound", "one_sided_confidence": 0.975 }`.
 Person classification is 0.99 (operator amendment, proposed to Codex).
 Company classification is 0.95 at 95% one-sided confidence (confidence bands,
-`docs/specs/clean-mdm/company-policy.md`, 2026-09-24); merging two published
+`docs/specs/mdm/company-policy.md`, 2026-09-24); merging two published
 Company IDs keeps 0.999 (Q11). The accepted floor is kept per **(kind,
 family)** (`activation.ACCEPTED_BARS`), so lowering one decision never lowers
 another; a pair with no accepted floor cannot declare a bar. A rule with no
@@ -572,7 +572,7 @@ document never becomes a digest.
    not run makes a failure and a success look identical.
 
    Draft lifecycle belongs in the **Rules Database**, which holds every
-   version with its state (draft, proven, active, retired) and hands Clean MDM
+   version with its state (draft, proven, active, retired) and hands MDM
    an *active* one. `CONTEXT.md` says explicitly to avoid editing rules in the
    production MDM database.
 10. **A kind block declares every section it carries** as authority-bearing or
@@ -625,7 +625,7 @@ over 72,981 decisions. `demo.html` opens by double-click with six guided
 cases. Survivorship was **not** exercised — it needs a populated identity
 store.
 
-## 13. Dependencies on Clean MDM and items raised for Codex
+## 13. Dependencies on MDM and items raised for Codex
 
 This is a proposal against `mdm.policy`, `clean/merge.py`,
 `clean/store.py` and `clean/adapters.py`, all Codex/Grok's. Items they must
