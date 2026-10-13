@@ -21,12 +21,12 @@
   "2"
  ],
  "goal": "Issue 20 20d: installed empty-store Person proof on the mastering target",
- "minutes": 4.6,
- "minutes_first_pass": 4.1,
+ "minutes": 2.6,
+ "minutes_first_pass": 2.2,
  "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
  "recovery": {
   "item_at_kill": {
-   "attempt": "7c2d48c7-27fd-41b8-b873-8da06d1101df",
+   "attempt": "db3c0d55-ff9a-41a4-af02-587a6bdb3803",
    "attempts": 1,
    "checks": {},
    "error": null,
@@ -34,11 +34,31 @@
    "receipt": null,
    "state": "running",
    "step": "merge",
-   "unit_key": "sec.submissions.person:6cc3ad8c107a2b3ab437f6e3f04761e4659358753264de7a9af03eebcfceaef6"
+   "unit_key": "sec.submissions.person:2b17f6987e3107c03500c28a03e193daed6148b2b86792143c9eded2f05058b6"
   },
   "killed_worker_exit": -9,
   "resumed_attempts": 2,
   "rows_at_kill": {}
  },
- "second_pass_changed_nothing": true
+ "second_pass_changed_nothing": true,
+ "writes": {
+  "after_first_pass": {
+   "batch": 20,
+   "checkpoint": 2,
+   "current_record": 1000,
+   "decision": 386,
+   "outbox": 60,
+   "set_aside_record": 614,
+   "source_reading": 386
+  },
+  "after_second_pass": {
+   "batch": 40,
+   "checkpoint": 4,
+   "current_record": 1000,
+   "decision": 386,
+   "outbox": 60,
+   "set_aside_record": 614,
+   "source_reading": 386
+  }
+ }
 }

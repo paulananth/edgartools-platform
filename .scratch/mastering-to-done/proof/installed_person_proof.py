@@ -50,6 +50,7 @@ WORK = Path(os.environ.get("PERSON_PROOF_WORK", "~/.local/share/edgartools/clean
 SOURCE, PERSON = "sec.submissions.person", "sec.submissions.person.v1"
 AS_OF, CAPTURE_RUN = "2026-09-29T15:00:00+00:00", "local-cm27-all-76230"
 EXPECTED = {
+    "companies_open": 0,
     "stage_records": {f"{PERSON}:person": 386},
     "stage_bound": {PERSON: 386},
     "open_reviews": {"classification_entity_undetermined": 447, "classification_deferred": 167},
@@ -140,6 +141,12 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
         with mdm_reader.connect() as conn:
             return old.counts(conn), old.bindings(conn)
 
+    def writes() -> dict:
+        """Rows each MDM table holds: what a pass wrote."""
+        with mdm_reader.connect() as conn:
+            return {t: conn.execute(text(f"SELECT count(*) FROM mdm.{t}")).scalar() for t in (
+                "batch", "source_reading", "decision", "current_record", "outbox", "checkpoint", "set_aside_record")}
+
     runs = {name: submit("person", reports[name]["manifest"]) for name in names}
 
     def prepared(name: str) -> str:
@@ -159,6 +166,7 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
     recovery["resumed_attempts"] = resumed["attempts"]
     assert resumed["state"] == "verified" and resumed["attempts"] == recovery["item_at_kill"]["attempts"] + 1
     first, first_bindings = snapshot()
+    first_writes = writes()
     first_minutes = minutes()
     old.say(stage="first pass", **first)
 
@@ -176,11 +184,13 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
         drive(run_id, ("mdm.merge",))
         finalize(run_id)
     second, second_bindings = snapshot()
+    second_writes = writes()
 
     report = {
         "goal": "Issue 20 20d: installed empty-store Person proof on the mastering target",
         "bundles": names, "policy": policy, "after_first_pass": first, "bindings": first_bindings,
         "second_pass_changed_nothing": first == second and first_bindings == second_bindings,
+        "writes": {"after_first_pass": first_writes, "after_second_pass": second_writes},
         "recovery": recovery, "minutes_first_pass": first_minutes, "minutes": minutes(),
     }
     out.write_text(json.dumps(report, sort_keys=True, indent=1) + "\n")
@@ -188,3 +198,5 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
     for key, expected in EXPECTED.items():
         assert first[key] == expected, (key, first[key], expected)
     assert report["second_pass_changed_nothing"]
+    # Only changed data (migration 017): merging the same records again queues no publication work.
+    assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)
