@@ -134,7 +134,8 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
 
 
 def test_census_main_inherits_company_reading_and_canonical_name_recipe():
-    """Fail when either upstream blueprint changes without updating this copy."""
+    """Fail when either upstream blueprint changes without updating this copy; filings are a
+    narrowed copy (only the columns combine's `forms` group uses), so a dropped column may change."""
     source = files.source('sec.submissions.company')
     census = deepcopy(files.load(ROOT/'census-main.yaml'))
     recipe = census['read']['tables']['company']['columns'].pop('_name_key')
@@ -149,7 +150,7 @@ def test_census_main_inherits_company_reading_and_canonical_name_recipe():
     assert set(filings['columns']) == {'form', 'cik', 'sync_run_id'}
     assert filings['columns'] == {name: full['columns'][name] for name in filings['columns']}
     fields = filings['each']['parallel'].pop('fields')
-    assert fields == {name: full['each']['parallel']['fields'][name] for name in ('accession_number', 'form')}
+    assert fields == {name: full['each']['parallel']['fields'][name] for name in ('form',)}
     full['each']['parallel'].pop('fields')
     assert (filings['take'], filings['each']) == (full['take'], full['each'])
     assert census == expected

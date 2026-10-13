@@ -47,9 +47,10 @@ POPULATION_BYTES = 64 * 1024**2
 KEY_READING_BYTES = 16 * 1024**2  # the bundle's one census-keys reading
 # One key reading names a bundle's documents (`census-keys.yaml` max_artifacts).
 BUNDLE_DOCUMENTS = 512
-# A main unit reads documents up to this many bytes: about 3x as reading output (24.6 MiB
-# for 7.9 MiB, 96 documents) and at most 7,423 filings rows a MiB, inside the combination's
-# 32 MiB reading and 100,000 rows with the catalog's 10,391 (measured 2026-10-12, cm27).
+# A main unit reads documents up to this many bytes: at most 7,423 filings rows a MiB, inside
+# the combination's 100,000 rows with the catalog's 10,391 (measured 2026-10-12, cm27). The
+# row bound limits it: filings keep three columns (ticket 28), so the output is now smaller
+# than the 3x of the documents measured then (24.6 MiB for 7.9 MiB, 96 documents).
 MAIN_READING_BYTES = 8 * 1024**2
 # The contracts the target's readings and combination run.
 RULES = ("census-main.yaml", "census-keys.yaml", "catalog.yaml", "census.yaml", "combine-census-captured.yaml")

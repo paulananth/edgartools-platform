@@ -1,6 +1,9 @@
 # Company main reading with an explicit census join key, and each row's bronze
 # origin (the document's object and sha256, from the caller's context).
-# Paired with combine-census.yaml; this does not activate a source mapping.
+# Paired with combine-census-captured.yaml; this does not activate a source mapping.
+# Filings keep only `form`, `cik` and `sync_run_id`: combine's `forms` group is
+# their one consumer (mastering-to-done 28). The other 17 filing columns, and the
+# shape checks on their fields, are left out on purpose; source.yaml keeps them.
 source: sec.submissions.company
 execution:
   profile: source.read
@@ -58,7 +61,6 @@ read:
           path: filings.recent
           anchor: accessionNumber
           fields:
-            accession_number: accessionNumber
             form: form
           lengths: anchor
           on_invalid_object: empty
