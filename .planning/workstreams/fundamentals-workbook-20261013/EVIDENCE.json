@@ -47,5 +47,8 @@
     "gap_rows_match": 14,
     "excel_download_and_repository_copies_match": true
   },
-  "verified_et": "2026-10-13 07:42 ET"
+  "verified_et": "2026-10-13 07:42 ET",
+  "pr_url": "https://github.com/paulananth/edgartools-platform/pull/941",
+  "handoff_delivery": "HANDOFF-TO-CLAUDE.md and PR description; no Claude implementation session started",
+  "documentation_audit": "PASS; independent scoped doc-sync audit; no edits required"
 }

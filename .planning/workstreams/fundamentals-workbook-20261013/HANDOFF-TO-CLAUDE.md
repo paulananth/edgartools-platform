@@ -1,6 +1,7 @@
 # Fundamentals acquisition requirements: handoff to Claude
 
 Owner handing over: Codex. Branch: `codex/fundamentals-workbook-requirements-20261013`.
+PR: [#941](https://github.com/paulananth/edgartools-platform/pull/941).
 Source: `Financial-Model-and-Valuation-Template.xlsx`; source hash in `EVIDENCE.json`.
 User requested a data requirements list, then a PR and handoff to Claude.
 

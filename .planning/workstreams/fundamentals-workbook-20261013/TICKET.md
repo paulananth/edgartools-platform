@@ -1,6 +1,6 @@
 # Fundamentals acquisition requirements from valuation workbook
 
-Status: in progress (requirements extraction only). Owner: Codex on
+Status: complete (requirements extraction and PR/handoff delivery only). Owner: Codex on
 `codex/fundamentals-workbook-requirements-20261013`; starting main `8f90cb9c`.
 
 Request: read `/Users/aneenaananth/Downloads/Financial-Model-and-Valuation-Template.xlsx`
@@ -18,7 +18,7 @@ Claude's Company financials map and active L7 paths.
 - [x] Specify each field's definition, fiscal period/units, source route and workbook references; include note-driven requirements and reconciliation additions explicitly. — 2026-10-13 07:42 ET; 243 cell/region references resolve; 102 financial rows and 30 valuation cells covered.
 - [x] Identify model/data ambiguities affecting acquisition: shares, periods, currency/scale, cash flows, forecasts, missing data and source coverage. — 2026-10-13 07:42 ET; 14 GAPS entries match Excel; source formula checks verified.
 - [x] Deliver readable Markdown, machine-readable CSV and a separate Excel requirements workbook. — 2026-10-13 07:42 ET; 115 JSON/CSV/Excel records match; Markdown IDs and output hashes verified.
-- [ ] Create the requested PR and hand over the catalog, unresolved choices and boundaries to Claude.
+- [x] Create the requested PR and hand over the catalog, unresolved choices and boundaries to Claude. — 2026-10-13 07:45 ET; [PR #941](https://github.com/paulananth/edgartools-platform/pull/941) opened; `HANDOFF-TO-CLAUDE.md` and PR body supply catalog and next steps.
 - [x] Verify coverage against source rows/formulas, output consistency, source immutability and ownership guard; commit the requirements artifacts. — 2026-10-13 07:43 ET; verification PASS, overlap guard passed for nine paths, committed in `6d9daf37`.
 
 ## Completion
