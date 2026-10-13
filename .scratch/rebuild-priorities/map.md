@@ -13,7 +13,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
   2. **Tickets 09–32, the recreation proof:** what the proof needs, in dependency order.
   3. **Tickets 33–62, product value:** the financials first, then the promotion criteria, the agent decision inputs and the dashboards.
   4. **Tickets 63–67, housekeeping:** needs no SEC requests.
-  5. **Tickets 68–70, gated:** each needs SEC requests or AWS. They wait for the operator's permission.
+  5. **Tickets 68–71, gated:** each needs SEC requests or AWS. They wait for the operator's permission.
 - **Execution is in scope.** This map carries build tickets as well as decisions, like the profiling map does. Each build ticket gets:
   - its own branch, cut fresh off origin/main, in its own worktree;
   - a GoF consult before code;
@@ -29,7 +29,6 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
   - names are the source's own;
   - each checklist part is ticked with its evidence and an ET time.
 - **Open question for the operator (blocks ticket 01's next part):** does the ownership feed create owner records of its own, or only link to owners mastered from submissions?
-- **Mastering-to-done ticket 24, the worker runtime on AWS,** is on #953's branch. It moves here as ticket 71 (tier 5) once #953 merges.
 
 ## Decisions so far
 
