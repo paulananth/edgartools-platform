@@ -1,0 +1,123 @@
+{
+ "after_first_pass": {
+  "companies_open": 6414,
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312,
+   "unsupported_identity_kind": 39
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  }
+ },
+ "bindings": "9216cc18292f1c683f4767dfb86ae89c14a72f7df050df08e3800ce1e305b85b",
+ "bindings_equal_checkout_replay": true,
+ "bundles": [
+  "1-1",
+  "1-2",
+  "2-1",
+  "2-2",
+  "3-1",
+  "3-2",
+  "4-1",
+  "4-2",
+  "5-1",
+  "5-2",
+  "6-1",
+  "6-2",
+  "7-1",
+  "7-2"
+ ],
+ "changed_data": {
+  "file_processed_events": 6726,
+  "listed": 6726,
+  "named_again": 0,
+  "named_first": 6726,
+  "runs_started_again": 0
+ },
+ "checkout_replay": {
+  "companies_open": 6414,
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  }
+ },
+ "gleif_scope_leis": 3755,
+ "goal": "Issue 20 20c part 4: installed empty-store Company proof on the mastering target",
+ "minutes": 42.1,
+ "minutes_since_start": {
+  "changed_data": 39.3,
+  "gleif_first": 39.0,
+  "manifests": 0.7,
+  "sec_first": 20.1,
+  "second_pass": 42.1
+ },
+ "only": null,
+ "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
+ "recovery": {
+  "item_at_kill": {
+   "attempt": "47ee8cf6-c60b-48fb-ade6-1a2471815f2f",
+   "attempts": 1,
+   "checks": {},
+   "error": null,
+   "ordinal": 0,
+   "receipt": null,
+   "state": "running",
+   "step": "merge",
+   "unit_key": "company:cc80d64ebc467284618f9f94058eb766b1a354fff0bf3ee6e5ab2095766e2c36"
+  },
+  "killed_worker_exit": -9,
+  "resumed_attempts": 2,
+  "rows_at_kill": {}
+ },
+ "second_pass_changed_nothing": true,
+ "writes": {
+  "after_first_pass": {
+   "batch": 21,
+   "checkpoint": 15,
+   "company": 9466,
+   "current_record": 1063,
+   "decision": 9466,
+   "journal_events": 6979,
+   "match_proposal": 21,
+   "outbox": 63,
+   "set_aside_record": 351,
+   "source_reading": 10130
+  },
+  "after_second_pass": {
+   "batch": 42,
+   "checkpoint": 30,
+   "company": 9466,
+   "current_record": 1063,
+   "decision": 9466,
+   "journal_events": 6995,
+   "match_proposal": 21,
+   "outbox": 63,
+   "set_aside_record": 351,
+   "source_reading": 10130
+  }
+ }
+}
