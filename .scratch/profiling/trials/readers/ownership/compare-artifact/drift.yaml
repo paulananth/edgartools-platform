@@ -1,0 +1,667 @@
+approved: ../cohort/findings.yaml
+drift:
+- drift: part_new
+  part: ownership.derivativeTable.derivativeHolding.postTransactionAmounts.sharesOwnedFollowingTransaction.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeHolding.securityTitle.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeHolding.underlyingSecurity.underlyingSecurityShares.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeHolding.underlyingSecurity.underlyingSecurityTitle.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeTransaction.ownershipNature.directOrIndirectOwnership.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeTransaction.transactionAmounts.transactionShares.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeTransaction.underlyingSecurity.underlyingSecurityShares.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.derivativeTable.derivativeTransaction.underlyingSecurity.underlyingSecurityTitle.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.ownershipNature.directOrIndirectOwnership.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: part_new
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.securityTitle.footnoteId
+  column: null
+  detail: 'a part not in the approved findings: profile and approve it first'
+  handled_by: refining-rules
+- drift: volume_changed
+  part: ownership
+  column: null
+  detail: 3367 → 5356 rows
+  handled_by: data-quality
+- drift: column_missing
+  part: ownership
+  column: file
+  detail: an approved column is gone
+  handled_by: refining-rules
+- drift: column_missing
+  part: ownership
+  column: folder_cik
+  detail: an approved column is gone
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership
+  column: artifact_sha256
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: distribution_changed
+  part: ownership
+  column: aff10b5One
+  detail: population stability index 0.504 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership
+  column: dateOfOriginalSubmission
+  detail: Kolmogorov-Smirnov distance 0.793 between the quantiles
+  handled_by: data-quality
+- drift: type_changed
+  part: ownership
+  column: issuer.issuerForeignTradingSymbol
+  detail: JSON → VARCHAR
+  handled_by: refining-rules
+- drift: distribution_changed
+  part: ownership
+  column: noSecuritiesOwned
+  detail: population stability index 0.303 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership
+  column: notSubjectToSection16
+  detail: population stability index 0.821 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: type_changed
+  part: ownership
+  column: periodOfReport
+  detail: DATE → VARCHAR
+  handled_by: refining-rules
+- drift: distribution_changed
+  part: ownership
+  column: periodOfReport
+  detail: Kolmogorov-Smirnov distance 0.951 between the quantiles
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership
+  column: remarks
+  detail: 0.053757 → 0.118559
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership
+  column: schemaVersion
+  detail: population stability index 9.223 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership
+  column: schemaVersion
+  detail: 4 → 2 distinct codes
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: null
+  detail: 428 → 986 rows
+  handled_by: data-quality
+- drift: column_missing
+  part: ownership.derivativeTable.derivativeHolding
+  column: transactionCoding.transactionFormType
+  detail: an approved column is gone
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeHolding
+  column: ownershipNature.directOrIndirectOwnership.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeHolding
+  column: postTransactionAmounts.valueOwnedFollowingTransaction.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeHolding
+  column: postTransactionAmounts.valueOwnedFollowingTransaction.value
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeHolding
+  column: underlyingSecurity.underlyingSecurityTitle.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeHolding
+  column: underlyingSecurity.underlyingSecurityValue.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: conversionOrExercisePrice.footnoteId
+  detail: 0.212617 → 0.445233
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: conversionOrExercisePrice.value
+  detail: 0.780374 → 0.574037
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: exerciseDate.footnoteId
+  detail: 0.785047 → 0.846856
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: exerciseDate.value
+  detail: 0.123832 → 0.324544
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: exerciseDate.value
+  detail: Kolmogorov-Smirnov distance 0.424 between the quantiles
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: expirationDate.footnoteId
+  detail: 0.221963 → 0.478702
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: expirationDate.value
+  detail: 0.698598 → 0.526369
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: expirationDate.value
+  detail: Kolmogorov-Smirnov distance 0.150 between the quantiles
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: ownershipNature.natureOfOwnership.footnoteId
+  detail: 0.060748 → 0.129817
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: postTransactionAmounts.sharesOwnedFollowingTransaction.footnoteId
+  detail: 0.11215 → 0.033469
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: postTransactionAmounts.sharesOwnedFollowingTransaction.value
+  detail: 0.184579 → 0.719067
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: underlyingSecurity.underlyingSecurityTitle.value
+  detail: population stability index 3.283 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.derivativeTable.derivativeHolding
+  column: underlyingSecurity.underlyingSecurityTitle.value
+  detail: 9 → 37 distinct codes
+  handled_by: data-quality
+- drift: codes_new
+  part: ownership.derivativeTable.derivativeHolding
+  column: underlyingSecurity.underlyingSecurityTitle.value
+  detail: '33 codes not in the approved list: American Depositary Shares (TSM), CACI
+    Common Stock, CHESS Depository Interests, COMMON STOCK, Class A Ordinary Share,
+    par value $0.0015 per share, Class A Ordinary Shares, Class A Ordinary Shares,
+    par value $0.05 per share, Class A Shares, Class A common stock, Class A common
+    stock, par value $0.01'
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeHolding.conversionOrExercisePrice.footnoteId
+  column: null
+  detail: 82 → 34 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeHolding.exerciseDate.footnoteId
+  column: null
+  detail: 120 → 24 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeHolding.expirationDate.footnoteId
+  column: null
+  detail: 114 → 22 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeHolding.ownershipNature.directOrIndirectOwnership.footnoteId
+  column: null
+  detail: 8 → 2 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeHolding.ownershipNature.natureOfOwnership.footnoteId
+  column: null
+  detail: 117 → 39 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: null
+  detail: 1528 → 2787 rows
+  handled_by: data-quality
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: deemedExecutionDate.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: deemedExecutionDate.value
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: ownershipNature.directOrIndirectOwnership.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: postTransactionAmounts.valueOwnedFollowingTransaction.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: postTransactionAmounts.valueOwnedFollowingTransaction.value
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionAmounts.transactionTotalValue.value
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: column_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: underlyingSecurity.underlyingSecurityTitle.footnoteId
+  detail: a column not in the approved findings
+  handled_by: refining-rules
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: conversionOrExercisePrice.footnoteId
+  detail: 0.63678 → 0.586294
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: conversionOrExercisePrice.value
+  detail: 0.526178 → 0.437029
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: exerciseDate.value
+  detail: Kolmogorov-Smirnov distance 0.438 between the quantiles
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: expirationDate.footnoteId
+  detail: 0.425393 → 0.620739
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: expirationDate.value
+  detail: 0.560864 → 0.369932
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: expirationDate.value
+  detail: Kolmogorov-Smirnov distance 0.197 between the quantiles
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionAmounts.transactionPricePerShare.value
+  detail: 0.781414 → 0.850018
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionAmounts.transactionShares.footnoteId
+  detail: 0.282068 → 0.102978
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionCoding.transactionCode
+  detail: population stability index 0.412 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: type_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionDate.value
+  detail: DATE → VARCHAR
+  handled_by: refining-rules
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionDate.value
+  detail: Kolmogorov-Smirnov distance 0.950 between the quantiles
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: underlyingSecurity.underlyingSecurityTitle.value
+  detail: population stability index 2.052 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionCoding.transactionCode
+  detail: 10 → 12 distinct codes
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionCoding.equitySwapInvolved
+  detail: 2 → 4 distinct codes
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.derivativeTable.derivativeTransaction
+  column: underlyingSecurity.underlyingSecurityTitle.value
+  detail: 18 → 83 distinct codes
+  handled_by: data-quality
+- drift: codes_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionCoding.equitySwapInvolved
+  detail: '2 codes not in the approved list: 1, true'
+  handled_by: data-quality
+- drift: codes_new
+  part: ownership.derivativeTable.derivativeTransaction
+  column: transactionCoding.transactionCode
+  detail: '2 codes not in the approved list: E, I'
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction.conversionOrExercisePrice.footnoteId
+  column: null
+  detail: 98 → 194 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction.exerciseDate.footnoteId
+  column: null
+  detail: 149 → 441 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction.expirationDate.footnoteId
+  column: null
+  detail: 149 → 225 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction.postTransactionAmounts.sharesOwnedFollowingTransaction.footnoteId
+  column: null
+  detail: 2 → 12 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction.transactionAmounts.transactionPricePerShare.footnoteId
+  column: null
+  detail: 26 → 165 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.derivativeTable.derivativeTransaction.transactionCoding.footnoteId
+  column: null
+  detail: 8 → 49 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.issuer
+  column: null
+  detail: 63 → 1877 rows
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.issuer
+  column: issuer.issuerCik
+  detail: population stability index 0.303 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.issuer
+  column: issuer.issuerCik
+  detail: 63 → 1877 distinct codes
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeHolding
+  column: null
+  detail: 1104 → 2381 rows
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeHolding
+  column: ownershipNature.natureOfOwnership.footnoteId
+  detail: 0.155797 → 0.288954
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeHolding
+  column: ownershipNature.natureOfOwnership.value
+  detail: 0.779891 → 0.700546
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeHolding.ownershipNature.directOrIndirectOwnership.footnoteId
+  column: null
+  detail: 3 → 217 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeHolding.postTransactionAmounts.sharesOwnedFollowingTransaction.footnoteId
+  column: null
+  detail: 5 → 31 rows
+  handled_by: data-quality
+- drift: type_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: deemedExecutionDate.value
+  detail: DATE → VARCHAR
+  handled_by: refining-rules
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: deemedExecutionDate.value
+  detail: 'measured differently: quantiles → categories (the column became, or stopped
+    being, a code)'
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: ownershipNature.directOrIndirectOwnership.value
+  detail: population stability index 0.634 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: ownershipNature.natureOfOwnership.footnoteId
+  detail: 0.561554 → 0.089397
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: ownershipNature.natureOfOwnership.value
+  detail: 0.580265 → 0.203987
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: postTransactionAmounts.sharesOwnedFollowingTransaction.footnoteId
+  detail: 0.032058 → 0.124985
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: securityTitle.value
+  detail: population stability index 1.576 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionAmounts.transactionAcquiredDisposedCode.value
+  detail: population stability index 0.173 (moderate shift of the value shares)
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionAmounts.transactionPricePerShare.footnoteId
+  detail: 0.676797 → 0.43231
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionAmounts.transactionShares.footnoteId
+  detail: 0.174115 → 0.257185
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.equitySwapInvolved
+  detail: population stability index 0.792 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.footnoteId
+  detail: 0.654987 → 0.293262
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.transactionCode
+  detail: population stability index 0.351 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: type_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionDate.value
+  detail: DATE → VARCHAR
+  handled_by: refining-rules
+- drift: distribution_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionDate.value
+  detail: Kolmogorov-Smirnov distance 0.951 between the quantiles
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: securityTitle.value
+  detail: 21 → 234 distinct codes
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.transactionCode
+  detail: 12 → 14 distinct codes
+  handled_by: data-quality
+- drift: codes_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.equitySwapInvolved
+  detail: 2 → 3 distinct codes
+  handled_by: data-quality
+- drift: codes_new
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.equitySwapInvolved
+  detail: '1 codes not in the approved list: 1'
+  handled_by: data-quality
+- drift: codes_new
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction
+  column: transactionCoding.transactionCode
+  detail: '2 codes not in the approved list: I, U'
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.ownershipNature.natureOfOwnership.footnoteId
+  column: null
+  detail: 188 → 756 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.postTransactionAmounts.sharesOwnedFollowingTransaction.footnoteId
+  column: null
+  detail: 32 → 135 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.transactionAmounts.transactionPricePerShare.footnoteId
+  column: null
+  detail: 64 → 167 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.transactionAmounts.transactionShares.footnoteId
+  column: null
+  detail: 2 → 110 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.nonDerivativeTable.nonDerivativeTransaction.transactionCoding.footnoteId
+  column: null
+  detail: 37 → 71 rows
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.ownerSignature
+  column: null
+  detail: 3571 → 5693 rows
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.ownerSignature
+  column: signatureDate
+  detail: Kolmogorov-Smirnov distance 0.951 between the quantiles
+  handled_by: data-quality
+- drift: volume_changed
+  part: ownership.reportingOwner
+  column: null
+  detail: 3570 → 5743 rows
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerAddress.rptOwnerCountry
+  detail: 0.006723 → 0.108132
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerAddress.rptOwnerNonUSAddressFlag
+  detail: 0.138936 → 1.0
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerAddress.rptOwnerState
+  detail: 0.992437 → 0.891868
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerAddress.rptOwnerStateDescription
+  detail: 0.029412 → 0.10552
+  handled_by: data-quality
+- drift: fill_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerAddress.rptOwnerStreet2
+  detail: 0.812605 → 0.619014
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerRelationship.isDirector
+  detail: population stability index 0.148 (moderate shift of the value shares)
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerRelationship.isOther
+  detail: population stability index 0.154 (moderate shift of the value shares)
+  handled_by: data-quality
+- drift: distribution_changed
+  part: ownership.reportingOwner
+  column: reportingOwnerRelationship.isTenPercentOwner
+  detail: population stability index 0.370 (significant shift of the value shares)
+  handled_by: data-quality
+- drift: class_changed
+  part: ownership.reportingOwner.reportingOwnerId
+  column: null
+  detail: reference → master
+  handled_by: refining-rules
+- drift: volume_changed
+  part: ownership.reportingOwner.reportingOwnerId
+  column: null
+  detail: 630 → 4831 rows
+  handled_by: data-quality
+deliveries:
+- part: ownership
+  keys_sampled: 201
+  persistence: 0.0
+  changed: null
+  added: 1.0
+  delivery: unknown
+  refresh: 76.0 days
+  capped: false
+- part: ownership.reportingOwner.reportingOwnerId
+  keys_sampled: 40
+  persistence: 0.1
+  changed: 0.0
+  added: 0.986711
+  delivery: changes
+  refresh: unknown
+  capped: false
+- part: ownership.issuer
+  keys_sampled: 63
+  persistence: 0.31746
+  changed: 0.0
+  added: 0.989345
+  delivery: unknown
+  refresh: unknown
+  capped: false
