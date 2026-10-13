@@ -214,7 +214,7 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
 
     # First SEC pass: preparation two bundles at a time; merges one at a time, in bundle order.
     runs = {name: submit("sec", reports[name]["manifest"]) for name in names}
-    preparation = [step["name"] for step in MASTERING[:-1]]
+    preparation = [step["name"] for step in MASTERING[:-2]]  # all but merge and processed (ticket 22)
 
     def prepared(name: str) -> str:
         drive(runs[name], PROFILES, set(preparation))
