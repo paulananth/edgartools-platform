@@ -101,6 +101,8 @@ BEGIN
     END LOOP;
 END;
 $$;
+COMMENT ON FUNCTION mdm.queue_outbox(text, jsonb) IS
+    'Queue a batch''s outbox rows, one a consumer, each keeping the hash of what outbox_delivery sends: the journal the whole batch (contract 2), every other consumer only the changed records (contract 3), none when no record changed. Called by write_batch and force_publish; not granted to any login.';
 
 CREATE OR REPLACE FUNCTION mdm.write_batch(request_text text, root_run uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
