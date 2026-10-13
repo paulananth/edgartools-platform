@@ -631,7 +631,12 @@ These name today's sources only as examples; nothing above depends on them.
   record; both older readers are deleted (#904, #905); the installed proof masters
   6,414 Companies with 3,052 CIK+LEI bindings through separate workers and
   verifiers, resumes a killed worker, and a second pass changes nothing (#905,
-  #907). Open: Company preparation runs its workers in one process, not as
-  Bookkeeping steps (Issue 20, 20c); record mapping still goes through
-  `adapters.py` (Issue 20, L7); capture from SEC has no configured worker
-  (Issue 20, L8).
+  #907). Done 2026-10-12/13: Company and Person preparation run as the
+  `mastering` Bookkeeping target on separate workers and verifiers (#928-#930,
+  #932); a batch that changes nothing queues nothing (#931); every contract
+  maps its fields through its reading, the old mapping deleted (#939). Open:
+  a new run processes every document it names, changed or not (ticket 22,
+  the Change Journal beside Bookkeeping); `mdm.publish` delivers to a local
+  contract sink only, not the required consumers' durable destinations;
+  capture from SEC (`provider.capture`, #933) is qualified offline only, and
+  live acquisition is parked until the AWS rollout (Issue 20, L8; #938).
