@@ -1,0 +1,94 @@
+{
+  "scope": "offline configured HTTPS JSON capture v1",
+  "branch": "codex/configured-capture-20261012",
+  "starting_main": "692e0215",
+  "rebased_main": "15f0deb5",
+  "implementation": "efe43354",
+  "recorded_et": "2026-10-12 21:49 ET",
+  "provider_requests": 0,
+  "activated": false,
+  "deployed": false,
+  "tests": [
+    {
+      "lane": "unit_architecture",
+      "passed": 990,
+      "seconds": 265.68
+    },
+    {
+      "lane": "capture_initial",
+      "passed": 58,
+      "seconds": 153.23
+    },
+    {
+      "lane": "runtime_pin",
+      "passed": 1,
+      "seconds": 1.2
+    },
+    {
+      "lane": "snapshot_storage",
+      "passed": 19,
+      "seconds": 0.66
+    },
+    {
+      "lane": "capture_added_pg16",
+      "passed": 6,
+      "seconds": 40.95
+    },
+    {
+      "lane": "forged_candidate_strengthening",
+      "passed": 1,
+      "seconds": 15.14,
+      "subset": true
+    },
+    {
+      "lane": "maintained_control_after_rebase",
+      "passed": 49,
+      "seconds": 108.35
+    },
+    {
+      "lane": "installed_wheels",
+      "passed": 2,
+      "seconds": 338.94,
+      "commit": "efe43354"
+    },
+    {
+      "lane": "rust_acceptance",
+      "status": "passed"
+    },
+    {
+      "lane": "page_selection_and_unsupported_configuration",
+      "passed": 6,
+      "seconds": 17.36
+    },
+    {
+      "lane": "final_capture_and_genericity",
+      "passed": 150,
+      "capture_cases": 91,
+      "genericity_cases": 59,
+      "seconds": 157.1
+    }
+  ],
+  "behavioral_audit": {
+    "selected_paths": 30,
+    "covered_paths": 30,
+    "assessment": "AI behavioral-path audit, not measured line coverage"
+  },
+  "reviews": {
+    "standards": "P2 specification wording corrected and confirmed",
+    "spec": "clear",
+    "gof": "leave existing function/worker seams",
+    "final_delta": "Standards, Spec and GoF clear; invalid native configuration now refuses HTTP"
+  },
+  "pending": [
+    "PR/CI publication",
+    "adapter/fallback retirement after changed-document interface",
+    "Company manifest retirement after receipt-selection interface",
+    "Company producer/continuation integration and live SEC qualification/source activation"
+  ],
+  "targeted_distinct_cases": 91,
+  "initial_ci": {
+    "run": 38332941218,
+    "failure": "Shared Journal SPEC source names outside examples; corrected and 59 genericity tests passed",
+    "runtime_jobs": "MDM, Engine, PG integration and shell passed"
+  }
+}

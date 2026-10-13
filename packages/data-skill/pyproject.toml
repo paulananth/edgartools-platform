@@ -24,6 +24,8 @@ dependencies = [
     "fsspec>=2023.1.0",
     # Generic source.read Parquet framing and the independent census boundary.
     "pyarrow>=17.0.0",
+    # Bounded configured provider.capture transport; no edgartools dependency.
+    "httpx>=0.28,<1",
 ]
 
 [project.optional-dependencies]

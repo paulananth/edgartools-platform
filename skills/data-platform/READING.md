@@ -856,11 +856,18 @@ branches still validate. This avoids relying on a supposedly absent path
 that captured data could contain.
 
 `test: {path: code, kind: truthy}` returns a native boolean without text
-coercion or materializing a subtree. Kinds are `truthy`, `missing`, `null`,
+coercion or materializing a subtree. Kinds are `truthy`, `missing`, `present`, `null`,
 `not_null`, `array`, `object` and `text`; optional `from: document` tests the original
 document. Null includes absent values; `missing` distinguishes absence from
 explicit null. Quote `'null'` in YAML so the kind is text. Truth follows the captured JSON type: zero, false, null and
 empty text/containers are false; whitespace text is true.
+
+`present` accepts an existing value, including null and an empty array.
+Default `path_mode: tree` traverses dotted paths. `literal` retains JSON
+children named `$` or `@name` while still traversing dots. `member` tests
+one exact object key, including dots or brackets in its name:
+`test: {path: 'a.b', path_mode: member, kind: present}` accepts
+`{"a.b": null}` and refuses `{"a": {"b": null}}`.
 
 A table may declare `select: <expression>` to exclude rows before column
 conversion and record checks. True retains a row; false/null excludes it;

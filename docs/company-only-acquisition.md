@@ -45,13 +45,23 @@ checked by a separate verifier. Nothing makes a request to SEC here.
 
 The `mdm` target still merges a manifest prepared elsewhere.
 
+## Configured capture
+
+The registered `provider.capture` worker and independent verifier are qualified
+offline for bounded HTTPS JSON objects. Frozen Rules/task authority and an
+acknowledged Journal authorization precede each GET. Conditional 304 reuse
+verifies prior bytes; recovery after a durable snapshot avoids another GET.
+A crash before a complete durable snapshot may repeat the request. See the
+[capture contract and commands](configured-capture.md).
+
 ## Not here yet
 
-- **Capture.** `provider.capture`, the worker that fetches from SEC under
-  Change Journal authority, is not built (Issue 20 L8). Its live proof needs
-  the operator's permission. The capture target returns with it, and so do the
-  assertions it must prove again: authorization before the request, a lost
-  acknowledgement never refetches, and unchanged links reuse verified bytes.
+- **Company acquisition integration.** The Company capture target still
+  selects `artifact.copy`. The new snapshot/receipt does not replace the
+  `receipts.jsonl`/raw-document input above. Producer manifest wiring, exact
+  source/Rules qualification and activation remain Issue 20 L8 work; live SEC
+  proof needs the operator's permission. Ticker-catalog completeness is outside
+  the capture worker's qualified JSON-only scope.
 - **Continuation pages.** The raw capture holds main documents and one
   ticker catalog only. Pages named in `filings.files` arrive with capture.
 

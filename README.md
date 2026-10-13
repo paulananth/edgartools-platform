@@ -16,6 +16,10 @@ The current executable is `edgar-warehouse`. It runs Rules, Bookkeeping, Change
 Journal, Clean MDM and local silver operations, plus independent parsing and
 mastering workers.
 
+The [configured capture guide](docs/configured-capture.md) documents the
+registered HTTPS JSON worker, offline qualification and pending Company
+acquisition integration.
+
 ## Architecture
 
 Ingest acquires one source file and keeps the verified bytes as bronze.
