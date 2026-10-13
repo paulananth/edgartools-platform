@@ -97,7 +97,7 @@ def write_capture_manifest(
     keys = sorted(keys)  # a bundle is its documents, in key order, however they are listed
     files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
     policy = digest(rules_files.policy())
-    processing = changed_files.identity({"read": reading["read"], "mdm": reading["mdm"]}, policy)
+    processing = changed_files.identity(changed_files.source_rules(source), policy)
     listed, keys = len(keys), changed_files.select(source, processing, files, force=force, ledger=journal)
     scope = {"documents": len(keys), "listed": listed, "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
              "capture_run_id": capture_run, "processing_identity": processing, "forced": force}

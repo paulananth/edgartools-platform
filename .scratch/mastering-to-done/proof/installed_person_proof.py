@@ -176,6 +176,15 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
         "forced_named": {n: r["scope"]["documents"] for n, r in forced.items()},
         "listed": {n: r["scope"]["listed"] for n, r in unchanged.items()},
     }
+    # A forced run of the same documents runs to the end on the installed workers and changes nothing.
+    for name in names:
+        forced_run = submit("person", forced[name]["manifest"])
+        drive(forced_run, ("source.read", "mdm.prepare", "mdm.merge", "journal.record"))
+        finalize(forced_run)
+    changed_data["forced_runs_changed_nothing"] = snapshot() == (first, first_bindings)
+    with databases.ledger_admin.connect() as conn:  # the runtime reads only through functions
+        changed_data["journal_events"] = dict(conn.execute(text(
+            "SELECT event_type, count(*) FROM journal.event WHERE producer = 'change-propagation' GROUP BY 1")).all())
     old.say(stage="changed data", **changed_data)
     first_minutes = minutes()
     old.say(stage="first pass", **first)
@@ -211,5 +220,7 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
     assert report["second_pass_changed_nothing"]
     assert changed_data["unchanged_runs"] == 0 and set(changed_data["unchanged_named"].values()) == {0}
     assert changed_data["forced_named"] == changed_data["listed"]
+    assert changed_data["forced_runs_changed_nothing"]
+    assert changed_data["journal_events"] == {"file.processed": 1000, "files.forced": len(names)}
     # Only changed data (migration 017): merging the same records again queues no publication work.
     assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)

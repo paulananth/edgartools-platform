@@ -2,6 +2,7 @@
 run processed, a retry appends nothing new, its verifier reads every event
 back, and the files then count as processed under that identity only."""
 
+import json
 from uuid import uuid4
 
 import pytest
@@ -47,3 +48,28 @@ def test_the_verifier_refuses_receipts_that_do_not_match_the_files(databases, tm
                                      forced=False, as_of="2026-10-13T13:00:00Z")
     with pytest.raises(ValueError, match="every file"):
         journal_record.verify({**envelope(store, tmp_path, one), "output": task["output"], "candidate": first}, store)
+
+
+def test_a_forced_rerun_and_a_file_another_run_recorded_first_keep_the_first_record(databases, tmp_path, monkeypatch):  # noqa: F811
+    # Review, 2026-10-13: a forced run over recorded files must finish, not conflict after its merge.
+    monkeypatch.setattr(journal_record, "_journal", lambda: databases.ledger)
+    store, source = Artifacts(), f"fixture.{uuid4().hex}"
+    first = changed_files.record_input(source=source, feed="documents", processing="i" * 64, files=FILES[:1],
+                                       forced=False, as_of="2026-10-13T13:00:00Z")
+    earlier = envelope(store, tmp_path / "a", first)
+    recorded = journal_record.execute(earlier, store)
+    forced = changed_files.record_input(source=source, feed="documents", processing="i" * 64, files=FILES,
+                                        forced=True, as_of="2026-10-14T13:00:00Z")
+    task = envelope(store, tmp_path / "b", forced)
+    result = journal_record.execute(task, store)
+    assert journal_record.verify({**task, "candidate": result}, store) == ({journal_record.CHECK: True}, [])
+    receipts = json.loads(store.verified(result))["receipts"]
+    kept = json.loads(store.verified(recorded))["receipts"][0]
+    assert receipts[0] == kept  # the first record of the file stands
+    assert receipts[1]["event"]["run_id"] == task["claim"]["run_id"]  # the file not yet recorded
+    assert receipts[2]["event"]["event_type"] == "files.forced" and receipts[2]["event"]["scope"]["files"] == "2"
+
+
+def test_a_file_key_the_journal_cannot_hold_is_refused_before_any_work():
+    with pytest.raises(ValueError, match="too long"):
+        changed_files.event_key("fixture", "i" * 64, "k" * 2048, "s" * 64)

@@ -30,8 +30,24 @@ def identity(rules, policy: str, shared: list[dict] | None = None) -> str:
                    "shared": sorted((s["name"], s["sha256"]) for s in shared or [])})
 
 
+KEY_BYTES = 2048  # the journal's bound on an event key
+
+
 def event_key(source: str, processing: str, key: str, sha256: str) -> str:
-    return f"{EVENT_TYPE}:{source}:{processing}:{sha256}:{key}"
+    """One file's key: its source, the processing identity, its content hash
+    and its key; refused before any work when the journal could not hold it."""
+    found = f"{EVENT_TYPE}:{source}:{processing}:{sha256}:{key}"
+    if len(found) > KEY_BYTES:
+        raise ValueError(f"A file key too long for the Change Journal: {key[:80]}...")
+    return found
+
+
+def source_rules(source: str) -> dict:
+    """The source's rules version: every rules file in its folder, by name."""
+    from edgar_warehouse.rules import files as rules_files
+
+    folder = rules_files.ROOT / "sources" / source
+    return {path.name: rules_files.load(path) for path in sorted(folder.glob("*.yaml"))}
 
 
 def unprocessed(journal, source: str, processing: str, files: list[tuple[str, str]]) -> list[str]:

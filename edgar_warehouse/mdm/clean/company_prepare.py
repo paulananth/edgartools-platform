@@ -196,8 +196,11 @@ def write_company_manifest(
     # Only the documents not yet processed under these rules, this census and this catalog.
     files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
     catalog_sha = raw_capture.document(folder, receipts, catalog)["sha256"]
-    processing = changed_files.identity({"read": rules, "mdm": rules_files.source(SOURCE)["mdm"]}, digest(POLICY), [
-        {"name": "name_census", "sha256": census_hash}, {"name": "catalog", "sha256": catalog_sha}])
+    # The rules version is every rules file of the source (its readings, combination and
+    # contract) and the load mode they run with; the census and catalog are shared inputs.
+    processing = changed_files.identity({"files": changed_files.source_rules(SOURCE), "load_mode": load_mode},
+                                        digest(POLICY), [{"name": "name_census", "sha256": census_hash},
+                                                         {"name": "catalog", "sha256": catalog_sha}])
     listed, keys = len(keys), changed_files.select(SOURCE, processing, files, force=force, ledger=journal)
     if not keys:  # every document is processed already: no run
         return {"contract_version": 3, "source_code": SOURCE_CODE, "target": TARGET, "manifest": None,
