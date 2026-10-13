@@ -2,7 +2,8 @@
 
 A capture is a folder with `receipts.jsonl` (each captured object's key and
 sha256) and the objects under `bronze/`, keyed as `warehouse/bronze/...`. Name
-Frequency and Company preparation read its documents only through here: a
+Frequency, Company preparation and a captured source's manifest
+(`capture_prepare`) read its documents only through here: a
 document is read only when its bytes equal its receipt, and each `source.read`
 unit is executed, then verified, before anything uses its output.
 """
@@ -49,6 +50,18 @@ def document_bytes(capture: Path, found: dict[str, str], key: str) -> bytes:
     if hashlib.sha256(data).hexdigest() != ref["sha256"]:
         raise Conflict(f"Captured document differs from its receipt: {key}")
     return data
+
+
+def slices(sized: list[tuple[str, int]], max_bytes: int, max_documents: int) -> list[list[str]]:
+    """Consecutive documents cut where the next would pass either bound; a larger document reads alone."""
+    found, current, total = [], [], 0
+    for key, size in sized:
+        if current and (total + size > max_bytes or len(current) == max_documents):
+            found.append(current)
+            current, total = [], 0
+        current.append(key)
+        total += size
+    return found + [current] if current else found
 
 
 def cik(key: str) -> int:

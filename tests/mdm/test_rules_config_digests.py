@@ -81,6 +81,10 @@ SEC_CONFIGURED_FIELDS = {
     "sec.submissions.person": "9ab5f191e7f18f58c1be5cedda3841d86c577f6074f9904a14c4f3eb1d875605",
 }
 PERSON_BEFORE_CONFIGURED_FIELDS = "a740357f911d531ae72a995409d5630b1eeced83c5c8b8078f5d806d8563dd9a"
+# Issue 20 slice 20d: one publication a bundle of documents, not one a document.
+# With the earlier wording the contract is the configured-fields one above.
+PERSON_ONE_PUBLICATION_A_BUNDLE = "2db297e8730696dd8fb65de5b6f28978d3361bbb059eee2aa8c0ec752ff959c1"
+PERSON_ONE_PUBLICATION_A_DOCUMENT = "exact captured submissions document (member name and sha256)"
 
 
 def test_the_company_configuration_is_unchanged():
@@ -290,5 +294,7 @@ def test_every_rules_file_round_trips_exactly(path):
 
 def test_person_configured_fields_preserve_the_previous_contract_digest():
     contract = files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1")
+    assert digest(contract) == PERSON_ONE_PUBLICATION_A_BUNDLE
+    contract = {**contract, "publication_key": PERSON_ONE_PUBLICATION_A_DOCUMENT}
     assert digest(contract) == SEC_CONFIGURED_FIELDS["sec.submissions.person"]
     assert digest(_without_configured_reading(contract)) == PERSON_BEFORE_CONFIGURED_FIELDS
