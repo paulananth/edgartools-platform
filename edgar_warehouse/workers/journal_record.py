@@ -51,12 +51,15 @@ def _forced(envelope: dict, body: dict) -> dict:
 
 
 def _matches(receipt: dict | None, value: dict) -> bool:
-    """A record of this file under its key: the same file, hash and identity, from any run."""
+    """A record of this file under its key: the same file key, content hash and identity, from
+    any run. Where a run read the file from (a folder, a bucket) is not the file."""
     if receipt is None:
         return False
     found = receipt["event"]
-    return (found["event_key"], found["evidence"], found["scope"]["identity"], found["scope"]["file"]) == (
-        value["event_key"], value["evidence"], value["scope"]["identity"], value["scope"]["file"])
+    def shape(event):
+        return (event["event_key"], [ref["sha256"] for ref in event["evidence"]],
+                event["scope"]["identity"], event["scope"]["file"])
+    return shape(found) == shape(value)
 
 
 def execute(envelope: dict, artifacts) -> dict:

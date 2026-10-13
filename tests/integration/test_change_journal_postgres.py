@@ -346,10 +346,13 @@ def test_found_names_only_the_recorded_keys_of_its_producer_by_the_index(databas
     with pytest.raises(ValueError):
         databases.ledger.found("fixture", ["k"] * 10_001)
     with databases.ledger_admin.begin() as conn:
+        # The plan of the function's own query, read from the installed function (not a copy).
+        import re
+        body = conn.scalar(text("SELECT prosrc FROM pg_proc WHERE proname='found' AND pronamespace='journal'::regnamespace"))
+        query = re.search(r"SELECT coalesce.*?;", body, re.S).group(0).rstrip(";").replace(" INTO result", "")
+        query = re.sub(r"\bunnest\(k\)", "unnest(CAST(:k AS text[]))", re.sub(r"=p\b", "=:p", query))
         conn.exec_driver_sql("SET LOCAL enable_seqscan = off")
-        plan = "\n".join(conn.execute(text(
-            "EXPLAIN SELECT e.event_key FROM (SELECT DISTINCT key FROM unnest(CAST(:k AS text[])) AS u(key)) u "
-            "JOIN journal.event e ON e.producer='fixture' AND e.event_key=u.key"), {"k": keys}).scalars())
+        plan = "\n".join(conn.execute(text("EXPLAIN " + query), {"k": keys, "p": "fixture"}).scalars())
         assert "Seq Scan on event" not in plan and "event_producer_event_key_key" in plan, plan
         settings = conn.scalar(text("SELECT proconfig FROM pg_proc WHERE proname='found' "
                                     "AND pronamespace='journal'::regnamespace"))
