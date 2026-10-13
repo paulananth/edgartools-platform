@@ -25,6 +25,11 @@
    "1": 500,
    "2": 500
   },
+  "forced_runs_changed_nothing": true,
+  "journal_events": {
+   "file.processed": 1000,
+   "files.forced": 2
+  },
   "listed": {
    "1": 500,
    "2": 500
@@ -36,12 +41,12 @@
   "unchanged_runs": 0
  },
  "goal": "Issue 20 20d: installed empty-store Person proof on the mastering target",
- "minutes": 2.5,
- "minutes_first_pass": 2.2,
+ "minutes": 3.7,
+ "minutes_first_pass": 3.3,
  "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
  "recovery": {
   "item_at_kill": {
-   "attempt": "ad8ea052-2496-4618-8c39-733fcf01d19f",
+   "attempt": "1a2bb605-3939-4fa3-8f95-4952a23ec20f",
    "attempts": 1,
    "checks": {},
    "error": null,
