@@ -448,3 +448,40 @@ def counts(args) -> int:
         "UNION ALL SELECT object_type,count(*) FROM mdm.current_record "
         "WHERE object_type<>'entity' GROUP BY object_type"
     )).all()))
+
+
+def force_publish(args) -> int:
+    """Force publish (ticket 22): write the current snapshot for one consumer as
+    forced pages (`mdm.force_publish`, no master data changes), then the input
+    manifest of a publish target with one unit a page, for `rules run`. The
+    same --run-id gives the same pages, so a stopped command is run again."""
+    from uuid import UUID, uuid4
+
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+
+    run_id = str(UUID(args.run_id)) if args.run_id else str(uuid4())
+    mdm = engine_from_env("MDM_DATABASE_URL")
+    pages, after = [], {"object_type": "", "object_id": ""}
+    try:
+        while after is not None:
+            with mdm.begin() as conn:
+                page = conn.scalar(text(
+                    "SELECT mdm.force_publish(:c,CAST(:r AS uuid),:p,:t,:i,:n)"),
+                    {"c": args.consumer, "r": run_id, "p": len(pages) + 1, "t": after["object_type"],
+                     "i": after["object_id"], "n": args.page_size})
+            pages.append(page)
+            after = page["next"]
+    finally:
+        mdm.dispose()
+    store = Artifacts()
+    root = Path(args.output).resolve().as_uri()
+    units = [{"keys": {"batch_id": page["batch_id"], "consumer": args.consumer},
+              # A page as MDM holds it; whether this call wrote it is not part of it.
+              "input": store.put(f"{root}/pages", {"version": 1, "forced": True,
+                                                   **{k: page[k] for k in ("batch_id", "generation", "records")}}),
+              "output": f"{root}/published/{n}.json", "cursor": {}}
+             for n, page in enumerate(pages, 1)]
+    manifest = store.put(root, {"version": 2, "steps": {args.step: units}})
+    print(json.dumps({"run_id": run_id, "consumer": args.consumer, "forced": True, "pages": len(pages),
+                      "records": sum(page["records"] for page in pages), "manifest": manifest}, sort_keys=True))
+    return 0

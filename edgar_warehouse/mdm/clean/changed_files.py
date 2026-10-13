@@ -15,11 +15,11 @@ from __future__ import annotations
 
 from datetime import UTC
 
+from edgar_warehouse.change_journal.store import FOUND_LIMIT
 from edgar_warehouse.control_contract import digest
 
 PRODUCER = "change-propagation"
 EVENT_TYPE = "file.processed"
-LOOKUP = 10_000  # keys a journal lookup takes at once
 
 
 def identity(rules, policy: str, shared: list[dict] | None = None) -> str:
@@ -55,8 +55,8 @@ def unprocessed(journal, source: str, processing: str, files: list[tuple[str, st
     keys = {event_key(source, processing, key, sha): key for key, sha in files}
     seen: set[str] = set()
     names = list(keys)
-    for start in range(0, len(names), LOOKUP):
-        seen |= journal.found(PRODUCER, names[start:start + LOOKUP])
+    for start in range(0, len(names), FOUND_LIMIT):
+        seen |= journal.found(PRODUCER, names[start:start + FOUND_LIMIT])
     return [keys[name] for name in names if name not in seen]
 
 

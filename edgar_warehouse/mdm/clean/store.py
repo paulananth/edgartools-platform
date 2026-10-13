@@ -59,6 +59,7 @@ MIGRATIONS: tuple[str, ...] = (
     "015_company_fields_once.sql",
     "016_publication_inputs.sql",
     "017_unchanged_batch_no_outbox.sql",
+    "018_publish_changed_records.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -85,6 +86,7 @@ RUNTIME_FUNCTIONS = (
     "entity_search(text,text,integer)",
     "record_match_proposal(text,uuid)",
     "supersede_match_proposal(text,uuid)",
+    "force_publish(text,uuid,bigint,text,text,integer)",
 )
 
 

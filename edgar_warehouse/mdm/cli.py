@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, Clean MDM only.
 
-Six commands: migrate, check-connectivity, counts, prepare-clean-company,
-prepare-capture and name-census. The legacy MDM commands and their tables are
+Seven commands: migrate, check-connectivity, counts, prepare-clean-company,
+prepare-capture, name-census and force-publish. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -65,6 +65,16 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     census.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
     census.add_argument("--output", required=True)
     census.set_defaults(handler=_logged_handler("name-census", _clean("name_census")))
+
+    force = mdm_sub.add_parser("force-publish", help="Publish every current record to one consumer, changed or not "
+                               "(forced pages of the current snapshot; changes no master data), and write the "
+                               "publish target's input manifest")
+    force.add_argument("--consumer", required=True, help="A consumer the current policy requires, not the journal")
+    force.add_argument("--output", required=True, help="Folder for the pages' inputs and the manifest")
+    force.add_argument("--page-size", type=int, default=10000, help="Records a page, at most 10000")
+    force.add_argument("--run-id", help="Run again with the same pages (a stopped command)")
+    force.add_argument("--step", default="graph-publication", help="The publish target's step name")
+    force.set_defaults(handler=_logged_handler("force-publish", _clean("force_publish")))
 
     counts = mdm_sub.add_parser("counts", help="Print Clean MDM entity and record counts")
     counts.set_defaults(handler=_logged_handler("counts", _clean("counts")))

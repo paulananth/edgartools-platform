@@ -79,15 +79,19 @@ def test_new_inputs_match_old_view_without_numeric_roundtrip(database):
     assert Store(database.application).deliver_one("export", "native", sent)
 
 
-def test_reconstructed_hash_mismatch_is_refused_before_any_send_and_releases_claim(database, monkeypatch):
-    save(database)
+@pytest.mark.parametrize("consumer,corrupt", [
+    ("journal", "postgres_jsonb_object_bytes"),  # contract 2: rebuilt by the program
+    ("export", "payload_bytes"),                 # contract 3 (018): the database's text, still hashed
+])
+def test_reconstructed_hash_mismatch_is_refused_before_any_send_and_releases_claim(database, monkeypatch, consumer, corrupt):
+    save(database, policy_digest=journal_policy(database))
     sent = Destination()
-    monkeypatch.setattr(payloads, "postgres_jsonb_object_bytes", lambda *_, **__: b'{"corrupt": true}')
+    monkeypatch.setattr(payloads, corrupt, lambda *_, **__: b'{"corrupt": true}')
     with pytest.raises(Conflict, match="committed payload hash"):
-        Store(database.application).deliver_one("export", "native", sent)
+        Store(database.application).deliver_one(consumer, "native", sent)
     assert not sent.sent
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT lease_until FROM mdm.outbox WHERE consumer='export'")) is None
+        assert conn.scalar(text("SELECT lease_until FROM mdm.outbox WHERE consumer=:c"), {"c": consumer}) is None
         assert conn.scalar(text("SELECT detail->>'error' FROM mdm.outbox_event WHERE event='failed'")) == "Conflict"
 
 
@@ -155,7 +159,8 @@ def test_a_populated_015_store_upgrades_without_changing_intent_or_request_hash(
     with monkeypatch.context() as patch:
         patch.setattr(module, "MIGRATIONS", module.MIGRATIONS[:module.MIGRATIONS.index("016_publication_inputs.sql")])
         patch.setattr(module, "RUNTIME_FUNCTIONS", tuple(f for f in module.RUNTIME_FUNCTIONS
-                                                       if f != "claim_outbox_input(text,text,integer,text)"))
+                                                       if f not in ("claim_outbox_input(text,text,integer,text)",
+                                                                    "force_publish(text,uuid,bigint,text,text,integer)")))
         database = core.initialize_database(admin, app)
     save(database)
     with database.admin.begin() as conn:
@@ -200,7 +205,7 @@ def test_input_retrieval_uses_the_existing_batch_and_outbox_indexes(database):
         if "Relation Name" in node:
             relations.add(node["Relation Name"])
         pending.extend(node.get("Plans", []))
-    assert relations == {"batch", "outbox"}
+    assert relations == {"batch", "outbox", "batch_change"}  # 018: the changed records, by key
 
 
 def test_public_worker_recovers_a_lost_reply_after_durable_publication_without_resending(database, tmp_path, monkeypatch):

@@ -14,6 +14,11 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.control_contract import canonical, reference
 
 
+# Keys `journal.found` takes in one call: migration 002's bound, held equal by
+# `test_change_journal_postgres.py`.
+FOUND_LIMIT = 10_000
+
+
 class JournalConflict(ValueError):
     """An original producer key names conflicting immutable content."""
 
@@ -137,11 +142,11 @@ class ChangeJournal:
 
     def found(self, producer: str, event_keys: list[str]) -> set[str]:
         """Which of these event keys the producer has recorded: one indexed
-        lookup per key, at most 10,000 keys a call."""
-        if not isinstance(event_keys, list) or len(event_keys) > 10_000 or any(
+        lookup per key, at most FOUND_LIMIT keys a call."""
+        if not isinstance(event_keys, list) or len(event_keys) > FOUND_LIMIT or any(
             type(key) is not str for key in event_keys
         ):
-            raise ValueError("Journal lookup requires at most 10000 text keys")
+            raise ValueError(f"Journal lookup requires at most {FOUND_LIMIT} text keys")
         if not event_keys:
             return set()
         with self.engine.connect() as conn:

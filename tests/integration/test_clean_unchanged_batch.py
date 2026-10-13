@@ -119,8 +119,9 @@ def test_record_company_version_says_whether_it_wrote(database):
 
 
 def test_a_new_deferred_record_alone_is_a_change(database):
-    """A batch whose only new row is a set-aside record is queued: the journal
-    sends deferred records too."""
+    """A batch whose only new row is a set-aside record changed something, but
+    no record: change data capture (018) queues only the journal, which sends
+    deferred records too; this policy's export and graph get nothing."""
     store = Store(database.application)
     review = {"object_type": "review", "object_id": "deferred-1", "body": {
         "deferred_id": "deferred-1", "open": True, "blocking": True, "retired": False}}
@@ -133,7 +134,9 @@ def test_a_new_deferred_record_alone_is_a_change(database):
         result = store.commit(conn, core.request(
             database, batch_id="batch-2", expected_generation=1, consumer="other", projections=[review],
             deferred=[deferred], source_accounting={"normalized": 0, "deferred": 1, "total": 1}), str(uuid4()))
-    assert result["changed"] is True and outbox(database, "batch-2") == outbox(database, "batch-1")
+    assert result["changed"] is True and outbox(database, "batch-2") == []
+    from edgar_warehouse.workers import mdm_publish
+    assert json.loads(mdm_publish.receipt(store, "batch-2", "export"))["unchanged"] is True
 
 
 def test_a_batch_that_changed_nothing_has_nothing_to_publish(database):

@@ -15,6 +15,7 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical
 from edgar_warehouse.change_journal import JournalConflict, envelope
 from edgar_warehouse.change_journal.database import migrate
+from edgar_warehouse.change_journal.store import FOUND_LIMIT
 from tests.integration.test_configured_bookkeeping_postgres import databases
 
 
@@ -344,7 +345,12 @@ def test_found_names_only_the_recorded_keys_of_its_producer_by_the_index(databas
     assert databases.ledger.found("another", keys) == set()
     assert databases.ledger.found("fixture", []) == set()
     with pytest.raises(ValueError):
-        databases.ledger.found("fixture", ["k"] * 10_001)
+        databases.ledger.found("fixture", ["k"] * (FOUND_LIMIT + 1))
+    # The installed function's own bound is the one Python names.
+    with databases.ledger.engine.connect() as conn:
+        assert conn.scalar(text("SELECT journal.found('fixture',CAST(:k AS text[]))"), {"k": ["k"] * FOUND_LIMIT}) == []
+    with databases.ledger.engine.connect() as conn, pytest.raises(DBAPIError, match="at most"):
+        conn.scalar(text("SELECT journal.found('fixture',CAST(:k AS text[]))"), {"k": ["k"] * (FOUND_LIMIT + 1)})
     with databases.ledger_admin.begin() as conn:
         # The plan of the function's own query, read from the installed function (not a copy).
         import re
