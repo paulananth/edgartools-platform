@@ -27,7 +27,7 @@ permitted by this implementation instruction.
 
 Rust presence/member predicates and READING reference also changed; full Rust acceptance passed. Source integration, approval and activation behavior remain unchanged.
 
-- [x] Publish the final qualification record and verify its review/CI; runtime code is already merged and qualified. Final counts, installed proof and exact green head published in PR #933; GitHub CI/merge readback and metadata consistency verified, 2026-10-13 06:19 ET.
+- [x] Record final capture qualification and verify underlying implementation review/CI; runtime code is already merged and qualified. Final counts, installed proof and exact green head published in PR #933; GitHub CI/merge readback and metadata consistency verified, 2026-10-13 06:19 ET.
 
 Changed-document speed-ups are separately deferred by the operator (#934); this record makes no claim they landed.
 
