@@ -131,7 +131,10 @@ def test_relationship_refusal_precedes_later_matching_shape_failure():
     row['Entity']['HeadquartersAddress']['AdditionalAddressLine']=['invalid']
     configured=copy.deepcopy(files.source('gleif')['mdm']['gleif.level1.v1']['contract'])
     configured['adapter']['relationships']=[{'type_field':'relationship.kind','type_values':{'KNOWN':'owns'}}]
-
+    publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture','revision':1}
+    with pytest.raises(adapters.UnsupportedRecord) as failure:
+        adapters.normalize(row,source_code='gleif.level1.v1',contract=configured,publication=publication)
+    assert failure.value.reason=='unsupported_relationship_type'
 
 
 def test_unused_mapping_expressions_are_validated_before_fields_projection():

@@ -129,8 +129,11 @@ def paths(spec: Any) -> list[tuple[str, str]]:
                 for _, path in paths(child)]
     if "join" in spec:
         return [("", f"{spec['join'].get('path')} (lines)")]
-    found = next(iter(spec.values()), None) if len(spec) == 1 else None
-    return [("", _text(found.get("path") if isinstance(found, dict) else found))]
+    if set(spec) == {"value"}:
+        return [("", _text(spec["value"].get("path")))]
+    # A field computed another way has no one source path to show; say so
+    # rather than print a wrong one.
+    raise ValueError(f"The workbook cannot show a source path for {sorted(spec)}")
 
 
 def critical_elements(block: dict) -> list[tuple[int, str, str]]:

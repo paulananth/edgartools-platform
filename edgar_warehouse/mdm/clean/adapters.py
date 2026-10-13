@@ -35,6 +35,11 @@ class UnsupportedRecord(ValueError):
         super().__init__(reason)
 
 
+class MappingError(Exception):
+    """A mapping that cannot run as written. Not a ValueError, so it stops the
+    run instead of setting records aside as source defects."""
+
+
 def _sec_cik(item) -> str:
     value = str(item).strip()
     if not value.isascii() or not value.isdigit() or len(value) > 10 or int(value) == 0:
@@ -404,11 +409,6 @@ def _reached(node, parts: list[str]):
         yield node
     elif isinstance(node, dict):
         yield from _reached(node.get(parts[0]), parts[1:])
-
-
-class MappingError(Exception):
-    """A mapping that cannot run as written. Not a ValueError, so it stops the
-    run instead of setting records aside as source defects."""
 
 
 def _scopes(row: dict, spec: dict):
