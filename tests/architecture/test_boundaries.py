@@ -12,14 +12,17 @@ def _python_sources() -> list[Path]:
 
 
 class BoundaryTests(unittest.TestCase):
-    def test_httpx_only_lives_in_sec_client(self) -> None:
+    def test_httpx_only_lives_in_configured_provider_transport(self) -> None:
         offenders = [
             path
             for path in _python_sources()
             if "import httpx" in path.read_text(encoding="utf-8")
-            and path != PACKAGE_ROOT / "infrastructure" / "sec_client.py"
+            and path != PACKAGE_ROOT / "workers" / "provider_transport.py"
         ]
         self.assertEqual(offenders, [])
+
+    def test_old_sec_client_is_retired(self) -> None:
+        self.assertFalse((PACKAGE_ROOT / 'infrastructure' / 'sec_client.py').exists())
 
     def test_no_local_silver_connection_is_reached_into(self) -> None:
         """The DuckDB engine is gone (silver-merge-engine-migration Ticket

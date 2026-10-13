@@ -382,7 +382,9 @@ class Bookkeeping:
         return found
 
     def renew(self, envelope: dict) -> dict:
-        return {**envelope, "claim": {**envelope["claim"], "proof": self.heartbeat(self._claim_of(envelope)).proof}}
+        claim = self._claim_of(envelope)
+        self._same_work(envelope, claim)  # External effects need the frozen work, not only a live lease.
+        return {**envelope, "claim": {**envelope["claim"], "proof": self.heartbeat(claim).proof}}
 
     def report(self, envelope: dict, candidate: dict, runtime: str) -> dict:
         """A worker's candidate; the unit is not complete until verified."""
