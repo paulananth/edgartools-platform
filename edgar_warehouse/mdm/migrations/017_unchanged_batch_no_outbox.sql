@@ -5,12 +5,102 @@
 -- export and graph publishers delivered a batch with no change.
 --
 -- write_batch now notes whether the batch changed anything: a source reading
--- it inserted, a master entity, a decision, a Company version or alias it
--- wrote, or a current record whose body differs (an equal one is not
+-- it inserted, a set-aside record not yet stored, a master entity, a decision, a Company version or alias it
+-- wrote (record_company_version now says whether it wrote: it alone decides
+-- when a Company is the same), or a current record whose body differs (an equal one is not
 -- rewritten, so it keeps the batch that wrote it). The batch row, its run and
 -- the consumer's checkpoint are written either way: the batch is committed
 -- and the consumer has read past it. Only a changed batch gets outbox rows.
 -- The result says which (`changed`).
+
+-- record_company_version answers whether it wrote (its return type changes,
+-- so it is dropped and created again; write_batch is its one caller).
+DROP FUNCTION mdm.record_company_version(jsonb, text, timestamp with time zone);
+CREATE FUNCTION mdm.record_company_version(projected jsonb, source_batch text, recorded_at timestamp with time zone) RETURNS boolean
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'mdm'
+    AS $$
+DECLARE
+    previous mdm.company%ROWTYPE;
+    old_alias mdm.company_alias%ROWTYPE;
+    generation_number bigint;
+    starts_at timestamptz;
+    refs jsonb;
+    selected jsonb;
+BEGIN
+    IF projected->>'kind' IS DISTINCT FROM 'company' THEN RETURN false; END IF;
+    SELECT generation INTO generation_number FROM mdm.batch WHERE batch_id=source_batch;
+    IF generation_number IS NULL THEN RAISE EXCEPTION 'Company projection has no committed batch'; END IF;
+    SELECT * INTO previous FROM mdm.company
+      WHERE entity_id=(projected->>'entity_id')::uuid AND valid_to IS NULL FOR UPDATE;
+    SELECT * INTO old_alias FROM mdm.company_alias
+      WHERE alias_id=(projected->>'entity_id')::uuid AND valid_to IS NULL FOR UPDATE;
+    IF projected->>'status'='alias' AND old_alias.alias_id IS NOT NULL
+       AND old_alias.canonical_id::text=projected->>'canonical_id' THEN RETURN false; END IF;
+    IF projected->>'status'<>'alias' AND previous.entity_id IS NOT NULL
+       AND previous.body=projected THEN RETURN false; END IF;
+    starts_at := greatest(
+        recorded_at,
+        coalesce(previous.valid_from + interval '1 microsecond',recorded_at),
+        coalesce(old_alias.valid_from + interval '1 microsecond',recorded_at)
+    );
+    IF previous.entity_id IS NOT NULL THEN
+        UPDATE mdm.company SET valid_to=starts_at,to_generation=generation_number
+          WHERE entity_id=previous.entity_id AND valid_to IS NULL;
+    END IF;
+    IF old_alias.alias_id IS NOT NULL THEN
+        UPDATE mdm.company_alias SET valid_to=starts_at,to_generation=generation_number
+          WHERE alias_id=old_alias.alias_id AND valid_to IS NULL;
+    END IF;
+    -- A merged-away ID is only routing metadata, not another Company row.
+    IF projected->>'status' = 'alias' THEN
+        INSERT INTO mdm.company_alias(
+            alias_id,canonical_id,from_generation,valid_from,batch_id
+        ) VALUES (
+            (projected->>'entity_id')::uuid,(projected->>'canonical_id')::uuid,
+            generation_number,starts_at,source_batch
+        );
+        RETURN true;
+    END IF;
+    IF projected->>'status' NOT IN ('accepted','review') OR projected->>'canonical_id' IS DISTINCT FROM projected->>'entity_id' THEN
+        RAISE EXCEPTION 'Invalid Company projection';
+    END IF;
+    refs := coalesce(projected->'identifiers','{}'::jsonb);
+    selected := coalesce(projected->'fields','{}'::jsonb);
+    INSERT INTO mdm.company (
+        entity_id,from_generation,valid_from,batch_id,status,quarantined,
+        cik,lei,identifiers,name,sic,sic_description,state_of_incorporation,
+        fiscal_year_end,description,jurisdiction,address,gleif_legal_form,
+        gleif_entity_status,gleif_registration_status,gleif_initial_registration,
+        gleif_last_update,gleif_next_renewal,gleif_managing_lou,
+        gleif_validation_source,gleif_registration_authority,
+        gleif_registration_authority_entity_id,gleif_entity_creation_date,body
+    ) VALUES (
+        (projected->>'entity_id')::uuid,generation_number,starts_at,source_batch,
+        projected->>'status',coalesce((projected->>'quarantined')::boolean,false),
+        CASE WHEN jsonb_array_length(coalesce(refs->'cik','[]'::jsonb))=1 THEN refs->'cik'->>0 END,
+        CASE WHEN jsonb_array_length(coalesce(refs->'lei','[]'::jsonb))=1 THEN refs->'lei'->>0 END,
+        refs,selected->'name'->>'value',selected->'sic'->>'value',
+        selected->'sic_description'->>'value',selected->'state_of_incorporation'->>'value',
+        selected->'fiscal_year_end'->>'value',selected->'description'->>'value',
+        selected->'jurisdiction'->>'value',
+        CASE WHEN selected->'address'->'value'='null'::jsonb THEN NULL
+             ELSE selected->'address'->'value' END,
+        selected->'gleif_legal_form'->>'value',selected->'gleif_entity_status'->>'value',
+        selected->'gleif_registration_status'->>'value',
+        selected->'gleif_initial_registration'->>'value',
+        selected->'gleif_last_update'->>'value',selected->'gleif_next_renewal'->>'value',
+        selected->'gleif_managing_lou'->>'value',selected->'gleif_validation_source'->>'value',
+        selected->'gleif_registration_authority'->>'value',
+        selected->'gleif_registration_authority_entity_id'->>'value',
+        selected->'gleif_entity_creation_date'->>'value',projected
+    );
+    RETURN true;
+END;
+$$;
+
+COMMENT ON FUNCTION mdm.record_company_version(jsonb, text, timestamp with time zone) IS
+    'Write a Company''s new version to company (closing the old one) and its aliases to company_alias; true when it wrote, false for the same Company. Called by write_batch.';
 
 CREATE OR REPLACE FUNCTION mdm.write_batch(request_text text, root_run uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
@@ -59,7 +149,8 @@ BEGIN
         IF FOUND THEN
             IF prior.request_hash <> h THEN RAISE EXCEPTION 'Batch key reused with different content'; END IF;
             INSERT INTO mdm.run_batch VALUES(root_run,prior.batch_id) ON CONFLICT DO NOTHING;
-            -- A changed batch always has outbox rows: every policy requires a consumer.
+            -- Since 017 a batch has outbox rows only when it changed something
+            -- (every policy requires a consumer); one saved before has them always.
             result := jsonb_build_object('batch_id',prior.batch_id,'generation',prior.generation,'duplicate',true,
                 'changed',EXISTS(SELECT 1 FROM mdm.outbox WHERE batch_id=prior.batch_id));
             EXIT core;
@@ -105,6 +196,12 @@ BEGIN
               ON CONFLICT(assertion_id) DO NOTHING;
             IF FOUND THEN wrote := true; END IF;
         END LOOP;
+        -- A deferred record is stored after this block; a new one is a change
+        -- (the journal sends the whole batch, deferred records too).
+        IF EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(r->'deferred','[]')) d
+                  WHERE NOT EXISTS(SELECT 1 FROM mdm.set_aside_record s WHERE s.deferred_id=d->>'deferred_id')) THEN
+            wrote := true;
+        END IF;
         IF coalesce(jsonb_array_length(r->'identities'),0)>0
            OR coalesce(jsonb_array_length(r->'decisions'),0)>0 THEN
             wrote := true;
@@ -122,19 +219,10 @@ BEGIN
         FOR item IN SELECT value FROM jsonb_array_elements(r->'projections') LOOP
             -- A Company is kept in the Company table only. The batch row
             -- above holds this commit's generation; now() is its created_at.
-            -- record_company_version writes nothing for an equal Company (015):
-            -- the same current alias, or the same current body.
             IF item->>'object_type'='entity' AND item->'body'->>'kind'='company' THEN
-                IF item->'body'->>'status'='alias' THEN
-                    IF NOT EXISTS(SELECT 1 FROM mdm.company_alias a WHERE a.alias_id::text=item->'body'->>'entity_id'
-                                  AND a.valid_to IS NULL AND a.canonical_id::text=item->'body'->>'canonical_id') THEN
-                        wrote := true;
-                    END IF;
-                ELSIF NOT EXISTS(SELECT 1 FROM mdm.company c WHERE c.entity_id=(item->'body'->>'entity_id')::uuid
-                                 AND c.valid_to IS NULL AND c.body=item->'body') THEN
+                IF mdm.record_company_version(item->'body',r->>'batch_id',now()) THEN
                     wrote := true;
                 END IF;
-                PERFORM mdm.record_company_version(item->'body',r->>'batch_id',now());
             ELSIF NOT EXISTS(SELECT 1 FROM mdm.current_record c WHERE c.object_type=item->>'object_type'
                     AND c.object_id=item->>'object_id' AND c.body=item->'body') THEN
                 INSERT INTO mdm.current_record VALUES(item->>'object_type',item->>'object_id',item->'body',r->>'batch_id')

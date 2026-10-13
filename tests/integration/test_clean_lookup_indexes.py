@@ -35,7 +35,7 @@ INDEXES = ("source_reading_link_subjects", "source_reading_subject", "master_ent
            "decision_subject", "decision_entity", "decision_left", "decision_right", "decision_target",
            "current_record_link_start", "current_record_link_end", "current_record_review_entity",
            "current_record_review_subject", "current_record_review_affected_subjects",
-           # 017: is this Company the one stored now (an unchanged batch queues nothing)?
+           # record_company_version: is this Company the one stored now (017 asks it)?
            "company_current_entity")
 
 

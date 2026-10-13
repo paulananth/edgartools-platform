@@ -4,6 +4,7 @@ Merging records MDM already holds, under a new batch and consumer, commits the
 batch and the consumer's checkpoint but queues no work for the journal, export
 or graph publishers. A batch that changes a record still queues it.
 """
+import json
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -76,15 +77,17 @@ def test_a_review_written_again_unchanged_keeps_the_batch_that_wrote_it(database
 
 
 def test_each_new_lookup_reads_through_an_index(database):
-    """The three questions write_batch now asks per projection read no table in
-    full: each plan, with sequential scans off, names an index scan."""
+    """The questions write_batch now asks read no table in full: each plan,
+    with sequential scans off, names its index. The Company questions are
+    record_company_version's own (held by test_clean_lookup_indexes)."""
     lookups = {
-        "company_current_entity": "SELECT 1 FROM mdm.company c WHERE c.entity_id=CAST(:id AS uuid) "
-                                  "AND c.valid_to IS NULL AND c.body=CAST(:body AS jsonb)",
-        "company_alias_current_text": "SELECT 1 FROM mdm.company_alias a WHERE a.alias_id::text=:id "
-                                      "AND a.valid_to IS NULL AND a.canonical_id::text=:id",
+        # Is this deferred record new (write_batch)?
+        "set_aside_record_pkey": "SELECT 1 FROM mdm.set_aside_record s WHERE s.deferred_id=:id",
+        # Is this record the one stored now (write_batch)?
         "current_record_pkey": "SELECT 1 FROM mdm.current_record c WHERE c.object_type='review' "
                                "AND c.object_id=:id AND c.body=CAST(:body AS jsonb)",
+        # Did a repeated batch change anything (write_batch, a repeat save)?
+        "outbox_pkey": "SELECT 1 FROM mdm.outbox WHERE batch_id=:id",
     }
     records = [core.source(f"c{n}", fields={"name": f"Company {n}"}) for n in range(300)]
     pairs = [core.identity_and_binding(r) for r in records]
@@ -101,3 +104,33 @@ def test_each_new_lookup_reads_through_an_index(database):
         for index, query in lookups.items():
             plan = "\n".join(conn.scalars(text("EXPLAIN " + query), {"id": str(uuid4()), "body": "{}"}))
             assert index in plan and "Seq Scan" not in plan, plan
+
+
+def test_record_company_version_says_whether_it_wrote(database):
+    """It alone decides when a Company is the same; write_batch asks it. The
+    changed answer is held by a renamed Company being queued (above)."""
+    a = core.source("a", fields={"name": "Acme"})
+    identity, bind = core.identity_and_binding(a)
+    merge(database, "first", "fixture", assertions=[a], identities=[identity], decisions=[bind])
+    with database.admin.begin() as conn:
+        body = conn.scalar(text("SELECT body FROM mdm.company WHERE valid_to IS NULL"))
+        same = text("SELECT mdm.record_company_version(CAST(:b AS jsonb),'first',now())")
+        assert conn.scalar(same, {"b": json.dumps(body, sort_keys=True)}) is False
+
+
+def test_a_new_deferred_record_alone_is_a_change(database):
+    """A batch whose only new row is a set-aside record is queued: the journal
+    sends deferred records too."""
+    store = Store(database.application)
+    review = {"object_type": "review", "object_id": "deferred-1", "body": {
+        "deferred_id": "deferred-1", "open": True, "blocking": True, "retired": False}}
+    with database.application.begin() as conn:
+        store.commit(conn, core.request(database, projections=[review]), str(uuid4()))
+    deferred = {"deferred_id": "deferred-1", "source_code": "fixture.primary", "publication_key": "p1",
+                "record_locator": "$[0]", "schema_version": "1", "reason": "needs evidence",
+                "raw_record": {}, "provenance": {}}
+    with database.application.begin() as conn:
+        result = store.commit(conn, core.request(
+            database, batch_id="batch-2", expected_generation=1, consumer="other", projections=[review],
+            deferred=[deferred], source_accounting={"normalized": 0, "deferred": 1, "total": 1}), str(uuid4()))
+    assert result["changed"] is True and outbox(database, "batch-2") == outbox(database, "batch-1")
