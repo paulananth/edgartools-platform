@@ -1,0 +1,21 @@
+{
+ "counts": {
+  "crlf": 0,
+  "files": 5356,
+  "header_names_accession_once": 5356
+ },
+ "documents_per_file": {
+  "1": 4856,
+  "2": 349,
+  "3": 62,
+  "4": 53,
+  "5": 26,
+  "6": 10
+ },
+ "xml_documents_per_file": {
+  "1": 5356
+ },
+ "xml_roots": {
+  "ownershipDocument": 5356
+ }
+}

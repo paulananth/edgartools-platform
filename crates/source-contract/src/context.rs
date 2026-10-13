@@ -9,8 +9,15 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
             let name = name.as_str().filter(|s| !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
                 .ok_or("context names use at most 64 letters, digits or underscores")?;
             let args = spec.as_mapping().ok_or(format!("context {name} must declare its type"))?;
-            if args.keys().any(|k| !matches!(k.as_str(), Some("type" | "nullable" | "max_bytes"))) {
+            if args.keys().any(|k| !matches!(k.as_str(), Some("type" | "nullable" | "max_bytes" | "sgml_header"))) {
                 return Err(format!("context {name} has an unknown argument"));
+            }
+            if let Some(line) = spec.get("sgml_header") {
+                // Filled from the submission's own header, never by the caller.
+                if setting(read, "container") != Some("sgml") || setting(spec, "type") != Some("text")
+                    || !line.as_str().is_some_and(|l| !l.is_empty() && l.len() <= 128 && !l.contains(':')) {
+                    return Err(format!("context {name} sgml_header names a header line (text, without its colon) of an SGML container"));
+                }
             }
             if !matches!(setting(spec, "type"), Some("text" | "integer" | "boolean")) {
                 return Err(format!("context {name} type is text, integer or boolean"));
@@ -67,9 +74,46 @@ fn references(expr: &Value, read: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The context fields an SGML header fills: (field, header line).
+pub(crate) fn from_header(read: &Value) -> Vec<(String, String)> {
+    read.get("context").and_then(Value::as_mapping).into_iter().flatten()
+        .filter_map(|(name, spec)| Some((name.as_str()?.to_string(), setting(spec, "sgml_header")?.to_string())))
+        .collect()
+}
+
+/// The caller's facts: every declared field but those a header fills.
 pub(crate) fn check(read: &Value, values: &Row) -> Result<(), Rejected> {
+    let filled = from_header(read);
+    if filled.iter().any(|(name, _)| values.contains_key(name)) {
+        return Err(Rejected::new("invalid_context", "a header field is filled from the submission, not by the caller"));
+    }
+    typed(read, values, filled.len())
+}
+
+/// The caller's facts with the fields an SGML header fills, each from the
+/// one header line it names; every declared field is then checked. A line the
+/// header names other than once, or that is too long or not UTF-8, is the
+/// submission's fault (`sgml_header`), not the caller's.
+pub(crate) fn fill_from_header(read: &Value, context: &Row, header: &[(String, String)]) -> Result<Row, Rejected> {
+    let mut filled = context.clone();
+    for (name, line) in from_header(read) {
+        let values: Vec<&String> = header.iter().filter(|(n, _)| *n == line).map(|(_, v)| v).collect();
+        let [value] = values[..] else {
+            return Err(Rejected::new("sgml_header", format!("the header names {line} {} times, not once", values.len())));
+        };
+        let bound = read["context"][name.as_str()].get("max_bytes").and_then(Value::as_u64).unwrap_or(4096);
+        if value.len() as u64 > bound || value.contains('\u{FFFD}') {
+            return Err(Rejected::new("sgml_header", format!("the header's {line} is over {bound} bytes or not UTF-8")));
+        }
+        filled.insert(name, Val::Str(value.clone()));
+    }
+    typed(read, &filled, 0)?;
+    Ok(filled)
+}
+
+fn typed(read: &Value, values: &Row, filled: usize) -> Result<(), Rejected> {
     let specs = read.get("context").and_then(Value::as_mapping);
-    if specs.map_or(0, |s| s.len()) != values.len() {
+    if specs.map_or(0, |s| s.len()) != values.len() + filled {
         return Err(Rejected::new("invalid_context", "context keys differ from the declared fields"));
     }
     for (name, value) in values {

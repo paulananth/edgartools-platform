@@ -233,15 +233,17 @@ impl Engine {
         if bytes.len() as u64 > self.limits.max_bytes {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
-        let member;
-        let bytes = if setting(&self.read, "container") == Some("zip") {
-            member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
-            &member[..]
-        } else {
-            bytes
+        let (member, filled) = match setting(&self.read, "container") {
+            Some("zip") => (formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?, None),
+            Some("sgml") => {
+                let (xml, header) = formats::sgml_document(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
+                (xml, Some(context::fill_from_header(&self.read, context, &header)?))
+            }
+            _ => (Vec::new(), None),
         };
+        let bytes = if setting(&self.read, "container").is_some() { &member[..] } else { bytes };
         let document = self.document(bytes)?;
-        self.read_document(&document, lookups, context)
+        self.read_document(&document, lookups, filled.as_ref().unwrap_or(context))
     }
 
     /// Project a validated framed JSON record through the ordinary configured
@@ -526,13 +528,17 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
         }
     }
     if let Some(container) = read.get("container") {
-        if container.as_str() != Some("zip") {
-            return Err(format!("container {container:?} is not read"));
+        match container.as_str() {
+            Some("zip") => {}
+            // An SGML submission's document is read as XML.
+            Some("sgml") if format == "xml" => {}
+            Some("sgml") => return Err("container sgml holds an XML document: it needs format xml".into()),
+            _ => return Err(format!("container {container:?} is not read")),
         }
     }
     if let Some(member) = read.get("member") {
-        if setting(read, "container") != Some("zip") {
-            return Err("read.member chooses a ZIP member: it needs container zip".into());
+        if !matches!(setting(read, "container"), Some("zip" | "sgml")) {
+            return Err("read.member chooses a ZIP member or an SGML document: it needs container zip or sgml".into());
         }
         if !member.as_str().is_some_and(|m| !m.is_empty() && m.len() <= 256) {
             return Err("read.member is a member name pattern of 1 to 256 bytes".into());
