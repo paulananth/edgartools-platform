@@ -1,6 +1,6 @@
 # Configured capture review
 
-Baseline: rebased main `15f0deb5`; implementation `efe43354`.
+Baseline: rebased main `2e78dc12`; final capture implementation `43a3c34e` (formerly `599f23c4` before the rebase).
 Scope: isolated configured HTTPS JSON worker/verifier and unused SEC client
 retirement. No provider request, source activation, or deployment.
 
@@ -17,8 +17,7 @@ Independent read-only review found no actionable in-scope defect. Frozen
 bindings, mandatory provider lease, acknowledged Journal intent, bounded/no-
 redirect GET, immutable snapshot, 304 authenticated direct-200 reuse, and
 independent verification match the approved isolated-slice contract.
-Plan completion audit: 9/9 substantive in-scope items done; publication/CI is
-ongoing. Explicitly deferred integration work stays unchecked in TICKET.
+Plan completion audit: 9/9 substantive in-scope items done; publication/CI passed; PR #933 merged. Explicitly deferred integration work stays unchecked in TICKET.
 
 ## GoF and pre-landing review
 
@@ -61,4 +60,6 @@ foreign tracker/skill files were not rewritten.
 
 Documentation follow-up: Company acquisition status/recovery wording and README capture link now match the qualified worker; genuine page selection and all four unsupported approved formats plus oversize bound were verified before HTTP.
 
-Final delta: a red PG16 regression reproduced a GET before a natively invalid approved configuration was rejected. The shared native builder now compiles in `_load` before effects and remains the payload checker afterward. Standards, Spec and GoF reviewers confirmed the fix. Final capture and genericity suite: 150 passed (91 capture cases plus 59 genericity checks, 2m37s). Initial CI identified only source-specific names outside Journal SPEC examples; generic wording corrected and verified. Installed final wheels and final CI remain in progress.
+Final delta: a red PG16 regression reproduced a GET before a natively invalid approved configuration was rejected. The shared native builder now compiles in `_load` before effects and remains the payload checker afterward. Standards, Spec and GoF reviewers confirmed the fix. Final capture and genericity suite: 150 passed (91 capture cases plus 59 genericity checks, 2m37s). Initial CI identified only source-specific names outside Journal SPEC examples; generic wording corrected and verified. Installed final capture wheels at `599f23c4`: 2 passed in 5m55s. All six required CI checks passed at that commit. The rebase preserved capture runtime files exactly; combined-state CI passed all six required checks at `43a3c34e` (run `38334540421`). PR #933 merged as `0e5db242` on 2026-10-12 22:02 ET.
+
+Qualification record closure: live GitHub readback on 2026-10-13 06:16 ET confirms the merged PR and its exact green head. No runtime changes in this record. Remaining adapter/fallback, Company manifest and live-source qualification are explicit deferred items. The changed-document speed-ups were separately deferred by the operator in #934; their deferral does not invalidate the capture qualification.
