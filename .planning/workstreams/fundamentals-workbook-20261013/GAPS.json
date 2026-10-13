@@ -1,0 +1,86 @@
+[
+  {
+    "id": "G01",
+    "issue": "History and fiscal periods",
+    "workbook_reference": "S2 E4,B6:AI6; S3 C7:AJ7",
+    "acquisition_implication": "Five historical years x four quarters plus annuals; first forecast year has quarters, followed by four annual forecasts. Template 2024 is an input/default, not the current year. Keep actual fiscal calendars and older source history."
+  },
+  {
+    "id": "G02",
+    "issue": "Balance opening positions",
+    "workbook_reference": "S4 B10,B18,B39; S5 B27",
+    "acquisition_implication": "Acquire opening cash, PP&E, retained earnings and working-capital balances before first modeled quarter. First modeled values are simplified; do not replace actual opening balances with zero."
+  },
+  {
+    "id": "G03",
+    "issue": "Share definitions",
+    "workbook_reference": "S3 C60,G62; S4 A40; S6 D72/SHARES; S7 I3",
+    "acquisition_implication": "Define basic versus diluted weighted-average shares separately from monetary common share capital and current outstanding shares. Annual GAAP Shares copies Q4; DCF SHARES points to AB62 (forecast Q1). These are not observed annual/current share definitions."
+  },
+  {
+    "id": "G04",
+    "issue": "Revenue segments/custom concepts",
+    "workbook_reference": "S2 A7,A13,A18; S1 Important Notes",
+    "acquisition_implication": "Two line labels are placeholders. Acquire all actually disclosed revenue dimensions/drivers. SEC Company Facts only aggregates standard-taxonomy/entity-wide facts, so filing/iXBRL/IR supplementation is needed for dimensions/custom labels."
+  },
+  {
+    "id": "G05",
+    "issue": "Cash-flow completeness",
+    "workbook_reference": "S5 A8:A30; S4 A40",
+    "acquisition_implication": "Modeled CFO includes only net income, depreciation, AR/inventory/AP changes; modeled financing uses debt and common-capital changes. Acquire reported CFO/CFI/CFF and actual cash transactions for independent reconciliation."
+  },
+  {
+    "id": "G06",
+    "issue": "Reported balance-sheet coverage",
+    "workbook_reference": "S4 B42,A41,A45",
+    "acquisition_implication": "Workbook B42 sums B39:B40 and omits APIC row41. Real equity may include treasury stock, OCI and NCI; real asset/liability categories may include goodwill, intangibles, leases and deferred tax. Keep reported totals, not a forced balance."
+  },
+  {
+    "id": "G07",
+    "issue": "PP&E and cash capex",
+    "workbook_reference": "S4 B18,A21; S5 A16",
+    "acquisition_implication": "Acquire net PP&E and cash purchases separately. Balance changes alone do not identify cash capex because depreciation, non-cash additions, acquisitions, disposals and FX differ."
+  },
+  {
+    "id": "G08",
+    "issue": "Expense overlap and adjusted EPS",
+    "workbook_reference": "S3 A13:A48; A64 comment",
+    "acquisition_implication": "Do not double-count D&A already in cost/operating expenses. Template EBITDA adds depreciation only; A64 excludes only depreciation, not a company-disclosed non-GAAP reconciliation."
+  },
+  {
+    "id": "G09",
+    "issue": "Quarterly/YTD/annual normalization",
+    "workbook_reference": "S2 quarter/year columns; S3 G62; S5 annual columns",
+    "acquisition_implication": "Acquire raw periods and dates. Derive standalone duration quarters only from compatible observations; Q4 can be annual less nine months for additive flows. Never apply that subtraction to balances, ratios, EPS or weighted-average shares."
+  },
+  {
+    "id": "G10",
+    "issue": "Taxes and loss carryforwards",
+    "workbook_reference": "S3 C54:Z54 and comments; S1 note8",
+    "acquisition_implication": "Historical tax formulas contain example hard-coded rates. Acquire actual tax provision/benefit and pretax income, with NOL/tax-note context; future rates/utilization are assumptions."
+  },
+  {
+    "id": "G11",
+    "issue": "DCF cash-flow basis and timing",
+    "workbook_reference": "S5 B33; S6 C11:G11,D63,D70:D73",
+    "acquisition_implication": "Resolve whether the cash flows are equity or firm cash flows, the debt/cash/equity bridge and discount timing. There are five forecast FCF values but terminal discount uses exponent4. Do not adopt the workbook as a qualified production valuation definition."
+  },
+  {
+    "id": "G12",
+    "issue": "Market data versus assumptions",
+    "workbook_reference": "S6 F35,F37,F39,F46,F62,G23; S7 E3,I4,C13/C17/C21",
+    "acquisition_implication": "Share price is an observed external input. Risk-free/beta/return/debt-cost/growth/weights/multiples are modeled assumptions; optional calibration requires as-of, instrument/window and methodology. IPO estimated price is an assumption, not a traded observation."
+  },
+  {
+    "id": "G13",
+    "issue": "Missing facts, scaling and currency",
+    "workbook_reference": "S2:S7 monetary headers; S3 A62; placeholder zeros/N/A",
+    "acquisition_implication": "Statements use thousands and shares use thousands; EPS/price are per share. Preserve real currency, units, negatives, precision and non-applicability. Zero template values are not acquired data; real reported zeros remain valid."
+  },
+  {
+    "id": "G14",
+    "issue": "External reference",
+    "workbook_reference": "Defined name Market_Cap",
+    "acquisition_implication": "One name points to an external workbook; no extracted cell formula uses it. No external link was followed. The visible I3 market cap is computed locally from price and modeled shares."
+  }
+]

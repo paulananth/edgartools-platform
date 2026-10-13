@@ -1,0 +1,51 @@
+{
+  "source_sha256": "446e2eddbb976d4538aa9488c9e457164ce3a55d77ca8fdaba345297f76110a6",
+  "source_name": "Financial-Model-and-Valuation-Template.xlsx",
+  "sheets": {
+    "S1": "Step 1 Modeling+Valuation Rules",
+    "S2": "Step 2 Revenue Forecast",
+    "S3": "Step 3 Income Statement ",
+    "S4": "Step 4 Balance Sheet",
+    "S5": "Step 5 Cash Flow Statement",
+    "S6": "Step 6 DCF Valuation",
+    "S7": "Step 7 Other Valuations+Compare"
+  },
+  "source_populated_formula_cells": 3862,
+  "source_formula_cells": 3132,
+  "catalog_entries": 115,
+  "categories": {
+    "Reported financial inputs": 25,
+    "Reported reconciliation additions": 20,
+    "Supplemental disclosures": 7,
+    "Market and valuation observations": 6,
+    "Versioned model assumptions": 19,
+    "Computed outputs": 24,
+    "Context and provenance": 14
+  },
+  "gap_entries": 14,
+  "xlsx_output": "/Users/aneenaananth/Downloads/Fundamentals-Acquisition-Requirements.xlsx",
+  "xlsx_sha256": "6458eb8aea12cb0cad192da35717c795310af3b70a5ca6a2b28fbf835359311a",
+  "recorded_et": "2026-10-13 07:42 ET",
+  "provider_requests": 0,
+  "runtime_changes": false,
+  "xlsx_repository_path": ".planning/workstreams/fundamentals-workbook-20261013/Fundamentals-Acquisition-Requirements.xlsx",
+  "synced_main_commit": "f8e0ca72",
+  "verification": {
+    "source_unchanged": true,
+    "json_csv_xlsx_exact_match": true,
+    "unique_entries_and_keys": 115,
+    "excel_formula_cells": 0,
+    "catalog_acquisition_entries": 58,
+    "assumptions": 19,
+    "computed_outputs": 24,
+    "context_metadata": 14,
+    "explicit_cell_or_region_references_validated": 243,
+    "substantive_financial_label_rows_covered": 102,
+    "key_valuation_input_output_cells_covered": 30,
+    "model_limitation_formula_checks": true,
+    "all_markdown_catalog_ids_present_once": true,
+    "gap_rows_match": 14,
+    "excel_download_and_repository_copies_match": true
+  },
+  "verified_et": "2026-10-13 07:42 ET"
+}
