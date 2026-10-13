@@ -1,7 +1,7 @@
 """One profiling run: inputs → findings.yaml + REPORT.md.
 
 Every claim carries its evidence; anything without evidence is "unknown".
-Samples of personal columns are masked to their shape.
+Samples of personal and free-text columns are masked to their shape.
 """
 
 from __future__ import annotations
@@ -82,14 +82,16 @@ def _classes_found(findings) -> str:
 
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
                    sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
-                   work: Path | None = None) -> dict:
+                   work: Path | None = None, known: tuple[dict, ...] = ()) -> dict:
     """Profile every input and return the findings (the findings.yaml document).
 
-    `work` holds the run's working copy; when none is given, one is made and removed at the end."""
+    `work` holds the run's working copy; when none is given, one is made and removed at the end.
+    `known` lists entities approved findings carry inside a part (`compare`): each is kept a part
+    even where this delivery repeats it less than discovery asks."""
     if work is None:
         work = Path(tempfile.mkdtemp(prefix="profiling-"))
         try:
-            return profile_inputs(sources, name, limit, sample, seed, kinds, work)
+            return profile_inputs(sources, name, limit, sample, seed, kinds, work, known)
         finally:
             shutil.rmtree(work, ignore_errors=True)
     started = time.monotonic()
@@ -128,6 +130,12 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     entities: dict[str, dict] = {}
     for p in list(parts):
         found, clashes = embedded.find(con, p, profiles[p], set(parts))
+        approved_only = embedded.known(con, p, profiles[p], known, set(parts) | {e["part"] for e in found})
+        for entity in found:
+            approved = next((k for k in known if k["part"] == entity["part"]), None)
+            if approved and approved["column"] != entity["column"]:
+                say(f"{entity['part']}: found by {entity['column']}, approved by {approved['column']}")
+        found += approved_only
         for clash in clashes:
             say(f"{clash}: an entity carried inside {p}, left in place: a part of that name exists")
         for entity in found:
@@ -219,6 +227,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
     tags = _tags(con, p, columns)
     personal = {n for n, t in tags.items() if t["sensitivity"] != "none"}
     identity = {n for n in personal if set(sensitivity.words(n)) & sensitivity.IDENTITY}
+    # Values never written out: personal columns, and free text, which can name anyone inside a
+    # sentence no column name or value test can see. Every site that writes a value reads this set.
+    masked = personal | {c["name"] for c in columns if not c["structure"] and _free_text(c)}
     code_list = codes.code_lists(con, p, columns, record_key["columns"], identity)
     code_columns = {c["column"] for c in code_list} | {c["label_column"] for c in code_list if c["label_column"]}
     labelled = {c["column"] for c in code_list if c["label_column"]}
@@ -236,8 +247,8 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             continue
         tagged = tags[c["name"]]
         role = _role(c, record_key, linked_columns, code_columns, times, measures)
-        top = [{"value": sensitivity.mask(t["value"]) if tagged["sensitivity"] != "none" else t["value"],
-                "rows": t["rows"]} for t in c["top"]]
+        hidden = c["name"] in masked
+        top = [{"value": sensitivity.mask(t["value"]) if hidden else t["value"], "rows": t["rows"]} for t in c["top"]]
         column_findings.append({
             "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
@@ -245,8 +256,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             # Measured only for a separated pattern: why it was, or was not, one under one prefix.
             **{k: c[k] for k in ("prefix_share", "pattern_temporal_share") if k in c},
             "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
-            # A personal column's values are never written out, so it has no distribution.
-            "distribution": None if tagged["sensitivity"] != "none" else profile.distribution(
+            "masked": hidden,
+            # A personal or free-text column's values are never written out, so it has no distribution.
+            "distribution": None if hidden else profile.distribution(
                 con, p, c, c["name"] in {x["column"] for x in code_list})})
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
             identifier_findings.append(_identifier(con, p, c, record_key))
@@ -314,11 +326,11 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             tags.get(k, {}).get("sensitivity", "none") != "none" for k in record_key["columns"])
         else timing.fingerprint(con, p, record_key["columns"],
                                 [c for c in columns if not c["structure"]
-                                 and (c["name"] in record_key["columns"] or c["name"] not in personal)],
+                                 and (c["name"] in record_key["columns"] or c["name"] not in masked)],
                                 times["as_at"] or times["event_time"]),
         "quality": quality.find(quality.Facts(
             con=con, part=p, columns=[c for c in columns if not c["structure"]],
-            roles={f["name"]: f["role"] for f in column_findings}, personal=personal, key=record_key["columns"],
+            roles={f["name"]: f["role"] for f in column_findings}, masked=masked, key=record_key["columns"],
             links=out, identifiers=[i for i in identifier_findings if i], code_lists=code_list))
         + quality.no_natural_key(record_key),
     }
@@ -338,11 +350,18 @@ def _values(con, p: str, c: dict) -> list[str]:
         return []
     return [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs.sql_name(c['name'])} AS VARCHAR) FROM "
                                       f"{inputs.sql_name(p)} WHERE {inputs.sql_name(c['name'])} IS NOT NULL "
-                                      "LIMIT 200").fetchall()]
+                                      "ORDER BY 1 LIMIT 200").fetchall()]
 
 
 def _rows(profiles, part):
     return profiles[part][0]["rows"] if profiles[part] else 0
+
+
+FREE_TEXT_TOKENS = 6  # more words than this a value: free text, not a name
+
+
+def _free_text(c: dict) -> bool:
+    return profile.is_text(c) and c.get("tokens", 0) > FREE_TEXT_TOKENS
 
 
 def _role(c, record_key, linked, code_columns, times, measures) -> str:
@@ -360,7 +379,7 @@ def _role(c, record_key, linked, code_columns, times, measures) -> str:
     if identifiers.identifier_shaped(c):
         return "identifier"
     if profile.is_text(c) and c["distinct"] > 50:
-        return "name" if c.get("tokens", 0) <= 6 else "text"
+        return "text" if _free_text(c) else "name"
     return "other"
 
 
@@ -506,28 +525,28 @@ def _silver(f: dict, relationships: list[dict], parts: dict) -> dict:
 
 
 def _mask_samples(hierarchies: list[dict], parts: dict) -> None:
-    """Hierarchy samples and role values of a personal column keep their shape only."""
+    """Hierarchy samples and role values of a masked column (personal or free text) keep their shape only."""
     for h in hierarchies:
-        tags = {c["name"]: c["sensitivity"] for c in parts[h["part"]]["columns"]}
+        masked = {c["name"] for c in parts[h["part"]]["columns"] if c["masked"]}
         for level in h["levels"]:
-            if tags.get(level["column"], "none") != "none":
+            if level["column"] in masked:
                 level["samples"] = [sensitivity.mask(v) for v in level["samples"]]
         role_column = _role_column(parts[h["part"]])
-        if h.get("role") and tags.get(role_column, "none") != "none":
+        if h.get("role") and role_column in masked:
             h["role"] = sensitivity.mask(h["role"])
             h["hierarchy"] = f"{h['part']}: per role (masked)"
 
 
 def _mark(hierarchies: list[dict], parts: dict) -> list[dict]:
-    """Each hierarchy's invalid rows, masked where a column is personal, with the evidence for each fix
+    """Each hierarchy's invalid rows, masked where a column is masked (personal or free text), with the evidence for each fix
     written from the masked values; the hierarchy's part gets one quality item."""
     marked = []
     for h in hierarchies:
         rows = h.pop("marked")
-        personal = {c["name"] for c in parts[h["part"]]["columns"] if c["sensitivity"] != "none"}
+        masked = {c["name"] for c in parts[h["part"]]["columns"] if c["masked"]}
 
         def shown(column, value):
-            return sensitivity.mask(value) if column in personal and value is not None else value
+            return sensitivity.mask(value) if column in masked and value is not None else value
 
         for m in rows:
             m["hierarchy"] = h["hierarchy"]  # the role in its name is masked when personal

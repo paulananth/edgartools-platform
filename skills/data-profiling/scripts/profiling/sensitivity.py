@@ -62,6 +62,14 @@ NOT_PEOPLE_COLUMN = {"entity", "firm", "business", "organisation", "organization
                      "title", "model", "store"}
 # A name column describes people when at least this share of its distinct values are people's names.
 PEOPLE = 0.5
+# A text that names a person inside it: a title before a name, a name with a middle initial, a
+# family's or a person's trust, an estate. On this share of a column's values, the column is personal.
+MENTIONS = 0.02
+_MENTION = re.compile(r"\b(?:Mr|Mrs|Ms)\.?\s+[A-Z][a-z]+|\bDr\.\s+[A-Z][a-z]+"
+                      r"|\b[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][a-z]+"
+                      r"|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:Family|Fam)\s+(?:Trust|Fund|Foundation)\b"
+                      r"|\b(?i:estate of)\s+[A-Z]"
+                      r"|\b[A-Z][a-z]+\s+(?:Revocable|Irrevocable|Living)\s+Trust\b")
 _NAME_WORD = re.compile(r"^[^\W\d_][^\W\d_.'\-]*(?:[.'\-][^\W\d_]*)*\.?$")
 _SIGNED = re.compile(r"^/s/\s*", re.I)  # a conformed signature: "/s/ <name>"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
@@ -116,6 +124,12 @@ def person_name(value) -> bool:
     return _words_of_a_person(text) or _words_of_a_person(head)
 
 
+def mentions_people(values: list[str]) -> bool:
+    """At least `MENTIONS` of the values name a person inside a text (`_MENTION`)."""
+    texts = [v for v in values if isinstance(v, str)]
+    return bool(texts) and sum(1 for v in texts if _MENTION.search(v)) >= MENTIONS * len(texts)
+
+
 def names_people(column: str, values: list[str]) -> bool:
     """A column named for people or names (not for organisations, places or things) whose distinct sampled values
     are mostly people's names."""
@@ -163,6 +177,8 @@ def tag(column: str, values: list[str], people: bool) -> dict:
         return {"sensitivity": "sensitive_personal", "signals": signals}
     if names_people(column, values):
         signals.append("values: people's names")
+    elif mentions_people(values):
+        signals.append("values: text naming people")
     elif people and set(found) & PERSONAL:
         signals.append("name: personal word in a part describing people")
     if set(found) & CONTACT:

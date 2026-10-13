@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import yaml  # noqa: E402
 
-from profiling import drift, inputs, report, run  # noqa: E402
+from profiling import drift, embedded, inputs, report, run  # noqa: E402
 
 
 def _stop(signum, _frame) -> None:
@@ -84,9 +84,11 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"{args.approved} is not approved: approve it before comparing")
         report.read_fingerprints(approved, args.approved.parent)
         sources = dict(item.split("=", 1) for item in args.input)
+        # The entities the approved findings carry inside a part stay parts in the new delivery.
+        known = tuple(embedded.from_findings(approved))
         with _work() as work:
             new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
-                                     seed=args.seed, work=work)
+                                     seed=args.seed, work=work, known=known)
         measured = drift.deliveries(approved, new)
         for m in measured:  # the new findings carry what the second delivery measured
             part = next(p for p in new["parts"] if p["part"] == m["part"])
@@ -103,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
     findings["approval"] = {"status": "approved", "approved_by": args.by, "approved_words": args.words,
                             "approved_at": run.now()}
     args.findings.write_text(yaml.safe_dump(findings, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
+    report_md = args.findings.with_name("REPORT.md")
+    if report_md.exists():  # the report says what the findings say
+        report_md.write_text(report.markdown(findings), encoding="utf-8")
     print(f"approved {args.findings}")
     return 0
 

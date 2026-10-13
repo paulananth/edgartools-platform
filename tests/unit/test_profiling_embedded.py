@@ -131,3 +131,99 @@ def test_a_tie_keeps_the_same_value_whatever_the_row_order():
         assert embedded.register(con, entity) == {"name": 2}
         kept.append(con.execute('SELECT name FROM "rows.id"').fetchone()[0])
     assert kept == ["Tied One", "Tied One"]
+
+
+def test_a_field_null_in_every_list_item_keeps_the_single_items_values(tmp_path):
+    # Most documents hold one signer written as an object, with a title; the few that hold a
+    # list hold the title empty, so the list items alone read the title as an empty JSON column.
+    with (tmp_path / "docs.jsonl").open("w") as out:
+        for n in range(40):
+            signer = {"signer_id": f"S{n:05d}", "title": ["Chair", "Treasurer", "Secretary"][n % 3]}
+            signers = [{"signer_id": f"S{n:05d}", "title": None}, {"signer_id": f"T{n:05d}", "title": None}] if n % 10 == 0 else signer
+            out.write(json.dumps({"document_id": f"D-{n:04d}", "signers": {"signer": signers}}) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    found = yaml.safe_load((out / "findings.yaml").read_text())
+    signers = next(p for p in found["parts"] if p["part"] == "doc.signers.signer")
+    title = next(c for c in signers["columns"] if c["name"] == "title")
+    assert title["fill"] == round(36 / 44, 6) and title["distinct"] == 3
+
+
+def test_compare_keeps_an_approved_entity_that_repeats_less_in_the_new_delivery(findings, tmp_path):
+    approved = tmp_path / "approved"
+    approved.mkdir()
+    _documents(tmp_path / "first.jsonl")
+    assert profile_data.main(["run", "--name", "documents", "--input", f"doc={tmp_path / 'first.jsonl'}",
+                              "--out", str(approved)]) == 0
+    assert profile_data.main(["approve", "--findings", str(approved / "findings.yaml"), "--by", "test",
+                              "--words", "approved"]) == 0
+    # The new delivery names each party once: too few repeats for discovery to find it.
+    with (tmp_path / "second.jsonl").open("w") as out:
+        for n in range(60):
+            out.write(json.dumps({
+                "document_id": f"E-{n:06d}", "filed": f"2026-04-{1 + n % 28:02d}",
+                "party": {"party_id": f"Q{n:07d}", "party_name": f"{WORDS[n % 10]} {WORDS[n // 10 % 10]} Supply",
+                          "city": WORDS[n % 10] + "ville", "postcode": f"{20000 + n}"},
+                "lines": {"line": {"day": "2026-04-01", "quantity": n + 1, "code": "A"}},
+                "fees": [{"amount": 5, "due": "2026-05-01"}] * 2}) + "\n")
+    drift_out = tmp_path / "drift"
+    assert profile_data.main(["compare", "--approved", str(approved / "findings.yaml"),
+                              "--input", f"doc={tmp_path / 'second.jsonl'}", "--out", str(drift_out)]) == 0
+    items = yaml.safe_load((drift_out / "drift.yaml").read_text())["drift"]
+    assert not [i for i in items if i["part"] == "doc.party" and i["drift"] in ("part_missing", "link_broken")]
+    new = yaml.safe_load((drift_out / "findings.yaml").read_text())
+    party = next(p for p in new["parts"] if p["part"] == "doc.party")
+    assert party["rows"] == 60 and party["derived_evidence"]["repeats"] == 1.0
+
+
+def test_free_text_samples_are_written_as_their_shape(tmp_path):
+    with (tmp_path / "docs.jsonl").open("w") as out:
+        for n in range(80):
+            out.write(json.dumps({"document_id": f"D-{n:04d}", "remark": (
+                f"{WORDS[n % 10]} cargo shipped through the quillfeather depot since {2000 + n}; the "
+                f"{WORDS[n // 10]} carrier keeps custody {'except' if n % 2 else 'beyond'} the dock")}) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    remark = next(c for c in yaml.safe_load((out / "findings.yaml").read_text())["parts"][0]["columns"]
+                  if c["name"] == "remark")
+    assert remark["distribution"] is None and remark["top"][0]["value"].startswith("Aaaa")
+    assert remark["sensitivity"] == "none"  # free text that names no one: masked as free text, not as personal
+    assert not [f for f in out.iterdir() if "quillfeather" in f.read_text()]
+
+
+def test_a_short_text_that_names_people_is_personal(tmp_path):
+    # Most holdings are held directly or by a firm; a few name a person's trust or estate.
+    held = ["Directly", "By spouse", "By Harbor Stone Partners, LP", "Through a retirement plan"]
+    with (tmp_path / "docs.jsonl").open("w") as out:
+        for n in range(200):
+            how = f"By the Orrin Q. Vantrell {n} Revocable Trust" if n % 20 == 0 else held[n % 4]
+            out.write(json.dumps({"document_id": f"D-{n:04d}", "held": how}) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    held_by = next(c for c in yaml.safe_load((out / "findings.yaml").read_text())["parts"][0]["columns"]
+                   if c["name"] == "held")
+    assert held_by["sensitivity"] == "personal" and "values: text naming people" in held_by["sensitivity_signals"]
+    assert not [f for f in out.iterdir() if "Vantrell" in f.read_text()]
+
+
+def test_text_naming_people_needs_their_capitals():
+    from profiling import sensitivity
+    things = ["Dr Pepper Snapple", "100 Oak Dr Suite 5", "Living Trust Services LLC", "held by the family",
+              "MS Office licence", "Estate of mind"]
+    assert not [v for v in things if sensitivity._MENTION.search(v)]
+    people = ["By the Orrin Q. Vantrell Revocable Trust", "Mr. Vantrell and his spouse", "Vantrell Family Trust",
+              "By estate of Orrin Vantrell"]
+    assert all(sensitivity._MENTION.search(v) for v in people)
+
+
+def test_approval_rewrites_the_report(findings, tmp_path):
+    out = tmp_path / "approve"
+    _documents(tmp_path / "docs.jsonl")
+    assert profile_data.main(["run", "--name", "documents", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    assert "Approval: **draft**" in (out / "REPORT.md").read_text()
+    assert profile_data.main(["approve", "--findings", str(out / "findings.yaml"), "--by", "test", "--words", "yes"]) == 0
+    assert "Approval: **approved**" in (out / "REPORT.md").read_text()

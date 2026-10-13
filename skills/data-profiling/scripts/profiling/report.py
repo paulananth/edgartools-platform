@@ -110,5 +110,5 @@ def markdown(f: dict) -> str:
     lines += ["", "## Questions for the operator (one at a time)", ""]
     lines += [f"{i}. {q['question']} Recommendation: {q['recommendation']}" for i, q in enumerate(f["questions"], 1)] \
         or ["None."]
-    lines += ["", "Samples of personal columns are masked to their shape. Store suggestions are advice only.", ""]
+    lines += ["", "Samples of personal and free-text columns are masked to their shape. Store suggestions are advice only.", ""]
     return "\n".join(lines)

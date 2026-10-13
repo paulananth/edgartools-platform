@@ -6,8 +6,8 @@ Each detector is a plain function over one part's facts and returns items:
 the values of a code list, a check-digit family). Which engine check carries
 it is the data-quality skill's choice, not profiling's.
 
-Examples are at most three distinct values; a personal column's are masked to
-their shape. Rows are exact counts over what was read (a sampled part counts
+Examples are at most three distinct values; a personal or free-text column's are
+masked to their shape. Rows are exact counts over what was read (a sampled part counts
 its sample).
 """
 
@@ -34,7 +34,7 @@ class Facts:
     part: str
     columns: list[dict]
     roles: dict[str, str]
-    personal: set[str]
+    masked: set[str]  # columns whose values are never written out: personal, and free text
     key: list[str]
     links: list[dict] = field(default_factory=list)
     identifiers: list[dict] = field(default_factory=list)
@@ -56,7 +56,7 @@ def _examples(facts: Facts, column: str, where: str) -> list:
     found = [r[0] for r in facts.con.execute(
         f"SELECT DISTINCT CAST({c} AS VARCHAR) v FROM {sql_name(facts.part)} WHERE {where} ORDER BY 1 "
         f"LIMIT {EXAMPLES}").fetchall()]
-    return [sensitivity.mask(v) for v in found] if column in facts.personal else found
+    return [sensitivity.mask(v) for v in found] if column in facts.masked else found
 
 
 def _count(facts: Facts, where: str) -> int:
@@ -136,7 +136,7 @@ def check_digits(facts: Facts) -> list[dict]:
         column = next((c for c in facts.columns if c["name"] == ident["column"]), {})
         length = column.get("min_length") if column.get("min_length") == column.get("max_length") else None
         found.append(item("check_digit", ident["column"], rows,
-                          [sensitivity.mask(v) for v in shown] if ident["column"] in facts.personal else shown,
+                          [sensitivity.mask(v) for v in shown] if ident["column"] in facts.masked else shown,
                           f"the {family} check digit fails: a mistyped or invented identifier",
                           proposal="withhold", args={"family": family, "length": length}))
     return found
@@ -146,7 +146,7 @@ def code_list_guards(facts: Facts) -> list[dict]:
     """A small code list is guarded as a whole: a code not seen in this delivery is flagged."""
     found = []
     for code in facts.code_lists:
-        if code["distinct"] > GUARDED_CODES or code["column"] in facts.personal or code["column"] in facts.key:
+        if code["distinct"] > GUARDED_CODES or code["column"] in facts.masked or code["column"] in facts.key:
             continue
         c = sql_name(code["column"])
         values = [r[0] for r in facts.con.execute(
