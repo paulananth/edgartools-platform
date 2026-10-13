@@ -70,7 +70,7 @@ never gates, alerts, or pages; nothing here blocks any other pipeline stage.
 **Blocked by:** Ticket 03 (Snowflake passthrough exports) — the model needs both
 `SEC_ADV_PRIVATE_FUND` and `SEC_ADV_FIRM_ROSTER` live in Snowflake to join against.
 
-**Status:** ready-for-agent
+**Status:** done (2026-10-13 ET, ticket 25): the `adv_fund_count_reconciliation` dbt model and its panel in `infra/snowflake/streamlit/streamlit_app.py` are both on main
 
 - [x] `adv_fund_count_reconciliation` model exists and its `mismatch` column is covered by
       a dbt unit test in a new `_adv_fund_count_reconciliation_unit_tests.yml` (following

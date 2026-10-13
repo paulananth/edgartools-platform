@@ -18,7 +18,7 @@ scheduled presence, delete with their tests, remove CLI/registry entries.
 Two to confirm rather than assume: `validate-data-quality` is named by one other map
 (large-profile-unscoped-load-audit Ticket 03) — check whether that map still expects it;
 `parse-ownership-bronze` IS in the deploy script, so it belongs to
-[Ticket 06](06-submissions-and-artifact-tables-landing-only.md)'s reader sweep, not here.
+Ticket 06 (deleted 2026-10-13, ticket 25; in git history)'s reader sweep, not here.
 
 **Blocked by:** none — frontier.
 

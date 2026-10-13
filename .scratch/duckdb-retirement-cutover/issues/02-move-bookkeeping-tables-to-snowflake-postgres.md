@@ -22,7 +22,7 @@ methods across 11 tables, 3 cross-store SQL joins with no existing plan, and
   specifically now mean Ticket 13 / Ticket 14 respectively; left as
   originally written elsewhere in this file since the caller-repointing
   scope as a whole still traces back to the original Ticket 03 split.
-- [Ticket 04](04-provision-live-bookkeeping-postgres.md) — actually run the
+- Ticket 04 (deleted 2026-10-13, ticket 25; in git history) — actually run the
   provisioning script against live prod Snowflake, last, once 02 and the
   full Ticket 03/13/14/15 caller-repointing chain are tested and reviewed.
 
@@ -136,7 +136,7 @@ runner; mirror `09_mdm_mirror_schema.sql`'s shape (`infra/snowflake/sql/
 bootstrap/`), the committed-script fix this repo already used for the
 identical class of gap. Do not run this script in this ticket — write and
 unit-test it against a local Postgres/SQLite target; live execution is
-[Ticket 04](04-provision-live-bookkeeping-postgres.md).
+Ticket 04 (deleted 2026-10-13, ticket 25; in git history).
 
 **Watch for the `snowflake_write` RESET ACCESS behavior** documented in
 CLAUDE.md: this platform re-grants `snowflake_write`'s baseline DML access
@@ -144,7 +144,7 @@ to a table as a side effect of rotating *either* `application`'s or
 `snowflake_admin`'s credentials — a prior `bootstrap-prod-mdm.sh` run
 silently reopened this exact fence on every invocation until it was fixed.
 Whatever this new provisioning script's last step is, [Ticket 04](
-04-provision-live-bookkeeping-postgres.md) must verify with a live
+04-provision-live-bookkeeping-postgres.md (deleted 2026-10-13, ticket 25; in git history)) must verify with a live
 `has_table_privilege` sweep *after* that last step, not just after the DDL.
 Also check whether `mdm check-fence` (`edgar_warehouse/mdm/fence_monitor.py`)
 discovers these new tables automatically — it discovers from
@@ -183,5 +183,5 @@ choice (DuckDB Retirement map, Ticket 08's answer).
 - [x] The empty-start behavior (every CIK reverts to pending) is documented
       in the deploy runbook (`docs/runbook.md`'s "Bookkeeping Store
       Cutover" gotcha), not just this ticket, so whoever runs
-      [Ticket 04](04-provision-live-bookkeeping-postgres.md) isn't
+      Ticket 04 (deleted 2026-10-13, ticket 25; in git history) isn't
       surprised by the reactivation scale

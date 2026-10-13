@@ -160,7 +160,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [24 — Migrate ADV sources](issues/24-migrate-adv-sources.md) — **Resolved** — see Decisions so far above.
 - [25 — Add conflict, repair, exclusion, and evidence-import workflows](issues/25-add-conflict-repair-and-evidence-import.md) — **Resolved (partially)** — see Decisions so far above.
 - 34 — Add exclusion and evidence-import workflows (deleted 2026-10-13, ticket 25; in git history) — **Resolved** — see Decisions so far above.
-- [26 — Rebuild and activate a ledger epoch](issues/26-rebuild-and-activate-ledger-epoch.md) — Recover authority through a Hybrid Source Baseline and atomic activation. Ready-for-agent; per Ticket 10, reserved for genuine ledger-loss disaster recovery only, no longer on Ticket 27's critical path.
+- 26 — Rebuild and activate a ledger epoch (deleted 2026-10-13, ticket 25; in git history) — Recover authority through a Hybrid Source Baseline and atomic activation. Ready-for-agent; per Ticket 10, reserved for genuine ledger-loss disaster recovery only, no longer on Ticket 27's critical path.
 - 27 — Contract legacy acquisition bypasses (deleted 2026-10-13, ticket 25; in git history) — **Claimed, first family slice only:** `filing_artifact` / OWNERSHIP_FORMS is the scheduled producer on `daily-incremental` (gated on by default; legacy ownership fetch unregistered, not deleted; fails closed; `--disable-filing-artifact-gated-capture` rollback). Remaining families and the six whole-ticket bullets stay open.
 - [45 — Coordinate with the DuckDB Retirement map's cutover](issues/45-coordinate-with-duckdb-retirement-cutover.md) — **Resolved** — see Decisions so far above.
 - [46 — Wire `filing_artifact`'s gated driver into `daily_incremental`](issues/46-wire-filing-artifact-into-daily-incremental.md) — **Resolved**: in-process chosen over a separate Step Functions state (the load-bearing reason is the shared `sec_fetch_active` lease `daily_incremental`'s ASL already holds around the whole task — see the ticket's Answer), gated behind an off-by-default `--enable-filing-artifact-gated-capture` flag, zero ASL changes needed. Live-prod verification completed 2026-08-28: gated-capture path ran clean against all 4,491 sealed daily-index candidates for 2026-08-26, exit code 0, zero errors, both paths diffable as designed.
@@ -187,7 +187,7 @@ Neo4j graph, with deterministic replay and one aligned Decision Watermark.
 - [43 — Migration 013's owner-gated statements have no live deploy path via the `application` DSN](issues/43-acquisition-owner-migrations-unreappliable-via-application-dsn.md) — **Resolved** — see Decisions so far above.
 - [44 — Monitor for `snowflake_write` privilege drift on fenced acquisition tables](issues/44-monitor-snowflake-write-privilege-drift.md) — **Resolved** — see Decisions so far above.
 - [55 — Decide whether reference_catalog retires warehouse seed-universe](issues/55-decide-whether-reference-catalog-retires-seed-universe.md) — **Resolved** — see Decisions so far above.
-- [56 — Build the reference_catalog capture-parity harness](issues/56-build-reference-catalog-capture-parity-harness.md) — Ticket 55's fetch-layer proof. Ready-for-agent; not blocked by Ticket 54.
+- 56 — Build the reference_catalog capture-parity harness (deleted 2026-10-13, ticket 25; in git history) — Ticket 55's fetch-layer proof. Ready-for-agent; not blocked by Ticket 54.
 
 ## Not yet specified
 

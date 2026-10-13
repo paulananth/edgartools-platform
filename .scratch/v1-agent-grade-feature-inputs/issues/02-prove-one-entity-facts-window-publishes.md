@@ -98,7 +98,7 @@ here would blur ownership. Recording it as the exact remaining refresh
 step per this ticket's own escape-hatch criterion, rather than executing
 it.
 
-**Load-bearing consequence for [Ticket 03](03-backfill-as-of-decision-features-for-the-universe.md):**
+**Load-bearing consequence for Ticket 03 (deleted 2026-10-13, ticket 25; in git history):**
 a full-universe entity-facts backfill will hit this identical gap at much
 larger scale — every CIK it processes will land in canonical silver but
 never reach Snowflake landing/gold without an explicit
