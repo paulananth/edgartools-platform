@@ -3,7 +3,6 @@ FROM ${DEPENDENCY_IMAGE}
 
 WORKDIR /app
 
-COPY edgar /app/edgar
 COPY edgar_warehouse /app/edgar_warehouse
 COPY rules /app/rules
 

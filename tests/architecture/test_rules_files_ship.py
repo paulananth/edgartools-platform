@@ -26,3 +26,15 @@ def test_the_rules_package_finds_the_folder_the_image_copies():
 
     assert files.ROOT == ROOT / "rules"
     assert (files.ROOT / "merge" / "policy.yaml").is_file()
+
+
+def test_every_path_an_image_copies_exists():
+    # Both images copied `edgar/` long after #766 deleted it, so neither could
+    # build (Codex's go-live review, 2026-10-12); CI builds no image to notice.
+    for dockerfile in sorted(ROOT.glob("Dockerfile*")):
+        for line in dockerfile.read_text().splitlines():
+            words = line.split()
+            if not words or words[0] != "COPY" or any(w.startswith("--from") for w in words):
+                continue
+            for source in [w for w in words[1:-1] if not w.startswith("--")]:
+                assert (ROOT / source).exists(), f"{dockerfile.name} copies {source}, which does not exist"
