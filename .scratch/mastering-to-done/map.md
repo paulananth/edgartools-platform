@@ -51,6 +51,7 @@ Work in this order. A ticket starts when everything it is blocked by is resolved
 | 19 | [Restore the catalog and publish Person and links](issues/19-restore-the-catalog-and-publish-person.md) | 11, 18 |
 | 20 | [Bookkeeping without legacy or custom code for Company and Person](issues/20-bookkeeping-without-legacy-or-custom-code.md) | none (slices 20a–20e) |
 | 12 | [Switch on Person feed 1 with its links](issues/12-switch-on-person-with-its-links.md) | 03, 06, 10, 11, 18, 19, 20 |
+| 22 | [The Change Journal beside Bookkeeping, for every step](issues/22-change-journal-beside-bookkeeping.md) | none |
 
 ## Decisions so far
 
