@@ -1100,7 +1100,7 @@ The sources this repository reads today, and where each rule above is applied.
   catalog layouts; runtime custom ticker parsing is retired and its oracle is
   test-only.
 - `min_integer: -9223372036854775807` matches the historical GLEIF decoder.
-- Active GLEIF JSON and XML retirement was unfinished when this was written.
+- The older GLEIF readers are retired: the three Golden Copy members equal them record for record (#904).
 
 ### The SEC Company main document
 
@@ -1187,8 +1187,8 @@ paired faults that prove refusal order. Holder aggregation and
 cascade decisions remain in `edgar_warehouse/mdm/clean/name_census.py`, which
 Name Frequency and matching still import. Whole-source construction (#901) and
 the installed population through the earlier in-process bundles (#905, #907)
-are qualified; the `mastering` target's installed proof is Issue 20 slice 20c
-part 4.
+are qualified; the `mastering` target's installed proof masters the 6,414
+Companies on separate workers and verifiers (Issue 20 slice 20c part 4, #930).
 
 ## Bounded Parquet framing and sparse object entries
 

@@ -207,7 +207,7 @@ trial proves read → prepare → merge with the actual Person Dataset Contract
 and policy, preserving two fixture records; a separate 1,000-capture comparison
 proves retained outcomes and assertion identities. These are qualification
 results, not operator activation. Company raw columns and filing arrays are
-qualified components. Its catalog and Name Frequency joins are qualified on fixtures. The whole-capture comparison, active caller replacement, and the installed 6,414 Company proof remain open. GLEIF's full archive has been read and reduced. A separate process later verified that saved reading. Golden-copy equivalence of the older GLEIF reader and deletion of `gleif_source.py` remain open. Use only
+qualified components. Its catalog and Name Frequency joins are qualified on fixtures. The whole-capture comparison (all 76,230 captured submissions), the active caller replacement (#905) and the installed 6,414 Company proof on Bookkeeping workers (#930) are done. GLEIF's three Golden Copy members equal the older reader record for record, and `gleif_source.py` is deleted (#904). Use only
 pipelines whose every profile resolves with `workers describe`; a declared
 Company acquisition or silver step without a worker remains incomplete.
 
