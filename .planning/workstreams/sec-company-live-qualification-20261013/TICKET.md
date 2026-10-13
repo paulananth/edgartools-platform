@@ -91,6 +91,7 @@ parallel mutable recovery store is justified by this qualification task.
 
 ## Parts
 
+- [ ] Publish this parking record as a reviewed PR; verify its scope/checklist and repository ownership before push. This is separate from the deferred implementation/proof PR below.
 - [x] Inspect current main, PRs, worktrees and active L7 edits; establish isolated ownership. Verified git/GitHub readback and dedicated worktree, 2026-10-13 06:42 ET.
 - [x] Review current capture, Rules authority, Company consumer interfaces and git history; define the integration gap. Verified code/docs and GoF review; current capture target is artifact.copy, 2026-10-13 06:42 ET.
 - [x] Define bounded Company-only scope, architecture responsibilities and remaining approval boundary. Verified against current contracts and official SEC API documentation, 2026-10-13 06:42 ET.
