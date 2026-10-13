@@ -1,0 +1,176 @@
+# A Form 3, 4 or 5 ownership document inside the SEC's SGML submission file: the
+# one <DOCUMENT> whose text is <XML>, the accession from the header's ACCESSION
+# NUMBER line. The same tables and columns as ownership-xml.yaml (a test holds the
+# two equal): profiling ticket 07.
+source: sec.ownership
+read:
+  format: xml
+  container: sgml
+  root: ownershipDocument
+  context:
+    accession: {type: text, sgml_header: ACCESSION NUMBER}
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  # Dates are calendar dates: an offset after the date (2024-01-05-05:00) is not read,
+  # nor a footnote marker after it (profiling ticket 07; the old parser read the same
+  # first ten characters). Flags are XML Schema booleans; any other spelling refuses the
+  # filing (operator, 2026-10-13: "Refuse the filing"). A transaction code outside the
+  # SEC's list refuses it too; an absent one is null.
+  reference_pins:
+    transaction_codes:
+      code_set: sec-ownership-transaction-codes
+      version: "1"
+      sha256: 30af302dddca7d4f95bc6065dd3f33120d7441e376ca90dfed2daa6b96da25bd
+  references:
+    booleans:
+      "0": {value: false}
+      "false": {value: false}
+      "1": {value: true}
+      "true": {value: true}
+    # SEC Form 4 General Instruction 8 (RDM sec-ownership-transaction-codes 1).
+    transaction_codes:
+      P: {label: "Open market or private purchase of non-derivative or derivative security"}
+      S: {label: "Open market or private sale of non-derivative or derivative security"}
+      V: {label: "Transaction voluntarily reported earlier than required"}
+      A: {label: "Grant, award or other acquisition pursuant to Rule 16b-3(d)"}
+      D: {label: "Disposition to the issuer of issuer equity securities pursuant to Rule 16b-3(e)"}
+      F: {label: "Payment of exercise price or tax liability by delivering or withholding securities incident to the receipt, exercise or vesting of a security issued in accordance with Rule 16b-3"}
+      I: {label: "Discretionary transaction in accordance with Rule 16b-3(f) resulting in acquisition or disposition of issuer securities"}
+      M: {label: "Exercise or conversion of derivative security exempted pursuant to Rule 16b-3"}
+      C: {label: "Conversion of derivative security"}
+      E: {label: "Expiration of short derivative position"}
+      H: {label: "Expiration (or cancellation) of long derivative position with value received"}
+      O: {label: "Exercise of out-of-the-money derivative security"}
+      X: {label: "Exercise of in-the-money or at-the-money derivative security"}
+      G: {label: "Bona fide gift"}
+      L: {label: "Small acquisition under Rule 16a-6"}
+      W: {label: "Acquisition or disposition by will or the laws of descent and distribution"}
+      Z: {label: "Deposit into or withdrawal from voting trust"}
+      J: {label: "Other acquisition or disposition (describe transaction)"}
+      K: {label: "Transaction in equity swap or instrument with similar characteristics"}
+      U: {label: "Disposition pursuant to a tender of shares in a change of control transaction"}
+  tables:
+    filing:
+      each: .
+      columns:
+        accession: {context: {name: accession}}
+        schema_version: {text: {path: schemaVersion.$}}
+        document_type: {text: {path: documentType.$}}
+        period_of_report: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10}}
+        date_of_original_submission: {date: {path: dateOfOriginalSubmission.$, kind: calendar, prefix_length: 10}}
+        not_subject_to_section16: {choose: {condition: {test: {path: notSubjectToSection16.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: notSubjectToSection16.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        form3_holdings_reported: {choose: {condition: {test: {path: form3HoldingsReported.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: form3HoldingsReported.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        form4_transactions_reported: {choose: {condition: {test: {path: form4TransactionsReported.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: form4TransactionsReported.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        aff10b5_one: {choose: {condition: {test: {path: aff10b5One.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: aff10b5One.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        no_securities_owned: {choose: {condition: {test: {path: noSecuritiesOwned.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: noSecuritiesOwned.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        issuer_cik: {text: {path: issuer.issuerCik.$}}
+        issuer_name: {text: {path: issuer.issuerName.$}}
+        issuer_trading_symbol: {text: {path: issuer.issuerTradingSymbol.$}}
+        remarks: {text: {path: remarks.$}}
+    reporting_owner:
+      each: reportingOwner
+      columns:
+        accession: {context: {name: accession}}
+        row: {ordinal: {}}
+        owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
+        owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
+        street1: {text: {path: reportingOwnerAddress.rptOwnerStreet1.$}}
+        street2: {text: {path: reportingOwnerAddress.rptOwnerStreet2.$}}
+        city: {text: {path: reportingOwnerAddress.rptOwnerCity.$}}
+        state: {text: {path: reportingOwnerAddress.rptOwnerState.$}}
+        zip_code: {text: {path: reportingOwnerAddress.rptOwnerZipCode.$}}
+        state_description: {text: {path: reportingOwnerAddress.rptOwnerStateDescription.$}}
+        non_us_address: {choose: {condition: {test: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        country: {text: {path: reportingOwnerAddress.rptOwnerCountry.$}}
+        is_director: {choose: {condition: {test: {path: reportingOwnerRelationship.isDirector.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isDirector.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        is_officer: {choose: {condition: {test: {path: reportingOwnerRelationship.isOfficer.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOfficer.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        is_ten_percent_owner: {choose: {condition: {test: {path: reportingOwnerRelationship.isTenPercentOwner.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isTenPercentOwner.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        is_other: {choose: {condition: {test: {path: reportingOwnerRelationship.isOther.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOther.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        officer_title: {text: {path: reportingOwnerRelationship.officerTitle.$}}
+        other_text: {text: {path: reportingOwnerRelationship.otherText.$}}
+    non_derivative_transaction:
+      each: nonDerivativeTable.nonDerivativeTransaction
+      columns:
+        accession: {context: {name: accession}}
+        row: {ordinal: {}}
+        security_title: {text: {path: securityTitle.value.$}}
+        transaction_date: {date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}
+        deemed_execution_date: {date: {path: deemedExecutionDate.value.$, kind: calendar, prefix_length: 10}}
+        transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
+        transaction_code: {text: {path: transactionCoding.transactionCode.$}}
+        transaction_code_label: {choose: {condition: {test: {path: transactionCoding.transactionCode.$, kind: text}}, then: {lookup: {reference: transaction_codes, column: label, key: {text: {path: transactionCoding.transactionCode.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        equity_swap_involved: {choose: {condition: {test: {path: transactionCoding.equitySwapInvolved.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: transactionCoding.equitySwapInvolved.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        transaction_timeliness: {text: {path: transactionTimeliness.value.$}}
+        transaction_shares: {text: {path: transactionAmounts.transactionShares.value.$}}
+        transaction_price_per_share: {text: {path: transactionAmounts.transactionPricePerShare.value.$}}
+        transaction_acquired_disposed_code: {text: {path: transactionAmounts.transactionAcquiredDisposedCode.value.$}}
+        shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
+        value_owned_following_transaction: {text: {path: postTransactionAmounts.valueOwnedFollowingTransaction.value.$}}
+        direct_or_indirect_ownership: {text: {path: ownershipNature.directOrIndirectOwnership.value.$}}
+        nature_of_ownership: {text: {path: ownershipNature.natureOfOwnership.value.$}}
+    non_derivative_holding:
+      each: nonDerivativeTable.nonDerivativeHolding
+      columns:
+        accession: {context: {name: accession}}
+        row: {ordinal: {}}
+        security_title: {text: {path: securityTitle.value.$}}
+        transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
+        shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
+        value_owned_following_transaction: {text: {path: postTransactionAmounts.valueOwnedFollowingTransaction.value.$}}
+        direct_or_indirect_ownership: {text: {path: ownershipNature.directOrIndirectOwnership.value.$}}
+        nature_of_ownership: {text: {path: ownershipNature.natureOfOwnership.value.$}}
+    derivative_transaction:
+      each: derivativeTable.derivativeTransaction
+      columns:
+        accession: {context: {name: accession}}
+        row: {ordinal: {}}
+        security_title: {text: {path: securityTitle.value.$}}
+        transaction_date: {date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}
+        deemed_execution_date: {date: {path: deemedExecutionDate.value.$, kind: calendar, prefix_length: 10}}
+        transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
+        transaction_code: {text: {path: transactionCoding.transactionCode.$}}
+        transaction_code_label: {choose: {condition: {test: {path: transactionCoding.transactionCode.$, kind: text}}, then: {lookup: {reference: transaction_codes, column: label, key: {text: {path: transactionCoding.transactionCode.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        equity_swap_involved: {choose: {condition: {test: {path: transactionCoding.equitySwapInvolved.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: transactionCoding.equitySwapInvolved.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        transaction_timeliness: {text: {path: transactionTimeliness.value.$}}
+        transaction_shares: {text: {path: transactionAmounts.transactionShares.value.$}}
+        transaction_price_per_share: {text: {path: transactionAmounts.transactionPricePerShare.value.$}}
+        transaction_acquired_disposed_code: {text: {path: transactionAmounts.transactionAcquiredDisposedCode.value.$}}
+        shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
+        value_owned_following_transaction: {text: {path: postTransactionAmounts.valueOwnedFollowingTransaction.value.$}}
+        direct_or_indirect_ownership: {text: {path: ownershipNature.directOrIndirectOwnership.value.$}}
+        nature_of_ownership: {text: {path: ownershipNature.natureOfOwnership.value.$}}
+        conversion_or_exercise_price: {text: {path: conversionOrExercisePrice.value.$}}
+        exercise_date: {date: {path: exerciseDate.value.$, kind: calendar, prefix_length: 10}}
+        expiration_date: {date: {path: expirationDate.value.$, kind: calendar, prefix_length: 10}}
+        underlying_security_title: {text: {path: underlyingSecurity.underlyingSecurityTitle.value.$}}
+        underlying_security_shares: {text: {path: underlyingSecurity.underlyingSecurityShares.value.$}}
+        underlying_security_value: {text: {path: underlyingSecurity.underlyingSecurityValue.value.$}}
+    derivative_holding:
+      each: derivativeTable.derivativeHolding
+      columns:
+        accession: {context: {name: accession}}
+        row: {ordinal: {}}
+        security_title: {text: {path: securityTitle.value.$}}
+        transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
+        shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
+        value_owned_following_transaction: {text: {path: postTransactionAmounts.valueOwnedFollowingTransaction.value.$}}
+        direct_or_indirect_ownership: {text: {path: ownershipNature.directOrIndirectOwnership.value.$}}
+        nature_of_ownership: {text: {path: ownershipNature.natureOfOwnership.value.$}}
+        conversion_or_exercise_price: {text: {path: conversionOrExercisePrice.value.$}}
+        exercise_date: {date: {path: exerciseDate.value.$, kind: calendar, prefix_length: 10}}
+        expiration_date: {date: {path: expirationDate.value.$, kind: calendar, prefix_length: 10}}
+        underlying_security_title: {text: {path: underlyingSecurity.underlyingSecurityTitle.value.$}}
+        underlying_security_shares: {text: {path: underlyingSecurity.underlyingSecurityShares.value.$}}
+        underlying_security_value: {text: {path: underlyingSecurity.underlyingSecurityValue.value.$}}
+    footnote:
+      each: footnotes.footnote
+      columns:
+        accession: {context: {name: accession}}
+        footnote_id: {text: {path: '@id'}}
+        text: {text: {path: $}}
+    signature:
+      each: ownerSignature
+      columns:
+        accession: {context: {name: accession}}
+        row: {ordinal: {}}
+        signature_name: {text: {path: signatureName.$}}
+        signature_date: {date: {path: signatureDate.$, kind: calendar, prefix_length: 10}}

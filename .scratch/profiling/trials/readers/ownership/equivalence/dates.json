@@ -1,0 +1,59 @@
+{
+ "artifact": {
+  "date_of_original_submission": {
+   "absent: as expected": 5267,
+   "date: as expected": 89
+  },
+  "deemed_execution_date": {
+   "absent: as expected": 10899,
+   "date with offset: as expected": 1,
+   "date: as expected": 64
+  },
+  "exercise_date": {
+   "absent: as expected": 3138,
+   "date: as expected": 635
+  },
+  "expiration_date": {
+   "absent: as expected": 2223,
+   "date: as expected": 1550
+  },
+  "period_of_report": {
+   "date with offset: as expected": 9,
+   "date: as expected": 5347
+  },
+  "signature_date": {
+   "date: as expected": 5693
+  },
+  "transaction_date": {
+   "date with offset: as expected": 13,
+   "date: as expected": 10951
+  }
+ },
+ "cohort": {
+  "date_of_original_submission": {
+   "absent: as expected": 3333,
+   "date: as expected": 34
+  },
+  "deemed_execution_date": {
+   "absent: as expected": 9898,
+   "date: as expected": 21
+  },
+  "exercise_date": {
+   "absent: as expected": 1682,
+   "date: as expected": 274
+  },
+  "expiration_date": {
+   "absent: as expected": 800,
+   "date: as expected": 1156
+  },
+  "period_of_report": {
+   "date: as expected": 3367
+  },
+  "signature_date": {
+   "date: as expected": 3571
+  },
+  "transaction_date": {
+   "date: as expected": 9919
+  }
+ }
+}

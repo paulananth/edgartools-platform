@@ -1,0 +1,243 @@
+{
+ "artifact": {
+  "derivative_transaction": {
+   "rows_read": 2787,
+   "rows_the_old_parser_dropped": 0
+  },
+  "derivative_transaction.acquired_disposed_code": {
+   "equal": 2787
+  },
+  "derivative_transaction.conversion_price": {
+   "equal": 2787
+  },
+  "derivative_transaction.direct_or_indirect": {
+   "equal": 2787
+  },
+  "derivative_transaction.exercise_date": {
+   "equal": 2787
+  },
+  "derivative_transaction.expiration_date": {
+   "equal": 2787
+  },
+  "derivative_transaction.kept_count": {
+   "equal": 5356
+  },
+  "derivative_transaction.nature_of_ownership": {
+   "equal": 2787
+  },
+  "derivative_transaction.security_title": {
+   "equal": 2787
+  },
+  "derivative_transaction.shares_owned_after": {
+   "equal": 2787
+  },
+  "derivative_transaction.transaction_code": {
+   "equal": 2787
+  },
+  "derivative_transaction.transaction_date": {
+   "equal": 2787
+  },
+  "derivative_transaction.transaction_price": {
+   "equal": 2787
+  },
+  "derivative_transaction.transaction_shares": {
+   "equal": 2787
+  },
+  "derivative_transaction.underlying_shares": {
+   "equal": 2787
+  },
+  "derivative_transaction.underlying_title": {
+   "equal": 2787
+  },
+  "filings": {
+   "read": 5356
+  },
+  "non_derivative_transaction": {
+   "rows_read": 8177,
+   "rows_the_old_parser_dropped": 0
+  },
+  "non_derivative_transaction.acquired_disposed_code": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.direct_or_indirect": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.kept_count": {
+   "equal": 5356
+  },
+  "non_derivative_transaction.nature_of_ownership": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.security_title": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.shares_owned_after": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.transaction_code": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.transaction_date": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.transaction_price": {
+   "equal": 8177
+  },
+  "non_derivative_transaction.transaction_shares": {
+   "equal": 8177
+  },
+  "owner.cik": {
+   "equal": 5743
+  },
+  "owner.is_director": {
+   "equal": 5743
+  },
+  "owner.is_officer": {
+   "equal": 5743
+  },
+  "owner.is_other": {
+   "equal": 5743
+  },
+  "owner.is_ten_percent_owner": {
+   "equal": 5743
+  },
+  "owner.name_raw": {
+   "equal": 5743
+  },
+  "owner.non_us_address": {
+   "equal": 5743
+  },
+  "owner.officer_title": {
+   "equal": 5602,
+   "old_replaced_see_remarks_with_remarks": 141
+  },
+  "owner.other_text": {
+   "equal": 5743
+  },
+  "owner_count": {
+   "equal": 5356
+  }
+ },
+ "cohort": {
+  "derivative_transaction": {
+   "rows_read": 1528,
+   "rows_the_old_parser_dropped": 0
+  },
+  "derivative_transaction.acquired_disposed_code": {
+   "equal": 1528
+  },
+  "derivative_transaction.conversion_price": {
+   "equal": 1528
+  },
+  "derivative_transaction.direct_or_indirect": {
+   "equal": 1528
+  },
+  "derivative_transaction.exercise_date": {
+   "equal": 1528
+  },
+  "derivative_transaction.expiration_date": {
+   "equal": 1528
+  },
+  "derivative_transaction.kept_count": {
+   "equal": 3367
+  },
+  "derivative_transaction.nature_of_ownership": {
+   "equal": 1528
+  },
+  "derivative_transaction.security_title": {
+   "equal": 1528
+  },
+  "derivative_transaction.shares_owned_after": {
+   "equal": 1528
+  },
+  "derivative_transaction.transaction_code": {
+   "equal": 1528
+  },
+  "derivative_transaction.transaction_date": {
+   "equal": 1528
+  },
+  "derivative_transaction.transaction_price": {
+   "equal": 1528
+  },
+  "derivative_transaction.transaction_shares": {
+   "equal": 1528
+  },
+  "derivative_transaction.underlying_shares": {
+   "equal": 1528
+  },
+  "derivative_transaction.underlying_title": {
+   "equal": 1528
+  },
+  "filings": {
+   "read": 3367
+  },
+  "non_derivative_transaction": {
+   "rows_read": 8391,
+   "rows_the_old_parser_dropped": 0
+  },
+  "non_derivative_transaction.acquired_disposed_code": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.direct_or_indirect": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.kept_count": {
+   "equal": 3367
+  },
+  "non_derivative_transaction.nature_of_ownership": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.security_title": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.shares_owned_after": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.transaction_code": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.transaction_date": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.transaction_price": {
+   "equal": 8391
+  },
+  "non_derivative_transaction.transaction_shares": {
+   "equal": 8391
+  },
+  "not_an_ownership_document": {
+   "skipped": 109
+  },
+  "owner.cik": {
+   "equal": 3570
+  },
+  "owner.is_director": {
+   "equal": 3570
+  },
+  "owner.is_officer": {
+   "equal": 3570
+  },
+  "owner.is_other": {
+   "equal": 3570
+  },
+  "owner.is_ten_percent_owner": {
+   "equal": 3570
+  },
+  "owner.name_raw": {
+   "equal": 3570
+  },
+  "owner.non_us_address": {
+   "equal": 3570
+  },
+  "owner.officer_title": {
+   "equal": 3541,
+   "old_replaced_see_remarks_with_remarks": 29
+  },
+  "owner.other_text": {
+   "equal": 3570
+  },
+  "owner_count": {
+   "equal": 3367
+  }
+ }
+}
