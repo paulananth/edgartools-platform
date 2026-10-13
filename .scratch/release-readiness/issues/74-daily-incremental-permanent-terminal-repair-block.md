@@ -21,7 +21,7 @@ Two accessions for CIK `2143673` -- `0000905148-26-003370` and
 `terminal_repair_required` by `daily_artifact_resume.py`'s immutable-content
 guard (`edgar_warehouse/silver_protection.py`-adjacent fail-closed policy, per
 [ticket 60](60-decide-durable-daily-artifact-resume-disposition.md)/
-[ticket 63](63-implement-durable-daily-artifact-resume-disposition.md)).
+ticket 63 (deleted 2026-10-13, ticket 25; in git history)).
 
 Diffed the actual bytes:
 - Live SEC content (`curl` against the real archival URL, fetched during this

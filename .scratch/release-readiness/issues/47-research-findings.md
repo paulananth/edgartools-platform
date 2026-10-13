@@ -1,5 +1,7 @@
 # Ticket 47 research findings — silent-overwrite window after the prodb→prod cutover
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 ## Scope and outcome
 
 This read-only investigation covers canonical bronze writes between **2026-07-19

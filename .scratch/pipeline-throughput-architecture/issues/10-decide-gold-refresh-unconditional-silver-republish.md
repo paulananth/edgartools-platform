@@ -122,6 +122,6 @@ generalizes automatically and correctly to any future command without
 requiring anyone to remember to classify it.
 
 Implementation split to
-[release-readiness ticket 79](../../release-readiness/issues/79-implement-skip-noop-silver-publish.md),
+release-readiness ticket 79 (deleted 2026-10-13, ticket 25; in git history),
 matching this map's decision-only mode and the split already used for
 tickets 03/06 -> 77/78.

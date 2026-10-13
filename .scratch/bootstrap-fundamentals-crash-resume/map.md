@@ -69,3 +69,5 @@ except where noted `grilling`.
 ## Out of scope
 
 <!-- none yet -->
+- 03 — Wire `entity-facts` mode's per-CIK loop to the durable marker (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes bootstrap fundamentals modes, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- 04 — Port the durable-marker fix to `per-filing` and `thirteenf` modes (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes bootstrap fundamentals modes, which the rebuild retired. Reopen as a new ticket if the need still applies.

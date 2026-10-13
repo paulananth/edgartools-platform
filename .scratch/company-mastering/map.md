@@ -151,6 +151,12 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   (operator, 2026-09-29 07:27 ET): approved `0d4d5cb0…0702`; the active policy
   is `15e07b30…b6d6`. A Company in review gains no record by a rule; only an
   identifier's issuer counts toward its conflict.
+- [Ticket 08 handoff to Codex: SEC-to-GLEIF matching rules (2026-09-25)](issues/08-handover-to-codex.md): a research note, handover or brief kept for its record, not a ticket with work of its own
+- [Ticket 09 handoff to Claude: dated Company read authority](issues/09-handover-to-claude.md): a research note, handover or brief kept for its record, not a ticket with work of its own
+- [Account hold-back: SEC Company rule for operator review](issues/12-approval-brief.md): a research note, handover or brief kept for its record, not a ticket with work of its own
+- [Ticket 12 handoff to Claude: Account hold-back activation (2026-09-25)](issues/12-handover-to-claude-activation.md): a research note, handover or brief kept for its record, not a ticket with work of its own
+- [Ticket 12 handover to Codex: the Account hold-back (2026-09-25)](issues/12-handover-to-codex-2.md): a research note, handover or brief kept for its record, not a ticket with work of its own
+- [Ticket 12 handover: Claude → Codex (2026-09-24, about 21:30 ET)](issues/12-handover-to-codex.md): a research note, handover or brief kept for its record, not a ticket with work of its own
 
 ## Added tickets
 

@@ -29,7 +29,7 @@ small. Concretely: freeze the resolved CIK window as a snapshot once per `run_id
 `company_resume.py.write_snapshot`), write one outcome marker per successfully-processed CIK
 (mirrors `daily_artifact_resume.py`'s per-item shape), and on any retry under the same
 `run_id`, filter the frozen snapshot against already-flushed outcomes before the loop starts —
-never re-derive the candidate set live. Implementation is [Ticket 03](03-wire-entity-facts-mode-to-durable-marker.md).
+never re-derive the candidate set live. Implementation is Ticket 03 (deleted 2026-10-13, ticket 25; in git history).
 
 ## Question
 

@@ -125,7 +125,7 @@ CIKs — confirmed live (16/53 windows after ~7h) to match release-readiness's
 [ticket 43](../../release-readiness/issues/43-investigate-daily-incremental-full-universe-scope.md)/
 [ticket 45](../../release-readiness/issues/45-decide-narrow-daily-incremental-stage0-and-cadence.md)
 finding of a 10h16m Stage0-alone runtime on the first-ever prod execution. That fix
-([ticket 49](../../release-readiness/issues/49-implement-bounded-daily-identity-refresh-schedule.md))
+(ticket 49 (deleted 2026-10-13, ticket 25; in git history))
 is designed but still `Status: open` — out of scope for this ticket, not re-litigated here.
 
 Rather than wait ~8+ more hours for `daily-incremental-ticket03-1785413694` to clear Stage0

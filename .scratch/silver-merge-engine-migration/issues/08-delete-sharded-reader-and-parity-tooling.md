@@ -14,8 +14,8 @@ exclude-column machinery CLAUDE.md's "verify-resolver-input-parity 100% false-po
 describes; `silver_support/session.py`'s `open_silver_shard` and `mdm/cli.py`'s six references
 go with it.
 
-**Blocked by:** [Ticket 05](05-thirteenf-tables-landing-only.md),
-[Ticket 06](06-submissions-and-artifact-tables-landing-only.md).
+**Blocked by:** Ticket 05 (deleted 2026-10-13, ticket 25; in git history),
+Ticket 06 (deleted 2026-10-13, ticket 25; in git history).
 
 ## Corrected scope (2026-09-14)
 

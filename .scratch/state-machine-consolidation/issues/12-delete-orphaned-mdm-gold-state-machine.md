@@ -1,7 +1,7 @@
 Type: task
 Status: resolved (2026-09-06)
 
-**Spawned by:** [Ticket 09 — Retire superseded document-loading machines](09-retire-superseded-document-loading-machines.md), noted out of that ticket's own scope: `edgartools-prod-mdm-gold` is a live AWS orphan — confirmed zero executions and zero remaining code references (its writer function and dispatch were already removed by an earlier ticket), but the deployed AWS state machine object itself was never deleted.
+**Spawned by:** Ticket 09 — Retire superseded document-loading machines (deleted 2026-10-13, ticket 25; in git history), noted out of that ticket's own scope: `edgartools-prod-mdm-gold` is a live AWS orphan — confirmed zero executions and zero remaining code references (its writer function and dispatch were already removed by an earlier ticket), but the deployed AWS state machine object itself was never deleted.
 
 ## Question
 

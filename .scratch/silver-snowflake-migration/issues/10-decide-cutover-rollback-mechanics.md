@@ -61,7 +61,7 @@ scoping instruction.
 
 **1. Flip mechanism: a toggleable env var,
 `MDM_SILVER_READ_TARGET=duckdb|snowflake`**, checked at every
-`ShardedSilverReader` call site named in [Ticket 12](12-cutover-mdm-sharded-silver-reader-to-snowflake.md)
+`ShardedSilverReader` call site named in Ticket 12 (deleted 2026-10-13, ticket 25; in git history)
 (the four sites in `edgar_warehouse/mdm/cli.py`). A deploy flips it — no
 image rebuild needed to revert. This is a deliberate, narrow exception to
 Ticket 05/07's "committed script over toggleable state" preference: that
@@ -119,6 +119,6 @@ a data bug to fix at the source, not a rollback-mechanics problem.
 **5. Alerting: yes, folded into item 3** — no separate alerting decision
 needed beyond the new alarm already specified there.
 
-Threaded back into [Ticket 12](12-cutover-mdm-sharded-silver-reader-to-snowflake.md)'s
+Threaded back into Ticket 12 (deleted 2026-10-13, ticket 25; in git history)'s
 scope as concrete implementation requirements (env var, parity-check
 command, alarm) rather than left as abstract policy.

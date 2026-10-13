@@ -1,7 +1,7 @@
 # Forms 3/4/5: capture and reader (06b)
 
 Type: grilling, then task
-Status: open
+Status: moved (2026-10-13 17:31 ET) to profiling ticket 07 (insider ownership): the readings for both file shapes merged in #951, the capacity links in #952; the Dataset Contracts and Proving Run are next there
 Blocked by: 02, 09, 14, 15
 
 ## Question

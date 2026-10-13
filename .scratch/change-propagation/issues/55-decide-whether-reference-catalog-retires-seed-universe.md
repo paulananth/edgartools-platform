@@ -45,14 +45,14 @@ how/where that seeding happens." Nobody has yet.
 
 Separately confirmed: `reference_catalog` has **not passed Decision 2** (the
 Ticket 10 per-family side-by-side parity proof, mirroring Tickets 51/53's
-`filing_artifact` harness) — [Ticket 27](27-contract-legacy-acquisition-bypasses.md)
+`filing_artifact` harness) — Ticket 27 (deleted 2026-10-13, ticket 25; in git history)
 names it explicitly among the families not yet cut over. So even the one
 piece `reference_catalog` *does* cover has no live-proven parity with
 `seed-universe`'s legacy fetch yet.
 
 ## The bigger finding: #2 and #4 are not new fog — they're Ticket 54
 
-[Ticket 54](54-bookkeeping-sits-outside-postgresql-authority-and-change-tracking.md)
+Ticket 54 (deleted 2026-10-13, ticket 25; in git history)
 (open, unclaimed) already asks whether Bookkeeping's change-detection
 tables — explicitly naming `sec_company_sync_state` among them — should be
 functionally consolidated onto this map's Change Ledger, with
@@ -77,7 +77,7 @@ one of `seed-universe`'s five responsibilities, not a replacement for the
 command. Retiring `seed-universe` needs, at minimum: Ticket 54's
 Bookkeeping/Change-Ledger consolidation question resolved (for #2/#4), a
 Decision-2 parity proof for `reference_catalog` against #1 (new
-[Ticket 56](56-build-reference-catalog-capture-parity-harness.md)), and a
+Ticket 56 (deleted 2026-10-13, ticket 25; in git history)), and a
 design decision for #3/#5 that doesn't exist yet. `seed-universe` stays as
 the current, correct command in the meantime — nothing here changes its
 behavior or its callers (`load_history`'s `SeedUniverse` state, the
@@ -119,7 +119,7 @@ documented (this ticket), and the question of whether/how to retire it is
 resolved into two already-actionable pieces: Ticket 54 (already open, now
 carries seed-universe as a second piece of evidence) for the
 sync-state/tracking-status responsibilities, and new
-[Ticket 56](56-build-reference-catalog-capture-parity-harness.md) for
+Ticket 56 (deleted 2026-10-13, ticket 25; in git history) for
 proving `reference_catalog` an equal-or-superset replacement for the raw
 fetch. The MDM-active-dedup and CIK-batch-manifest responsibilities have no
 ledger-gated design yet and aren't sharp enough to ticket — moved to this

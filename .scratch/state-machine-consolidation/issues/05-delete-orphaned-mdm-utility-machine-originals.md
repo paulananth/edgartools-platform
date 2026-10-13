@@ -87,7 +87,7 @@ close).
 `docs/release-readiness/`'s historical write-ups — narrative documentation
 of past events, not executable code or anything treating the names as
 still-current. One item examined closely:
-`.scratch/release-readiness/issues/94-sync-graph-silent-default-limit.md`
+`.scratch/release-readiness/issues/94-sync-graph-silent-default-limit.md` (deleted 2026-10-13, ticket 25; in git history)
 (status: open) describes a real, still-unfixed bug in `mdm sync-graph`'s
 `limit_per_type` wiring, discovered via the orphaned standalone
 `edgartools-prod-mdm-sync-graph` machine. The bug lives in shared

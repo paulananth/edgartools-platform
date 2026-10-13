@@ -1,7 +1,7 @@
 # Remove legacy tables and their code
 
 Type: task
-Status: 2a merged (#764); 2b/2c in review (Claude, branch `claude/remove-legacy-2bc-scripts-dbt`)
+Status: done (2026-10-13 ET, ticket 25): 2a merged in #764, 2b/2c in #766; the two struck-out parts stay deferred as written
 
 ## Operator ruling
 
@@ -140,7 +140,7 @@ Local runs, each under 5 minutes:
     to a stage that no longer exists, and the unsupported "the dashboard
     reads these tables" claim. Confirmed no `.tf` change and no live action;
     `bootstrap-prod-mdm.sh` matches `store.migrate`'s grant model.
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word (#764 and #766 merged)
 
 ## Follow-ups found (not built here)
 

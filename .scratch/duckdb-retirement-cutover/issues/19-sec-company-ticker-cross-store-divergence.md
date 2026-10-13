@@ -26,7 +26,7 @@ sample.
   buffer never picked it up, a COPY INTO failure, a dbt model bug) or a reconciliation-tool
   artifact specific to this table's shape (e.g. a business-key/authority-column declaration
   mismatch in `contracts.py`).
-- Whether this predates [Ticket 10](10-atomic-write-path-cutover.md)'s cutover (like the other
+- Whether this predates Ticket 10 (deleted 2026-10-13, ticket 25; in git history)'s cutover (like the other
   three tickets 11 found failing) or is itself new.
 
 ## Done when
@@ -70,7 +70,7 @@ Evidence: the canonical `s3://edgartools-prod-warehouse-690839588395/warehouse/s
 - The 512 keys were last written by 14 runs, from 2026-07-20 23:07 ET to 2026-08-18 07:21 ET.
   Snowflake's ticker landing starts 2026-08-22 19:32 ET
   (`seed-universe-verify-streaming-fix-1787441504`; Snowflake displays it as 23:32 −0700 because
-  of [Ticket 22](22-silver-landing-timestamps-shifted-by-account-timezone.md)), and every SEC
+  of Ticket 22 (deleted 2026-10-13, ticket 25; in git history)), and every SEC
   snapshot landed since then (eight, ~10,391 keys per source) is in silver: no landing key is
   missing from silver, and there are no retirement records for this table. So none of the 512
   keys was in any SEC ticker catalog fetched since 2026-08-22.
@@ -106,7 +106,7 @@ Evidence: the canonical `s3://edgartools-prod-warehouse-690839588395/warehouse/s
 
 Not a cause of either failure (the reconciler excludes `last_synced_at` from the digest, and the
 shift only widened its scope watermark). Filed as
-[Ticket 22](22-silver-landing-timestamps-shifted-by-account-timezone.md).
+Ticket 22 (deleted 2026-10-13, ticket 25; in git history).
 
 ### Proposed closure
 

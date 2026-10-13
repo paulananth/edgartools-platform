@@ -21,7 +21,7 @@ issuers have `sec_raw_object` rows pointing at S3 keys that don't exist,
 | 1018724 | Amazon.com Inc | 48 |
 | 1652044 | Alphabet Inc. | 6 |
 
-Same underlying gap as [Ticket 88](88-missing-s3-object-for-cached-accession-text-extraction.md):
+Same underlying gap as Ticket 88 (deleted 2026-10-13, ticket 25; in git history):
 DB rows reference bronze keys that were never actually written to S3, most
 likely by the same one-off manual/repair scripts. Ticket 88's code fix
 already makes this self-healing on next read (a cache-hit that finds the

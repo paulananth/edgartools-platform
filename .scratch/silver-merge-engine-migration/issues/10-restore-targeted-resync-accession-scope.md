@@ -10,7 +10,7 @@
 stopped hydrating local DuckDB. `_run_accession_resync` (`warehouse_orchestrator.py`) starts
 with `db.get_filing(accession_number)` on a store the command opened empty in a fresh
 container, so it should always raise "Unknown accession_number for targeted resync". Found
-while grilling [Ticket 06d](06-submissions-and-artifact-tables-landing-only.md); a code
+while grilling Ticket 06d (deleted 2026-10-13, ticket 25; in git history); a code
 reading, not yet confirmed by a run.
 
 1. **Verify live:** run one accession-scoped `targeted_resync` in prod against a known

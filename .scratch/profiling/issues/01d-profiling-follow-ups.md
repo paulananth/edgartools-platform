@@ -1,5 +1,7 @@
 # 01d Profiling follow-ups (deferred parts of 01b and 01c)
 
+Status: done (2026-10-13 17:31 ET): every part ticked with its evidence; its PRs are merged
+
 Type: task. Phase: A. Blocked by: 01b, 01c. Map: [map](../map.md). Plan: [plan](../plan.md).
 
 The deferred parts of 01b and 01c that can be done locally now (operator,

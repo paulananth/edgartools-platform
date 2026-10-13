@@ -725,9 +725,9 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   before triggering it, and don't schedule the cutover immediately before
   a cost-sensitive window.
 - **Not yet live as of this note** — see
-  `.scratch/duckdb-retirement-cutover/issues/04-provision-live-bookkeeping-postgres.md`
+  `.scratch/duckdb-retirement-cutover/issues/04-provision-live-bookkeeping-postgres.md` (deleted 2026-10-13, ticket 25; in git history)
   for the live-provisioning ticket and
-  `.scratch/duckdb-retirement-cutover/issues/10-atomic-write-path-cutover.md`
+  `.scratch/duckdb-retirement-cutover/issues/10-atomic-write-path-cutover.md` (deleted 2026-10-13, ticket 25; in git history)
   for the ticket that actually repoints the write path (and triggers this
   reactivation).
 

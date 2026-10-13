@@ -24,7 +24,7 @@ against real `stg_daily_index_filing_bulk` data (not just a syntax check) —
 same row selected, same tie-breaking on `seq DESC`, same `ON CONFLICT
 (business_date, accession_number) DO UPDATE SET ...` behavior downstream.
 
-This is a prerequisite for [Ticket 09](09-complete-sqlite-test-port.md)'s
+This is a prerequisite for Ticket 09 (deleted 2026-10-13, ticket 25; in git history)'s
 SQLite port, not the port itself — it just removes the one syntax blocker
 standing in the way of that method's tests running under SQLite at all.
 
@@ -57,7 +57,7 @@ standing in the way of that method's tests running under SQLite at all.
       suite green: 2706 passed, 4 skipped.
 - [x] Confirmed via grep: no other `QUALIFY` clause remains in any method
       that isn't already scheduled for deletion by the atomic cutover
-      ([Ticket 10](10-atomic-write-path-cutover.md)) — the 10 remaining
+      (Ticket 10 (deleted 2026-10-13, ticket 25; in git history)) — the 10 remaining
       `silver_store.py` clauses are all in the 5 content-merge methods
       named above.
 
@@ -74,7 +74,7 @@ own rewritten `WHERE rn = 1` clause — had zero real callers left. The
 method portable, which is what was asked), but the method it protected
 turned out to already be dead by the time this was discovered; deleted
 alongside 5 other second-wave dead bookkeeping methods (see
-[Ticket 09](09-complete-sqlite-test-port.md)'s own addendum for the full
+Ticket 09 (deleted 2026-10-13, ticket 25; in git history)'s own addendum for the full
 list). `tests/unit/test_daily_index_filing_merge.py` (this ticket's own
 regression-guard test file, including
 `test_merge_daily_index_filings_dedupes_same_key_rows_within_one_batch`) was

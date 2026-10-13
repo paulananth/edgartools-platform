@@ -80,8 +80,8 @@ shared edgartools HTTP client before a bounded retry. MDM all-entity
 relationship processing remains independent from the company-identity filter.
 
 Implementation is graduated to
-[Implement the company-only identity refresh universe](51-implement-company-only-identity-refresh-universe.md)
+Implement the company-only identity refresh universe (deleted 2026-10-13, ticket 25; in git history)
 and
-[Bind daily artifacts to the forced-index accession union](52-bind-daily-artifacts-to-index-accessions.md).
+Bind daily artifacts to the forced-index accession union (deleted 2026-10-13, ticket 25; in git history).
 No code, AWS resources, running executions, or schedules were mutated by this
 research.

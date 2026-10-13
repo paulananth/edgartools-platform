@@ -8,7 +8,7 @@ Claimed by Claude on 2026-08-18.
 
 ## Question
 
-Surfaced while implementing [Ticket 12](12-cutover-mdm-sharded-silver-reader-to-snowflake.md)
+Surfaced while implementing Ticket 12 (deleted 2026-10-13, ticket 25; in git history)
 (Cut Over MDM's ShardedSilverReader to Snowflake): `EDGARTOOLS_SILVER`'s
 dynamic tables were built with `target_lag = 'DOWNSTREAM'` (per Ticket 01's
 model-structure design). Snowflake's `DOWNSTREAM` lag mode means a dynamic

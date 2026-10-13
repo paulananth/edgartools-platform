@@ -1,6 +1,6 @@
 # 23 — Keep one definition of `SNOWFLAKE_RUN_MANIFEST_TASK`
 
-**What was found:** while fixing [Ticket 22](22-silver-landing-timestamps-shifted-by-account-timezone.md)
+**What was found:** while fixing Ticket 22 (deleted 2026-10-13, ticket 25; in git history)
 (2026-09-14). The task that loads the source layer and refreshes gold is created in three places,
 and each one replaces the task entirely, so whichever runs last wins:
 

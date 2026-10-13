@@ -1,5 +1,7 @@
 # 02 RDM database, publish, MDM pin, migrate reference YAML
 
+Status: done (2026-10-13 17:31 ET): every part ticked with its evidence; its PRs are merged
+
 Type: task. Phase: B. Blocked by: 01a, Codex retirement merged. Map: [map](../map.md). Plan: [plan](../plan.md).
 
 ## Rulings

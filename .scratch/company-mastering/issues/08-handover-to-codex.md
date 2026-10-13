@@ -1,5 +1,7 @@
 # Ticket 08 handoff to Codex: SEC-to-GLEIF matching rules (2026-09-25)
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 The operator asked Claude to write this note and give the Company mastering
 work to Codex to continue. Claude's branch is
 `claude/company-mastering-08-sec-gleif-matching`, PR

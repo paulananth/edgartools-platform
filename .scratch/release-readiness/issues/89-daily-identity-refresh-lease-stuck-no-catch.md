@@ -22,7 +22,7 @@ Confirmed via direct canonical-S3 read of `pipeline_run_lease`:
 ```
 
 The holder, `daily-incremental-ticket77-livemeasure-1785794199`, is
-[ticket 83](83-reduce-identity-refresh-oom-on-merge.md)'s own OOM incident —
+ticket 83 (deleted 2026-10-13, ticket 25; in git history)'s own OOM incident —
 `reduce-identity-refresh` was OOM-killed twice (exit 137, "OutOfMemoryError:
 container killed due to memory usage") on `edgartools-prod-medium` (4096MB),
 confirmed via `get-execution-history`'s `TaskFailed`/`ExecutionFailed` events.

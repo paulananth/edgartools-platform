@@ -87,5 +87,5 @@ conflicting etag and that a full second attempt cycle follows). Full `tests/unit
 
 Not yet deployed — takes effect on the next warehouse image rebuild + deploy. The "Done when"
 criterion of seeing this live in a real prod `ReduceIdentityRefresh` execution remains open
-until that deploy happens and the schedule (still gated behind [ticket 49](49-implement-bounded-daily-identity-refresh-schedule.md))
+until that deploy happens and the schedule (still gated behind ticket 49 (deleted 2026-10-13, ticket 25; in git history))
 or a manual run exercises it.

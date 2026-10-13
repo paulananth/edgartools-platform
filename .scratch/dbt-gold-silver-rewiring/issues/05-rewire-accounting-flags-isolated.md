@@ -75,7 +75,7 @@ carries the separately-tracked forensic-score masking-bug fix — `LAST_VALUE
 plain "latest row wins" collapse
 (`generate_silver_dbt_models.py`'s `_COALESCE_PRESERVING_COLUMNS`
 mechanism, the same fix
-`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md`
+`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md` (deleted 2026-10-13, ticket 25; in git history)
 documents). This rewire's `ref('sec_accounting_flag')` therefore picks up
 that already-fixed output automatically — there was no separate "apply the
 fix" step needed as part of this ticket, only confirming (by reading the

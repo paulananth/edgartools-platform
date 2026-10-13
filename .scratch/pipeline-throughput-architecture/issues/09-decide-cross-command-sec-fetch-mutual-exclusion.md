@@ -100,5 +100,5 @@ mirroring how `daily_identity_refresh`'s lease already scopes narrowly to
 by another command.
 
 Implementation split to
-[release-readiness ticket 80](../../release-readiness/issues/80-implement-cross-command-sec-fetch-lease.md),
+release-readiness ticket 80 (deleted 2026-10-13, ticket 25; in git history),
 matching this map's decision-only mode.

@@ -6,7 +6,7 @@ Status: resolved (2026-09-12) — pattern confirmed NOT Apple-specific; see
 
 ## Question
 
-[Ticket 88](88-missing-s3-object-for-cached-accession-text-extraction.md) found
+Ticket 88 (deleted 2026-10-13, ticket 25; in git history) found
 494 of Apple (CIK 320193)'s 1,044 `sec_raw_object` rows point at S3 keys that
 don't exist. That investigation was deliberately scoped to Apple only (the
 CIK where the failure was first observed live) -- no other CIK has been

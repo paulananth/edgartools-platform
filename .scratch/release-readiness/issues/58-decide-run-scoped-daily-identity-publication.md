@@ -85,4 +85,4 @@ completed, exactly one canonical publication occurred, existing canonical
 integrity protections held, and the total daily execution completed within
 six hours.
 
-Follow-up: [Implement run-scoped Daily Identity Refresh publication](61-implement-run-scoped-daily-identity-publication.md).
+Follow-up: Implement run-scoped Daily Identity Refresh publication (deleted 2026-10-13, ticket 25; in git history).

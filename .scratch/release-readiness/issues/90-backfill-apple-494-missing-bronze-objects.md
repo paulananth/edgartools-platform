@@ -7,7 +7,7 @@ targeted-resync; execution is armed and waiting on `daily_incremental`'s
 
 ## Question
 
-[Ticket 88](88-missing-s3-object-for-cached-accession-text-extraction.md) found
+Ticket 88 (deleted 2026-10-13, ticket 25; in git history) found
 (not fixed as data) that 494 of Apple (CIK 320193)'s 1,044 `sec_raw_object` rows
 reference S3 keys that don't exist in the bronze bucket (477 attachment
 children, 17 primary documents), most likely from one-off manual/repair

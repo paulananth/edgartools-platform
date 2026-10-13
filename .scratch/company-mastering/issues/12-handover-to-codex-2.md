@@ -1,5 +1,7 @@
 # Ticket 12 handover to Codex: the Account hold-back (2026-09-25)
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 Claude hands ticket 12 to Codex because its session limit is running out
 (operator, 2026-09-25). **Work on your own branch**
 `codex/company-mastering-12-account-hold-back`, cut from the head of

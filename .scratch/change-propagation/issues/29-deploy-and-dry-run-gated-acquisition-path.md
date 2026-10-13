@@ -95,8 +95,8 @@ exactly as designed (`WarehouseRuntimeError: No sealed discovery observation
 for business_date=2026-08-21 (checkpoint status='missing')`). Root-caused to
 two compounding, pre-existing bugs in the general silver merge/publish
 subsystem (not caused by this ticket's own diff) — see
-[31 — `EXCLUDED_OPERATIONAL_TABLES` content never reaches canonical silver
-once canonical exists](31-excluded-operational-tables-never-reach-canonical-silver.md)
+31 — `EXCLUDED_OPERATIONAL_TABLES` content never reaches canonical silver
+once canonical exists (deleted 2026-10-13, ticket 25; in git history)
 for the full root cause and fix. That fix was implemented, reviewed, merged
 (PR #454), deployed to prod, and verified live — `load-daily-form-index-for-date`
 re-run afterward showed `"tables_merged": ["sec_daily_index_checkpoint",

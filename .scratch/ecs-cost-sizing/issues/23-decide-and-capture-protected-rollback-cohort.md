@@ -96,7 +96,7 @@ execution in the exact prior registration window failed at `mdm export`
 and never validated `BatchSilver` children, graph, or gold completion.
 Building a genuinely validated Code Rollback cohort — a separately
 attested, actually-rehearsed prior image pair — is real work, not a quick
-capture. Split into [Ticket 32](32-build-and-rehearse-code-rollback-cohort.md).
+capture. Split into Ticket 32 (deleted 2026-10-13, ticket 25; in git history).
 Not a blocker for Wave 0: genuinely new *code* risk (versus config/wiring
 risk) is primarily Wave 4's (machine-profile) concern, and Ticket 04's own
 policy already leans on Configuration Rollback's 15-minute restore as the

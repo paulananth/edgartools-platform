@@ -47,7 +47,7 @@ operator alert subscriber.
 - Separately (context, not in scope here): confirmed via `aws events list-rules`
   that no EventBridge schedule currently triggers `daily-incremental`
   automatically at all — both runs inspected this session were started manually.
-  That's [ticket 49](49-implement-bounded-daily-identity-refresh-schedule.md)'s
+  That's ticket 49 (deleted 2026-10-13, ticket 25; in git history)'s
   territory (its own Progress notes already flag "CloudWatch alerting" as
   explicitly not done), not this ticket's.
 

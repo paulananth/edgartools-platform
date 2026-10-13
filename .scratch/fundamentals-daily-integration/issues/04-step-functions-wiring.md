@@ -90,5 +90,5 @@ failures noted throughout CLAUDE.md) green after the fix.
 Committed to branch `claude/fundamentals-daily-integration-ticket04-stepfn-wiring`
 (commits `742f3e7e` + `9165c690`). Not yet pushed, opened as a PR, deployed,
 or live-verified against a real `daily_incremental` execution — that's
-[Ticket 05](05-end-to-end-verification.md)'s Step 3, still blocked pending
+Ticket 05 (deleted 2026-10-13, ticket 25; in git history)'s Step 3, still blocked pending
 the user's go-ahead to push/merge/deploy.

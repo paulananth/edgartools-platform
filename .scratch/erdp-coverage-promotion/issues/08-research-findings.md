@@ -1,5 +1,7 @@
 # Ticket 08 research findings — free/legal transcript TEXT sources
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 Research conducted 2026-07-28 against primary sources: live-fetched IR pages, live-fetched
 Terms of Service/Terms of Use pages, a live-fetched sample commercial transcript PDF, SEC
 EDGAR's own full-text search API (`efts.sec.gov`) hit with a proper identifying User-Agent per

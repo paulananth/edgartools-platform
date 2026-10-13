@@ -208,7 +208,7 @@ machine besides `daily_incremental`/`load_history`:**
 
 **Not yet implemented** — retiring the 5 machines above (rollback snapshot
 then explicit delete, mirroring tickets 03/04/06's own pattern) is tracked
-as [Ticket 09](issues/09-retire-superseded-document-loading-machines.md).
+as Ticket 09 (deleted 2026-10-13, ticket 25; in git history).
 Separately, and still not implemented from Ticket 07: `mdm_gold` deletion
 and the `seed_universe`/`mdm_seed_universe` merge remain decided-but-live in
 prod — a pre-existing execution gap, not reopened or re-scoped by this

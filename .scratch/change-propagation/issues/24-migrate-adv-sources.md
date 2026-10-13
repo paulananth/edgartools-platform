@@ -119,7 +119,7 @@ was never disclosed in those tickets' own Answer sections either — this new
 `adv_filing` driver is scoped exactly the same way its `filing_artifact`
 sibling was: it adds the new ledger-gated path, it does not retire the old
 one. Retiring either legacy artifact-fetch path for any family is
-explicitly [Ticket 27](27-contract-legacy-acquisition-bypasses.md)'s job
+explicitly Ticket 27 (deleted 2026-10-13, ticket 25; in git history)'s job
 ("Remove bypasses only after every source family proves the authoritative
 path"), already tracked, not a new follow-up this correction needs to spawn.
 

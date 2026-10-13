@@ -120,7 +120,7 @@ unlike MDM's `tests/integration/test_source_registry_postgres.py`) — not a
 new gap this ticket introduces, and not fixed here since building
 Postgres integration testing for the whole store is out of this ticket's
 scope. Worth a follow-up before [Ticket 04](
-04-provision-live-bookkeeping-postgres.md)'s live cutover actually depends
+04-provision-live-bookkeeping-postgres.md (deleted 2026-10-13, ticket 25; in git history))'s live cutover actually depends
 on this ordering behaving correctly against real Postgres.
       (none found — confirmed all method-call-based, as the original recon
       pass suspected but didn't verify), turned up only the 3 already-known

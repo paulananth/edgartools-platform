@@ -1,5 +1,7 @@
 # 44 — Research findings: root-causing the earnings-8-K immutable-content collision
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 Feeds ticket 44
 (`.scratch/release-readiness/issues/44-root-cause-earnings-8k-immutable-content-collision.md`).
 Written as a durable sibling artifact per this repo's issue-tracker convention, matching the
