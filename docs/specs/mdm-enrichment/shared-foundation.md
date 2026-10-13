@@ -12,9 +12,9 @@ contract.** Sections marked *Open* below name what the map did not decide.
 No implementation, migration, or runtime change is authorized by this
 document; the [release gates](#release-gates) say what must be true first.
 
-Read against: `origin/main` `7467b114` and Clean MDM's
+Read against: `origin/main` `7467b114` and MDM's
 `origin/codex/clean-mdm-integration` `a19463be9be7` (read-only). Where this
-spec cites a Clean MDM migration it pins the sha256 that
+spec cites an MDM migration it pins the sha256 that
 `edgar_warehouse/mdm/clean/store.py` records in `mdm.migration.checksum`,
 so drift between this text and the installed table is visible by one
 `SELECT`.
@@ -24,10 +24,10 @@ so drift between this text and the installed table is visible by one
 Legacy MDM (`edgar_warehouse/mdm/` outside `clean/`, ADR 0007's
 `mdm_change_log`/`mdm_relationship_instance`/`mdm_entity`) is being
 decommissioned. **Nothing in this specification targets legacy MDM.** There
-is one MDM and one set of MDM tables: Clean MDM's `mdm` schema
-(`edgar_warehouse/mdm/clean/`, `docs/specs/clean-mdm/`). This spec points at
+is one MDM and one set of MDM tables: MDM's `mdm` schema
+(`edgar_warehouse/mdm/clean/`, `docs/specs/mdm/`). This spec points at
 those tables by name and defining migration and never restates their DDL.
-`mdm` is Clean MDM's schema name, chosen to sit beside legacy until legacy
+`mdm` is MDM's schema name, chosen to sit beside legacy until legacy
 is dropped; it is not a second MDM.
 
 ## Vocabulary
@@ -85,7 +85,7 @@ to existing rows
 | Source publication | **derived**: the `change_ledger.source_revision` rows sharing `(source_family, source_native_revision)`, manifest file included | migration `013_acquisition_ledger.sql` |
 | Publication artifact | one `change_ledger.source_revision` row per file | `013_acquisition_ledger.sql` |
 | Source record version | `mdm.source_reading` | `023_clean_mdm.sql` `44374b8b47061dd4aa8fc3b600a76bb2c5a28870f044f5f6834e4a701ca942a1` |
-| Consumer candidate | not persisted today; the [pre-merge staging proposal](../../../.scratch/clean-mdm-premerge-staging-proposal/map.md) — *proposed, awaiting Clean MDM review* | — |
+| Consumer candidate | not persisted today; the [pre-merge staging proposal](../../../.scratch/clean-mdm-premerge-staging-proposal/map.md) — *proposed, awaiting MDM review* | — |
 | Stewardship decision | `mdm.decision` | `023` as above |
 | Accepted binding / version | `mdm.master_entity` (history) + `mdm.current_record` (current) | `023` as above |
 | Deferred evidence | `mdm.set_aside_record` | `027_clean_mdm_deferred.sql` `d34641669802a44924dde46c48239432927eaeb899bb03325a185075cd594c0e` |
@@ -96,7 +96,7 @@ to existing rows
 ([ticket 01](../../../.scratch/mdm-enrichment-shared-foundation/issues/01-decide-root-run-location.md)).
 A new source is a new `command_name` value and new `source_family` values;
 no table changes. `mdm.batch.run_id` and `mdm.attempt_event.run_id`
-are that `pipeline_run_id` — Clean MDM's `023` header states this itself.
+are that `pipeline_run_id` — MDM's `023` header states this itself.
 Bookkeeping is updated by observation after the MDM commit; it is not a
 participant in any transaction.
 
@@ -114,7 +114,7 @@ consumer. That cannot hold "Company is at Golden Copy 2026-09-19 but ISIN
 2026-09-18," and cannot honor "never advance a sibling family." The
 foundation requires the key `(consumer, source_family, publication_family)`
 with the consumed publication identity and continuity proof on the row.
-This is [proposed to Clean MDM](../../../.scratch/clean-mdm-checkpoint-key-proposal/map.md)
+This is [proposed to MDM](../../../.scratch/clean-mdm-checkpoint-key-proposal/map.md)
 (their `recovery.md` already describes the checkpoint as carrying
 "family/epoch and source position"; the DDL lags it) — *status: proposed,
 awaiting review.* Until accepted, a consumer of more than one family cannot
@@ -134,7 +134,7 @@ consumer, per program ticket 12.
 
 ## Temporal behavior
 
-As Clean MDM's `source-evidence.md` defines and this foundation adopts:
+As MDM's `source-evidence.md` defines and this foundation adopts:
 source effective time, publication time, observation time, and recorded
 time are separate; a missing effective time is explicit under a versioned
 dataset rule, never replaced by load time; publication order comes from the
@@ -144,7 +144,7 @@ source record/field chain is a new assertion.
 
 ## Conflict and review states
 
-Owned by Clean MDM's accepted Q1–Q16 policy (`docs/specs/clean-mdm/merge-stage.md`)
+Owned by MDM's accepted Q1–Q16 policy (`docs/specs/mdm/merge-stage.md`)
 and its `decision.operation` set (`bind`, `merge`, `reverse`, `override`,
 `revoke`, `exclude`, `retire_source`). This foundation adds none and reopens
 none. Two states it relies on:
@@ -197,7 +197,7 @@ generalized from GLEIF Company ticket 14:
   (migration 014) **names** its continuity rule; it is a text policy name,
   not a field set. *Open (found in documentation review, 2026-09-19)*: where
   the rule's field definitions live. Recommended: the versioned dataset
-  contract in `mdm.dataset.body`, which Clean MDM's `source-evidence.md`
+  contract in `mdm.dataset.body`, which MDM's `source-evidence.md`
   already scopes to "publication key/order rules, time semantics, declared
   completeness scope" — one home, versioned by `registry_version`, no new
   column anywhere. Not decided here.
@@ -212,7 +212,7 @@ generalized from GLEIF Company ticket 14:
   Immutable batch keys return the prior committed result after a lost
   acknowledgement; changed content under the same key is a conflict.
 
-Clean MDM's failure matrix (`recovery.md`) governs interruptions inside
+MDM's failure matrix (`recovery.md`) governs interruptions inside
 step 3 and publication; nothing here overrides it.
 
 ## Storage and paths
@@ -239,7 +239,7 @@ Every enrichment fact resolves to one `pipeline_run_id`: fetch decisions,
 revisions, assertions, decisions, checkpoints, publication receipts. MDM
 Commit Evidence counts committed outputs by type per run. "Master
 committed," "export verified," "graph verified/active," and "end-to-end
-verified" are separate observations (Clean MDM `recovery.md`). *Open*:
+verified" are separate observations (MDM `recovery.md`). *Open*:
 metric names, alert thresholds, and the staleness SLO for enrichment
 publication were not decided.
 
@@ -255,7 +255,7 @@ No new Postgres roles
 | Revision Claimer | `edgartools_acquisition_processor` | Marks a verified revision "being processed" so it is processed once |
 | Publication Verifier | `edgartools_acquisition_silver_finalizer` | Records that a publication's expected outputs were produced and verified, or failed; gates the consumer starting |
 | Ledger Repairer | `edgartools_acquisition_operator` | Human-driven quarantine, exclusion, superseded-artifact deletion evidence |
-| MDM Committer | Clean MDM runtime role via `save_batch` | The only path that writes master tables; the application holds no direct table write |
+| MDM Committer | MDM runtime role via `save_batch` | The only path that writes master tables; the application holds no direct table write |
 | Steward | `actor` in the decision body | The person or deterministic rule behind a decision; `save_batch` rejects a decision without actor and reason |
 
 Release Owner is a person approving a consumer's release evidence, not a
@@ -287,13 +287,13 @@ committed) per run.
 ## Migration and rollback
 
 - No data migration: nothing new is created, and existing tables are unchanged.
-- Rollback of a consumer batch is Clean MDM's reversal contract
+- Rollback of a consumer batch is MDM's reversal contract
   (`recovery.md`, `decision.operation = 'reverse'`): projections and
   checkpoint restored, source evidence, decisions, and run lineage preserved.
 - Rollback of capture is unnecessary: a captured revision is immutable
   evidence; an unwanted publication is simply never consumed.
 - *Open*: the migration path for `mdm.checkpoint` rows written under
-  Clean MDM's current per-batch-consumer workaround, if the per-family key
+  MDM's current per-batch-consumer workaround, if the per-family key
   is accepted — listed as an open question on that proposal.
 
 ## Tests
@@ -318,7 +318,7 @@ implementation — only when all hold:
 1. The offline fixture above passes: identical inventories, state changes,
    and evidence hashes, zero domain records published (workstream 00's exit
    gate, verbatim).
-2. Both Clean MDM proposals have a recorded outcome — accepted, adapted, or
+2. Both MDM proposals have a recorded outcome — accepted, adapted, or
    declined — and this spec has been revised to match. A consumer of a
    single family may proceed on today's checkpoint DDL; a consumer of more
    than one family may not until the per-family key exists.
@@ -339,7 +339,7 @@ implementation — only when all hold:
   in the same change — the continuity-proof home above was over-specified
   and is now *Open*; `source_registry_coverage` is migration 014 not 013;
   the Company spec's consolidation figures were coarse and are now exact;
-  the `gleif.*` dataset codes are proposed in Clean MDM's spec, not
+  the `gleif.*` dataset codes are proposed in MDM's spec, not
   installed; gate 4 closed as recorded. Checksums, role names, table and
   column names, relationship type names, cohort counts, and every cited
   file were verified present and as stated.
@@ -348,10 +348,10 @@ implementation — only when all hold:
 
 - Domain meaning, survivorship, accepted relationship semantics, or release
   approval for any consumer — each consumer's own spec.
-- Any change to Clean MDM's tables, functions, policy, or files. Requests go
+- Any change to MDM's tables, functions, policy, or files. Requests go
   through handover proposals, never edits.
 - A new schema, database, registry, or Postgres role.
-- Automatic matching or consolidation: disabled in Clean MDM this release
+- Automatic matching or consolidation: disabled in MDM this release
   behind Q11's calibration bar; not re-enabled here.
 - Applying the Temporary Bronze Stage contract to existing SEC pipelines.
 - Legacy MDM in any form.

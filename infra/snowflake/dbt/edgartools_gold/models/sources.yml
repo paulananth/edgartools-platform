@@ -153,7 +153,7 @@ sources:
   # MDM's golden-record export table in EDGARTOOLS_GOLD. Its writer, the
   # legacy edgar_warehouse/mdm/export.py, was deleted (platform validation
   # 2a, 2026-09-30), so the table keeps its last rows and gets no new ones
-  # until a Clean MDM export to Snowflake exists. COMPANY and MDM_COMPANY
+  # until an MDM export to Snowflake exists. COMPANY and MDM_COMPANY
   # still read it.
   - name: mdm_export
     database: "{{ target.database }}"

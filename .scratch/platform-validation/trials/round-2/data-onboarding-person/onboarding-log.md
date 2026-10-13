@@ -71,7 +71,7 @@ Log path stand-in: work2/onboarding-log.md (skill says .scratch/onboarding/<sour
   Binding tiers, The Person projection), rules/merge/kinds/company.yaml, policy.yaml,
   activation.py (ACCEPTED_BARS: person classification 0.99 @ 0.975), classification.py,
   primitives.py, the C-J prototype `.scratch/mastering-policy-language/prototype/policy-person.json`.
-  Not read (time-box): CONTEXT.md, docs/specs/clean-mdm/source-evidence.md, company-policy.md — logged.
+  Not read (time-box): CONTEXT.md, docs/specs/mdm/source-evidence.md, company-policy.md — logged.
 - Reader: none (no code loads a person rules file or names the source code) => mapped raw JSON paths.
 - Kind: Person, but SEC types people and firms alike as `other` (300/300) => classification rule.
 - Record key: [`cik`], format `sec_cik`. Identifier: `cik` (issued by SEC, joins records).

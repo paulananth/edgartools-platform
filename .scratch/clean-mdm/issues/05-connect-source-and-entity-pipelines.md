@@ -14,7 +14,7 @@ Route supported source adapters and existing mastering, relationship, stewardshi
 
 User direction on 2026-09-19: SEC + GLEIF Company mastering has priority over
 Person, ADV roles, Fund, Security and other entity integrations. Implement and
-verify the [Company completion gate](../../../docs/specs/clean-mdm/company-completion.md)
+verify the [Company completion gate](../../../docs/specs/mdm/company-completion.md)
 first, including accepted OpenCorporates corroboration, Company consolidation
 relationships, source changes and end-to-end local recovery. Do not close this
 ticket from a SEC-only Company loader or advance other entity integration
@@ -22,7 +22,7 @@ before that gate passes. Broader ticket scope remains pending afterward.
 
 ## Current policy and pre-implementation review
 
-[Company Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md) replace the
+[Company Q1–Q13](../../../docs/specs/mdm/company-policy.md) replace the
 manual-default linking/consolidation and blanket deferred-match blocking rules.
 [Design gate 08](08-confirm-company-candidate-assessment.md) is accepted.
 [Ticket 09](09-build-company-candidate-assessment.md) implements assessment
@@ -34,4 +34,4 @@ First bounded native SEC Company preparation/normalization is implemented and
 tested. A three-company candidate is pinned locally, but coverage activation,
 identity review and persistent Clean MDM ingestion have not occurred. Other
 source/role/relationship pipelines remain pending. Ticket 04 is still open.
-See [build state](../../../docs/specs/clean-mdm/state-of-build.md).
+See [build state](../../../docs/specs/mdm/state-of-build.md).

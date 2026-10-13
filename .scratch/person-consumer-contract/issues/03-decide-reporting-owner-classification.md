@@ -59,7 +59,7 @@ lines 492-495), `rule_combo_h` / `rule_combo_j` (lines 671-703).
   parser work; noted for ticket 04).
 - **"Entity, kind undetermined" is terminal for the Person consumer**, not a
   Steward item. Only Company and Person are enabled kinds
-  (`docs/specs/clean-mdm/domain-model.md:25`); a trust/LLC/fund owner has no
+  (`docs/specs/mdm/domain-model.md:25`); a trust/LLC/fund owner has no
   consumer to publish it, so it is retained as a Clean MDM deferred record
   *outside* the Person publishing scope (`company-completion.md:63-67`): it
   does not block Person completeness and generates no review. When a Fund

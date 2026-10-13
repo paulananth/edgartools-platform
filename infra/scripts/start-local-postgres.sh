@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Start the Clean MDM local PostgreSQL 16 instance on loopback.
+# Start the MDM local PostgreSQL 16 instance on loopback.
 #
-# This is the disposable operator Postgres from docs/specs/clean-mdm/acceptance.md:
+# This is the disposable operator Postgres from docs/specs/mdm/acceptance.md:
 # PostgreSQL 16, Colima Docker on macOS, bound only to 127.0.0.1, unique
 # container/volume for this workstream. It is not a substitute for the
 # ephemeral postgres:16-alpine fixtures in tests/integration/.

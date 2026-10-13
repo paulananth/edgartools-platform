@@ -12,7 +12,7 @@ PR lands; this note does not authorize overlapping edits beforehand.
   `survivorship.py`, `assessment.py`, `relationships.py`, `store.py`.
 - Ticket 12: native source verification and range consumption, existing root-run
   recovery, migration 030's registered retained-evidence dispositions, real PG16
-  tests. See `docs/specs/clean-mdm/native-gleif.md` and
+  tests. See `docs/specs/mdm/native-gleif.md` and
   `.scratch/clean-mdm/ticket12-acceptance.md`.
 - SEC + GLEIF fields share one Company in a retained-source fixture using explicit
   test decisions. This is not proof of engine-selected matching.
@@ -24,7 +24,7 @@ PR lands; this note does not authorize overlapping edits beforehand.
 
 ## Next Company work
 
-Read `docs/specs/clean-mdm/company-policy.md`, `company-completion.md`,
+Read `docs/specs/mdm/company-policy.md`, `company-completion.md`,
 `docs/specs/mdm/policy-language.md`, `docs/specs/source-contract/spec.md`, and
 `2026-09-22-codex-source-contract-response.md` in this folder. Reconcile unresolved
 schema/replay details before creating implementation tickets. Tell the user what

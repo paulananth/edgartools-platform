@@ -24,7 +24,7 @@ rather than preference. Establish, from primary sources:
    of more than one kind or more than one source? Read
    `edgar_warehouse/mdm/clean/merge.py`, `store.py` (`register_policy`),
    `consumer.py`, `company_source.py`, `cli.py`, and
-   `docs/specs/clean-mdm/merge-stage.md` / `evidence.md` /
+   `docs/specs/mdm/merge-stage.md` / `evidence.md` /
    `domain-model.md`. Cite `path:line`. Note in particular whether the
    `fields` block being keyed by kind already implies (a) or (c).
 2. **How established entity-resolution / MDM tools scope their match and

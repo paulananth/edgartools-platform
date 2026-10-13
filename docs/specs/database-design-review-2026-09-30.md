@@ -14,12 +14,12 @@ The four are separate databases, which can share one PostgreSQL 16 server. Each 
 | `bookkeeping_clean` | `bookkeeping` | Runs, their work items, leases, checkpoints and the outbox to the Journal | `edgar-warehouse bookkeeping init` / `migrate --runtime-role` | `edgar_warehouse/bookkeeping/clean/migrations/`, 001–004 |
 | each destination database | `bookkeeping_guard` | Which run may write which resource | `bookkeeping init-guard` | `destination_guard.sql` |
 | `change_journal_clean` | `journal` | The append-only record of what was acquired and published | `edgar-warehouse change-journal init` / `migrate --runtime-role` | `edgar_warehouse/change_journal/migrations/`, 001 |
-| `mdm` | `mdm_v2` | Clean MDM: source readings, master entities, decisions, the approved policy | `edgar-warehouse mdm migrate --model clean --application-role …` | `edgar_warehouse/mdm/migrations/`, 023–042 |
+| `mdm` | `mdm_v2` | MDM: source readings, master entities, decisions, the approved policy | `edgar-warehouse mdm migrate --model clean --application-role …` | `edgar_warehouse/mdm/migrations/`, 023–042 |
 | `mdm` (same database) | `public` | **Legacy MDM**, 27 tables. Nothing enabled uses them. | `mdm migrate --model legacy` | the same folder, 001–022 |
 
 ## Every table
 
-### Clean MDM (`mdm_v2`)
+### MDM (`mdm_v2`)
 
 None of these tables, columns or functions has a database comment today (`COMMENT ON` appears in no migration), so `\d+` explains nothing. Slice 3 adds a comment to each, and may rename the unclear ones (see "Names" below).
 
@@ -97,7 +97,7 @@ These are created by migrations 001–022 and never dropped. Nothing enabled wri
 | `mdm_relationship_type`, `_instance`, `_property_def`, `_source_mapping`, `_source_priority`, `_coverage`, `_derivation_checkpoint` | Legacy relationships |
 | `mdm_graph_generation`, `mdm_graph_partition`, `mdm_publication_request`, `mdm_pipeline_lease` | Legacy graph publishing and leases |
 
-The legacy Bookkeeping store, with 10 tables in `edgar_warehouse/bookkeeping/models.py`, is retired (`bookkeeping/database.py` raises). Its models are still imported by 6 modules, including the Clean MDM `RunCoordinator` (finding 2).
+The legacy Bookkeeping store, with 10 tables in `edgar_warehouse/bookkeeping/models.py`, is retired (`bookkeeping/database.py` raises). Its models are still imported by 6 modules, including the MDM `RunCoordinator` (finding 2).
 
 ## How the databases hand work to each other
 
@@ -137,14 +137,14 @@ The operator rules on the names.
 
 | # | Severity | Finding | Evidence | Recommendation | Slice |
 |---|---|---|---|---|---|
-| 1 | High | Legacy MDM, 27 tables and 34 modules, lives in the same database and migration folder as Clean MDM, and nothing enabled uses it | `mdm/migrations/001–022`, `edgar_warehouse/mdm/*.py` | Delete the code, the migrations and the tables (local databases recreated; a hosted database only on the operator's word) | 2 |
-| 2 | High | The Clean MDM run coordinator needs the retired Bookkeeping models. Ticket 27 had to skip its start and reconcile. | `mdm/clean/bookkeeping.py` imports `PipelineRun`, `BookkeepingStore` | Move the root run to MDM's own `attempt_event`, or to `bookkeeping_clean`, then delete the legacy models and their 6 importers | 2 |
+| 1 | High | Legacy MDM, 27 tables and 34 modules, lives in the same database and migration folder as MDM, and nothing enabled uses it | `mdm/migrations/001–022`, `edgar_warehouse/mdm/*.py` | Delete the code, the migrations and the tables (local databases recreated; a hosted database only on the operator's word) | 2 |
+| 2 | High | The MDM run coordinator needs the retired Bookkeeping models. Ticket 27 had to skip its start and reconcile. | `mdm/clean/bookkeeping.py` imports `PipelineRun`, `BookkeepingStore` | Move the root run to MDM's own `attempt_event`, or to `bookkeeping_clean`, then delete the legacy models and their 6 importers | 2 |
 | 3 | High | No enabled command runs mastering. The Merge Stage is reached only by `bookkeeping/clean/mdm_capabilities.py`, tests and scripts. `mdm apply-decisions` is advertised but blocked, and has no handler. | `edgar_warehouse/cli.py main()`, `mdm/clean/cli.py handle()` | One path: Bookkeeping's `mdm` target through `rules run --target mdm`, named in a skill | 4 (ticket) |
 | 4 | Medium | `mdm counts` is enabled but reads legacy tables, so it fails on a Clean-only database | walk-through, 2026-09-30 | Rewrite it on `mdm_v2` (per-kind counts) or disable it | 2 |
 | 5 | Medium | The 16 MiB batch cap is below real GLEIF batches (1,000 records came to 43 MB) | ticket 27 | Keep the cap. Size GLEIF batches by bytes in the code that builds them. | ticket |
 | 6 | Medium | The Name Census refuses a capture with no former names, although the landing writer skips empty tables by design | ticket 27 | Treat a missing former-name member as none | ticket |
 | 7 | Medium | No table, column or function has a database comment. Several names do not say what they hold (`assertion`, `identity`, `projection`, `observation`, `assessment`). | migrations 023–042 | Comment every object. Rename on the operator's ruling (below). | 3 |
-| 8 | Medium | The schema is called `mdm_v2` although there is no other system to be version 2 of | all Clean MDM code | Re-baseline Clean migrations under schema `mdm` | 3 |
+| 8 | Medium | The schema is called `mdm_v2` although there is no other system to be version 2 of | all MDM code | Re-baseline Clean migrations under schema `mdm` | 3 |
 | 9 | Low | `rules migrate` does not migrate the Rules Database: `rules init` does. The other two stores use `migrate` for that. | `rules/cli.py` | Name the file↔database move something else (e.g. `rules load` / `rules unload`) | 4 |
 | 10 | Low | The rules skill cites `COMPANY_NAMED_FIELDS` (it does not exist) and `CHANGE_LEDGER_DATABASE_URL` (`rules activate` does not read it) | `skills/rules/SKILL.md` | Fix in the skill split | 4 |
 | 11 | Low | Migration history is kept differently: a schema comment with checksums (rules, bookkeeping, journal) versus a `migration` table (MDM) | the four `*/database.py` and `store.py` | Keep both for now. Note it in the comment standard. | — |

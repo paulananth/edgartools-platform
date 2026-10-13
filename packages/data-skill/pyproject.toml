@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "edgartools-data"
 version = "0.1.0"
-description = "The data skill, installed whole: rules creator, configured engine, workers, Bookkeeping, Change Journal and Clean MDM, with the skills themselves"
+description = "The data skill, installed whole: rules creator, configured engine, workers, Bookkeeping, Change Journal and MDM, with the skills themselves"
 requires-python = ">=3.12"
 # Mastering to-do 21. Bookkeeping and the Change Journal ship as their own
 # wheels and are dependencies; no file belongs to two wheels

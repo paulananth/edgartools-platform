@@ -89,7 +89,7 @@ at position -1/revision 0 over verified source-owned input manifests.
 
 The journal transaction is separate. Delivery reads back the exact receipt
 before the owner acknowledges intent. A lost acknowledgement retries the same
-key/envelope. No cross-database atomicity is claimed. Clean MDM retains its
+key/envelope. No cross-database atomicity is claimed. MDM retains its
 local publication outbox, immutable batches and commit evidence. Its adapter
 references the committed payload/hash instead of copying business attributes
 into the shared journal. Only batches declared by a fresh root manifest may

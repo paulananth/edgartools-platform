@@ -31,7 +31,7 @@ Provenance tags used below: [files] = profile of the captured files;
 - Reader exists: `edgar_warehouse/mdm/clean/gleif_source.py`. `record_evidence()`
   calls `normalize()`; `inspect_archive()` streams the JSON zip; driven by
   `native_consumption.prepare_native()` (run via `edgar-warehouse mdm mastering
-  --model clean --manifest ...` per docs/specs/clean-mdm/local-operations.md).
+  --model clean --manifest ...` per docs/specs/mdm/local-operations.md).
 - The reader reads its mapping with `rules_files.source("gleif")`, so the rules
   folder is fixed: `rules/sources/gleif/source.yaml`. That folder does NOT exist
   in this repo copy (only `rules/sources/sec.submissions.company/`). So
@@ -53,10 +53,10 @@ Provenance tags used below: [files] = profile of the captured files;
   - `gleif.level1.v1` is live in `rules/merge/kinds/company.yaml`
     (`defaults.sources` rank 2 after SEC; source of both SEC-to-GLEIF name rules).
   - Relationship and REPEX source codes are named nowhere in code or rules.
-    `docs/specs/clean-mdm/source-evidence.md` lists "proposed dataset codes"
+    `docs/specs/mdm/source-evidence.md` lists "proposed dataset codes"
     `gleif.lei`, `gleif.relationship`, `gleif.reporting_exception` (conflicts with
     the live `gleif.level1.v1` pattern). [docs]
-- Referenced but missing from this repo copy: `docs/specs/clean-mdm/native-gleif.md`,
+- Referenced but missing from this repo copy: `docs/specs/mdm/native-gleif.md`,
   every `.scratch/...` link (gleif-company-augmentation issues 13/15/16, the
   source-file catalog, ticket12 acceptance). [docs gap]
 
@@ -435,9 +435,9 @@ Unclear or wrong:
   middle or tail, or stratify.
 - Step 2 gives no fallback when a full JSON pass is too slow; a grep over the
   pretty-printed layout, cross-checked against the JSON pass, was 30x faster.
-- Research step: repo docs link `docs/specs/clean-mdm/native-gleif.md` and many
+- Research step: repo docs link `docs/specs/mdm/native-gleif.md` and many
   `.scratch/` files that are absent in this copy.
-  `docs/specs/clean-mdm/source-evidence.md` proposes codes (`gleif.lei`,
+  `docs/specs/mdm/source-evidence.md` proposes codes (`gleif.lei`,
   `gleif.relationship`, `gleif.reporting_exception`) that conflict with the live
   `gleif.level1.v1`. The skill does not say which wins (I took the live rules).
 - The skill does not separate the source's documentation from its data API

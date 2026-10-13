@@ -14,12 +14,12 @@ the user's plan, not an implementation ticket.
 
 ## Review assets
 
-- [Domain and relationship model](../../../docs/specs/clean-mdm/domain-model.md)
-- [Pipeline and source inventory](../../../docs/specs/clean-mdm/pipeline-inventory.md)
-- [Source evidence contract](../../../docs/specs/clean-mdm/source-evidence.md)
-- [Merge Stage proposal](../../../docs/specs/clean-mdm/merge-stage.md)
-- [Journal and recovery proposal](../../../docs/specs/clean-mdm/recovery.md)
-- [Acceptance and qualification plan](../../../docs/specs/clean-mdm/acceptance.md)
+- [Domain and relationship model](../../../docs/specs/mdm/domain-model.md)
+- [Pipeline and source inventory](../../../docs/specs/mdm/pipeline-inventory.md)
+- [Source evidence contract](../../../docs/specs/mdm/source-evidence.md)
+- [Merge Stage proposal](../../../docs/specs/mdm/merge-stage.md)
+- [Journal and recovery proposal](../../../docs/specs/mdm/recovery.md)
+- [Acceptance and qualification plan](../../../docs/specs/mdm/acceptance.md)
 
 ## Decision frontier after vendor research
 
@@ -199,7 +199,7 @@ it would not certify rule accuracy or production readiness.
 
 ## Later Company-specific amendments
 
-[Company interview Q1–Q13](../../../docs/specs/clean-mdm/company-policy.md),
+[Company interview Q1–Q13](../../../docs/specs/mdm/company-policy.md),
 accepted 2026-09-19, supersede conflicting steward-only Company consolidation,
 routine manual-review and blanket deferred-match completion recommendations.
 The original source-binding precision gate remains; automatic consolidation

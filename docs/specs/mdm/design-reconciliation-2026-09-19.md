@@ -1,4 +1,4 @@
-# Clean MDM design reconciliation with Claude's handoff
+# MDM design reconciliation with Claude's handoff
 
 Date: 2026-09-19. Reviewed source commit `b87fc05a`, after rebasing the clean
 `codex/sec-gleif-company` worktree from merged core `e2807e52`. This is a
@@ -6,14 +6,14 @@ pre-implementation review. No runtime code, database schema or data changed.
 
 ## Pulled and reviewed
 
-- PR #657: Clean MDM core, Company preparation and CI fixes, merged `e2807e52`.
+- PR #657: MDM core, Company preparation and CI fixes, merged `e2807e52`.
   Its final GitHub checks passed, including 83 PostgreSQL integration tests.
 - PR #658: accepted [Agent Open Query Surface ADR 0014](../../adr/0014-agent-open-query-surface.md)
   plus research and the standalone staging proposal, merged `cee23b11`.
 - PR #659: [Claude's latest handoff](../../../.scratch/handover/2026-09-19-claude-to-codex-mdm-premerge-proposal.md),
   merged `b87fc05a`. Its sentence saying the handoff was not yet merged is now
   historical. The proposal itself remains a recommendation, not an accepted
-  Clean MDM table design.
+  MDM table design.
 - [Company Q1–Q13](company-policy.md): current user answers govern scope,
   automatic linking/consolidation, exception handling and milestone completion.
 
@@ -83,8 +83,8 @@ ADR 0014 locks a separate Agent Query Surface: MCP, raw SQL over PostgreSQL and
 Snowflake, raw JSON, shared service authentication, a dedicated database-enforced
 read-only role, and separate resource limits/pools. It declines attached
 freshness/point-in-time result metadata for that surface. It does not remove
-Clean MDM's stored provenance, journals, generation identity or required
-publication receipts, and does not mandate changing Clean MDM's versioned API.
+MDM's stored provenance, journals, generation identity or required
+publication receipts, and does not mandate changing MDM's versioned API.
 
 The ADR's “v1/v2 stay” refers to the Snowflake Decision Contract and Mongo
 Decision Projection. Those are not the legacy/v2 MDM API versions. Preserve
@@ -93,7 +93,7 @@ Company workstream; future catalog/grants must describe the actual clean schema
 and deny master-write capabilities, including security-definer functions.
 
 Claude's DDL inventory describes the legacy `public` tables and is a dated
-input, not a complete Clean MDM catalog. It must not be used to conclude that
+input, not a complete MDM catalog. It must not be used to conclude that
 `mdm_v2` is absent. The persistent local clean schema is distinct from the
 legacy source/population counts; no schema deployment is inferred from a
 merged migration file. A read-only check during this review found PostgreSQL

@@ -30,7 +30,7 @@ tests each rule actually performs:
 - **Company/GLEIF** — `.scratch/gleif-company-augmentation/spec.md`
   (revalidated Adjudicated Seed Links, deterministic crosswalks, one
   active binding per side, name match never sufficient).
-- **Survivorship** — `docs/specs/clean-mdm/merge-stage.md:125-160` (the
+- **Survivorship** — `docs/specs/mdm/merge-stage.md:125-160` (the
   five-step ranking, field groups, freshness limits, eligibility) and the
   implemented `edgar_warehouse/mdm/clean/survivorship.py`.
 - **Legacy, as evidence of need only** — the normalization rules and

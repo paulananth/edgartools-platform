@@ -131,14 +131,14 @@ company 2, step 9 deferred (person) 2, step 11 deferred 31. [profile + code]
 - CONTEXT.md: Company Identity, Probable Kind, Source Stage, Name Census,
   Dataset Contract, Identifier Contract, Mastering Policy. A rename stays one
   Company; the old name is an alias. [docs]
-- docs/specs/clean-mdm/source-evidence.md: source_code is a dataset; missing
+- docs/specs/mdm/source-evidence.md: source_code is a dataset; missing
   effective time stays explicit; a limit-bound sample never proves absence;
   transport paths stay out of business hashes. [docs]
-- docs/specs/clean-mdm/company-policy.md: confidence bands (2026-09-24) —
+- docs/specs/mdm/company-policy.md: confidence bands (2026-09-24) —
   50–95% "waits in the Stage with no kind or link. No Steward"; Q8 "keep
   different concepts in separate fields"; Q14 identifier binding needs an
   Identifier Contract. [docs]
-- docs/specs/clean-mdm/local-operations.md "Prepare a native Company sample":
+- docs/specs/mdm/local-operations.md "Prepare a native Company sample":
   the bundle, its pinned members, and "each record carries its postcode,
   country and census entry in provenance.matching". [docs]
 - KINDS (evidence.py): company, person, security, fund_structure, branch,

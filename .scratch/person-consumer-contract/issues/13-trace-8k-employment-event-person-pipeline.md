@@ -34,7 +34,7 @@ what could not be determined from code. Cover, in order:
    `graph.py`), API routers, Agent Query Surface contracts that read the
    person or its edges.
 6. **Clean MDM's stated target** for this source — the exact row in
-   `docs/specs/clean-mdm/pipeline-inventory.md` and anything in
+   `docs/specs/mdm/pipeline-inventory.md` and anything in
    `domain-model.md` (read from `origin/codex/clean-mdm-integration` with
    `git show`; never edit).
 

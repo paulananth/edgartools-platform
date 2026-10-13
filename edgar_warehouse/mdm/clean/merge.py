@@ -1,4 +1,4 @@
-"""One bounded, atomic Merge Stage for all Clean MDM writers.
+"""One bounded, atomic Merge Stage for all MDM writers.
 
 The retained decision graph supplies identity; source policy supplies fields.
 Identifier-only automatic binding runs through the same assessment (ticket

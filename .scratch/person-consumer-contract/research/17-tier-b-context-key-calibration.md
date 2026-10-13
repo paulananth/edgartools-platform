@@ -67,7 +67,7 @@ Method definition read at the source: Clean MDM's accepted Q11 — "at least 99.
 demonstrated by a one-sided 95% lower confidence bound on representative, independently labeled
 held-out automatic-binding decisions for each enabled entity kind and rule family … Also require
 zero hard-veto violations in adversarial fixtures; measure candidate recall and review volume"
-(`docs/specs/clean-mdm/merge-stage.md:53-58`, proposed at
+(`docs/specs/mdm/merge-stage.md:53-58`, proposed at
 `.scratch/clean-mdm/issues/01-set-merge-stage-policy.md:135-142`); its named validation cases are
 "homonyms, reused identifiers" and transitive bridges (`merge-stage.md:74`). The Person-kind bar is
 **99%**, an operator amendment ([ticket 02 Answer](../issues/02-decide-what-binds-a-person.md) §4,

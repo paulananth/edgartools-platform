@@ -36,8 +36,8 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   `merge.py:303`). Nothing binds automatically until predicates are
   implemented and tested. That refusal is the safety net; it comes out only
   with its replacement in place.
-- **Accepted policy** (do not reopen): [Company Q1-Q14](../../docs/specs/clean-mdm/company-policy.md),
-  the [completion gate](../../docs/specs/clean-mdm/company-completion.md), and
+- **Accepted policy** (do not reopen): [Company Q1-Q14](../../docs/specs/mdm/company-policy.md),
+  the [completion gate](../../docs/specs/mdm/company-completion.md), and
   the proposed [policy language](../../docs/specs/mdm/policy-language.md).
   Q14 lets an identifier-only binding activate through a verified Identifier
   Contract; fuzzy binding and published-ID consolidation keep their own
@@ -94,7 +94,7 @@ exact digest.** This map carries execution, not only decisions (see Notes).
   falls from 99.9% to 95% for these two decisions only; publishing-ID
   consolidation keeps 99.9%. No Steward vets public data routinely: testing
   catches a weak rule. Recorded in
-  [the Company policy](../../docs/specs/clean-mdm/company-policy.md).
+  [the Company policy](../../docs/specs/mdm/company-policy.md).
 
 - **One Company, one master record, whatever the sources** (operator,
   2026-09-24). Mastering exists because no source carries everything: SEC

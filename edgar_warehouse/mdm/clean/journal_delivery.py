@@ -1,4 +1,4 @@
-"""Publish Clean MDM's committed local intent without copying business payloads."""
+"""Publish MDM's committed local intent without copying business payloads."""
 
 from __future__ import annotations
 

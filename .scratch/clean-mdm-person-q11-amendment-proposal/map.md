@@ -20,7 +20,7 @@ own files.
   2026-09-18 — chose 99% for Person to minimize manual stewardship, and
   asked that it go to Codex as a proposal.
 - **Ownership boundary, deliberately kept**: `.scratch/clean-mdm/`,
-  `docs/specs/clean-mdm/`, `edgar_warehouse/mdm/clean/` are Codex/Grok-
+  `docs/specs/mdm/`, `edgar_warehouse/mdm/clean/` are Codex/Grok-
   owned; read-only here. Same pattern as the pre-merge staging and
   checkpoint-key proposals.
 - Read against `origin/codex/clean-mdm-integration` `merge-stage.md` lines

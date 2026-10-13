@@ -829,7 +829,7 @@ def test_stages_run_in_provision_deploy_early_data_late_data_order(
     provision{TF state, Neo4j, passive infra, access roles, native-pull
     foundation, Postgres/graph prereqs} -> deploy{ECR publish, ECS task defs,
     MDM export targets, dbt gold, loader role ownership, Streamlit dashboard}
-    -> Clean MDM connectivity and migration. Source data stages remain
+    -> MDM connectivity and migration. Source data stages remain
     disabled until their Rules/feed baseline qualifies.
     """
     assert _plan_stage_titles(tmp_path) == PROVISION_DEPLOY_DATA_STAGE_ORDER

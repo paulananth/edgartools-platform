@@ -48,7 +48,7 @@ PIPELINE = {
 
 @pytest.fixture
 def mdm(databases):
-    """A Clean MDM database in the same server, migrated and registered."""
+    """An MDM database in the same server, migrated and registered."""
     name = f"mdm_worker_{uuid4().hex[:8]}"
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql(f"CREATE DATABASE {name}")

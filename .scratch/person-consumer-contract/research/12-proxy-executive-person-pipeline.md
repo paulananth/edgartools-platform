@@ -33,8 +33,8 @@ installed `edgartools==5.30.0` wheel (`uv.lock` line 655-656; pin
   `edgar_warehouse/infrastructure/run_manifest_builder.py:29`.
 - Tests: `tests/unit/test_fundamentals_modules.py`, `tests/unit/test_fundamentals_landing_passthrough.py`,
   `tests/mdm/test_pipeline_relationships.py:864-1000`, `tests/mdm/test_relationship_temporal_contract.py:62-178`.
-- Clean MDM target (never checked out): `git show origin/codex/clean-mdm-integration:docs/specs/clean-mdm/pipeline-inventory.md`
-  (row 26) and `...:docs/specs/clean-mdm/domain-model.md` (lines 12, 25-28, 68, 87).
+- Clean MDM target (never checked out): `git show origin/codex/clean-mdm-integration:docs/specs/mdm/pipeline-inventory.md`
+  (row 26) and `...:docs/specs/mdm/domain-model.md` (lines 12, 25-28, 68, 87).
 
 ## Findings
 
@@ -246,7 +246,7 @@ through a role" (line 12); "Company and Person are the first supported
 identities" (line 25); `EMPLOYED_BY / insider association | Person to Company | Source-reported office/role and valid dates; holdings do not imply employment`
 (line 68); "Legacy IDs become an explicitly verified, versioned crosswalk"
 (line 87). The same two files also exist on this branch under
-`docs/specs/clean-mdm/` (untouched).
+`docs/specs/mdm/` (untouched).
 
 ## What this settles for tickets 02/03/05/06/10
 

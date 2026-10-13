@@ -34,8 +34,8 @@ target, read with `git show origin/codex/clean-mdm-integration:<path>`.
 - Tests: `tests/unit/test_item_502_parser.py` (401 lines, whole),
   `tests/unit/test_item_502_branch_a_parse.py`, `tests/unit/test_item_502_spacy_runtime_deps.py`,
   `tests/mdm/test_pipeline_relationships.py` (867-1060, 2974-3060).
-- Clean MDM target: `docs/specs/clean-mdm/pipeline-inventory.md` (rows 23, 26)
-  and `docs/specs/clean-mdm/domain-model.md` (12, 25-30, 68, 84-95) on
+- Clean MDM target: `docs/specs/mdm/pipeline-inventory.md` (rows 23, 26)
+  and `docs/specs/mdm/domain-model.md` (12, 25-30, 68, 84-95) on
   `origin/codex/clean-mdm-integration`, never checked out or edited.
 
 ## Findings

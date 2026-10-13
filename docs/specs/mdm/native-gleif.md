@@ -5,7 +5,7 @@
 > publication is attested by `gleif_publication.attest_publication`. The page stays as
 > the record of what was built; the code last ran at commit `68cc1240`.
 
-Ticket 12 adds a native evidence path to the existing Clean MDM commands. It does
+Ticket 12 adds a native evidence path to the existing MDM commands. It does
 not activate Company matching rules or implement the Source Contract runner.
 The September 11 captured source is **JSON ZIP**. XML ZIP is an explicit alternative
 input format; callers must pin the actual format, never infer it from a filename.

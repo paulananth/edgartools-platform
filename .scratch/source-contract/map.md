@@ -61,7 +61,7 @@ no edit to any Clean MDM file.
   with a recommendation), `/domain-modeling`, `/research` (primary sources,
   `path:line`), `/wait-what` (ASD-STE100 re-pitch).
 - Standing rules: never commit to `main`; one worktree per topic; Codex/Grok
-  files (`edgar_warehouse/mdm/clean/`, `docs/specs/clean-mdm/`,
+  files (`edgar_warehouse/mdm/clean/`, `docs/specs/mdm/`,
   `.scratch/clean-mdm/`) are read-only — gaps go as proposals under
   `.scratch/handover/`; zero SEC requests (bronze only); Snowflake will not
   be restored; nothing is deployed until written and tested locally.

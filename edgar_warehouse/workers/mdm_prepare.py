@@ -1,4 +1,4 @@
-"""mdm.prepare: a configured reading into a Clean MDM input manifest (mastering to-do 21).
+"""mdm.prepare: a configured reading into an MDM input manifest (mastering to-do 21).
 
 The unit's input is a `source.read` output (normally `from` the run's read
 step); its keys say what to take from it, so nothing feed-specific runs:
@@ -212,7 +212,7 @@ def _effective_at(rows: list[dict], column: str, as_of: str) -> str:
 
     Compared as written: one file states its time one way. A time after the
     manifest's `as_of` is refused, since MDM would read those records as not
-    yet in effect and leave them out silently. (The same test as Clean MDM's
+    yet in effect and leave them out silently. (The same test as MDM's
     `evidence.instant`, kept here so the worker's pinned runtime stays small.)
     """
     if len({json.dumps(row.get(column)) for row in rows}) != 1:

@@ -4,7 +4,7 @@ Date: 2026-09-19; Q14 accepted 2026-09-20. The user accepted Company Q1–Q13,
 one question at a time, after PR #657 merged, then accepted deterministic
 identifier binding in Q14. These decisions supersede conflicting earlier Company
 recommendations; they are requirements, not implementation or calibration proof.
-The original Clean MDM Q1–Q16 numbering is a different interview.
+The original MDM Q1–Q16 numbering is a different interview.
 
 | Company question | Accepted decision |
 | --- | --- |

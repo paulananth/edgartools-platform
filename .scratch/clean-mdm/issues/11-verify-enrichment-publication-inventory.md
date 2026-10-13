@@ -42,7 +42,7 @@ matching truth.
 
 ## Implementation and verification — 2026-09-20
 
-Implemented the [source-only verifier contract](../../../docs/specs/clean-mdm/source-publications.md)
+Implemented the [source-only verifier contract](../../../docs/specs/mdm/source-publications.md)
 without new tables, roles or migrations. It verifies exact captured inventories,
 raw bytes, interpretation hashes/versions, source coverage and predecessor chains;
 recovery proposes the smallest proven delta route or a full reconciliation for

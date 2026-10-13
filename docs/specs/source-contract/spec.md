@@ -1,7 +1,7 @@
 # Source Contract
 
 Status: **proposed**, 2026-09-21. Planning only: this document implies no
-code, migration or edit to any Clean MDM file. Written from the resolved
+code, migration or edit to any MDM file. Written from the resolved
 tickets of the [Source Contract](../../../.scratch/source-contract/map.md)
 wayfinder map, which hold the reasons. This document holds the rules.
 Codex builds the real engine from it. The throwaway prototype that proved it
@@ -14,12 +14,12 @@ report it.
 ## 1. Purpose
 
 Today a new source means a new Python parser, a silver table written by hand
-in three places, and a hand-written Clean MDM adapter. A **Source Contract**
+in three places, and a hand-written MDM adapter. A **Source Contract**
 replaces all of that with **one file per source**. The file declares:
 
 1. how the source's Bronze Artifacts are read (`read`);
 2. the silver table the source produces (`silver`);
-3. how silver rows map into MDM (`dataset`, Clean MDM's own Dataset Contract);
+3. how silver rows map into MDM (`dataset`, MDM's own Dataset Contract);
 4. the tests and data checks that prove it (`tests`, `checks`, `gate`).
 
 Adding a source becomes a file, not a module. Operator's framing
@@ -28,7 +28,7 @@ using configuration input file"*.
 
 ## 2. Scope
 
-**In:** everything from an existing Bronze Artifact to a Clean MDM source
+**In:** everything from an existing Bronze Artifact to an MDM source
 publication, and the tests that prove it.
 
 **Out:**
@@ -58,7 +58,7 @@ A contract may use no other domain term (acceptance check 7).
 ### 4.1 The Rules Database is the master
 
 - The **Rules Database** is a Postgres database of its own, separate from
-  Clean MDM's `mdm`. It is local first. It holds every version of every
+  MDM's `mdm`. It is local first. It holds every version of every
   Source Contract and Mastering Policy, with its state, its proof and its
   approval (ticket 06 Q1–Q2).
 - YAML is the authoring and export format. The database stores each version
@@ -67,7 +67,7 @@ A contract may use no other domain term (acceptance check 7).
   their digests. **Proposed** (not decided by a ticket): the runner refuses
   a version whose recorded digests do not match the files.
 - **Production never reads the Rules Database.** When a version becomes
-  active, the Dataset Contract is registered into Clean MDM through
+  active, the Dataset Contract is registered into MDM through
   `register_dataset`, and a Mastering Policy through `register_policy`.
   Production merges read only `mdm`, pinned by digest.
 - **Proving Run merges happen beside the Rules Database** (ticket 06 Q3–Q4),
@@ -82,7 +82,7 @@ A contract may use no other domain term (acceptance check 7).
 |---|---|---|
 | draft | `source save` stores a validated new version | agent |
 | proven | a Proving Run passes every named case, every check and the Batch Gate (§16) | agent |
-| active | the version is registered into Clean MDM (§4.1) | agent, **or** a person — see §4.3 |
+| active | the version is registered into MDM (§4.1) | agent, **or** a person — see §4.3 |
 | retired | a newer version of the same source becomes active; kept for replay (ticket 06 Q3) | the activation that replaces it |
 
 A failed Proving Run leaves the version in draft. The failed run is kept as
@@ -172,7 +172,7 @@ setting, and is not part of any contract.
 
 | Key | Required | Meaning |
 |---|---|---|
-| `source` | yes | the source code: lowercase dotted, e.g. `gleif.level1`. Becomes Clean MDM's `source_code` |
+| `source` | yes | the source code: lowercase dotted, e.g. `gleif.level1`. Becomes MDM's `source_code` |
 | `version` | yes | the author's version label (a prototype convention). The digest, not the label, identifies a version |
 | `bronze` | yes | `{ family: <Artifact Family> }`: what `source run` reads |
 | `requires` | if `custom.py` imports anything outside the standard library | distribution names, e.g. `[edgartools]` |
@@ -522,11 +522,11 @@ silver:
 ```yaml
 dataset:
   table: <the silver table that feeds MDM>
-  contract: <Clean MDM Dataset Contract, including its adapter block, unchanged>
+  contract: <MDM Dataset Contract, including its adapter block, unchanged>
 ```
 
-The `contract` is Clean MDM's own Dataset Contract. Its `adapter` block is
-read by Clean MDM's `normalize`
+The `contract` is MDM's own Dataset Contract. Its `adapter` block is
+read by MDM's `normalize`
 (`edgar_warehouse/mdm/clean/adapters.py:49-158`), one silver row to one
 assertion. The prototype carried Codex's `publication_v1/dataset.json` into
 a contract verbatim (JSON is YAML 1.2), and `normalize` mapped it as
@@ -543,11 +543,11 @@ rejection, is in
 | `version` | yes | adapter version. It enters every `assertion_id` (§23) |
 | `kind` \| `kind_field` + `kind_values` | one of them | a fixed kind, or an exact, case-sensitive lookup with no fallback |
 | `record_key` (+ `record_key_format`) | yes | list of silver columns. One part gives the plain value; several give a JSON array string |
-| `identifiers` (+ `identifier_formats`) | no | namespace → column; `identifier_formats` is namespace → format. **A namespace is not a format.** Clean MDM's SEC Company source uses `identifiers: { cik: cik }` with `identifier_formats: { cik: sec_cik }` (`rules/sources/sec.submissions.company/source.yaml`, `adapter.identifiers`). Writing `sec_cik` as the namespace silently skips formatting (ticket 09). Name a namespace after the issuing register, lowercase (`cik`, `lei`, `crd`); where the Mastering Policy has an Identifier Contract for it, use that contract's namespace. Only `sec_cik` exists as a format (gap G3); an identifier with no format is kept as written |
+| `identifiers` (+ `identifier_formats`) | no | namespace → column; `identifier_formats` is namespace → format. **A namespace is not a format.** MDM's SEC Company source uses `identifiers: { cik: cik }` with `identifier_formats: { cik: sec_cik }` (`rules/sources/sec.submissions.company/source.yaml`, `adapter.identifiers`). Writing `sec_cik` as the namespace silently skips formatting (ticket 09). Name a namespace after the issuing register, lowercase (`cik`, `lei`, `crd`); where the Mastering Policy has an Identifier Contract for it, use that contract's namespace. Only `sec_cik` exists as a format (gap G3); an identifier with no format is kept as written |
 | `fields` | no | MDM field → column. A name not in the Mastering Policy is evidence only |
 | `field_shape` | no | one scalar at the top of the adapter: `field_shape: nullable_text` (every field must be text or null). Any other value is silently ignored |
 | `profiles` | no | Governed Role Profiles: `role` (literal), `authority` (literal), `registration` (column; null skips the profile), `valid_from` (column, required, time-zone aware), optional `jurisdiction`, `valid_to`, `fields` |
-| `relationships` | no | reported edges: `type` (literal, a Clean MDM relationship type), `target_key` (columns), `target_source` (literal source code), `valid_from` (column, required, time-zone aware), optional `scope` (literal), `valid_to`, `properties` |
+| `relationships` | no | reported edges: `type` (literal, an MDM relationship type), `target_key` (columns), `target_source` (literal source code), `valid_from` (column, required, time-zone aware), optional `scope` (literal), `valid_to`, `properties` |
 | `source_record_provenance` | no | **set it to `true`** (gap X3): without it, a re-ordered file mints new assertions |
 | `provenance` | no | source values copied into provenance |
 | `retain_deferred` | no | unsupported records become deferred evidence instead of failing the batch |
@@ -561,7 +561,7 @@ validator checks it. Literal keys (`role`, `authority`, `type`,
 - A path through a list gives `null` with no error. So each row of
   `dataset.table` must already be **one assertion**; `read` does the
   fan-out.
-- **Within one publication, a record key may appear only once.** Clean MDM
+- **Within one publication, a record key may appear only once.** MDM
   stores one assertion per `(source_code, record_key, publication_key)`
   (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:50`). Round 3 of the
   trial keyed Form ADV silver by `filing_id` but the adapter by `crd`, and one
@@ -611,13 +611,13 @@ but free text. Until Codex fixes closed value sets (research 01 §3,
 | Part | Write |
 |---|---|
 | `provider` | the authority's short name: `SEC`, `GLEIF`, `IAPD`, `PCAOB` |
-| `family` | the Clean MDM source-registry family the artifacts come from (for SEC submissions, `submissions`). It must match the registry, so it is checked at registration. A provider with no registry family yet needs one registered first: that is part of onboarding the Artifact Family, done outside the source folder, like `families.local.yaml` |
+| `family` | the MDM source-registry family the artifacts come from (for SEC submissions, `submissions`). It must match the registry, so it is checked at registration. A provider with no registry family yet needs one registered first: that is part of onboarding the Artifact Family, done outside the source folder, like `families.local.yaml` |
 | `schema_version` | `silver-<dataset table>-v<N>` |
 | `record_key` | the adapter's `record_key` in words, e.g. `zero-padded 10-digit CIK` |
 | `publication_key` | what identifies one publication, e.g. `capture run plus artifact sha256` |
 | `effective_time` | `unknown` or `publication`. With `unknown`, a field can win only where the Mastering Policy also sets `allow_unknown_effective` for it — part of the same policy change that ranks the source (§13.2a). A source the policy does not rank needs nothing here |
 | `semantics` | `patch` |
-| `completeness` | optional (not required by Clean MDM, not read by code): `bounded_sample`, `full_baseline` or `delta` |
+| `completeness` | optional (not required by MDM, not read by code): `bounded_sample`, `full_baseline` or `delta` |
 
 Never author `registry_evidence`: `register_dataset` adds it.
 
@@ -696,7 +696,7 @@ tests:
         <name>: { fixture: fixtures/<file>, record: <record key> }
     expect:
       silver: { <table>: [ { <column>: <value>, … }, … ] }    # rows in order; only listed columns compared; row count exact
-      mdm:    [ { kind, identifiers: {…}, fields: {…}, evidence_only: [<column>, …] }, … ]   # Clean MDM assertions, in row order
+      mdm:    [ { kind, identifiers: {…}, fields: {…}, evidence_only: [<column>, …] }, … ]   # MDM assertions, in row order
       merge:
         - { record: <key>, outcome: bound, to: <name> }
         - { record: <key>, outcome: binding_required }
@@ -837,7 +837,7 @@ never reads 0 as proven.
   `(artifact sha256, contract digest)`, which keys idempotency on the durable
   artifact.
 - It parses into silver with the same engine code as `source prove`, and
-  publishes the rows to Clean MDM as a pinned source publication. The
+  publishes the rows to MDM as a pinned source publication. The
   Merge Stage then applies the active Mastering Policy.
 - `normalize` needs `publication_key`, `revision`, `effective_at`,
   `artifact_sha256` and `member` from the publication, not from the row
@@ -1004,7 +1004,7 @@ gate:
 
 The lifecycle in §4.2 **works only for the first version of each source**
 today:
-- Clean MDM stores one Dataset Contract body per `source_code`, forever
+- MDM stores one Dataset Contract body per `source_code`, forever
   (`edgar_warehouse/mdm/clean/store.py:217-224`: "Dataset contract is
   immutable; register a new versioned contract").
 - `adapter.version` enters every `assertion_id`, and the store is unique on
@@ -1019,7 +1019,7 @@ This is the map's open **Change and replay** item. It needs a Codex decision
 (handover item 4) before any source's second version can go live. First
 versions are unaffected.
 
-## 24. Dependencies on Clean MDM
+## 24. Dependencies on MDM
 
 These are sent to Codex as one note:
 [`.scratch/handover/2026-09-21-claude-to-codex-source-contract.md`](../../../.scratch/handover/2026-09-21-claude-to-codex-source-contract.md).

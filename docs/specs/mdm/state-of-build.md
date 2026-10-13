@@ -1,4 +1,4 @@
-# Clean MDM state of the build
+# MDM state of the build
 
 Checkpoint: 2026-09-19. This is a local development handoff, not a release or
 cutover approval. The shared core and first native Company preparation path
@@ -62,7 +62,7 @@ Rebased onto `origin/main` `dc55bf1d`; Company scope remains in
 records the disposition of Claude’s proposals and differences from the newer
 accepted Company policy. Assessment work is preserved as `f3f924a9`.
 Migration 029 adds family-scoped cursors and existing-manifest support; see
-[family checkpoints](family-checkpoints.md). All 47 current Clean MDM PostgreSQL
+[family checkpoints](family-checkpoints.md). All 47 current MDM PostgreSQL
 and native Company checks passed without skips; [evidence](../../../.scratch/clean-mdm/company-family-checkpoint-acceptance.json)
 pins the tested files. The next prerequisite is
 [ticket 11](../../../.scratch/clean-mdm/issues/11-verify-enrichment-publication-inventory.md),
@@ -167,7 +167,7 @@ The user supplied local URLs for databases `mdm`, `bookkeeping` and
 `change_ledger` on `127.0.0.1:5432`. Keep credentials in environment variables,
 not new committed artifacts. Grok also provisioned the local `silver` database.
 The latest read-only check found PostgreSQL 16.15, 13 legacy MDM entities,
-3 silver companies, zero Clean MDM batches/datasets and zero acquisition
+3 silver companies, zero MDM batches/datasets and zero acquisition
 registry versions. Migration 027 is **tested in disposable databases but not
 installed in the persistent local MDM**. Migrations 023/025/026 and mirror 024
 were previously installed there; keep their checksums unchanged.
@@ -218,7 +218,7 @@ increment; no structural GoF refactor was justified. See
 [review record](integration-review.md). This does not retroactively certify
 the entire legacy platform or all unimplemented acceptance gates.
 
-Ruff passes for the Clean MDM package and changed acceptance tests. A broader
+Ruff passes for the MDM package and changed acceptance tests. A broader
 check also reported existing lint violations in legacy `mdm/cli.py`; this
 checkpoint does not claim repository-wide lint or test success.
 

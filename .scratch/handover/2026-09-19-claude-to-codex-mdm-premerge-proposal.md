@@ -5,7 +5,7 @@
 A design proposal for Clean MDM's Merge Stage is ready for your review: a
 **persisted, reviewable pre-merge staging table**, sitting between identity
 matching and `MergeStage.apply()`'s atomic commit. Nothing under
-`.scratch/clean-mdm/`, `docs/specs/clean-mdm/`, or
+`.scratch/clean-mdm/`, `docs/specs/mdm/`, or
 `edgar_warehouse/mdm/clean/` was touched to produce it — it's a standalone
 recommendation on its own map, for you to accept, adapt, or decline.
 

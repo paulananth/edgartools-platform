@@ -22,7 +22,7 @@ Clean MDM's own files.
   add a "pre-merge stage after de-duplication" to Clean MDM's plan if it
   doesn't already have one.
 - **Ownership boundary, deliberately kept**: `.scratch/clean-mdm/` and
-  `docs/specs/clean-mdm/` are Codex/Grok-owned, active work (open PR #657,
+  `docs/specs/mdm/` are Codex/Grok-owned, active work (open PR #657,
   134 passing tests, an accepted Q1-Q16 policy interview from 2026-09-18).
   Per CLAUDE.md's "Treat current Codex or Grok work as protected unless the
   user explicitly hands it off" and Clean MDM's own map's "do not reopen
@@ -30,7 +30,7 @@ Clean MDM's own files.
   keep this a proposal on a separate map rather than a direct edit to their
   files. Read-only reference only.
 - Checked live against `origin/codex/clean-mdm-integration` (base
-  `e14eb74b` per `docs/specs/clean-mdm/state-of-build.md`).
+  `e14eb74b` per `docs/specs/mdm/state-of-build.md`).
 - What Clean MDM already has, confirmed by reading `merge.py`/`merge-stage.md`
   directly (not inferred): the **Merge Stage is already more rigorous** than
   legacy's pattern (steward-owned field authority order, hard-veto identifier
@@ -79,5 +79,5 @@ Clean MDM's own files.
 - Any actual implementation of the staging table or a change to
   `MergeStage.apply()`'s transaction boundary — that's Clean MDM's decision
   surface, not this map's, per the ownership boundary above.
-- Any edit to `.scratch/clean-mdm/` or `docs/specs/clean-mdm/` — reference
+- Any edit to `.scratch/clean-mdm/` or `docs/specs/mdm/` — reference
   only.

@@ -128,4 +128,4 @@ immutable assertions and journal events. Govern mutable projections separately
 and limit writes to reviewed merge/publication operations. Verify effective
 permissions including inherited roles, not only direct grants. Existing
 acquisition role fencing and Snowflake `snowflake_write` inheritance lessons
-apply. Never weaken the existing acquisition permissions to enable Clean MDM.
+apply. Never weaken the existing acquisition permissions to enable MDM.

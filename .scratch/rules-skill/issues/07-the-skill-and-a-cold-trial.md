@@ -52,7 +52,7 @@ Skill first (operator, 2026-09-26, answered between 16:15 and 16:21 ET): "skill 
     Microsoft, Amazon, Shell, ASML and 35 random ones, seed 20260926) and
     both ticker lists (2026-09-02);
   - GLEIF: the three 2026-09-11 16:00 UTC Golden Copy zips; also removed
-    `docs/specs/clean-mdm/native-gleif.md` and `docs/specs/source-contract/`,
+    `docs/specs/mdm/native-gleif.md` and `docs/specs/source-contract/`,
     which restate its mapping.
 
   A leak check found the draft reference page used GLEIF's real values as

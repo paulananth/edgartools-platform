@@ -409,7 +409,7 @@ bash infra/scripts/publish-warehouse-image.sh \
 ```
 
 Running feeds is the Bookkeeping skill's **run** mode (`skills/bookkeeping/`), and
-mastering is Clean MDM (`docs/specs/clean-mdm/local-operations.md`).
+mastering is MDM (`docs/specs/mdm/local-operations.md`).
 
 ---
 

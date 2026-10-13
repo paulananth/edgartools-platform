@@ -257,7 +257,7 @@ if result.returncode != 0:
 conn = connect(database)
 conn.autocommit = True
 cur = conn.cursor()
-# Clean MDM's `mdm migrate` keeps snowflake_admin as the owner and grants
+# MDM's `mdm migrate` keeps snowflake_admin as the owner and grants
 # `application` only what the runtime needs (SELECT, and EXECUTE on the save
 # functions). Ownership must stay with snowflake_admin: an owner bypasses
 # those grants. `application` needs only to connect.

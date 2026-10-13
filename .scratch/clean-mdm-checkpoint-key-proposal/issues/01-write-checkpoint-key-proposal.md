@@ -66,11 +66,11 @@ plus committed publication and continuity proof for exactly this reason.
 
 ### Evidence this is your direction already, not a change of direction
 
-1. `docs/specs/clean-mdm/recovery.md` line 20 — your own owner table:
+1. `docs/specs/mdm/recovery.md` line 20 — your own owner table:
    *"Consumer Checkpoint | Committed bounded progress for one consumer,
    contract/policy version, **family/epoch and source position**."* The
    spec already describes a family-bearing checkpoint; the 023 DDL lags it.
-2. `docs/specs/clean-mdm/source-evidence.md`, "GLEIF and mapping extension
+2. `docs/specs/mdm/source-evidence.md`, "GLEIF and mapping extension
    boundary": *"Each of the six mappings has its own publication, cadence,
    checkpoint and recovery. A consumer may require several families, and
    advances only when all of its prerequisites are verified."* Same

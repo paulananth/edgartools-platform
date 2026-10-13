@@ -18,7 +18,7 @@ This review changes no runtime code and activates no rule.
    commit, register reading 2 and retry the same manifest/run: Bookkeeping
    rejects it with `Root run scope changed`. PostgreSQL 16 reproduction
    confirmed this. The original handover requires the exact immutable mapping
-   on replay; `docs/specs/clean-mdm/native-gleif.md:98–101` freezes contract
+   on replay; `docs/specs/mdm/native-gleif.md:98–101` freezes contract
    digests in the run. Persist mapping versions when starting and resolve
    those retained versions when resuming. The ordinary file path
    (`cli.py:118–124`) also reads latest, but does not freeze mappings in its
@@ -45,7 +45,7 @@ This review changes no runtime code and activates no rule.
    `profile_fields` but records an enclosing-kind digest that excludes those
    rules. Reversing adviser-name source priority changes the winner and leaves
    the digest unchanged. This violates the selected identity/profile field
-   provenance contract (`docs/specs/clean-mdm/source-evidence.md:27`). Claude
+   provenance contract (`docs/specs/mdm/source-evidence.md:27`). Claude
    disclosed this, but it is a current provenance regression. Retaining the
    full policy digest for profile values is a small interim repair; a
    versioned role-authority digest is the longer-term option.

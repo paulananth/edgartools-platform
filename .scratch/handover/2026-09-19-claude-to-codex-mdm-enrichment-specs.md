@@ -19,7 +19,7 @@ Read, in order:
    [per-family checkpoint key](../clean-mdm-checkpoint-key-proposal/issues/01-write-checkpoint-key-proposal.md)
    and [pre-merge candidate table](../clean-mdm-premerge-staging-proposal/issues/01-write-premerge-staging-proposal.md).
 
-Nothing under `.scratch/clean-mdm/`, `docs/specs/clean-mdm/`, or
+Nothing under `.scratch/clean-mdm/`, `docs/specs/mdm/`, or
 `edgar_warehouse/mdm/clean/` was touched by any of this.
 
 ## The one directive you need from the operator

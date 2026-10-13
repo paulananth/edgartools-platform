@@ -25,7 +25,7 @@ Send together in one note (operator, 2026-09-21), not piecemeal:
    (`tests/integration/test_clean_mdm_postgres.py:65-73`, ~8 s today; 4 of 7
    runs failed on Colima).
 3. **A named offline registry authority** for local tests
-   (`docs/specs/clean-mdm/local-operations.md:46-47` forbids manufacturing
+   (`docs/specs/mdm/local-operations.md:46-47` forbids manufacturing
    activation authority).
 4. Contract validation, `lei` format, formatted relationship targets,
    deferral instead of silent relationship drops, and a versioning path for

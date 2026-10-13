@@ -14,8 +14,8 @@ named where it bites. Nothing here authorizes implementation; the
 [release gates](#release-gates) do.
 
 **Implementation owner.** Clean MDM's
-[Company mastering completion gate](https://github.com/paulananth/edgartools-platform/blob/codex/clean-mdm-integration/docs/specs/clean-mdm/company-completion.md)
-(`docs/specs/clean-mdm/company-completion.md` on `origin/codex/clean-mdm-integration`,
+[Company mastering completion gate](https://github.com/paulananth/edgartools-platform/blob/codex/clean-mdm-integration/docs/specs/mdm/company-completion.md)
+(`docs/specs/mdm/company-completion.md` on `origin/codex/clean-mdm-integration`,
 Codex/Grok-owned, read-only from here) already sequences GLEIF capture,
 normalization, Company-to-LEI binding, field policy, relationships, and
 daily/monthly update as its steps 2–8, and cites this map's tickets 13, 15,

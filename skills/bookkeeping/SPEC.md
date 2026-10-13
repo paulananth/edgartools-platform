@@ -206,7 +206,7 @@ as a publication command. Final MDM verification checks the MDM worklists
 and exact required consumer set.
 
 MDM work is done by two worker profiles (mastering to-do 20e), never by
-control. `mdm.merge` takes one Clean MDM input manifest (contract version 2;
+control. `mdm.merge` takes one MDM input manifest (contract version 2;
 a batch's records file sits beside it) through the Merge Stage under an MDM
 run fixed by the envelope's effect key, and reports a receipt read back from
 MDM; its verifier reports `mdm.committed`. `mdm.publish` delivers one
@@ -321,7 +321,7 @@ Verification recorded during implementation:
   corrupt prerequisite evidence, and real MDM merge/publication stage order.
 - Contract, CLI inventory, Rules files and every existing source's suites:
   168 passed in 25.23 seconds.
-- Existing complete Clean MDM PostgreSQL suite: 56 passed. After adding
+- Existing complete MDM PostgreSQL suite: 56 passed. After adding
   assessment authorization, its eight assessment tests passed again.
 - The complete unit/architecture follow-up passed 2,020 tests and 27 subtests
   in 188.28 seconds, with eight existing optional skips. This includes the
@@ -337,7 +337,7 @@ operator find the root after a lost submission acknowledgement.
 Still required before the supplied plan is complete:
 
 1. Convert all existing warehouse orchestration, source discovery/parse, silver,
-   legacy MDM and Clean MDM RunCoordinator callers. They currently retain
+   legacy MDM and MDM RunCoordinator callers. They currently retain
    their old control interfaces. The fresh runner is an additional path, not
    a completed replacement.
 2. Reconstruct each source's document worklists and tracking scope from source-owned

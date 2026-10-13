@@ -113,7 +113,7 @@ Local runs, each under 5 minutes:
 - [x] Docs that tell someone to run something: `AGENTS.md`, `README.md`,
   `CLAUDE.md`, `docs/runbook.md`, `docs/aws-authentication.md`,
   `infra/terraform/README.md`, `docs/prodb-to-prod-promotion.md`,
-  `docs/specs/clean-mdm/local-operations.md`, the Change Journal skill; a
+  `docs/specs/mdm/local-operations.md`, the Change Journal skill; a
   "Retired" banner on five docs that describe the old pipeline. Dated
   handoffs and research notes are left as history
 - [x] dbt: no model changed. `company` and `mdm_company` read

@@ -42,8 +42,8 @@ Recommendation: yes. Assumed answer: yes.
 | - | `rules init`, `rules migrate --to-db / --to-files` | Not needed for this task; not built. |
 
 Not a missing command, but a missing file the code points at: `gleif_source.py` and
-`docs/specs/clean-mdm/{state-of-build,local-operations,source-publications}.md` link
-`docs/specs/clean-mdm/native-gleif.md` ("native GLEIF operation"); it does not exist in the repo.
+`docs/specs/mdm/{state-of-build,local-operations,source-publications}.md` link
+`docs/specs/mdm/native-gleif.md` ("native GLEIF operation"); it does not exist in the repo.
 
 ## Step 2. Profile
 
@@ -119,10 +119,10 @@ What I read, and what each gave:
 - `CONTEXT.md` (Clean MDM section): kinds and terms. GLEIF RR is the evidence for
   IS_INTERNATIONAL_BRANCH_OF, Accounting Direct Parent, GLEIF Fund Link (keep GLEIF's direction);
   Probable Kind; Source Stage (a record waits unbound until a matching rule links it). [repo-docs]
-- `docs/specs/clean-mdm/source-evidence.md`: proposes dataset codes `gleif.lei`,
+- `docs/specs/mdm/source-evidence.md`: proposes dataset codes `gleif.lei`,
   `gleif.relationship`, `gleif.reporting_exception` (conflicts with the codes the code and merge
   rules use: see Q2). Level 1, RR and REPEX are one coordinated Golden Copy family. [repo-docs]
-- `docs/specs/clean-mdm/company-policy.md`: Q1 scope (SEC Company universe plus approved
+- `docs/specs/mdm/company-policy.md`: Q1 scope (SEC Company universe plus approved
   GLEIF-only parents; not all global GLEIF Companies); Q14 ("an LEI does not establish a CIK
   crosswalk merely because both values exist"). [repo-docs]
 - `docs/research/gleif-open-data-augmentation-2026-09-11.md`: "Never treat registeredAs as CIK
@@ -570,7 +570,7 @@ any MDM database, and nothing is approved. Step 9 needs the operator's approval 
 10. **The profile step at this size.** A 13 GB JSON member profiles in about an hour in pure
     Python; the skill's "short script" advice does not warn about it. A line-based join pass
     (`scratch/l1table.py`) took ~20 min under load; `grep` for one field took 2 min.
-11. **Some referenced material is missing from the repo copy:** `docs/specs/clean-mdm/native-gleif.md`
+11. **Some referenced material is missing from the repo copy:** `docs/specs/mdm/native-gleif.md`
     (linked from four docs and the code) and `.scratch/company-mastering/research/08-rules.json`
     (needed to even collect `test_clean_matching.py`, `test_clean_company_source.py`,
     `test_clean_activation.py`).

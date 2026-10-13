@@ -20,7 +20,7 @@ actual source/merge/checkpoint SQL. The handoff supplies planning, not a loader.
   Keep old rows explicitly unscoped; never guess family or proof from encoded
   consumer strings. Store the consumed publication reference and proof on the
   cursor and immutable batch effects; there is no cross-database foreign key.
-  [Ticket 10](../clean-mdm/issues/10-build-family-checkpoints.md) owns migration,
+  [Ticket 10](../mdm/issues/10-build-family-checkpoints.md) owns migration,
   Merge Stage integration and PostgreSQL proof of independent fencing.
 - Continuity field definitions: **adopt `mdm_v2.dataset.body`**, the existing
   immutable dataset contract. This is configuration metadata, not another

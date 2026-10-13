@@ -177,9 +177,9 @@ def plan(root: Path | None = None) -> dict:
                                    f"not this catalog. Rules digest: `{rules_digest(root)}`."},
         "databases": [
             {"name": SOURCES, "service": SERVICE, "description": "Every source: its feeds and datasets."},
-            {"name": MDM, "service": SERVICE, "description": "Clean MDM: every kind and its fields."}],
+            {"name": MDM, "service": SERVICE, "description": "MDM: every kind and its fields."}],
         "schemas": schemas + [{"name": CLEAN, "database": fqn(SERVICE, MDM),
-                               "description": "The kinds Clean MDM masters."}],
+                               "description": "The kinds MDM masters."}],
         "tables": tables,
         "lineage": lineage,
     }

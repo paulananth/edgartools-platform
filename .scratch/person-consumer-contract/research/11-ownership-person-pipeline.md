@@ -32,7 +32,7 @@ Code-only (no Snowflake, AWS or network reads). Line numbers are from the
   23-29, `mdm/api/routers/{persons,graph}.py`, `mdm/api/schemas/entities.py`
   62-69, `serving/subject_bundle_read.py` 148-179, `docs/adr/0008`, `docs/adr/0014`,
   `.scratch/agent-open-query-interface/map.md`, `research/05-mdm-postgres-ddl-inventory.md`.
-- Clean MDM: `docs/specs/clean-mdm/pipeline-inventory.md` rows 20-25,
+- Clean MDM: `docs/specs/mdm/pipeline-inventory.md` rows 20-25,
   `domain-model.md` 8-30, 58-70, 84-92 (Codex branch).
 - Tickets 01, 02, 03, 05, 06 of this map.
 

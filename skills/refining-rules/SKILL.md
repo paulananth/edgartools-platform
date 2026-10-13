@@ -1,6 +1,6 @@
 ---
 name: refining-rules
-description: Improve an existing feed or domain's mapping, data quality or matching rules in Clean MDM. Measure changes on pinned captures, regenerate Mapping Documents, test and obtain operator approval of the exact version. Use data-onboarding for a new feed or domain.
+description: Improve an existing feed or domain's mapping, data quality or matching rules in MDM. Measure changes on pinned captures, regenerate Mapping Documents, test and obtain operator approval of the exact version. Use data-onboarding for a new feed or domain.
 ---
 
 # Refining Rules

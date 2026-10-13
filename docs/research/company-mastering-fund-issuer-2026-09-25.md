@@ -11,9 +11,9 @@ A Company is keyed by CIK. The old resolver says CIK is definitive and a
 fuzzy name match is rarely needed (`edgar_warehouse/mdm/resolvers/company.py`).
 The accepted Company policy joins that CIK to a GLEIF LEI. A name change
 alone does not split the Company or suspend the link
-(`docs/specs/clean-mdm/company-policy.md`, Q9). Two published Companies
+(`docs/specs/mdm/company-policy.md`, Q9). Two published Companies
 are not consolidated on a fuzzy name
-(`company-policy.md`, Q10; `docs/specs/clean-mdm/company-completion.md`,
+(`company-policy.md`, Q10; `docs/specs/mdm/company-completion.md`,
 item 4: no name-only automatic rule).
 
 A 13F issuer string is not an input. Company mastering reads `sec_company`,

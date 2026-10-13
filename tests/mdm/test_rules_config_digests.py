@@ -1,7 +1,7 @@
-"""Moving the Clean MDM configuration into `rules/` changed no digest.
+"""Moving the MDM configuration into `rules/` changed no digest.
 
 Each digest below was taken from the Python and JSON copies before they moved
-(rules skill ticket 01, 2026-09-26). A digest that moves means Clean MDM would
+(rules skill ticket 01, 2026-09-26). A digest that moves means MDM would
 register different rules: the live Company policy is `983352e8…4049`.
 """
 

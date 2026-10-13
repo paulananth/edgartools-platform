@@ -171,7 +171,7 @@ a Name Census built from a full GLEIF Golden Copy, which is not in `inputs/`.
 
 - Terms [docs]: `CONTEXT.md` (Company Identity, Source Stage, Probable Kind,
   Dataset Contract, Security Identity: "A 13F CUSIP is that identity").
-- Clean MDM [docs]: `docs/specs/clean-mdm/source-evidence.md`, `company-policy.md`,
+- Clean MDM [docs]: `docs/specs/mdm/source-evidence.md`, `company-policy.md`,
   `local-operations.md` ("Prepare a native Company sample", "Name each record's
   bronze object"), `security-identity.md`, `state-of-build.md`.
 - Kinds [code]: `KINDS` = company, person, security, fund_structure, branch,
@@ -290,7 +290,7 @@ Fixed by the repo (not asked):
 - Trace fields: open, see Q6. The skill and the Clean MDM spec disagree:
   - skill step 4 / REFERENCE "Defaults": put every trace field the reader attaches
     (file hashes, run ids, observed time, raw object ids) into `provenance`;
-  - `docs/specs/clean-mdm/source-evidence.md`: "Exclude wall-clock ingest time, attempt
+  - `docs/specs/mdm/source-evidence.md`: "Exclude wall-clock ingest time, attempt
     IDs, transport paths, and delivery ordering from business hashes"; ticket 10
     (`local-operations.md`): the bronze object travels beside the record, "The record
     itself is unchanged"; `adapters.normalize`: delivery paths/hashes "remain pinned in

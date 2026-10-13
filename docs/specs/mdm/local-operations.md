@@ -52,7 +52,7 @@ registry version. Do not manufacture activation authority to make a run pass.
 After those contracts and a pinned manifest have been registered, mastering
 has no `edgar-warehouse` command yet: the `mdm mastering`, `derive-relationships`,
 `publish` and `reconcile` commands were deleted (platform validation 2a), and a
-Clean MDM run command is an open finding (design review 2026-09-30, finding 3).
+MDM run command is an open finding (design review 2026-09-30, finding 3).
 Run the Merge Stage as the Proving Run does:
 `.scratch/company-mastering/research/27_proving_run.py`.
 
@@ -210,4 +210,4 @@ document), and its `raw_object_id` is that sha256. The record itself is
 unchanged. A GLEIF record's bronze object comes from its verified native
 publication.
 Apply owner migrations and approved registry/dataset/policy registration before
-using its manifest with the normal bounded Clean MDM commands.
+using its manifest with the normal bounded MDM commands.

@@ -11,7 +11,7 @@ labelled pairs; research 18: 1,220 labels), all offline — Snowflake was
 never used.
 
 Not for implementation now: your
-[Company completion gate](../../docs/specs/clean-mdm/company-completion.md)
+[Company completion gate](../../docs/specs/mdm/company-completion.md)
 line 80 stands. This is the contract to build against when Person starts.
 
 ## What changed on your side already, and how this uses it

@@ -3,7 +3,7 @@
 Ticket: [03-can-mastering-test-cases-run-locally](../issues/03-can-mastering-test-cases-run-locally.md)
 Map: [Source Contract](../map.md), acceptance checks 4 (no network) and 8 (one command).
 Date: 2026-09-21. Branch `claude/source-contract-map`. All citations are `path:line` in this worktree.
-Clean MDM files were read only. Nothing under `edgar_warehouse/mdm/clean/`, `docs/specs/clean-mdm/` or `.scratch/clean-mdm/` was changed.
+Clean MDM files were read only. Nothing under `edgar_warehouse/mdm/clean/`, `docs/specs/mdm/` or `.scratch/clean-mdm/` was changed.
 
 ## Answer in brief
 
@@ -48,7 +48,7 @@ fixture in `tests/mdm/conftest.py:88-102` serves the legacy MDM model, not `mdm_
 ### Migrations
 
 - `store.migrate` runs `023_clean_mdm.sql`, then `025`-`029`, all checksummed (`store.py:49-106`;
-  `docs/specs/clean-mdm/local-operations.md:34-41`).
+  `docs/specs/mdm/local-operations.md:34-41`).
 - `024_clean_mdm_mirror.sql` (the journal mirror) is separate. It is installed by
   `clean.publication.migrate_mirror` into the change-ledger database (`local-operations.md:42-44`), and only
   the CLI or journal path needs it.
@@ -163,7 +163,7 @@ own longer readiness budget. It must not reuse this fixture as it stands.
   (`test_clean_mdm_postgres.py:231-237`).
 - The spec also forbids writing around the Merge Stage: "No adapter, API override, bulk loader, **seed**,
   repair, or reconciliation path writes master state around this entry point"
-  (`docs/specs/clean-mdm/merge-stage.md:28-29`).
+  (`docs/specs/mdm/merge-stage.md:28-29`).
 
 **The supported seeding path is a first `MergeStage.apply()` batch.** That batch holds the seed source
 records, the identity allocations and `bind` decisions. This is what every existing test does:

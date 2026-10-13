@@ -1,4 +1,4 @@
-"""CLI surface: Rules, Bookkeeping, Change Journal, Clean MDM and agent context.
+"""CLI surface: Rules, Bookkeeping, Change Journal, MDM and agent context.
 
 The legacy warehouse commands and their code are deleted (platform
 validation slice 2a). Configure a source or feed through Rules and submit

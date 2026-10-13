@@ -24,9 +24,11 @@ _Avoid_: Result, completion
 A verifier's read-back of a reported output, bound to exactly that run, step, unit, attempt, effect key and output, with every check the step names.
 _Avoid_: Worker success, exit code
 
-### Clean MDM identities and mastering
+### MDM identities and mastering
 
 MDM is the first scope. It masters identities and the relationships between them. A filing or a GLEIF file is evidence for that mastering. It is not itself a master record. Silver, gold, and the parser are outside this scope.
+
+There is one MDM. It is not called "Clean MDM" (operator, 2026-10-13); the old MDM it replaced is deleted.
 
 The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity, International Organization, and Market/Venue. A profile hangs on one of those domains and is not itself a domain.
 
@@ -195,7 +197,7 @@ The one versioned file that declares everything about one source after its Bronz
 _Avoid_: Source config, pipeline config, adapter config, a contract that also fetches bronze
 
 **Dataset Contract**:
-The part of a Source Contract that tells Clean MDM what a source's records are: its authority, record key, publication and time semantics, completeness scope, and the adapter mapping from silver columns to identity kind, identifiers, fields, profiles and relationships.
+The part of a Source Contract that tells MDM what a source's records are: its authority, record key, publication and time semantics, completeness scope, and the adapter mapping from silver columns to identity kind, identifiers, fields, profiles and relationships.
 _Avoid_: Mastering Policy (sameness and survivorship live there, not here), field-alias map as a separate document
 
 **Mapping Document**:
@@ -207,7 +209,7 @@ The published list of every source, dataset and MDM field, with the sources that
 _Avoid_: A place to author rules, a catalog that differs from what runs
 
 **Rules Database**:
-The database that holds every version of every Source Contract and Mastering Policy with its lifecycle state (draft, proven, active, retired), proof and approval, and where Proving Runs execute; an active version is handed to Clean MDM, which production reads.
+The database that holds every version of every Source Contract and Mastering Policy with its lifecycle state (draft, proven, active, retired), proof and approval, and where Proving Runs execute; an active version is handed to MDM, which production reads.
 _Avoid_: Golden merge rule store, editing rules in the production MDM database, a place production merges read from
 
 **Rule Activation Approval**:
