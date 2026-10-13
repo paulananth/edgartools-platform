@@ -63,6 +63,15 @@ def receipt(store, batch_id: str, consumer: str) -> bytes:
     with store.engine.connect() as conn:
         row = conn.execute(text("SELECT payload_hash, verified_at FROM mdm.outbox WHERE batch_id=:b AND consumer=:c"),
                            {"b": batch_id, "c": consumer}).mappings().first()
+        # A committed batch that changed nothing queues no consumer (migration 017):
+        # there is nothing to publish, and the receipt says so. A changed batch has a
+        # row for every consumer its policy requires, so a missing one is refused.
+        unchanged = row is None and conn.scalar(text(
+            "SELECT EXISTS(SELECT 1 FROM mdm.batch WHERE batch_id=:b) "
+            "AND NOT EXISTS(SELECT 1 FROM mdm.outbox WHERE batch_id=:b)"), {"b": batch_id})
+    if unchanged:
+        body = {"version": 1, "batch_id": batch_id, "consumer": consumer, "unchanged": True}
+        return json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
     if row is None:
         raise ValueError(f"MDM holds no {consumer} publication for {batch_id}")
     if row["verified_at"] is None:
@@ -77,11 +86,14 @@ def execute(envelope: dict, artifacts) -> dict:
     batch_id, consumer = _keys(envelope)
     store = _store(restricted=True, envelope=envelope)
     try:
-        publisher = _publisher(envelope, artifacts, store, consumer)
-        # False when it is already delivered (a lost acknowledgement) or not
-        # claimable yet; the receipt below says which.
-        store.deliver_one(consumer, envelope["claim"]["attempt"], publisher, batch_id=batch_id)
-        return artifacts.put_bytes(envelope["output"], receipt(store, batch_id, consumer))
+        found = receipt_if_unchanged(store, batch_id, consumer)
+        if found is None:
+            publisher = _publisher(envelope, artifacts, store, consumer)
+            # False when it is already delivered (a lost acknowledgement) or not
+            # claimable yet; the receipt below says which.
+            store.deliver_one(consumer, envelope["claim"]["attempt"], publisher, batch_id=batch_id)
+            found = receipt(store, batch_id, consumer)
+        return artifacts.put_bytes(envelope["output"], found)
     finally:
         store.engine.dispose()
 
@@ -93,6 +105,8 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     store = _store(restricted=False)
     try:
         expected = receipt(store, batch_id, consumer)
+        if json.loads(expected).get("unchanged"):
+            return _same(envelope, artifacts, expected)
         with store.engine.connect() as conn:
             row = conn.execute(text("SELECT * FROM mdm.outbox_input WHERE batch_id=:b AND consumer=:c"),
                                {"b": batch_id, "c": consumer}).mappings().one()
@@ -103,6 +117,19 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         publisher.verify(f"{consumer}/{batch_id}", payload, json.loads(expected)["payload_hash"])
     finally:
         store.engine.dispose()
+    return _same(envelope, artifacts, expected)
+
+
+def receipt_if_unchanged(store, batch_id: str, consumer: str) -> bytes | None:
+    """The receipt of a batch that changed nothing, else None (there is work to deliver)."""
+    try:
+        found = receipt(store, batch_id, consumer)
+    except ValueError:
+        return None
+    return found if json.loads(found).get("unchanged") else None
+
+
+def _same(envelope: dict, artifacts, expected: bytes) -> tuple[dict, list]:
     if artifacts.verified(envelope["candidate"], max_bytes=1024**2) != expected:
         raise ValueError("The receipt differs from what MDM holds")
     return {CHECK: True}, []

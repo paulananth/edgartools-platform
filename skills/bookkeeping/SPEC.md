@@ -212,7 +212,8 @@ run fixed by the envelope's effect key, and reports a receipt read back from
 MDM; its verifier reports `mdm.committed`. `mdm.publish` delivers one
 committed batch to one consumer in that consumer's generation order (the
 `journal` consumer becomes a Change Journal event under the envelope's run);
-its verifier reports `mdm.published`. Both fence every MDM transaction with
+its verifier reports `mdm.published`. A batch that changed nothing queues no
+consumer (MDM migration 017), so its receipt says there is nothing to publish. Both fence every MDM transaction with
 the envelope's live lease through the MDM database's `bookkeeping_guard`.
 The former `mdm.ingest` operation is `mdm.merge` with a file batch.
 

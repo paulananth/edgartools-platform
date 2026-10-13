@@ -134,3 +134,25 @@ def test_a_new_deferred_record_alone_is_a_change(database):
             database, batch_id="batch-2", expected_generation=1, consumer="other", projections=[review],
             deferred=[deferred], source_accounting={"normalized": 0, "deferred": 1, "total": 1}), str(uuid4()))
     assert result["changed"] is True and outbox(database, "batch-2") == outbox(database, "batch-1")
+
+
+def test_a_batch_that_changed_nothing_has_nothing_to_publish(database):
+    """A publish unit frozen before the merge may name a batch that changed
+    nothing: its receipt says there is nothing to publish. A changed batch with
+    no row for a consumer, or a batch MDM never committed, is still refused."""
+    import pytest
+
+    from edgar_warehouse.workers import mdm_publish
+
+    store = Store(database.application)
+    with database.application.begin() as conn:
+        store.commit(conn, core.request(database), str(uuid4()))
+        store.commit(conn, core.request(database, batch_id="batch-2", expected_generation=1, consumer="other"),
+                     str(uuid4()))
+    assert json.loads(mdm_publish.receipt(store, "batch-2", "export")) == {
+        "version": 1, "batch_id": "batch-2", "consumer": "export", "unchanged": True}
+    assert mdm_publish.receipt_if_unchanged(store, "batch-1", "export") is None  # queued, not delivered yet
+    with pytest.raises(ValueError, match="no audit publication"):
+        mdm_publish.receipt(store, "batch-1", "audit")
+    with pytest.raises(ValueError, match="no export publication"):
+        mdm_publish.receipt(store, "never-committed", "export")
