@@ -17,7 +17,7 @@ acquisition path (Tickets 21-25's own families) does **not** route through
 this ticket's rebuild machinery at all — it starts capturing forward from
 each family's already-trusted existing data instead. This ticket is
 reserved strictly for genuine ledger loss/reinitialization, and per Ticket
-10's Decision 5, no longer blocks [Ticket 27](27-contract-legacy-acquisition-bypasses.md).
+10's Decision 5, no longer blocks Ticket 27 (deleted 2026-10-13, ticket 25; in git history).
 Still a legitimate, real piece of disaster-recovery machinery worth
 building — just off the critical path to legacy-bypass removal.
 

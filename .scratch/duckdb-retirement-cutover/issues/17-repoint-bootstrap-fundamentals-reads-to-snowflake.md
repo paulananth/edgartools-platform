@@ -14,7 +14,7 @@ the real `edgartools-prod-large:299`).
 re-fetched the full companyfacts JSON from SEC (`network_fetches: 1,
 silver_skips: 0`) instead of skipping.
 
-**Root cause:** Ticket 10 (`10-atomic-write-path-cutover.md`) removed local-
+**Root cause:** Ticket 10 (`10-atomic-write-path-cutover.md` (deleted 2026-10-13, ticket 25; in git history)) removed local-
 DuckDB hydration from the production write path and repointed two read call
 sites to Snowflake (`_company_identity_ciks_snowflake`,
 `_snowflake_distinct_values` in `warehouse_orchestrator.py`) before flipping

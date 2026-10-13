@@ -162,4 +162,4 @@ and financial facts on a daily cadence instead of only whenever
   Stays on the ADV Pipeline map, unimplemented, ready-for-agent whenever
   picked up — needs no Step Functions wiring since ADV bulk fetch already
   rides `daily_incremental`'s existing stage.
-- [05 — End-to-end verification](issues/05-end-to-end-verification.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes daily_incremental, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- 05 — End-to-end verification (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes daily_incremental, which the rebuild retired. Reopen as a new ticket if the need still applies.

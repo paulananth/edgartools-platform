@@ -9,7 +9,7 @@ Status: open
 `reference_catalog` (Ticket 23) has never been compared against
 `seed-universe`'s legacy `_sync_reference_data` fetch — no Decision-2
 side-by-side proof exists (the same gate every other family needed before
-[Ticket 27](27-contract-legacy-acquisition-bypasses.md) could cut it over,
+Ticket 27 (deleted 2026-10-13, ticket 25; in git history) could cut it over,
 per [Ticket 10](10-decide-migration-cutover-rollback.md)). Build the
 comparison, mirroring [Ticket 51](51-build-filing-artifact-capture-parity-harness.md)
 (`filing_artifact`'s harness) and [Ticket 53](53-drive-legacy-and-gated-capture-into-parity-diff.md)

@@ -863,7 +863,7 @@ note above and state-machine-consolidation wayfinder map ticket 03).
   with `daily_incremental`'s overlap — the two weren't distinguished by this
   investigation. Avoiding the overlap removes one contributing writer but
   may not eliminate the race. See
-  `.scratch/state-machine-consolidation/issues/11-decide-bronze-seed-silver-gold-default-path-fate.md`
+  `.scratch/state-machine-consolidation/issues/11-decide-bronze-seed-silver-gold-default-path-fate.md` (deleted 2026-10-13, ticket 25; in git history)
   and `.scratch/state-machine-consolidation/issues/14-fix-monolith-silver-hydrate-fileexpired-race.md`
   for the full evidence and open follow-up.
 

@@ -43,7 +43,7 @@ Live gold factors CIKs: 1800, 8818, 10329, 14177, 15615, 16160, 22701,
 23194, 25895, 27093, 27996, 60519, 75288, 77543, 82020, 277638, **320193**,
 764180, 875355, 1064728, 1603978.
 
-[Decide and execute the fundamentals pipeline backfill](../../release-readiness/issues/42-decide-execute-fundamentals-backfill.md):
+Decide and execute the fundamentals pipeline backfill (deleted 2026-10-13, ticket 25; in git history):
 
 - 2026-07-29: Apple (`320193`) entity-facts smoke, real prod write. 282
   derived rows — live factors still has **282** rows for 320193.

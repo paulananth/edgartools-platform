@@ -112,7 +112,7 @@ except where a table's specifics genuinely need a fresh design pass.
   `SEC_FINANCIAL_FACT`/`SEC_FINANCIAL_DERIVED`/`SEC_ACCOUNTING_FLAG` landing rows (scores
   populated) — the "done" bar both tickets still owe.
 - Silver-landing timestamps load 7–8 hours late, found 2026-09-14 by Ticket 19:
-  [duckdb-retirement-cutover Ticket 22](../duckdb-retirement-cutover/issues/22-silver-landing-timestamps-shifted-by-account-timezone.md).
+  duckdb-retirement-cutover Ticket 22 (deleted 2026-10-13, ticket 25; in git history).
   Platform-wide (every `TIMESTAMP_TZ` in `EDGARTOOLS_SILVER_LANDING`, and `EDGARTOOLS_SOURCE` too),
   not DuckDB-specific; filed there only because Ticket 19 found it. Diagnosed 2026-09-14 (COPY
   INTO labels Parquet UTC times with the session zone). Deployed and corrected in one window

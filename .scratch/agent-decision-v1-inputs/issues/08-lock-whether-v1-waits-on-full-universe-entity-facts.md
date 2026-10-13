@@ -16,8 +16,8 @@ backfill (or daily_incremental Stage 1B wiring) before v1 input is
 sorted, or is the 21-CIK sample enough for contract objects while
 coverage stays a section flag (`empty` for everyone else)?
 
-Do not re-chart [Decide and execute the fundamentals pipeline
-backfill](../../release-readiness/issues/42-decide-execute-fundamentals-backfill.md),
+Do not re-chart Decide and execute the fundamentals pipeline
+backfill (deleted 2026-10-13, ticket 25; in git history),
 [Fix Stage1BEntityFacts's OOM on the medium Task
 Profile](../../ecs-cost-sizing/issues/20-fix-stage1b-entity-facts-oom-on-medium-profile.md),
 or [Bring Missing Fundamentals Artifacts Into

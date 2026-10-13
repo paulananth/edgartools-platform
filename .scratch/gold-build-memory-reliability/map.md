@@ -59,4 +59,4 @@ carries execution, not open design decisions (see Notes).
   That's release-readiness's ticket 45 (`decide-narrow-daily-incremental-stage0-and-cadence`) —
   a different axis (which companies get processed) from this map's axis (how much memory the
   gold-build step needs regardless of scope).
-- [Eliminate redundant full gold builds inside bootstrap-next windows](issues/04-eliminate-redundant-bootstrap-next-gold-builds.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes bootstrap-next, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- Eliminate redundant full gold builds inside bootstrap-next windows (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes bootstrap-next, which the rebuild retired. Reopen as a new ticket if the need still applies.

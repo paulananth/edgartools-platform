@@ -39,7 +39,7 @@ unrelated keys). MDM processing resulting from one silver publication tied
 to one `cause_reference` enqueues exactly one publication request for that
 Run, carrying `cause_reference` in the already-available `source_summary`
 JSON field. Concrete wiring (both writer and consumer sides) deferred to
-new [Ticket 36](36-wire-mdm-publication-outbox.md).
+new Ticket 36 (deleted 2026-10-13, ticket 25; in git history).
 
 **Domain-content hashes:** already generic — `MdmSourceRef.source_content_hash`
 is keyed to `mdm_entity` (not company-specific), but the skip-if-unchanged

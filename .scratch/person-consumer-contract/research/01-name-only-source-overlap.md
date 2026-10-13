@@ -94,4 +94,4 @@ reachable.
 Questions 1 and 3 of the ticket need `sec_ownership_reporting_owner`.
 Re-run when Snowflake billing is restored: a three-way join on
 `(cik, normalized name)` plus a flag breakdown by `owner_cik`. Tracked as
-[ticket 09](../issues/09-measure-reporting-owner-overlap-when-snowflake-returns.md).
+ticket 09 (deleted 2026-10-13, ticket 25; in git history).

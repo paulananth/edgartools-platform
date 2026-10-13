@@ -93,4 +93,4 @@ split: this map decides, `release-readiness` tickets implement.
 ## Out of scope
 
 (none yet -- scope has not been narrowed enough to rule anything out)
-- [11-decide-bronze-seed-silver-gold-default-path-fate](issues/11-decide-bronze-seed-silver-gold-default-path-fate.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes one_click_data_refresh, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- 11-decide-bronze-seed-silver-gold-default-path-fate (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes one_click_data_refresh, which the rebuild retired. Reopen as a new ticket if the need still applies.

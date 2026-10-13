@@ -45,14 +45,14 @@ how/where that seeding happens." Nobody has yet.
 
 Separately confirmed: `reference_catalog` has **not passed Decision 2** (the
 Ticket 10 per-family side-by-side parity proof, mirroring Tickets 51/53's
-`filing_artifact` harness) — [Ticket 27](27-contract-legacy-acquisition-bypasses.md)
+`filing_artifact` harness) — Ticket 27 (deleted 2026-10-13, ticket 25; in git history)
 names it explicitly among the families not yet cut over. So even the one
 piece `reference_catalog` *does* cover has no live-proven parity with
 `seed-universe`'s legacy fetch yet.
 
 ## The bigger finding: #2 and #4 are not new fog — they're Ticket 54
 
-[Ticket 54](54-bookkeeping-sits-outside-postgresql-authority-and-change-tracking.md)
+Ticket 54 (deleted 2026-10-13, ticket 25; in git history)
 (open, unclaimed) already asks whether Bookkeeping's change-detection
 tables — explicitly naming `sec_company_sync_state` among them — should be
 functionally consolidated onto this map's Change Ledger, with

@@ -55,7 +55,7 @@ Resolved via HITL exchange with the operator (2026-08-03):
 3. **Both go-forward and retroactive.** The fetch-policy change applies
    immediately to new fetches; a follow-up task to find and remove already-
    captured binary exhibits from S3 bronze was also requested — filed separately
-   as [ticket 71](71-cleanup-existing-binary-attachments-in-bronze.md) rather than
+   as ticket 71 (deleted 2026-10-13, ticket 25; in git history) rather than
    done inline here, since a bulk-delete against prod S3 needs its own scoped
    investigation (how many objects, how much data, confirmation nothing already
    depends on them) before executing anything destructive.

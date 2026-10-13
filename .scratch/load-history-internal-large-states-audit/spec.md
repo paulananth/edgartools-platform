@@ -1,6 +1,6 @@
 Status: ready-for-agent
 
-Parent: [Ticket 04 — Audit load_history's internal large-profile states for the unscoped-load shape](../large-profile-unscoped-load-audit/issues/04-audit-load-history-internal-large-states.md), a child of the [Large-profile unscoped-load audit](../large-profile-unscoped-load-audit/map.md) wayfinder map.
+Parent: Ticket 04 — Audit load_history's internal large-profile states for the unscoped-load shape (deleted 2026-10-13, ticket 25; in git history), a child of the [Large-profile unscoped-load audit](../large-profile-unscoped-load-audit/map.md) wayfinder map.
 
 ## Problem Statement
 

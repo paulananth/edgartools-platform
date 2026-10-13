@@ -57,7 +57,7 @@ standing in the way of that method's tests running under SQLite at all.
       suite green: 2706 passed, 4 skipped.
 - [x] Confirmed via grep: no other `QUALIFY` clause remains in any method
       that isn't already scheduled for deletion by the atomic cutover
-      ([Ticket 10](10-atomic-write-path-cutover.md)) — the 10 remaining
+      (Ticket 10 (deleted 2026-10-13, ticket 25; in git history)) — the 10 remaining
       `silver_store.py` clauses are all in the 5 content-merge methods
       named above.
 

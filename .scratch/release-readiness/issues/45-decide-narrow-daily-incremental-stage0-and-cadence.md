@@ -136,4 +136,4 @@ cannot enable them automatically. Disabling a schedule remains an immediate
 operator safety action.
 
 Implementation, live proof, and the activation checkpoint belong to
-[Implement and Activate the Bounded Daily Identity Refresh Schedule](49-implement-bounded-daily-identity-refresh-schedule.md).
+Implement and Activate the Bounded Daily Identity Refresh Schedule (deleted 2026-10-13, ticket 25; in git history).

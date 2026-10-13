@@ -1,7 +1,7 @@
 Type: grilling
 Status: resolved (2026-09-06)
 
-**Spawned by:** user note during [Ticket 11](11-decide-bronze-seed-silver-gold-default-path-fate.md)'s live AWS cutover (2026-09-06), while renaming the outer machine `bronze_seed_silver_gold` -> `one_click_data_refresh`.
+**Spawned by:** user note during Ticket 11 (deleted 2026-10-13, ticket 25; in git history)'s live AWS cutover (2026-09-06), while renaming the outer machine `bronze_seed_silver_gold` -> `one_click_data_refresh`.
 
 ## Question
 

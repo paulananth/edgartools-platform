@@ -100,4 +100,4 @@ that made it safe recorded) or fixed.
   streaming-hydrate fix, stage0-stage1-consolidation) — those stay
   authoritative for the DuckDB/S3-buffering shape; this map only adds a
   check for the *unscoped-ORM-hydration* shape on top, not a re-litigation.
-- [04 — Audit load_history's internal large-profile states for the unscoped-load shape](issues/04-audit-load-history-internal-large-states.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes load_history, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- 04 — Audit load_history's internal large-profile states for the unscoped-load shape (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes load_history, which the rebuild retired. Reopen as a new ticket if the need still applies.

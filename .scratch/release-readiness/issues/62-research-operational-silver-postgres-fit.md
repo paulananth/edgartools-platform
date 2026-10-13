@@ -104,5 +104,5 @@ benchmark run the same identity-upsert workload and compare key-level checksums,
 row counts, Parquet-export time, and end-to-end elapsed time.
 
 No new follow-up ticket is needed now: the immediate work is already tracked
-by [Implement run-scoped Daily Identity Refresh publication](61-implement-run-scoped-daily-identity-publication.md)
+by Implement run-scoped Daily Identity Refresh publication (deleted 2026-10-13, ticket 25; in git history)
 and [Decide a Durable Daily-Artifact Resume and Disposition Contract](60-decide-durable-daily-artifact-resume-disposition.md).

@@ -414,7 +414,7 @@ the open decision for whoever picks this up next is: fix the gate's
 comparison to exclude these known-divergent columns and get a genuine
 `passed: true` before treating this checklist item as done, or accept this
 live evidence as sufficient sign-off as-is and proceed. Either way,
-[Ticket 10](10-atomic-write-path-cutover.md) should not be considered
+Ticket 10 (deleted 2026-10-13, ticket 25; in git history) should not be considered
 unblocked on this item until one of those two paths is deliberately chosen.
 
 **RESOLVED 2026-09-06: fixed the gate itself, then re-verified live —
@@ -459,5 +459,5 @@ divergent columns don't cause a false mismatch (company, and both
 ownership-adjacent shapes), and a genuine content difference on a
 non-excluded column still fails (same 3 shapes). mypy clean.
 
-[Ticket 10](10-atomic-write-path-cutover.md) can now be considered
+Ticket 10 (deleted 2026-10-13, ticket 25; in git history) can now be considered
 genuinely unblocked on this item.

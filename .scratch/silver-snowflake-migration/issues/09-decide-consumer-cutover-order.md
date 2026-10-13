@@ -126,4 +126,4 @@ shard/monolith to Snowflake, authenticating as
 `EDGARTOOLS_PROD_MDM_SILVER_READER` against the `EDGARTOOLS_SILVER` dbt
 schema. The write path is unchanged — still dual-writing to DuckDB (for
 gold-building, not yet migrated) and Snowflake silver-landing (Ticket 07,
-already live). Graduates into [Ticket 12](12-cutover-mdm-sharded-silver-reader-to-snowflake.md).
+already live). Graduates into Ticket 12 (deleted 2026-10-13, ticket 25; in git history).

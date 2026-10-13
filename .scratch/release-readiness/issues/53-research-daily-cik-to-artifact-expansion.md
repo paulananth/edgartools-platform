@@ -72,4 +72,4 @@ exact forced-index accession union and fail before attachment iteration if any
 selected accession falls outside it. Historical submissions enumeration
 belongs in explicit bootstrap, backfill, or repair workflows. Implementation
 is tracked by
-[ticket 52](52-bind-daily-artifacts-to-index-accessions.md).
+ticket 52 (deleted 2026-10-13, ticket 25; in git history).

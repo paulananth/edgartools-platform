@@ -2,7 +2,7 @@
 
 **What to build:** Run [Ticket 08](08-build-table-specific-reconciliation-tooling.md)'s
 tooling against the post-cutover state produced by
-[Ticket 10](10-atomic-write-path-cutover.md), producing the fail-closed
+Ticket 10 (deleted 2026-10-13, ticket 25; in git history), producing the fail-closed
 assertion DuckDB Retirement's Ticket 07 (wayfinder decision) requires, and
 route the result to a required human approval before the cutover is
 considered final.
@@ -22,7 +22,7 @@ rollback itself. Rollback mechanics, if reconciliation fails, follow Ticket
 01's rollback answer (all-or-nothing across the write path + reader
 cutovers), executed as a separate, explicit operator action.
 
-**Blocked by:** [Ticket 10](10-atomic-write-path-cutover.md)
+**Blocked by:** Ticket 10 (deleted 2026-10-13, ticket 25; in git history)
 
 **Status:** resolved (2026-09-12) — GO
 
@@ -39,7 +39,7 @@ cutovers), executed as a separate, explicit operator action.
 
 ## Deploy-timing discovery (2026-09-12): the cutover was already live before this gate ran
 
-Found while starting this ticket: [Ticket 10](10-atomic-write-path-cutover.md)'s own file still
+Found while starting this ticket: Ticket 10 (deleted 2026-10-13, ticket 25; in git history)'s own file still
 said "code complete; deploy pending operator" — but the currently-registered prod ECS task
 definition (`edgartools-prod-large`, revision 302, registered 2026-09-12) runs image
 `warehouse-sha-cffe2a043680`, and `git merge-base --is-ancestor 29612b3d cffe2a04` confirms that
@@ -88,7 +88,7 @@ Failing (4), root-caused rather than left as raw numbers:
 2. **`sec_company_filing`** — `bronze_to_silver`/`required_parent` orphan_count 455 (cik-orphans
    against `sec_company`), and `semantic_content_digest` genuinely fails (content differs for
    the same 500 compared keys, not a false positive). **Already known, already fixed, not yet
-   deployed**: matches [Ticket 16](16-sec-company-filing-coregistrant-key-collision.md)'s
+   deployed**: matches Ticket 16 (deleted 2026-10-13, ticket 25; in git history)'s
    already-diagnosed co-registrant/ownership-filing collision (SEC lets one accession cover
    multiple CIKs; this table's one-row-per-accession model silently picks whichever CIK's feed
    lands first, and DuckDB/Snowflake don't necessarily agree on which). Ticket 16's fix is

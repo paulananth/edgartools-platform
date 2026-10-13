@@ -5,7 +5,7 @@ Status: open
 
 ## Question
 
-[Ticket 42](42-decide-execute-fundamentals-backfill.md) found `sec_accounting_flag` (F11)
+Ticket 42 (deleted 2026-10-13, ticket 25; in git history) found `sec_accounting_flag` (F11)
 cannot be populated from `bootstrap-fundamentals --mode entity-facts` as currently designed:
 `parse_entity_facts` (`edgar_warehouse/parsers/financials.py`) builds base rows exclusively
 from four DEI XBRL concepts (`AuditorFirmId`, `AuditorName`, `AuditorLocation`,

@@ -138,9 +138,9 @@
     "AGENTS.md",
     ".planning/HANDOFF.json",
     ".planning/.continue-here.md",
-    ".scratch/release-readiness/issues/61-implement-run-scoped-daily-identity-publication.md",
-    ".scratch/release-readiness/issues/63-implement-durable-daily-artifact-resume-disposition.md",
-    ".scratch/gold-build-memory-reliability/issues/04-eliminate-redundant-bootstrap-next-gold-builds.md"
+    ".scratch/release-readiness/issues/61-implement-run-scoped-daily-identity-publication.md (deleted 2026-10-13, ticket 25; in git history)",
+    ".scratch/release-readiness/issues/63-implement-durable-daily-artifact-resume-disposition.md (deleted 2026-10-13, ticket 25; in git history)",
+    ".scratch/gold-build-memory-reliability/issues/04-eliminate-redundant-bootstrap-next-gold-builds.md (deleted 2026-10-13, ticket 25; in git history)"
   ],
   "next_action": "Claude first checks the terminal status and execution history for load-history-silver-only-20260801T235002Z, then recovers exactly one selected stash into an isolated branch using git stash branch <branch> <stash-object>.",
   "context_notes": "No open GitHub PRs remained at handoff time. Local verification for the PR #326 CI repair was 907 passed, 4 skipped; both PRs subsequently passed all GitHub CI jobs. The final merged main image was not built or deployed in this closing sequence. Stash object IDs are durable recovery references; do not drop them until the recovered work is either merged or explicitly rejected. Local branch cleanup intentionally preserves only main plus the backup tags listed above."

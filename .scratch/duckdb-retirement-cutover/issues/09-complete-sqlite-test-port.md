@@ -88,7 +88,7 @@ no longer holds as written.**
   `SilverDatabase`'s bulk-write internals to be backend-agnostic first — a
   production-code decision outside this ticket's original "just port the
   tests" framing, and arguably within [Ticket 10](
-  10-atomic-write-path-cutover.md)'s scope instead, since Ticket 10 deletes
+  10-atomic-write-path-cutover.md (deleted 2026-10-13, ticket 25; in git history))'s scope instead, since Ticket 10 deletes
   these methods wholesale anyway rather than porting them.
 - **Net effect:** this ticket's real remaining scope is smaller and
   differently shaped than its original text describes — likely closer to

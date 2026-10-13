@@ -190,7 +190,7 @@ times:**
    all three companyfacts responses, ruling out an "auditor-specific" exclusion).
    **Disposed 2026-07-13 as EDGE-10: "EXCLUDED — source-coverage exclusion (structural SEC
    API limitation)"** (`.planning/workstreams/fix-pipelines/REQUIREMENTS.md:44`).
-2. `.scratch/release-readiness/issues/42-decide-execute-fundamentals-backfill.md` (2026-07-29,
+2. `.scratch/release-readiness/issues/42-decide-execute-fundamentals-backfill.md` (deleted 2026-10-13, ticket 25; in git history) (2026-07-29,
    over two weeks later, apparently independently): a real single-CIK smoke test against
    prod (CIK 320193, direct `aws ecs run-task`, real writes to canonical silver) reproduced
    the identical finding — `sec_financial_fact`/`sec_financial_derived` populated correctly

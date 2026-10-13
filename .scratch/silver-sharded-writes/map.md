@@ -142,5 +142,5 @@ map once the two-surface rollout here has proven the pattern in prod.
   the codebase today (0 rows in the live Snowflake mirror). Out of scope
   here, not because they're unimportant, but because neither
   `WindowedBootstrap` nor `bootstrap_fundamentals.py` touches them.
-- [Decide Migration/Cutover Strategy From Monolith to Sharded Primary Writes](issues/04-decide-migration-cutover-strategy.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the sharded DuckDB silver, which the rebuild retired. Reopen as a new ticket if the need still applies.
-- [Decide Shard-Count Growth Strategy](issues/06-decide-shard-count-growth-strategy.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the sharded DuckDB silver, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- Decide Migration/Cutover Strategy From Monolith to Sharded Primary Writes (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the sharded DuckDB silver, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- Decide Shard-Count Growth Strategy (deleted 2026-10-13, ticket 25; in git history): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the sharded DuckDB silver, which the rebuild retired. Reopen as a new ticket if the need still applies.

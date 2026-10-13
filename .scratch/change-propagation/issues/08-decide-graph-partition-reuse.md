@@ -74,4 +74,4 @@ rejected concurrent attempt fails outright rather than queuing — a queued
 retry risks replaying a now-stale request instead of picking up current
 state on the next natural trigger, matching this repo's general
 current-state-driven-retry preference. Concrete migration and test
-deferred to new [Ticket 40](40-serialize-concurrent-graph-generation-builds.md).
+deferred to new Ticket 40 (deleted 2026-10-13, ticket 25; in git history).

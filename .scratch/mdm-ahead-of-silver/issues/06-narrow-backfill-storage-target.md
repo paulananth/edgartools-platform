@@ -140,7 +140,7 @@ column not itself wrapped in `LAST_VALUE(...IGNORE NULLS)`, so a thin row
 still nulls out every other column. This is a live, pre-existing bug in
 `sec_accounting_flag`'s own forensic-score backfill, not just a risk for
 this feature — tracked separately at
-[`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md`](../silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md)
+`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md (deleted 2026-10-13, ticket 25; in git history)` (deleted 2026-10-13, ticket 25; in git history)
 since it predates and is unrelated to this map. Commit `e8e801ec` was
 reverted (`ceef4a4d`) and this ticket's Answer stands as originally
 recorded above: **full-row re-emission**, confirmed by the user a second

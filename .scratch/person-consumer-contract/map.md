@@ -395,7 +395,7 @@ distinct-CIK count borrowed from a different study. Detail on
 
 ## Out of scope
 
-- [Measure reporting-owner overlap once Snowflake is reachable](issues/09-measure-reporting-owner-overlap-when-snowflake-returns.md)
+- Measure reporting-owner overlap once Snowflake is reachable (deleted 2026-10-13, ticket 25; in git history)
   — closed 2026-09-19: Snowflake will not be restored.
 
 - Implementation, migrations, schedules, deployment — Codex/Grok's, after

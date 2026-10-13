@@ -121,9 +121,9 @@ measurement, which oversteps that mode -- the same mistake avoided for
 here: implementation (the `ThreadPoolExecutor` change itself, the
 `BOOTSTRAP_BATCH_CONCURRENCY` re-evaluation, and the live compliance
 measurement) moves to
-[release-readiness ticket 78](../../release-readiness/issues/78-implement-shared-submissions-fetch-concurrency.md),
+release-readiness ticket 78 (deleted 2026-10-13, ticket 25; in git history),
 matching where every other implementation-shaped finding from this
 workstream lives (tickets 65, 67-76). Ticket 03's own artifact-fetch-loop
 implementation had the same gap (decided, never split into an
 implementation ticket) -- filed alongside as
-[release-readiness ticket 77](../../release-readiness/issues/77-implement-artifact-fetch-concurrency.md).
+release-readiness ticket 77 (deleted 2026-10-13, ticket 25; in git history).

@@ -8,10 +8,10 @@ merge), same table family (`sec_accounting_flag`).
 
 **Status:** resolved (2026-08-28) — write-side fix implemented and tested;
 see "Answer" below. Repair of already-corrupted historical rows split to
-[Ticket 05](05-repair-already-corrupted-sec-accounting-flag-rows.md).
+Ticket 05 (deleted 2026-10-13, ticket 25; in git history).
 
 **Moved here 2026-08-27** from its original standalone location
-(`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md`,
+(`.scratch/silver-landing-coalesce-bug/issues/01-thin-backfill-nulls-other-columns.md` (deleted 2026-10-13, ticket 25; in git history),
 content preserved verbatim below with a redirect note left at the original
 path) — consolidated into this map because it's the same class of finding
 (a column set doesn't line up correctly across a partial write, causing
@@ -163,7 +163,7 @@ landing row). Both confirmed to fail against the pre-fix code (`git stash`
 round-trip, run directly against this repo's current `main`) and pass
 post-fix. Full repo suite green: 2702 passed, 4 skipped.
 
-**Not done here, split to [Ticket 05](05-repair-already-corrupted-sec-accounting-flag-rows.md):**
+**Not done here, split to Ticket 05 (deleted 2026-10-13, ticket 25; in git history):**
 this fix is forward-only — any row already backfilled before this fix
 deploys is still sitting corrupted in
 `EDGARTOOLS_SILVER.SEC_ACCOUNTING_FLAG` today. Local DuckDB silver was

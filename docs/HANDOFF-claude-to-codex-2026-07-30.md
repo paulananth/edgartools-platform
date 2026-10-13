@@ -18,7 +18,7 @@ shared-lease non-overlap disposition (`deferred`, `backstop_overdue` carry-forwa
 stale-execution alarm), the schedule-ownership split (passive Terraform → explicit
 `deploy-aws-application.sh` control), and the two-phase activation boundary.
 
-[Implement and Activate the Bounded Daily Identity Refresh Schedule](.scratch/release-readiness/issues/49-implement-bounded-daily-identity-refresh-schedule.md)
+Implement and Activate the Bounded Daily Identity Refresh Schedule (deleted 2026-10-13, ticket 25; in git history)
 (ticket 49) is the implementation task ticket 45 spawned. Claude has been implementing it across
 three sessions/branches, each landing a slice:
 
