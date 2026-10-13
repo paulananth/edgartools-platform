@@ -1,5 +1,7 @@
 # 03 MDM cross-reference table
 
+Status: done (2026-10-13 17:31 ET): every part ticked with its evidence; its PRs are merged
+
 Type: task. Phase: A. Blocked by: 01a. Map: [map](../map.md). Plan: [plan](../plan.md).
 
 ## Checklist

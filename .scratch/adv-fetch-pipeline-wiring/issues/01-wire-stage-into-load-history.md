@@ -17,7 +17,7 @@ of `load_history`.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (load_history) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [x] The generated `load_history` JSON has a new stage running after
       `Stage1BThirteenF` and before `MdmRun`.

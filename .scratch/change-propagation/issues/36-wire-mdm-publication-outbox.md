@@ -9,7 +9,7 @@ of never being enqueued at all.
 **Blocked by:** None — the design decision is already made (Ticket 06);
 this is pure wiring.
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the old MDM publication path (the Clean MDM outbox and mdm.publish replace it)) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [ ] Every MDM processing pass tied to one upstream `cause_reference`
   (per Ticket 04's Run identity) calls `request_publication` exactly once

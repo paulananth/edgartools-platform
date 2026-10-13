@@ -1,5 +1,7 @@
 # Ticket 12 handover: Claude → Codex (2026-09-24, about 21:30 ET)
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 The operator asked to hand ticket 12 to Codex. Read
 `12-prove-and-switch-on-the-sec-company-classification-rule.md` (decisions and
 checklist) and `../research/12-sec-company-classification-proof.md` (the

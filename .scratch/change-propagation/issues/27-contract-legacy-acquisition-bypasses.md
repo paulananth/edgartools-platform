@@ -10,7 +10,7 @@ company-facts snapshots; 23 — Migrate reference catalogs; 24 — Migrate ADV
 sources; 25 — Add conflict, repair, exclusion, and evidence-import workflows;
 46 — Wire `filing_artifact`'s gated driver into `daily_incremental`
 
-**Status:** claimed (2026-08-29, grok — first family slice: `filing_artifact` /
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the legacy acquisition paths) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 OWNERSHIP_FORMS only). Ticket 26 removed from
 this ticket's blockers — [Ticket 10](10-decide-migration-cutover-rollback.md)'s
 Decision 5 found it was never a genuine prerequisite (ordinary per-family

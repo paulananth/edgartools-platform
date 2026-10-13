@@ -1,5 +1,7 @@
 # Research findings: why 3,082 daily CIKs became 148,524 artifact candidates
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 ## Answer
 
 The expansion was deterministic and reproducible. It was not caused by pagination,

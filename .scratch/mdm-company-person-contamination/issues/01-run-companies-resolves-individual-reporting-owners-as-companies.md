@@ -86,7 +86,7 @@ resolve the FULL active-tracked backlog every day, so leaving individual
 CIKs marked `active` upstream means every future run still has to check
 and skip them, at real cost, even after this fix.
 
-**Status:** root cause found and validated live; forward-looking fix not
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the old MDM run_companies (Clean MDM classifies by its rules)) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 yet implemented; existing-data cleanup and tracking-layer fix both
 explicitly deferred pending operator decision.
 

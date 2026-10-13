@@ -1,5 +1,7 @@
 # Research findings: bound daily identity to companies, daily artifacts to exact index accessions
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 ## Scope and evidence standard
 
 This note records established read-only production, SEC, canonical ticket, and repository findings. It proposes implementation follow-ups but makes no code or AWS mutation.

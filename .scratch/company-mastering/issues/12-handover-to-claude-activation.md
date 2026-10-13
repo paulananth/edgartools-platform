@@ -1,5 +1,7 @@
 # Ticket 12 handoff to Claude: Account hold-back activation (2026-09-25)
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 The operator asked Codex to finish the Account hold-back, then give the work
 to Claude with this note. Codex's branch is
 `codex/company-mastering-12-account-hold-back`; its draft PR is

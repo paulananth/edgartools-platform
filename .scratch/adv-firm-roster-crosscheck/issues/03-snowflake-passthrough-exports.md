@@ -46,7 +46,7 @@ against the `SEC_SUBSIDIARY_EVIDENCE` precedent's actual reference chain, in add
 exist in silver before it can be exported. (`sec_adv_private_fund` already exists and is
 unaffected by ticket 01/02.)
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the retired exporters) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [ ] Both tables are created via bootstrap SQL (`01_source_stage.sql`) and registered for
       merge-key-based incremental load in `03_source_load_wrapper.sql`.

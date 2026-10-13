@@ -1,5 +1,7 @@
 # Research findings — ticket 05 (Implement unified COMPANY dimension), live-state check
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 Captured 2026-07-29 against `edgartools-prod` (Snowflake account `xcpclkf-kb19989`).
 Ticket 05 itself is unclaimed and gated ("Do not start until operator explicitly
 claims this ticket") — this is fact-finding only, no implementation.

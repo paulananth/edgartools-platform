@@ -1,7 +1,7 @@
 # SEC Company on the engine
 
 Type: task (code)
-Status: open
+Status: done (2026-10-13 17:31 ET): SEC Company is read on the engine from the raw capture and company_source.py and loaders/ are retired (Issue 20 L4, #905, #909; the mastering target #928-#930)
 Blocked by: 15
 
 ## Question

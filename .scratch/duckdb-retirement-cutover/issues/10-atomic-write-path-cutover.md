@@ -58,7 +58,7 @@ off DuckDB. Note Ticket 04 specifically: the bookkeeping Postgres instance
 must be live, not just coded, before this deploy — the write path cannot
 repoint to a store that doesn't exist yet.
 
-**Status:** deployed (confirmed live 2026-09-12 — see correction below)
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the DuckDB write path) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 **Correction (2026-09-12):** this "deploy pending operator" line was stale. The cutover has
 already shipped: the currently-registered prod `edgartools-prod-large` task definition

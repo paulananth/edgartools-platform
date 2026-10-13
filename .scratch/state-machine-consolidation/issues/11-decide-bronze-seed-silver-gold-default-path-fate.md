@@ -1,5 +1,5 @@
 Type: grilling
-Status: claimed
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (one_click_data_refresh) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 **Spawned by:** [Ticket 09 — Retire superseded document-loading machines](09-retire-superseded-document-loading-machines.md)'s deferral (2026-09-05): `bronze_seed_silver_gold`'s default path was confirmed to still be install.sh's live, documented "canonical one-click path for cold-starting or recovering an environment's silver/MDM/gold from a bronze snapshot" (`{"batch_size": 100, "release_mode": false}`), directly contradicting the ticket's original confirmed-unused premise for that one machine. The user chose to defer rather than retire-and-break or redesign `install.sh` in the same pass.
 

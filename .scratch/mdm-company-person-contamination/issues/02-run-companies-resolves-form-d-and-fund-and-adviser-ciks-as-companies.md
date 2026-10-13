@@ -1,6 +1,6 @@
 # 02 — `run_companies()` resolves Form D issuers, registered funds, and 13F-only investment managers as `mdm_company` entities
 
-**Status:** open
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the old MDM run_companies) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 **What was found (2026-09-07):** follow-on to Ticket 01. After the
 individual-reporting-owner exclusion filter shipped (Ticket 01, merged

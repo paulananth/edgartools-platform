@@ -25,7 +25,7 @@ failure must never affect MDM entity resolution, graph sync, or the existing
 **Blocked by:** Ticket 01 (Firm Roster parser + silver table) — the ingest dispatch branch
 needs the parser's ingest function to call.
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the load_history and daily_incremental stages) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [ ] Fetch decision logic (Firm Roster's own `periods_to_fetch`/`select_downloadable`
       equivalents, and its manifest `kind` value) is tested at the same seam

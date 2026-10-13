@@ -23,7 +23,7 @@ precedent.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the DuckDB silver parser path) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [ ] Parser unit tests (mirroring `tests/application/test_adv_bulk_ingest.py`'s shape)
       feed a real or minimal synthetic Firm Roster CSV zip through the parser and assert

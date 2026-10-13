@@ -14,7 +14,7 @@ already makes the ~29 no-op days/month cheap.
 **Blocked by:** None — independent Python heredoc from ticket 01; can start immediately
 and in parallel.
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (daily_incremental) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [x] The generated `daily_incremental` JSON has the same new stage running after
       `RunWarehouseTask` and before `MdmRun`.

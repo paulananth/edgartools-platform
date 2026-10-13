@@ -176,7 +176,7 @@ requested this session). Committing to a branch + PR first.
 **Blocked by:** none — independent of Ticket 11/12's remaining scope; does
 not block the DuckDB retirement cutover's own completion.
 
-**Status:** implemented and validated live, not yet deployed to prod
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the landed sec_company_filing loader) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [x] Quantify the true scope: ~209,600 accessions extrapolated (3.29% of
       6.36M in-scope rows), not the originally-assumed narrow corner case

@@ -1,0 +1,9 @@
+# 25: Stale tickets cleaned up
+
+Status: done (2026-10-13 17:31 ET), on the operator's word, 2026-10-13: "clean up all the stale tickets".
+
+- [x] Survey: 860 tickets under `.scratch/*/issues/`; 696 closed, 164 not (2026-10-13 17:31 ET)
+- [x] 15 closed as done or moved, each with its evidence on its Status line: profiling 00, 01, 01a, 01b, 01c, 01d, 02, 03, 04, 04b, 04c and 07b (every part ticked, PRs merged); mastering-to-done 16 (#904), 17 (#905, #909, #928-#930), 10 (moved to profiling 07: #951, #952) (2026-10-13 17:31 ET)
+- [x] 14 research notes, handovers and a brief marked closed as records, not tickets (2026-10-13 17:31 ET)
+- [x] 62 superseded by the rebuild: each changes the retired pipeline (the daily, bootstrap and load-history commands and their state machines, the DuckDB silver store, the old MDM runs, the retired ECS tasks), retired by platform validation 2a/2b (#764, #766) and silver-merge-engine-migration 17; checked by whether the code each names is still on main. Reopen one as a new ticket if its need still applies (2026-10-13 17:31 ET)
+- [x] Left open, as real work or decisions: company-financials (16, the map of 2026-10-12); profiling 05, 05b, 06, 07, 07c, 08; mastering-to-done 06, 07, 09, 12, 15, 18, 19, 20 (L8), 21 (Codex), 24; agent-decision-v1-inputs, er-dashboards, nport-fund-holdings, security-mastering, v1-agent-grade-feature-inputs, v2-mongo-decision-projection; release-readiness 31, 32, 36, 38, 92 (promotion criteria and a data-source decision), 90 and 103 (missing bronze objects: SEC requests, the operator's permission); change-propagation 12, 56; duckdb-retirement-cutover 23 (Snowflake tasks still exist); adv-firm-roster-crosscheck 04; ecs-cost-sizing and others whose code is still on main; rules-skill 11, 15; platform-validation 05c; agent-guides 01; uv-migration 03, 04; unified-company-dimension 05; mdm-enrichment-program 09 (deferred) (2026-10-13 17:31 ET)

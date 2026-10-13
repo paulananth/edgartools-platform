@@ -1,7 +1,7 @@
 # Cut Over MDM's ShardedSilverReader to Snowflake
 
 Type: task
-Status: partially implemented — code shipped, flip not yet safe to trust live
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the old MDM silver reader) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 Blocked by: Stage 14 (EDGARTOOLS_SILVER at real data volume). Ticket 13's refresh-trigger blocker is now resolved. The CloudWatch alarm (Ticket 10 item 3) is this ticket's own remaining deliverable, not an external blocker — corrected here (2026-08-18) after a review pass caught the earlier version making this ticket self-blocking by construction. The alarm can't actually be built until a real `verify-silver-parity` run against post-flip data exists to alarm on, so it waits on the same Stage 14 dependency, not a separate one.
 
 ## Question

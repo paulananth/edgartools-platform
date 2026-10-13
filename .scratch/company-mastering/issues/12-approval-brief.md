@@ -1,5 +1,7 @@
 # Account hold-back: SEC Company rule for operator review
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 **Decision state:** The operator approved the frozen Account hold-back proposal
 on 2026-09-25. The reply was processed at 2026-09-25 13:09:33 ET
 (2026-09-25T17:09:33Z). The rule is active on the Codex branch only; it has

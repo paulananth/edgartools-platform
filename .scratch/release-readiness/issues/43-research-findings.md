@@ -1,5 +1,7 @@
 # 43 — Research findings: SEC daily-index JSON + this repo's daily-form-index pipeline
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 Feeds ticket 43
 (`.scratch/release-readiness/issues/43-investigate-daily-incremental-full-universe-scope.md`).
 Written as a durable sibling artifact per this repo's issue-tracker convention, matching the

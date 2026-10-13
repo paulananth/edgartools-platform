@@ -57,7 +57,7 @@ recently written, rather than trusting a nonzero row count.
 [29 — Deploy the gated acquisition path to prod and dry-run it](29-deploy-and-dry-run-gated-acquisition-path.md),
 which cannot complete its live dry-run checkboxes until this is fixed.
 
-**Status:** ready-for-agent
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the DuckDB silver store) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 - [ ] Decide the right fix shape: `merge_candidate_into_canonical` needs a
   second code path (distinct from the `PROTECTED_TABLE_REGISTRY` merge loop,

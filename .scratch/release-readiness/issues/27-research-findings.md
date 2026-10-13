@@ -1,5 +1,7 @@
 # 27 — Research findings: ER skill requirements per F1–F12 product
 
+Status: closed (2026-10-13 17:31 ET): a research note, handover or brief kept for its record, not a ticket with work of its own
+
 Feeds ticket 27 (`.scratch/release-readiness/issues/27-survey-er-skill-requirements-per-f1-f12-product.md`).
 Written as a durable sibling artifact per this repo's issue-tracker convention, matching the shape
 of `.scratch/erdp-coverage-promotion/issues/01-survey-er-skill-requirements-per-product.md`'s

@@ -1,5 +1,5 @@
 Type: task
-Status: in_progress
+Status: superseded by the rebuild (2026-10-13 17:31 ET): the pipeline it changes (the daily, bootstrap and identity-refresh commands and their state machines) was retired (platform validation 2a/2b, #764 and #766; the DuckDB silver store, silver-merge-engine-migration 17); the configured platform (Rules, Bookkeeping, Change Journal, Clean MDM) replaces it. Reopen as a new ticket if the need still applies
 
 ## Question
 

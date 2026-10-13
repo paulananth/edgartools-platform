@@ -1,7 +1,7 @@
 # GLEIF on the engine
 
 Type: task (code)
-Status: open
+Status: done (2026-10-13 17:31 ET): GLEIF is read by its contracts on the engine and gleif_source.py is retired (Issue 20 L6, #904, 44782b87; equivalence on all three Golden Copy members)
 Blocked by: 15
 
 ## Question
