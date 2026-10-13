@@ -79,6 +79,29 @@ CREATE OR REPLACE VIEW mdm.outbox_input AS
  FROM mdm.outbox o JOIN mdm.batch b USING(batch_id);
 COMMENT ON COLUMN mdm.outbox_input.payload_text IS 'Publication JSONB text sent as is: a stored pre-014 payload, or a contract 3 payload (outbox_delivery); NULL for contract 2 intent prepared from the fields below.';
 
+-- The outbox rows of a batch: one a consumer, each keeping the hash of what
+-- outbox_delivery sends. The journal keeps the whole batch (contract 2: the
+-- history of what was decided). Every other consumer gets change data capture
+-- (contract 3): only the records the batch inserted or changed, and no row at
+-- all when it changed none of them (a decision or set-aside record alone).
+-- Called by write_batch and force_publish; not granted to any login.
+CREATE FUNCTION mdm.queue_outbox(key text, consumers jsonb) RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'mdm'
+    AS $$
+DECLARE item jsonb; delivered jsonb;
+BEGIN
+    FOR item IN SELECT value FROM jsonb_array_elements(consumers) LOOP
+        CONTINUE WHEN item#>>'{}'<>'journal' AND NOT EXISTS(SELECT 1 FROM mdm.batch_change WHERE batch_id=key);
+        INSERT INTO mdm.outbox(batch_id,consumer,payload,payload_hash,contract_version)
+        VALUES(key,item#>>'{}',NULL,'',CASE WHEN item#>>'{}'='journal' THEN 2 ELSE 3 END);
+        SELECT d.payload INTO delivered FROM mdm.outbox_delivery d WHERE d.batch_id=key AND d.consumer=item#>>'{}';
+        UPDATE mdm.outbox SET payload_hash=encode(sha256(convert_to(delivered::text,'UTF8')),'hex')
+          WHERE batch_id=key AND consumer=item#>>'{}';
+    END LOOP;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION mdm.write_batch(request_text text, root_run uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'mdm'
@@ -223,20 +246,9 @@ BEGIN
             batch_id=excluded.batch_id,committed_publication=excluded.committed_publication,continuity_proof=excluded.continuity_proof;
         -- An outbox row names its batch; what it sends is built from the batch row
         -- (outbox_delivery), and the row keeps the hash of that.
-        -- The journal keeps the whole batch (contract 2: the history of what was
-        -- decided). Every other consumer gets change data capture (contract 3):
-        -- only the records this batch inserted or changed, and no row at all when
-        -- it changed none of them (a decision or set-aside record alone).
-        FOR item IN SELECT value FROM jsonb_array_elements(CASE WHEN wrote THEN required ELSE '[]'::jsonb END) LOOP
-            CONTINUE WHEN item#>>'{}'<>'journal'
-                AND NOT EXISTS(SELECT 1 FROM mdm.batch_change WHERE batch_id=r->>'batch_id');
-            INSERT INTO mdm.outbox(batch_id,consumer,payload,payload_hash,contract_version)
-            VALUES(r->>'batch_id',item#>>'{}',NULL,'',CASE WHEN item#>>'{}'='journal' THEN 2 ELSE 3 END);
-            SELECT d.payload INTO delivered FROM mdm.outbox_delivery d
-              WHERE d.batch_id=r->>'batch_id' AND d.consumer=item#>>'{}';
-            UPDATE mdm.outbox SET payload_hash=encode(sha256(convert_to(delivered::text,'UTF8')),'hex')
-              WHERE batch_id=r->>'batch_id' AND consumer=item#>>'{}';
-        END LOOP;
+        -- Outbox rows: the journal's the whole batch, every other consumer's only
+        -- its changed records (mdm.queue_outbox).
+        PERFORM mdm.queue_outbox(r->>'batch_id',CASE WHEN wrote THEN required ELSE '[]'::jsonb END);
         result := jsonb_build_object('batch_id',r->>'batch_id','generation',next_generation,'duplicate',false,
                                      'changed',wrote);
     END core;
@@ -305,7 +317,9 @@ CREATE FUNCTION mdm.force_publish(target text, root_run uuid, page bigint, after
     AS $$
 DECLARE key text := format('forced:%s:%s:%s', target, root_run, page);
     found_batch mdm.batch%ROWTYPE; required jsonb; policy text; objects jsonb; effects jsonb;
-    next_generation bigint; last jsonb; total bigint;
+    next_generation bigint; last jsonb; total bigint; more boolean;
+    -- Companies and aliases are all object_type 'entity': read by their id's index.
+    entity_after text := CASE WHEN after_type = 'entity' THEN after_id ELSE '' END;
 BEGIN
     IF target IS NULL OR root_run IS NULL OR page IS NULL OR page < 1 OR after_type IS NULL OR after_id IS NULL
        OR page_size IS NULL OR page_size < 1 OR page_size > 10000 THEN
@@ -330,22 +344,25 @@ BEGIN
       INTO objects, total FROM (
         (SELECT c.object_type,c.object_id,c.body FROM mdm.current_record c
           WHERE (c.object_type,c.object_id) > (after_type,after_id)
-          ORDER BY c.object_type,c.object_id LIMIT page_size)
+          ORDER BY c.object_type,c.object_id LIMIT page_size+1)
         UNION ALL
         (SELECT 'entity',c.entity_id::text,c.body FROM mdm.company c
-          WHERE c.valid_to IS NULL AND ('entity',c.entity_id::text) > (after_type,after_id)
-          ORDER BY c.entity_id::text LIMIT page_size)
+          WHERE c.valid_to IS NULL AND after_type <= 'entity' AND c.entity_id::text > entity_after
+          ORDER BY c.entity_id::text LIMIT page_size+1)
         UNION ALL
         (SELECT 'entity',a.alias_id::text,jsonb_build_object('entity_id',a.alias_id::text,'kind','company',
                  'canonical_id',a.canonical_id::text,'status','alias')
           FROM mdm.company_alias a
-          WHERE a.valid_to IS NULL AND ('entity',a.alias_id::text) > (after_type,after_id)
-          ORDER BY a.alias_id::text LIMIT page_size)
-        ORDER BY 1,2 LIMIT page_size) s;
+          WHERE a.valid_to IS NULL AND after_type <= 'entity' AND a.alias_id::text > entity_after
+          ORDER BY a.alias_id::text LIMIT page_size+1)
+        ORDER BY 1,2 LIMIT page_size+1) s;
+    -- One record more than the page says whether another page follows; it is not sent.
+    more := total > page_size;
+    IF more THEN objects := objects - page_size; total := page_size; END IF;
     last := objects->(jsonb_array_length(objects)-1);
     effects := jsonb_build_object('forced',true,'consumer',target,'policy_digest',policy,'page',page,
         'after',jsonb_build_object('object_type',after_type,'object_id',after_id),
-        'next',CASE WHEN total = page_size THEN jsonb_build_object('object_type',last->>'object_type','object_id',last->>'object_id') END,
+        'next',CASE WHEN more THEN jsonb_build_object('object_type',last->>'object_type','object_id',last->>'object_id') END,
         'projections',objects);
     SELECT coalesce(max(generation),0)+1 INTO next_generation FROM mdm.batch;
     INSERT INTO mdm.run(run_id,scope) VALUES(root_run,jsonb_build_object('forced_publish',target)) ON CONFLICT DO NOTHING;
@@ -353,10 +370,7 @@ BEGIN
         next_generation,'forced:'||target,page,effects,now());
     INSERT INTO mdm.run_batch VALUES(root_run,key);
     INSERT INTO mdm.batch_change SELECT key,i,'snapshot' FROM generate_series(1,total) i;
-    INSERT INTO mdm.outbox(batch_id,consumer,payload,payload_hash,contract_version)
-    VALUES(key,target,NULL,'',3);
-    UPDATE mdm.outbox o SET payload_hash=encode(sha256(convert_to(d.payload::text,'UTF8')),'hex')
-      FROM mdm.outbox_delivery d WHERE d.batch_id=key AND d.consumer=target AND o.batch_id=key AND o.consumer=target;
+    PERFORM mdm.queue_outbox(key,jsonb_build_array(target));
     RETURN jsonb_build_object('batch_id',key,'generation',next_generation,'duplicate',false,
         'records',total,'next',effects->'next');
 END;

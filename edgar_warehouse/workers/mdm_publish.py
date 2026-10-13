@@ -65,11 +65,12 @@ def receipt(store, batch_id: str, consumer: str) -> bytes:
                            {"b": batch_id, "c": consumer}).mappings().first()
         # A committed batch that changed nothing queues no consumer (migration 017),
         # and one that changed no record queues none but the journal (018: change
-        # data capture): there is nothing to publish, and the receipt says so. Any
-        # other missing row is refused.
+        # data capture): there is nothing to publish, and the receipt says so. A
+        # batch with a row for any other consumer is one whose records went out, so
+        # a missing row there is refused, as is any missing row before 018.
         unchanged = row is None and conn.scalar(text(
             "SELECT EXISTS(SELECT 1 FROM mdm.batch WHERE batch_id=:b) "
-            "AND NOT EXISTS(SELECT 1 FROM mdm.batch_change WHERE batch_id=:b) "
+            "AND NOT EXISTS(SELECT 1 FROM mdm.outbox WHERE batch_id=:b AND consumer<>'journal') "
             "AND (:c<>'journal' OR NOT EXISTS(SELECT 1 FROM mdm.outbox WHERE batch_id=:b))"),
             {"b": batch_id, "c": consumer})
     if unchanged:

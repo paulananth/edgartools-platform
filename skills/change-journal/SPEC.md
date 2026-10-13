@@ -148,6 +148,9 @@ order; every record's `change` is `snapshot` and the payload's `forced` is
 true), changes no master data, and writes the input manifest of the publish
 target (`rules run --pipeline graph-publication --target publish`). The same
 `--run-id` gives the same pages. The journal is refused: it holds every batch.
+Each page is its own batch, so a merge between two pages comes after the first
+in generation order; a consumer applies batches in generation order (as
+`mdm.publish` delivers them), so the snapshot plus what follows is current.
 
 ## Rules and source-owned evidence
 
