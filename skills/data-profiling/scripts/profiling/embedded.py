@@ -65,7 +65,7 @@ def find(con, part: str, columns: list[dict], existing: set[str]) -> tuple[list[
     return found, clashes
 
 
-def known(con, part: str, columns: list[dict], approved, existing: set[str]) -> list[dict]:
+def known(con, part: str, columns: list[dict], approved: tuple[dict, ...], existing: set[str]) -> list[dict]:
     """The entities approved findings carry inside `part`, taken by their approved identifier and columns.
 
     A new delivery may repeat an entity less than the discovery bar asks (each party on one
@@ -85,9 +85,15 @@ def known(con, part: str, columns: list[dict], approved, existing: set[str]) -> 
 
 def from_findings(findings: dict) -> list[dict]:
     """The entities approved findings carry inside a part, as `known` takes them."""
-    return [{"part": p["part"], "from": p["derived_from"], "column": p["derived_evidence"]["column"],
-             "follows": list(p["derived_evidence"]["follows"])}
-            for p in findings["parts"] if p.get("derived_from") and "column" in (p.get("derived_evidence") or {})]
+    found = []
+    for p in findings["parts"]:
+        evidence = p.get("derived_evidence") or {}
+        # Findings from before the identifier was recorded: a one-column record key is it.
+        column = evidence.get("column") or (p["record_key"]["columns"][0] if len(p["record_key"]["columns"]) == 1 else None)
+        if p.get("derived_from") and column:
+            found.append({"part": p["part"], "from": p["derived_from"], "column": column,
+                          "follows": list(evidence.get("follows") or {})})
+    return found
 
 
 def _entity(name: str, part: str, x: dict, follows: dict[str, float]) -> dict:

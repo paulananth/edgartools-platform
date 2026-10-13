@@ -181,15 +181,16 @@ def test_free_text_samples_are_written_as_their_shape(tmp_path):
     with (tmp_path / "docs.jsonl").open("w") as out:
         for n in range(80):
             out.write(json.dumps({"document_id": f"D-{n:04d}", "remark": (
-                f"{WORDS[n % 10]} shares held by the Quillfeather Family Trust since {2000 + n}; the "
-                f"{WORDS[n // 10]} party disclaims ownership {'except' if n % 2 else 'beyond'} its interest")}) + "\n")
+                f"{WORDS[n % 10]} cargo shipped through the quillfeather depot since {2000 + n}; the "
+                f"{WORDS[n // 10]} carrier keeps custody {'except' if n % 2 else 'beyond'} the dock")}) + "\n")
     out = tmp_path / "out"
     assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
                               "--out", str(out)]) == 0
     remark = next(c for c in yaml.safe_load((out / "findings.yaml").read_text())["parts"][0]["columns"]
                   if c["name"] == "remark")
     assert remark["distribution"] is None and remark["top"][0]["value"].startswith("Aaaa")
-    assert not [f for f in out.iterdir() if "Quillfeather" in f.read_text()]
+    assert remark["sensitivity"] == "none"  # free text that names no one: masked as free text, not as personal
+    assert not [f for f in out.iterdir() if "quillfeather" in f.read_text()]
 
 
 def test_a_short_text_that_names_people_is_personal(tmp_path):
@@ -206,3 +207,23 @@ def test_a_short_text_that_names_people_is_personal(tmp_path):
                    if c["name"] == "held")
     assert held_by["sensitivity"] == "personal" and "values: text naming people" in held_by["sensitivity_signals"]
     assert not [f for f in out.iterdir() if "Vantrell" in f.read_text()]
+
+
+def test_text_naming_people_needs_their_capitals():
+    from profiling import sensitivity
+    things = ["Dr Pepper Snapple", "100 Oak Dr Suite 5", "Living Trust Services LLC", "held by the family",
+              "MS Office licence", "Estate of mind"]
+    assert not [v for v in things if sensitivity._MENTION.search(v)]
+    people = ["By the Orrin Q. Vantrell Revocable Trust", "Mr. Vantrell and his spouse", "Vantrell Family Trust",
+              "By estate of Orrin Vantrell"]
+    assert all(sensitivity._MENTION.search(v) for v in people)
+
+
+def test_approval_rewrites_the_report(findings, tmp_path):
+    out = tmp_path / "approve"
+    _documents(tmp_path / "docs.jsonl")
+    assert profile_data.main(["run", "--name", "documents", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    assert "Approval: **draft**" in (out / "REPORT.md").read_text()
+    assert profile_data.main(["approve", "--findings", str(out / "findings.yaml"), "--by", "test", "--words", "yes"]) == 0
+    assert "Approval: **approved**" in (out / "REPORT.md").read_text()

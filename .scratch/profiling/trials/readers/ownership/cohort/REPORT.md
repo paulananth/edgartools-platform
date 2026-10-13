@@ -1,6 +1,6 @@
 # Profiling report: Insider ownership documents (Forms 3, 4, 5), proof cohort
 
-Profiled 2026-10-12T22:08:15-04:00 by data-profiling 1. Scan: **full**; 9.6 s. Approval: **draft**.
+Profiled 2026-10-12T22:08:15-04:00 by data-profiling 1. Scan: **full**; 9.6 s. Approval: **approved**.
 
 ## Parts
 
@@ -234,5 +234,8 @@ Dependencies that are not hierarchies: a yes/no flag (never a level), or a coinc
 ## Questions for the operator (one at a time)
 
 1. Is ownership.issuer a new master kind named 'issuer'? Recommendation: yes: has a unique key (required); other parts point at it; points at few parts; has name-like text; smaller than the parts pointing at it; has attributes besides codes and dates
+2. Is the reporting owner reference data (0.857) or master data (0.833)? Recommendation: master: the owner is a Person or a Company, bound by its CIK; it looks like reference data only because the filing carries just its CIK and name
+3. Is the owner on a filing (accession, owner CIK) transaction data or a relationship? Recommendation: a relationship: owner to issuer, with its roles (director, officer, ten-percent owner, other) and its period from the filings; onboarded together with the two masters
+4. Is securityTitle.value > ownershipNature.natureOfOwnership.value a reference hierarchy? Recommendation: no: it holds in this data by chance; neither column is a level of a code set
 
 Samples of personal and free-text columns are masked to their shape. Store suggestions are advice only.

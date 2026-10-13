@@ -709,7 +709,8 @@ def _fold_single_items(con, child: str) -> None:
     start = con.execute(f"SELECT coalesce(max({ROW}) + 1, 0) FROM {sql_name(child)}").fetchone()[0]
     filled = " OR ".join(f"{sql_name(c)} IS NOT NULL" for c in dotted.values())
     targets = ", ".join(sql_name(f) for f in dotted)
-    values = ", ".join(f"TRY_CAST({sql_name(c)} AS {child_columns[f]})" for f, c in dotted.items())
+    values = ", ".join(f"json_extract_string({sql_name(c)}, '$')" if columns[c] == "JSON" and child_columns[f] == "VARCHAR"
+                       else f"TRY_CAST({sql_name(c)} AS {child_columns[f]})" for f, c in dotted.items())
     con.execute(f"INSERT INTO {sql_name(child)} ({ROW}, {PARENT}, {POSITION}, {targets}) "
                 f"SELECT {start} + row_number() OVER (ORDER BY {ROW}) - 1, {ROW}, 0, {values} "
                 f"FROM {sql_name(parent)} WHERE {filled}")
@@ -724,7 +725,7 @@ def _common_type(con, child: str, field: str, held: str, single: str) -> str:
     if not con.execute(f"SELECT count({sql_name(field)}) FROM {sql_name(child)}").fetchone()[0]:
         return single
     if held in NUMBERS and single in NUMBERS:
-        return "DOUBLE" if "DOUBLE" in (held, single) or "FLOAT" in (held, single) else "BIGINT"
+        return "DOUBLE" if {"DOUBLE", "FLOAT"} & {held, single} else "HUGEINT" if "HUGEINT" in (held, single) else "BIGINT"
     return "VARCHAR"
 
 

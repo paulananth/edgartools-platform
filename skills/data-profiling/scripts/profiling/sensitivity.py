@@ -65,9 +65,11 @@ PEOPLE = 0.5
 # A text that names a person inside it: a title before a name, a name with a middle initial, a
 # family's or a person's trust, an estate. On this share of a column's values, the column is personal.
 MENTIONS = 0.02
-_MENTION = re.compile(r"\b(?:Mr|Mrs|Ms|Dr)\.?\s+[A-Z][a-z]|\b[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][a-z]+"
-                      r"|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:Family|Fam)\b|\bestate of\b"
-                      r"|\b(?:Revocable|Irrevocable|Living)\s+Trust\b", re.I)
+_MENTION = re.compile(r"\b(?:Mr|Mrs|Ms)\.?\s+[A-Z][a-z]+|\bDr\.\s+[A-Z][a-z]+"
+                      r"|\b[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][a-z]+"
+                      r"|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:Family|Fam)\s+(?:Trust|Fund|Foundation)\b"
+                      r"|\b(?i:estate of)\s+[A-Z]"
+                      r"|\b[A-Z][a-z]+\s+(?:Revocable|Irrevocable|Living)\s+Trust\b")
 _NAME_WORD = re.compile(r"^[^\W\d_][^\W\d_.'\-]*(?:[.'\-][^\W\d_]*)*\.?$")
 _SIGNED = re.compile(r"^/s/\s*", re.I)  # a conformed signature: "/s/ <name>"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")

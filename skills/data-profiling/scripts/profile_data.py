@@ -105,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
     findings["approval"] = {"status": "approved", "approved_by": args.by, "approved_words": args.words,
                             "approved_at": run.now()}
     args.findings.write_text(yaml.safe_dump(findings, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
+    report_md = args.findings.with_name("REPORT.md")
+    if report_md.exists():  # the report says what the findings say
+        report_md.write_text(report.markdown(findings), encoding="utf-8")
     print(f"approved {args.findings}")
     return 0
 
