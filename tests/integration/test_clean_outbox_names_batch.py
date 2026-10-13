@@ -51,7 +51,11 @@ def test_a_new_row_keeps_only_the_hash_and_sends_what_its_batch_holds(database):
     with database.admin.connect() as conn:
         batch = conn.execute(text("SELECT generation, run_id::text, effects FROM mdm.batch")).one()
     for r in found:
-        assert r["sent"]["objects"] == batch.effects["projections"]
+        # The journal keeps the whole batch; the others get its changes (018), here every record new.
+        if r["consumer"] == "journal":
+            assert r["sent"]["objects"] == batch.effects["projections"]
+        else:
+            assert r["sent"]["objects"] == [{**p, "change": "insert"} for p in batch.effects["projections"]]
         assert r["sent"]["generation"] == batch.generation and r["sent"]["run_id"] == batch.run_id
         assert ("effects" in r["sent"]) == (r["consumer"] == "journal")
     sent = Destination()

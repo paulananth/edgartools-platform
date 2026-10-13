@@ -39,12 +39,15 @@ Bronze
 one immutable captured file
       |
       v
-Approved Rules ---------------- Bookkeeping
-how that file is read            frozen work, lease, retry
-      |                              |
-      v                              v
-source.read                          verifier read-back
-source extract                       Rust, called from Python
+Approved Rules            Bookkeeping                 Change Journal
+how that file is read     restart: frozen work,       what changed: a file
+      |                   lease, retry, verifier      already processed under
+      |                   read-back                   the same rules and shared
+      |                                               inputs is skipped
+      |                   (both stand beside every step below)
+      v
+source.read
+source extract, Rust, called from Python
       |
       +---- source.combine           when one feed joins several source extracts
       |
@@ -55,11 +58,10 @@ source extract                       Rust, called from Python
 
 Mastering, from the source extract:
 
-mdm.prepare ---- mdm.merge ---- mdm.publish
-                                      |
-                                      v
-                               Change Journal
-                               durable history of delivery intent
+mdm.prepare ---- mdm.merge ---- journal.record ----> Change Journal
+                     |                               each file processed
+                     v
+                mdm.publish ----> consumers, and the MDM Change Journal
 
 Analytics, separate from mastering:
 
@@ -70,7 +72,12 @@ Rules own the versioned contracts. Bookkeeping owns work and recovery, and
 starts without a parser or a master record. Workers read and write. A separate
 verifier rereads the destination. Clean MDM owns identities, evidence, merge
 decisions and publication intent, and each commit checks the worker's live
-lease. The Change Journal records history. Silver lands an approved spec by hand on
+lease. Bookkeeping and the Change Journal are peers over every step:
+Bookkeeping restarts a load where it stopped, and the Change Journal decides,
+for a whole file or source, whether it is identical (skip it) or must be
+processed. A change in how a source is read, or in a shared input, processes
+every file again; `--all` forces every file, and the journal records the force.
+It never decides at field level. Silver lands an approved spec by hand on
 local PostgreSQL and does not commit a master. The pipeline worker for that
 landing is not built.
 

@@ -202,6 +202,13 @@ def test_a_publication_carries_the_objects_the_merge_stage_computed(database):
                 "FROM mdm.outbox_delivery d JOIN mdm.batch b USING (batch_id)"
             )
         ).all()
-    assert rows and all(objects == sent for _, objects, sent in rows)
+    # Since 018 a consumer gets the objects the Merge Stage computed that changed, in batch
+    # order, each with its change: both Companies new, then the merged-away one an alias.
+    assert rows
+    for _, objects, sent in rows:
+        plain = [{k: v for k, v in o.items() if k != "change"} for o in objects]
+        assert plain and plain == [p for p in sent if p in plain]
+    changes = sorted({(o["object_id"], o["change"], o["body"]["status"]) for _, objects, _ in rows for o in objects})
+    assert [c[1:] for c in changes if c[2] == "alias"] == [("update", "alias")]
 
 

@@ -242,8 +242,12 @@ _Avoid_: A snapshot as the only test, a case named by number, expectations re-re
 The declared limits a Source Contract version must meet on a pinned batch of real Bronze Artifacts in a Proving Run, each looser-than-zero limit carrying its reason.
 _Avoid_: A limit without a reason, an unpinned batch, a gate that replaces a Mastering Policy's precision proof
 
+**Change Journal**:
+The append-only record, beside Bookkeeping over every step, of what each source's steps have processed: a whole file or source is identical (already processed under the same rules and shared inputs, so skipped) or is processed; a change in how a source is read, or in a shared input, makes every file of it new again. Bookkeeping restarts a load; the Change Journal says what changed.
+_Avoid_: Field- or record-level change (that is the step's own work, and publication's), a journal for mastering only, skipping a file without the operator's force being recorded
+
 **MDM Change Journal**:
-The evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
+The mastering part of the Change Journal: the evidence, decision, outcome and recovery history for mastering within the Change Ledger, joined to the originating Bookkeeping run and MDM Commit Evidence.
 _Avoid_: A second root-run authority, mutable log of only the latest result
 
 **IS_ULTIMATELY_CONSOLIDATED_BY**:

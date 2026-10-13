@@ -18,6 +18,7 @@ PREPARE = ["--capture", "c", "--documents", "d", "--population", "p", "--catalog
     (["mdm", "check-connectivity"], "check_connectivity"),
     (["mdm", "name-census", *CENSUS], "name_census"),
     (["mdm", "prepare-clean-company", *PREPARE], "prepare_clean_company"),
+    (["mdm", "force-publish", "--consumer", "graph", "--output", "o"], "force_publish"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []

@@ -130,6 +130,28 @@ whole file, never a field or a record inside one (record-level change is
   files without an event; when none is left it starts no run.
 - `--all` names every file; its events say `forced: yes`.
 
+## What `mdm.publish` sends (change data capture)
+
+Inside a file, record-level change is `mdm.publish`'s (migration 018). A
+batch's journal row keeps the whole batch (payload contract 2: the history of
+what was decided). Every other consumer gets contract 3: only the records the
+batch inserted or changed, each with its `change` (`insert`, `update`; MDM
+keeps no deletes, so a record that ends is an update whose body says so), and
+no row at all when the batch changed none of its records. Rows queued before
+018 keep contract 2.
+
+**Force publish** sends every current record to one consumer, changed or not
+(a consumer that is new, rebuilt or out of step): `edgar-warehouse mdm
+force-publish --consumer <name> --output <folder>` writes the current snapshot
+as forced pages (`mdm.force_publish`, at most 10,000 records a page, in object
+order; every record's `change` is `snapshot` and the payload's `forced` is
+true), changes no master data, and writes the input manifest of the publish
+target (`rules run --pipeline graph-publication --target publish`). The same
+`--run-id` gives the same pages. The journal is refused: it holds every batch.
+Each page is its own batch, so a merge between two pages comes after the first
+in generation order; a consumer applies batches in generation order (as
+`mdm.publish` delivers them), so the snapshot plus what follows is current.
+
 ## Rules and source-owned evidence
 
 The acquisition section and integration boundary are described in
