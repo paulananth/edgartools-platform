@@ -1,0 +1,16 @@
+# SEC insider ownership filings (Forms 3, 4 and 5), drafted from the profiling
+# findings approved by the operator on 2026-10-12 (`.scratch/profiling/trials/
+# readers/ownership/cohort/findings.yaml`; profiling ticket 07). This file names the
+# source; it reads nothing itself. Each filing is read by one of two readings, by
+# the shape it was captured in, both with the same tables and columns:
+#   ownership-xml.yaml: the filing's primary document, bare XML (the accession
+#     from the capture's path, given by the caller);
+#   ownership-sgml.yaml: the SGML submission file (the accession from its header).
+# The issuer is the existing Company (by CIK); the owner is master data, a Person
+# or Company (by CIK), and the owner on a filing is a relationship onboarded
+# with both masters (operator, 2026-10-12, "approved"). Their Dataset Contracts,
+# the transaction tables' silver specs and a Bookkeeping target come in a later
+# change, after a Proving Run; nothing here is mastered or landed yet. Its bronze
+# family is named with its capture: today's local copies sit in two (the cohort's
+# primary documents and the filing_artifact submission files).
+source: sec.ownership

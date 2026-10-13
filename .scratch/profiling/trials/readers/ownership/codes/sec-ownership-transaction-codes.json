@@ -1,0 +1,163 @@
+{
+ "code_set": {
+  "code_set": "sec-ownership-transaction-codes",
+  "name": "Form 4 transaction codes",
+  "definition": "The code an insider writes for the character of each transaction reported on Form 4 (Table I column 3, Table II column 4) and Form 5",
+  "authority": "SEC Form 4 General Instruction 8, Transaction Codes (https://www.sec.gov/files/form4.pdf, sha256 275cfc9188bc1c7b7a5b8c45abb03c799b64f9e1fe74c92a28e97598778abc2d, read 2026-10-13)",
+  "steward": "operator"
+ },
+ "version": "1",
+ "created_by": "claude/data-onboarding (profiling ticket 07)",
+ "evidence": {
+  "source": "SEC Form 4 General Instruction 8",
+  "pdf_sha256": "275cfc9188bc1c7b7a5b8c45abb03c799b64f9e1fe74c92a28e97598778abc2d",
+  "read_at": "2026-10-13T14:58:00-04:00",
+  "local_codes_seen": 15,
+  "local_codes_outside_the_list": 0
+ },
+ "codes": [
+  {
+   "code": "P",
+   "label": "Open market or private purchase of non-derivative or derivative security",
+   "definition": "General transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "S",
+   "label": "Open market or private sale of non-derivative or derivative security",
+   "definition": "General transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "V",
+   "label": "Transaction voluntarily reported earlier than required",
+   "definition": "General transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "A",
+   "label": "Grant, award or other acquisition pursuant to Rule 16b-3(d)",
+   "definition": "Rule 16b-3 transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "D",
+   "label": "Disposition to the issuer of issuer equity securities pursuant to Rule 16b-3(e)",
+   "definition": "Rule 16b-3 transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "F",
+   "label": "Payment of exercise price or tax liability by delivering or withholding securities incident to the receipt, exercise or vesting of a security issued in accordance with Rule 16b-3",
+   "definition": "Rule 16b-3 transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "I",
+   "label": "Discretionary transaction in accordance with Rule 16b-3(f) resulting in acquisition or disposition of issuer securities",
+   "definition": "Rule 16b-3 transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "M",
+   "label": "Exercise or conversion of derivative security exempted pursuant to Rule 16b-3",
+   "definition": "Rule 16b-3 transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "C",
+   "label": "Conversion of derivative security",
+   "definition": "Derivative securities codes (except for transactions exempted pursuant to Rule 16b-3), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "E",
+   "label": "Expiration of short derivative position",
+   "definition": "Derivative securities codes (except for transactions exempted pursuant to Rule 16b-3), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "H",
+   "label": "Expiration (or cancellation) of long derivative position with value received",
+   "definition": "Derivative securities codes (except for transactions exempted pursuant to Rule 16b-3), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "O",
+   "label": "Exercise of out-of-the-money derivative security",
+   "definition": "Derivative securities codes (except for transactions exempted pursuant to Rule 16b-3), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "X",
+   "label": "Exercise of in-the-money or at-the-money derivative security",
+   "definition": "Derivative securities codes (except for transactions exempted pursuant to Rule 16b-3), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "G",
+   "label": "Bona fide gift",
+   "definition": "Other Section 16(b) exempt transaction and small acquisition codes (except for Rule 16b-3 codes above), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "L",
+   "label": "Small acquisition under Rule 16a-6",
+   "definition": "Other Section 16(b) exempt transaction and small acquisition codes (except for Rule 16b-3 codes above), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "W",
+   "label": "Acquisition or disposition by will or the laws of descent and distribution",
+   "definition": "Other Section 16(b) exempt transaction and small acquisition codes (except for Rule 16b-3 codes above), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "Z",
+   "label": "Deposit into or withdrawal from voting trust",
+   "definition": "Other Section 16(b) exempt transaction and small acquisition codes (except for Rule 16b-3 codes above), SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "J",
+   "label": "Other acquisition or disposition (describe transaction)",
+   "definition": "Other transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "K",
+   "label": "Transaction in equity swap or instrument with similar characteristics",
+   "definition": "Other transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  },
+  {
+   "code": "U",
+   "label": "Disposition pursuant to a tender of shares in a change of control transaction",
+   "definition": "Other transaction codes, SEC Form 4 General Instruction 8.",
+   "status": "valid"
+  }
+ ],
+ "usage": [
+  {
+   "store": "source",
+   "object": "sec.ownership",
+   "field": "transactionCoding.transactionCode",
+   "match": "exact",
+   "note": "both transaction tables"
+  }
+ ],
+ "hints": [
+  {
+   "kind": "meaning",
+   "text": "One letter for the kind of transaction: P a purchase, S a sale, A an award, M an exercise of an exempt derivative, F shares withheld for tax, G a gift, J other (described in a footnote)"
+  },
+  {
+   "kind": "use_when",
+   "text": "Telling trades (P, S) from awards, exercises and gifts in insider transactions"
+  },
+  {
+   "kind": "avoid_when",
+   "text": "Reading K alone: the SEC asks for K beside the code that describes the transaction (S/K, P/K)"
+  }
+ ]
+}
