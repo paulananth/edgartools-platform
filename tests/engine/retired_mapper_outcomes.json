@@ -1,0 +1,202 @@
+{
+ "gleif/alias/'plain text'": "f50d2fb15899eb12075de6343fd2232f59f12c842d7aafd9c193d97989057d06",
+ "gleif/alias/[{'$': 'hidden'}]": "f50d2fb15899eb12075de6343fd2232f59f12c842d7aafd9c193d97989057d06",
+ "gleif/level1/blank": "f50d2fb15899eb12075de6343fd2232f59f12c842d7aafd9c193d97989057d06",
+ "gleif/level1/complete": "6f29d1f2b2971943f849f4a0ad2035be7937ecea070d60fef03ce2929ae268e2",
+ "gleif/level1/empty_address": "093c4ca40a1ab70670ed363c47f0dbd6476e26fb2902523c2c3ff68af2eabab0",
+ "gleif/level1/empty_lines": "49f2b5c848fa14a946924a6128e302308d6641015540943794b9099fef5aac5f",
+ "gleif/level1/missing": "045a2028908164a236281eb30d5731d25342f928dbc4b6d76cb48ade4db33786",
+ "gleif/level1/null_lines": "49f2b5c848fa14a946924a6128e302308d6641015540943794b9099fef5aac5f",
+ "gleif/normalize/bad_address": [
+  "deferred",
+  "invalid_field_shape",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "gleif/normalize/bad_matching": [
+  "deferred",
+  "invalid_field_shape",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "gleif/normalize/bad_name": [
+  "deferred",
+  "invalid_field_shape",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "gleif/normalize/invalid_lei": [
+  "deferred",
+  "invalid_lei",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "gleif/normalize/non_company": [
+  "deferred",
+  "unsupported_identity_kind",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "fund_structure"
+ ],
+ "gleif/normalize/valid": [
+  "assertion",
+  "601a07a3a228c07bd7bd7e9752c8a58fd59fa85f053d9cf7e3a2037945534d28"
+ ],
+ "gleif/parents/'plain text'": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
+ "gleif/parents/0": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
+ "gleif/parents/False": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
+ "gleif/parents/None": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
+ "gleif/parents/[{'LegalName': {'$': 'hidden'}}]": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
+ "gleif/raw/relationships": "829dd32c54e3cf0ae0ee24012fae209e414464e7617050eb92a6e46d130a91ab",
+ "gleif/raw/reporting_exceptions": "829dd32c54e3cf0ae0ee24012fae209e414464e7617050eb92a6e46d130a91ab",
+ "sec/address/'text'": [
+  "mapped",
+  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+ ],
+ "sec/address/False": [
+  "mapped",
+  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+ ],
+ "sec/address/None": [
+  "mapped",
+  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+ ],
+ "sec/address/[]": [
+  "mapped",
+  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+ ],
+ "sec/address/{'street': '\\x1c A \\x1f', 'city': ' '}": [
+  "mapped",
+  "68bb2b0ffbd640964163e5b83bde035a8823b0e6e435786a776e0a1988ed7c5f"
+ ],
+ "sec/address/{'street': 0}": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/address/{'street': False}": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/address/{'street': []}": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/address/{}": [
+  "mapped",
+  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+ ],
+ "sec/exact/sec.submissions.company/' Exact Spelling '": [
+  "mapped",
+  "96e9468497738a8d2a7f3669fe6fca72b4862fef53b856338d82171331ec6f48",
+  "d6e10a7eb7bf553bc789efc154f27861fa12da375a78cf3f7021d1a233b4eb06"
+ ],
+ "sec/exact/sec.submissions.company/'\\x1c \\x1f'": [
+  "mapped",
+  "24a68d398a41b1efab867a01093fb46582cbb722aa5977ec1430c7a4eba28a89",
+  "d6e10a7eb7bf553bc789efc154f27861fa12da375a78cf3f7021d1a233b4eb06"
+ ],
+ "sec/exact/sec.submissions.company/0": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.company/False": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.company/None": [
+  "mapped",
+  "24a68d398a41b1efab867a01093fb46582cbb722aa5977ec1430c7a4eba28a89",
+  "d6e10a7eb7bf553bc789efc154f27861fa12da375a78cf3f7021d1a233b4eb06"
+ ],
+ "sec/exact/sec.submissions.company/[]": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.company/{}": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.person/' Exact Spelling '": [
+  "mapped",
+  "eb41a37adfdbed499a8ec6d2eceaaa84ec49ee0dcbf094a28203e8ecd0097f1c",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+ ],
+ "sec/exact/sec.submissions.person/'\\x1c \\x1f'": [
+  "mapped",
+  "76d737807161fc1a6577ac6a5b43b5bae63f992a938badde92f9532ee570b3b9",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+ ],
+ "sec/exact/sec.submissions.person/0": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.person/False": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.person/None": [
+  "mapped",
+  "76d737807161fc1a6577ac6a5b43b5bae63f992a938badde92f9532ee570b3b9",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+ ],
+ "sec/exact/sec.submissions.person/[]": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/exact/sec.submissions.person/{}": [
+  "deferred",
+  "invalid_field_shape"
+ ],
+ "sec/normalize/sec.submissions.company/bad_identity": [
+  "deferred",
+  "invalid_cik",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "sec/normalize/sec.submissions.company/bad_name": [
+  "deferred",
+  "invalid_field_shape",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "sec/normalize/sec.submissions.company/blank_name": [
+  "deferred",
+  "quality_name_present",
+  "212ec0ff044695bf34d90d3c68333b779dcf0da93bff78c92b2ea0158193b071",
+  null
+ ],
+ "sec/normalize/sec.submissions.company/unknown_fields": [
+  "assertion",
+  "0452f1757504dbba4db94fd201064a507f39bf5967a3dc156f76699147b32da2"
+ ],
+ "sec/normalize/sec.submissions.company/valid": [
+  "assertion",
+  "0452f1757504dbba4db94fd201064a507f39bf5967a3dc156f76699147b32da2"
+ ],
+ "sec/normalize/sec.submissions.person/bad_identity": [
+  "deferred",
+  "invalid_cik",
+  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  null
+ ],
+ "sec/normalize/sec.submissions.person/bad_name": [
+  "deferred",
+  "classification_deferred",
+  "7d913e48d0bf6115eca3f548877deaebf43b8d407f25b69e0a5bc4faf2ed6fd4",
+  null
+ ],
+ "sec/normalize/sec.submissions.person/blank_name": [
+  "deferred",
+  "classification_deferred",
+  "7d913e48d0bf6115eca3f548877deaebf43b8d407f25b69e0a5bc4faf2ed6fd4",
+  null
+ ],
+ "sec/normalize/sec.submissions.person/unknown_fields": [
+  "assertion",
+  "1863434f8bcecf0c2639de0f88868d0694489e61fbe818c5c87ebec4bea2e47e"
+ ],
+ "sec/normalize/sec.submissions.person/valid": [
+  "assertion",
+  "1863434f8bcecf0c2639de0f88868d0694489e61fbe818c5c87ebec4bea2e47e"
+ ],
+ "sec/timestamps": "0fdc179a446447fab45a8f8400ec3126ea9cb1303a9951e2d530da018ce67434"
+}

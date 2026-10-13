@@ -8,7 +8,8 @@ register different rules: the live Company policy is `983352e8…4049`.
 from __future__ import annotations
 
 import copy
-
+import json
+from pathlib import Path
 
 import pytest
 
@@ -87,6 +88,25 @@ PERSON_ONE_PUBLICATION_A_BUNDLE = "2db297e8730696dd8fb65de5b6f28978d3361bbb059ee
 PERSON_ONE_PUBLICATION_A_DOCUMENT = "exact captured submissions document (member name and sha256)"
 
 
+# Issue 20 L7: the reading is each contract's one statement of its fields and
+# matching values; the older lists it repeated (`fields`, `matching`,
+# `field_shape`) left the contracts. With them put back, each contract is the
+# one pinned before. Their values: `retired_mapping_lists.json`.
+RETIRED_LISTS = json.loads((Path(__file__).with_name("retired_mapping_lists.json")).read_text())
+ONE_STATEMENT = {
+    "sec.submissions.company.v1": "a05633a7509f533f4e64d40485ea3a701513a10d88b0ce4503fbaadbc9ba5872",
+    "sec.submissions.person.v1": "51a849b62316e130f7c6e0f104face7b0d7193f5200125b596fc00b77dc2ce36",
+    "gleif.level1.v1": "c370b924e8f5e42789c9cd58d2c18a0c73df8e0ca47cfa5f927d90baff75fc8d",
+    "gleif.relationships.v1": "c2c536fae34512ded9219b2cec74c11f69f5fc8e257f87e7ea7f52e8937b744b",
+    "gleif.reporting_exceptions.v1": "6d53334aa182cfff12d6407191ac69d5e96ad79e3fdfaf237e2d7741c37e588a",
+}
+
+
+def _with_retired_lists(contract: dict, code: str) -> dict:
+    assert digest(contract) == ONE_STATEMENT[code], code
+    return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[code]}}
+
+
 def test_the_company_configuration_is_unchanged():
     # Rules skill ticket 08 added the SEC place-code table to the policy body;
     # without it the policy is the one that moved here.
@@ -94,15 +114,16 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
-    assert digest(sec_company.CONTRACT) == WITH_PINNED_PLACE_CHECK
-    assert digest(_with_yaml_place_check(sec_company.CONTRACT)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
-    contract = _without_configured_reading(_with_yaml_place_check(sec_company.CONTRACT))
+    company = _with_retired_lists(sec_company.CONTRACT, sec_company.SOURCE_CODE)
+    assert digest(company) == WITH_PINNED_PLACE_CHECK
+    assert digest(_with_yaml_place_check(company)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
+    contract = _without_configured_reading(_with_yaml_place_check(company))
     assert digest(contract) == SEC_READING_V7
     v6 = {**contract, "adapter": {**contract["adapter"],
                                                   "version": "sec-company-landing-v6"}}
     assert digest(v6) == WITH_QUALITY["contract"]
     assert digest(_without_quality(v6)) == BEFORE["contract"]
-    assert digest(sec_company.FIELDS) == BEFORE["fields"]
+    assert digest(RETIRED_LISTS[sec_company.SOURCE_CODE]["fields"]) == BEFORE["fields"]
     assert digest(sec_company.PROOF) == BEFORE["proof"]
     assert digest(sec_company.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]
@@ -250,7 +271,7 @@ def _without_invalid_lei(contract: dict) -> dict:
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
-    contract = gleif_publication.dataset_contract(member)
+    contract = _with_retired_lists(gleif_publication.dataset_contract(member), f"gleif.{member}.v1")
     if member in WITH_EXTENSION_CHECK:
         assert digest(contract) == WITH_EXTENSION_CHECK[member]
         contract = _without_extension_check(contract)
@@ -273,7 +294,8 @@ def test_a_gleif_relationship_points_at_the_level1_source_it_is_given():
     assert [r["target_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     assert [r["source_source"] for r in contract["adapter"]["relationships"]] == ["x.level1"]
     # A fresh copy each call: the substitution never leaks into the next caller.
-    contract = _without_extension_check(gleif_publication.dataset_contract("relationships"))
+    contract = _without_extension_check(
+        _with_retired_lists(gleif_publication.dataset_contract("relationships"), "gleif.relationships.v1"))
     assert digest(contract) == WITH_REFUSALS["relationships"]
     assert digest(_without_configured_reading(_without_refusals(contract))) == WITH_LINK_START["relationships"]
 
@@ -293,7 +315,8 @@ def test_every_rules_file_round_trips_exactly(path):
 
 
 def test_person_configured_fields_preserve_the_previous_contract_digest():
-    contract = files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1")
+    contract = _with_retired_lists(files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1"),
+                                   "sec.submissions.person.v1")
     assert digest(contract) == PERSON_ONE_PUBLICATION_A_BUNDLE
     contract = {**contract, "publication_key": PERSON_ONE_PUBLICATION_A_DOCUMENT}
     assert digest(contract) == SEC_CONFIGURED_FIELDS["sec.submissions.person"]

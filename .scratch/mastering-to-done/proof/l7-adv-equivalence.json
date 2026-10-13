@@ -1,0 +1,17 @@
+{
+ "iapd.adv.custodians.v1": {
+  "counts": {
+   "assertion": 50058,
+   "equal": 50152,
+   "invalid_lei_checksum": 94
+  },
+  "first_differences": []
+ },
+ "iapd.adv.filings.v1": {
+  "counts": {
+   "assertion": 46640,
+   "equal": 46640
+  },
+  "first_differences": []
+ }
+}

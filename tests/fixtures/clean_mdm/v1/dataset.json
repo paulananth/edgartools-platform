@@ -1,8 +1,5 @@
 {
   "adapter": {
-    "fields": {
-      "name": "name"
-    },
     "kind_field": "kind",
     "kind_values": {
       "branch": "branch",
@@ -34,6 +31,40 @@
         "valid_from": "valid_from"
       }
     ],
+    "reading": {
+      "read": {
+        "format": "json",
+        "limits": {
+          "max_bytes": 33554432,
+          "max_records": 1
+        },
+        "tables": {
+          "mapped": {
+            "columns": {
+              "fields": {
+                "object": {
+                  "fields": {
+                    "name": {
+                      "value": {
+                        "null_if_blank": true,
+                        "path": "name",
+                        "path_mode": "literal"
+                      }
+                    }
+                  }
+                }
+              },
+              "matching": {
+                "object": {
+                  "fields": {}
+                }
+              }
+            },
+            "each": "."
+          }
+        }
+      }
+    },
     "record_key": [
       "key"
     ],

@@ -61,6 +61,11 @@ mdm:
               mapped:
                 each: .
                 columns:
+                  # `legal_name` per the Person projection (consumer.md). `display_name` is derived
+                  # by the policy, never here. `formerNames` (a list; non-empty in 9,580 of 76,230
+                  # documents) would feed `name_variants[]`, but the contract has no list-shaped
+                  # field: left out, logged for a ticket. Addresses are never captured into MDM for
+                  # reporting owners (consumer.md, The Person projection).
                   fields:
                     object:
                       fields:
@@ -76,7 +81,6 @@ mdm:
         version: sec-submissions-person-json-v1
         retain_deferred: true
         source_record_provenance: true
-        field_shape: nullable_text
         record_key:
         - cik
         record_key_format: sec_cik
@@ -97,13 +101,6 @@ mdm:
           cik: cik
         identifier_formats:
           cik: sec_cik
-        # `legal_name` per the Person projection (consumer.md). `display_name` is derived
-        # by the policy, never here. `formerNames` (a list; non-empty in 9,580 of 76,230
-        # documents) would feed `name_variants[]`, but the contract has no list-shaped
-        # field: left out, logged for a ticket. Addresses are never captured into MDM for
-        # reporting owners (consumer.md, The Person projection).
-        fields:
-          legal_name: name
 # Person preparation and mastering of one bundle (Issue 20 slice 20d): the
 # input manifest is written by `mdm prepare-capture --source sec.submissions.person`;
 # the records input is composed from the verified readings.

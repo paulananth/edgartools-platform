@@ -85,55 +85,6 @@ def format_value(item, format_name=None):
     return FORMATS[format_name](item)
 
 
-def _blank(item) -> bool:
-    return isinstance(item, str) and not item.strip()
-
-
-ADDRESS_COMPONENTS = frozenset(
-    {"street", "street2", "city", "region", "postcode", "country"}
-)
-
-
-def mapped_field(row: dict, name: str, spec: str | dict):
-    """Read one coherent field, including a source's complete address group."""
-    if isinstance(spec, str):
-        item = value(row, spec)
-        return None if _blank(item) else item
-    components = spec.get("components") if isinstance(spec, dict) else None
-    if name != "address" or not isinstance(components, dict) or not components:
-        raise UnsupportedRecord("invalid_field_mapping")
-    if set(components) - ADDRESS_COMPONENTS:
-        raise UnsupportedRecord("invalid_field_mapping")
-    address = {}
-    for part, path in components.items():
-        if isinstance(path, str) and path:
-            item = value(row, path)
-        elif (
-            part == "street2"
-            and isinstance(path, dict)
-            and set(path) == {"lines"}
-            and isinstance(path["lines"], str)
-            and path["lines"]
-        ):
-            lines = value(row, path["lines"])
-            if lines is not None and not isinstance(lines, list):
-                raise UnsupportedRecord("invalid_field_shape")
-            if lines is not None and any(
-                not isinstance(line, dict) or not isinstance(line.get("$"), str)
-                for line in lines
-            ):
-                raise UnsupportedRecord("invalid_field_shape")
-            item = "\n".join(line["$"].strip() for line in lines if line["$"].strip()) if lines else None
-        else:
-            raise UnsupportedRecord("invalid_field_mapping")
-        if item is None or _blank(item):
-            continue
-        if not isinstance(item, str):
-            raise UnsupportedRecord("invalid_field_shape")
-        address[part] = item.strip()
-    return address or None
-
-
 def value(row: dict, path: str):
     if path == ".":  # the whole record, as a provenance path names it
         return row
@@ -217,7 +168,7 @@ def _configured_values(row: dict, mapping: dict, column: str) -> dict:
     from edgar_warehouse.workers.source_mapping import project_record
 
     try:
-        return project_record(row, mapping["reading"], column=column)
+        return project_record(row, _reading(mapping), column=column)
     except SourceRejected as error:
         if error.code in {"value_type", "join_shape"}:
             raise UnsupportedRecord("invalid_field_shape") from None
@@ -225,37 +176,27 @@ def _configured_values(row: dict, mapping: dict, column: str) -> dict:
         raise
 
 
+def _reading(mapping: dict) -> dict:
+    """The contract's reading: its one statement of a record's fields and
+    matching values. A contract without one cannot run (Issue 20 L7)."""
+    if not isinstance(mapping.get("reading"), dict):
+        raise MappingError("A Dataset Contract states its fields and matching values in adapter.reading")
+    return mapping["reading"]
+
+
 def _fields(row: dict, mapping: dict) -> dict:
-    """A row's mapped fields. Blank text is unknown, never a value: a source
-    that sends "" has said nothing, and a blank must not win a field or show
-    in the master (operator, 2026-09-24)."""
-    if "reading" in mapping:
-        return _configured_values(row, mapping, "fields")
-    fields = {
-        name: mapped_field(row, name, spec)
-        for name, spec in mapping.get("fields", {}).items()
-    }
-    if mapping.get("field_shape") == "nullable_text" and any(
-        v is not None
-        and not isinstance(v, str)
-        and not (name == "address" and isinstance(v, dict))
-        for name, v in fields.items()
-    ):
-        raise UnsupportedRecord("invalid_field_shape")
-    return fields
+    """A row's mapped fields, as the contract's reading states them. Blank
+    text is unknown, never a value: a source that sends "" has said nothing,
+    and a blank must not win a field or show in the master (operator,
+    2026-09-24); the reading says so with `null_if_blank`."""
+    return _configured_values(row, mapping, "fields")
 
 
 def _matching_values(row: dict, mapping: dict) -> dict:
     """What a matching rule compares, kept with the record and out of its
-    fields, so reading it grants no field a value (ticket 08). A value is one
-    path, or an address's components, as `fields.address` reads them
-    (GLEIF's headquarters address: ticket 22)."""
-    if "reading" in mapping:
-        return _configured_values(row, mapping, "matching")
-    return {
-        name: value(row, path) if isinstance(path, str) else mapped_field(row, "address", path)
-        for name, path in (mapping.get("matching") or {}).items()
-    }
+    fields, so reading it grants no field a value (ticket 08): the reading's
+    `matching` column."""
+    return _configured_values(row, mapping, "matching")
 
 
 def _refuse(row: dict, mapping: dict) -> None:
@@ -268,11 +209,10 @@ def _refuse(row: dict, mapping: dict) -> None:
     value and with `reason` when one is not in `values`. `retained_as` names
     the reason every remaining record waits with: a source whose records are
     evidence only, never an identity."""
-    if "reading" in mapping:
-        from edgar_warehouse.workers.source_mapping import record_refusal
+    from edgar_warehouse.workers.source_mapping import record_refusal
 
-        if reason := record_refusal(row, mapping["reading"]):
-            raise UnsupportedRecord(reason)
+    if reason := record_refusal(row, _reading(mapping)):
+        raise UnsupportedRecord(reason)
     for rule in mapping.get("every_in", []):
         node = value(row, rule["path"])
         found = _as_list(node) if node else []  # empty text, list or object: none

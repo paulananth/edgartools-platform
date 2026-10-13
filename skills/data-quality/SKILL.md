@@ -48,7 +48,8 @@ uv run python <this skill's folder>/scripts/quality_plan.py --help
 You need the part's approved `findings.yaml` and a map from each source
 column the items name to the record path a check reads (`fields.<name>`,
 `fields.address.<part>` or `matching.<name>`). The map comes from the part's
-Dataset Contract: the field each column fills.
+Dataset Contract: the field each column fills, as its reading's `fields` and
+`matching` columns state it.
 
 ```
 uv run python <this skill's folder>/scripts/quality_plan.py draft \

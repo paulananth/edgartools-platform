@@ -5,6 +5,7 @@ reads `target_key`/`target_source`, and nothing changes when they are absent."""
 from __future__ import annotations
 
 from edgar_warehouse.mdm.clean.adapters import normalize, subject_key
+from tests.support.reading import reading
 
 PUBLICATION = {"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "m"}
 LINK = {
@@ -22,7 +23,7 @@ ROW = {"start": "CHILD", "end": "PARENT", "relationship_type": "IS_DIRECTLY_CONS
 def read(link: dict) -> dict:
     contract = {"schema_version": "1", "adapter": {
         "version": "fixture-v1", "kind": "company", "record_key": ["start", "end", "relationship_type"],
-        "fields": {}, "relationships": [link]}}
+        "reading": reading(), "relationships": [link]}}
     return normalize(ROW, source_code="fixture.relationships", contract=contract, publication=PUBLICATION)
 
 

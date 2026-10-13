@@ -7,6 +7,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import mdm_merge, mdm_prepare
+from tests.support.reading import reading
 
 
 def test_preparation_chunks_rows_and_verifies_every_records_file(tmp_path):
@@ -109,7 +110,7 @@ def test_a_prepared_effective_time_dates_the_records_mdm_reads(tmp_path):
     batch = store.json(mdm_prepare.execute(envelope, store))["batches"][0]
     contract = {"schema_version": "fixture-v1", "adapter": {
         "version": "fixture-v1", "kind": "company", "record_key": ["id"],
-        "field_shape": "nullable_text", "fields": {"legal_name": "name"}}}
+        "reading": reading({"legal_name": "name"}, text=True)}}
     record = normalize(rows[0], source_code="fixture.rows", contract=contract,
                        publication={**batch["input"]["publication"], "artifact_sha256": "a" * 64,
                                     "member": batch["input"]["path"]})
