@@ -1,5 +1,7 @@
 # Current-Head Production Launch Readiness
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 ## Destination
 
 Produce a decision-complete validation plan for production operator readiness, bound to an immutable Release Candidate commit and exact warehouse/MDM image digests, with every hard gate, evidence artifact, owner, dependency, and GO condition specified.

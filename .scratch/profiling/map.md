@@ -1,5 +1,7 @@
 # Data profiling program
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 ## Destination
 
 Any data set can be profiled, classified into master, reference, relationship, transaction and metadata parts, and onboarded into MDM, RDM or silver by agents, generically. The program ends when the recreation proof's DIFF.md is accepted by the operator.

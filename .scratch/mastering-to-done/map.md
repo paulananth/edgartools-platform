@@ -1,5 +1,7 @@
 # Company, Person and Relationship mastering: what is left
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 ## Destination
 
 Company, Person and their relationships are switched on in a fresh local Clean MDM. They are fed through configured parsing, Bookkeeping and the Change Journal, with data quality checks and the Data Catalog current. Every open ticket's status matches git.

@@ -1,5 +1,7 @@
 # ER dashboards — wayfinder map
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 Label: `wayfinder:map`  
 Repo: **edgartools-platform**  
 Consumers: financial-services equity-research skills / desk agents (Explore-first)

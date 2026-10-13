@@ -1,5 +1,7 @@
 # Unified Company Dimension (Option B)
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 ## Destination
 
 Replace the dual analytics company surfaces (`EDGARTOOLS_GOLD.COMPANY` and

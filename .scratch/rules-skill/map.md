@@ -1,5 +1,7 @@
 # The `rules` skill
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 Label: `wayfinder:map` (execution carried in the map: the operator approved
 the plan on 2026-09-26, so each ticket builds rather than decides)
 
