@@ -198,8 +198,11 @@ def write_company_manifest(
     catalog_sha = raw_capture.document(folder, receipts, catalog)["sha256"]
     # The rules version is every rules file of the source (its readings, combination and
     # contract) and the load mode they run with; the census and catalog are shared inputs.
+    # Only a true content change is a change (operator, 2026-10-13): the census counts by its
+    # name counts, normalizers and version, not by the capture and population it was built from.
+    census_content = digest({part: census.get(part) for part in ("entries", "normalizers", "version")})
     processing = changed_files.identity({"files": changed_files.source_rules(SOURCE), "load_mode": load_mode},
-                                        digest(POLICY), [{"name": "name_census", "sha256": census_hash},
+                                        digest(POLICY), [{"name": "name_census", "sha256": census_content},
                                                          {"name": "catalog", "sha256": catalog_sha}])
     listed, keys = len(keys), changed_files.select(SOURCE, processing, files, force=force, ledger=journal)
     if not keys:  # every document is processed already: no run
