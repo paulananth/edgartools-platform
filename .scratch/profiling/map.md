@@ -37,6 +37,18 @@ Any data set can be profiled, classified into master, reference, relationship, t
 ## Decisions so far
 
 - See plan.md, decisions 1–49 (operator, 2026-10-04).
+- [00 Ownership and overlap guard](issues/00-ownership-and-overlap-guard.md): every part ticked with its evidence; its PRs are merged
+- [01 Research note: classify, profile, RDM, agent context](issues/01-research-note.md): every part ticked with its evidence; its PRs are merged
+- [01a Specs: RDM, agent context, silver table spec, findings schema](issues/01a-specs.md): every part ticked with its evidence; its PRs are merged
+- [01b data-profiling skill and trials A and B](issues/01b-data-profiling-skill-and-trials-a-and-b.md): every part ticked with its evidence; its PRs are merged
+- [01c data-quality skill](issues/01c-data-quality-skill.md): every part ticked with its evidence; its PRs are merged
+- [01d Profiling follow-ups (deferred parts of 01b and 01c)](issues/01d-profiling-follow-ups.md): every part ticked with its evidence; its PRs are merged
+- [02 RDM database, publish, MDM pin, migrate reference YAML](issues/02-rdm-database.md): every part ticked with its evidence; its PRs are merged
+- [03 MDM cross-reference table](issues/03-mdm-cross-reference-table.md): every part ticked with its evidence; its PRs are merged
+- [04 Relationship context view and onboarding](issues/04-relationship-context-view-and-onboarding.md): every part ticked with its evidence; its PRs are merged
+- [04b Relationship types: real names; parents with a basis; corporate actions](issues/04b-parent-relationship-types.md): every part ticked with its evidence; its PRs are merged
+- [04c GLEIF's successor entity, read from its lists](issues/04c-gleif-successor-entity.md): every part ticked with its evidence; its PRs are merged
+- [07b Name-based matching](issues/07b-name-based-matching.md): every part ticked with its evidence; its PRs are merged
 
 ## Out of scope
 

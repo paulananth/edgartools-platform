@@ -147,3 +147,6 @@ from `issues/`, same as any other frontier ticket.
 - Optimizing Snowflake warehouses, dbt models, S3 retention, or dashboard query
   cost except where their existing outputs establish a workflow's consumer or
   value.
+- [Run `warehouse.gold_standalone` Medium Canaries](issues/29-run-warehouse-gold-standalone-medium-canaries.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the warehouse ECS tasks, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [Build Staged-Transaction Deploy Support for Structural Changes](issues/31-build-staged-transaction-deploy-support.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the ECS task-definition deploys, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [Build and Rehearse a Code Rollback Cohort](issues/32-build-and-rehearse-code-rollback-cohort.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the ECS task-definition deploys, which the rebuild retired. Reopen as a new ticket if the need still applies.

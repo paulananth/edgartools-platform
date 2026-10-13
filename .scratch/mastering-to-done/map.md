@@ -60,6 +60,10 @@ Work in this order. A ticket starts when everything it is blocked by is resolved
 - [The command that runs mastering](issues/04-the-command-that-runs-mastering.md): `edgar-warehouse rules run --target mdm`; no `bookkeeping run`.
 - [Configured parsing](issues/08-configured-parsing-engine.md): build the engine first, a Rust core always called through Python; custom readers only as a last resort; built in tickets 15–17.
 - [Data Catalog for Person and links](issues/11-data-catalog-for-person-and-links.md): the catalog and the Mapping Documents both before switch-on; built in ticket 19.
+- [Forms 3/4/5: capture and reader (06b)](issues/10-forms-345-capture-and-reader.md): to profiling ticket 07 (insider ownership): the readings for both file shapes merged in #951, the capacity links in #952; the Dataset Contracts and Proving Run are next there
+- [GLEIF on the engine](issues/16-gleif-on-the-engine.md): GLEIF is read by its contracts on the engine and gleif_source.py is retired (Issue 20 L6, #904, 44782b87; equivalence on all three Golden Copy members)
+- [SEC Company on the engine](issues/17-sec-company-on-the-engine.md): SEC Company is read on the engine from the raw capture and company_source.py and loaders/ are retired (Issue 20 L4, #905, #909; the mastering target #928-#930)
+- [25: Stale tickets cleaned up](issues/25-stale-ticket-cleanup.md): , on the operator's word, 2026-10-13: "clean up all the stale tickets".
 
 ## Not yet specified
 

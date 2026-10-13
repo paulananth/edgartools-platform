@@ -64,6 +64,8 @@ of "the company universe."
 ## Out of scope
 
 (none yet)
+- [02-decide-cleanup-strategy-for-misclassified-rows](issues/02-decide-cleanup-strategy-for-misclassified-rows.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the old MDM and silver rows, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [Correct: SEC entityType "other" is not an individual](issues/05-correct-other-is-not-an-individual.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the old MDM classification, which the rebuild retired. Reopen as a new ticket if the need still applies.
 
 ## Corrected (2026-09-24)
 

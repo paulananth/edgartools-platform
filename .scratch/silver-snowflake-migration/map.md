@@ -227,3 +227,5 @@ it.
 ## Out of scope
 
 <!-- none identified yet; fog resolves into tickets or here as the map advances -->
+- [Cut Over MDM's ShardedSilverReader to Snowflake](issues/12-cutover-mdm-sharded-silver-reader-to-snowflake.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the old MDM silver reader, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [16-bootstrap-fundamentals-never-reaches-snowflake-landing](issues/16-bootstrap-fundamentals-never-reaches-snowflake-landing.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes load_history's fundamentals stages, which the rebuild retired. Reopen as a new ticket if the need still applies.

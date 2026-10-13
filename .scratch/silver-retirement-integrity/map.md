@@ -60,3 +60,5 @@ resolution instead of leaving them as loose findings.
   implementation — that's the silver-snowflake-migration map's job.
 - Any change to `daily_incremental`/`bootstrap`'s write architecture
   (sharding, concurrency) — that's the silver-sharded-writes map's job.
+- [03 — Decide sec_financial_fact/sec_accounting_flag retirement conflict-resolution policy](issues/03-decide-retirement-conflict-resolution-policy.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the DuckDB silver retirement, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [05 — Repair already-corrupted `sec_accounting_flag` rows in Snowflake](issues/05-repair-already-corrupted-sec-accounting-flag-rows.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the DuckDB silver rows, which the rebuild retired. Reopen as a new ticket if the need still applies.

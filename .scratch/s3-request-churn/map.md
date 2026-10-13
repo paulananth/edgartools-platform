@@ -57,3 +57,6 @@ idempotency, and all existing data-publication contracts.
   verified source/checkpoint state to optimistic assumptions.
 - Replacing S3, migrating Silver to PostgreSQL, or redesigning the AWS data
   plane; this effort is limited to request access patterns.
+- [Capture the Production S3 Request-Attribution Baseline](issues/02-capture-production-s3-request-attribution-baseline.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the retired pipeline's S3 traffic, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [Replace the Dominant S3 Request-Churn Paths](issues/03-replace-dominant-s3-request-churn-paths.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the retired pipeline's S3 paths, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [Verify S3 Request Reduction and Bronze Safety](issues/04-verify-s3-request-reduction-and-bronze-safety.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the retired pipeline's S3 paths, which the rebuild retired. Reopen as a new ticket if the need still applies.

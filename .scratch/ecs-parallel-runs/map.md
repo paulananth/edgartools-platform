@@ -42,6 +42,8 @@ here after each ticket closes.
 
 ## Frontier
 
+Both tickets below were ruled out of scope on 2026-10-13 (ticket 25, superseded by the rebuild); this effort has no open frontier. See Out of scope.
+
 - [Prove the Two-Wave Parallel Residual Pipeline with a Controlled Canary](issues/01-prove-two-wave-parallel-residual-pipeline.md)
   is the only unblocked ticket.
 - [Implement and Roll Out the Proven Two-Wave Parallel Residual Pipeline](issues/02-implement-two-wave-parallel-residual-pipeline.md)
@@ -61,3 +63,5 @@ prove the topology, then implement only if it passes.
 - Parallelizing `MdmExport`, `MdmSync`, or `MdmVerify`.
 - Relationship semantics, target limits, schema, graph scope, IAM broadening,
   or unrelated workflow changes.
+- [Prove the Two-Wave Parallel Residual Pipeline with a Controlled Canary](issues/01-prove-two-wave-parallel-residual-pipeline.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the residual MDM state machine, which the rebuild retired. Reopen as a new ticket if the need still applies.
+- [Implement and Roll Out the Proven Two-Wave Parallel Residual Pipeline](issues/02-implement-two-wave-parallel-residual-pipeline.md): superseded by the rebuild, 2026-10-13 (ticket 25): it changes the residual MDM state machine, which the rebuild retired. Reopen as a new ticket if the need still applies.
