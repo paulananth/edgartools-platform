@@ -386,7 +386,7 @@ EOF
 
 known_install_notes_markdown() {
   cat <<'EOF'
-- `cleanup-ecr-images.sh` only protects image digests referenced by *currently active* ECS task definitions. If you redeploy with a stale cached image ref (e.g. from an old `infra/aws-<env>-application.json` or a manually-typed digest) and then run cleanup, the digest you're about to deploy can be deleted out from under you if it isn't the one already active. Always redeploy with a freshly published or freshly verified-present image ref before running ECR cleanup, not after assuming an old digest is still around.
+- `cleanup-ecr-images.sh` only protects image digests referenced by *currently active* ECS task definitions. If you redeploy with a stale cached image ref (e.g. from an old `infra/aws-<env>-application.json` or a manually-typed digest) and then run cleanup, the digest you're about to deploy can be deleted out from under you if it isn't the one already active. Always redeploy with a freshly published or freshly verified-present image ref before running ECR cleanup, not after assuming an old digest is still around. Since the AWS pipeline's task definitions were retired (platform validation 2b), there may be none active at all, and then cleanup protects no digest: do not run it until the new worker runtime's task definitions exist.
 EOF
 }
 
@@ -577,6 +577,12 @@ build_stages() {
   mdm_network_rule_name_q="$(shell_quote "$mdm_network_rule_name")"
   mdm_schema_name_q="$(shell_quote "$mdm_schema_name")"
   mdm_comment_env_q="$(shell_quote "$ENVIRONMENT")"
+  rules_role="$(shell_quote "${INSTALL_RULES_AGENT_ROLE:-rules_agent}")"
+  bookkeeping_role="$(shell_quote "${INSTALL_BOOKKEEPING_ROLE:-bookkeeping_runtime}")"
+  journal_role="$(shell_quote "${INSTALL_CHANGE_JOURNAL_ROLE:-change_journal_runtime}")"
+  rdm_role="$(shell_quote "${INSTALL_RDM_ROLE:-rdm_runtime}")"
+  silver_role="$(shell_quote "${INSTALL_SILVER_ROLE:-silver_runtime}")"
+  mdm_role="$(shell_quote "${INSTALL_MDM_APPLICATION_ROLE:-application}")"
 
   # Phase: provision -- bare AWS/Snowflake infrastructure and schema; no
   # application artifacts (images, task defs, dbt models) and no real data.
@@ -649,7 +655,7 @@ bash infra/scripts/bootstrap-prod-mdm.sh --env-name ${ENVIRONMENT} --snow-connec
 snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/10_graph_schema.sql
 snow sql --connection ${SNOW_CONNECTION} --enable-templating JINJA --filename infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql -D database=${db_name}"
 
-  # Phase: deploy -- application artifacts (images, ECS task defs, dbt gold
+  # Phase: deploy -- application artifacts (images, dbt gold
   # models, ownership/grants that depend on those models existing, the
   # Streamlit dashboard). No real SEC data is fetched in this phase.
   add_stage \
@@ -660,7 +666,7 @@ AWS_PROFILE=${deployer_q} bash infra/scripts/publish-warehouse-image.sh --aws-re
 
   add_stage \
     "Snowflake: MDM export targets" \
-    "Creates the 5 MDM golden-record export target tables (MDM_COMPANY_ENTITY, MDM_ADVISER, MDM_PERSON, MDM_SECURITY, MDM_FUND) that edgar_warehouse/mdm/export.py's MDMExporter.export_pending() MERGEs into -- no Terraform equivalent creates these (wayfinder snowflake-account-cutover ticket 07). Must run before the next stage: company.sql (dbt) reads {{ source('mdm_export', 'MDM_COMPANY_ENTITY') }}, so a brand-new account's first dbt run would fail without this table already existing. 07_mdm_export_targets.sql uses Snowflake session variables (SET x = ...; then \$x in the SQL body), not Jinja {{ }} templating, so its required SET statements are piped in via stdin ahead of the file's own content rather than passed as -D flags." \
+    "Creates the 5 MDM golden-record export target tables (MDM_COMPANY_ENTITY, MDM_ADVISER, MDM_PERSON, MDM_SECURITY, MDM_FUND) that the retired MDM exporter wrote (edgar_warehouse/mdm/export.py, removed by platform validation 2a; dbt's company.sql still reads MDM_COMPANY_ENTITY) -- no Terraform equivalent creates these (wayfinder snowflake-account-cutover ticket 07). Must run before the next stage: company.sql (dbt) reads {{ source('mdm_export', 'MDM_COMPANY_ENTITY') }}, so a brand-new account's first dbt run would fail without this table already existing. 07_mdm_export_targets.sql uses Snowflake session variables (SET x = ...; then \$x in the SQL body), not Jinja {{ }} templating, so its required SET statements are piped in via stdin ahead of the file's own content rather than passed as -D flags." \
     "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET gold_schema_name = 'EDGARTOOLS_GOLD';\" \"SET deployer_role_name = 'ACCOUNTADMIN';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\"
 cat infra/snowflake/sql/bootstrap/07_mdm_export_targets.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
 
@@ -671,7 +677,7 @@ cat infra/snowflake/sql/bootstrap/07_mdm_export_targets.sql; } | snow sql --conn
 
   add_stage \
     "Snowflake: silver-landing schema + ingest" \
-    "Provisions EDGARTOOLS_SILVER_LANDING (11_silver_landing_schema.sql, generated verbatim from silver_store.py's DDL -- same anti-drift rationale as the MDM mirror schema stage above), EDGARTOOLS_SILVER plus MDM's dedicated silver-reader role (12_silver_schema_and_mdm_reader.sql), the landing ingest apparatus -- stage/file-format/load-procedure/scheduled task (13_silver_landing_ingest.sql), the mdm_entity_id column backfill for the 6 tables 11 created before the mdm-ahead-of-silver map's Phase A added that column to its own generator output (14_silver_landing_mdm_entity_id.sql), the Form 3/4/5 classification-evidence and joint-filing columns for tables 11 created before Person Consumer Contract ticket 19 (20_silver_landing_ownership_evidence.sql -- the three dbt ownership silver models select them, so it must run before dbt), SEC's address country_code for a table 11 created before company mastering ticket 14 (21_silver_landing_company_country_code.sql -- the dbt sec_company_address silver model selects it, so it must run before dbt), and EDGARTOOLS_${ENV_UPPER}_DEPLOYER's read grant on EDGARTOOLS_SILVER_LANDING, the same CREATE-SCHEMA-privilege-checked-before-existence gotcha as the MDM export deployer read stage above (16_silver_landing_deployer_read.sql). Run in this exact order: each file's own header states 13 must follow 11+12 (plus native_pull's already-applied storage-integration widen, infra/terraform/snowflake/accounts/${ENVIRONMENT}/main.tf's additional_storage_locations -- confirmed already committed, needs no separate stage), 14/16/20/21 must follow 11. Must run before 'Snowflake: dbt gold' below: 12's own header requires it run before the first dbt run against the silver dbt models (infra/snowflake/dbt/edgartools_gold/models/silver/, the same dbt project and dbt run invocation as the gold models -- no separate dbt stage needed), and 16 closes the same before-dbt-run privilege gap MDM export deployer read fixes for MDM_COMPANY_ENTITY. Never wired into any install/deploy script before this stage -- confirmed via repo-wide search for each of these files." \
+    "Provisions EDGARTOOLS_SILVER_LANDING (11_silver_landing_schema.sql, held equal to edgar_warehouse/silver_schema.py by tests/unit/test_silver_schema_snapshot.py), EDGARTOOLS_SILVER plus MDM's dedicated silver-reader role (12_silver_schema_and_mdm_reader.sql), the landing ingest apparatus -- stage/file-format/load-procedure/scheduled task (13_silver_landing_ingest.sql), the mdm_entity_id column backfill for the 6 tables 11 created before the mdm-ahead-of-silver map's Phase A added that column to its own generator output (14_silver_landing_mdm_entity_id.sql), the Form 3/4/5 classification-evidence and joint-filing columns for tables 11 created before Person Consumer Contract ticket 19 (20_silver_landing_ownership_evidence.sql -- the three dbt ownership silver models select them, so it must run before dbt), SEC's address country_code for a table 11 created before company mastering ticket 14 (21_silver_landing_company_country_code.sql -- the dbt sec_company_address silver model selects it, so it must run before dbt), and EDGARTOOLS_${ENV_UPPER}_DEPLOYER's read grant on EDGARTOOLS_SILVER_LANDING, the same CREATE-SCHEMA-privilege-checked-before-existence gotcha as the MDM export deployer read stage above (16_silver_landing_deployer_read.sql). Run in this exact order: each file's own header states 13 must follow 11+12 (plus native_pull's already-applied storage-integration widen, infra/terraform/snowflake/accounts/${ENVIRONMENT}/main.tf's additional_storage_locations -- confirmed already committed, needs no separate stage), 14/16/20/21 must follow 11. Must run before 'Snowflake: dbt gold' below: 12's own header requires it run before the first dbt run against the silver dbt models (infra/snowflake/dbt/edgartools_gold/models/silver/, the same dbt project and dbt run invocation as the gold models -- no separate dbt stage needed), and 16 closes the same before-dbt-run privilege gap MDM export deployer read fixes for MDM_COMPANY_ENTITY. Never wired into any install/deploy script before this stage -- confirmed via repo-wide search for each of these files." \
     "snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql
 snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/12_silver_schema_and_mdm_reader.sql
 snow sql --connection ${SNOW_CONNECTION} -f infra/snowflake/sql/bootstrap/13_silver_landing_ingest.sql
@@ -690,13 +696,13 @@ uv run --with dbt-snowflake dbt test --target ${ENVIRONMENT}"
 
   add_stage \
     "Snowflake: loader role ownership" \
-    "Creates EDGARTOOLS_${ENV_UPPER}_LOADER (if the access-control Terraform root did not already) and transfers ownership of the EDGARTOOLS_GOLD dynamic tables plus the 3 manifest-pipeline procedures (LOAD_EXPORTS_FOR_RUN, REFRESH_AFTER_LOAD, PROCESS_RUN_MANIFEST_STREAM) onto it -- REFRESH_AFTER_LOAD's ALTER DYNAMIC TABLE ... REFRESH requires the direct owner role, so this must run after this stage's own dbt gold prerequisite (the dynamic tables must exist before ownership of them can be granted) and before any gold-refresh (both the standalone stage and one_click_data_refresh's internal one, both later in this sequence). 08_loader_role.sql also uses Snowflake session variables, piped the same way as the MDM export targets stage above. On a genuinely brand-new account, dbt gold above already runs as this loader role (profiles.yml's prod target), so the GRANT OWNERSHIP statements here are harmless idempotent re-grants to the already-current owner; they become real ownership transfers only when re-run against an account with pre-existing drift." \
+    "Creates EDGARTOOLS_${ENV_UPPER}_LOADER (if the access-control Terraform root did not already) and transfers ownership of the EDGARTOOLS_GOLD dynamic tables plus the 3 manifest-pipeline procedures (LOAD_EXPORTS_FOR_RUN, REFRESH_AFTER_LOAD, PROCESS_RUN_MANIFEST_STREAM) onto it -- REFRESH_AFTER_LOAD's ALTER DYNAMIC TABLE ... REFRESH requires the direct owner role, so this must run after this stage's own dbt gold prerequisite (the dynamic tables must exist before ownership of them can be granted) and before the first gold refresh (REFRESH_AFTER_LOAD). 08_loader_role.sql also uses Snowflake session variables, piped the same way as the MDM export targets stage above. On a genuinely brand-new account, dbt gold above already runs as this loader role (profiles.yml's prod target), so the GRANT OWNERSHIP statements here are harmless idempotent re-grants to the already-current owner; they become real ownership transfers only when re-run against an account with pre-existing drift." \
     "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET source_schema_name = 'EDGARTOOLS_SOURCE';\" \"SET gold_schema_name = 'EDGARTOOLS_GOLD';\" \"SET admin_role_name = 'ACCOUNTADMIN';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\" \"SET loader_default_grantee = 'ACCOUNTADMIN';\" \"SET refresh_warehouse_name = 'EDGARTOOLS_${ENV_UPPER}_REFRESH_WH';\" \"SET source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';\" \"SET refresh_procedure_name = 'REFRESH_AFTER_LOAD';\" \"SET stream_processor_procedure_name = 'PROCESS_RUN_MANIFEST_STREAM';\" \"SET manifest_stream_name = 'SNOWFLAKE_RUN_MANIFEST_STREAM';\" \"SET status_table_name = 'SNOWFLAKE_REFRESH_STATUS';\"
 cat infra/snowflake/sql/bootstrap/08_loader_role.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
 
   add_stage \
     "Snowflake: loader read grants on silver" \
-    "Grants EDGARTOOLS_${ENV_UPPER}_LOADER OPERATE + SELECT on every EDGARTOOLS_SILVER dynamic table (current and future). Must run after this stage's own loader-role prerequisite above (the role must exist first) and before any gold-refresh (both the standalone stage and one_click_data_refresh's internal one, both later in this sequence) -- without it, REFRESH_AFTER_LOAD (EXECUTE AS OWNER, running as loader) cannot refresh any gold dynamic table whose dbt model reads from silver via ref()/source() (e.g. COMPANY, FILING_ACTIVITY, TICKER_REFERENCE), because those silver dynamic tables are owned by EDGARTOOLS_${ENV_UPPER}_DEPLOYER, not loader, and 08_loader_role.sql's own grants only ever covered EDGARTOOLS_GOLD. Found live 2026-08-22 (PRJEDJU-QJB05385): this had been silently failing every scheduled SNOWFLAKE_RUN_MANIFEST_TASK refresh since at least 2026-08-18 with no visible signal beyond the task's own TASK_HISTORY, because the task's overall state stayed 'started' and its schedule kept firing on time regardless of the refresh failing every single run. Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
+    "Grants EDGARTOOLS_${ENV_UPPER}_LOADER OPERATE + SELECT on every EDGARTOOLS_SILVER dynamic table (current and future). Must run after this stage's own loader-role prerequisite above (the role must exist first) and before the first gold refresh (REFRESH_AFTER_LOAD) -- without it, REFRESH_AFTER_LOAD (EXECUTE AS OWNER, running as loader) cannot refresh any gold dynamic table whose dbt model reads from silver via ref()/source() (e.g. COMPANY, FILING_ACTIVITY, TICKER_REFERENCE), because those silver dynamic tables are owned by EDGARTOOLS_${ENV_UPPER}_DEPLOYER, not loader, and 08_loader_role.sql's own grants only ever covered EDGARTOOLS_GOLD. Found live 2026-08-22 (PRJEDJU-QJB05385): this had been silently failing every scheduled SNOWFLAKE_RUN_MANIFEST_TASK refresh since at least 2026-08-18 with no visible signal beyond the task's own TASK_HISTORY, because the task's overall state stayed 'started' and its schedule kept firing on time regardless of the refresh failing every single run. Full timeline: CLAUDE.md's 'SNOWFLAKE_RUN_MANIFEST_TASK / silver-loader OPERATE+SELECT gap' 5-whys section." \
     "{ printf '%s\n' \"SET database_name = '${db_name}';\" \"SET silver_schema_name = 'EDGARTOOLS_SILVER';\" \"SET loader_role_name = 'EDGARTOOLS_${ENV_UPPER}_LOADER';\"
 cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql --connection ${SNOW_CONNECTION} -i"
 
@@ -705,12 +711,57 @@ cat infra/snowflake/sql/bootstrap/18_silver_loader_read_grants.sql; } | snow sql
     "Uploads the Streamlit dashboard artifacts to the Snowflake dashboard stage." \
     "SNOW_CONNECTION=${snow_q} DASHBOARD_DATABASE=${db_name} bash infra/snowflake/streamlit/deploy.sh"
 
-  # Source data work stays disabled until its Rules/feed baseline qualifies.
+  # Phase: stores -- the PostgreSQL 16 stores the configured platform runs on
+  # (skills/data-platform/SKILL.md, "Stores"): Rules, Bookkeeping, Change Journal,
+  # RDM, silver and Clean MDM. Each init and migrate connects as the store's
+  # schema owner, through its own *_MIGRATION_DATABASE_URL (MDM: MDM_DATABASE_URL
+  # set to its owner), set outside this script, never on its command line; the
+  # runtime logins use the plain *_DATABASE_URL. Each schema is created once and
+  # upgraded in place: init changes nothing when rerun, migrate applies the
+  # migration files that landed since.
+  # The runtime logins are named by INSTALL_*_ROLE variables; the defaults are
+  # placeholders for the environment's own names.
+  add_stage \
+    "Stores: Rules Database" \
+    "Creates and upgrades the Rules Database (as its owner, RULES_MIGRATION_DATABASE_URL): the versioned rules files, their test runs and the operator's approvals. The agent login (${rules_role}) may save drafts; only the approver login approves." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse rules init --agent-role ${rules_role}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse rules migrate --agent-role ${rules_role}"
+
+  add_stage \
+    "Stores: Bookkeeping" \
+    "Creates and upgrades Bookkeeping (as its owner, BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL): frozen runs, leases, retries and the verifier's admissions, so a load restarts where it stopped. ${bookkeeping_role} is the runtime login; each worker profile's own logins are granted later with bookkeeping grant-profile." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping init --runtime-role ${bookkeeping_role}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping migrate --runtime-role ${bookkeeping_role}"
+
+  add_stage \
+    "Stores: Change Journal" \
+    "Creates and upgrades the Change Journal (as its owner, CHANGE_JOURNAL_MIGRATION_DATABASE_URL): the append-only record, beside Bookkeeping, of what each step processed, so a run takes only the files that changed (and the MDM Change Journal's delivery history)." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse change-journal init --runtime-role ${journal_role}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse change-journal migrate --runtime-role ${journal_role}"
+
+  add_stage \
+    "Stores: RDM" \
+    "Creates and upgrades Reference Data Management (as its owner, RDM_MIGRATION_DATABASE_URL): code sets, their approved and published versions, hierarchies and crosswalks. Published versions are written under rules/reference/published/, where readings pin them by sha256." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse rdm init --runtime-role ${rdm_role}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse rdm migrate --runtime-role ${rdm_role}"
+
+  add_stage \
+    "Stores: silver" \
+    "Creates and upgrades the silver store (as its owner, SILVER_MIGRATION_DATABASE_URL): tables registered from approved silver table specs, each row with its source key and MDM id." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse silver init --runtime-role ${silver_role}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse silver migrate --runtime-role ${silver_role}"
+
   add_stage \
     "MDM: clean migration and connectivity" \
-    "Applies the Clean MDM migrations, then checks connectivity: the check reads mdm.migration, which the migrations create. Source feeds remain disabled until configured Rules and Bookkeeping qualification." \
-    "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate
+    "Applies the Clean MDM migrations (MDM_DATABASE_URL, its migration owner) for the application login ${mdm_role}, installs Bookkeeping's destination guard so every MDM commit is checked against the worker's live lease (DESTINATION_MIGRATION_DATABASE_URL, the MDM owner), then checks connectivity: the check reads mdm.migration, which the migrations create. Source data work stays disabled until its Rules/feed baseline qualifies (configured Rules and Bookkeeping qualification)." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm migrate --application-role ${mdm_role}
+uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping init-guard --runtime-role ${mdm_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse mdm check-connectivity"
+
+  add_stage \
+    "Check: doctor" \
+    "Reads every store that is set, loads the engine and the rules folder, and checks every command the skills name; it must print \"ok\": true." \
+    "uv run --extra s3 --extra mdm-runtime edgar-warehouse doctor"
 
 
 }
