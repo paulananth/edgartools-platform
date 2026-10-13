@@ -95,15 +95,21 @@ references the committed payload/hash instead of copying business attributes
 into the shared journal. Only batches declared by a fresh root manifest may
 enter the fresh journal.
 
-Configured `provider.capture` commits a fenced authorization intent, verifies
-its journal acknowledgement, then checks/renews Bookkeeping authority before
-each provider request. Journal failure or lease takeover blocks the request.
+Configured `provider.capture` validates its frozen task and live lease through
+public Bookkeeping renewal, appends and reads back the Journal authorization,
+then renews immediately before each GET. Journal failure or lease takeover
+blocks the request. Bookkeeping holds no domain authorization hook or intent
+table; no atomic transaction spans control, Journal and HTTP.
 Authorization and outcome use separate producers, `acquisition` and
-`acquisition.outcome`, each retaining the original candidate id. Conditional 304 results
+`acquisition.outcome`, each retaining the logical effect key. Conditional 304 results
 must link verified prior source bytes and pass current completeness; they
-never fabricate an empty capture. Deferred requests remain pending. Captured
-outcome manifests at their exact frozen URI reconcile after a lost completion
-acknowledgement. No storage listing establishes success.
+never fabricate an empty capture. Deferred requests remain pending. The
+immutable capture snapshot and output receipt at the frozen destination
+reconcile after a lost completion acknowledgement without another GET. A crash
+before a complete durable snapshot may repeat the GET. No storage listing
+establishes success. This worker is qualified offline for bounded HTTPS JSON
+objects; Company producer manifests, continuation expansion, live SEC proof and
+source activation remain Issue 20 L8 integration work.
 
 ## Rules and source-owned evidence
 

@@ -1,6 +1,6 @@
 # Isolated configured capture and retirement integration
 
-Status: in progress. Starting main 692e0215; own branch/worktree
+Status: local capture qualification complete; publication/CI in progress. Broader retirement incomplete. Starting main 692e0215; own branch/worktree
 `codex/configured-capture-20261012`.
 
 Operator agreed: keep Claude's active changed-data files, implement isolated
@@ -15,8 +15,10 @@ permitted by this implementation instruction.
 - [x] Implement Python configured transport and registered provider.capture worker/verifier, using Rust configured completeness checks and no Bookkeeping domain callbacks. Verified 58 capture checks and 49 maintained control tests, 2026-10-12 20:59 ET.
 - [x] Qualify conditional reuse, malformed/oversized/redirected responses, prior-receipt corruption and authority failures before network effects. Verified 58 capture checks and 49 maintained control tests, 2026-10-12 20:59 ET.
 - [x] Prove real PG16 restricted worker/verifier lifecycle, journal-before-request, journal outage, completion lost acknowledgement and expired/taken-over leases offline. Verified 58 capture checks and 49 maintained control tests, 2026-10-12 20:59 ET.
-- [ ] Verify runtime pinning, installed path and unchanged control independence; qualify the supported source/configuration scope without claiming live provider proof.
-- [ ] Retire sec_client.py only after replacement and executable-caller/test inventory proves the old path is unnecessary.
+- [x] Verify runtime pinning, installed path and unchanged control independence; qualify the supported source/configuration scope without claiming live provider proof. Verified: Installed committed-wheel capture/public verifier and no-duplicate-file checks passed; describe command and runtime digest test passed, 2026-10-12 21:17 ET.
+- [x] Retire sec_client.py only after replacement and executable-caller/test inventory proves the old path is unnecessary. Verified: Production/script/package caller inventory is empty; retirement and transport-only architecture boundaries passed in 990 unit/architecture tests, 2026-10-12 21:17 ET.
+- [x] Correct the stale Change Journal capture specification to match public renewal/Journal sequencing, preserving control-only ownership and explicit offline qualification. Verified: Standards reviewer confirmed the corrected renewal/Journal/renewal sequence and logical effect keys, 2026-10-12 21:17 ET.
+- [x] Standards, Spec and GoF reviews resolved; native/frame coverage audit found no remaining significant in-scope behavioral gap after 6 added PG16 cases and 19 storage/frame tests, 2026-10-12 21:17 ET.
 - [ ] Review Standards, Spec and GoF; resolve findings, guard/commit and publish a reviewable result with CI evidence.
 - [ ] ~~Live SEC/continuation-page qualification and source activation~~ remains Issue 20 L8: requires explicit provider authorization and approval of exact source evidence/version; no requests in this slice.
 - [ ] ~~Adapter mapping/fallback retirement (L7)~~ integrate after Claude's changed-data changes merge: store.py and installed-bundle tests are his active files.

@@ -22,7 +22,7 @@ from tests.support.rules_approval import approve
 
 
 @pytest.fixture
-def setup(databases, tmp_path, monkeypatch):
+def setup(databases, tmp_path, monkeypatch, request):
     grant_profile(databases.admin, profile=capture.PRODUCER, worker='bk_runtime', verifier='bk_verifier')
     monkeypatch.setenv('BOOKKEEPING_CLEAN_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
     monkeypatch.setenv('CHANGE_JOURNAL_DATABASE_URL', databases.ledger.engine.url.render_as_string(hide_password=False))
@@ -33,6 +33,8 @@ def setup(databases, tmp_path, monkeypatch):
     body['bookkeeping']['targets']['capture'] = target
     target['steps'][0].update(name='fixture', operation=capture.PRODUCER, leases=['provider:fixture.invalid', 'output:{destination}'],
                               checks=['input.hash', 'output.receipt', capture.CHECK])
+    if getattr(request, 'param', None) == 'without_provider':
+        target['steps'][0]['leases'] = ['output:{destination}']
     name = 'capture-' + uuid4().hex
     baseline = book.artifacts.put(tmp_path.as_uri() + '/baseline', {'offline': True})
     proof = approved_acquisition(body, name, [], baseline)
@@ -177,6 +179,70 @@ def test_shared_provider_lease_blocks_another_run(setup, databases):
     expire(databases, book._claim_of(first))
     replacement = start()
     assert replacement['claim']['run_id'] != first['claim']['run_id']
+
+
+@pytest.mark.parametrize('setup', ['without_provider'], indirect=True)
+def test_genuine_approved_plan_without_provider_lease_never_gets(setup, monkeypatch):
+    book, start, _ = setup
+    envelope = start()
+    calls = []
+    http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
+    with pytest.raises(ValueError, match='shared provider lease'):
+        capture.execute(envelope, book.artifacts)
+    assert calls == []
+
+
+def test_lease_loss_after_get_cannot_persist_but_retry_can_refetch(setup, databases, monkeypatch):
+    book, start, finish = setup
+    envelope = start()
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if len(calls) == 1:
+            expire(databases, book._claim_of(envelope))
+        return httpx.Response(200, content=b'{"ok":true}')
+    http(monkeypatch, respond)
+    with pytest.raises(control.ControlError):
+        capture.execute(envelope, book.artifacts)
+    assert not Path(envelope['output'].removeprefix('file://') + '.capture.zip').exists()
+    assert databases.ledger.get(capture.OUTCOME, envelope['effect_key']) is None
+    replacement, = book.tasks(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
+    finish(replacement, capture.execute(replacement, book.artifacts))
+    assert len(calls) == 2  # No durable snapshot existed; no exactly-once HTTP claim.
+
+
+@pytest.mark.parametrize('damage', ['authorization', 'outcome', 'candidate', 'snapshot'])
+def test_independent_verifier_rejects_disagreeing_durable_evidence(setup, databases, monkeypatch, damage):
+    from edgar_warehouse.change_journal import ChangeJournal
+    book, start, _ = setup
+    envelope = start()
+    calls = []
+    http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200, content=b'{"ok":true}'))
+    candidate = capture.execute(envelope, book.artifacts)
+    book.report(envelope, candidate, runtime(capture))
+    verifier = Bookkeeping(databases.verifier)
+    verification, = verifier.verifications(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
+    if damage in ('authorization', 'outcome'):
+        original = ChangeJournal.get
+        producer = capture.AUTHORIZATION if damage == 'authorization' else capture.OUTCOME
+        # Simulate an unavailable acknowledgement. Other evidence still comes
+        # from real restricted-role Journal reads, never invented receipts.
+        monkeypatch.setattr(ChangeJournal, 'get', lambda self, p, key: None if p == producer else original(self, p, key))
+    elif damage == 'candidate':
+        import hashlib
+        forged = b'{"forged":true}'
+        Path(candidate['uri'].removeprefix('file://')).write_bytes(forged)
+        # Even a hash-consistent candidate must equal reconstructed evidence.
+        verification['candidate'] = {**candidate, 'sha256': hashlib.sha256(forged).hexdigest()}
+    else:
+        receipt = book.artifacts.json(candidate)
+        meta, payload = capture._unpack(book.artifacts.verified(receipt['snapshot']), 1024)
+        meta['feed'] = 'wrong'
+        Path(receipt['snapshot']['uri'].removeprefix('file://')).write_bytes(capture._pack(meta, payload))
+    with pytest.raises((ValueError, Blocked)):
+        capture.verify(verification, book.artifacts)
+    assert len(calls) == 1
+    assert verifier.status(envelope['claim']['run_id'])['counts'] == {'reported': 1}
 
 
 @pytest.mark.parametrize('damage', ['snapshot', 'orphan_candidate'])
