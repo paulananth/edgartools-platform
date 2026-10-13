@@ -38,12 +38,18 @@ def test_versions_stored_before_read_the_same_after(database):
     baseline = (MIGRATIONS / "001_mdm.sql").read_text()
     start = baseline.index("CREATE FUNCTION mdm.record_company_version(")
     old_fn = baseline[start:baseline.index("$$;\n", start) + 4].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+    # 017 changed both functions; the store before 015 had 014's write_batch.
+    later = (MIGRATIONS / "014_outbox_names_batch.sql").read_text()
+    start = later.index("CREATE OR REPLACE FUNCTION mdm.write_batch(")
+    old_batch = later[start:later.index("$$;\n", start) + 4]
     start = baseline.index("CREATE VIEW mdm.company_master_field AS")
     old_view = baseline[start:baseline.index(";", baseline.index("WHERE (c.valid_to IS NULL)", start)) + 1]
     with database.admin.begin() as conn:
         conn.exec_driver_sql("DROP VIEW mdm.company_master_field")
         conn.exec_driver_sql("ALTER TABLE mdm.company ADD COLUMN fields jsonb")
+        conn.exec_driver_sql("DROP FUNCTION mdm.record_company_version(jsonb, text, timestamp with time zone)")
         conn.exec_driver_sql(old_fn.replace("%", "%%"))  # psycopg2 formats a bare %
+        conn.exec_driver_sql(old_batch.replace("%", "%%"))
         conn.exec_driver_sql(old_view)
     company(database, 1, "Acme")
     company(database, 2, "Acme Holdings")
@@ -52,6 +58,7 @@ def test_versions_stored_before_read_the_same_after(database):
         before = [dict(r) for r in conn.execute(text(FIELDS)).mappings()]
     with database.admin.begin() as conn:
         conn.execute(text((MIGRATIONS / "015_company_fields_once.sql").read_text()))
+        conn.execute(text((MIGRATIONS / "017_unchanged_batch_no_outbox.sql").read_text()))
     with database.admin.connect() as conn:
         after = [dict(r) for r in conn.execute(text(FIELDS)).mappings()]
     assert before and after == before
