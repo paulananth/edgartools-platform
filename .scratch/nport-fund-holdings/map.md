@@ -1,5 +1,7 @@
 # N-PORT fund holdings
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 ## Destination
 
 A locked design for ingesting SEC Form N-PORT (quarterly-public portfolio

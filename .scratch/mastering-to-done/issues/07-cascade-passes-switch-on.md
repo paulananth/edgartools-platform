@@ -1,11 +1,3 @@
 # Cascade name-and-address passes: label and switch on
 
-Type: task, then approval
-Status: open
-Blocked by: 06
-
-## Question
-
-The SEC-to-GLEIF cascade passes are built and switched off (company mastering 21, #746). 248 same-name pairs wait without agreement (`company-mastering/research/20-1-waiting-no-agreement.csv`).
-
-The remaining step: draw and label a sample per pass and stratum, show the operator the precision, and approve or tune each pass. Delete the CSV once that is done.
+Status: moved (2026-10-13 ET) to [Rebuild priorities 09](../../rebuild-priorities/issues/09-mastering-to-done-07-cascade-passes-switch-on.md), tier 2, the recreation proof.

@@ -1,5 +1,7 @@
 # v1 Agent-Grade Inputs
 
+> 2026-10-13: this map's open tickets moved to [Rebuild priorities](../rebuild-priorities/map.md), numbered by priority. Each old ticket file holds a one-line pointer.
+
 Label: `wayfinder:map`
 
 ## Destination
