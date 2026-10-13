@@ -61,7 +61,9 @@ Mastering, from the source extract:
 mdm.prepare ---- mdm.merge ---- journal.record ----> Change Journal
                      |                               each file processed
                      v
-                mdm.publish ----> consumers, and the MDM Change Journal
+                mdm.publish ----> consumers: only the records that changed
+                     |            (or every record, on a forced publish)
+                     +----------> the MDM Change Journal: the whole batch
 
 Analytics, separate from mastering:
 
@@ -93,7 +95,8 @@ through that facade. Calls into the edgartools package stay in Python. A
 custom step is a named Python function, used when the rules file cannot state
 the field.
 
-The engine reads XML, JSON, JSON Lines, CSV, and one zip member. An ordinary
+The engine reads XML, JSON, JSON Lines, CSV and Parquet, one member of a zip
+archive, and the XML document inside an SEC SGML submission file. An ordinary
 read holds the artifact in memory up to the contract's byte and record limits
 and fails closed past those limits. A large captured JSON array or XML
 envelope can declare streamed framing: Rust frames each record inside the
@@ -165,17 +168,48 @@ one transaction, under the worker's live lease
       |                        a name lookup id never creates an identity
       |
       v
-Publication intent ----> Change Journal
+Publication intent
+  each consumer gets only the records the batch inserted or changed
+  the MDM Change Journal gets the whole batch, as history
+  `mdm force-publish` sends every current record to one consumer
 ```
 
 A proved name rule may bind when the operator has approved that exact version.
 Anything less stays with a steward. Old readers stay until an installed
 empty-store replay matches the mastered result.
 
+## Sources
+
+| Source | Read by | Mastered |
+| --- | --- | --- |
+| SEC submissions, Company | `rules/sources/sec.submissions.company` | Company (by CIK), on the `mastering` target |
+| SEC submissions, Person | `rules/sources/sec.submissions.person` | Person (by CIK), on the `mastering` target |
+| GLEIF Golden Copy (Level 1, relationships, reporting exceptions) | `rules/sources/gleif` | Company (by LEI) and its parents |
+| IAPD Form ADV (filings, custodians) | `rules/sources/iapd.adv` | drafted, not switched on |
+| SEC Forms 3, 4 and 5 | `rules/sources/sec.ownership` | read only; its Dataset Contracts are next |
+
+Reference data the readings pin lives in `rules/reference/published/` (RDM
+code sets, each pinned by sha256).
+
 ## Install
 
-Install is not final. The bundle, a checkout, the stores, and the local
-qualification commands will be written here once install is completed.
+[`infra/scripts/install.sh`](infra/scripts/install.sh) prints the ordered
+install plan (`plan`), checks the workstation (`doctor`) and, with `deploy
+--apply`, runs each stage after a yes. Its stages provision AWS and Snowflake,
+publish the images, build dbt gold and the dashboard, then create and upgrade
+the five PostgreSQL 16 stores the configured platform runs on: Rules,
+Bookkeeping, Change Journal, RDM and silver, and Clean MDM with Bookkeeping's
+lease guard. Each store is reached through its own variable
+(`RULES_DATABASE_URL`, `BOOKKEEPING_CLEAN_DATABASE_URL`,
+`CHANGE_JOURNAL_DATABASE_URL`, `RDM_DATABASE_URL`, `SILVER_DATABASE_URL`,
+`MDM_DATABASE_URL`), set outside the script; `edgar-warehouse doctor` must
+then print `"ok": true`.
+
+Not yet in the plan: the worker runtime on AWS. The old pipeline's ECS task
+definitions and Step Functions were retired with its commands (platform
+validation 2b); the configured workers' launch configuration waits for the
+operator's AWS destinations. Today a feed runs with the Bookkeeping skill's
+**run** mode ([skills/bookkeeping/RUN.md](skills/bookkeeping/RUN.md)).
 
 ## Evidence and custom steps
 
