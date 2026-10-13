@@ -55,6 +55,7 @@ def test_an_activated_policy_registers_and_merges(database):
         "batch_id": "activated-policy",
         "duplicate": False,
         "generation": 1,
+        "changed": False,  # no record: nothing to queue (017)
     }
 
 

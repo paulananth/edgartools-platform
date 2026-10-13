@@ -153,7 +153,7 @@ def test_a_populated_015_store_upgrades_without_changing_intent_or_request_hash(
 
     admin, app = postgres
     with monkeypatch.context() as patch:
-        patch.setattr(module, "MIGRATIONS", module.MIGRATIONS[:-1])
+        patch.setattr(module, "MIGRATIONS", module.MIGRATIONS[:module.MIGRATIONS.index("016_publication_inputs.sql")])
         patch.setattr(module, "RUNTIME_FUNCTIONS", tuple(f for f in module.RUNTIME_FUNCTIONS
                                                        if f != "claim_outbox_input(text,text,integer,text)"))
         database = core.initialize_database(admin, app)
