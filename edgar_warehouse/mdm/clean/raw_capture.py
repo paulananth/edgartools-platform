@@ -51,6 +51,18 @@ def document_bytes(capture: Path, found: dict[str, str], key: str) -> bytes:
     return data
 
 
+def slices(sized: list[tuple[str, int]], max_bytes: int, max_documents: int) -> list[list[str]]:
+    """Consecutive documents cut where the next would pass either bound; a larger document reads alone."""
+    found, current, total = [], [], 0
+    for key, size in sized:
+        if current and (total + size > max_bytes or len(current) == max_documents):
+            found.append(current)
+            current, total = [], 0
+        current.append(key)
+        total += size
+    return found + [current] if current else found
+
+
 def cik(key: str) -> int:
     return int(key.split("/cik=", 1)[1].split("/", 1)[0])
 

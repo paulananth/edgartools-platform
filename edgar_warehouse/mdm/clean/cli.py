@@ -391,6 +391,22 @@ def prepare_clean_company(args) -> int:
     return 0
 
 
+def prepare_capture(args) -> int:
+    from .capture_prepare import write_capture_manifest
+
+    report = write_capture_manifest(
+        source=args.source,
+        capture=args.capture,
+        documents=args.documents,
+        capture_run=args.capture_run,
+        output=args.output,
+        as_of=args.as_of,
+        revision=args.revision,
+    )
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def name_census(args) -> int:
     from .name_frequency import write_name_frequency
 

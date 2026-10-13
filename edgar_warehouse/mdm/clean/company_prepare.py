@@ -66,18 +66,6 @@ def _bind(value, bindings):
     return value
 
 
-def _slices(sized: list[tuple[str, int]], max_bytes: int, max_documents: int) -> list[list[str]]:
-    """Consecutive documents cut where the next would pass either bound; a larger document reads alone."""
-    found, current, total = [], [], 0
-    for key, size in sized:
-        if current and (total + size > max_bytes or len(current) == max_documents):
-            found.append(current)
-            current, total = [], 0
-        current.append(key)
-        total += size
-    return found + [current] if current else found
-
-
 def _unit(output: str, keys: dict, source: dict) -> dict:
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
@@ -93,7 +81,7 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
     # Each document equal to its receipt before it is frozen; its size cuts the main units.
     sized = [(key, len(raw_capture.document_bytes(folder, receipts, key))) for key in keys]
     main, start = [], 0
-    for unit in _slices(sized, MAIN_READING_BYTES, main_rules["execution"]["max_artifacts"]):
+    for unit in raw_capture.slices(sized, MAIN_READING_BYTES, main_rules["execution"]["max_artifacts"]):
         documents = [raw_capture.document(folder, receipts, key) for key in unit]
         contexts = [put({"version": 1, "input": ref, "values": {
             "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],

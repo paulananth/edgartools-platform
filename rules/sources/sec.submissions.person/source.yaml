@@ -8,7 +8,9 @@
 # log: .scratch/onboarding/sec.submissions.person/onboarding-log.md).
 source: sec.submissions.person
 # This read block is locally qualified. It does not activate a Rules version.
-execution: {profile: source.read, workers: 1, max_artifacts: 1}
+# One reading reads many documents (at most 512), each kept whole as one record:
+# a unit per document would start a worker for each (Issue 20 slice 20d).
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
   limits: {max_bytes: 33554432, max_records: 1}
@@ -26,7 +28,8 @@ mdm:
       family: submissions
       schema_version: sec-submissions-person-json-v1
       record_key: zero-padded 10-digit CIK of the filer the submissions document describes
-      publication_key: exact captured submissions document (member name and sha256)
+      publication_key: capture run plus the digest of the bundle's document list (one publication a
+        bundle of at most 512 documents, each named by its receipt)
       effective_time: unknown; the document states no effective time
       semantics: patch
       completeness: one filer per document; a capture covers the filers listed in its manifest;
@@ -101,3 +104,30 @@ mdm:
         # reporting owners (consumer.md, The Person projection).
         fields:
           legal_name: name
+# Person preparation and mastering of one bundle (Issue 20 slice 20d): the
+# input manifest is written by `mdm prepare-capture --source sec.submissions.person`;
+# the records input is composed from the verified readings.
+bookkeeping:
+  version: 1
+  targets:
+    mastering:
+      steps:
+        - name: read
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+        - name: records
+          operation: mdm.prepare
+          requires: [read]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+        - name: merge
+          operation: mdm.merge
+          requires: [records]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+      checks: [manifest.hash, work.accounting, journal.delivered]

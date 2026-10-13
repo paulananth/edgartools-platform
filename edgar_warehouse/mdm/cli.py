@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, Clean MDM only.
 
-Five commands: migrate, check-connectivity, counts, prepare-clean-company and
-name-census. The legacy MDM commands and their tables are deleted (platform
+Six commands: migrate, check-connectivity, counts, prepare-clean-company,
+prepare-capture and name-census. The legacy MDM commands and their tables are deleted (platform
 validation slice 2a).
 """
 from __future__ import annotations
@@ -35,6 +35,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)
     prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
+
+    capture = mdm_sub.add_parser("prepare-capture", help="Write a source's mastering target input manifest for one "
+                                 "bundle of captured documents, each read whole (e.g. sec.submissions.person)")
+    capture.add_argument("--source", required=True, help="The source under rules/sources/ (its reading keeps each document whole)")
+    capture.add_argument("--capture", required=True, help="A capture folder: receipts.jsonl and bronze/")
+    capture.add_argument("--documents", required=True, help="JSON file: this bundle's documents by receipt key (at most 512)")
+    capture.add_argument("--capture-run", required=True, help="Approved capture run ID")
+    capture.add_argument("--output", required=True)
+    capture.add_argument("--as-of", required=True)
+    capture.add_argument("--revision", type=int, required=True)
+    capture.set_defaults(handler=_logged_handler("prepare-capture", _clean("prepare_capture")))
 
     census = mdm_sub.add_parser("name-census", help="Count an SEC population and one configured full GLEIF Golden Copy "
                                 "reading into a Name Census file")
