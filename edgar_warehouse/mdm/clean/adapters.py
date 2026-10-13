@@ -453,13 +453,23 @@ def _scopes(row: dict, spec: dict):
 
 
 def _time(item, spec: dict):
-    """A link's time as the mapping writes it: as read, or `time_format: instant`
-    as an ISO 8601 instant; a time that is not one sets the record aside."""
-    if item is None or spec.get("time_format") != "instant":
+    """A link's time as the mapping writes it: as read, `time_format: instant` as
+    an ISO 8601 instant, or `time_format: date` a calendar date (YYYY-MM-DD) as
+    the instant its day starts in UTC (a Form 4's event date has no time or zone);
+    a time that is not one sets the record aside."""
+    form = spec.get("time_format")
+    if item is None or form not in ("instant", "date"):
         return item
+    from datetime import date
+
     from .evidence import instant
 
     try:
+        if form == "date":
+            day = date.fromisoformat(item).isoformat()
+            if day != item:  # fromisoformat also takes 20260105 and week dates
+                raise ValueError(item)
+            return f"{day}T00:00:00+00:00"
         return instant(item).isoformat()
     except (TypeError, ValueError):
         raise UnsupportedRecord("invalid_time") from None
@@ -471,7 +481,7 @@ def _refuse_link(scope: dict, spec: dict) -> None:
     end for each status in `need_end`)."""
     if not (spec.get("interval") or spec.get("status")):
         return
-    start = _time(value(scope, spec["valid_from"]), spec)
+    start = _time(value(scope, spec["on"] if "capacity" in spec else spec["valid_from"]), spec)
     end = _time(value(scope, spec["valid_to"]), spec) if spec.get("valid_to") else None
     if rule := spec.get("interval"):
         from .evidence import instant
@@ -508,12 +518,32 @@ def _link(scope: dict, spec: dict) -> dict | None:
         )
     except ValueError:
         return None
-    return {
+    link = {
         **start,
         "type": relationship_type,
         "target_subject": subject_key(spec["target_source"], target),
         "scope": spec.get("scope", ""),
-        "valid_from": _time(value(scope, spec["valid_from"]), spec),
         "valid_to": _time(value(scope, spec["valid_to"]), spec) if spec.get("valid_to") else None,
         "properties": {name: value(scope, path) for name, path in spec.get("properties", {}).items()},
+    }
+    if "capacity" not in spec:
+        return {**link, "valid_from": _time(value(scope, spec["valid_from"]), spec)}
+    # A link in a capacity (a Person's: director, officer, ten-percent owner) is
+    # a dated sighting that the Merge Stage folds into periods
+    # (relationships.fold_sightings): the capacity held, or dropped, on the
+    # record's event date `on`. A filing restates its capacities, so a flag that
+    # is not true (false or absent) is a drop; `title` is the period's dated detail.
+    if "on" not in spec or "held" not in spec:
+        raise MappingError("A link in a capacity names its date (on) and its flag (held)")
+    held = value(scope, spec["held"])
+    if held not in (True, False, None):  # a flag read as text, say, is not one
+        raise UnsupportedRecord("invalid_field_shape")
+    on = _time(value(scope, spec["on"]), spec)
+    return {
+        **link,
+        "valid_from": on,
+        "capacity": spec["capacity"],
+        "on": on,
+        "held": held is True,
+        "title": value(scope, spec["title"]) if spec.get("title") else None,
     }
