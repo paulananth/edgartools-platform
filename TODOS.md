@@ -1939,3 +1939,69 @@ already-documented gold-refresh/Snowflake-export risk. Read-only AWS API
 checks only (`s3 ls`, `cloudwatch get-metric-statistics`, `ecs
 list-tasks`/`describe-tasks`) — nothing was modified, and nothing
 touching Codex's in-flight run was touched.
+
+## Bookkeeping architecture follow-ups (2026-10-13 autoplan)
+
+### Authenticate destination transaction fencing independently of caller-supplied proof
+
+**What:** Qualify and repair destination-side lease/fence authentication and enforcement.
+**Why:** P2 control-scan optimization cannot make a caller-supplied fence authoritative.
+**Context:** The architecture research and `.planning/workstreams/bookkeeping-p2-autoplan/PLAN.md`
+keep this separate P1 visible. Begin at `edgar_warehouse/bookkeeping/clean/destinations.py`,
+`migrations/destination_guard.sql`, and real PostgreSQL expiry/takeover/direct-call tests.
+Do not treat an existing happy-path stale-token test as full forged-proof qualification.
+**Pros:** Independent authoritative refusal of stale/fabricated destination work.
+**Cons:** Requires its own cross-database authority and operational qualification.
+**Effort:** M
+**Priority:** P1
+**Depends on:** A scoped authority design and real destination/Bookkeeping PostgreSQL evidence; not blocked on P2 performance work.
+
+### Complete runtime fingerprint admission and reproducibility evidence
+
+**What:** Define and qualify the complete worker/verifier runtime fingerprint admitted to a run.
+**Why:** Existing runtime pins do not establish complete executable/dependency reproducibility.
+**Context:** P2 retains task protocol 1 and existing runtime bindings without claiming this P1
+fixed. Start with configured-capture runtime registration and installed-wheel tests; inventory
+which build/dependency/configuration inputs are currently absent before changing the contract.
+**Pros:** Reproducible proof of exactly which runtime executed and verified frozen work.
+**Cons:** A separate admission/versioning contract and operator upgrade procedure.
+**Effort:** M
+**Priority:** P1
+**Depends on:** Runtime-input inventory and independent contract review; no AWS activation assumed.
+
+### Reassess full-audit cadence for long per-unit-validation runs
+
+**What:** Decide whether observed long-run recovery needs justify a scheduled integrity audit.
+**Why:** The proposed P2 policy detects unrelated missing/corrupt evidence at explicit checks,
+resume or terminal reconciliation; operators may want a shorter detection interval later.
+**Context:** Existing `bookkeeping checks` is the deliberate full audit. P2 adds no timer service;
+first measure real run length, corruption frequency, operator burden and audit cost. Capture
+the resulting policy before introducing any scheduler or AWS workload. A future decision must
+preserve relevant-evidence immediate blocking and the authoritative final audit.
+**Pros:** Potentially bounds delayed detection on long-running workloads.
+**Cons:** Extra scanning, operational surface and a policy that has not yet been justified.
+**Effort:** S for research; implementation separately scoped
+**Priority:** P3
+**Depends on:** Qualified per-unit implementation plus real long-run measurements and operator policy approval.
+
+### Clarify first-unit redo semantics for generated steps with nonzero ordinal bases
+
+**What:** Resolve whether first-unit redo means absolute ordinal zero or the first admitted unit of a generated step.
+**Why:** Current ticket72 code tests `ordinal == 0`, while generated_worklist adds ordinal_base; a step whose first admitted child has a positive ordinal can follow only the random draw.
+**Context:** PR958/commit00e89799 established confirmation plus first/random5% redo. Both final Bookkeeping P2 sync voices flagged this preexisting wording/implementation ambiguity. P2 preserves exact stored ordinals and current draw behavior; it must not reset offsets or put sampling policy into Bookkeeping. Start at workers.sample, generated_worklist and test_check_confirms. Resolve policy separately, then add real generated-step fixtures.
+**Pros:** Clear, executable first-unit sampling contract without corrupting frozen ordinals.
+**Cons:** A policy change could alter verification cost and requires operator direction and matched runtime qualification.
+**Effort:** S
+**Priority:** P2
+**Depends on:** Ticket72/operator sampling-policy clarification; not required to preserve current behavior during P2.
+
+### Reconsider uncapped Bookkeeping expansion only after an explicit scope change
+
+**What:** If requested, replace Bookkeeping's current generated-expansion/document bounds with a scalable admission and per-child provenance protocol.
+**Why:** Simply removing128/32MiB while re-reading the entire parent for every child would recreate repeated O(N²) validation and would not deliver P2's selected-unit scaling.
+**Context:** Operator, 2026-10-14, chose “Follow Claude’s current MDM scope for now.” Ticket74 removes Merge Stage refusals, leaving Bookkeeping protocol bounds unchanged. A fresh Claude consultation proposed seal-time origin verification, immutable child provenance, hot-path selected-child checks, streamed full audits and paged admission with seal last. Those are future design proposals, not a qualified atomic protocol; review concurrent claims, incomplete admissions, leases and recovery before implementation. No arbitrary local-capacity cap should replace the old bound.
+**Pros:** Potential future scale without parent-wide work on each child call.
+**Cons:** Changes expansion atomicity/proofs/compatibility and needs its own complete SQL/concurrency qualification.
+**Effort:** M
+**Priority:** P3
+**Depends on:** Explicit operator expansion beyond MDM-only scope and a separate protocol review.
