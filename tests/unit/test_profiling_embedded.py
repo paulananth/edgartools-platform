@@ -131,3 +131,47 @@ def test_a_tie_keeps_the_same_value_whatever_the_row_order():
         assert embedded.register(con, entity) == {"name": 2}
         kept.append(con.execute('SELECT name FROM "rows.id"').fetchone()[0])
     assert kept == ["Tied One", "Tied One"]
+
+
+def test_a_field_null_in_every_list_item_keeps_the_single_items_values(tmp_path):
+    # Most documents hold one signer written as an object, with a title; the few that hold a
+    # list hold the title empty, so the list items alone read the title as an empty JSON column.
+    with (tmp_path / "docs.jsonl").open("w") as out:
+        for n in range(40):
+            signer = {"signer_id": f"S{n:05d}", "title": ["Chair", "Treasurer", "Secretary"][n % 3]}
+            signers = [{"signer_id": f"S{n:05d}", "title": None}, {"signer_id": f"T{n:05d}", "title": None}] if n % 10 == 0 else signer
+            out.write(json.dumps({"document_id": f"D-{n:04d}", "signers": {"signer": signers}}) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    found = yaml.safe_load((out / "findings.yaml").read_text())
+    signers = next(p for p in found["parts"] if p["part"] == "doc.signers.signer")
+    title = next(c for c in signers["columns"] if c["name"] == "title")
+    assert title["fill"] == round(36 / 44, 6) and title["distinct"] == 3
+
+
+def test_compare_keeps_an_approved_entity_that_repeats_less_in_the_new_delivery(findings, tmp_path):
+    approved = tmp_path / "approved"
+    approved.mkdir()
+    _documents(tmp_path / "first.jsonl")
+    assert profile_data.main(["run", "--name", "documents", "--input", f"doc={tmp_path / 'first.jsonl'}",
+                              "--out", str(approved)]) == 0
+    assert profile_data.main(["approve", "--findings", str(approved / "findings.yaml"), "--by", "test",
+                              "--words", "approved"]) == 0
+    # The new delivery names each party once: too few repeats for discovery to find it.
+    with (tmp_path / "second.jsonl").open("w") as out:
+        for n in range(60):
+            out.write(json.dumps({
+                "document_id": f"E-{n:06d}", "filed": f"2026-04-{1 + n % 28:02d}",
+                "party": {"party_id": f"Q{n:07d}", "party_name": f"{WORDS[n % 10]} {WORDS[n // 10 % 10]} Supply",
+                          "city": WORDS[n % 10] + "ville", "postcode": f"{20000 + n}"},
+                "lines": {"line": {"day": "2026-04-01", "quantity": n + 1, "code": "A"}},
+                "fees": [{"amount": 5, "due": "2026-05-01"}] * 2}) + "\n")
+    drift_out = tmp_path / "drift"
+    assert profile_data.main(["compare", "--approved", str(approved / "findings.yaml"),
+                              "--input", f"doc={tmp_path / 'second.jsonl'}", "--out", str(drift_out)]) == 0
+    items = yaml.safe_load((drift_out / "drift.yaml").read_text())["drift"]
+    assert not [i for i in items if i["part"] == "doc.party" and i["drift"] in ("part_missing", "link_broken")]
+    new = yaml.safe_load((drift_out / "findings.yaml").read_text())
+    party = next(p for p in new["parts"] if p["part"] == "doc.party")
+    assert party["rows"] == 60 and party["derived_evidence"]["repeats"] == 1.0

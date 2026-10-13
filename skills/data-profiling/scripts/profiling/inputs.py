@@ -698,6 +698,13 @@ def _fold_single_items(con, child: str) -> None:
         if field not in child_columns:
             con.execute(f"ALTER TABLE {sql_name(child)} ADD COLUMN {sql_name(field)} {columns[source]}")
             child_columns[field] = columns[source]
+        elif child_columns[field] != columns[source]:
+            # The two reads typed the field apart (a field null in every list item reads as JSON):
+            # the child takes the single items' type when it holds no value, else text, so no value is lost.
+            empty = not con.execute(f"SELECT count({sql_name(field)}) FROM {sql_name(child)}").fetchone()[0]
+            kind = columns[source] if empty else "VARCHAR"
+            con.execute(f"ALTER TABLE {sql_name(child)} ALTER {sql_name(field)} TYPE {kind}")
+            child_columns[field] = kind
     start = con.execute(f"SELECT coalesce(max({ROW}) + 1, 0) FROM {sql_name(child)}").fetchone()[0]
     filled = " OR ".join(f"{sql_name(c)} IS NOT NULL" for c in dotted.values())
     targets = ", ".join(sql_name(f) for f in dotted)

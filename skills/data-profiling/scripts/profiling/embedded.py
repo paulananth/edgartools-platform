@@ -61,11 +61,31 @@ def find(con, part: str, columns: list[dict], existing: set[str]) -> tuple[list[
             clashes.append(name)
             continue
         named.add(name)
-        found.append({"part": name, "from": part, "column": x["name"], "follows": [c["name"] for c in follows],
-                      "evidence": {"rows": x["non_null"], "values": x["distinct"],
-                                   "repeats": round(x["distinct"] / x["non_null"], 6),
-                                   "follows": {c["name"]: shares[c["name"]] for c in follows}}})
+        found.append(_entity(name, part, x, {c["name"]: shares[c["name"]] for c in follows}))
     return found, clashes
+
+
+def known(con, part: str, columns: list[dict], approved: list[dict], existing: set[str]) -> list[dict]:
+    """The entities approved findings carry inside `part`, taken by their approved identifier and columns.
+
+    A new delivery may repeat an entity less than the discovery bar asks (each party on one
+    document), yet the approved findings already say it is an entity: `compare` keeps it a part,
+    with its evidence measured the same way, so its drift is reported against the approved one."""
+    by_name = {c["name"]: c for c in columns}
+    found = []
+    for e in approved:
+        x = by_name.get(e["column"])
+        if e["from"] != part or e["part"] in existing or x is None or not x["non_null"]:
+            continue
+        follows = [c for c in e["follows"] if c in by_name and by_name[c]["non_null"]]
+        found.append(_entity(e["part"], part, x, {c: determines(con, part, x["name"], c) for c in follows}))
+    return found
+
+
+def _entity(name: str, part: str, x: dict, follows: dict[str, float]) -> dict:
+    return {"part": name, "from": part, "column": x["name"], "follows": list(follows),
+            "evidence": {"rows": x["non_null"], "values": x["distinct"],
+                         "repeats": round(x["distinct"] / x["non_null"], 6), "follows": follows}}
 
 
 def register(con, entity: dict) -> dict[str, int]:

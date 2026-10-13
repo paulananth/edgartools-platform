@@ -82,14 +82,16 @@ def _classes_found(findings) -> str:
 
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
                    sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
-                   work: Path | None = None) -> dict:
+                   work: Path | None = None, known: list[dict] = ()) -> dict:
     """Profile every input and return the findings (the findings.yaml document).
 
-    `work` holds the run's working copy; when none is given, one is made and removed at the end."""
+    `work` holds the run's working copy; when none is given, one is made and removed at the end.
+    `known` lists entities approved findings carry inside a part (`compare`): each is kept a part
+    even where this delivery repeats it less than discovery asks."""
     if work is None:
         work = Path(tempfile.mkdtemp(prefix="profiling-"))
         try:
-            return profile_inputs(sources, name, limit, sample, seed, kinds, work)
+            return profile_inputs(sources, name, limit, sample, seed, kinds, work, known)
         finally:
             shutil.rmtree(work, ignore_errors=True)
     started = time.monotonic()
@@ -128,6 +130,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     entities: dict[str, dict] = {}
     for p in list(parts):
         found, clashes = embedded.find(con, p, profiles[p], set(parts))
+        found += embedded.known(con, p, profiles[p], known, set(parts) | {e["part"] for e in found})
         for clash in clashes:
             say(f"{clash}: an entity carried inside {p}, left in place: a part of that name exists")
         for entity in found:

@@ -84,9 +84,13 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"{args.approved} is not approved: approve it before comparing")
         report.read_fingerprints(approved, args.approved.parent)
         sources = dict(item.split("=", 1) for item in args.input)
+        # The entities the approved findings carry inside a part stay parts in the new delivery.
+        known = [{"part": p["part"], "from": p["derived_from"], "column": p["record_key"]["columns"][0],
+                  "follows": list(p["derived_evidence"]["follows"])}
+                 for p in approved["parts"] if p.get("derived_from") and p.get("derived_evidence")]
         with _work() as work:
             new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
-                                     seed=args.seed, work=work)
+                                     seed=args.seed, work=work, known=known)
         measured = drift.deliveries(approved, new)
         for m in measured:  # the new findings carry what the second delivery measured
             part = next(p for p in new["parts"] if p["part"] == m["part"])
