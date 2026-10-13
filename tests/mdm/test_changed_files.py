@@ -15,7 +15,7 @@ from tests.mdm.test_clean_company_preparation import capture as company_capture 
 from tests.mdm.test_clean_company_preparation import census_capture, documents as company_documents, prepare
 from tests.mdm.test_clean_company_preparation import CATALOG_ROWS
 from tests.support.memory_journal import MemoryJournal
-from tests.support.sec_capture import document, key, write_capture
+from tests.support.sec_capture import address, document, key, write_capture
 
 SOURCE = "sec.submissions.person"
 PEOPLE = {1001: document(1001, "DOE JOHN", entity_type="other"), 1002: document(1002, "ROE JANE", entity_type="other")}
@@ -102,3 +102,17 @@ def test_a_company_census_from_another_capture_names_every_file(tmp_path, compan
     assert Path(other[2]).read_bytes() != Path(company_capture[2]).read_bytes()
     report, _ = prepare(tmp_path, other, output="second", journal=journal)
     assert len(named(report)) == 3  # the two unchanged documents too
+
+
+def test_a_new_capture_where_one_address_changed_names_only_that_company(tmp_path, company_capture):  # noqa: F811
+    # Operator, 2026-10-13: "Only true content change is change". The new capture's census
+    # names another capture, but its name counts are the same, so only the changed file is named.
+    journal = MemoryJournal()
+    record(prepare(tmp_path, company_capture, output="first", journal=journal)[0], journal)
+    moved = company_documents({42: document(42, "ACME HOLDINGS PLC", business=address(
+        street="2 KING ST", city="LONDON", state="X0", zip_code="EC2", country="UNITED KINGDOM", country_code="GB"))})
+    other = census_capture(tmp_path / "other", moved, CATALOG_ROWS)
+    old_census, new_census = (json.loads(Path(c[2]).read_text()) for c in (company_capture, other))
+    assert old_census["sec"] != new_census["sec"] and old_census["entries"] == new_census["entries"]
+    report, _ = prepare(tmp_path, other, output="second", journal=journal)
+    assert named(report) == [key(42)] and report["scope"]["listed"] == 3
