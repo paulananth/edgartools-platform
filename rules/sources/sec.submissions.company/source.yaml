@@ -95,6 +95,14 @@ bookkeeping:
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
           checks: [input.hash, output.receipt, mdm.committed]
+        # The Change Journal records each file the run processed, once its
+        # merge is verified, so a later run names only changed files (ticket 22).
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
     mdm:
       steps:

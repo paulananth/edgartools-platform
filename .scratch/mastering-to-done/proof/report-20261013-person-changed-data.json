@@ -1,0 +1,84 @@
+{
+ "after_first_pass": {
+  "companies_open": 0,
+  "decisions_by_rule": {
+   "person-cik": 386
+  },
+  "open_reviews": {
+   "classification_deferred": 167,
+   "classification_entity_undetermined": 447
+  },
+  "stage_bound": {
+   "sec.submissions.person.v1": 386
+  },
+  "stage_records": {
+   "sec.submissions.person.v1:person": 386
+  }
+ },
+ "bindings": "3ffe1b045df9e4fa09f558ddd32d5479080306e584ab6f0659f70d70691fe324",
+ "bundles": [
+  "1",
+  "2"
+ ],
+ "changed_data": {
+  "forced_named": {
+   "1": 500,
+   "2": 500
+  },
+  "forced_runs_changed_nothing": true,
+  "journal_events": {
+   "file.processed": 1000,
+   "files.forced": 2
+  },
+  "listed": {
+   "1": 500,
+   "2": 500
+  },
+  "unchanged_named": {
+   "1": 0,
+   "2": 0
+  },
+  "unchanged_runs": 0
+ },
+ "goal": "Issue 20 20d: installed empty-store Person proof on the mastering target",
+ "minutes": 3.7,
+ "minutes_first_pass": 3.3,
+ "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
+ "recovery": {
+  "item_at_kill": {
+   "attempt": "1a2bb605-3939-4fa3-8f95-4952a23ec20f",
+   "attempts": 1,
+   "checks": {},
+   "error": null,
+   "ordinal": 0,
+   "receipt": null,
+   "state": "running",
+   "step": "merge",
+   "unit_key": "sec.submissions.person:ce6b8fadb882c706e6b0730b462b97244482f1f8c978e6ace2b106253471fdeb"
+  },
+  "killed_worker_exit": -9,
+  "resumed_attempts": 2,
+  "rows_at_kill": {}
+ },
+ "second_pass_changed_nothing": true,
+ "writes": {
+  "after_first_pass": {
+   "batch": 20,
+   "checkpoint": 2,
+   "current_record": 1000,
+   "decision": 386,
+   "outbox": 60,
+   "set_aside_record": 614,
+   "source_reading": 386
+  },
+  "after_second_pass": {
+   "batch": 40,
+   "checkpoint": 4,
+   "current_record": 1000,
+   "decision": 386,
+   "outbox": 60,
+   "set_aside_record": 614,
+   "source_reading": 386
+  }
+ }
+}

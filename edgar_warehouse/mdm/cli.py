@@ -34,6 +34,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)
+    prepare.add_argument("--all", action="store_true", help="Name every document, processed or not (a forced run); "
+                     "by default only documents the Change Journal does not record as processed under these rules")
     prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
 
     capture = mdm_sub.add_parser("prepare-capture", help="Write a source's mastering target input manifest for one "
@@ -45,6 +47,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     capture.add_argument("--output", required=True)
     capture.add_argument("--as-of", required=True)
     capture.add_argument("--revision", type=int, required=True)
+    capture.add_argument("--all", action="store_true", help="Name every document, processed or not (a forced run); "
+                     "by default only documents the Change Journal does not record as processed under these rules")
     capture.set_defaults(handler=_logged_handler("prepare-capture", _clean("prepare_capture")))
 
     census = mdm_sub.add_parser("name-census", help="Count an SEC population and one configured full GLEIF Golden Copy "

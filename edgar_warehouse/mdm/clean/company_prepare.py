@@ -33,12 +33,13 @@ from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
 from .evidence import instant
-from . import raw_capture
+from . import changed_files, raw_capture
 from .raw_capture import read_bounded
 from .sec_company import CONTRACT, POLICY, SOURCE_CODE
 from .store import Conflict, canonical, digest
 
-ROOT = rules_files.ROOT / "sources/sec.submissions.company"
+SOURCE = "sec.submissions.company"
+ROOT = rules_files.ROOT / "sources" / SOURCE
 TARGET = "mastering"
 DOCUMENTS_BYTES = 1024**2
 CENSUS_BYTES = 256 * 1024**2
@@ -151,6 +152,8 @@ def write_company_manifest(
     as_of: str,
     revision: int,
     load_mode: str = "default",
+    force: bool = False,
+    journal=None,
 ) -> dict:
     """The `mastering` target's input manifest for a bounded Company sample from a raw capture.
 
@@ -161,7 +164,10 @@ def write_company_manifest(
     `catalog` by receipt key); the SEC-to-GLEIF matching rules read the
     business address and the Name Census. The approved capture and catalog run
     IDs and the observation time are the caller's facts, bound into every row.
-    Returns the report: the manifest's reference and the publication's scope.
+    Only the documents the Change Journal does not record as processed under
+    these rules, this census and this catalog are named (ticket 22); `force`
+    names every one. Returns the report: the manifest's reference (none when
+    every document was processed already) and the publication's scope.
     """
     if type(revision) is not int or revision < 0:
         raise ValueError("Require a nonnegative explicit publication revision")
@@ -186,12 +192,28 @@ def write_company_manifest(
         raise Conflict("The Name Census did not count this capture's documents")
     canonical_census = canonical(census).encode()
     census_hash = hashlib.sha256(canonical_census).hexdigest()  # the census's digest
-    documents_hash = hashlib.sha256(documents_raw).hexdigest()
+    rules = [rules_files.load(ROOT / name) for name in RULES]
+    # Only the documents not yet processed under these rules, this census and this catalog.
+    files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
+    catalog_sha = raw_capture.document(folder, receipts, catalog)["sha256"]
+    # The rules version is every rules file of the source (its readings, combination and
+    # contract) and the load mode they run with; the census and catalog are shared inputs.
+    processing = changed_files.identity({"files": changed_files.source_rules(SOURCE), "load_mode": load_mode},
+                                        digest(POLICY), [{"name": "name_census", "sha256": census_hash},
+                                                         {"name": "catalog", "sha256": catalog_sha}])
+    listed, keys = len(keys), changed_files.select(SOURCE, processing, files, force=force, ledger=journal)
+    if not keys:  # every document is processed already: no run
+        return {"contract_version": 3, "source_code": SOURCE_CODE, "target": TARGET, "manifest": None,
+                "publication": None, "dataset_digest": digest(CONTRACT), "policy_digest": digest(POLICY),
+                "scope": {"selected_records": 0, "listed": listed, "processing_identity": processing,
+                          "forced": force, "capture_run_id": capture_run}}
+    # The publication is the documents themselves (key and receipt), not the list file's
+    # bytes, as for any source (`capture_prepare`): the same documents are one publication.
+    documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
                        f":name_census:{census_hash}")
     # The consumer and batch ids name everything that shapes the rows: a rerun with another
     # observation time, load mode or rules version is a new consumer, not a reused batch key.
-    rules = [rules_files.load(ROOT / name) for name in RULES]
     bundle = digest([publication_key, revision, as_of, observed_at, load_mode, rules])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{SOURCE_CODE}/{bundle}", "batch_id": f"company:{bundle}"}
@@ -200,6 +222,11 @@ def write_company_manifest(
     store = Artifacts()
     root = Path(output).resolve().as_uri()
     steps = _units(store, root, folder, receipts, keys, catalog, canonical_census, census_hash, pins, publication)
+    steps["processed"] = [_unit(f"{root}/processed.json", {"unit": "processed"}, store.put(
+        root + "/inputs", changed_files.record_input(
+            source=SOURCE, feed=rules_files.source(SOURCE)["bronze"]["family"], processing=processing,
+            forced=force, as_of=as_of, files=[{"key": key, **raw_capture.document(folder, receipts, key)}
+                                              for key in keys])))]
     manifest = store.put(root, {"version": 2, "steps": steps})
     scope = {
         "mode": "bounded_sample",
@@ -210,6 +237,9 @@ def write_company_manifest(
         "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
         "ciks": [raw_capture.cik(key) for key in keys],
         "bronze_named": len(keys),
+        "listed": listed,
+        "processing_identity": processing,
+        "forced": force,
     }
     return {
         "contract_version": 3,

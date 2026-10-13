@@ -19,6 +19,7 @@ from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from edgar_warehouse.mdm.clean import limits
 from tests.mdm.test_clean_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, census_capture, documents
+from tests.support.memory_journal import MemoryJournal
 from tests.support.bookkeeping_protocol import drive
 from tests.support.retired_company_bundle import prepare_company_bundle
 from tests.support.sec_capture import CATALOG, document, key
@@ -32,11 +33,11 @@ def run_without_merge(databases, tmp_path, book, report):
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     target = deepcopy(files.source("sec.submissions.company")["bookkeeping"]["targets"]["mastering"])
-    assert target["steps"][-1]["name"] == "merge"
-    target["steps"] = target["steps"][:-1]
+    assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
+    target["steps"] = target["steps"][:-2]
     body = {"source": f"company-{uuid4().hex}", "bookkeeping": {"version": 1, "targets": {"mastering": target}}}
     steps = book.artifacts.json(report["manifest"])["steps"]
-    del steps["merge"]
+    del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     saved = databases.rules.save("source", body["source"], "1", body)
     databases.rules.prove("source", body["source"], "1",
@@ -53,7 +54,7 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     listed.write_text(json.dumps([key(c) for c in CIKS]))
     args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
             "name_census": str(census), **PINS}
-    report = write_company_manifest(output=str(tmp_path / "bundle"), **args)
+    report = write_company_manifest(journal=MemoryJournal(), output=str(tmp_path / "bundle"), **args)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
@@ -67,12 +68,19 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
 
     def landed(manifest, root):
         """What MDM reads: each batch's records bytes, count and publication (ids aside)."""
-        return [((root / b["input"]["path"]).read_bytes(), b["input"]["record_count"], b["input"]["publication"],
+        return [((root / b["input"]["path"]).read_bytes(), b["input"]["record_count"],
+                 {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
                  b["input"]["source_code"], b["expected_checkpoint"], b["checkpoint"]) for b in manifest["batches"]]
 
     assert landed(prepared, tmp_path / "bundle/records") == landed(oracle, tmp_path / "oracle")
     assert (prepared["as_of"], prepared["policy_digest"]) == (oracle["as_of"], oracle["policy_digest"])
-    assert report["scope"] == oracle_report["scope"]
+    # Ticket 22: the publication is its documents (key and receipt), as for any source, not
+    # the list file's bytes the oracle hashed; the rest of the key is the oracle's.
+    ours, theirs = (report["publication"]["publication_key"].split(":"),
+                    oracle["batches"][0]["input"]["publication"]["publication_key"].split(":"))
+    assert ours[:2] + ours[3:] == theirs[:2] + theirs[3:] and ours[2] != theirs[2]
+    assert {k: v for k, v in report["scope"].items() if k in oracle_report["scope"]} == oracle_report["scope"]
+    assert (report["scope"]["listed"], report["scope"]["forced"]) == (len(CIKS), False)
     assert [b["consumer"] for b in prepared["batches"]] == [report["publication"]["consumer"]]
 
     book.resume(rid)  # nothing is redone: every receipt and composed input is reverified
@@ -83,11 +91,11 @@ def test_the_manifest_freezes_documents_by_receipt_and_composes_census_and_combi
     folder, population, census = census_capture(tmp_path, documents(), CATALOG_ROWS)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(c) for c in CIKS]))
-    report = write_company_manifest(capture=str(folder), documents=str(listed), population=str(population),
+    report = write_company_manifest(journal=MemoryJournal(), capture=str(folder), documents=str(listed), population=str(population),
                                     catalog=CATALOG, name_census=str(census), output=str(tmp_path / "b"), **PINS)
     steps = json.loads(Path(report["manifest"]["uri"].removeprefix("file://")).read_bytes())["steps"]
     assert {name: len(units) for name, units in steps.items()} == {
-        "main": 1, "keys": 1, "catalog": 1, "census": 1, "combine": 1, "records": 1, "merge": 1}
+        "main": 1, "keys": 1, "catalog": 1, "census": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
     census_input = steps["census"][0]["input"]["compose"]
     assert census_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [{"step": "keys", "key": "keys"}]
     assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "census", "catalog"}
@@ -101,7 +109,7 @@ def mastered(databases, tmp_path, found=None):
     folder, population, census = census_capture(tmp_path, found or documents(), CATALOG_ROWS)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(c) for c in CIKS]))
-    report = write_company_manifest(capture=str(folder), documents=str(listed), population=str(population),
+    report = write_company_manifest(journal=MemoryJournal(), capture=str(folder), documents=str(listed), population=str(population),
                                     catalog=CATALOG, name_census=str(census), output=str(tmp_path / "bundle"), **PINS)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)

@@ -59,7 +59,7 @@ EXPECTED = {
 MASTERING = files.source(SOURCE)["bookkeeping"]["targets"]["mastering"]["steps"]
 PIPELINE = {"pipeline": "installed-person-proof", "bookkeeping": {"version": 1, "targets": {
     "person": old.TARGET(MASTERING),
-    "person-replay": old.TARGET([{**MASTERING[-1], "requires": []}])}}}
+    "person-replay": old.TARGET([{**next(s for s in MASTERING if s["name"] == "merge"), "requires": []}])}}}
 
 
 def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F811
@@ -70,7 +70,7 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
     started = time.monotonic()
     minutes = lambda: round((time.monotonic() - started) / 60, 1)  # noqa: E731
 
-    for profile in ("source.read", "mdm.prepare", "mdm.merge"):
+    for profile in ("source.read", "mdm.prepare", "mdm.merge", "journal.record"):
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql("CREATE DATABASE mdm_proof")
@@ -97,11 +97,11 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
         assert done.returncode == 0, done.stderr[-4000:]
         return done.stdout
 
-    def prepare(name: str) -> dict:
+    def prepare(name: str, folder: str = "first", *extra: str) -> dict:
         report = json.loads(cli(
             "mdm", "prepare-capture", "--source", SOURCE, "--capture", str(company.CAPTURE),
             "--documents", str(WORK / f"documents-{name}.json"), "--capture-run", CAPTURE_RUN,
-            "--output", str(tmp_path / "first" / name), "--as-of", AS_OF, "--revision", "0"))
+            "--output", str(tmp_path / folder / name), "--as-of", AS_OF, "--revision", "0", *extra))
         assert report["policy_digest"] == policy, (report["policy_digest"], policy)
         return report
 
@@ -159,7 +159,7 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
         for name in pool.map(prepared, names):
             if not recovery:
                 recovery = company.kill_and_recover(python, entry, worker, root, runs[name], items, snapshot)
-            drive(runs[name], ("mdm.merge",))
+            drive(runs[name], ("mdm.merge", "journal.record"))
             finalize(runs[name])
             old.say(bundle=name, merged=True, minutes=minutes())
     resumed = next(i for i in items(runs[names[0]]) if i["unit_key"] == recovery["item_at_kill"]["unit_key"])
@@ -167,6 +167,25 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
     assert resumed["state"] == "verified" and resumed["attempts"] == recovery["item_at_kill"]["attempts"] + 1
     first, first_bindings = snapshot()
     first_writes = writes()
+    # Ticket 22: the same documents again name no file and start no run; --all names them all.
+    unchanged = {name: prepare(name, "unchanged") for name in names}
+    forced = {name: prepare(name, "forced", "--all") for name in names}
+    changed_data = {
+        "unchanged_named": {n: r["scope"]["documents"] for n, r in unchanged.items()},
+        "unchanged_runs": sum(r["manifest"] is not None for r in unchanged.values()),
+        "forced_named": {n: r["scope"]["documents"] for n, r in forced.items()},
+        "listed": {n: r["scope"]["listed"] for n, r in unchanged.items()},
+    }
+    # A forced run of the same documents runs to the end on the installed workers and changes nothing.
+    for name in names:
+        forced_run = submit("person", forced[name]["manifest"])
+        drive(forced_run, ("source.read", "mdm.prepare", "mdm.merge", "journal.record"))
+        finalize(forced_run)
+    changed_data["forced_runs_changed_nothing"] = snapshot() == (first, first_bindings)
+    with databases.ledger_admin.connect() as conn:  # the runtime reads only through functions
+        changed_data["journal_events"] = dict(conn.execute(text(
+            "SELECT event_type, count(*) FROM journal.event WHERE producer = 'change-propagation' GROUP BY 1")).all())
+    old.say(stage="changed data", **changed_data)
     first_minutes = minutes()
     old.say(stage="first pass", **first)
 
@@ -192,11 +211,16 @@ def test_installed_person_mastering(installed, databases, tmp_path):  # noqa: F8
         "second_pass_changed_nothing": first == second and first_bindings == second_bindings,
         "writes": {"after_first_pass": first_writes, "after_second_pass": second_writes},
         "recovery": recovery, "minutes_first_pass": first_minutes, "minutes": minutes(),
+        "changed_data": changed_data,
     }
     out.write_text(json.dumps(report, sort_keys=True, indent=1) + "\n")
     old.say(stage="report", **report)
     for key, expected in EXPECTED.items():
         assert first[key] == expected, (key, first[key], expected)
     assert report["second_pass_changed_nothing"]
+    assert changed_data["unchanged_runs"] == 0 and set(changed_data["unchanged_named"].values()) == {0}
+    assert changed_data["forced_named"] == changed_data["listed"]
+    assert changed_data["forced_runs_changed_nothing"]
+    assert changed_data["journal_events"] == {"file.processed": 1000, "files.forced": len(names)}
     # Only changed data (migration 017): merging the same records again queues no publication work.
     assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)

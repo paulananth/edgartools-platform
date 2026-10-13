@@ -37,6 +37,7 @@ assert {str(path) for path in files if str(path).startswith("edgar_warehouse/") 
     "edgar_warehouse/change_journal/__init__.py", "edgar_warehouse/change_journal/cli.py",
     "edgar_warehouse/change_journal/database.py", "edgar_warehouse/change_journal/store.py",
     "edgar_warehouse/change_journal/migrations/001_event.sql",
+    "edgar_warehouse/change_journal/migrations/002_found.sql",
 }
 print("minimal wheel installed")
 '''], capture_output=True, text=True, check=True)
@@ -60,7 +61,7 @@ from edgar_warehouse.change_journal.cli import main
 raise SystemExit(main(["init", "--runtime-role", "ledger_runtime"]))
 ''', environment=environment, python=journal_python, installed=True)
     assert initialized.returncode == 0, initialized.stderr
-    assert set(json.loads(initialized.stdout)) == {"001_event.sql"}
+    assert set(json.loads(initialized.stdout)) == {"001_event.sql", "002_found.sql"}
     key = uuid4().hex
     runtime = run_isolated(root, '''
 import json
@@ -122,4 +123,4 @@ raise SystemExit(main(sys.argv[1:]))
         elif arguments[0] == "verify":
             assert body == receipt
         elif arguments[0] in {"init", "migrate"}:
-            assert set(body) == {"001_event.sql"}
+            assert set(body) == {"001_event.sql", "002_found.sql"}

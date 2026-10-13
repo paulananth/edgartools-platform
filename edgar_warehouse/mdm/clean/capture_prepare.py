@@ -25,7 +25,7 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
-from . import raw_capture
+from . import changed_files, raw_capture
 from .evidence import instant
 from .raw_capture import read_bounded
 from .store import digest
@@ -61,13 +61,18 @@ def write_capture_manifest(
     output: str,
     as_of: str,
     revision: int,
+    force: bool = False,
+    journal=None,
 ) -> dict:
     """The source's `mastering` input manifest for one bundle of captured documents.
 
     `documents` lists the bundle's documents by receipt key (at most the
     source's `execution.max_artifacts`, and at most 24 MiB). `capture_run` is
-    the caller's approved run ID of the capture. Returns the report: the
-    manifest's reference and the publication."""
+    the caller's approved run ID of the capture. Only the documents the Change
+    Journal does not record as processed under this source's rules are named
+    (ticket 22); `force` names every one. Returns the report: the manifest's
+    reference (none when every document was processed already) and the
+    publication."""
     if type(revision) is not int or revision < 0:
         raise ValueError("Require a nonnegative explicit publication revision")
     instant(as_of)
@@ -90,6 +95,15 @@ def write_capture_manifest(
             or len(set(keys)) != len(keys) or any(not isinstance(key, str) for key in keys)):
         raise ValueError(f"A bundle names 1..{limit} distinct documents")
     keys = sorted(keys)  # a bundle is its documents, in key order, however they are listed
+    files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
+    policy = digest(rules_files.policy())
+    processing = changed_files.identity(changed_files.source_rules(source), policy)
+    listed, keys = len(keys), changed_files.select(source, processing, files, force=force, ledger=journal)
+    scope = {"documents": len(keys), "listed": listed, "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
+             "capture_run_id": capture_run, "processing_identity": processing, "forced": force}
+    if not keys:  # every document is processed already: no run
+        return {"source": source, "source_code": dataset, "target": TARGET, "manifest": None,
+                "publication": None, "policy_digest": policy, "scope": scope}
     # Each document equal to its receipt before it is frozen; its size cuts the read units.
     sized = [(key, len(raw_capture.document_bytes(folder, receipts, key))) for key in keys]
     if sum(size for _, size in sized) > BUNDLE_BYTES:
@@ -98,7 +112,6 @@ def write_capture_manifest(
     # list file's bytes: the same documents are one publication.
     documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = f"{capture_run}:{source}:{documents_hash}"
-    policy = digest(rules_files.policy())
     # The consumer and batch ids name what shapes the records (the reading, the
     # contract with its quality rule, the policy): a rerun under other rules or
     # another time is a new consumer, not a reused batch key. The steps do not.
@@ -123,7 +136,11 @@ def write_capture_manifest(
             "slots": {"read": [{"step": "read", "key": unit["keys"]["unit"]} for unit in read]}}})
     merge = {"keys": {"batch_id": publication["batch_id"], "consumer": publication["consumer"]},
              "input": {"from": {"step": "records", "key": "records"}}, "output": f"{root}/merge.json", "cursor": {}}
-    manifest = store.put(root, {"version": 2, "steps": {"read": read, "records": [records], "merge": [merge]}})
+    processed = _unit(f"{root}/processed.json", {"unit": "processed"}, store.put(inputs, changed_files.record_input(
+        source=source, feed=reading["bronze"]["family"], processing=processing, forced=force, as_of=as_of,
+        files=[{"key": key, **raw_capture.document(folder, receipts, key)} for key in keys])))
+    manifest = store.put(root, {"version": 2, "steps": {"read": read, "records": [records], "merge": [merge],
+                                                        "processed": [processed]}})
     return {
         "source": source,
         "source_code": dataset,
@@ -131,8 +148,7 @@ def write_capture_manifest(
         "manifest": manifest,
         "publication": publication,
         "policy_digest": policy,
-        "scope": {"documents": len(keys), "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
-                  "capture_run_id": capture_run},
+        "scope": scope,
     }
 
 

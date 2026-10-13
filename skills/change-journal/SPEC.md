@@ -111,6 +111,25 @@ establishes success. This worker is qualified offline for bounded HTTPS JSON
 objects. Source producer manifests, continuation expansion, live provider proof
 and exact Rules activation require separate integration and qualification.
 
+## Which files a run processes
+
+A run processes only the files its source has not processed under the same
+**processing identity**: the digest of the source's rules version (its
+readings, Dataset Contracts and policy) and every shared input it reads. A
+change to any of them processes every file of the source again. The unit is a
+whole file, never a field or a record inside one (record-level change is
+`mdm.publish`'s).
+
+- A target's last step, `journal.record` (after its merge is verified),
+  appends one `file.processed` event per file the run named, producer
+  `change-propagation`, its key `file.processed:<source>:<identity>:<sha256>:<file
+  key>`, its time the run's own (a retry appends the same event). Its verifier
+  reads every event back.
+- A manifest writer asks `journal.found(producer, keys)` (up to 10,000 keys,
+  each joined on the unique `(producer, event_key)` index) and names only the
+  files without an event; when none is left it starts no run.
+- `--all` names every file; its events say `forced: yes`.
+
 ## Rules and source-owned evidence
 
 The acquisition section and integration boundary are described in

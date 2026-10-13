@@ -26,3 +26,4 @@ bypass-selection = true
 "../../edgar_warehouse/change_journal/database.py" = "edgar_warehouse/change_journal/database.py"
 "../../edgar_warehouse/change_journal/store.py" = "edgar_warehouse/change_journal/store.py"
 "../../edgar_warehouse/change_journal/migrations/001_event.sql" = "edgar_warehouse/change_journal/migrations/001_event.sql"
+"../../edgar_warehouse/change_journal/migrations/002_found.sql" = "edgar_warehouse/change_journal/migrations/002_found.sql"

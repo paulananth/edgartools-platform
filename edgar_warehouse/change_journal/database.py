@@ -94,6 +94,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
             "get(text,text)",
             "list_events(text,text,uuid,integer,bigint)",
             "status(text,text)",
+            "found(text,text[])",
         ):
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION journal.{signature} TO {runtime}"
