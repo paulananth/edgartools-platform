@@ -142,12 +142,12 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         return done.stdout
 
     # Each bundle's input manifest, written by the installed CLI into this attempt's folder.
-    def prepare_manifest(name: str) -> dict:
+    def prepare_manifest(name: str, folder: str = "sec-first") -> dict:
         report = json.loads(cli(
             "mdm", "prepare-clean-company", "--capture", str(CAPTURE), "--documents", str(WORK / f"documents-{name}.json"),
             "--population", str(WORK / "population.json"), "--name-census", str(WORK / "census.json"),
             "--catalog", CATALOG, "--capture-run", f"local-cm27-chunk{name.split('-')[0]}", "--catalog-run", CATALOG_RUN,
-            "--observed-at", OBSERVED_AT, "--output", str(tmp_path / "sec-first" / name),
+            "--observed-at", OBSERVED_AT, "--output", str(tmp_path / folder / name),
             "--as-of", old.AS_OF, "--revision", "0"))
         assert report["policy_digest"] == policy, (report["policy_digest"], policy)
         return report
@@ -247,6 +247,22 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     first_writes = writes()
     old.say(stage="first pass", writes=first_writes, **first)
 
+    # Ticket 22: the same documents prepared again name no file and start no run.
+    with ThreadPoolExecutor(4) as pool:
+        again = dict(zip(names, pool.map(lambda n: prepare_manifest(n, "sec-again"), names)))
+    changed_data = {"listed": sum(r["scope"]["listed"] for r in again.values()),
+                    "named_again": sum(r["scope"]["selected_records"] for r in again.values()),
+                    "runs_started_again": sum(1 for r in again.values() if r["manifest"]),
+                    "named_first": sum(r["scope"]["selected_records"] for r in reports.values())}
+    journal = create_engine(databases.admin.url.set(database=databases.ledger.engine.url.database))
+    with journal.connect() as conn:
+        changed_data["file_processed_events"] = conn.execute(text(
+            "SELECT count(*) FROM journal.event WHERE producer='change-propagation' "
+            "AND event_key LIKE 'file.processed:%'")).scalar()
+    journal.dispose()
+    old.say(stage="changed data", **changed_data)
+    timings["changed_data"] = minutes()
+
     # Second pass: every bundle's verified records merged again under new batch ids and consumers.
     for name in names:
         source, target = tmp_path / "sec-first" / name / "records", tmp_path / "sec-second" / name
@@ -277,7 +293,7 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         "after_first_pass": first, "bindings": first_bindings,
         "second_pass_changed_nothing": first == second and first_bindings == second_bindings,
         "writes": {"after_first_pass": first_writes, "after_second_pass": second_writes},
-        "recovery": recovery, "minutes_since_start": timings,  # cumulative: each stage's end
+        "recovery": recovery, "changed_data": changed_data, "minutes_since_start": timings,  # cumulative: each stage's end
         "bindings_equal_checkout_replay": first_bindings == old.CHECKOUT_BINDINGS if only != "sec" and whole else None,
         "checkout_replay": {k: v for k, v in PIN["after_first_pass"].items() if k in first},
         "minutes": minutes(),
@@ -287,6 +303,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     assert report["second_pass_changed_nothing"]
     # Only changed data (017): merging the same records again queues no publication work.
     assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)
+    assert changed_data["named_again"] == 0 and changed_data["runs_started_again"] == 0, changed_data
+    assert changed_data["file_processed_events"] == changed_data["named_first"], changed_data
     if whole:
         assert first["stage_records"].get(f"{SEC}:company") == 6414, first["stage_records"]
         assert first["stage_bound"].get(SEC) == 6414
