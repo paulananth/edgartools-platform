@@ -1,4 +1,5 @@
-//! Readers for JSON, JSON Lines, CSV and a ZIP container. Each builds the
+//! Readers for JSON, JSON Lines, CSV, a ZIP container and an SGML submission
+//! container. Each builds the
 //! shared tree; JSON Lines and CSV put each line under `record`.
 
 use std::io::{Cursor, Read};
@@ -167,6 +168,62 @@ pub fn zip_member(bytes: &[u8], max_member_bytes: u64, pattern: Option<&str>) ->
         return Err(Rejected::new("limit_exceeded", format!("the member is over {max_member_bytes} bytes")));
     }
     Ok(out)
+}
+
+fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+    hay.get(from..)?.windows(needle.len()).position(|w| w == needle).map(|i| i + from)
+}
+
+/// The text of a one-line SGML tag (`<FILENAME>name`), up to its line end.
+fn tag_line<'a>(block: &'a [u8], tag: &[u8]) -> Option<&'a [u8]> {
+    let start = find(block, tag, 0)? + tag.len();
+    let end = block[start..].iter().position(|b| *b == b'\n').map_or(block.len(), |i| start + i);
+    Some(block[start..end].trim_ascii())
+}
+
+/// An SGML header's `NAME: value` lines, in order.
+pub type HeaderLines = Vec<(String, String)>;
+
+/// One SGML submission file (an `<SEC-DOCUMENT>`): the one document whose
+/// text holds `<XML>`, read no further than `max_member_bytes`, and the
+/// header's `NAME: value` lines. When `pattern` is given, only documents
+/// whose `<FILENAME>` it matches count. None or several refuse, as
+/// `zip_member` refuses.
+pub fn sgml_document(bytes: &[u8], max_member_bytes: u64, pattern: Option<&str>) -> Result<(Vec<u8>, HeaderLines), Rejected> {
+    if !bytes.trim_ascii_start().starts_with(b"<SEC-DOCUMENT>") {
+        return Err(malformed("an SGML submission starts with <SEC-DOCUMENT>"));
+    }
+    let header_start = find(bytes, b"<SEC-HEADER>", 0).ok_or_else(|| malformed("no <SEC-HEADER>"))?;
+    let header_end = find(bytes, b"</SEC-HEADER>", header_start).ok_or_else(|| malformed("no </SEC-HEADER>"))?;
+    let header = std::str::from_utf8(&bytes[header_start..header_end]).map_err(malformed)?;
+    let lines = header.lines().skip(1).filter_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        let (name, value) = (name.trim(), value.trim());
+        (!name.is_empty() && !value.is_empty() && !name.starts_with('<')).then(|| (name.to_string(), value.to_string()))
+    }).collect();
+    let mut found = Vec::new();
+    let mut at = header_end;
+    while let Some(start) = find(bytes, b"<DOCUMENT>", at) {
+        let end = find(bytes, b"</DOCUMENT>", start).ok_or_else(|| malformed("a <DOCUMENT> is not closed"))?;
+        let block = &bytes[start..end];
+        if let Some(open) = find(block, b"<XML>", 0) {
+            let close = find(block, b"</XML>", open).ok_or_else(|| malformed("an <XML> is not closed"))?;
+            let name = tag_line(block, b"<FILENAME>").map(|n| String::from_utf8_lossy(n).into_owned()).unwrap_or_default();
+            if pattern.is_none_or(|p| matches_pattern(p, &name)) {
+                found.push(block[open + b"<XML>".len()..close].trim_ascii());
+            }
+        }
+        at = end;
+    }
+    let xml = match found[..] {
+        [xml] => xml,
+        [] => return Err(Rejected::new("sgml_documents", "no document holds XML".to_string() + &pattern.map(|p| format!(" named {p}")).unwrap_or_default())),
+        _ => return Err(Rejected::new("sgml_documents", format!("{} documents hold XML, not one", found.len()))),
+    };
+    if xml.len() as u64 > max_member_bytes {
+        return Err(Rejected::new("limit_exceeded", format!("the document is over {max_member_bytes} bytes")));
+    }
+    Ok((xml.to_vec(), lines))
 }
 
 /// Whether a member name matches a pattern: `*` stands for any run of

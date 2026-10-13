@@ -1343,3 +1343,48 @@ with `malformed`. Nothing is replaced or guessed. The one case the list cannot
 tell apart is a windows-1252 file whose accented letters happen to form valid
 UTF-8 pairs; profile the source's publications before choosing the list, and
 prefer a single encoding when every publication shares one.
+
+## The XML document inside an SGML submission file
+
+Some publishers wrap each submission in SGML, not XML: an envelope with a
+header of `NAME: value` lines, then one `<DOCUMENT>` block per document
+(`<TYPE>`, `<FILENAME>`, `<TEXT>`). Read the one document whose text holds
+`<XML>` with `container: sgml`; it needs `format: xml`, and `root` still
+checks the document's root.
+
+Exactly one document must hold `<XML>`: none, or more than one, refuses the
+artifact with `sgml_documents`. `read.member`, a pattern over `<FILENAME>`
+(as for a ZIP member), narrows which documents count. The XML between `<XML>`
+and `</XML>` is read no further than `max_member_bytes`; a larger one refuses
+with `limit_exceeded`. A file that does not start with the envelope's opening
+tag, or whose header or a block is not closed, refuses with `malformed`.
+
+A context field may name a header line with `sgml_header` (text, the line's
+name without its colon). It is filled from the header, never by the caller:
+the caller supplies every other declared field, and supplying this one refuses
+with `invalid_context`. The line must appear exactly once in the header, or the
+artifact refuses with `sgml_header`; a name the header repeats in several
+sections cannot be read this way. A reading of the same documents captured as
+bare XML declares the same field without `sgml_header`, and its caller supplies
+it (for example from the capture path), so both readings fill the same columns.
+
+### Examples
+
+An SEC submission file opens with `<SEC-DOCUMENT>` and `<SEC-HEADER>`; its
+header names the filing's `ACCESSION NUMBER` once:
+
+```yaml
+read:
+  format: xml
+  container: sgml
+  root: ownershipDocument
+  context:
+    accession: {type: text, sgml_header: ACCESSION NUMBER}
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432}
+  tables:
+    filing:
+      each: .
+      columns:
+        accession: {context: {name: accession}}
+        period: {text: {path: periodOfReport.$}}
+```

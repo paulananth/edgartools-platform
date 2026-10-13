@@ -234,11 +234,29 @@ impl Engine {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
         let member;
-        let bytes = if setting(&self.read, "container") == Some("zip") {
-            member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
-            &member[..]
-        } else {
-            bytes
+        let mut filled;
+        let mut context = context;
+        let bytes = match setting(&self.read, "container") {
+            Some("zip") => {
+                member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
+                &member[..]
+            }
+            Some("sgml") => {
+                let header;
+                (member, header) = formats::sgml_document(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
+                filled = context.clone();
+                for (name, line) in context::from_header(&self.read) {
+                    let values: Vec<&String> = header.iter().filter(|(n, _)| *n == line).map(|(_, v)| v).collect();
+                    let [value] = values[..] else {
+                        return Err(Rejected::new("sgml_header", format!("the header names {line} {} times, not once", values.len())));
+                    };
+                    filled.insert(name, Val::Str(value.clone()));
+                }
+                context::check_filled(&self.read, &filled)?;
+                context = &filled;
+                &member[..]
+            }
+            _ => bytes,
         };
         let document = self.document(bytes)?;
         self.read_document(&document, lookups, context)
@@ -526,13 +544,17 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
         }
     }
     if let Some(container) = read.get("container") {
-        if container.as_str() != Some("zip") {
-            return Err(format!("container {container:?} is not read"));
+        match container.as_str() {
+            Some("zip") => {}
+            // An SGML submission's document is read as XML.
+            Some("sgml") if format == "xml" => {}
+            Some("sgml") => return Err("container sgml holds an XML document: it needs format xml".into()),
+            _ => return Err(format!("container {container:?} is not read")),
         }
     }
     if let Some(member) = read.get("member") {
-        if setting(read, "container") != Some("zip") {
-            return Err("read.member chooses a ZIP member: it needs container zip".into());
+        if !matches!(setting(read, "container"), Some("zip" | "sgml")) {
+            return Err("read.member chooses a ZIP member or an SGML document: it needs container zip or sgml".into());
         }
         if !member.as_str().is_some_and(|m| !m.is_empty() && m.len() <= 256) {
             return Err("read.member is a member name pattern of 1 to 256 bytes".into());

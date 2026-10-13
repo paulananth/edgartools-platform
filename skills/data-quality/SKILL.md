@@ -14,6 +14,14 @@ each, and what does each one do on the records?** Profiling finds the defects
 This skill turns them into the engine's checks and fixes, measures them, and
 writes them once the operator decides.
 
+**A part that goes to silver** (transaction or event data, published
+reference data) has no `quality.yaml`: these checks read MDM records only,
+and a silver table spec holds no checks. Fix its defects in the part's
+reading instead (a date written with a time-zone offset read as a calendar
+date, the spellings of one flag looked up to a boolean, codes read against
+their full list from its authority, not one sample's) and type them in its
+silver spec. A check on silver rows is new code: log it for a ticket.
+
 **Use the other skill when:**
 - there are no approved findings yet: use **data-profiling** first;
 - you are changing a live feed's mapping or matching: use **refining-rules**.
