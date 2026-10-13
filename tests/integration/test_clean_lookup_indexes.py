@@ -30,11 +30,13 @@ from tests.integration.test_clean_mdm_postgres import (
 postgres = core.postgres
 database = core.database
 
-TABLES = ("source_reading", "decision", "master_entity", "current_record")
+TABLES = ("source_reading", "decision", "master_entity", "current_record", "company", "company_alias")
 INDEXES = ("source_reading_link_subjects", "source_reading_subject", "master_entity_id_text", "decision_retired_source",
            "decision_subject", "decision_entity", "decision_left", "decision_right", "decision_target",
            "current_record_link_start", "current_record_link_end", "current_record_review_entity",
-           "current_record_review_subject", "current_record_review_affected_subjects")
+           "current_record_review_subject", "current_record_review_affected_subjects",
+           # record_company_version: is this Company the one stored now (017 asks it)?
+           "company_current_entity")
 
 
 def parent(target, **more):

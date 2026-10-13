@@ -282,6 +282,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     out.write_text(json.dumps(report, sort_keys=True, indent=1) + "\n")
     old.say(stage="report", **report)
     assert report["second_pass_changed_nothing"]
+    # Only changed data (017): merging the same records again queues no publication work.
+    assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)
     if whole:
         assert first["stage_records"].get(f"{SEC}:company") == 6414, first["stage_records"]
         assert first["stage_bound"].get(SEC) == 6414

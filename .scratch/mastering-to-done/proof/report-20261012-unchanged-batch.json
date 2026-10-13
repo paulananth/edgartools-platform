@@ -1,0 +1,93 @@
+{
+ "after_first_pass": {
+  "companies_open": 20,
+  "decisions_by_rule": {
+   "company-cik": 20
+  },
+  "open_reviews": {},
+  "stage_bound": {
+   "sec.submissions.company.v1": 20
+  },
+  "stage_records": {
+   "sec.submissions.company.v1:company": 20
+  }
+ },
+ "bindings": "2bed1e6c9a5c828f46f27e02c349681cb4f4588ba66cad43ffa71c67192497e4",
+ "bindings_equal_checkout_replay": null,
+ "bundles": [
+  "9-9"
+ ],
+ "checkout_replay": {
+  "companies_open": 6414,
+  "decisions_by_rule": {
+   "company-cik": 6414,
+   "sec-gleif-name-jurisdiction": 2861,
+   "sec-gleif-name-postal": 191
+  },
+  "open_reviews": {
+   "binding_required": 664,
+   "classification_deferred": 312
+  },
+  "stage_bound": {
+   "gleif.level1.v1": 3052,
+   "sec.submissions.company.v1": 6414
+  },
+  "stage_records": {
+   "gleif.level1.v1:company": 3716,
+   "sec.submissions.company.v1:company": 6414
+  }
+ },
+ "gleif_scope_leis": 0,
+ "goal": "Issue 20 20c part 4: installed empty-store Company proof on the mastering target",
+ "minutes": 2.4,
+ "minutes_since_start": {
+  "manifests": 0.3,
+  "sec_first": 2.2,
+  "second_pass": 2.4
+ },
+ "only": "sec",
+ "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
+ "recovery": {
+  "item_at_kill": {
+   "attempt": "7ff9b04b-f13d-4042-afb2-b4908462effb",
+   "attempts": 1,
+   "checks": {},
+   "error": null,
+   "ordinal": 0,
+   "receipt": null,
+   "state": "running",
+   "step": "merge",
+   "unit_key": "company:2c5a447a2f24b302498d8f734e51a81cd5f7fb79d3e585e41624a636e238cd00"
+  },
+  "killed_worker_exit": -9,
+  "resumed_attempts": 2,
+  "rows_at_kill": {}
+ },
+ "second_pass_changed_nothing": true,
+ "writes": {
+  "after_first_pass": {
+   "batch": 1,
+   "checkpoint": 1,
+   "company": 20,
+   "current_record": 0,
+   "decision": 20,
+   "journal_events": 7,
+   "match_proposal": 1,
+   "outbox": 3,
+   "set_aside_record": 0,
+   "source_reading": 20
+  },
+  "after_second_pass": {
+   "batch": 2,
+   "checkpoint": 2,
+   "company": 20,
+   "current_record": 0,
+   "decision": 20,
+   "journal_events": 8,
+   "match_proposal": 1,
+   "outbox": 3,
+   "set_aside_record": 0,
+   "source_reading": 20
+  }
+ }
+}
