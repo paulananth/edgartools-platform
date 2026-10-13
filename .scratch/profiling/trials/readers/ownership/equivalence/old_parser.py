@@ -19,9 +19,9 @@ from edgar_warehouse.rules.source_engine import SourceEngine
 
 spec = importlib.util.spec_from_file_location("old_ownership", sys.argv[1])
 old = importlib.util.module_from_spec(spec); spec.loader.exec_module(old)
-B = Path(sys.argv[2])
-R = Path(__file__).resolve().parents[6] / "rules/sources/sec.ownership"
-XML, SGML = (SourceEngine(files.load(R / f"ownership-{s}.yaml")) for s in ("xml", "sgml"))
+BRONZE = Path(sys.argv[2])
+RULES = Path(__file__).resolve().parents[6] / "rules/sources/sec.ownership"
+XML, SGML = (SourceEngine(files.load(RULES / f"ownership-{s}.yaml")) for s in ("xml", "sgml"))
 MARKER = re.compile(r" \[F\d+(,F\d+)*\]$")  # the old parser's footnote marker, "<value> [F1,F2]"
 
 
@@ -55,11 +55,11 @@ def run(counts, which, accession, raw, xml_bytes, engine, context):
     owners_new, owners_old = new["reporting_owner"], was["sec_ownership_reporting_owner"]
     compare(counts, which, len(owners_new), len(owners_old), "owner_count")
     for n, o in zip(owners_new, owners_old):
-        compare(counts, which, int(n["owner_cik"]) if n["owner_cik"] else None, o["owner_cik"], "owner.cik")
-        compare(counts, which, blank(n["owner_name"]), blank(o["owner_name_raw"]), "owner.name_raw")
+        compare(counts, which, int(n["rpt_owner_cik"]) if n["rpt_owner_cik"] else None, o["owner_cik"], "owner.cik")
+        compare(counts, which, blank(n["rpt_owner_name"]), blank(o["owner_name_raw"]), "owner.name_raw")
         for f in ("is_director", "is_officer", "is_ten_percent_owner", "is_other"):
             compare(counts, which, bool(n[f]), o[f], f"owner.{f}")
-        compare(counts, which, bool(n["non_us_address"]), o["address_non_us"], "owner.non_us_address")
+        compare(counts, which, bool(n["rpt_owner_non_us_address_flag"]), o["address_non_us"], "owner.non_us_address")
         compare(counts, which, blank(n["other_text"]), blank(o["other_text"]), "owner.other_text")
         if "see remarks" in (n["officer_title"] or "").lower():  # the old parser put the remarks there
             counts[(which, "owner.officer_title", "old_replaced_see_remarks_with_remarks")] += 1
@@ -96,14 +96,14 @@ def run(counts, which, accession, raw, xml_bytes, engine, context):
 
 
 counts = collections.Counter()
-for p in sorted(glob.glob(str(B / "filings/sec/*/*/primary/*.xml"))):
+for p in sorted(glob.glob(str(BRONZE / "filings/sec/*/*/primary/*.xml"))):
     raw = Path(p).read_bytes()
     if b"<ownershipDocument" not in raw:
         counts[("cohort", "not_an_ownership_document", "skipped")] += 1
         continue
     accession = re.search(r"accession=([\d-]+)", p).group(1)
     run(counts, "cohort", accession, raw, raw, XML, {"accession": accession})
-for p in sorted((B / "filing_artifact").iterdir()):
+for p in sorted((BRONZE / "filing_artifact").iterdir()):
     raw = p.read_bytes()
     accession = re.search(rb"ACCESSION NUMBER:\s*([\d-]+)", raw).group(1).decode()
     run(counts, "artifact", accession, raw, None, SGML, None)

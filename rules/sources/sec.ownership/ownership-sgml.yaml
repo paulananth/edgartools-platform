@@ -9,12 +9,17 @@ read:
   root: ownershipDocument
   context:
     accession: {type: text, sgml_header: ACCESSION NUMBER}
+  # max_member_bytes bounds the XML inside an SGML file; the bare reading declares it too, so the
+  # two readings' limits stay one statement (a test holds them equal).
   limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
-  # Dates are calendar dates: an offset after the date (2024-01-05-05:00) is not read,
-  # nor a footnote marker after it (profiling ticket 07; the old parser read the same
-  # first ten characters). Flags are XML Schema booleans; any other spelling refuses the
+  # Names are the SEC's element names. Dates are calendar dates: an offset after the date
+  # (2024-01-05-05:00) or a footnote marker after it is not read (the old parser read the
+  # same first ten characters); a value that is not a date refuses the filing. Flags are XML
+  # Schema booleans (0, false, 1, true), null when absent; any other spelling refuses the
   # filing (operator, 2026-10-13: "Refuse the filing"). A transaction code outside the
-  # SEC's list refuses it too; an absent one is null.
+  # SEC's list refuses it too; an absent one is null. Which footnote qualifies which value
+  # (each value's footnoteId) is not read yet: the footnote table holds the texts
+  # (profiling ticket 07, deferred to the silver specs).
   reference_pins:
     transaction_codes:
       code_set: sec-ownership-transaction-codes
@@ -49,7 +54,7 @@ read:
       K: {label: "Transaction in equity swap or instrument with similar characteristics"}
       U: {label: "Disposition pursuant to a tender of shares in a change of control transaction"}
   tables:
-    filing:
+    ownership_document:
       each: .
       columns:
         accession: {context: {name: accession}}
@@ -70,17 +75,17 @@ read:
       each: reportingOwner
       columns:
         accession: {context: {name: accession}}
-        row: {ordinal: {}}
-        owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
-        owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
-        street1: {text: {path: reportingOwnerAddress.rptOwnerStreet1.$}}
-        street2: {text: {path: reportingOwnerAddress.rptOwnerStreet2.$}}
-        city: {text: {path: reportingOwnerAddress.rptOwnerCity.$}}
-        state: {text: {path: reportingOwnerAddress.rptOwnerState.$}}
-        zip_code: {text: {path: reportingOwnerAddress.rptOwnerZipCode.$}}
-        state_description: {text: {path: reportingOwnerAddress.rptOwnerStateDescription.$}}
-        non_us_address: {choose: {condition: {test: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$}}, on_missing: error}}, else: {const: {value: null}}}}
-        country: {text: {path: reportingOwnerAddress.rptOwnerCountry.$}}
+        position: {ordinal: {}}
+        rpt_owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
+        rpt_owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
+        rpt_owner_street1: {text: {path: reportingOwnerAddress.rptOwnerStreet1.$}}
+        rpt_owner_street2: {text: {path: reportingOwnerAddress.rptOwnerStreet2.$}}
+        rpt_owner_city: {text: {path: reportingOwnerAddress.rptOwnerCity.$}}
+        rpt_owner_state: {text: {path: reportingOwnerAddress.rptOwnerState.$}}
+        rpt_owner_zip_code: {text: {path: reportingOwnerAddress.rptOwnerZipCode.$}}
+        rpt_owner_state_description: {text: {path: reportingOwnerAddress.rptOwnerStateDescription.$}}
+        rpt_owner_non_us_address_flag: {choose: {condition: {test: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$}}, on_missing: error}}, else: {const: {value: null}}}}
+        rpt_owner_country: {text: {path: reportingOwnerAddress.rptOwnerCountry.$}}
         is_director: {choose: {condition: {test: {path: reportingOwnerRelationship.isDirector.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isDirector.$}}, on_missing: error}}, else: {const: {value: null}}}}
         is_officer: {choose: {condition: {test: {path: reportingOwnerRelationship.isOfficer.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOfficer.$}}, on_missing: error}}, else: {const: {value: null}}}}
         is_ten_percent_owner: {choose: {condition: {test: {path: reportingOwnerRelationship.isTenPercentOwner.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isTenPercentOwner.$}}, on_missing: error}}, else: {const: {value: null}}}}
@@ -91,7 +96,7 @@ read:
       each: nonDerivativeTable.nonDerivativeTransaction
       columns:
         accession: {context: {name: accession}}
-        row: {ordinal: {}}
+        position: {ordinal: {}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_date: {date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}
         deemed_execution_date: {date: {path: deemedExecutionDate.value.$, kind: calendar, prefix_length: 10}}
@@ -102,6 +107,7 @@ read:
         transaction_timeliness: {text: {path: transactionTimeliness.value.$}}
         transaction_shares: {text: {path: transactionAmounts.transactionShares.value.$}}
         transaction_price_per_share: {text: {path: transactionAmounts.transactionPricePerShare.value.$}}
+        transaction_total_value: {text: {path: transactionAmounts.transactionTotalValue.value.$}}
         transaction_acquired_disposed_code: {text: {path: transactionAmounts.transactionAcquiredDisposedCode.value.$}}
         shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
         value_owned_following_transaction: {text: {path: postTransactionAmounts.valueOwnedFollowingTransaction.value.$}}
@@ -111,7 +117,7 @@ read:
       each: nonDerivativeTable.nonDerivativeHolding
       columns:
         accession: {context: {name: accession}}
-        row: {ordinal: {}}
+        position: {ordinal: {}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
         shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
@@ -122,7 +128,7 @@ read:
       each: derivativeTable.derivativeTransaction
       columns:
         accession: {context: {name: accession}}
-        row: {ordinal: {}}
+        position: {ordinal: {}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_date: {date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}
         deemed_execution_date: {date: {path: deemedExecutionDate.value.$, kind: calendar, prefix_length: 10}}
@@ -133,6 +139,7 @@ read:
         transaction_timeliness: {text: {path: transactionTimeliness.value.$}}
         transaction_shares: {text: {path: transactionAmounts.transactionShares.value.$}}
         transaction_price_per_share: {text: {path: transactionAmounts.transactionPricePerShare.value.$}}
+        transaction_total_value: {text: {path: transactionAmounts.transactionTotalValue.value.$}}
         transaction_acquired_disposed_code: {text: {path: transactionAmounts.transactionAcquiredDisposedCode.value.$}}
         shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
         value_owned_following_transaction: {text: {path: postTransactionAmounts.valueOwnedFollowingTransaction.value.$}}
@@ -148,7 +155,7 @@ read:
       each: derivativeTable.derivativeHolding
       columns:
         accession: {context: {name: accession}}
-        row: {ordinal: {}}
+        position: {ordinal: {}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
         shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
@@ -167,10 +174,10 @@ read:
         accession: {context: {name: accession}}
         footnote_id: {text: {path: '@id'}}
         text: {text: {path: $}}
-    signature:
+    owner_signature:
       each: ownerSignature
       columns:
         accession: {context: {name: accession}}
-        row: {ordinal: {}}
+        position: {ordinal: {}}
         signature_name: {text: {path: signatureName.$}}
         signature_date: {date: {path: signatureDate.$, kind: calendar, prefix_length: 10}}

@@ -21,12 +21,13 @@ XML, SGML = (files.load(FOLDER / f"ownership-{shape}.yaml") for shape in ("xml",
 ACCESSION = "0000000000-26-000001"
 
 
-def filing(*, date="2026-01-05", swap="0", code="P", director="1", coding=True) -> bytes:
+def filing(*, date="2026-01-05", swap="0", code="P", director="1", coding=True, flag="0", root="ownershipDocument") -> bytes:
     coded = (f"<transactionCoding><transactionFormType>4</transactionFormType><transactionCode>{code}</transactionCode>"
              f"<equitySwapInvolved>{swap}</equitySwapInvolved></transactionCoding>") if coding else ""
     return f"""<?xml version="1.0"?>
-<ownershipDocument>
+<{root}>
  <schemaVersion>X0508</schemaVersion><documentType>4</documentType><periodOfReport>{date}</periodOfReport>
+ <notSubjectToSection16>{flag}</notSubjectToSection16><aff10b5One>true</aff10b5One>
  <issuer><issuerCik>0000000001</issuerCik><issuerName>Example Widgets Inc</issuerName><issuerTradingSymbol>EXW</issuerTradingSymbol></issuer>
  <reportingOwner>
   <reportingOwnerId><rptOwnerCik>0000000002</rptOwnerCik><rptOwnerName>Sample Holder</rptOwnerName></reportingOwnerId>
@@ -43,10 +44,15 @@ def filing(*, date="2026-01-05", swap="0", code="P", director="1", coding=True) 
    <postTransactionAmounts><sharesOwnedFollowingTransaction><value>1100</value></sharesOwnedFollowingTransaction></postTransactionAmounts>
    <ownershipNature><directOrIndirectOwnership><value>D</value></directOrIndirectOwnership></ownershipNature>
   </nonDerivativeTransaction>
+ <nonDerivativeHolding>
+   <securityTitle><value>Common Stock</value></securityTitle>
+   <postTransactionAmounts><sharesOwnedFollowingTransaction><value>500</value></sharesOwnedFollowingTransaction></postTransactionAmounts>
+   <ownershipNature><directOrIndirectOwnership><value>I</value></directOrIndirectOwnership></ownershipNature>
+  </nonDerivativeHolding>
  </nonDerivativeTable>
  <footnotes><footnote id="F1">An invented footnote.</footnote></footnotes>
  <ownerSignature><signatureName>Sample Holder</signatureName><signatureDate>2026-01-06</signatureDate></ownerSignature>
-</ownershipDocument>
+</{root}>
 """.encode()
 
 
@@ -71,15 +77,16 @@ def test_both_shapes_read_the_same_rows():
     tables = bare(filing())
     assert tables == wrapped(filing())
     (row,) = tables["non_derivative_transaction"]
-    assert (row["accession"], row["row"], row["transaction_date"], row["transaction_code"], row["equity_swap_involved"],
+    assert (row["accession"], row["position"], row["transaction_date"], row["transaction_code"], row["equity_swap_involved"],
             row["transaction_shares"]) == (ACCESSION, 1, "2026-01-05", "P", False, "100")
     assert tables["reporting_owner"][0]["is_director"] is True
+    assert tables["ownership_document"][0]["accession"] == ACCESSION
     assert tables["footnote"] == [{"accession": ACCESSION, "footnote_id": "F1", "text": "An invented footnote."}]
 
 
 def test_a_date_with_an_offset_reads_as_its_calendar_date():
     tables = bare(filing(date="2026-01-05-05:00"))
-    assert tables["filing"][0]["period_of_report"] == "2026-01-05"
+    assert tables["ownership_document"][0]["period_of_report"] == "2026-01-05"
     assert tables["non_derivative_transaction"][0]["transaction_date"] == "2026-01-05"
 
 
@@ -109,3 +116,25 @@ def test_the_codes_are_the_published_rdm_version_the_reading_pins():
     assert hashlib.sha256((folder / "canonical.jsonl").read_bytes()).hexdigest() == pin["sha256"]
     assert {row["code"]: row["label"] for row in published} == {
         code: row["label"] for code, row in XML["read"]["references"]["transaction_codes"].items()}
+
+
+def test_the_filing_flags_and_a_holding_are_read():
+    tables = bare(filing())
+    document = tables["ownership_document"][0]
+    assert (document["not_subject_to_section16"], document["aff10b5_one"], document["form3_holdings_reported"]) == (
+        False, True, None)
+    (holding,) = tables["non_derivative_holding"]
+    assert (holding["position"], holding["shares_owned_following_transaction"],
+            holding["direct_or_indirect_ownership"]) == (1, "500", "I")
+
+
+def test_a_filing_flag_with_a_fifth_spelling_refuses():
+    with pytest.raises(SourceRejected) as refused:
+        bare(filing(flag="N"))
+    assert refused.value.code == "lookup_missing"
+
+
+def test_a_document_that_is_not_an_ownership_document_is_refused():
+    with pytest.raises(SourceRejected) as refused:
+        bare(filing(root="edgarSubmission"))
+    assert refused.value.code == "wrong_root"

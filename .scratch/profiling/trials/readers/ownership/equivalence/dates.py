@@ -12,16 +12,16 @@ from pathlib import Path
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
 
-R = Path(__file__).resolve().parents[6] / "rules/sources/sec.ownership"
-XML, SGML = (SourceEngine(files.load(R / f"ownership-{s}.yaml")) for s in ("xml", "sgml"))
-B = Path(sys.argv[1])
+RULES = Path(__file__).resolve().parents[6] / "rules/sources/sec.ownership"
+XML, SGML = (SourceEngine(files.load(RULES / f"ownership-{s}.yaml")) for s in ("xml", "sgml"))
+BRONZE = Path(sys.argv[1])
 # table, the XML item, column, the element path under the item
-FIELDS = [("filing", ".", "period_of_report", "periodOfReport"), ("filing", ".", "date_of_original_submission", "dateOfOriginalSubmission")]
+FIELDS = [("ownership_document", ".", "period_of_report", "periodOfReport"), ("ownership_document", ".", "date_of_original_submission", "dateOfOriginalSubmission")]
 for table, item in (("non_derivative_transaction", "nonDerivativeTable/nonDerivativeTransaction"), ("derivative_transaction", "derivativeTable/derivativeTransaction")):
     FIELDS += [(table, item, "transaction_date", "transactionDate/value"), (table, item, "deemed_execution_date", "deemedExecutionDate/value")]
 for table, item in (("derivative_transaction", "derivativeTable/derivativeTransaction"), ("derivative_holding", "derivativeTable/derivativeHolding")):
     FIELDS += [(table, item, "exercise_date", "exerciseDate/value"), (table, item, "expiration_date", "expirationDate/value")]
-FIELDS += [("signature", "ownerSignature", "signature_date", "signatureDate")]
+FIELDS += [("owner_signature", "ownerSignature", "signature_date", "signatureDate")]
 
 
 def shape(raw):
@@ -46,11 +46,11 @@ def run(which, xml_text, tables):
             expected = raw.strip()[:10] if kind != "absent" else None
             counts[(which, column, kind, "as expected" if read == expected else "unexpected")] += 1
 
-for p in sorted(glob.glob(str(B / "filings/sec/*/*/primary/*.xml"))):
+for p in sorted(glob.glob(str(BRONZE / "filings/sec/*/*/primary/*.xml"))):
     raw = Path(p).read_bytes()
     if b"<ownershipDocument" not in raw: continue
     run("cohort", raw.decode(), XML.read(raw, context={"accession": "x"}).tables)
-for p in sorted((B / "filing_artifact").iterdir()):
+for p in sorted((BRONZE / "filing_artifact").iterdir()):
     raw = p.read_bytes()
     run("artifact", re.search(rb"<XML>(.*?)</XML>", raw, re.S).group(1).decode(), SGML.read(raw).tables)
 out = collections.defaultdict(dict)
