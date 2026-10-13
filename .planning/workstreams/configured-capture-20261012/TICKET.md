@@ -1,6 +1,6 @@
 # Isolated configured capture and retirement integration
 
-Status: local capture qualification complete; publication/CI in progress. Broader retirement incomplete. Starting main 692e0215; own branch/worktree
+Status: offline capture complete; PR #933 merged with all six CI checks green. Broader retirement incomplete. Starting main 692e0215; own branch/worktree
 `codex/configured-capture-20261012`.
 
 Operator agreed: keep Claude's active changed-data files, implement isolated
@@ -20,17 +20,21 @@ permitted by this implementation instruction.
 - [x] Correct the stale Change Journal capture specification to match public renewal/Journal sequencing, preserving control-only ownership and explicit offline qualification. Verified: Standards reviewer confirmed the corrected renewal/Journal/renewal sequence and logical effect keys, 2026-10-12 21:17 ET.
 - [x] Standards, Spec and GoF reviews resolved; native/frame coverage audit found no remaining significant in-scope behavioral gap after 6 added PG16 cases and 19 storage/frame tests, 2026-10-12 21:17 ET.
 - [x] Align the Company acquisition reference and README discovery link with the qualified worker and pending integration; verify genuine page selection and unsupported approved format/bound refusal. Verified 6 real PG16 cases, guide/README readback and ownership/overlap guard, 2026-10-12 21:29 ET.
-- [ ] Review Standards, Spec and GoF; resolve findings, guard/commit and publish a reviewable result with CI evidence.
+- [x] Review Standards, Spec and GoF; resolve findings, guard/commit and publish a reviewable result with CI evidence. Verified PR #933 merged as 0e5db242, all six checks passed on 43a3c34e, GitHub readback 2026-10-13 06:16 ET.
 - [ ] ~~Live SEC/continuation-page qualification and source activation~~ remains Issue 20 L8: requires explicit provider authorization and approval of exact source evidence/version; no requests in this slice.
-- [ ] ~~Adapter mapping/fallback retirement (L7)~~ integrate after Claude's changed-data changes merge: store.py and installed-bundle tests are his active files.
-- [ ] ~~Company manifest writer replacement~~ integrate after the changed-document selection interface lands; do not duplicate Claude's receipt-selection work.
+- [ ] ~~Adapter mapping/fallback retirement (L7)~~ deferred to Issue 20 L7: qualified policy/caller retirement remains a separate integration slice; preserve Claude's ownership.
+- [ ] ~~Company manifest writer replacement~~ deferred to the Company producer integration slice: its domain evidence and manifest semantics still require qualification; do not duplicate Claude's receipt-selection work.
 
 Rust presence/member predicates and READING reference also changed; full Rust acceptance passed. Source integration, approval and activation behavior remain unchanged.
+
+- [x] Record final capture qualification and verify underlying implementation review/CI; runtime code is already merged and qualified. Final counts, installed proof and exact green head published in PR #933; GitHub CI/merge readback and metadata consistency verified, 2026-10-13 06:19 ET.
+
+Changed-document speed-ups are separately deferred by the operator (#934); this record makes no claim they landed.
 
 ## Acceptance
 
 - [x] Compile completeness contracts before HTTP; prove approved but natively invalid configuration refuses all provider effects. Verified red regression reproduced one GET before the fix; final capture/genericity suite passed 150 tests, 2026-10-12 21:49 ET.
-- [ ] Resolve PR CI failures and verify the required gate on the final implementation.
+- [x] Resolve PR CI failures and verify the required gate on the final implementation. Verified run 38334540421: Unit, MDM, PostgreSQL integration, Rust/Python engine, shell and CI gate all passed on 43a3c34e; 2026-10-13 06:16 ET.
 
 
 Configured capture is a Python integration called through the existing external
