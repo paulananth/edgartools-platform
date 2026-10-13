@@ -134,7 +134,8 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
 
 
 def test_census_main_inherits_company_reading_and_canonical_name_recipe():
-    """Fail when either upstream blueprint changes without updating this copy."""
+    """Fail when either upstream blueprint changes without updating this copy; filings are a
+    narrowed copy (only the columns combine's `forms` group uses), so a dropped column may change."""
     source = files.source('sec.submissions.company')
     census = deepcopy(files.load(ROOT/'census-main.yaml'))
     recipe = census['read']['tables']['company']['columns'].pop('_name_key')
@@ -144,6 +145,14 @@ def test_census_main_inherits_company_reading_and_canonical_name_recipe():
     assert census['execution'].pop('max_artifacts') == 512
     expected = deepcopy({key: source[key] for key in ('source', 'execution', 'read')})
     expected['execution'].pop('max_artifacts')
+    # Filings keep only what combine's `forms` group uses (mastering-to-done 28): the same columns, fewer.
+    filings, full = census['read']['tables'].pop('filings'), expected['read']['tables'].pop('filings')
+    assert set(filings['columns']) == {'form', 'cik', 'sync_run_id'}
+    assert filings['columns'] == {name: full['columns'][name] for name in filings['columns']}
+    fields = filings['each']['parallel'].pop('fields')
+    assert fields == {name: full['each']['parallel']['fields'][name] for name in ('form',)}
+    full['each']['parallel'].pop('fields')
+    assert (filings['take'], filings['each']) == (full['take'], full['each'])
     assert census == expected
     assert recipe == files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
 

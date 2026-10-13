@@ -1,6 +1,9 @@
 # Company main reading with an explicit census join key, and each row's bronze
 # origin (the document's object and sha256, from the caller's context).
-# Paired with combine-census.yaml; this does not activate a source mapping.
+# Paired with combine-census-captured.yaml; this does not activate a source mapping.
+# Filings keep only `form`, `cik` and `sync_run_id`: combine's `forms` group is
+# their one consumer (mastering-to-done 28). The other 17 filing columns, and the
+# shape checks on their fields, are left out on purpose; source.yaml keeps them.
 source: sec.submissions.company
 execution:
   profile: source.read
@@ -58,20 +61,7 @@ read:
           path: filings.recent
           anchor: accessionNumber
           fields:
-            accession_number: accessionNumber
             form: form
-            filing_date: filingDate
-            report_date: reportDate
-            acceptance_datetime: acceptanceDateTime
-            act: act
-            file_number: fileNumber
-            film_number: filmNumber
-            items: items
-            primary_document: primaryDocument
-            primary_doc_desc: primaryDocDescription
-            size: size
-            is_xbrl: isXBRL
-            is_inline_xbrl: isInlineXBRL
           lengths: anchor
           on_invalid_object: empty
           strings: characters
@@ -79,13 +69,6 @@ read:
           objects: indexed
           validation: selected
       columns:
-        accession_number:
-          text:
-            path: accession_number
-            trim: false
-            null_if:
-            - ""
-            coerce: python
         form:
           text:
             path: form
@@ -93,99 +76,12 @@ read:
             null_if:
             - ""
             coerce: python
-        filing_date:
-          date:
-            path: filing_date
-            kind: calendar
-            basic_suffix: ignore
-            prefix_length: 10
-            on_invalid: null
-            coerce: python
-        report_date:
-          date:
-            path: report_date
-            kind: calendar
-            basic_suffix: ignore
-            prefix_length: 10
-            on_invalid: null
-            coerce: python
-        acceptance_datetime:
-          text:
-            path: acceptance_datetime
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        act:
-          text:
-            path: act
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        file_number:
-          text:
-            path: file_number
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        film_number:
-          text:
-            path: film_number
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        items:
-          text:
-            path: items
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        primary_document:
-          text:
-            path: primary_document
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        primary_doc_desc:
-          text:
-            path: primary_doc_desc
-            trim: false
-            null_if:
-            - ""
-            coerce: python
-        size:
-          integer:
-            path: size
-            on_invalid: null
-        is_xbrl:
-          integer:
-            path: is_xbrl
-            as: boolean
-            default: false
-            on_invalid: default
-        is_inline_xbrl:
-          integer:
-            path: is_inline_xbrl
-            as: boolean
-            default: false
-            on_invalid: default
         cik:
           context:
             name: cik
         sync_run_id:
           context:
             name: sync_run_id
-        raw_object_id:
-          context:
-            name: raw_object_id
-        load_mode:
-          context:
-            name: load_mode
     company:
       each: .
       columns:
