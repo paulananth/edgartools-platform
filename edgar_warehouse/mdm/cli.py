@@ -1,8 +1,8 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, Clean MDM only.
 
 Six commands: migrate, check-connectivity, counts, prepare-clean-company,
-prepare-capture and name-census. The legacy MDM commands and their tables are deleted (platform
-validation slice 2a).
+prepare-capture and name-census. The legacy MDM commands and their tables are
+deleted (platform validation slice 2a).
 """
 from __future__ import annotations
 

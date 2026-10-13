@@ -8,6 +8,7 @@ installed proof covers it.
 """
 import json
 from copy import deepcopy
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -103,3 +104,25 @@ def test_only_a_reading_that_keeps_documents_whole_is_taken():
     company = files.load(files.ROOT / "sources/sec.submissions.company/source.yaml")
     with pytest.raises(ValueError, match="keep each document whole"):
         record_shape(company)
+
+
+def test_the_same_documents_are_one_publication_however_they_are_listed(tmp_path):
+    folder, _ = write_capture(tmp_path / "capture", PEOPLE)
+    found = []
+    for name, order, indent in (("a", list(PEOPLE), None), ("b", list(reversed(list(PEOPLE))), 2)):
+        listed = tmp_path / f"{name}.json"
+        listed.write_text(json.dumps([key(cik) for cik in order], indent=indent))
+        report = write_capture_manifest(source=SOURCE, capture=str(folder), documents=str(listed),
+                                        capture_run="capture-1", output=str(tmp_path / name),
+                                        as_of="2026-10-01T00:00:00Z", revision=0)
+        steps = json.loads((tmp_path / name / f"{report['manifest']['sha256']}.json").read_bytes())["steps"]
+        read = [json.loads(Path(unit["input"]["uri"].removeprefix("file://")).read_bytes())["artifacts"]
+                for unit in steps["read"]]
+        found.append((report["publication"], read))
+    assert found[0] == found[1]  # one publication, the same documents read in the same order
+
+
+def test_a_source_not_under_the_rules_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="No source named"):
+        write_capture_manifest(source="../merge", capture=str(tmp_path), documents=str(tmp_path / "d.json"),
+                               capture_run="c", output=str(tmp_path / "b"), as_of="2026-10-01T00:00:00Z", revision=0)
