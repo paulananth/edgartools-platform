@@ -466,9 +466,10 @@ def _time(item, spec: dict):
 
     try:
         if form == "date":
-            if len(item) != 10:  # fromisoformat also takes 20260105
+            day = date.fromisoformat(item).isoformat()
+            if day != item:  # fromisoformat also takes 20260105 and week dates
                 raise ValueError(item)
-            return f"{date.fromisoformat(item).isoformat()}T00:00:00+00:00"
+            return f"{day}T00:00:00+00:00"
         return instant(item).isoformat()
     except (TypeError, ValueError):
         raise UnsupportedRecord("invalid_time") from None
@@ -480,7 +481,7 @@ def _refuse_link(scope: dict, spec: dict) -> None:
     end for each status in `need_end`)."""
     if not (spec.get("interval") or spec.get("status")):
         return
-    start = _time(value(scope, spec["valid_from"]), spec)
+    start = _time(value(scope, spec["on"] if "capacity" in spec else spec["valid_from"]), spec)
     end = _time(value(scope, spec["valid_to"]), spec) if spec.get("valid_to") else None
     if rule := spec.get("interval"):
         from .evidence import instant
@@ -532,12 +533,17 @@ def _link(scope: dict, spec: dict) -> dict | None:
     # (relationships.fold_sightings): the capacity held, or dropped, on the
     # record's event date `on`. A filing restates its capacities, so a flag that
     # is not true (false or absent) is a drop; `title` is the period's dated detail.
+    if "on" not in spec or "held" not in spec:
+        raise MappingError("A link in a capacity names its date (on) and its flag (held)")
+    held = value(scope, spec["held"])
+    if held not in (True, False, None):  # a flag read as text, say, is not one
+        raise UnsupportedRecord("invalid_field_shape")
     on = _time(value(scope, spec["on"]), spec)
     return {
         **link,
         "valid_from": on,
         "capacity": spec["capacity"],
         "on": on,
-        "held": value(scope, spec["held"]) is True,
+        "held": held is True,
         "title": value(scope, spec["title"]) if spec.get("title") else None,
     }

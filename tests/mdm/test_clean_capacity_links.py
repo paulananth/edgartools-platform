@@ -57,11 +57,18 @@ def test_a_link_without_a_capacity_reads_as_before():
 
 def test_a_capacity_link_without_its_date_stops_the_run():
     link = {k: v for k, v in OFFICER.items() if k != "on"}
-    with pytest.raises((MappingError, KeyError)):
+    with pytest.raises(MappingError):
         read({"issuer": "1", "period": "2026-01-05", "is_officer": True}, link)
 
 
-@pytest.mark.parametrize("given", ["20260105", "2026-01-05T10:00:00+00:00", "2026-02-30", 20260105])
+def test_a_flag_that_is_not_a_boolean_sets_the_record_aside():
+    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+    with pytest.raises(UnsupportedRecord, match="invalid_field_shape"):
+        read({"issuer": "1", "period": "2026-01-05", "is_officer": "1"})
+
+
+@pytest.mark.parametrize("given", ["20260105", "2026-W01-1", "2026-01-05T10:00:00+00:00", "2026-02-30", 20260105])
 def test_a_date_that_is_not_a_calendar_date_sets_the_record_aside(given):
     from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
 
