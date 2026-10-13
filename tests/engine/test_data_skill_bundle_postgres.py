@@ -1382,14 +1382,15 @@ def test_active_company_preparation_caller_runs_from_installed_bundle(installed,
     from tests.support.sec_capture import CATALOG
     python, root = installed
     capture = census_capture(tmp_path, documents(), CATALOG_ROWS)
-    original, _ = prepare(tmp_path, capture, output="checkout")
+    # --all: this test has no Change Journal; it names every document, as the checkout's does (ticket 22).
+    original, _ = prepare(tmp_path, capture, output="checkout", force=True)
     folder, population, census = capture
     listed = tmp_path / "documents-checkout.json"
     arguments = ["mdm", "prepare-clean-company", "--capture", str(folder), "--documents", str(listed),
                  "--population", str(population), "--catalog", CATALOG,
                  "--capture-run", PINS["capture_run"], "--catalog-run", PINS["catalog_run"],
                  "--observed-at", PINS["observed_at"], "--name-census", str(census),
-                 "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"])]
+                 "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"]), "--all"]
     run = _run(python, "-c", """
 import sys
 from edgar_warehouse.rules import source_engine
@@ -1416,7 +1417,7 @@ items = worklist(Artifacts().json(json.load(sys.stdin)["manifest"]), config)
 print(json.dumps(sorted({i["step"] for i in items})))
 """, cwd=root, document=report)
     assert frozen.returncode == 0, frozen.stderr
-    assert json.loads(frozen.stdout) == ["catalog", "census", "combine", "keys", "main", "merge", "records"]
+    assert json.loads(frozen.stdout) == ["catalog", "census", "combine", "keys", "main", "merge", "processed", "records"]
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
