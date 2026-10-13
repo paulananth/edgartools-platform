@@ -110,16 +110,30 @@ def words(table: dict, name: str, args: dict) -> str:
     return template.format_map(defaultdict(str, {k: _text(v) for k, v in (args or {}).items()}))
 
 
+MAPPED = "adapter.reading.read.tables.mapped.columns"  # where a contract's reading states its values
+
+
+def mapped(adapter: dict, section: str) -> dict[str, dict]:
+    """MDM field (or matching value) -> its expression, as the contract's
+    reading states it: `section` is the reading's `fields` or `matching`
+    column."""
+    columns = (((adapter.get("reading") or {}).get("read") or {}).get("tables") or {}).get("mapped") or {}
+    return (((columns.get("columns") or {}).get(section) or {}).get("object") or {}).get("fields") or {}
+
+
 def paths(spec: Any) -> list[tuple[str, str]]:
-    """(part, source path) for one mapped value: a path, or an address's parts."""
-    if isinstance(spec, str):
-        return [("", spec)]
-    parts = []
-    for part, path in (spec.get("components") or {}).items():
-        if isinstance(path, dict) and "lines" in path:
-            path = f"{path['lines']} (lines)"
-        parts.append((part, _text(path)))
-    return parts
+    """(part, source path) for one mapped expression: a value's path, a
+    list's path joined into lines, or each part of an object (an address)."""
+    if "object" in spec:
+        return [(part, path) for part, child in (spec["object"].get("fields") or {}).items()
+                for _, path in paths(child)]
+    if "join" in spec:
+        return [("", f"{spec['join'].get('path')} (lines)")]
+    if set(spec) == {"value"}:
+        return [("", _text(spec["value"].get("path")))]
+    # A field computed another way has no one source path to show; say so
+    # rather than print a wrong one.
+    raise ValueError(f"The workbook cannot show a source path for {sorted(spec)}")
 
 
 def critical_elements(block: dict) -> list[tuple[int, str, str]]:
@@ -149,7 +163,7 @@ def winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], li
     filled: dict[str, set] = defaultdict(set)
     for path in sorted((root / "sources").glob("*/source.yaml")):
         for code, entry in (files.load_source(path).get("mdm") or {}).items():
-            for field in ((entry.get("contract") or {}).get("adapter") or {}).get("fields") or {}:
+            for field in mapped((entry.get("contract") or {}).get("adapter") or {}, "fields"):
                 filled[field].add(code)
     found: dict[str, dict] = {}
     for kind, rules in (policy.get("kinds") or {}).items():
@@ -229,9 +243,9 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
             [f"{code}: set aside without stopping the run", _text(contract.get("nonblocking_deferred_reasons"))],
         ]
         for section, used_for in (("fields", "MDM field"), ("matching", "Matching only")):
-            for field, spec in (adapter.get(section) or {}).items():
+            for field, spec in mapped(adapter, section).items():
                 for part, path in paths(spec):
-                    fields.append([code, field, part, path, used_for, f"{at}.adapter.{section}.{field}"])
+                    fields.append([code, field, part, path, used_for, f"{at}.{MAPPED}.{section}.object.fields.{field}"])
         for relationship in adapter.get("relationships") or []:
             kinds = relationship.get("type") or _text(list((relationship.get("type_values") or {}).values()))
             if relationship.get("source_key"):  # the link starts at another record

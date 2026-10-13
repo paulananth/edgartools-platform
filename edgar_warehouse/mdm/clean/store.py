@@ -290,6 +290,12 @@ def register_dataset(
     ):
         raise ValueError("nonblocking_deferred_reasons requires distinct reason names")
     adapter = body.get("adapter", {})
+    if {"fields", "matching", "field_shape"} & set(adapter):
+        # The reading is the contract's one statement of a record's fields and
+        # matching values (Issue 20 L7: the hand-written mapping is gone); a
+        # contract without one is refused when it maps a record.
+        raise ValueError("adapter.fields, adapter.matching and adapter.field_shape are retired; "
+                         "the contract's reading states them")
     if adapter.get("classification") and ("kind" in adapter or "kind_field" in adapter):
         # One writer of the kind: the contract states it when every record is
         # that kind, or names the rule that decides it, never both (ADR 0015).

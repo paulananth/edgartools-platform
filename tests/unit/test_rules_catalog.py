@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.rules import catalog, files
+from edgar_warehouse.rules import catalog, files, mapdoc
 
 
 def _tables(plan: dict) -> dict[str, dict]:
@@ -54,7 +54,7 @@ def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path)
     shutil.copytree(files.ROOT, root)
     path = root / "sources" / "sec.submissions.company" / "source.yaml"
     body = files.load_source(path)
-    del body["mdm"]["sec.submissions.company.v1"]["contract"]["adapter"]["fields"]["description"]
+    del mapdoc.mapped(body["mdm"]["sec.submissions.company.v1"]["contract"]["adapter"], "fields")["description"]
     files.write_source(body, path.parent)
     changed = catalog.plan(root)
     assert changed["service"]["description"] != catalog.plan()["service"]["description"]  # a new digest

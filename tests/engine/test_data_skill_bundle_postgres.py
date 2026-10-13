@@ -33,6 +33,7 @@ from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.rules import files
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from tests.support.journal_isolation import ROOT
+from tests.support.reading import reading as mapped_reading
 
 WHEELS = {
     "edgartools-data": "packages/data-skill",
@@ -573,7 +574,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                                         "fields": {"company": {"name": {"sources": ["fixture.filers"]}}}})
         register_dataset(conn, "fixture.filers", "1", core.contract_body(adapter={
             "version": "v1", "kind": "company", "record_key": ["cik"], "identifiers": {"cik": "cik"},
-            "fields": {"name": "name"}}))
+            "reading": mapped_reading({"name": "name"})}))
 
     if trial_mode in ("raw-person", "object-records"):
         with mdm_admin.begin() as conn:
@@ -1244,25 +1245,19 @@ for record in body["sec_records"]:
     contract=files.mdm_contract(source,code)
     recipe=files.load(files.ROOT/"sources"/source/"fields.yaml")
     assert digest(contract["adapter"]["reading"])==digest(recipe)
-    retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
     publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
                  "revision":1,"artifact_sha256":digest(row),
                  "member":"four_companies_v1.json","record_locator":str(row["cik"])}
     kwargs={"source_code":code,"publication":publication,"policy":files.policy()}
-    actual=adapters.normalize(row,contract=contract,**kwargs)
-    assert digest(actual)==digest(adapters.normalize(row,contract=retained,**kwargs))
-    sec_readings.append(actual)
+    sec_readings.append(adapters.normalize(row,contract=contract,**kwargs))
 assert digest(sec_readings)==digest(body["readings"])
 contract=files.mdm_contract("gleif","gleif.level1.v1")
-retained=copy.deepcopy(contract); retained["adapter"].pop("reading")
 assertions=[]
 for row in body["rows"]:
     publication={"publication_key":"installed-gleif-fixture","revision":1,
                  "artifact_sha256":digest(row),"member":"level1","effective_at":None}
     kwargs={"source_code":"gleif.level1.v1","publication":publication}
-    actual=adapters.normalize(row,contract=contract,**kwargs)
-    assert digest(actual)==digest(adapters.normalize(row,contract=retained,**kwargs))
-    assertions.append(actual)
+    assertions.append(adapters.normalize(row,contract=contract,**kwargs))
 store=Store(engine); stage=MergeStage(store); run=str(uuid4())
 command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-gleif-qualification",
          "policy_digest":body["policy"],"expected_checkpoint":0,"checkpoint":1,

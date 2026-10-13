@@ -104,6 +104,8 @@ mdm:
                       path: Entity.EntityCategory.$
                       type: text
                       path_mode: literal
+                  # `name` is shared with SEC, SEC first where both supply it.
+                  # `jurisdiction` is GLEIF's alone (operator, 2026-09-24).
                   fields:
                     object:
                       fields:
@@ -249,6 +251,9 @@ mdm:
                           value:
                             path: Entity.HeadquartersAddress.Country.$
                             path_mode: literal
+                        # The whole headquarters address, for matching only (ticket 22): the
+                        # legal address is often a registered agent's, and the headquarters
+                        # address then is the company's own (108,392 of 124,830 such LEIs).
                         headquarters_address:
                           object:
                             fields:
@@ -306,32 +311,6 @@ mdm:
         native_member: level1
         retain_deferred: true
         source_record_provenance: true
-        field_shape: nullable_text
-        fields:
-          # `name` is shared with SEC, SEC first where both supply it.
-          # `jurisdiction` is GLEIF's alone (operator, 2026-09-24).
-          name: Entity.LegalName.$
-          address:
-            components:
-              street: Entity.LegalAddress.FirstAddressLine.$
-              street2:
-                lines: Entity.LegalAddress.AdditionalAddressLine
-              city: Entity.LegalAddress.City.$
-              region: Entity.LegalAddress.Region.$
-              postcode: Entity.LegalAddress.PostalCode.$
-              country: Entity.LegalAddress.Country.$
-          jurisdiction: Entity.LegalJurisdiction.$
-          gleif_legal_form: Entity.LegalForm.EntityLegalFormCode.$
-          gleif_entity_status: Entity.EntityStatus.$
-          gleif_registration_status: Registration.RegistrationStatus.$
-          gleif_initial_registration: Registration.InitialRegistrationDate.$
-          gleif_last_update: Registration.LastUpdateDate.$
-          gleif_next_renewal: Registration.NextRenewalDate.$
-          gleif_managing_lou: Registration.ManagingLOU.$
-          gleif_validation_source: Registration.ValidationSources.$
-          gleif_registration_authority: Entity.RegistrationAuthority.RegistrationAuthorityID.$
-          gleif_registration_authority_entity_id: Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$
-          gleif_entity_creation_date: Entity.EntityCreationDate.$
         # The record as GLEIF published it, and the time it states for itself
         # (L6: what the older reader kept and stamped, now the contract's own).
         provenance:
@@ -355,21 +334,6 @@ mdm:
           lei: LEI.$
         identifier_formats:
           lei: lei
-        matching:
-          headquarters_postal_code: Entity.HeadquartersAddress.PostalCode.$
-          headquarters_country: Entity.HeadquartersAddress.Country.$
-          # The whole headquarters address, for matching only (ticket 22): the
-          # legal address is often a registered agent's, and the headquarters
-          # address then is the company's own (108,392 of 124,830 such LEIs).
-          headquarters_address:
-            components:
-              street: Entity.HeadquartersAddress.FirstAddressLine.$
-              street2:
-                lines: Entity.HeadquartersAddress.AdditionalAddressLine
-              city: Entity.HeadquartersAddress.City.$
-              region: Entity.HeadquartersAddress.Region.$
-              postcode: Entity.HeadquartersAddress.PostalCode.$
-              country: Entity.HeadquartersAddress.Country.$
         relationships:
         # GLEIF's SuccessorEntity (profiling ticket 04c): one link per
         # successor LEI (a demerger lists several; a successor named only, with
@@ -500,8 +464,6 @@ mdm:
         native_member: relationships
         retain_deferred: true
         source_record_provenance: true
-        field_shape: nullable_text
-        fields: {}
         provenance:
           native_record: .
         kind: company
@@ -634,8 +596,6 @@ mdm:
         native_member: reporting_exceptions
         retain_deferred: true
         source_record_provenance: true
-        field_shape: nullable_text
-        fields: {}
         provenance:
           native_record: .
         # GLEIF's reasons for not reporting a parent (REPEX 2.1 ExceptionReasonEnum, with its

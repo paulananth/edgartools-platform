@@ -163,6 +163,8 @@ mdm:
                             path_mode: literal
                             type: text
                             null_if_blank: true
+                        # SEC's own field, as SEC writes it ("CA", "DC", "E9"). Jurisdiction is
+                        # GLEIF's, a separate field, so the two never compete (operator, 2026-09-24).
                         state_of_incorporation:
                           value:
                             path: state_of_incorporation
@@ -228,6 +230,8 @@ mdm:
                                   null_if_blank: true
                             omit_nulls: true
                             null_if_empty: true
+                  # What the SEC-to-GLEIF matching rules compare, kept with the record and
+                  # out of its fields (company mastering ticket 08).
                   matching:
                     object:
                       fields:
@@ -255,7 +259,6 @@ mdm:
         version: sec-company-landing-v7
         retain_deferred: true
         source_record_provenance: true
-        field_shape: nullable_text
         record_key:
         - cik
         record_key_format: sec_cik
@@ -273,23 +276,6 @@ mdm:
           cik: cik
         identifier_formats:
           cik: sec_cik
-        fields:
-          name: entity_name
-          sic: sic
-          sic_description: sic_description
-          # SEC's own field, as SEC writes it ("CA", "DC", "E9"). Jurisdiction is
-          # GLEIF's, a separate field, so the two never compete (operator, 2026-09-24).
-          state_of_incorporation: state_of_incorporation
-          fiscal_year_end: fiscal_year_end
-          description: description
-          address:
-            components:
-              street: business_address.street
-              street2: business_address.street2
-              city: business_address.city
-              region: business_address.region
-              postcode: business_address.postal_code
-              country: business_address.country
         # Behind the operator's decision (2026-09-27): capture hashes, run id and
         # sync time stay beside the record, not in it. The next SEC mapping
         # drops them; do not copy this block as an example.
@@ -303,12 +289,6 @@ mdm:
           ticker_landing_sha256: _origin.tickers.sha256
           ticker_run_id: _origin.tickers.run_id
           address_landing_sha256: _origin.business_address.sha256
-        # What the SEC-to-GLEIF matching rules compare, kept with the record and
-        # out of its fields (company mastering ticket 08).
-        matching:
-          business_postal_code: business_address.postal_code
-          business_country: business_address.country
-          name_census: name_census
 
 # Generic reading of a receipt-bound main document; no source activation.
 execution:

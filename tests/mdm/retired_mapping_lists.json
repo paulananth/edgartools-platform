@@ -1,0 +1,88 @@
+{
+ "gleif.level1.v1": {
+  "field_shape": "nullable_text",
+  "fields": {
+   "address": {
+    "components": {
+     "city": "Entity.LegalAddress.City.$",
+     "country": "Entity.LegalAddress.Country.$",
+     "postcode": "Entity.LegalAddress.PostalCode.$",
+     "region": "Entity.LegalAddress.Region.$",
+     "street": "Entity.LegalAddress.FirstAddressLine.$",
+     "street2": {
+      "lines": "Entity.LegalAddress.AdditionalAddressLine"
+     }
+    }
+   },
+   "gleif_entity_creation_date": "Entity.EntityCreationDate.$",
+   "gleif_entity_status": "Entity.EntityStatus.$",
+   "gleif_initial_registration": "Registration.InitialRegistrationDate.$",
+   "gleif_last_update": "Registration.LastUpdateDate.$",
+   "gleif_legal_form": "Entity.LegalForm.EntityLegalFormCode.$",
+   "gleif_managing_lou": "Registration.ManagingLOU.$",
+   "gleif_next_renewal": "Registration.NextRenewalDate.$",
+   "gleif_registration_authority": "Entity.RegistrationAuthority.RegistrationAuthorityID.$",
+   "gleif_registration_authority_entity_id": "Entity.RegistrationAuthority.RegistrationAuthorityEntityID.$",
+   "gleif_registration_status": "Registration.RegistrationStatus.$",
+   "gleif_validation_source": "Registration.ValidationSources.$",
+   "jurisdiction": "Entity.LegalJurisdiction.$",
+   "name": "Entity.LegalName.$"
+  },
+  "matching": {
+   "headquarters_address": {
+    "components": {
+     "city": "Entity.HeadquartersAddress.City.$",
+     "country": "Entity.HeadquartersAddress.Country.$",
+     "postcode": "Entity.HeadquartersAddress.PostalCode.$",
+     "region": "Entity.HeadquartersAddress.Region.$",
+     "street": "Entity.HeadquartersAddress.FirstAddressLine.$",
+     "street2": {
+      "lines": "Entity.HeadquartersAddress.AdditionalAddressLine"
+     }
+    }
+   },
+   "headquarters_country": "Entity.HeadquartersAddress.Country.$",
+   "headquarters_postal_code": "Entity.HeadquartersAddress.PostalCode.$"
+  }
+ },
+ "gleif.relationships.v1": {
+  "field_shape": "nullable_text",
+  "fields": {}
+ },
+ "gleif.reporting_exceptions.v1": {
+  "field_shape": "nullable_text",
+  "fields": {}
+ },
+ "sec.submissions.company.v1": {
+  "field_shape": "nullable_text",
+  "fields": {
+   "address": {
+    "components": {
+     "city": "business_address.city",
+     "country": "business_address.country",
+     "postcode": "business_address.postal_code",
+     "region": "business_address.region",
+     "street": "business_address.street",
+     "street2": "business_address.street2"
+    }
+   },
+   "description": "description",
+   "fiscal_year_end": "fiscal_year_end",
+   "name": "entity_name",
+   "sic": "sic",
+   "sic_description": "sic_description",
+   "state_of_incorporation": "state_of_incorporation"
+  },
+  "matching": {
+   "business_country": "business_address.country",
+   "business_postal_code": "business_address.postal_code",
+   "name_census": "name_census"
+  }
+ },
+ "sec.submissions.person.v1": {
+  "field_shape": "nullable_text",
+  "fields": {
+   "legal_name": "name"
+  }
+ }
+}

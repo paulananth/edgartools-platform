@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from edgar_warehouse.mdm.clean.adapters import MappingError, normalize, subject_key
+from tests.support.reading import reading
 
 PUBLICATION = {"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "m"}
 LINK = {
@@ -24,7 +25,7 @@ LINK = {
 
 def read(row: dict, link: dict = LINK) -> list[dict]:
     contract = {"schema_version": "1", "adapter": {
-        "version": "fixture-v1", "kind": "company", "record_key": ["key"], "fields": {}, "relationships": [link]}}
+        "version": "fixture-v1", "kind": "company", "record_key": ["key"], "reading": reading(), "relationships": [link]}}
     return normalize({"key": "K", **row}, source_code="fixture.records", contract=contract,
                      publication=PUBLICATION)["relationships"]
 

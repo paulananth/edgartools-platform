@@ -31,7 +31,7 @@ from urllib.parse import quote as escape, urlencode
 from urllib.request import Request, urlopen
 
 from . import files
-from .mapdoc import critical_elements, paths, winners
+from .mapdoc import critical_elements, mapped, paths, winners
 
 SERVICE = "edgartools-rules"
 SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
@@ -86,7 +86,7 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: di
     for path in adapter.get("record_key") or []:
         uses[path].append("Record key")
     for section, used in (("fields", "MDM field"), ("matching", "Matching only")):
-        for field, spec in (adapter.get(section) or {}).items():
+        for field, spec in mapped(adapter, section).items():
             for part, path in paths(spec):
                 uses[path].append(f"{used} `{field}`" + (f" ({part})" if part else ""))
                 if section == "fields":

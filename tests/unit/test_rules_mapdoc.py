@@ -199,3 +199,12 @@ def test_a_field_rule_without_its_own_order_says_the_order_is_the_default(rules_
             "Its own rule (max_age_days: 400), order from the kind default",
             "merge/kinds/company.yaml fields.name; merge/kinds/company.yaml defaults.sources"] in (
         sheets["Who wins each field"])
+
+
+def test_a_field_with_no_one_source_path_is_refused_not_shown_wrong():
+    # Issue 20 L7: the Fields sheet reads each path from the reading; a value
+    # computed another way (a constant, a choice) has no one path to show.
+    assert mapdoc.paths({"value": {"path": "a.b"}}) == [("", "a.b")]
+    assert mapdoc.paths({"join": {"path": "lines"}}) == [("", "lines (lines)")]
+    with pytest.raises(ValueError, match="cannot show a source path"):
+        mapdoc.paths({"const": "x"})

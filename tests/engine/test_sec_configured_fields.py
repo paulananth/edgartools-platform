@@ -1,18 +1,29 @@
-"""SEC native mapping must preserve typed values and complete assertions."""
+"""SEC native mapping must preserve typed values and complete assertions.
+
+Issue 20 L7 retired the hand-written mapping these cases were compared with;
+what it gave for each case, taken from it on main before it went, is in
+`retired_mapper_outcomes.json` (`RETIRED`)."""
 import copy
 import json
+from pathlib import Path
+
 import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.rules import files,source_engine
 
 SOURCES=('sec.submissions.company','sec.submissions.person')
+RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
 
 
 def contracts(source):
-    configured=next(iter(files.source(source)['mdm'].values()))['contract']
-    retained=copy.deepcopy(configured);retained['adapter'].pop('reading')
-    return configured,retained
+    return next(iter(files.source(source)['mdm'].values()))['contract']
+
+
+def retired(key, outcome):
+    """The outcome as the retired mapping gave it for this case."""
+    assert key in RETIRED, key
+    assert json.loads(json.dumps(outcome))==RETIRED[key]
 
 
 def row(source):
@@ -29,7 +40,7 @@ def row(source):
 
 @pytest.mark.parametrize('source',SOURCES)
 def test_inline_native_reading_matches_bundled_recipe(source):
-    configured,_=contracts(source)
+    configured=contracts(source)
     recipe=files.load(files.ROOT/'sources'/source/'fields.yaml')
     assert digest(configured['adapter']['reading'])==digest(recipe)
 
@@ -38,24 +49,21 @@ def test_inline_native_reading_matches_bundled_recipe(source):
 @pytest.mark.parametrize('value',[' Exact Spelling ',None,'\x1c \x1f',False,0,[],{}])
 def test_exact_values_and_invalid_shapes_match_retained_mapping(source,value):
     record=row(source);record['name' if source.endswith('person') else 'entity_name']=value
-    configured,retained=contracts(source)
-    def mapped(body):
-        try:
-            return ('mapped',digest(adapters._fields(record,body['adapter'])),
-                    digest(adapters._matching_values(record,body['adapter'])))
-        except adapters.UnsupportedRecord as error: return ('deferred',error.reason)
-    assert mapped(configured)==mapped(retained)
+    body=contracts(source)
+    try:
+        mapped=('mapped',digest(adapters._fields(record,body['adapter'])),
+                digest(adapters._matching_values(record,body['adapter'])))
+    except adapters.UnsupportedRecord as error: mapped=('deferred',error.reason)
+    retired(f'sec/exact/{source}/{value!r}',mapped)
 
 
 @pytest.mark.parametrize('value',[None,{},'text',[],False,{'street':'\x1c A \x1f','city':' '},
                                   {'street':False},{'street':0},{'street':[]}])
 def test_company_address_group_preserves_dictionary_path_semantics(value):
     record=row(SOURCES[0]);record['business_address']=value
-    configured,retained=contracts(SOURCES[0])
-    def mapped(body):
-        try: return ('mapped',digest(adapters._fields(record,body['adapter'])))
-        except adapters.UnsupportedRecord as error:return ('deferred',error.reason)
-    assert mapped(configured)==mapped(retained)
+    try: mapped=('mapped',digest(adapters._fields(record,contracts(SOURCES[0])['adapter'])))
+    except adapters.UnsupportedRecord as error: mapped=('deferred',error.reason)
+    retired(f'sec/address/{value!r}',mapped)
 
 
 @pytest.mark.parametrize('source',SOURCES)
@@ -66,37 +74,34 @@ def test_normalization_preserves_assertion_ids_classification_quality_and_deferr
     elif case=='blank_name':record['name' if source.endswith('person') else 'entity_name']=' '
     elif case=='bad_name':record['name' if source.endswith('person') else 'entity_name']=False
     elif case=='unknown_fields':record['unknown']={'integer':18446744073709551615,'boolean':False,'null':None}
-    configured,retained=contracts(source)
     publication={'publication_key':'fixture','revision':1,'artifact_sha256':'a'*64,'member':'fixture'}
     code=next(iter(files.source(source)['mdm']))
-    def normalized(body):
-        try:
-            return ('assertion',digest(adapters.normalize(record,source_code=code,contract=body,
-                       publication=publication,policy=files.policy())))
-        except adapters.UnsupportedRecord as error:
-            return ('deferred',error.reason,digest(error.detail),error.probable_kind)
-    assert normalized(configured)==normalized(retained)
+    try:
+        normalized=('assertion',digest(adapters.normalize(record,source_code=code,contract=contracts(source),
+                    publication=publication,policy=files.policy())))
+    except adapters.UnsupportedRecord as error:
+        normalized=('deferred',error.reason,digest(error.detail),error.probable_kind)
+    retired(f'sec/normalize/{source}/{case}',normalized)
 
 
 def test_company_metadata_timestamps_do_not_enter_the_declared_json_projection():
     from datetime import datetime,timezone
-    configured,retained=contracts(SOURCES[0]);record=row(SOURCES[0])
+    configured=contracts(SOURCES[0]);record=row(SOURCES[0])
     record['last_synced_at']=datetime(2026,1,1,tzinfo=timezone.utc)
-    expected=(adapters._fields(record,retained['adapter']),adapters._matching_values(record,retained['adapter']))
     actual=(adapters._fields(record,configured['adapter']),adapters._matching_values(record,configured['adapter']))
-    assert digest(actual)==digest(expected)
+    retired('sec/timestamps',digest(actual))
 
 
 @pytest.mark.parametrize('inputs',[None,[],['entity_name','entity_name'],['nested.field'],[False],['x']*129,'name'])
 def test_invalid_declared_json_input_fields_fail_closed(inputs):
-    configured,_=contracts(SOURCES[0]);configured=copy.deepcopy(configured)
+    configured=contracts(SOURCES[0]);configured=copy.deepcopy(configured)
     configured['adapter']['reading']['input_fields']=inputs
     with pytest.raises(source_engine.SourceRejected) as failure:adapters._fields(row(SOURCES[0]),configured['adapter'])
     assert failure.value.code=='contract'
 
 
 def test_company_json_input_roots_cover_every_declared_value_path():
-    configured,_=contracts(SOURCES[0]);reading=configured['adapter']['reading']
+    configured=contracts(SOURCES[0]);reading=configured['adapter']['reading']
     roots=set()
     def visit(node):
         if isinstance(node,dict):
@@ -110,7 +115,7 @@ def test_company_json_input_roots_cover_every_declared_value_path():
 
 def test_declared_json_input_projection_preserves_missing_versus_explicit_null():
     from edgar_warehouse.workers.source_mapping import project_record
-    configured,_=contracts(SOURCES[0]);reading=copy.deepcopy(configured['adapter']['reading'])
+    configured=contracts(SOURCES[0]);reading=copy.deepcopy(configured['adapter']['reading'])
     reading['read']['tables']['mapped']['columns']['fields']={'object':{'fields':{
         'missing':{'test':{'path':'entity_name','kind':'missing'}}}}}
     assert project_record({},reading,column='fields')=={'missing':True}
@@ -119,7 +124,7 @@ def test_declared_json_input_projection_preserves_missing_versus_explicit_null()
 
 @pytest.mark.parametrize('value', [('company',), {1: 'company'}])
 def test_selected_python_only_values_are_rejected_without_json_coercion(value):
-    configured,_=contracts(SOURCES[0]);record=row(SOURCES[0])
+    configured=contracts(SOURCES[0]);record=row(SOURCES[0])
     record['name_census']=value
     with pytest.raises(TypeError):
         adapters._matching_values(record,configured['adapter'])

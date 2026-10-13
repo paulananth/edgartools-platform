@@ -13,6 +13,7 @@ from edgar_warehouse.mdm.clean.adapters import normalize
 from edgar_warehouse.mdm.clean.evidence import assertion, validate_assertion
 from edgar_warehouse.mdm.clean import store
 from edgar_warehouse.mdm.clean.store import register_dataset
+from tests.support.reading import reading
 
 AT = "2026-01-02T00:00:00+00:00"
 BASE = dict(source_code="fixture.primary", record_key="k1", publication_key="p1", revision=1, effective_at=AT,
@@ -26,7 +27,7 @@ PUBLICATION = {"artifact_sha256": "0" * 64, "member": "m", "publication_key": "p
 def contract(**adapter):
     return {"schema_version": "1", "adapter": {
         "version": "fixture-v1", "kind": "company", "record_key": ["id"], "identifiers": {"cik": "cik"},
-        "identifier_formats": {"cik": "sec_cik"}, "fields": {"name": "name"}, **adapter}}
+        "identifier_formats": {"cik": "sec_cik"}, "reading": reading({"name": "name"}), **adapter}}
 
 
 def test_a_record_without_cross_references_keeps_its_assertion_id():

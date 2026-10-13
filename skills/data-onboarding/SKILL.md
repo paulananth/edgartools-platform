@@ -604,8 +604,9 @@ These name today's sources only as examples; nothing above depends on them.
   Company (`sec.submissions.company`); Person from the same files is
   `sec.submissions.person` and `sec.submissions.person.v1`.
 - **A record key's order:** GLEIF relationships: start, end, type.
-- **Fields:** Company's are `FIELDS = CONTRACT["adapter"]["fields"]` in
-  `edgar_warehouse/mdm/clean/sec_company.py`; Person has none in code, so
+- **Fields:** Company's are its contract reading's `fields` column
+  (`rules/sources/sec.submissions.company/source.yaml`, and the Fields sheet
+  of its `MAPPING.xlsx`); Person has none in code, so
   its consumer spec (`docs/specs/person/consumer.md`, "The Person
   projection") holds them. A list-shaped field: Person's `name_variants[]`.
 - **Another kind's value:** a ticker belongs to Security, not Company.
