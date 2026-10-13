@@ -160,6 +160,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     gleif_first, scope = (None, 0)
     if only != "sec":
         gleif_first, scope = _gleif(old, store, tmp_path, policy)
+    # A fresh journal: every document is new. A journal that already holds them names none.
+    assert all(r["manifest"] for r in reports.values()), "the journal already holds these documents: use --all"
     saved = databases.rules.save("pipeline", PIPELINE["pipeline"], "1", PIPELINE)
     databases.rules.prove("pipeline", PIPELINE["pipeline"], "1",
                           {"digest": saved["digest"], "batch_hash": reports[names[0]]["manifest"]["sha256"],

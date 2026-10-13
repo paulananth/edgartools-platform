@@ -73,3 +73,18 @@ def test_a_forced_rerun_and_a_file_another_run_recorded_first_keep_the_first_rec
 def test_a_file_key_the_journal_cannot_hold_is_refused_before_any_work():
     with pytest.raises(ValueError, match="too long"):
         changed_files.event_key("fixture", "i" * 64, "k" * 2048, "s" * 64)
+
+
+def test_the_same_file_read_from_another_capture_folder_keeps_its_first_record(databases, tmp_path, monkeypatch):  # noqa: F811
+    # The file is its key and content; where a run read it from (another folder, a bucket) is not.
+    monkeypatch.setattr(journal_record, "_journal", lambda: databases.ledger)
+    store, source = Artifacts(), f"fixture.{uuid4().hex}"
+    first = changed_files.record_input(source=source, feed="documents", processing="i" * 64, files=FILES,
+                                       forced=False, as_of="2026-10-13T13:00:00Z")
+    journal_record.execute(envelope(store, tmp_path / "a", first), store)
+    elsewhere = [{**f, "uri": f["uri"].replace("/capture/", "/capture-copy/")} for f in FILES]
+    forced = changed_files.record_input(source=source, feed="documents", processing="i" * 64, files=elsewhere,
+                                        forced=True, as_of="2026-10-14T13:00:00Z")
+    task = envelope(store, tmp_path / "b", forced)
+    result = journal_record.execute(task, store)
+    assert journal_record.verify({**task, "candidate": result}, store) == ({journal_record.CHECK: True}, [])
