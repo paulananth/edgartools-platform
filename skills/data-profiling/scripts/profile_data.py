@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import yaml  # noqa: E402
 
-from profiling import drift, inputs, report, run  # noqa: E402
+from profiling import drift, embedded, inputs, report, run  # noqa: E402
 
 
 def _stop(signum, _frame) -> None:
@@ -85,9 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         report.read_fingerprints(approved, args.approved.parent)
         sources = dict(item.split("=", 1) for item in args.input)
         # The entities the approved findings carry inside a part stay parts in the new delivery.
-        known = [{"part": p["part"], "from": p["derived_from"], "column": p["record_key"]["columns"][0],
-                  "follows": list(p["derived_evidence"]["follows"])}
-                 for p in approved["parts"] if p.get("derived_from") and p.get("derived_evidence")]
+        known = tuple(embedded.from_findings(approved))
         with _work() as work:
             new = run.profile_inputs(sources, approved["dataset"]["name"], int(args.limit_gb * inputs.GB),
                                      seed=args.seed, work=work, known=known)

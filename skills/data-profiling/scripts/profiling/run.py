@@ -1,7 +1,7 @@
 """One profiling run: inputs → findings.yaml + REPORT.md.
 
 Every claim carries its evidence; anything without evidence is "unknown".
-Samples of personal columns are masked to their shape.
+Samples of personal and free-text columns are masked to their shape.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def _classes_found(findings) -> str:
 
 def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAULT_LIMIT,
                    sample: int = inputs.SAMPLE_RECORDS, seed: int = 0, kinds: tuple[str, ...] = (),
-                   work: Path | None = None, known: list[dict] = ()) -> dict:
+                   work: Path | None = None, known: tuple[dict, ...] = ()) -> dict:
     """Profile every input and return the findings (the findings.yaml document).
 
     `work` holds the run's working copy; when none is given, one is made and removed at the end.
@@ -130,7 +130,12 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     entities: dict[str, dict] = {}
     for p in list(parts):
         found, clashes = embedded.find(con, p, profiles[p], set(parts))
-        found += embedded.known(con, p, profiles[p], known, set(parts) | {e["part"] for e in found})
+        again = embedded.known(con, p, profiles[p], known, set(parts) | {e["part"] for e in found})
+        for entity in found:
+            approved = next((k for k in known if k["part"] == entity["part"]), None)
+            if approved and approved["column"] != entity["column"]:
+                say(f"{entity['part']}: found by {entity['column']}, approved by {approved['column']}")
+        found += again
         for clash in clashes:
             say(f"{clash}: an entity carried inside {p}, left in place: a part of that name exists")
         for entity in found:
@@ -239,8 +244,10 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             continue
         tagged = tags[c["name"]]
         role = _role(c, record_key, linked_columns, code_columns, times, measures)
-        top = [{"value": sensitivity.mask(t["value"]) if tagged["sensitivity"] != "none" else t["value"],
-                "rows": t["rows"]} for t in c["top"]]
+        # Free text (more than six words a value) can name anyone, inside a sentence no column
+        # name or value test can see: like a personal column, its samples are written as their shape only.
+        hidden = tagged["sensitivity"] != "none" or (profile.is_text(c) and c.get("tokens", 0) > 6)
+        top = [{"value": sensitivity.mask(t["value"]) if hidden else t["value"], "rows": t["rows"]} for t in c["top"]]
         column_findings.append({
             "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
@@ -248,8 +255,8 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             # Measured only for a separated pattern: why it was, or was not, one under one prefix.
             **{k: c[k] for k in ("prefix_share", "pattern_temporal_share") if k in c},
             "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
-            # A personal column's values are never written out, so it has no distribution.
-            "distribution": None if tagged["sensitivity"] != "none" else profile.distribution(
+            # A personal or free-text column's values are never written out, so it has no distribution.
+            "distribution": None if hidden else profile.distribution(
                 con, p, c, c["name"] in {x["column"] for x in code_list})})
         if identifiers.identifier_shaped(c) or c["name"] in record_key["columns"]:
             identifier_findings.append(_identifier(con, p, c, record_key))

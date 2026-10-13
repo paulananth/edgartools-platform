@@ -700,10 +700,11 @@ def _fold_single_items(con, child: str) -> None:
             child_columns[field] = columns[source]
         elif child_columns[field] != columns[source]:
             # The two reads typed the field apart (a field null in every list item reads as JSON):
-            # the child takes the single items' type when it holds no value, else text, so no value is lost.
-            empty = not con.execute(f"SELECT count({sql_name(field)}) FROM {sql_name(child)}").fetchone()[0]
-            kind = columns[source] if empty else "VARCHAR"
-            con.execute(f"ALTER TABLE {sql_name(child)} ALTER {sql_name(field)} TYPE {kind}")
+            # the child takes the single items' type when it holds no value, a number type both
+            # can hold when both are numbers, else text, so no value is lost or quoted.
+            f, kind = sql_name(field), _common_type(con, child, field, child_columns[field], columns[source])
+            using = f" USING json_extract_string({f}, '$')" if child_columns[field] == "JSON" and kind == "VARCHAR" else ""
+            con.execute(f"ALTER TABLE {sql_name(child)} ALTER {f} TYPE {kind}{using}")
             child_columns[field] = kind
     start = con.execute(f"SELECT coalesce(max({ROW}) + 1, 0) FROM {sql_name(child)}").fetchone()[0]
     filled = " OR ".join(f"{sql_name(c)} IS NOT NULL" for c in dotted.values())
@@ -714,6 +715,17 @@ def _fold_single_items(con, child: str) -> None:
                 f"FROM {sql_name(parent)} WHERE {filled}")
     for source in dotted.values():
         con.execute(f"ALTER TABLE {sql_name(parent)} DROP COLUMN {sql_name(source)}")
+
+
+NUMBERS = ("TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "FLOAT", "DOUBLE")
+
+
+def _common_type(con, child: str, field: str, held: str, single: str) -> str:
+    if not con.execute(f"SELECT count({sql_name(field)}) FROM {sql_name(child)}").fetchone()[0]:
+        return single
+    if held in NUMBERS and single in NUMBERS:
+        return "DOUBLE" if "DOUBLE" in (held, single) or "FLOAT" in (held, single) else "BIGINT"
+    return "VARCHAR"
 
 
 def _exists(con, table: str) -> bool:

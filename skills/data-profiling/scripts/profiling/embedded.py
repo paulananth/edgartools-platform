@@ -65,7 +65,7 @@ def find(con, part: str, columns: list[dict], existing: set[str]) -> tuple[list[
     return found, clashes
 
 
-def known(con, part: str, columns: list[dict], approved: list[dict], existing: set[str]) -> list[dict]:
+def known(con, part: str, columns: list[dict], approved, existing: set[str]) -> list[dict]:
     """The entities approved findings carry inside `part`, taken by their approved identifier and columns.
 
     A new delivery may repeat an entity less than the discovery bar asks (each party on one
@@ -75,16 +75,24 @@ def known(con, part: str, columns: list[dict], approved: list[dict], existing: s
     found = []
     for e in approved:
         x = by_name.get(e["column"])
-        if e["from"] != part or e["part"] in existing or x is None or not x["non_null"]:
+        # Its identifier gone: drift reports the part missing. Found already: discovery's evidence stands.
+        if e["from"] != part or x is None or not x["non_null"] or e["part"] in existing:
             continue
         follows = [c for c in e["follows"] if c in by_name and by_name[c]["non_null"]]
         found.append(_entity(e["part"], part, x, {c: determines(con, part, x["name"], c) for c in follows}))
     return found
 
 
+def from_findings(findings: dict) -> list[dict]:
+    """The entities approved findings carry inside a part, as `known` takes them."""
+    return [{"part": p["part"], "from": p["derived_from"], "column": p["derived_evidence"]["column"],
+             "follows": list(p["derived_evidence"]["follows"])}
+            for p in findings["parts"] if p.get("derived_from") and "column" in (p.get("derived_evidence") or {})]
+
+
 def _entity(name: str, part: str, x: dict, follows: dict[str, float]) -> dict:
     return {"part": name, "from": part, "column": x["name"], "follows": list(follows),
-            "evidence": {"rows": x["non_null"], "values": x["distinct"],
+            "evidence": {"column": x["name"], "rows": x["non_null"], "values": x["distinct"],
                          "repeats": round(x["distinct"] / x["non_null"], 6), "follows": follows}}
 
 

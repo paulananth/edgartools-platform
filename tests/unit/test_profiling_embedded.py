@@ -175,3 +175,34 @@ def test_compare_keeps_an_approved_entity_that_repeats_less_in_the_new_delivery(
     new = yaml.safe_load((drift_out / "findings.yaml").read_text())
     party = next(p for p in new["parts"] if p["part"] == "doc.party")
     assert party["rows"] == 60 and party["derived_evidence"]["repeats"] == 1.0
+
+
+def test_free_text_samples_are_written_as_their_shape(tmp_path):
+    with (tmp_path / "docs.jsonl").open("w") as out:
+        for n in range(80):
+            out.write(json.dumps({"document_id": f"D-{n:04d}", "remark": (
+                f"{WORDS[n % 10]} shares held by the Quillfeather Family Trust since {2000 + n}; the "
+                f"{WORDS[n // 10]} party disclaims ownership {'except' if n % 2 else 'beyond'} its interest")}) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    remark = next(c for c in yaml.safe_load((out / "findings.yaml").read_text())["parts"][0]["columns"]
+                  if c["name"] == "remark")
+    assert remark["distribution"] is None and remark["top"][0]["value"].startswith("Aaaa")
+    assert not [f for f in out.iterdir() if "Quillfeather" in f.read_text()]
+
+
+def test_a_short_text_that_names_people_is_personal(tmp_path):
+    # Most holdings are held directly or by a firm; a few name a person's trust or estate.
+    held = ["Directly", "By spouse", "By Harbor Stone Partners, LP", "Through a retirement plan"]
+    with (tmp_path / "docs.jsonl").open("w") as out:
+        for n in range(200):
+            how = f"By the Orrin Q. Vantrell {n} Revocable Trust" if n % 20 == 0 else held[n % 4]
+            out.write(json.dumps({"document_id": f"D-{n:04d}", "held": how}) + "\n")
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "docs", "--input", f"doc={tmp_path / 'docs.jsonl'}",
+                              "--out", str(out)]) == 0
+    held_by = next(c for c in yaml.safe_load((out / "findings.yaml").read_text())["parts"][0]["columns"]
+                   if c["name"] == "held")
+    assert held_by["sensitivity"] == "personal" and "values: text naming people" in held_by["sensitivity_signals"]
+    assert not [f for f in out.iterdir() if "Vantrell" in f.read_text()]
