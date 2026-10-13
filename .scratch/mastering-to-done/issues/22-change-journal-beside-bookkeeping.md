@@ -14,6 +14,9 @@ Status: open (to fix). Raised by the operator, 2026-10-13 08:17 ET.
 >
 > Change journal does not micro manage it will decide a file or a source is
 > identical or is needed to be processed it doesn't decide at field level
+>
+> MDM publish can implement cdc aka change data capture only publish what truly
+> changed please make a note
 
 ## The problem
 
@@ -37,7 +40,17 @@ Two rules follow:
    everything that reading produced: every file it read is processed again,
    not only files whose bytes changed.
 
+## MDM publish: change data capture
+
+Inside mastering, `mdm.publish` is where record-level change belongs, not in
+the Change Journal: it publishes only the master records (and relationships)
+that truly changed, as change data capture, never the whole master again. A
+record merged again with the same values publishes nothing. Migration 017
+(unchanged batches queue nothing in the outbox) is a first step; this widens it
+to every published record.
+
 ## Checklist
+
 
 - [ ] Map today's change handling per step: what each step uses now to skip
   unchanged input (receipts, content hashes, migration 017's "unchanged batches
@@ -54,5 +67,9 @@ Two rules follow:
   MDM Change Journal as its mastering part)
 - [ ] Build it: steps ask the journal for what changed, and a reading or rules
   version change replays the whole source; tests per step
+- [ ] `mdm.publish` as change data capture: map what it publishes today and
+  what migration 017 already skips; publish only records and relationships
+  whose published values changed (insert, update, retire), with a test that a
+  second publish of unchanged records sends nothing
 - [ ] Relates to: the Company manifest writer's changed-document selection
   (Issue 20 / Codex readiness note), which should read this, not keep its own
