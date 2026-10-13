@@ -11,6 +11,9 @@ Status: open (to fix). Raised by the operator, 2026-10-13 08:17 ET.
 >
 > Change journal is not just for mdm if a source parsing changes everything you
 > need to process all
+>
+> Change journal does not micro manage it will decide a file or a source is
+> identical or is needed to be processed it doesn't decide at field level
 
 ## The problem
 
@@ -21,8 +24,10 @@ as a mastering detail. The operator's model has two peers over every step:
 
 - **Bookkeeping**: restart. A load that stopped resumes where it stopped
   (frozen work, leases, retries, the verifier).
-- **Change Journal**: what changed. Each step processes only what changed since
-  it last ran: changed files, changed records, changed outputs.
+- **Change Journal**: what changed. Each step processes only the files that
+  changed since it last ran. Its unit is a whole file or a whole source: it
+  answers "identical, skip it" or "process it", never which fields or records
+  inside a file changed (the step itself handles what is inside).
 
 Two rules follow:
 1. The Change Journal serves every step (capture, `source.read`,
@@ -39,10 +44,11 @@ Two rules follow:
   queue nothing", the Person and Company document selection), and where the
   Change Journal's events are written and read today (`skills/change-journal`,
   `docs/architecture/runtime-responsibilities.md`)
-- [ ] Decide with the operator: what the journal records per step (input
-  identity, the rules or reading version, output identity) so "changed" is one
-  question for every step; and how a rules or reading change marks everything it
-  read as changed
+- [ ] Decide with the operator: what the journal records per file and step
+  (the file's identity, the rules or reading version that processed it) so
+  "identical or process it" is one question for every step; and how a rules or
+  reading change marks every file of that source to process. No field-level or
+  record-level tracking (operator: "it doesn't decide at field level")
 - [ ] Redraw the README flow with Bookkeeping and the Change Journal side by
   side over all steps; widen the `CONTEXT.md` term (Change Journal, with the
   MDM Change Journal as its mastering part)
