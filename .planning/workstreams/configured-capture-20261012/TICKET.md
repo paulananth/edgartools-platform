@@ -19,6 +19,7 @@ permitted by this implementation instruction.
 - [x] Retire sec_client.py only after replacement and executable-caller/test inventory proves the old path is unnecessary. Verified: Production/script/package caller inventory is empty; retirement and transport-only architecture boundaries passed in 990 unit/architecture tests, 2026-10-12 21:17 ET.
 - [x] Correct the stale Change Journal capture specification to match public renewal/Journal sequencing, preserving control-only ownership and explicit offline qualification. Verified: Standards reviewer confirmed the corrected renewal/Journal/renewal sequence and logical effect keys, 2026-10-12 21:17 ET.
 - [x] Standards, Spec and GoF reviews resolved; native/frame coverage audit found no remaining significant in-scope behavioral gap after 6 added PG16 cases and 19 storage/frame tests, 2026-10-12 21:17 ET.
+- [x] Align the Company acquisition reference and README discovery link with the qualified worker and pending integration; verify genuine page selection and unsupported approved format/bound refusal. Verified 6 real PG16 cases, guide/README readback and ownership/overlap guard, 2026-10-12 21:29 ET.
 - [ ] Review Standards, Spec and GoF; resolve findings, guard/commit and publish a reviewable result with CI evidence.
 - [ ] ~~Live SEC/continuation-page qualification and source activation~~ remains Issue 20 L8: requires explicit provider authorization and approval of exact source evidence/version; no requests in this slice.
 - [ ] ~~Adapter mapping/fallback retirement (L7)~~ integrate after Claude's changed-data changes merge: store.py and installed-bundle tests are his active files.
@@ -27,6 +28,7 @@ permitted by this implementation instruction.
 Rust presence/member predicates and READING reference also changed; full Rust acceptance passed. Source integration, approval and activation behavior remain unchanged.
 
 ## Acceptance
+
 
 Configured capture is a Python integration called through the existing external
 worker protocol. Parsing/completeness computation uses the configured Rust core.

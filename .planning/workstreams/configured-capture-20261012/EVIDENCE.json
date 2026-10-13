@@ -54,6 +54,11 @@
     {
       "lane": "rust_acceptance",
       "status": "passed"
+    },
+    {
+      "lane": "page_selection_and_unsupported_configuration",
+      "passed": 6,
+      "seconds": 17.36
     }
   ],
   "behavioral_audit": {
@@ -71,5 +76,6 @@
     "adapter/fallback retirement after changed-document interface",
     "Company manifest retirement after receipt-selection interface",
     "Company producer/continuation integration and live SEC qualification/source activation"
-  ]
+  ],
+  "targeted_distinct_cases": 90
 }

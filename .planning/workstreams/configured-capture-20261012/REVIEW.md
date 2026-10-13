@@ -43,7 +43,7 @@ The strengthened hash-consistent forged candidate case also passed separately.
 
 - All Rust acceptance tests passed, including two new presence tests.
 - 58 initial capture checks, runtime pinning check, 19 frame/storage cases and
-  six added PG16 cases passed: 84 distinct targeted cases across these runs.
+  six added PG16 recovery cases and six page/unsupported-configuration cases passed: 90 distinct targeted cases across these runs.
 - Unit/architecture: 990 passed (4m25s), before the 19-case audit addition.
 - Maintained PG16 control after rebase: 49 passed (1m48s).
 - Installed committed wheels, actual capture/public verifier and whole-package
@@ -58,3 +58,5 @@ live SEC/Rules qualification are still pending; this slice is not go-live proof.
 No VERSION/CHANGELOG pipeline exists here. Packages remain their existing
 0.1.0 and install by pinned git ref. Unrelated historical TODOS organization and
 foreign tracker/skill files were not rewritten.
+
+Documentation follow-up: Company acquisition status/recovery wording and README capture link now match the qualified worker; genuine page selection and all four unsupported approved formats plus oversize bound were verified before HTTP.

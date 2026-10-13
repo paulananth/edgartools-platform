@@ -39,6 +39,13 @@ def setup(databases, tmp_path, monkeypatch, request):
     baseline = book.artifacts.put(tmp_path.as_uri() + '/baseline', {'offline': True})
     proof = approved_acquisition(body, name, [], baseline)
     body['acquisition']['feeds']['fixture']['completeness'].update(required=['ok'], allow_empty=False)
+    if getattr(request, 'param', None) == 'with_page':
+        body['acquisition']['feeds']['fixture']['page_completeness'] = {
+            'format': 'json', 'required': ['page'], 'allow_empty': False, 'max_bytes': 1024}
+    elif getattr(request, 'param', None) in ('xml', 'zip', 'text', 'ticker_catalog'):
+        body['acquisition']['feeds']['fixture']['completeness']['format'] = request.param
+    elif getattr(request, 'param', None) == 'oversize_bound':
+        body['acquisition']['feeds']['fixture']['completeness']['max_bytes'] = transport.MAX_BYTES + 1
     saved = databases.rules.save('source', name, '1', body)
     databases.rules.prove('source', name, '1', {'digest': saved['digest'], 'batch_hash': baseline['sha256'],
                                                'passed': True, 'acquisition': proof})
@@ -189,6 +196,24 @@ def test_genuine_approved_plan_without_provider_lease_never_gets(setup, monkeypa
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
     with pytest.raises(ValueError, match='shared provider lease'):
         capture.execute(envelope, book.artifacts)
+    assert calls == []
+
+
+@pytest.mark.parametrize('setup', ['with_page'], indirect=True)
+def test_page_uses_its_own_approved_completeness(setup, monkeypatch):
+    book, start, finish = setup
+    http(monkeypatch, lambda request: httpx.Response(200, content=b'{"page":true}'))
+    envelope = start(document='page')
+    finish(envelope, capture.execute(envelope, book.artifacts))
+
+
+@pytest.mark.parametrize('setup', ['xml', 'zip', 'text', 'ticker_catalog', 'oversize_bound'], indirect=True)
+def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypatch):
+    book, start, _ = setup
+    calls = []
+    http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
+    with pytest.raises(ValueError, match='bounded JSON object completeness'):
+        capture.execute(start(), book.artifacts)
     assert calls == []
 
 
