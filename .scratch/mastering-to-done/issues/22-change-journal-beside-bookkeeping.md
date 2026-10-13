@@ -17,6 +17,8 @@ Status: open (to fix). Raised by the operator, 2026-10-13 08:17 ET.
 >
 > MDM publish can implement cdc aka change data capture only publish what truly
 > changed please make a note
+>
+> There has to be a force publish to publish all records
 
 ## The problem
 
@@ -49,6 +51,15 @@ record merged again with the same values publishes nothing. Migration 017
 (unchanged batches queue nothing in the outbox) is a first step; this widens it
 to every published record.
 
+A **force publish** publishes every record, changed or not: for a consumer
+that is new, rebuilt or out of step. It is an explicit operator choice (a
+flag on the publish command), never the default, and it is recorded as a
+forced publication so a reader can tell it from change data capture. The
+same holds one level up: the Change Journal's "process it" for every file of
+a source (a reading or rules change) is the step-level counterpart. It
+matches the repo's existing rule for SEC files: skip what is already loaded
+unless an operator passes an explicit `--force` repair flag.
+
 ## Checklist
 
 
@@ -71,5 +82,8 @@ to every published record.
   what migration 017 already skips; publish only records and relationships
   whose published values changed (insert, update, retire), with a test that a
   second publish of unchanged records sends nothing
+- [ ] Force publish: an explicit operator flag that publishes every record and
+  relationship, recorded as forced; test that it sends all records after a run
+  that sent none
 - [ ] Relates to: the Company manifest writer's changed-document selection
   (Issue 20 / Codex readiness note), which should read this, not keep its own
