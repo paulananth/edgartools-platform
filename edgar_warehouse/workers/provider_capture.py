@@ -90,10 +90,11 @@ def _load(envelope, artifacts):
         raise ValueError('Capture output must be an explicit file or S3 object')
     if 'previous' in request:
         reference(request['previous'])
+    _completeness_engine(completeness)  # Native contract validation must precede every HTTP effect.
     return request, authority, completeness, url
 
 
-def _complete(data, configuration):
+def _completeness_engine(configuration):
     # Only checks cross into Rust; no Python JSON-domain parsing or body copying
     # into a Python row. Required member paths are literal, including dots.
     assertions = [{'test': {'test': {'path': '.', 'kind': 'object'}},
@@ -105,7 +106,11 @@ def _complete(data, configuration):
     contract = {'read': {'format': 'json', 'limits': {'max_bytes': configuration['max_bytes'], 'max_records': 1},
                         'assertions': assertions,
                         'tables': {'capture': {'each': '.', 'columns': {'complete': {'const': {'value': True}}}}}}}
-    result = source_engine.SourceEngine(contract).read(data)
+    return source_engine.SourceEngine(contract)
+
+
+def _complete(data, configuration):
+    result = _completeness_engine(configuration).read(data)
     if result.deferred or len(result.tables['capture']) != 1:
         raise ValueError('Capture payload failed its configured completeness')
 

@@ -43,7 +43,7 @@ The strengthened hash-consistent forged candidate case also passed separately.
 
 - All Rust acceptance tests passed, including two new presence tests.
 - 58 initial capture checks, runtime pinning check, 19 frame/storage cases and
-  six added PG16 recovery cases and six page/unsupported-configuration cases passed: 90 distinct targeted cases across these runs.
+  six added PG16 recovery cases and six page/unsupported-configuration cases passed: 90 distinct targeted cases before the final pre-HTTP configuration regression across these runs.
 - Unit/architecture: 990 passed (4m25s), before the 19-case audit addition.
 - Maintained PG16 control after rebase: 49 passed (1m48s).
 - Installed committed wheels, actual capture/public verifier and whole-package
@@ -60,3 +60,5 @@ No VERSION/CHANGELOG pipeline exists here. Packages remain their existing
 foreign tracker/skill files were not rewritten.
 
 Documentation follow-up: Company acquisition status/recovery wording and README capture link now match the qualified worker; genuine page selection and all four unsupported approved formats plus oversize bound were verified before HTTP.
+
+Final delta: a red PG16 regression reproduced a GET before a natively invalid approved configuration was rejected. The shared native builder now compiles in `_load` before effects and remains the payload checker afterward. Standards, Spec and GoF reviewers confirmed the fix. Final capture and genericity suite: 150 passed (91 capture cases plus 59 genericity checks, 2m37s). Initial CI identified only source-specific names outside Journal SPEC examples; generic wording corrected and verified. Installed final wheels and final CI remain in progress.

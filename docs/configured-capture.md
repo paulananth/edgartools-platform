@@ -32,7 +32,8 @@ Optional `previous` is an exact `{uri, sha256}` capture receipt reference.
 `document: page` selects approved `page_completeness` and is refused if absent.
 The frozen Rules source supplies exact approval/proof, allowed URL prefixes,
 scope names, fetch capability and completeness. Unit keys contain the feed and
-every scope value. Scope identifies requested work; the completeness contract
+every scope value. The native completeness contract compiles before HTTP;
+unsupported native configuration refuses the request. Scope identifies requested work; the completeness contract
 does not prove that the provider's returned CIK equals the requested CIK.
 Domain identity checks and continuation qualification belong to the subsequent
 Company integration.

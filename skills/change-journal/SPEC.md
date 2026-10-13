@@ -108,8 +108,8 @@ immutable capture snapshot and output receipt at the frozen destination
 reconcile after a lost completion acknowledgement without another GET. A crash
 before a complete durable snapshot may repeat the GET. No storage listing
 establishes success. This worker is qualified offline for bounded HTTPS JSON
-objects; Company producer manifests, continuation expansion, live SEC proof and
-source activation remain Issue 20 L8 integration work.
+objects. Source producer manifests, continuation expansion, live provider proof
+and exact Rules activation require separate integration and qualification.
 
 ## Rules and source-owned evidence
 

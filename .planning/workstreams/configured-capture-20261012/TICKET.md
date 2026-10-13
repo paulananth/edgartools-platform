@@ -29,6 +29,9 @@ Rust presence/member predicates and READING reference also changed; full Rust ac
 
 ## Acceptance
 
+- [x] Compile completeness contracts before HTTP; prove approved but natively invalid configuration refuses all provider effects. Verified red regression reproduced one GET before the fix; final capture/genericity suite passed 150 tests, 2026-10-12 21:49 ET.
+- [ ] Resolve PR CI failures and verify the required gate on the final implementation.
+
 
 Configured capture is a Python integration called through the existing external
 worker protocol. Parsing/completeness computation uses the configured Rust core.

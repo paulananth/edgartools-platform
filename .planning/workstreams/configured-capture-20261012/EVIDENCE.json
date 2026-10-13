@@ -4,7 +4,7 @@
   "starting_main": "692e0215",
   "rebased_main": "15f0deb5",
   "implementation": "efe43354",
-  "recorded_et": "2026-10-12 21:17 ET",
+  "recorded_et": "2026-10-12 21:49 ET",
   "provider_requests": 0,
   "activated": false,
   "deployed": false,
@@ -59,6 +59,13 @@
       "lane": "page_selection_and_unsupported_configuration",
       "passed": 6,
       "seconds": 17.36
+    },
+    {
+      "lane": "final_capture_and_genericity",
+      "passed": 150,
+      "capture_cases": 91,
+      "genericity_cases": 59,
+      "seconds": 157.1
     }
   ],
   "behavioral_audit": {
@@ -69,7 +76,8 @@
   "reviews": {
     "standards": "P2 specification wording corrected and confirmed",
     "spec": "clear",
-    "gof": "leave existing function/worker seams"
+    "gof": "leave existing function/worker seams",
+    "final_delta": "Standards, Spec and GoF clear; invalid native configuration now refuses HTTP"
   },
   "pending": [
     "PR/CI publication",
@@ -77,5 +85,10 @@
     "Company manifest retirement after receipt-selection interface",
     "Company producer/continuation integration and live SEC qualification/source activation"
   ],
-  "targeted_distinct_cases": 90
+  "targeted_distinct_cases": 91,
+  "initial_ci": {
+    "run": 38332941218,
+    "failure": "Shared Journal SPEC source names outside examples; corrected and 59 genericity tests passed",
+    "runtime_jobs": "MDM, Engine, PG integration and shell passed"
+  }
 }

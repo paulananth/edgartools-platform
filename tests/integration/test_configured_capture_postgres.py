@@ -46,6 +46,8 @@ def setup(databases, tmp_path, monkeypatch, request):
         body['acquisition']['feeds']['fixture']['completeness']['format'] = request.param
     elif getattr(request, 'param', None) == 'oversize_bound':
         body['acquisition']['feeds']['fixture']['completeness']['max_bytes'] = transport.MAX_BYTES + 1
+    elif getattr(request, 'param', None) == 'invalid_native_contract':
+        body['acquisition']['feeds']['fixture']['completeness']['required'] = ['x' * 4096]
     saved = databases.rules.save('source', name, '1', body)
     databases.rules.prove('source', name, '1', {'digest': saved['digest'], 'batch_hash': baseline['sha256'],
                                                'passed': True, 'acquisition': proof})
@@ -213,6 +215,17 @@ def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypa
     calls = []
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
     with pytest.raises(ValueError, match='bounded JSON object completeness'):
+        capture.execute(start(), book.artifacts)
+    assert calls == []
+
+
+@pytest.mark.parametrize('setup', ['invalid_native_contract'], indirect=True)
+def test_approved_but_invalid_native_contract_refuses_before_get(setup, monkeypatch):
+    from edgar_warehouse.rules.source_engine import SourceRejected
+    book, start, _ = setup
+    calls = []
+    http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200, content=b'{"ok":true}'))
+    with pytest.raises(SourceRejected, match='contract: an assertion reason'):
         capture.execute(start(), book.artifacts)
     assert calls == []
 
