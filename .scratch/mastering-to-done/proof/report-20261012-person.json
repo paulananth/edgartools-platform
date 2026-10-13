@@ -1,0 +1,44 @@
+{
+ "after_first_pass": {
+  "companies_open": 0,
+  "decisions_by_rule": {
+   "person-cik": 386
+  },
+  "open_reviews": {
+   "classification_deferred": 167,
+   "classification_entity_undetermined": 447
+  },
+  "stage_bound": {
+   "sec.submissions.person.v1": 386
+  },
+  "stage_records": {
+   "sec.submissions.person.v1:person": 386
+  }
+ },
+ "bindings": "3ffe1b045df9e4fa09f558ddd32d5479080306e584ab6f0659f70d70691fe324",
+ "bundles": [
+  "1",
+  "2"
+ ],
+ "goal": "Issue 20 20d: installed empty-store Person proof on the mastering target",
+ "minutes": 4.6,
+ "minutes_first_pass": 4.1,
+ "policy": "34f548776040bb44451f0ac17e496ae30e1ce20568ad199bfa03616a6645b2e2",
+ "recovery": {
+  "item_at_kill": {
+   "attempt": "7c2d48c7-27fd-41b8-b873-8da06d1101df",
+   "attempts": 1,
+   "checks": {},
+   "error": null,
+   "ordinal": 0,
+   "receipt": null,
+   "state": "running",
+   "step": "merge",
+   "unit_key": "sec.submissions.person:6cc3ad8c107a2b3ab437f6e3f04761e4659358753264de7a9af03eebcfceaef6"
+  },
+  "killed_worker_exit": -9,
+  "resumed_attempts": 2,
+  "rows_at_kill": {}
+ },
+ "second_pass_changed_nothing": true
+}
