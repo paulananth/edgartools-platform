@@ -233,33 +233,17 @@ impl Engine {
         if bytes.len() as u64 > self.limits.max_bytes {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
-        let member;
-        let mut filled;
-        let mut context = context;
-        let bytes = match setting(&self.read, "container") {
-            Some("zip") => {
-                member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
-                &member[..]
-            }
+        let (member, filled) = match setting(&self.read, "container") {
+            Some("zip") => (formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?, None),
             Some("sgml") => {
-                let header;
-                (member, header) = formats::sgml_document(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
-                filled = context.clone();
-                for (name, line) in context::from_header(&self.read) {
-                    let values: Vec<&String> = header.iter().filter(|(n, _)| *n == line).map(|(_, v)| v).collect();
-                    let [value] = values[..] else {
-                        return Err(Rejected::new("sgml_header", format!("the header names {line} {} times, not once", values.len())));
-                    };
-                    filled.insert(name, Val::Str(value.clone()));
-                }
-                context::check_filled(&self.read, &filled)?;
-                context = &filled;
-                &member[..]
+                let (xml, header) = formats::sgml_document(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
+                (xml, Some(context::fill_from_header(&self.read, context, &header)?))
             }
-            _ => bytes,
+            _ => (Vec::new(), None),
         };
+        let bytes = if setting(&self.read, "container").is_some() { &member[..] } else { bytes };
         let document = self.document(bytes)?;
-        self.read_document(&document, lookups, context)
+        self.read_document(&document, lookups, filled.as_ref().unwrap_or(context))
     }
 
     /// Project a validated framed JSON record through the ordinary configured

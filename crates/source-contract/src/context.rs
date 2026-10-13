@@ -90,9 +90,25 @@ pub(crate) fn check(read: &Value, values: &Row) -> Result<(), Rejected> {
     typed(read, values, filled.len())
 }
 
-/// The caller's facts with the header's: every declared field.
-pub(crate) fn check_filled(read: &Value, values: &Row) -> Result<(), Rejected> {
-    typed(read, values, 0)
+/// The caller's facts with the fields an SGML header fills, each from the
+/// one header line it names; every declared field is then checked. A line the
+/// header names other than once, or that is too long or not UTF-8, is the
+/// submission's fault (`sgml_header`), not the caller's.
+pub(crate) fn fill_from_header(read: &Value, context: &Row, header: &[(String, String)]) -> Result<Row, Rejected> {
+    let mut filled = context.clone();
+    for (name, line) in from_header(read) {
+        let values: Vec<&String> = header.iter().filter(|(n, _)| *n == line).map(|(_, v)| v).collect();
+        let [value] = values[..] else {
+            return Err(Rejected::new("sgml_header", format!("the header names {line} {} times, not once", values.len())));
+        };
+        let bound = read["context"][name.as_str()].get("max_bytes").and_then(Value::as_u64).unwrap_or(4096);
+        if value.len() as u64 > bound || value.contains('\u{FFFD}') {
+            return Err(Rejected::new("sgml_header", format!("the header's {line} is over {bound} bytes or not UTF-8")));
+        }
+        filled.insert(name, Val::Str(value.clone()));
+    }
+    typed(read, &filled, 0)?;
+    Ok(filled)
 }
 
 fn typed(read: &Value, values: &Row, filled: usize) -> Result<(), Rejected> {

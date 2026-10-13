@@ -108,3 +108,36 @@ fn the_contract_ties_each_setting_to_its_container() {
     assert!(engine(&CONTRACT.replace("type: text, sgml_header", "type: integer, sgml_header")).is_err());
     assert!(engine(&plain.replace("  root: sampleDocument\n", "  root: sampleDocument\n  member: \"*.xml\"\n")).is_err());
 }
+
+#[test]
+fn a_document_left_open_or_a_mention_of_xml_in_another_text_is_never_taken_for_the_document() {
+    let e = engine(CONTRACT).unwrap();
+    let open = submission(HEADER, &[
+        "<DOCUMENT>\n<TYPE>EX-24\n<FILENAME>ex.txt\n<TEXT>\nUNCLOSED\n".to_string(),
+        document("sample.xml", "4", &xml("P")),
+    ]);
+    assert_eq!(e.read_with_context(&open, &Lookups::new(), &caller()).unwrap_err().code, "malformed");
+    let mention = submission(HEADER, &[
+        document("ex.txt", "EX-99", "The schedule is filed as <XML> with its own </XML> tags."),
+        document("sample.xml", "4", &xml("P")),
+    ]);
+    let rows = e.read_with_context(&mention, &Lookups::new(), &caller()).unwrap().tables.remove("filing").unwrap();
+    assert_eq!(rows[0]["code"], Val::Str("P".into()));
+}
+
+#[test]
+fn a_header_line_too_long_or_not_utf8_is_the_submissions_fault() {
+    let doc = [document("sample.xml", "4", &xml("P"))];
+    let short = engine(&CONTRACT.replace("sgml_header: ACCESSION NUMBER}", "max_bytes: 4, sgml_header: ACCESSION NUMBER}")).unwrap();
+    assert_eq!(short.read_with_context(&submission(HEADER, &doc), &Lookups::new(), &caller()).unwrap_err().code, "sgml_header");
+    let mut latin = submission(HEADER, &doc);
+    let at = latin.windows(6).position(|w| w == b"SAMPLE").unwrap();
+    latin[at] = 0xC9; // a name in another encoding, on a line no field reads
+    let rows = engine(CONTRACT).unwrap().read_with_context(&latin, &Lookups::new(), &caller()).unwrap().tables.remove("filing").unwrap();
+    assert_eq!(rows[0]["accession"], Val::Str("0000000000-26-000001".into()));
+    let read = submission("ACCESSION NUMBER:\t0000000000-26-00000\u{1}\n", &doc);
+    let mut bad = read.clone();
+    let at = bad.windows(2).position(|w| w == b"0\x01").unwrap() + 1;
+    bad[at] = 0xFF;
+    assert_eq!(engine(CONTRACT).unwrap().read_with_context(&bad, &Lookups::new(), &caller()).unwrap_err().code, "sgml_header");
+}

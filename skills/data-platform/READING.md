@@ -614,7 +614,7 @@ read:
         name: {text: {path: name}}
 ```
 
-Provide every declared context key exactly once. Types are `text`, signed
+Provide every declared context key exactly once (except a field an SGML header fills: see "The XML document inside an SGML submission file"). Types are `text`, signed
 64-bit `integer`, and native `boolean`; there is no coercion. Null requires
 `nullable: true`. Text defaults to at most 4,096 UTF-8 bytes; `max_bytes` may
 lower that limit. Declare at most 32 keys, each at most 64 ASCII letters,
@@ -1352,19 +1352,24 @@ header of `NAME: value` lines, then one `<DOCUMENT>` block per document
 `<XML>` with `container: sgml`; it needs `format: xml`, and `root` still
 checks the document's root.
 
-Exactly one document must hold `<XML>`: none, or more than one, refuses the
-artifact with `sgml_documents`. `read.member`, a pattern over `<FILENAME>`
-(as for a ZIP member), narrows which documents count. The XML between `<XML>`
-and `</XML>` is read no further than `max_member_bytes`; a larger one refuses
-with `limit_exceeded`. A file that does not start with the envelope's opening
-tag, or whose header or a block is not closed, refuses with `malformed`.
+A document is XML when its `<TEXT>` starts with `<XML>`; the words `<XML>`
+inside another document's text do not count. Exactly one document must be XML:
+none, or more than one, refuses the artifact with `sgml_documents`.
+`read.member`, a pattern over `<FILENAME>` (as for a ZIP member), narrows which
+documents count; a document with no `<FILENAME>` never matches one. The whole
+file is bounded by `max_bytes`; the XML between `<XML>` and `</XML>` must be no
+larger than `max_member_bytes`, or the artifact refuses with `limit_exceeded`.
+A file that does not start with the envelope's opening tag, whose header or a
+block is not closed (before the next block opens), refuses with `malformed`.
 
 A context field may name a header line with `sgml_header` (text, the line's
 name without its colon). It is filled from the header, never by the caller:
 the caller supplies every other declared field, and supplying this one refuses
-with `invalid_context`. The line must appear exactly once in the header, or the
-artifact refuses with `sgml_header`; a name the header repeats in several
-sections cannot be read this way. A reading of the same documents captured as
+with `invalid_context`. The line must appear exactly once in the header, within the
+field's `max_bytes` and in UTF-8, or the artifact refuses with `sgml_header`;
+a name the header repeats in several sections cannot be read this way. Other
+header lines may hold bytes of another encoding; only a line a field reads must
+be UTF-8. A reading of the same documents captured as
 bare XML declares the same field without `sgml_header`, and its caller supplies
 it (for example from the capture path), so both readings fill the same columns.
 

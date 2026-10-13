@@ -195,7 +195,9 @@ pub fn sgml_document(bytes: &[u8], max_member_bytes: u64, pattern: Option<&str>)
     }
     let header_start = find(bytes, b"<SEC-HEADER>", 0).ok_or_else(|| malformed("no <SEC-HEADER>"))?;
     let header_end = find(bytes, b"</SEC-HEADER>", header_start).ok_or_else(|| malformed("no </SEC-HEADER>"))?;
-    let header = std::str::from_utf8(&bytes[header_start..header_end]).map_err(malformed)?;
+    // A byte that is not UTF-8 (a name in another encoding) stays in its line
+    // as U+FFFD; a field that reads such a line is refused by its caller.
+    let header = String::from_utf8_lossy(&bytes[header_start..header_end]);
     let lines = header.lines().skip(1).filter_map(|line| {
         let (name, value) = line.split_once(':')?;
         let (name, value) = (name.trim(), value.trim());
@@ -206,7 +208,14 @@ pub fn sgml_document(bytes: &[u8], max_member_bytes: u64, pattern: Option<&str>)
     while let Some(start) = find(bytes, b"<DOCUMENT>", at) {
         let end = find(bytes, b"</DOCUMENT>", start).ok_or_else(|| malformed("a <DOCUMENT> is not closed"))?;
         let block = &bytes[start..end];
-        if let Some(open) = find(block, b"<XML>", 0) {
+        if find(block, b"<DOCUMENT>", 1).is_some() {
+            return Err(malformed("a <DOCUMENT> is not closed before the next"));
+        }
+        // The document is XML when its text starts with <XML>; the words
+        // "<XML>" inside another document's text do not count.
+        let text = find(block, b"<TEXT>", 0).map(|at| at + b"<TEXT>".len());
+        let opens = text.filter(|&at| block[at..].trim_ascii_start().starts_with(b"<XML>"));
+        if let Some(open) = opens.and_then(|at| find(block, b"<XML>", at)) {
             let close = find(block, b"</XML>", open).ok_or_else(|| malformed("an <XML> is not closed"))?;
             let name = tag_line(block, b"<FILENAME>").map(|n| String::from_utf8_lossy(n).into_owned()).unwrap_or_default();
             if pattern.is_none_or(|p| matches_pattern(p, &name)) {
