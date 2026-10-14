@@ -164,6 +164,65 @@ ET (`2026-09-24 14:05 ET`), never UTC. Say up front when a part will take long
 (a full scan, a large test suite, a deploy), and report the elapsed time of any
 step over ten minutes, so the operator can see where the time went.
 
+- **Read the clock before every stamp:** `TZ=America/New_York date`. A
+  guessed time is wrong more often than not.
+- **The last part of every ticket is `Learning → skill`.** Name the skill
+  line the ticket changed with what it learned, or write "none". A rule,
+  practice or how-to learned here belongs in a skill (data work, MDM
+  engineering) or in this file (how to work in this repo), never only in a
+  ticket or in one runtime's private memory. A skill issue found while
+  working is fixed in the skill, on its own branch and PR.
+
+## How to work in this repo (every runtime)
+
+Learned the hard way; each is a standing operator rule.
+
+**Tests and CI**
+- Locally, run only the tests a change can affect, with `pytest --testmon`
+  (`TESTMON_DATAFILE=~/.cache/edgartools/testmondata uv run pytest --testmon
+  <folders>`; never with `-p no:cacheprovider`). After a change to a
+  `.sql`, `.yaml` or data file, also run that area's test files by name. No
+  local test run may take more than five minutes; CI runs everything.
+- Merge only when every CI check is green, and only on the operator's own
+  words for that PR. Approval of a rule, a ruling on a design or a goal is
+  not merge approval.
+- Every background watcher (CI, a long test, a proof) has a deadline and an
+  exit for every outcome, including the PR merging or closing. Stop test
+  containers when a run ends, however it ends.
+- Choose the cheapest proof that proves the change (the `mdm-engineering`
+  skill, "Choose the cheapest proof"); say the time of any step over ten
+  minutes before starting it.
+
+**Commits, PRs and secrets**
+- Write commit messages and PR bodies to a file and pass them with
+  `git commit -F` and `gh pr create --body-file`; inline text with backticks
+  gets mangled.
+- Never print a secret, a password, a token or a database address, and never
+  ask the operator to type one into the chat. Read them from environment
+  variables; if one is missing, ask the operator to set it in their own
+  terminal.
+- This repository is public: counts and invented examples only, never a
+  value from the data (a name, an identifier, a record).
+- No request to a data provider (its site, API or documentation) without the
+  operator's permission for that request.
+
+**Talking with the operator**
+- Report findings with their numbers and what they mean, not the steps you
+  are about to take.
+- Use the business words of `CONTEXT.md`; translate engine terms first.
+- Before asking for any approval, say in plain words what is approved, what
+  it changes and on what evidence. A digest, hash or version number goes
+  beside the explanation, never instead of it. A rule version has a
+  descriptive name.
+- Decide what follows from a ruling already given, say so, and go on. Stop
+  only for an approval, a switch-on, a merge or a new kind of decision, and
+  then ask one question at a time with your recommendation.
+
+**Debugging**
+- Before fixing an error, find its root cause (ask "why" until the answer is
+  a cause, not a trigger) and fix that. Write a recurring lesson where it
+  belongs: a skill, or this file.
+
 ## Git/GitHub commit and PR text with backticks
 
 **Never build a `git commit -m`/`gh pr create --body`/`gh pr edit --body` string via an
