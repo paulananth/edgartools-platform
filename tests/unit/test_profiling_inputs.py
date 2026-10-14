@@ -258,6 +258,25 @@ def test_a_zip_of_tables_with_its_documentation_reads_the_tables_and_lists_the_r
         assert parts[name].location == f"{tmp_path / 'set.zip'}#{name}.{fmt}"
 
 
+def test_a_readme_does_not_split_tables_of_one_header(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "q.zip", "w") as archive:
+        archive.writestr("q1.csv", "k,v\n1,a\n")
+        archive.writestr("q2.csv", "k,v\n2,b\n")
+        archive.writestr("readme.htm", "<p>about</p>")
+    parts = inputs.register(con, "q", str(tmp_path / "q.zip"), tmp_path / "w")
+    assert sorted((p.name, p.not_read is None) for p in parts) == [("q", True), ("readme", False)]
+    assert sorted(rows(con, "q")) == [(1, "a"), (2, "b")]
+
+
+def test_records_beside_tables_are_named_as_records_not_documents(con, tmp_path):
+    with zipfile.ZipFile(tmp_path / "m.zip", "w") as archive:
+        archive.writestr("a.csv", "k\n1\n")
+        archive.writestr("r.jsonl", '{"id": 1}\n')
+    parts = {p.name: p for p in inputs.register(con, "m", str(tmp_path / "m.zip"), tmp_path / "w")}
+    assert parts["r"].not_read == "not a table (jsonl); records beside the tables; profile this file as its own input to read it"
+    assert not (tmp_path / "w" / "members" / "1").exists()  # a member not read is not copied out
+
+
 def test_a_zip_holding_records_is_still_read_as_records(con, tmp_path):
     with zipfile.ZipFile(tmp_path / "r.zip", "w") as archive:
         archive.writestr("r.jsonl", '{"id": 1}\n{"id": 2}\n')
@@ -353,7 +372,7 @@ def test_table_names_never_repeat_or_come_out_empty(tmp_path):
     (tmp_path / "s" / "t_2.csv").write_text("z\n1\n")
     (tmp_path / "s" / "c" / "@.csv").write_text("p\n1\n")
     (tmp_path / "s" / "d" / "@.csv").write_text("q\n1\n")
-    tables = inputs._tables(tmp_path / "s", tmp_path / "w")
+    tables, _ = inputs._tables(tmp_path / "s", tmp_path / "w")
     names = [t.name for t in tables]
     assert len(set(names)) == len(names) and all(names)
     assert {"a_t", "b_t", "t_2"} <= set(names)
