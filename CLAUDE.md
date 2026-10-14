@@ -164,6 +164,74 @@ ET (`2026-09-24 14:05 ET`), never UTC. Say up front when a part will take long
 (a full scan, a large test suite, a deploy), and report the elapsed time of any
 step over ten minutes, so the operator can see where the time went.
 
+- **Read the clock before every stamp:** `TZ=America/New_York date`. A
+  guessed time is wrong more often than not.
+- **The last part of every ticket is `Learning → skill`.** Name the skill
+  line the ticket changed with what it learned, or write "none". A rule,
+  practice or how-to learned here belongs in a skill (data work, MDM
+  engineering) or in this file (how to work in this repo), never only in a
+  ticket or in one runtime's private memory. A skill issue found while
+  working is fixed in the skill, on its own branch and PR.
+
+## How to work in this repo (every runtime)
+
+Learned the hard way; each is a standing operator rule.
+
+**Tests and CI**
+- Run only the tests a change can affect ("Test baseline", below). No local
+  test run may take more than five minutes; CI runs everything.
+- Merge only when every CI check is green, and only on the operator's own
+  words naming the PRs to merge ("Merge" answering a question about named
+  PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
+  not merge approval.
+- Every background watcher (CI, a long test, a proof) has a deadline and an
+  exit for every outcome, including the PR merging or closing. Stop test
+  containers when a run ends, however it ends.
+- Choose the cheapest proof that proves the change (the `mdm-engineering`
+  skill, "Choose the cheapest proof"); say the time of any step over ten
+  minutes before starting it.
+
+**Commits, PRs and secrets**
+- One branch per ticket, cut fresh off `origin/main` in its own worktree;
+  never continue a ticket on a used or merged branch (PRs are squash-merged).
+- Work only in this repository. Never commit, push or open a PR in another
+  repository, even for a task that spans repositories.
+- Commit and PR text from a file ("Git/GitHub commit and PR text with
+  backticks", below).
+- Never print a secret, a password, a token or a database address, and never
+  ask the operator to type one into the chat. Read them from environment
+  variables; if one is missing, ask the operator to set it in their own
+  terminal. Redact by key name (any key containing `password`, `secret`,
+  `token`, `key`, `dsn` or `url`), never by an exact list, and never pipe a
+  secrets fetch to `head`, `cat` or a variable you print.
+- This repository is public: counts and invented examples only, never a
+  value from the data (a name, an identifier, a record).
+- No request to a data provider (its site, API or documentation) without the
+  operator's permission for that request.
+
+**Talking with the operator**
+- Every time shown to the operator is local ET, including times read from
+  AWS, Postgres or CI, which report UTC.
+- Report findings with their numbers and what they mean, not the steps you
+  are about to take.
+- Use the business words of `CONTEXT.md`; translate engine terms first (a
+  "matching rule", not a "binding rule").
+- Before asking for any approval, say in plain words what is approved, what
+  it changes and on what evidence. A digest, hash or version number goes
+  beside the explanation, never instead of it. A rule version has a
+  descriptive name.
+- Decide what follows from a ruling already given, say so, and go on. Stop
+  only for an approval, a switch-on, a merge or a new kind of decision, and
+  then ask one question at a time with your recommendation.
+
+**Stores**
+- Writes into Snowflake's SQL layer go through dbt. MDM's own Postgres store
+  is written by its own code (SQLAlchemy), not dbt.
+
+**Debugging**
+- Root cause first ("Debugging discipline: 5-whys", below); write a recurring
+  lesson where it belongs: a skill, or this file.
+
 ## Git/GitHub commit and PR text with backticks
 
 **Never build a `git commit -m`/`gh pr create --body`/`gh pr edit --body` string via an
@@ -373,7 +441,7 @@ bugs, infra errors), do a 5-whys root-cause pass before applying a fix:
    the proximate trigger.
 3. Apply the fix at the root cause, not just the symptom.
 4. If the issue is non-trivial or likely to recur, document only the final
-   conclusion in this file or `TODOS.md` so future sessions don't re-debug
+   conclusion in a skill, this file or `TODOS.md` so future sessions don't re-debug
    it from scratch — the numbered why-by-why walkthrough is scaffolding for
    *finding* the root cause, not something a future reader needs preserved.
    Write: **Problem** (1 sentence), **Root cause** (1 sentence), **Fix**
@@ -429,42 +497,18 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   qualify, so the default golden-record writer is the field's only real consumer.
 
 **Postgres / MDM**
-
+- **The MDM store's engineering rules live in the `mdm-engineering` skill**, the one source for them:
+  key-list lookups (join the keys, GIN one key at a time, `plan_cache_mode`), no table scans, set-based
+  reads and writes, migrations on populated tables, partial unique indexes, guarded `GRANT`s, commits only
+  when durable, the Merge Stage record by record, and the cheapest proof. The rules below are about this
+  deployment.
 - `mdm migrate` does not run automatically on deploy. Treat any prod deploy carrying new migration files
   as incomplete until it has been re-run explicitly — "the image is current" and "the migration was
   applied" are separate facts.
-- Test every migration against a genuinely **populated** table. An empty-table-only suite is unproven for
-  exactly what migrations exist to do, and has shipped real breakage here more than once.
-- Postgres cannot defer a **partial** unique index (only a full-table `UNIQUE`/`PRIMARY KEY` backed by a
-  non-partial index can be `DEFERRABLE`), so it is checked at every row-level UPDATE — order and flush
-  multi-row status transitions explicitly instead of trusting SQLAlchemy's unit-of-work ordering.
-- Guard each privileged `GRANT` in a migration with an "already satisfied" check, or a rerun by a role
-  that holds the membership without ADMIN OPTION is rejected outright.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
   `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so `bootstrap-prod-mdm.sh`
   runs `mdm migrate` as its true last database-mutating step. `mdm check-fence`
   (`edgar_warehouse/mdm/fence_monitor.py`) discovers the fenced table set live and verifies no leak.
-- SQLAlchemy's `Session` never auto-commits, and a logged "succeeded" is not evidence of a durable write.
-  Commit only once the work a checkpoint claims is itself durable, and roll staged state back on failure.
-- A PL/pgSQL function that looks rows up against a list of keys held in a variable (`= ANY(keys)`, `&& keys`,
-  `?| keys`) carries `SET plan_cache_mode = force_custom_plan`; no other function does, and never set it for the
-  session. After five calls PL/pgSQL may reuse a generic plan, which cannot hash the list, so each row is compared
-  with every key (the match proposal snapshot: 5.2 s generic, 0.8 s custom, at 4,000 Form ADV filings); per-row
-  statements, re-planned on every call, ran twice as slow. `tests/integration/test_clean_plan_cache_postgres.py`
-  holds the rule for every installed function, including a `CREATE OR REPLACE` that drops the setting
-  (migration 011, profiling ticket 07).
-- Look rows up by a list of keys by **joining** the keys (`unnest(keys) k JOIN t ON t.col = k.key`, one
-  branch per indexed column under `UNION ALL`), never `col = ANY(keys)` under an `OR`, and never an `OR` beside
-  an `IN (subquery)`: both read the whole table. Probe a GIN index one key at a time (`@> ARRAY[k.key]`,
-  `? k.key`), never with the whole list (`&&`/`?|`): at 2,229 keys the whole-list search took 12-21 s, one
-  key at a time 14-18 ms for all of them. Keep `fastupdate = off` on such an index, or every search reads its
-  growing pending list (111 us a probe against 3). The Merge Stage closure and the match proposal snapshot
-  share `mdm.readings_naming`/`mdm.decisions_naming` (migration 012); `tests/integration/
-  test_clean_plan_cache_postgres.py` refuses a whole-list search in any `mdm` function, and
-  `test_clean_lookup_indexes.py` checks every lookup uses its index with sequential scans off.
-- Memoize invariant lookups per batch, and bulk-prefetch/bulk-flush per-row round trips. This N+1 shape
-  has been found and fixed at least five separate times in this codebase — assume any newly-added batch
-  path has it until a real run at scale says otherwise. SQLite-backed unit tests never surface it.
 - MDM chain runtime is ~60-70 min end to end; `Reconcile` (~21 min) and `Publish` (~19 min) are ~65% of it
   and are Snowflake-side work. Relationship derivation (~15 min, bounded by
   `MDM_RELATIONSHIP_CONCURRENCY`, default 4) is no longer the bottleneck — optimise the Snowflake stages,
@@ -508,10 +552,9 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
 
 **Test baseline**
 
-- The 8 `tests/integration/test_acquisition_ledger_postgres.py`/`test_conflict_postgres.py` Postgres
-  schema-drift failures against the local test-Postgres instance, and the `fastapi` import-collection
-  errors in `tests/mdm/test_api.py`, `test_temporal_graph_queries.py` and `test_runtime_ops.py`, are
-  pre-existing and unrelated to any current change. "Green except these" is the normal baseline.
+- No test is expected to fail: CI is green on `main`. Locally, the install wizard tests
+  (`tests/architecture/test_install_wizard.py`) run `infra/scripts/install.sh`, which needs a `python3` of
+  3.11 or later and `jq` on `PATH`. macOS's own `/usr/bin/python3` is 3.9, so put a newer one first.
 - **Locally, run the tests a change can affect; CI runs everything** (operator, 2026-09-29, after a
   16-minute integration run). `pytest-testmon` records which code each test executes and re-runs only
   the tests touching changed Python: `TESTMON_DATAFILE=~/.cache/edgartools/testmondata uv run pytest

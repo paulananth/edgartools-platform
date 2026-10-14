@@ -14,8 +14,9 @@ needed, except to write a custom parsing step (Mode 6).
 
 The [data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops) apply
 to every mode here. In short: never approve or switch on for the operator;
-never approve without a test run; no request to a provider the operator ruled out; never read or
-print a secret; never guess an identifier; never invent a command; ask one
+never approve without a test run; never ask approval of a digest the operator cannot read; no
+request to a provider the operator ruled out; never read or print a secret; no value from the data
+in a public repository; never guess an identifier; never invent a command; ask one
 question at a time, with your recommendation.
 
 ## The flow
