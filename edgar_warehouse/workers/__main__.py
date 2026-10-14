@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import secrets
 import sys
 import threading
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 
-from . import control, profile as load_profile
+from . import Redo, control, profile as load_profile
 
 
 def runtime(module) -> str:
@@ -90,14 +91,40 @@ def work(name: str, run_id: str, limit: int) -> int:
     return 1 if failed else 0
 
 
+# A check confirms a step's output; it redoes the work in full for the step's
+# first unit in the run and for this share of the rest (operator, ticket 72).
+SAMPLE_PERCENT = 5
+
+
+def sample(verification: dict) -> dict:
+    """Whether this check redoes the work, decided when the check runs (after
+    the output is written), so a worker cannot know which unit is redone."""
+    draw = secrets.randbelow(100)
+    first = verification["ordinal"] == 0
+    return {"redone": first or draw < SAMPLE_PERCENT, "first_unit": first, "draw": draw,
+            "percent": SAMPLE_PERCENT}
+
+
 def verify(name: str, run_id: str, reports: str, limit: int) -> int:
     module, artifacts, failed = load_profile(name), Artifacts(), 0
     digest = runtime(module)
     for verification in one_at_a_time(lambda n: control.verifications(run_id, name, n), limit):
         claim = verification["claim"]
         try:
+            # A profile without `confirm` always redoes; one with it confirms, or redoes a sample.
+            decision = sample(verification) if hasattr(module, "confirm") else None
             with Renewal(verification) as renewal:
-                checks, proofs = module.verify(verification, artifacts)
+                if decision is None or decision["redone"]:
+                    checks, proofs = module.verify(verification, artifacts)
+                else:
+                    try:
+                        checks, proofs = module.confirm(verification, artifacts)
+                    except Redo as reason:  # this output cannot be confirmed: redo it
+                        decision = {**decision, "redone": True, "why": str(reason)}
+                        checks, proofs = module.verify(verification, artifacts)
+            if decision is not None:  # the decision is evidence beside the report
+                proofs = [*proofs, artifacts.put(reports, {"sample": decision, "claim": {
+                    k: claim[k] for k in ("run_id", "step", "key", "attempt")}})]
             if renewal.error is not None:
                 raise renewal.error
             if any(value is not True for value in checks.values()):

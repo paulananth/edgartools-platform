@@ -13,7 +13,7 @@ import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import canonical, reference
-from . import source_stream, source_readings, source_parquet
+from . import Redo, source_stream, source_readings, source_parquet
 
 OUTPUT_BYTES = 128 * 1024**2
 # Capture the actual loaded codec location; later wrapper metadata changes
@@ -243,17 +243,31 @@ def _derived_context(bound, artifacts):
     return selected
 
 
-def _output(envelope: dict, artifacts, documents=None) -> bytes:
-    manifest, contract, execution, inputs = documents or _documents(envelope, artifacts)
-    read = contract.get("read")
-    parquet = isinstance(read, dict) and read.get("format") == "parquet"
-    engine = source_engine.SourceEngine(source_parquet.engine_contract(contract) if parquet else contract)
+def _limits(contract, execution) -> tuple[int, int]:
+    """The contract's per-file byte and record limits, within the step's bounds."""
     max_bytes = contract["read"].get("limits", {}).get("max_bytes", 32 * 1024**2)
     max_records = contract["read"].get("limits", {}).get("max_records")
     if max_bytes > execution.get("max_input_bytes", 32 * 1024**2):
         raise ValueError("source.read accepts at most 32 MiB per artifact")
     if type(max_records) is not int or not 1 <= max_records <= 100000:
         raise ValueError("source.read requires a limit of at most 100000 records")
+    return max_bytes, max_records
+
+
+def _receipts(manifest, entry) -> dict:
+    """The receipts an output artifact names for one input: the file, and its
+    context and lookup documents where the manifest version has them."""
+    return {"input": _entry(manifest, entry),
+            **({"context": entry["context"]} if manifest["version"] >= 2 else {}),
+            **({"lookups": entry["lookups"]} if manifest["version"] == 3 else {})}
+
+
+def _output(envelope: dict, artifacts, documents=None) -> bytes:
+    manifest, contract, execution, inputs = documents or _documents(envelope, artifacts)
+    read = contract.get("read")
+    parquet = isinstance(read, dict) and read.get("format") == "parquet"
+    engine = source_engine.SourceEngine(source_parquet.engine_contract(contract) if parquet else contract)
+    max_bytes, _ = _limits(contract, execution)
 
     def read(entry):
         ref, context, evidence = _context(manifest, entry, artifacts)
@@ -297,4 +311,34 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     found = artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES)
     if found != expected:
         raise ValueError("Written source output differs from the configured reading")
+    return {name: True for name in envelope["checks"]}, []
+
+
+def confirm(envelope: dict, artifacts) -> tuple[dict, list]:
+    """The check without redoing the work (ticket 72). The inputs and contract
+    pass the step's own checks, and the written output parses, names this
+    contract and, in order, each input's file, context and lookup receipts,
+    and holds only the contract's tables. (The record limit bounds a file's
+    input records, not the rows it gives, so it is not checked here.) Bookkeeping pins the worker's runtime for the run and hashes the
+    input and the output; the check loop still redoes a sample of units."""
+    if envelope["candidate"]["uri"] != envelope["output"]:
+        raise ValueError("Candidate URI differs from the intended output")
+    manifest, contract, execution, inputs = _documents(envelope, artifacts)
+    read = contract.get("read")
+    if isinstance(read, dict) and "stream" in read:
+        raise Redo("a streamed source extract has its own output shape")
+    _limits(contract, execution)  # the contract's limits, as the work checks them
+    body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES))
+    if (not isinstance(body, dict) or set(body) != {"version", "contract", "artifacts"} or body["version"] != 1
+            or body["contract"] != manifest["contract"] or not isinstance(body["artifacts"], list)
+            or len(body["artifacts"]) != len(inputs)):
+        raise ValueError("Written source output does not name this contract and these inputs")
+    declared = set(read["tables"])
+    for artifact, entry in zip(body["artifacts"], inputs):
+        if not isinstance(artifact, dict) or {k: v for k, v in artifact.items() if k not in ("tables", "deferred")} != _receipts(manifest, entry):
+            raise ValueError("Written source output does not name these inputs in order")
+        tables = artifact.get("tables")
+        if (not isinstance(tables, dict) or not set(tables) <= declared or not isinstance(artifact.get("deferred"), list)
+                or any(not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows) for rows in tables.values())):
+            raise ValueError("Written source output holds tables the contract does not declare")
     return {name: True for name in envelope["checks"]}, []

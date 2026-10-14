@@ -128,6 +128,15 @@ shows one. A step whose profile is not there has no worker yet: report its
 execution as unsupported and name the ticket that builds it; never route it
 through an in-process callback.
 
+A verifier for `source.read` or `source.combine` confirms instead of redoing
+the work: the inputs and contract pass the step's own checks, and the output
+names this contract and these inputs and holds only declared tables. It still
+redoes the work in full for the step's first unit in a run and for a random
+5% of units, drawn when the check runs; each decision is written beside the
+report as a proof. Bookkeeping pins the worker's runtime per run and hashes
+the input and output. A streamed source extract and every other profile are
+always redone or read back (ticket 72).
+
 ## Init and migrate modes
 
 Use `init` for an empty `bookkeeping_clean` PostgreSQL 16 database; use

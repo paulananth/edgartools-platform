@@ -97,7 +97,8 @@ before any partition is written. The version-2 source-extract index names immuta
 content-addressed partitions, their byte sizes, source ordinal ranges and
 declared table names (at most 64 distinct names).
 The verifier rebuilds them from the original receipts and compares their
-exact bytes without writes. A later output-write failure may leave immutable
+exact bytes without writes (a streamed output is always rebuilt; other
+outputs are confirmed, with a sample rebuilt: the Bookkeeping skill). A later output-write failure may leave immutable
 partitions for retry; the index is written last.
 
 `source.combine` and `mdm.prepare` accept both inline and partitioned source extracts.
