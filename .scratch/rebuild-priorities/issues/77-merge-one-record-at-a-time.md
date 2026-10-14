@@ -56,8 +56,8 @@ Per batch (at most 1,000 records), in one transaction:
 
 ## Checklist
 
-- [ ] The operator approves the design (question 1)
-- [ ] The operator answers question 2
+- [x] The operator approves the design (question 1): "Approve (Recommended)" (2026-10-14 08:31 ET)
+- [x] The operator answers question 2: "Same transaction (Recommended)": the proposal row first, then the batch, in one commit; no snapshot (2026-10-14 08:31 ET)
 - [ ] GoF consult before code
 - [ ] Characterization tests on today's Merge Stage outputs (masters, links, reviews), kept green through the change
 - [ ] Steps 1–3: affected masters, recomputed alone
@@ -65,7 +65,7 @@ Per batch (at most 1,000 records), in one transaction:
 - [ ] Step 6: the chain walk for hierarchies
 - [ ] Step 7: reviews in scope
 - [ ] Step 8: only changed rows, set-based `write_batch` (a migration)
-- [ ] The snapshot removed or kept, per question 2
+- [ ] The snapshot removed (question 2): proposal and batch in one transaction; a refused proposal kept in its own
 - [ ] Old against new: no unexplained difference
 - [ ] Cost test: the rows read per batch do not grow with the network
 - [ ] Three-axis review; the full installed proof (a Merge Stage change)
