@@ -36,23 +36,12 @@ def load(conn, key: str) -> dict:
     return body
 
 
-def check(conn, key: str, effects: dict) -> None:
-    """A recorded proposal may still be applied: it is ready, not applied or
-    superseded, and the batch computed now writes exactly its effects
-    (ticket 77: no snapshot; recomputed under the lock instead)."""
-    body = load(conn, key)
-    if body["outcome"] != "ready":
-        raise Conflict("Rejected identity assessment cannot be applied")
-    same = conn.scalar(
-        text("""SELECT encode(sha256(convert_to(CAST(:effects AS jsonb)::text,'UTF8')),'hex') = :sha"""),
-        {"effects": canonical(effects), "sha": body.get("effects_sha256")},
-    )
-    if not same or conn.scalar(
-        text("""SELECT EXISTS(SELECT 1 FROM mdm.match_proposal_event
-        WHERE assessment_id=:key AND event IN ('applied','superseded'))"""),
-        {"key": key},
-    ):
-        raise StaleAssessment("Stale identity assessment; recompute proposal")
+def stale(exc) -> bool:
+    """Whether the save refused a proposal because it no longer holds: the
+    batch computed now writes other than its effects, or it was applied or
+    superseded meanwhile (`save_batch`)."""
+    text_ = str(getattr(exc, "orig", exc))
+    return "differs from assessed effects" in text_ or "requires a ready assessment" in text_
 
 
 def supersede(store, key: str, run_id: str) -> None:

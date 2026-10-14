@@ -10,9 +10,11 @@ serve the query, so a full read here is a lookup with no index.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from sqlalchemy import text
 
+from edgar_warehouse.mdm.clean import store
 from edgar_warehouse.mdm.clean.scope import link_ends
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_mdm_postgres import (
@@ -121,9 +123,9 @@ def test_a_save_reads_no_table_in_full(database):
     assert {i for i in INDEXES if after[1][i] > before[1][i]} == set(INDEXES)
 
 
-def test_sql_and_python_agree_on_the_records_a_reading_links_to(database):
+def test_sql_and_python_agree_on_the_records_a_source_record_links_to(database):
     """`mdm.reading_link_subjects` (the index) and `scope.link_ends` (a save
-    following a reading's links) must name the same records."""
+    following a source record's links) must name the same records."""
     bodies = [
         {"relationships": [{"target_subject": "b"}]},
         {"relationships": [{"target_subject": "b", "source_subject": "a"}, {"target_subject": "c"}]},
@@ -144,3 +146,27 @@ def test_sql_and_python_agree_on_the_records_a_reading_links_to(database):
                 if isinstance(links, list) else set()
             )
             assert sorted(sql) == sorted(python), body
+
+
+def test_migration_012_on_a_populated_store_keeps_every_row(database):
+    """Migration 012 on a populated store: the key-join lookups are installed,
+    the indexes probed one key at a time keep no pending list, and every row is
+    kept (profiling ticket 07, tuning). 012's snapshot part was dropped by 020,
+    so only the rest of 012 is run again here."""
+    populate(database)
+    tables = ("source_reading", "decision", "master_entity", "current_record", "company")
+    sql = (Path(store.__file__).parents[1] / "migrations" / "012_key_join_lookups.sql").read_text()
+    with database.admin.begin() as conn:
+        conn.execute(text("DROP FUNCTION mdm.readings_naming(text[])"))
+        conn.execute(text("DROP FUNCTION mdm.decisions_naming(text[])"))
+        for name in ("source_reading_link_subjects", "current_record_review_affected_subjects"):
+            conn.execute(text(f"ALTER INDEX mdm.{name} RESET (fastupdate)"))
+        counts = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in tables}
+        conn.execute(text(sql[:sql.index("-- The snapshot, as in 003")]))
+    with database.admin.connect() as conn:
+        assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in tables} == counts
+        for function in ("readings_naming(text[])", "decisions_naming(text[])"):
+            assert conn.scalar(text(f"SELECT to_regprocedure('mdm.{function}')")) is not None
+        for name in ("source_reading_link_subjects", "current_record_review_affected_subjects"):
+            assert "fastupdate=off" in conn.scalar(text(
+                "SELECT reloptions FROM pg_class WHERE oid = to_regclass(:n)"), {"n": f"mdm.{name}"})

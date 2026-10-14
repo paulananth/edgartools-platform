@@ -986,17 +986,27 @@ def test_fresh_replay_preserves_business_results_across_batching_and_order(postg
             assert business == expected
 
 
-def test_a_batch_reads_its_own_masters_not_what_links_to_them(database):
+def test_a_batch_reads_as_much_in_a_small_network_as_in_a_large_one(database):
     """Ticket 77 (operator, 2026-10-14: "find a match if not found insert"): a
-    batch that changes a record's fields reads that record's master only, not
-    the 10,001 records that link to it; it reads them only when the master's
-    identity changes."""
+    batch that changes a record's fields reads that record's master, and as
+    many rows with 10,001 records linking to it as with none. Those records
+    are read only when the master's identity changes."""
+    from edgar_warehouse.mdm.clean import scope as scoping
+
     target = source()
     entity, bind = identity_and_binding(target)
     apply(database, 1, assertions=[target], identities=[entity], decisions=[bind])
+    changed = source(revision=2, fields={"name": "Changed"})
+
+    def reads(changed_masters=frozenset()):
+        with database.application.connect() as conn:
+            scope = scoping.identities(conn, [changed], [])
+            scoping.links(conn, scope, {entity["entity_id"]}, set(changed_masters), {}, [changed])
+            return len(scope.readings)
+
+    small = reads()
     with database.admin.begin() as conn:
-        # 10,001 stored readings that link to the target, written directly: the
-        # closure of any batch naming the target reads them all.
+        # 10,001 stored source records that link to the target, written directly.
         conn.execute(text("""INSERT INTO mdm.source_reading(assertion_id, source_code, record_key,
                 publication_key, revision, body, batch_id)
             SELECT 'linker-' || n, (SELECT source_code FROM mdm.source_reading LIMIT 1), 'linker-' || n,
@@ -1004,15 +1014,8 @@ def test_a_batch_reads_its_own_masters_not_what_links_to_them(database):
                        'relationships', jsonb_build_array(jsonb_build_object('target_subject', :subject))),
                    (SELECT batch_id FROM mdm.batch LIMIT 1)
             FROM generate_series(1, 10001) n"""), {"subject": target["subject"], "code": target["source_code"]})
-    from edgar_warehouse.mdm.clean import scope as scoping
-    changed = source(revision=2, fields={"name": "Changed"})
-    with database.application.connect() as conn:
-        scope = scoping.identities(conn, [changed], [])
-        assert {a["subject"] for a in scope.readings.values()} == {target["subject"]}
-        scoping.links(conn, scope, {entity["entity_id"]}, set(), {}, [changed])
-        assert len(scope.readings) == 1
-        scoping.links(conn, scope, {entity["entity_id"]}, {entity["entity_id"]}, {}, [changed])
-        assert len(scope.readings) == 10002
+    assert reads() == small == 1
+    assert reads({entity["entity_id"]}) == 10002
     apply(database, 2, assertions=[changed])
     assert documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"] == "Changed"
 

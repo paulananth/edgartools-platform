@@ -8,11 +8,11 @@ links. It reads, by key through an index:
 1. **The affected masters** (`identities`): each record of the batch and each
    record or master a decision names, with the decisions that bind or merge
    them, until the identities are whole. Links are not followed.
-2. **The links those masters start** (`links`): the readings of their records
-   and the readings their stored links cite. The far end of a plain link is
+2. **The links those masters start** (`links`): every source record of their members
+   and the source records their stored links cite. The far end of a plain link is
    read as it is stored, never replayed.
 3. **The links into a master whose identity changed** (new, merged, or a
-   changed status, kind or profiles): every reading that links to its records.
+   changed status, kind or profiles): every source record that links to its records.
 4. **A hierarchy whole**: a parent-type link walks its stored chain up and
    down, so cycles, a second parent and ultimate parents see all of it.
 
@@ -36,7 +36,8 @@ from .store import rows
 # ultimate parent or a succession depend on every link of the hierarchy.
 WHOLE = ("hierarchy", "one_parent", "ultimate_parent", "ends_parent_links")
 # What a link checks of its ends: a change re-checks the links into a master.
-LINKED = ("canonical_id", "status", "kind", "profiles")
+# Its records too: a record that joins or leaves moves the links naming it.
+LINKED = ("canonical_id", "status", "kind", "profiles", "subjects", "quarantined")
 
 
 def walks_whole(spec: dict | None) -> bool:
@@ -52,8 +53,8 @@ def anchors(decision: dict) -> set[str]:
 
 
 def link_ends(reading: dict) -> list[tuple[str | None, str, str | None]]:
-    """Each link of a reading as (type, start, target): a link starts at the
-    reading's own record unless it names another (`source_subject`)."""
+    """Each link of a source record as (type, start, target): a link starts at
+    the record itself unless it names another (`source_subject`)."""
     return [
         (r.get("type"), r.get("source_subject") or reading["subject"], r.get("target_subject"))
         for r in reading["relationships"]
@@ -102,7 +103,7 @@ class Scope:
         return None if entity is None else self.root(entity)
 
     def owns_link(self, link: dict) -> bool:
-        """A link whose readings were all read: one an affected master starts,
+        """A link whose source records were all read: one an affected master starts,
         or one into a master whose identity changed."""
         return link["source_id"] in self.starts or link["target_id"] in self.changed
 
@@ -131,7 +132,7 @@ class Scope:
         )
 
     def read(self, conn, *, subjects=(), assertion_ids=()) -> None:
-        """Every reading of these records (each version), and these readings."""
+        """Every source record of these records (each version), and these source records."""
         subjects = sorted(set(subjects) - self.read_subjects)
         assertion_ids = sorted(set(assertion_ids) - set(self.readings))
         if not subjects and not assertion_ids:
@@ -159,7 +160,8 @@ def identities(conn, assertions: list[dict], decisions: list[dict]) -> Scope:
         # Every record of a source being retired is the batch's own work.
         for r in rows(
             conn,
-            "SELECT body FROM mdm.source_reading WHERE source_code=ANY(CAST(:codes AS text[]))",
+            """SELECT r.body FROM unnest(CAST(:codes AS text[])) k(code) CROSS JOIN LATERAL (
+                SELECT body FROM mdm.source_reading WHERE source_code = k.code OFFSET 0) r""",
             codes=retiring,
         ):
             scope.readings[r["body"]["assertion_id"]] = r["body"]
@@ -240,13 +242,15 @@ def links(conn, scope: Scope, starts: set[str], changed: set[str], types: dict, 
             ):
                 scope.readings[r["body"]["assertion_id"]] = r["body"]
             named_into.update(want)
-        # A reading read for its link is read whole: every version of its record.
+        # A source record read for its link is read whole: every version of its record.
         scope.read(conn, subjects={a["subject"] for a in scope.readings.values()})
         every = [*scope.readings.values(), *batch]
         _bind(conn, scope, every)
-        # A link of the batch's own records starts at a master it only names
-        # (a link record of another source): that master's links are whole too.
-        grown = {scope.master(start) for a in batch for _, start, _ in link_ends(a)} - {None}
+        # A link of the batch's own records (or of a retired source, or one a
+        # decision names) starts at a master it only names (a link record of
+        # another source): that master's links are whole too.
+        own = [a for a in every if a["subject"] in scope.subjects] + batch
+        grown = {scope.master(start) for a in own for _, start, _ in link_ends(a)} - {None}
         # A hierarchy link touching a start or a changed master: walk it whole.
         touched = {
             end
@@ -338,12 +342,14 @@ def _chain(conn, seeds: set[str], types: dict) -> set[str]:
             """SELECT c.s, c.t FROM unnest(CAST(:ids AS text[])) k(id) CROSS JOIN LATERAL (
                 SELECT body->>'source_id' AS s, body->>'target_id' AS t FROM mdm.current_record
                 WHERE object_type='relationship' AND body->>'source_id' = k.id
-                  AND body->>'type' = ANY(CAST(:types AS text[])) OFFSET 0) c
+                  AND body->>'type' = ANY(CAST(:types AS text[]))
+                  AND body->'retired' IS DISTINCT FROM 'true'::jsonb OFFSET 0) c
             UNION
             SELECT c.s, c.t FROM unnest(CAST(:ids AS text[])) k(id) CROSS JOIN LATERAL (
                 SELECT body->>'source_id' AS s, body->>'target_id' AS t FROM mdm.current_record
                 WHERE object_type='relationship' AND body->>'target_id' = k.id
-                  AND body->>'type' = ANY(CAST(:types AS text[])) OFFSET 0) c""",
+                  AND body->>'type' = ANY(CAST(:types AS text[]))
+                  AND body->'retired' IS DISTINCT FROM 'true'::jsonb OFFSET 0) c""",
             ids=sorted(frontier),
             types=whole,
         )

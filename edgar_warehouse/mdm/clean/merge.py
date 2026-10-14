@@ -2,7 +2,7 @@
 
 Record by record (ticket 77): each record of a batch finds its master by an
 identifier rule, or a new one is made; only the masters a batch touches are
-replayed, from their retained decisions and their records' readings, with the
+replayed, from their retained decisions and their source records, with the
 links they start or that point into a master whose identity changed (`scope`).
 Source policy supplies fields. Automatic consolidation and fuzzy binding are
 not enabled.
@@ -255,8 +255,8 @@ class MergeStage:
 
     def apply_assessment(self, assessment_id: str, *, run_id: str) -> dict:
         """Save the batch a recorded proposal computed. It is computed again
-        under the lock; if what it would write differs from the proposal's
-        effects, the proposal is stale and superseded."""
+        under the lock; if the save finds it writes other than the proposal's
+        effects, or the proposal already applied, it is stale and superseded."""
         with self.store.engine.connect() as conn:
             body = assessment.load(conn, assessment_id)
         if body["outcome"] != "ready":
@@ -268,6 +268,11 @@ class MergeStage:
                 assessment_id=assessment_id,
                 automatic=body.get("automatic"),
             )
+        except DBAPIError as exc:
+            if not assessment.stale(exc):
+                raise
+            assessment.supersede(self.store, assessment_id, run_id)
+            raise assessment.StaleAssessment("Stale identity assessment; recompute proposal") from None
         except assessment.StaleAssessment:
             assessment.supersede(self.store, assessment_id, run_id)
             raise
@@ -534,10 +539,10 @@ class MergeStage:
             }
             scope.masters = set(projected)
             scope.replayed = {s: state.canonical[e] for s, e in state.bindings.items()}
-            scoping.links(
-                conn, scope, {e for e in projected if state.canonical[e] == e}, changed, types, assertions
-            )
-            linked = {**evidence, **{k: v for k, v in scope.readings.items() if k not in evidence}}
+            # Every affected master starts its links here, a merged-away one
+            # too: its stored links are read, and retired once it is an alias.
+            scoping.links(conn, scope, set(projected), changed, types, assertions)
+            linked = {**scope.readings, **evidence}
             ends = SimpleNamespace(
                 bindings={**scope.bound, **state.bindings},
                 canonical={**{e: scope.root(e) for e in scope.stored}, **state.canonical},
@@ -676,7 +681,7 @@ class MergeStage:
                     "assessment": candidate,
                 }
             if assessment_id is not None:
-                assessment.check(conn, assessment_id, effects)
+                # The save checks the batch equals the proposal's effects.
                 request["assessment_id"] = assessment_id
             elif candidate is not None:
                 # The proposal first, then the batch, in one commit (Q13).
