@@ -100,7 +100,8 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 
 - **Formats:** CSV, Parquet, JSON (an array, one object per file, or an object
   wrapping one list), JSON Lines, XML, zip members (a zip of CSV or Parquet
-  files gives each member as its own file), a SQLite or DuckDB file, or a
+  files gives each member as its own file; a readme or metadata file beside
+  the tables is listed under `dataset.not_read`), a SQLite or DuckDB file, or a
   read-only database whose address is in an environment variable.
 - **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
   Latin-1); its input's `encoding` says so, marked inferred, with the first byte

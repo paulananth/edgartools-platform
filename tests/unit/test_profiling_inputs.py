@@ -241,6 +241,23 @@ def test_a_zip_of_csv_tables_gives_one_part_per_member(con, tmp_path):
     assert {p.location for p in parts} == {f"{tmp_path / 'bulk.zip'}#one.csv", f"{tmp_path / 'bulk.zip'}#sub/two.csv"}
 
 
+def test_a_zip_of_tables_with_its_documentation_reads_the_tables_and_lists_the_rest(con, tmp_path):
+    # A bulk data set ships its tables beside a readme and a metadata file: the tables are
+    # read, and each other member is listed as not read, with its reason, never dropped.
+    with zipfile.ZipFile(tmp_path / "set.zip", "w") as archive:
+        archive.writestr("A.tsv", "k\tv\n1\tx\n2\ty\n")
+        archive.writestr("B.tsv", "k\tw\n1\t9\n")
+        archive.writestr("readme.htm", "<html>about</html>")
+        archive.writestr("meta.json", '{"tables": []}')
+    parts = {p.name: p for p in inputs.register(con, "set", str(tmp_path / "set.zip"), tmp_path / "w")}
+    assert sorted(parts) == ["A", "B", "meta", "readme"]
+    assert rows(con, "A") == [(1, "x"), (2, "y")]
+    assert parts["A"].not_read is None and parts["B"].not_read is None
+    for name, fmt in (("readme", "htm"), ("meta", "json")):
+        assert parts[name].not_read.startswith(f"not a table ({fmt})")
+        assert parts[name].location == f"{tmp_path / 'set.zip'}#{name}.{fmt}"
+
+
 def test_a_zip_holding_records_is_still_read_as_records(con, tmp_path):
     with zipfile.ZipFile(tmp_path / "r.zip", "w") as archive:
         archive.writestr("r.jsonl", '{"id": 1}\n{"id": 2}\n')

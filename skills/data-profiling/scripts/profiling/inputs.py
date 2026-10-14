@@ -4,7 +4,8 @@ Each part is read once into a table (a remote database stays a read-only view),
 and later steps read tables only, never asking what format a part came from.
 
 - CSV and Parquet are read by DuckDB directly, with a full type scan; a zip of
-  CSV or Parquet files gives each member as a file. A CSV that is not UTF-8 is
+  CSV or Parquet files gives each member as a file, and any other member of it
+  (a readme, a metadata file) is listed as not read, with its reason. A CSV that is not UTF-8 is
   read as Windows-1252 (or Latin-1), and the findings say so. A table DuckDB
   cannot read is reported as not read, and the rest of the input is profiled.
 - JSON, JSON Lines, XML and zip members are read by the Python standard
@@ -366,7 +367,7 @@ def _tables(path: Path, work: Path) -> list[Table] | None:
             # A zip made on a Mac carries `__MACOSX/._name` resource entries: no data.
             members = [i for i in archive.infolist() if not i.is_dir()
                        and not i.filename.startswith("__MACOSX/") and not Path(i.filename).name.startswith("._")]
-            if not members or any(format_of(Path(i.filename)) not in TABULAR for i in members):
+            if not any(format_of(Path(i.filename)) in TABULAR for i in members):
                 return None
             for info in members:
                 # One folder per member: two members (or two zips) may share a file name.
@@ -374,8 +375,12 @@ def _tables(path: Path, work: Path) -> list[Table] | None:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(info) as source, target.open("wb") as copy:
                     shutil.copyfileobj(source, copy)
-                tables.append(Table(target, f"{file}#{info.filename}"))
-    formats = {format_of(t.file) for t in tables}
+                table = Table(target, f"{file}#{info.filename}")
+                if (fmt := format_of(target)) not in TABULAR:
+                    # A data set's readme or metadata file beside its tables: listed, not profiled.
+                    table.unreadable = f"not a table ({fmt}); a document beside the tables, not profiled"
+                tables.append(table)
+    formats = {format_of(t.file) for t in tables if not t.unreadable}
     if len(formats) != 1 or not formats <= TABULAR:
         return None
     _name_tables(tables)
