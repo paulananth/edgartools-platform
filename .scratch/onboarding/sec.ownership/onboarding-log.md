@@ -94,7 +94,6 @@ left the machine. Names stay out of this file (the repo is public).
 
 - The proof's labels are another rule's verdicts, not hand labels: a proven rule
   (720 hand-checked labels) run on richer evidence about the same CIK. The 31 it
-  left undecided are drafted by an agent and need the operator's check.
-- A prolific owner: one record per filing; the Merge Stage closure holds 10,000
-  records (the custodian finding). The local copies' largest owner is far below;
-  production history may not be.
+  left undecided were drafted by an agent and checked by the operator (answer 4).
+- A prolific owner: one record per filing. The Merge Stage closure limit is being
+  removed (answer 5).
