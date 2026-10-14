@@ -68,43 +68,68 @@ def test_redelivery_of_a_saved_batch_is_a_duplicate(database):
     assert again["generation"] == first["generation"] and again.get("duplicate") is True
 
 
-def test_an_unrelated_batch_saved_between_assessment_and_save_does_not_stale_it(database, monkeypatch):
-    """An unrelated generation alone does not invalidate a proposal
-    (`candidate-assessments.md`): the batch saves at the current generation."""
-    stage = MergeStage(Store(database.application))
-    command = core.assessment_command(database)
-    original = stage._save_assessed
-
-    def unrelated_first(key, *args):
-        other = MergeStage(Store(database.application))
-        found = core.source("unrelated", fields={"name": "Other"})
-        identity, binding = core.identity_and_binding(found)
-        other.apply(batch_id="unrelated", run_id=str(uuid4()), policy_digest=database.policy,
-                    consumer="other", expected_checkpoint=0, checkpoint=1, as_of=core.AS_OF,
-                    assertions=[found], identities=[identity], decisions=[binding])
-        return original(key, *args)
-
-    monkeypatch.setattr(stage, "_save_assessed", unrelated_first)
-    result = stage.apply(**command)
-    assert result["generation"] == 2
-    found = proposals(database)
-    assert sorted(p["events"][-1] for p in found) == ["applied", "applied"]
-
-
 def test_a_batch_the_database_refuses_at_save_keeps_a_rejected_proposal(database, monkeypatch):
     stage = MergeStage(Store(database.application))
     command = core.assessment_command(database)
-    original = stage._save_assessed
+    original = stage.store.commit
 
-    def refused(key, request, *args):
-        return original(key, {**request, "checkpoint": request["expected_checkpoint"]}, *args)
+    def refused(conn, request, run_id):
+        return original(conn, {**request, "checkpoint": request["expected_checkpoint"]}, run_id)
 
-    monkeypatch.setattr(stage, "_save_assessed", refused)
+    monkeypatch.setattr(stage.store, "commit", refused)
     with pytest.raises(DBAPIError):
         stage.apply(**command)
-    found = proposals(database)
-    assert sorted(p["outcome"] for p in found) == ["ready", "rejected"]
-    # The ready one is an orphan; saving its batch later closes it (save_batch).
-    assert "applied" not in next(p for p in found if p["outcome"] == "ready")["events"]
+    # The ready proposal went back with its batch; the refusal is kept.
+    assert [p["outcome"] for p in proposals(database)] == ["rejected"]
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
+
+
+def test_a_store_with_a_ready_proposal_takes_020_and_the_proposal_still_applies(database):
+    """Migration 020 (ticket 77) on a populated store: a ready proposal
+    recorded with its scope and snapshot before 020 applies once 020 drops the
+    snapshot; the store's rows are kept."""
+    from pathlib import Path
+
+    from edgar_warehouse.mdm.clean import merge, store
+    from edgar_warehouse.mdm.clean.store import canonical, migrate
+
+    folder = Path(store.__file__).parents[1] / "migrations"
+
+    def body(file, name):
+        sql = (folder / file).read_text()
+        start = sql.index(f"FUNCTION mdm.{name}(")
+        start = sql.rindex("CREATE", 0, start)
+        text_ = sql[start:sql.index("$$;", start) + 3]
+        return text_.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+
+    core.apply(database, 1, assertions=[core.source("other")])
+    with database.admin.begin() as conn:
+        for file, name in (("019_merge_stage_no_limit.sql", "match_proposal_snapshot"),
+                           ("019_merge_stage_no_limit.sql", "record_match_proposal"),
+                           ("013_proposal_effects_hash.sql", "save_batch"),
+                           ("001_mdm.sql", "supersede_match_proposal")):
+            conn.execute(text(body(file, name)))
+        conn.execute(text("GRANT EXECUTE ON FUNCTION mdm.match_proposal_snapshot(jsonb) TO clean_application"))
+        # The migration ledger is append-only; only this simulation of an older
+        # store goes around that, as the database owner.
+        conn.execute(text("SET LOCAL session_replication_role = replica"))
+        conn.execute(text("DELETE FROM mdm.migration WHERE name='020_merge_record_by_record.sql'"))
+        conn.execute(text("SET LOCAL session_replication_role = origin"))
+    stage = MergeStage(Store(database.application))
+    command = core.assessment_command(database, expected_checkpoint=0, checkpoint=1, consumer="old")
+    candidate = stage.apply(**command, preview=True)["assessment"]
+    scope = {"keys": [command["assertions"][0]["subject"]], "sources": [], "consumer": "old"}
+    with database.application.begin() as conn:
+        snapshot = conn.scalar(text("SELECT mdm.match_proposal_snapshot(CAST(:s AS jsonb))"), {"s": canonical(scope)})
+        key = conn.scalar(text("SELECT mdm.record_match_proposal(:b,CAST(:run AS uuid))"), {
+            "b": canonical({**candidate, "command": merge._proposal(command), "scope": scope, "snapshot": snapshot}),
+            "run": command["run_id"]})
+    with database.admin.connect() as conn:
+        counts = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in ("batch", "source_reading", "match_proposal")}
+    migrate(database.admin, application_role="clean_application")
+    with database.admin.connect() as conn:
+        assert conn.scalar(text("SELECT to_regprocedure('mdm.match_proposal_snapshot(jsonb)')")) is None
+        assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in counts} == counts
+    assert stage.apply_assessment(key, run_id=command["run_id"])["generation"] == 2
+    assert [p["events"] for p in proposals(database)] == [["ready", "observed", "applied"]]

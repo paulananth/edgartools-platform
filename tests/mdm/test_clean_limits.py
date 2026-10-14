@@ -40,7 +40,7 @@ def test_the_deferred_record_bounds_equal_the_limits():
 
 def test_the_merge_stage_has_no_size_cap():
     """Operator, 2026-10-14: "merge stage should have no limit"."""
-    for name in ("write_batch", "record_match_proposal", "match_proposal_snapshot"):
+    for name in ("write_batch", "record_match_proposal"):
         body = function(name)
         assert "octet_length" not in body and "10001" not in body and "> 10000" not in body, name
 

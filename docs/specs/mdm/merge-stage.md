@@ -184,7 +184,7 @@ Each merge event records all anchors/aliases, prior bindings, decision evidence,
 policy digest, affected relationships and projection revisions. Reversal is
 a new steward-authorized event referencing that merge, not a deletion:
 
-1. Fence the affected identity/relationship closure and materialize a preview
+1. Fence the affected masters and their links and materialize a preview
    with before/after identities, fields, aliases, edges and consumer changes.
 2. Remove the revoked merge from the accepted-decision graph and find dependent
    merge decisions. Decisions that used the invalid combined identity require
@@ -202,7 +202,7 @@ Accepted policy: record a scoped Match Exclusion so the next replay cannot
 automatically recreate the rejected merge. Revocation requires a new
 evidence-bound decision; the exclusion must not block unrelated identities.
 
-If the closure exceeds a bounded transaction, build and verify it in an
+If the affected masters exceed one transaction, build and verify them in an
 isolated generation using bounded batches, then atomically activate the full
 generation. Readers cannot observe a partly reversed identity graph. Policy
 upgrades are separate explicit replay operations, not implicit behavior during
@@ -225,7 +225,8 @@ prior accepted generations remain available. Copying the previous current row
 would make results depend on delivery order, so quarantine is projected
 deterministically from the retained inputs.
 
-Bounded reversal preview executes the same transaction and rolls it back.
-Large-component staged generation building is not implemented: closure above
-10,000 records is rejected before any business effects. See the concrete
+Reversal preview executes the same transaction and rolls it back. A batch
+replays only the masters its records and decisions touch, the links they
+start, the links into a master whose identity changed, and a parent hierarchy
+whole (ticket 77, `scope.py`); there is no size limit (ticket 74). See the concrete
 [local reversal procedure](local-operations.md).

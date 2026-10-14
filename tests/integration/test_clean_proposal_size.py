@@ -38,41 +38,6 @@ def test_a_proposal_keeps_the_hash_of_its_effects_and_applies(database):
         assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
 
 
-def test_a_proposal_stored_before_the_hash_still_applies(database):
-    """A populated store: a proposal recorded by the 001 function keeps its
-    effects whole and is checked as before once 013 is installed."""
-    baseline = (MIGRATIONS / "001_mdm.sql").read_text()
-    start = baseline.index("CREATE FUNCTION mdm.record_match_proposal(")
-    old = baseline[start:baseline.index("$$;\n", start) + 4].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
-    with database.admin.begin() as conn:
-        conn.exec_driver_sql(old)
-    stage = MergeStage(Store(database.application))
-    command = core.assessment_command(database)
-    candidate = stage.assess(**command)
-    assert "effects" in stored(database, candidate["assessment_id"])
-    with database.admin.begin() as conn:
-        conn.execute(text((MIGRATIONS / "013_proposal_effects_hash.sql").read_text()))
-    stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
-
-
-def test_a_changed_request_against_a_proposal_stored_before_is_refused(database):
-    baseline = (MIGRATIONS / "001_mdm.sql").read_text()
-    start = baseline.index("CREATE FUNCTION mdm.record_match_proposal(")
-    old = baseline[start:baseline.index("$$;\n", start) + 4].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
-    with database.admin.begin() as conn:
-        conn.exec_driver_sql(old)
-    stage = MergeStage(Store(database.application))
-    command = core.assessment_command(database)
-    candidate = stage.assess(**command)
-    with database.admin.begin() as conn:
-        conn.execute(text((MIGRATIONS / "013_proposal_effects_hash.sql").read_text()))
-    assessed = {**candidate["effects"], "expected_generation": 0, "assessment_id": candidate["assessment_id"]}
-    with pytest.raises(DBAPIError, match="differs from assessed"), database.application.begin() as conn:
-        stage.store.commit(conn, {**assessed, "projections": []}, command["run_id"])
-
-
 def test_effects_that_differ_from_the_request_are_refused(database):
     stage = MergeStage(Store(database.application))
     command = core.assessment_command(database)

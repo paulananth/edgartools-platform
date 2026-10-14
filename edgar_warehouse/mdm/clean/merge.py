@@ -1,33 +1,30 @@
 """One atomic Merge Stage for all MDM writers.
 
-The retained decision graph supplies identity; source policy supplies fields.
-Identifier-only automatic binding runs through the same assessment (ticket
-04); automatic consolidation and fuzzy binding are not enabled.
+Record by record (ticket 77): each record of a batch finds its master by an
+identifier rule, or a new one is made; only the masters a batch touches are
+replayed, from their retained decisions and their source records, with the
+links they start or that point into a master whose identity changed (`scope`).
+Source policy supplies fields. Automatic consolidation and fuzzy binding are
+not enabled.
 """
 
 from __future__ import annotations
 
 import re
 from collections import defaultdict
+from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from . import assessment, binding, correction, limits, matching, relationships
+from . import scope as scoping
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
 from .store import Conflict, Store, canonical, digest, rows
 from .survivorship import PROFILE_IDENTITY, current_claims, select_fields
-
-
-def anchors(decision: dict) -> set[str]:
-    return {
-        str(decision[k])
-        for k in ("subject", "entity_id", "left", "right", "target", "decision_id")
-        if decision.get(k)
-    }
 
 
 def _disposition(reason: str) -> dict:
@@ -46,16 +43,17 @@ def review_scope(
     canonical: dict,
     evidence: dict,
     decisions: dict,
+    within: set[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     """The records and Companies a review is about: its record, its Company's
     records, the Companies a link review names, and for an override with no
     record, its Company and its evidence (platform validation 05b).
 
-    `members` maps each current Company to its records. A closure is a
-    connected component, so a later save that touches any of its records
-    loads all of them and finds the review by these alone. A review that
-    names no record falls back to every record of its closure, as before,
-    rather than block the family's later saves.
+    `members` maps each current Company to its records. A later save that
+    touches any of its records reads all of them (`scope`) and finds the
+    review by these alone. A review that names no record falls back to every
+    record of the masters the batch touches (`within`), rather than block
+    their later saves.
     """
     entities = set(review.get("entities", []))
     subjects = set()
@@ -77,7 +75,9 @@ def review_scope(
     for entity in entities:
         subjects.update(members.get(entity, []))
     if not subjects:
-        subjects = {a["subject"] for a in evidence.values()}
+        subjects = {
+            a["subject"] for a in evidence.values() if within is None or a["subject"] in within
+        }
     return sorted(subjects), sorted(entities)
 
 
@@ -100,17 +100,6 @@ def check_company_sources(policy: dict, assertions: list[dict]) -> None:
         )
 
 
-def linked_subjects(a: dict) -> set[str]:
-    """The other records a reading's links name: each link's end, and its
-    start when the link starts at another record (`source_subject`)."""
-    return {
-        s
-        for r in a["relationships"]
-        for s in (r.get("target_subject"), r.get("source_subject"))
-        if s
-    }
-
-
 def link_only(claim: dict) -> bool:
     """A reading that only states links between other records (a GLEIF
     relationship record): it has no identity of its own to bind."""
@@ -122,97 +111,35 @@ def link_only(claim: dict) -> bool:
     )
 
 
-def load_closure(conn, assertions: list[dict], decisions: list[dict]):
-    """Conservative closure includes historical merges and incoming/outgoing edges.
-
-    It has no size limit (operator, 2026-10-14: "merge stage should have no
-    limit"): a batch is replayed with everything it is connected to.
-    """
-    keys = {a["subject"] for a in assertions} | {
-        k for d in decisions for k in anchors(d)
-    }
-    for a in assertions:
-        keys.update(linked_subjects(a))
-    stored_a = {}
-    stored_d = {}
-    retiring = [
-        d["source_code"] for d in decisions if d["operation"] == "retire_source"
-    ]
-    while keys:
-        before = set(keys)
-        evidence = rows(
-            conn,
-            """SELECT body FROM mdm.source_reading
-            WHERE assertion_id IN (SELECT id FROM mdm.readings_naming(CAST(:keys AS text[])) id
-             UNION ALL SELECT assertion_id FROM mdm.source_reading WHERE source_code=ANY(:retiring))""",
-            keys=sorted(keys),
-            retiring=retiring,
-        )
-        decision_rows = rows(
-            conn,
-            """SELECT body FROM mdm.decision
-            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)""",
-            keys=sorted(keys),
-        )
-        for r in evidence:
-            a = r["body"]
-            stored_a[a["assertion_id"]] = a
-            keys.add(a["subject"])
-            keys.update(linked_subjects(a))
-        for r in decision_rows:
-            d = r["body"]
-            stored_d[d["decision_id"]] = d
-            keys.update(anchors(d))
-        if keys == before:
-            break
-    sources = sorted({a["source_code"] for a in [*stored_a.values(), *assertions]})
-    for r in rows(
-        conn,
-        "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(:sources)",
-        sources=sources,
-    ):
-        stored_d[r["body"]["decision_id"]] = r["body"]
-    id_keys = []
-    for key in keys:
-        try:
-            id_keys.append(str(UUID(key)))
-        except ValueError:
-            pass
-    identities = rows(
-        conn,
-        "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(:keys)",
-        keys=id_keys,
-    )
-    return list(stored_a.values()), list(stored_d.values()), identities
-
-
 class MergeStage:
     def __init__(self, store: Store):
         self.store = store
 
     def apply(self, **command) -> dict:
-        """Persist identity assessment, then automatically apply eligible work.
+        """Match the batch's records, then save it, in one transaction.
 
-        Active identifier rules may propose bindings and new Companies for the
-        batch's records (ticket 04). Every proposal, the caller's or a rule's,
-        is assessed before it commits (Q13); a load batch with nothing to bind
-        keeps its direct path. A crash between the transactions leaves an
-        assessment no one applies: the next run proposes again with fresh ids,
-        and committing the batch closes the orphan (migration 040).
+        Active identifier and name rules may propose bindings and new masters
+        for the batch's records (ticket 04). Every proposal, the caller's or a
+        rule's, is recorded before the batch's writes, in the same transaction
+        (Q13; operator, 2026-10-14: "Same transaction"); a refused one is kept in
+        a transaction of its own. A rule's proposal another run has overtaken is
+        proposed again.
         """
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
         for attempt in range(3):
-            # Re-proposed on every attempt: a stale assessment means master
-            # state moved, and the next proposal must see where it moved to.
             automatic = self.propose(**command)
             if not _identity_work(command.get("decisions"), automatic):
                 return self._execute(**command, automatic=automatic)
+            proposal, kept = _proposal(command), _kept(automatic)
             try:
-                return self._assess_and_apply(command, automatic)
+                return self._execute(**command, automatic=automatic, _record={"command": proposal, **kept})
             except assessment.StaleAssessment:
                 if attempt == 2:
                     raise
+            except (Conflict, DBAPIError) as exc:
+                self._reject(proposal, kept, exc, command["run_id"])
+                raise
         raise AssertionError("Unreachable assessment retry state")
 
     def propose(self, **command) -> dict:
@@ -262,21 +189,19 @@ class MergeStage:
             return proposed
 
     def assess(self, *, automatic: dict | None = None, **command) -> dict:
-        """Retain a proposed binding/consolidation without committing masters.
+        """Record a proposal without saving its batch, for `apply_assessment`.
 
-        Invalid proposals retain their veto before the validation error is
-        raised. A rule's proposals are kept beside the caller's command, never
-        inside it, so the command's hash stays the caller's own.
+        A refused proposal is recorded before the error is raised. A rule's
+        proposals are kept beside the caller's command, never inside it, so
+        the command's hash stays the caller's own.
         """
         if not _identity_work(command.get("decisions"), automatic):
             raise ValueError("Assessment requires an identity proposal")
-        proposal, kept, context = _proposal(command), _kept(automatic), {}
+        proposal, kept = _proposal(command), _kept(automatic)
         try:
-            result = self._execute(
-                **{**command, "preview": True}, automatic=automatic, _context=context
-            )
+            result = self._execute(**{**command, "preview": True}, automatic=automatic)
         except (Conflict, DBAPIError) as exc:
-            self._reject(proposal, kept, context, exc, command["run_id"])
+            self._reject(proposal, kept, exc, command["run_id"])
             raise
         body = result.get("assessment")
         if body is None:
@@ -285,62 +210,14 @@ class MergeStage:
             self.store, {**body, "command": proposal, **kept}, command["run_id"]
         )
 
-    def _assess_and_apply(self, command: dict, automatic: dict) -> dict:
-        """Assess, then save the batch the assessment computed: computed and
-        written once, with no preview write and no second computation.
-
-        The proposal is committed before any master write (Q13); the save then
-        re-checks it under the lock (its dependency snapshot, and each rule
-        proposal against concurrent runs) and save_batch checks the batch against
-        its effects. A batch refused when assessed or when saved keeps a rejected
-        proposal, as `assess` does; a stale one is superseded and re-proposed."""
-        proposal, kept, context = _proposal(command), _kept(automatic), {}
-        try:
-            prepared = self._execute(
-                **command, automatic=automatic, _context=context,
-                _record={"command": proposal, **kept},
-            )
-        except assessment.StaleAssessment:
-            raise  # A Conflict too, but re-proposed, never recorded as rejected.
-        except (Conflict, DBAPIError) as exc:
-            self._reject(proposal, kept, context, exc, command["run_id"])
-            raise
-        if "assessment_id" not in prepared:
-            return prepared
-        key = prepared["assessment_id"]
-        try:
-            return self._save_assessed(key, prepared["request"], command, automatic)
-        except assessment.StaleAssessment:
-            assessment.supersede(self.store, key, command["run_id"])
-            raise
-        except (Conflict, DBAPIError) as exc:
-            # The ready proposal is left as an orphan, closed when its batch saves.
-            self._reject(proposal, kept, context, exc, command["run_id"])
-            raise
-
-    def _save_assessed(self, key: str, request: dict, command: dict, automatic: dict) -> dict:
-        """Save a batch its committed proposal computed, once the proposal still holds.
-
-        An unrelated batch saved since the assessment does not make it stale
-        (its snapshot covers what the batch depends on), so the batch is saved
-        at the current generation."""
-        decisions = [*(command.get("decisions") or []), *(automatic or binding.nothing())["decisions"]]
-        with self.store.engine.begin() as conn:
-            conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
-            assessment.check(conn, key)
-            self._check_rule_proposals(conn, command["policy_digest"], automatic, decisions)
-            generation = conn.scalar(text("SELECT coalesce(max(generation),0) FROM mdm.batch"))
-            return self.store.commit(
-                conn, {**request, "expected_generation": generation, "assessment_id": key}, command["run_id"])
-
     @staticmethod
     def _check_rule_proposals(conn, policy_digest: str, automatic: dict | None, decisions: list[dict]) -> dict:
         """Under the lock, every rule proposal is re-checked: a concurrent run may
         have bound its identifier, given it to another Company, or published a
-        newer Company of its kind since it was assessed. Re-assess rather than
-        mint twice, join the wrong Company, or publish a new Company before one
-        already stored. A preview passes no proposals and checks only the policy.
-        Returns the policy."""
+        newer Company of its kind since it was proposed. Propose again rather
+        than mint twice, join the wrong Company, or publish a new Company before
+        one already stored. A preview passes no proposals and checks only the
+        policy. Returns the policy."""
         policy = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:digest"),
                              {"digest": policy_digest})
         if policy is None:
@@ -355,7 +232,7 @@ class MergeStage:
             raise assessment.StaleAssessment("A rule's proposal no longer holds; re-assess")
         return policy
 
-    def _reject(self, proposal: dict, kept: dict, context: dict, exc: Exception, run_id: str) -> None:
+    def _reject(self, proposal: dict, kept: dict, exc: Exception, run_id: str) -> None:
         # SQL driver exceptions can contain source values/connection details;
         # retain the SQLSTATE, never its full rendered query/parameters.
         veto = (
@@ -372,14 +249,18 @@ class MergeStage:
                 "rule_version": "merge-validation-v1",
                 "vetoes": [veto],
                 **kept,
-                **context,
             },
             run_id,
         )
 
     def apply_assessment(self, assessment_id: str, *, run_id: str) -> dict:
+        """Save the batch a recorded proposal computed. It is computed again
+        under the lock; if the save finds it writes other than the proposal's
+        effects, or the proposal already applied, it is stale and superseded."""
         with self.store.engine.connect() as conn:
             body = assessment.load(conn, assessment_id)
+        if body["outcome"] != "ready":
+            raise Conflict("Rejected identity assessment cannot be applied")
         try:
             return self._execute(
                 **body["command"],
@@ -387,6 +268,11 @@ class MergeStage:
                 assessment_id=assessment_id,
                 automatic=body.get("automatic"),
             )
+        except DBAPIError as exc:
+            if not assessment.stale(exc):
+                raise
+            assessment.supersede(self.store, assessment_id, run_id)
+            raise assessment.StaleAssessment("Stale identity assessment; recompute proposal") from None
         except assessment.StaleAssessment:
             assessment.supersede(self.store, assessment_id, run_id)
             raise
@@ -413,7 +299,6 @@ class MergeStage:
         continuity_proof: dict | None = None,
         assessment_id: str | None = None,
         automatic: dict | None = None,
-        _context: dict | None = None,
         _record: dict | None = None,
     ) -> dict:
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
@@ -439,12 +324,7 @@ class MergeStage:
                 raise Conflict("Profile identifying values must be text")
         for record in deferred:
             validate_deferred(record)
-        for d in decisions:
-            if (
-                digest({k: v for k, v in d.items() if k != "decision_id"})
-                != d["decision_id"]
-            ):
-                raise Conflict("Decision hash mismatch")
+        _check_hashes(decisions)
         command = {
             "batch_id": batch_id,
             "policy_digest": policy_digest,
@@ -490,12 +370,7 @@ class MergeStage:
         # command is hashed: they carry fresh ids, so hashing them would make
         # a redelivered batch look like a different command (ticket 04).
         automatic = automatic or binding.nothing()
-        for d in automatic["decisions"]:
-            if (
-                digest({k: v for k, v in d.items() if k != "decision_id"})
-                != d["decision_id"]
-            ):
-                raise Conflict("Decision hash mismatch")
+        _check_hashes(automatic["decisions"])
         decisions = sorted(
             [*decisions, *automatic["decisions"]],
             key=lambda d: (d["at"], d["decision_id"]),
@@ -515,54 +390,23 @@ class MergeStage:
                 if preview:
                     return {"preview": True, "duplicate": True, "effects": previous}
                 return self.store.commit(conn, previous, run_id)
-            if assessment_id is not None:
-                assessment.check(conn, assessment_id)
             policy = self._check_rule_proposals(
                 conn, policy_digest, None if preview else automatic, decisions
             )
-            stored_a, stored_d, stored_ids = load_closure(conn, assertions, decisions)
-            check_company_sources(policy, [*stored_a, *assertions])
-            context = _context if _context is not None else {}
-            proposing = preview or _record is not None
-            if proposing and any(d["operation"] in {"bind", "merge"} for d in decisions):
-                all_assertions = [*stored_a, *assertions]
-                keys = {a["subject"] for a in all_assertions}
-                keys.update(i["entity_id"] for i in [*stored_ids, *identities])
-                keys.update(k for d in [*stored_d, *decisions] for k in anchors(d))
-                keys.update(k for a in all_assertions for k in linked_subjects(a))
-                scope = {
-                    "keys": sorted(keys),
-                    "consumer": consumer,
-                    "sources": sorted({a["source_code"] for a in all_assertions}),
-                }
-                if source_family is not None:
-                    scope.update(
-                        source_family=source_family,
-                        publication_family=publication_family,
-                    )
-                context.update(
-                    {
-                        "scope": scope,
-                        "snapshot": assessment.snapshot(conn, scope),
-                        "retained": {
-                            "assertion_ids": sorted(
-                                a["assertion_id"] for a in stored_a
-                            ),
-                            "decision_ids": sorted(d["decision_id"] for d in stored_d),
-                            "identities": sorted(
-                                stored_ids, key=lambda i: i["entity_id"]
-                            ),
-                        },
-                    }
-                )
-            evidence = {a["assertion_id"]: a for a in stored_a}
+            types = relationships.types_of(policy)
+            # The masters this batch touches, whole; nothing it is only
+            # linked to (ticket 77, `scope`).
+            scope = scoping.identities(conn, assertions, decisions)
+            check_company_sources(policy, [*scope.readings.values(), *assertions])
+            evidence = dict(scope.readings)
             for a in assertions:
                 if a["assertion_id"] in evidence and a != evidence[a["assertion_id"]]:
                     raise Conflict("Evidence collision")
                 evidence[a["assertion_id"]] = a
-            all_d = {d["decision_id"]: d for d in stored_d}
+            all_d = {**scope.decisions, **scoping.retirements(conn)}
             all_d.update({d["decision_id"]: d for d in decisions})
-            all_ids = {i["entity_id"]: i for i in stored_ids}
+            scope.decisions.update({d["decision_id"]: d for d in decisions})
+            all_ids = {i["entity_id"]: i for i in scope.identities}
             for i in identities:
                 if i["entity_id"] in all_ids:
                     raise Conflict("Identity allocation already exists")
@@ -685,38 +529,69 @@ class MergeStage:
                         }
                     )
             reviews.extend(automatic["reviews"])
-            edges, edge_reviews = relationships.project(
-                claims, state, projected, as_of, types=relationships.types_of(policy)
+            # The links: those the affected masters start, and those into a
+            # master whose identity changed; a far end is read as stored.
+            stored = scoping.stored_masters(conn, projected)
+            changed = {e for e, b in projected.items() if scoping.identity_changed(b, stored.get(e))}
+            # Its survivor now and before: a link into either may move.
+            changed |= {state.canonical[e] for e in changed} | {
+                stored[e].get("canonical_id") or e for e in changed if e in stored
+            }
+            scope.masters = set(projected)
+            scope.replayed = {s: state.canonical[e] for s, e in state.bindings.items()}
+            # Every affected master starts its links here, a merged-away one
+            # too: its stored links are read, and retired once it is an alias.
+            scoping.links(conn, scope, set(projected), changed, types, assertions)
+            linked = {**scope.readings, **evidence}
+            ends = SimpleNamespace(
+                bindings={**scope.bound, **state.bindings},
+                canonical={**{e: scope.root(e) for e in scope.stored}, **state.canonical},
             )
+            edges, edge_reviews = relationships.project(
+                current_claims(list(linked.values()), as_of, state.retired_sources),
+                ends,
+                {**{scope.root(e): scope.stored[scope.root(e)] for e in scope.stored}, **projected},
+                as_of,
+                types=types,
+            )
+            edges = [e for e in edges if scope.owns_link(e)]
             reviews.extend(edge_reviews)
+            old = {
+                (p["object_type"], p["object_id"]): p["body"]
+                for p in scoping.stored_links_and_reviews(conn, scope)
+            }
+            scope.links = {e["relationship_id"] for e in edges} | {
+                k for t, k in old if t == "relationship"
+            }
+            # Only what changed is written: a master, link or review equal to
+            # its stored body is left as it is.
             projections = [
                 {"object_type": "entity", "object_id": key, "body": body}
                 for key, body in projected.items()
+                if body != stored.get(key)
             ]
             projections.extend(
-                {
-                    "object_type": "relationship",
-                    "object_id": e["relationship_id"],
-                    "body": e,
-                }
+                {"object_type": "relationship", "object_id": e["relationship_id"], "body": e}
                 for e in edges
+                if e != old.get(("relationship", e["relationship_id"]))
             )
+            live = {("relationship", e["relationship_id"]) for e in edges}
             for r in reviews:
                 subjects, entities = review_scope(
-                    r, groups, state.canonical, evidence, all_d
+                    r, groups, state.canonical, evidence, all_d, within=scope.subjects
                 )
-                projections.append(
-                    {
-                        "object_type": "review",
-                        "object_id": digest(r),
-                        "body": {
-                            **r,
-                            **_disposition(r["reason"]),
-                            "affected_subjects": subjects,
-                            "affected_entities": entities,
-                        },
-                    }
-                )
+                body = {
+                    **r,
+                    **_disposition(r["reason"]),
+                    "affected_subjects": subjects,
+                    "affected_entities": entities,
+                }
+                if r not in automatic["reviews"] and not scope.owns(body):
+                    continue
+                key = ("review", digest(r))
+                live.add(key)
+                if body != old.get(key):
+                    projections.append({"object_type": "review", "object_id": key[1], "body": body})
             deferred_contracts = {
                 row["source_code"]: row["body"]
                 for row in rows(
@@ -725,6 +600,7 @@ class MergeStage:
                     codes=sorted({r["source_code"] for r in deferred}),
                 )
             }
+            # A set-aside record's review is always sent: the save checks it.
             projections.extend(
                 {
                     "object_type": "review",
@@ -744,26 +620,16 @@ class MergeStage:
                 }
                 for r in deferred
             )
-            # Retire old projected edges/reviews in the affected component only.
-            old = rows(
-                conn,
-                # Each lookup its own condition, with its type, so an index
-                # (migration 003) serves it.
-                """SELECT object_type,object_id,body FROM mdm.current_record WHERE
-             (object_type='relationship' AND body->>'source_id'=ANY(:ids)) OR
-             (object_type='relationship' AND body->>'target_id'=ANY(:ids)) OR
-             (object_type='review' AND body->>'entity_id'=ANY(:ids)) OR
-             (object_type='review' AND body->>'subject'=ANY(:subjects)) OR
-             (object_type='review' AND body->'affected_subjects' ?| CAST(:subjects AS text[]))""",
-                ids=sorted(all_ids),
-                subjects=sorted({a["subject"] for a in evidence.values()}),
-            )
-            live = {(p["object_type"], p["object_id"]) for p in projections}
-            for p in old:
-                if (p["object_type"], p["object_id"]) not in live:
-                    projections.append(
-                        {**p, "body": {**p["body"], "retired": True, "open": False, "waiting_for_end": False}}
-                    )
+            # Retire the batch's own links and reviews it no longer produces.
+            for (kind, key), body in sorted(old.items()):
+                if (kind, key) in live or body.get("retired"):
+                    continue
+                if kind == "review" and not scope.owns(body):
+                    continue
+                projections.append(
+                    {"object_type": kind, "object_id": key,
+                     "body": {**body, "retired": True, "open": False, "waiting_for_end": False}}
+                )
             generation = conn.scalar(
                 text("SELECT coalesce(max(generation),0) FROM mdm.batch")
             )
@@ -772,11 +638,7 @@ class MergeStage:
                 "identities": identities,
                 "input_hash": input_hash,
                 "expected_generation": generation,
-                "decisions": [
-                    d
-                    for d in decisions
-                    if d["decision_id"] not in {s["decision_id"] for s in stored_d}
-                ],
+                "decisions": [d for d in decisions if d["decision_id"] not in scope.stored_decisions],
                 "projections": sorted(
                     projections, key=lambda p: (p["object_type"], p["object_id"])
                 ),
@@ -786,40 +648,29 @@ class MergeStage:
                     "total": len(assertions) + len(deferred),
                 },
             }
-            encoded = canonical(request)
+            effects = {k: v for k, v in request.items() if k != "expected_generation"}
             if preview:
                 # Exercise the identical SQL validation/permissions boundary,
                 # through a capability that always rolls back its inner writes.
                 conn.execute(
                     text("SELECT mdm.preview_batch(:request,CAST(:run AS uuid))"),
-                    {"request": encoded, "run": run_id},
+                    {"request": canonical(request), "run": run_id},
                 )
             candidate = None
-            if proposing and any(
-                d["operation"] in {"bind", "merge"} for d in request["decisions"]
-            ):
-                before = old + rows(
-                    conn,
-                    """SELECT 'entity' AS object_type,object_id,body
-                    FROM mdm.current_entity
-                    WHERE object_id=ANY(:ids)""",
-                    ids=sorted(all_ids),
-                )
+            if (preview or _record is not None) and _identity_work(request["decisions"], None):
+                before = [
+                    {"object_type": t, "object_id": k, "body": b} for (t, k), b in old.items()
+                ] + [
+                    {"object_type": "entity", "object_id": k, "body": b} for k, b in stored.items()
+                ]
                 candidate = {
                     "version": 1,
                     "command": command,
                     "outcome": "ready",
                     "rule_version": "merge-validation-v1",
                     "vetoes": [],
-                    **context,
-                    "before": sorted(
-                        before, key=lambda p: (p["object_type"], p["object_id"])
-                    ),
-                    "effects": {
-                        k: v
-                        for k, v in request.items()
-                        if k != "expected_generation"
-                    },
+                    "before": sorted(before, key=lambda p: (p["object_type"], p["object_id"])),
+                    "effects": effects,
                 }
             if preview:
                 conn.rollback()
@@ -829,14 +680,21 @@ class MergeStage:
                     "effects": request,
                     "assessment": candidate,
                 }
-            if candidate is not None:
-                # Committed with this transaction; the caller saves the batch in the next.
-                self.store._authorize(conn)
-                key = assessment.record_in(conn, {**candidate, **_record}, run_id)
-                return {"assessment_id": key, "request": request}
             if assessment_id is not None:
+                # The save checks the batch equals the proposal's effects.
                 request["assessment_id"] = assessment_id
+            elif candidate is not None:
+                # The proposal first, then the batch, in one commit (Q13).
+                self.store._authorize(conn)
+                request["assessment_id"] = assessment.record_in(conn, {**candidate, **_record}, run_id)
             return self.store.commit(conn, request, run_id)
+
+
+def _check_hashes(decisions: list[dict]) -> None:
+    """A decision's id is the hash of its body."""
+    for d in decisions:
+        if digest({k: v for k, v in d.items() if k != "decision_id"}) != d["decision_id"]:
+            raise Conflict("Decision hash mismatch")
 
 
 def _proposal(command: dict) -> dict:

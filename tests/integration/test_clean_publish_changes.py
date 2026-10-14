@@ -232,3 +232,13 @@ def test_a_missing_row_before_018_is_still_refused(database):
         conn.execute(text("DELETE FROM mdm.outbox WHERE batch_id='batch-1' AND consumer='graph'"))
     with pytest.raises(ValueError, match="no graph publication"):
         mdm_publish.receipt(Store(database.application), "batch-1", "graph")
+
+
+def test_a_changed_record_is_read_from_the_projections_expanded_once(database):
+    """Ticket 77: outbox_delivery expands a batch's projections once. Reading
+    each changed record out of the whole batch document decompressed the
+    document once per record (81 of 88 seconds of a 1,000-record save)."""
+    with database.admin.connect() as conn:
+        view = conn.scalar(text("SELECT pg_get_viewdef('mdm.outbox_delivery'::regclass)"))
+    assert "WITH ORDINALITY" in view
+    assert "(c.\"position\")::integer - 1" not in view and "c.position::int - 1" not in view

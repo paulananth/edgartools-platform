@@ -26,13 +26,6 @@ def record_in(conn, body: dict, run_id: str) -> str:
     )
 
 
-def snapshot(conn, scope: dict) -> str:
-    return conn.scalar(
-        text("SELECT mdm.match_proposal_snapshot(CAST(:scope AS jsonb))"),
-        {"scope": canonical(scope)},
-    )
-
-
 def load(conn, key: str) -> dict:
     body = conn.scalar(
         text("SELECT body FROM mdm.match_proposal WHERE assessment_id=:key"),
@@ -43,16 +36,12 @@ def load(conn, key: str) -> dict:
     return body
 
 
-def check(conn, key: str) -> None:
-    body = load(conn, key)
-    if body["outcome"] != "ready":
-        raise Conflict("Rejected identity assessment cannot be applied")
-    if conn.scalar(
-        text("""SELECT EXISTS(SELECT 1 FROM mdm.match_proposal_event
-        WHERE assessment_id=:key AND event IN ('applied','superseded'))"""),
-        {"key": key},
-    ) or body["snapshot"] != snapshot(conn, body["scope"]):
-        raise StaleAssessment("Stale identity assessment; recompute proposal")
+def stale(exc) -> bool:
+    """Whether the save refused a proposal because it no longer holds: the
+    batch computed now writes other than its effects, or it was applied or
+    superseded meanwhile (`save_batch`)."""
+    text_ = str(getattr(exc, "orig", exc))
+    return "differs from assessed effects" in text_ or "requires a ready assessment" in text_
 
 
 def supersede(store, key: str, run_id: str) -> None:
