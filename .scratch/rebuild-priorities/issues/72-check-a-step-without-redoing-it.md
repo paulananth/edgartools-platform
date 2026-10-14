@@ -56,4 +56,15 @@ C. Operator, "Confirm, plus a sample (Recommended)" (2026-10-13 20:03 ET).
 - [x] The worker's runtime: no code needed. Each worker already reports its runtime digest with its output, and `bookkeeping.report` pins the first one per run and profile and refuses a changed one ("Pinned worker runtime changed; start a new run", migration 006). GoF consult (2026-10-13 20:17 ET): the choice lives in the shared check loop (`workers/__main__.py`), one `confirm` per step; split combine's input checks from its combining first
 - [x] Parse (`source.read`) and combine (`source.combine`) confirm instead of redoing; `mdm.prepare` keeps redoing (its check is about 4% of check time, and its checks and work are one function). `tests/engine/test_check_confirms.py`, 21 pass: confirm passes without running the engine or the combination; it refuses another contract, missing or reordered inputs, an undeclared table, non-row rows, a bad deferred list, another output URI, changed receipts and a changed scope; a wrong value passes confirm and the redo catches it. The input and output hashes stay Bookkeeping's (`input.hash`, `output.receipt`). Affected tests: engine and architecture 449 pass (the 17 failures are the local environment's, the same on main); Bookkeeping Postgres 98 pass, 8 min (2026-10-13 20:17 ET)
 - [x] The sample: Bookkeeping now gives each unit its ordinal in the work envelope; a check redoes the step's first unit (ordinal 0) and a draw below 5 of 100 (`secrets.randbelow`, at check time, after the output is written). Each decision (redone, first unit, draw, percent) is written beside the report and named in its proofs, which Bookkeeping verifies (2026-10-13 20:17 ET)
-- [ ] Review, three axes; PR, CI green, merge on the operator's word
+- [x] Review, three axes (2026-10-13 20:23 ET). GoF: leave it. Fixed from Standards and Spec:
+  - a streamed source extract was recorded "not redone" though `confirm` redid it: `confirm` now raises `Redo`, and the check loop redoes the unit and records `redone: true` with the reason (a test runs it through the loop);
+  - the parse step's confirm compares each input's context and lookup receipts, not only the file (version 2 and 3), and runs the contract's limit checks (shared with the work as `_limits`);
+  - combine's confirm refuses an undeclared table, and a reduce output past its row or byte bound;
+  - the docs that said the verifier always rebuilds (READING.md, COMBINING.md) now say it confirms, with a sample rebuilt; the Bookkeeping skill describes the rule;
+  - "reading" removed from the new text.
+  Not taken, with reasons:
+  - checking a file's output rows against `max_records`: that limit bounds a file's input records, not the rows it gives, so the check could refuse a valid file;
+  - redoing a unit whose contract is new to the store: every step today has one contract per run, so the step's first unit covers a new contract; a step mixing contracts within one run would rely on the 5% draw;
+  - generated steps (`ordinal_base` above 0) have no ordinal-0 unit, so they rely on the 5% draw; no step uses generated work today.
+  Tests: 25 confirm tests; affected engine tests 190 pass; the guard is clear for READING.md and COMBINING.md, and for `workers/source_*.py`.
+- [ ] PR, CI green, merge on the operator's word

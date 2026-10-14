@@ -142,7 +142,7 @@ def _encode(body, max_bytes=None):
 
 def _checked(envelope, artifacts):
     """The combination's inputs and contract, checked without combining:
-    (manifest, reading receipts, plan, whether the contract reduces)."""
+    (manifest, source-extract receipts, plan, whether the contract reduces)."""
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError("source.combine verifies source.combined only")
     keys = envelope.get("keys", {})
@@ -231,20 +231,26 @@ def verify(envelope, artifacts):
 def confirm(envelope, artifacts):
     """The check without combining again (ticket 72). The inputs and contract
     pass the step's own checks, the written scope equals these inputs, and the
-    written output parses as one combined reading of this contract and these
-    receipts. Bookkeeping has already pinned the worker's runtime for the run
-    and hashes the input and the output; a sample of units is still redone."""
+    written output parses as one combination of this contract and these
+    receipts, holding only the contract's tables within its output bounds.
+    Bookkeeping pins the worker's runtime for the run and hashes the input and
+    the output; the check loop still redoes a sample of units."""
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from intended combined output")
-    manifest, refs, _, _ = _checked(envelope, artifacts)
+    manifest, refs, plan, reduced = _checked(envelope, artifacts)
     scope_ref, scope = _scope(envelope, manifest)
     if artifacts.verified(scope_ref, max_bytes=INPUT_BYTES) != scope:
         raise ValueError("Written combination scope differs from pinned inputs")
-    body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES))
+    data = artifacts.verified(envelope["candidate"], max_bytes=plan["max_output_bytes"] if reduced else OUTPUT_BYTES)
+    body = artifact_store.json_value(data)
     if (not isinstance(body, dict) or set(body) != {"version", "contract", "readings", "artifacts"}
             or body["contract"] != manifest["contract"] or body["readings"] != refs):
-        raise ValueError("Written combined reading does not name this contract and these receipts")
-    _reading_body(body)
+        raise ValueError("Written combination does not name this contract and these receipts")
+    _, rows = _reading_body(body)
     if [artifact["input"] for artifact in body["artifacts"]] != [scope_ref]:
-        raise ValueError("Written combined reading does not name its scope")
+        raise ValueError("Written combination does not name its scope")
+    if not set(body["artifacts"][0]["tables"]) <= set(plan["groups"] if reduced else plan["tables"]):
+        raise ValueError("Written combination holds tables the contract does not declare")
+    if reduced and rows > plan["max_output_rows"]:
+        raise ValueError("Written combination exceeds the contract's output rows")
     return {CHECK: True}, []

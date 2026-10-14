@@ -173,3 +173,67 @@ def test_a_profile_without_confirm_always_redoes(tmp_path, monkeypatch):
     monkeypatch.setattr(workers.control, "report_document", lambda *a: {"proofs": a[2]})
     assert workers.verify("p", "r", tmp_path.as_uri(), 10) == 0
     assert calls == [0, 1]
+
+
+def test_combine_confirm_refuses_an_undeclared_table(tmp_path):
+    store, work, receipt = _combine(tmp_path)
+    changed = _rewrite(store, receipt, lambda b: {**b, "artifacts": [
+        {**b["artifacts"][0], "tables": {**b["artifacts"][0]["tables"], "undeclared": []}}]})
+    with pytest.raises(ValueError, match="does not declare"):
+        source_combine.confirm({**work, "candidate": changed}, store)
+
+
+def test_reduce_confirm_passes_and_holds_its_output_bound(tmp_path):
+    from tests.engine.test_source_reduction import member, partitioned, plan as reduce_plan
+    store = Artifacts()
+    refs = {"main": partitioned(store, tmp_path, [{"legal": [{"key": "a", "holder": "A"}, {"key": "b", "holder": "B"}]}])}
+    work = combine_task(store, tmp_path, reduce_plan({"legal": member("legal")}), refs)
+    receipt = source_combine.execute(work, store)
+    assert source_combine.confirm({**work, "candidate": receipt}, store) == ({source_combine.CHECK: True}, [])
+    # The same two rows, written for a contract that allows one.
+    narrow = combine_task(store, tmp_path / "narrow", reduce_plan({"legal": member("legal")}, max_output_rows=1), refs)
+    scope_ref, scope = source_combine._scope(narrow, store.json(narrow["input"]))
+    store.put_bytes(scope_ref["uri"], scope)
+    body = store.json(receipt)
+    body["contract"], body["artifacts"][0]["input"] = store.json(narrow["input"])["contract"], scope_ref
+    written = store.put_bytes(narrow["output"], json.dumps(body, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="output rows"):
+        source_combine.confirm({**narrow, "candidate": written}, store)
+
+
+def test_read_confirm_compares_each_inputs_context_receipt(tmp_path):
+    store = Artifacts()
+    contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), (Path(__file__).resolve().parents[2]
+                               / "crates/source-contract/contracts/thirteenf/contract.yaml").read_bytes())
+    fixture = (Path(__file__).resolve().parents[2] / "crates/source-contract/contracts/thirteenf/fixtures/one-row.xml").read_bytes()
+    ref = store.put_bytes((tmp_path / "0.xml").as_uri(), fixture)
+    context = store.put(tmp_path.as_uri(), {"version": 1, "input": ref, "values": {}})
+    manifest = store.put(tmp_path.as_uri(), {"version": 2, "contract": contract, "artifacts": [{"input": ref, "context": context}]})
+    work = {"input": manifest, "output": (tmp_path / "rows.json").as_uri(), "checks": ["source.output"]}
+    receipt = source_read.execute(work, store)
+    assert source_read.confirm({**work, "candidate": receipt}, store) == ({"source.output": True}, [])
+    other = store.put(tmp_path.as_uri(), {"version": 1, "input": ref, "values": {"other": 1}})
+    changed = _rewrite(store, receipt, lambda b: {**b, "artifacts": [{**b["artifacts"][0], "context": other}]})
+    with pytest.raises(ValueError, match="in order"):
+        source_read.confirm({**work, "candidate": changed}, store)
+
+
+def test_a_streamed_extract_is_redone_and_recorded_as_redone(tmp_path, monkeypatch):
+    from tests.engine.test_source_stream_worker import task as stream_task
+    store = Artifacts()
+    work = stream_task(tmp_path, store, [json.dumps({"records": [{"n": 1}]}).encode()])
+    receipt = source_read.execute(work, store)
+    with pytest.raises(workers.Redo):
+        source_read.confirm({**work, "candidate": receipt}, store)
+    admitted = []
+    unit = {**work, "candidate": receipt, "ordinal": 4, "heartbeat_seconds": 60,
+            "claim": {"run_id": "r", "step": "s", "key": "k", "attempt": "a"}}
+    units = [unit]
+    monkeypatch.setattr(workers, "load_profile", lambda name: source_read)
+    monkeypatch.setattr(workers.control, "verifications", lambda run, name, n: [units.pop(0)] if units else [])
+    monkeypatch.setattr(workers.control, "admit", lambda envelope, report: admitted.append(report))
+    monkeypatch.setattr(workers.control, "report_document", lambda verification, checks, proofs, digest: {"proofs": proofs})
+    monkeypatch.setattr(workers.secrets, "randbelow", lambda n: 50)
+    assert workers.verify("source.read", "r", (tmp_path / "reports").as_uri(), 1) == 0
+    decision = store.json(store.json(admitted[0])["proofs"][-1])["sample"]
+    assert decision["redone"] is True and "streamed" in decision["why"]

@@ -65,8 +65,8 @@ stable ordering, distinctness, first/last/one selection, missing-match policy,
 nested joins and drops. Payloads remain opaque Python objects, preserving exact
 integer/float/Unicode values and canonical JSON spelling. Python authenticates
 all inputs, enforces original aggregate row/byte bounds, encodes output within
-its byte limit and publishes only after complete success; the verifier rebuilds
-it independently. The grammar and limits below are unchanged.
+its byte limit and publishes only after complete success; the verifier confirms
+it, and rebuilds it independently for a sample of units (the Bookkeeping skill). The grammar and limits below are unchanged.
 
 Materialized combination still retains decoded Python input rows and output
 objects. Rust indexes and payload references add bounded-by-row allocations;
@@ -237,7 +237,8 @@ The combination worker materializes a content-addressed scope document under
 receipts. Its source-extract artifact's `input` points to that real document. A change
 to a contract or auxiliary source extract therefore changes downstream MDM input
 identity; no receipt is invented for bytes at another URI. The verifier
-rebuilds and verifies the scope document and exact combined output.
+verifies the scope document, and confirms the combined output or, for a
+sample of units, rebuilds it exactly.
 
 Declare step dependencies read → combine → prepare → merge. The combine step
 uses operation `source.combine`, declares domain check `source.combined`, and

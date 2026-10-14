@@ -16,7 +16,7 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 
-from . import control, profile as load_profile
+from . import Redo, control, profile as load_profile
 
 
 def runtime(module) -> str:
@@ -113,9 +113,15 @@ def verify(name: str, run_id: str, reports: str, limit: int) -> int:
         try:
             # A profile without `confirm` always redoes; one with it confirms, or redoes a sample.
             decision = sample(verification) if hasattr(module, "confirm") else None
-            check = module.verify if decision is None or decision["redone"] else module.confirm
             with Renewal(verification) as renewal:
-                checks, proofs = check(verification, artifacts)
+                if decision is None or decision["redone"]:
+                    checks, proofs = module.verify(verification, artifacts)
+                else:
+                    try:
+                        checks, proofs = module.confirm(verification, artifacts)
+                    except Redo as reason:  # this output cannot be confirmed: redo it
+                        decision = {**decision, "redone": True, "why": str(reason)}
+                        checks, proofs = module.verify(verification, artifacts)
             if decision is not None:  # the decision is evidence beside the report
                 proofs = [*proofs, artifacts.put(reports, {"sample": decision, "claim": {
                     k: claim[k] for k in ("run_id", "step", "key", "attempt")}})]
