@@ -398,10 +398,9 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
       Company (another Company acquired it, or the Company was merged away);
     - an identity of a new Company's kind has since been published at or
       after the new Company's publish time (`publish_floor`).
-    Changes to a target Company itself (a merge, or review) move the
-    assessment's snapshot, which `assessment.check` already refuses. A join
-    to a Company this batch's own caller binds is not in `joins`: it has no
-    stored holding yet, and the caller's decision covers it.
+    - a Company a join rests on has since gone into review.
+    A join to a Company this batch's own caller binds is not in `joins`: it
+    has no stored holding yet, and the caller's decision covers it.
     """
     mints = automatic.get("mints") or []
     joins = automatic.get("joins") or []
@@ -418,6 +417,8 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
     if any(held(m) for m in mints):
         return True
     if any(set(held(j)) != {j["entity_id"]} for j in joins):
+        return True
+    if in_review(conn, {j["entity_id"] for j in joins}):
         return True
     # One read per kind: every new Company of a kind in a batch shares the
     # earliest publish time among them.

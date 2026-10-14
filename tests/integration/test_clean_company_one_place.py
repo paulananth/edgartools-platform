@@ -18,7 +18,6 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean.consumer import ContractReader
-from edgar_warehouse.mdm.clean.store import canonical
 from tests.integration import test_clean_mdm_postgres as core
 
 postgres = core.postgres
@@ -132,37 +131,6 @@ def test_a_person_stays_in_projection(database):
         )
     assert kinds == ["person"]
     assert core.documents(database, "entity") == computed(database, "work-1")
-
-
-def test_a_company_change_alone_changes_the_assessment_snapshot(database):
-    """The snapshot reads each Company from the Company table.
-
-    Only the Company row changes: no assertion, decision or identity in the
-    scope does. Before 042 the snapshot read projection and missed it.
-    """
-    a = core.source("a")
-    identity, bind = core.identity_and_binding(a)
-    core.apply(database, 1, assertions=[a], identities=[identity], decisions=[bind])
-    person = core.source("p", kind="person", fields={"name": "Jane Roe"})
-    other, bind_other = core.identity_and_binding(person)
-    core.apply(
-        database, 2, assertions=[person], identities=[other], decisions=[bind_other]
-    )
-    scope = canonical({"keys": [identity["entity_id"]], "sources": []})
-    snapshot = text("SELECT mdm.match_proposal_snapshot(CAST(:s AS jsonb))")
-    with database.admin.begin() as conn:
-        before = conn.scalar(snapshot, {"s": scope})
-        body = conn.scalar(
-            text("SELECT body FROM mdm.company WHERE valid_to IS NULL")
-        )
-        body["fields"]["name"]["value"] = "Renamed"
-        conn.execute(
-            text(
-                "SELECT mdm.record_company_version(CAST(:b AS jsonb),'work-2',now())"
-            ),
-            {"b": canonical(body)},
-        )
-        assert conn.scalar(snapshot, {"s": scope}) != before
 
 
 def test_the_company_copy_steps_are_gone(database):

@@ -58,16 +58,18 @@ Per batch (at most 1,000 records), in one transaction:
 
 - [x] The operator approves the design (question 1): "Approve (Recommended)" (2026-10-14 08:31 ET)
 - [x] The operator answers question 2: "Same transaction (Recommended)": the proposal row first, then the batch, in one commit; no snapshot (2026-10-14 08:31 ET)
-- [ ] GoF consult before code
-- [ ] Characterization tests on today's Merge Stage outputs (masters, links, reviews), kept green through the change
+- [x] GoF consult before code: one finding, the batch's scope was computed in three places (closure, snapshot, retirement) and changed in 6 of the last 12 commits; one `Scope` (`scope.py`) now holds what a batch reads and may write. `_execute` otherwise left (2026-10-14 08:46 ET)
+- [x] Characterization: a local harness saves an ownership slice (300 filings, 41 issuers, batches of 40) through today's code and the new code and compares every master, Company row, link and review with ids mapped to records: 385 of 385 equal (2026-10-14 08:46 ET)
 - [ ] Steps 1–3: affected masters, recomputed alone
 - [ ] Steps 4–5: links from their own sightings; re-checked on an identity change
 - [ ] Step 6: the chain walk for hierarchies
 - [ ] Step 7: reviews in scope
 - [ ] Step 8: only changed rows, set-based `write_batch` (a migration)
-- [ ] The snapshot removed (question 2): proposal and batch in one transaction; a refused proposal kept in its own
+- [x] The snapshot removed (question 2): proposal first, then the batch, in one transaction (`MergeStage.apply`); a refused one kept in its own (`_reject`); a proposal applied later is computed again and must write exactly its effects (`assessment.check`). Migration 020: `save_batch` without the same-transaction refusal and the snapshot, `record_match_proposal` without scope and snapshot, `match_proposal_snapshot` dropped. A join into a Company now in review is a stale rule proposal (`binding.proposal_is_stale`) (2026-10-14 08:46 ET)
 - [ ] Old against new: no unexplained difference
 - [ ] Cost test: the rows read per batch do not grow with the network
+- [x] Debris removed from `merge.py` (operator, 2026-10-14: "Remove all debris and duplicate code in merge.py"): the closure (`load_closure`, `linked_subjects`), the two-transaction proposal (`_assess_and_apply`, `_save_assessed`, the snapshot and `retained` context), the decision hash check written twice (`_check_hashes`), `anchors` kept once (`scope`), a repeated bind-or-merge test (`_identity_work`) (2026-10-14 08:46 ET)
+- [x] Tests of removed code (operator, 2026-10-14: "Remove all unnecessary tests"): removed the snapshot tests (Company one place, relationship identity x2, plan cache 010-011, schema comments 001-002, lookup indexes 002-003 and 011-012), the closure-equality test and "an unrelated batch between proposal and save"; rewritten: no table read in full (now the scope's reads, with a new master), the 10,001-linker test (a batch reads its own master, and the linkers only on an identity change), a race (computed under the lock with what another run saved), refused at save, same transaction allowed, SQL and Python agree on a reading's links (2026-10-14 08:46 ET)
 - [ ] Three-axis review; the full installed proof (a Merge Stage change)
 - [ ] The ownership Proving Run, time per batch
 - [ ] PR, CI green, merge on the operator's word
