@@ -11,6 +11,6 @@ These rules are in `rules/merge/kinds/company.yaml`, but they are not in the Mas
 
 ## Checklist
 
-- [ ] GLEIF cascade `sec-gleif-cascade-p1` to `p7` (2026-09-28.1): find their proof, if any; measure on the pinned Golden Copy (counts only); ask: switch on or delete
+- [ ] ~~GLEIF cascade `sec-gleif-cascade-p1` to `p7`~~ already tracked by ticket 09 ("Cascade name-and-address passes: label and switch on"), found 2026-10-14 12:50 ET; this ticket keeps the Form ADV rules
 - [ ] Form ADV `iapd-adv-crd`, `iapd-adv-custodian-lei` and `iapd-adv-custodian-bd` (2026-10-09.1): the same
 - [ ] Each answer recorded here with the operator's words and the ET time
