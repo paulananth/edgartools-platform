@@ -2,7 +2,7 @@
 
 Priority: 72, tier 1, in flight (raised by the operator, 2026-10-13). Map: [Rebuild priorities](../map.md).
 
-Type: grilling. Status: claimed (Claude, 2026-10-13 ET, branch `claude/verify-without-rerun`). Blocked by: none
+Type: grilling. Status: resolved (2026-10-13 ET). Blocked by: none
 
 ## Question
 
@@ -67,4 +67,4 @@ C. Operator, "Confirm, plus a sample (Recommended)" (2026-10-13 20:03 ET).
   - redoing a unit whose contract is new to the store: every step today has one contract per run, so the step's first unit covers a new contract; a step mixing contracts within one run would rely on the 5% draw;
   - generated steps (`ordinal_base` above 0) have no ordinal-0 unit, so they rely on the 5% draw; no step uses generated work today.
   Tests: 25 confirm tests; affected engine tests 190 pass; the guard is clear for READING.md and COMBINING.md, and for `workers/source_*.py`.
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #958, six checks green, merged as 00e89799 2026-10-13 20:30 ET (operator: "Merge both (Recommended)")
