@@ -5,7 +5,7 @@ and `PROFILE_KINDS` (`edgar_warehouse/mdm/clean/evidence.py`), the kinds'
 Identifier Contracts (`rules/merge/kinds/`), the relationship types
 (`rules/merge/relationships.yaml`), and the approved specs
 (`docs/specs/rdm/spec.md`, `docs/specs/agent-context/spec.md`,
-`docs/specs/profiling/`). First written by Grok (PR #839); handed to Claude by
+`docs/specs/profiling/`). First written by Grok; handed to Claude by
 the operator on 2026-10-07 ("I am handing it to you"), after a review found
 it out of date and without a method for reference data.
 
@@ -61,12 +61,12 @@ approved findings exist, or to say that they do not.
 
 ## Settled since the first version
 
-- The RDM spec is approved (2026-10-05, PR #825) and built: the `rdm`
-  database (PR #845), the policy's pin of its reference data (ticket 02).
-- `edgar-warehouse context <code set>` reads `rdm.code_context` (PR #847);
+- The RDM spec is approved and built: the `rdm`
+  database, the policy's pin of its reference data (ticket 02).
+- `edgar-warehouse context <code set>` reads `rdm.code_context`;
   `edgar-warehouse rdm list` and `rdm describe` give a code set's meaning,
   version, usage and hints.
-- Name-based matching is on main (PR #838): an id made from a name, a
+- Name-based matching is built: an id made from a name, a
   cross-reference, only where no id exists.
 
 ## Open questions

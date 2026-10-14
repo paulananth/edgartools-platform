@@ -34,6 +34,9 @@ SPECIFIC = re.compile(
     # Source codes and format names as written in rules files (`gleif`, `sec.ownership`, `sec_cik`, `lei`).
     r"|\b(gleif\w*|sec[._]\w+|lei)\b"
 )
+# In a skill, a pull request number is history: it belongs in a ticket or an Examples section,
+# not in the how-to. A spec may cite the PR that approved it.
+HISTORY = re.compile(r"(?<![\w/&])#\d{3,}\b")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
@@ -48,8 +51,11 @@ def _files() -> list[Path]:
     return found
 
 
-def specific_names(path: Path, root: Path = ROOT) -> list[str]:
-    """Each line naming a specific source, kind or identifier outside an Examples section."""
+def specific_names(path: Path, root: Path = ROOT, history: bool | None = None) -> list[str]:
+    """Each line naming a specific source, kind or identifier outside an Examples section;
+    in a skill (or with `history`), also each pull request number."""
+    if history is None:
+        history = path.relative_to(root).parts[0] == "skills"
     hits, examples_level = [], None
     in_code = False
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -65,7 +71,10 @@ def specific_names(path: Path, root: Path = ROOT) -> list[str]:
                     examples_level = level
             if examples_level is not None:
                 continue
-        hits += [f"{path.relative_to(root)}:{number}: {m.group(0)}" for m in SPECIFIC.finditer(line)]
+        found = list(SPECIFIC.finditer(line))
+        if history:
+            found += list(HISTORY.finditer(line))
+        hits += [f"{path.relative_to(root)}:{number}: {m.group(0)}" for m in sorted(found, key=lambda m: m.start())]
     return hits
 
 
@@ -81,5 +90,5 @@ def test_no_specific_names_outside_examples(path):
 def test_lint_catches_a_name_and_spares_examples(tmp_path):
     doc = tmp_path / "x.md"
     doc.write_text("# A\nKeys such as a CIK.\n## Examples\nA CIK.\n### More\nAn LEI.\n## B\nA Company.\n"
-                   "Run `--source gleif` with `sec_cik`; selected, secure.\n")
-    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path)] == ["CIK", "Company", "gleif", "sec_cik"]
+                   "Run `--source gleif` with `sec_cik`; selected, secure.\nBuilt by #960; color #fff.\n")
+    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path, history=True)] == ["CIK", "Company", "gleif", "sec_cik", "#960"]
