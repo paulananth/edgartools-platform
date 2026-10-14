@@ -24,6 +24,7 @@ SCOPE = (
     "skills/data-platform",
     "skills/bookkeeping",
     "skills/change-journal",
+    "skills/mdm-engineering",
 )
 # Sources, kinds and identifiers this repo happens to hold today. Lowercase
 # "person" stays allowed: "personal data" is generic.
