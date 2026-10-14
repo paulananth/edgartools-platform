@@ -30,6 +30,8 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
   - each checklist part is ticked with its evidence and an ET time.
 - **Answered (operator, 2026-10-13 20:30 ET, "Create its own (Recommended)"):** the ownership feed masters each reporting owner (Person or Company, by CIK) together with its insider link; it does not wait for the submissions feed.
 
+- **Answered (operator, 2026-10-14 08:19 ET):** Form ADV's custodian links come back once the Merge Stage has no limit (ticket 75, "Yes, a new ticket"); the GLEIF cascade and Form ADV matching rules, declared but not switched on, are measured and then switched on or deleted (ticket 76, "Track them on the map"). For the ownership feed, a ten-percent owner is linked `BENEFICIAL_OWNER_OF` ("BENEFICIAL_OWNER_OF (Recommended)"), and a random 50 of the 198 owners with no submissions document are checked before its switch-on ("Check a sample first (Recommended)"); both are recorded in ticket 01.
+
 ## Decisions so far
 
 - [Which measures analysts use, and the reported concepts behind each](issues/33-company-financials-01-which-measures-and-concepts.md): 19 line items by usage, concepts chosen per period, years keyed on period end
