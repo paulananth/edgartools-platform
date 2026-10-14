@@ -13,6 +13,11 @@
 --   supersede_match_proposal: a ready proposal not yet applied is superseded
 --     when its caller found it stale (its effects no longer match), with no
 --     snapshot to compare.
+--   outbox_delivery: a changed record's body is taken from the batch's
+--     projections expanded once, not read out of the whole batch document once
+--     per record (each read decompressed the document again: 81 of 88 seconds
+--     of a 1,000-record ownership save). The payload, and so its hash, is the
+--     same.
 --   match_proposal_snapshot: dropped.
 
 CREATE OR REPLACE FUNCTION mdm.save_batch(request_text text, root_run uuid) RETURNS jsonb
@@ -132,6 +137,27 @@ BEGIN
     END IF;
 END;
 $$;
+
+CREATE OR REPLACE VIEW mdm.outbox_delivery AS
+ SELECT o.batch_id,
+    o.consumer,
+    COALESCE(o.payload,
+        CASE WHEN o.contract_version = 3 THEN
+        jsonb_build_object('contract_version', 3, 'generation', b.generation, 'run_id', b.run_id,
+            'policy_digest', b.effects ->> 'policy_digest',
+            'forced', coalesce((b.effects ->> 'forced')::boolean, false),
+            'objects', coalesce((SELECT jsonb_agg(p.value || jsonb_build_object('change', c.change) ORDER BY c.position)
+                                 FROM jsonb_array_elements(b.effects -> 'projections') WITH ORDINALITY p(value, position)
+                                 JOIN mdm.batch_change c ON c.batch_id = b.batch_id AND c.position = p.position),
+                                '[]'::jsonb))
+        ELSE
+        jsonb_build_object('contract_version', 2, 'generation', b.generation, 'run_id', b.run_id,
+                           'policy_digest', b.effects ->> 'policy_digest', 'objects', b.effects -> 'projections')
+        || CASE WHEN o.consumer = 'journal' THEN jsonb_build_object('effects', b.effects) ELSE '{}'::jsonb END
+        END) AS payload
+   FROM mdm.outbox o
+     JOIN mdm.batch b USING (batch_id);
+
 
 DROP FUNCTION mdm.match_proposal_snapshot(jsonb);
 
