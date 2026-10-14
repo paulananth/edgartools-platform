@@ -3,7 +3,7 @@
 Priority: 07, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/platform-validation/issues/05b-match-proposal-snapshot-scaling.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: bug (found by the Person feed 1 Proving Run, 2026-10-01)
-Status: parts 1 (#772) and 2 (#774) merged; the Person timing run and finding 5 remain, deferred.
+Status: parts 1 (#772) and 2 (#774) merged; the snapshot itself is gone (ticket 77, #963, migration 020: a proposal and its batch are saved in one transaction). Left: the 30,000-reading Person timing run; finding 5 stays deferred.
 
 ## What was seen
 
@@ -100,7 +100,7 @@ about. No pattern; leave the rest.
   reviews get new ids once (they now name `entities`); the old ones are
   retired by the next save of their family.
 - [x] PR #772; CI green; merged on the operator's "merge" (2026-10-01 21:50 ET)
-- [ ] Open for slice 6: the closure follows links, so a save loads the whole
+- [x] Resolved by ticket 77 (#963, 2026-10-14 12:50 ET): a batch no longer loads a closure; it reads the masters it touches and their links, and a parent hierarchy whole. Was: the closure follows links, so a save loads the whole
   corporate family; at full GLEIF scale a family may reach the closure limit
   or the byte cap. Whether link ends should stop the closure is a design
   question.
@@ -145,7 +145,7 @@ a few GIN entries, not about 1,000.
   shape change, not tuning
 
 - [x] GoF consult on `match_proposal_snapshot` and `assessment.py` (Part 2 note above, 2026-10-01 22:25 ET)
-- [ ] ~~Profile `save_batch` for a 1,000-Person batch (`track_functions`)~~ deferred to the next Person run, with its timings
+- [x] Profile `save_batch` with `track_functions` on 1,000-record Person batches (the ownership Proving Run, ticket 77): `queue_outbox` 81.4 of 88 s, `outbox_delivery` decompressing the batch document once per changed record; fixed in migration 020 (2026-10-14 12:50 ET)
 - [x] Make each branch an indexed lookup by key (subject, affected subjects,
   relationship targets), keeping the hash the same for the same state
   (migration 003 and its tests, above)

@@ -33,6 +33,6 @@ Operator, 2026-10-14: "Fix the Merge Stage (Recommended)" (a link pulls in only 
 - [ ] ~~Old against new: an ownership slice and the GLEIF fixtures through `904f7318` and through the new code: current records and Company rows equal~~ deferred to ticket 77: the operator chose a merge record by record ("Option 1", 2026-10-14) over narrowing the closure
 - [ ] ~~Known cost left: when an issuer is itself in a batch, every owner linking to it is read as own; if it shows, read own ends' stored projections instead~~ deferred to ticket 77: the operator chose a merge record by record ("Option 1", 2026-10-14) over narrowing the closure
 - [ ] ~~The ownership Proving Run reruns: both passes, time per batch measured~~ deferred to ticket 77: the operator chose a merge record by record ("Option 1", 2026-10-14) over narrowing the closure
-- [ ] Three-axis review
-- [ ] The full installed proof (a Merge Stage change)
-- [ ] PR, CI green, merge on the operator's word
+- [ ] ~~Three-axis review~~ superseded: ticket 77 rewrote the same code (closure, write-back, the proposal's save) on top of this change, and its three-axis review covered the result (2026-10-14 12:29 ET)
+- [x] The full installed proof (a Merge Stage change), on main after #960 and #963 (`e3a968ca`): the installed empty-store Company proof (`.planning/workstreams/whole-source-census/installed_proof.py`), 27.7 min: 6,414 Companies, 3,052 GLEIF records bound, decisions by rule CIK 6,414 / name and state 2,861 / postcode 191, open reviews as on 2026-10-11 (664 / 312 / 39), bindings equal the pinned replay (9216cc18…), a killed worker resumed, the second pass changed nothing (2026-10-14 12:54 ET)
+- [x] PR, CI green, merge on the operator's word: #960 merged as `9da59e01`, operator 2026-10-14: "Merge pending pR" (2026-10-14 12:29 ET)
