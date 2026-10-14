@@ -112,7 +112,7 @@ def test_the_snapshot_closure_and_retirement_read_no_table_in_full(database):
         keys = {owner["subject"], children[5]["subject"], pairs[0][0]["entity_id"], "no-such-key"}
         with database.application.connect() as conn:
             snapshot(conn, keys, ["fixture.primary"])
-            load_closure(conn, [source("child-7", revision=2, relationships=[parent(owner)])], [], limit=10000)
+            load_closure(conn, [source("child-7", revision=2, relationships=[parent(owner)])], [])
         # A save through one child: its closure, retirement and the save itself.
         apply(database, 3, assertions=[source("child-9", revision=2, fields={"name": "Renamed"},
                                               relationships=[parent(owner)])])
@@ -231,7 +231,7 @@ def test_the_closure_finds_what_it_found_before_the_indexes(database):
         decisions = [] if isinstance(start, dict) else [
             decision("quarantine", actor="steward", reason="probe", at=AT, subject="probe", entity_id=start)]
         with database.application.connect() as conn:
-            readings, found, identities = load_closure(conn, assertions, decisions, limit=10000)
+            readings, found, identities = load_closure(conn, assertions, decisions)
             if decisions:
                 keys |= {"probe", decisions[0]["decision_id"]}
             expected_readings, expected_decisions = old_closure(conn, keys)
@@ -244,7 +244,7 @@ def test_the_closure_finds_what_it_found_before_the_indexes(database):
     # moved this branch into the joined lookup's IN).
     retire = decision("retire_source", actor="steward", reason="probe", at=AT, source_code="fixture.secondary")
     with database.application.connect() as conn:
-        readings, found, _ = load_closure(conn, [], [retire], limit=10000)
+        readings, found, _ = load_closure(conn, [], [retire])
         expected_readings, _ = old_closure(conn, {retire["decision_id"]}, ["fixture.secondary"])
     assert {a["assertion_id"] for a in readings} == expected_readings
     assert any(a["source_code"] == "fixture.secondary" for a in readings)

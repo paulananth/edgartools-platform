@@ -47,8 +47,8 @@ bounded run retry mechanism. It does not silently change the frozen command.
 ## Inspect and resume
 
 For explicit pre-application inspection, use the Python API with the same
-bounded command used by the existing Merge Stage (at most 1,000 identity
-decisions and a 16 MiB serialized assessment; partition larger work):
+command used by the existing Merge Stage (at most 1,000 identity decisions, as
+mdm.prepare cuts a batch; no cap on the assessment's size, migration 019):
 
 ```python
 prepared = stage.assess(**command)

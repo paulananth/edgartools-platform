@@ -1,4 +1,5 @@
-"""The Merge Stage's bounds are stated once (`limits`) and the SQL agrees."""
+"""How a run's records are cut into batches is stated once (`limits`) and the SQL
+agrees; the Merge Stage refuses nothing by size (019)."""
 
 import re
 from pathlib import Path
@@ -27,7 +28,6 @@ def function(name: str) -> str:
 
 def test_the_save_request_bounds_equal_the_limits():
     body = function("write_batch")
-    assert f"octet_length(request_text) > {limits.REQUEST_BYTES}" in body
     assert f"jsonb_array_length(r->'assertions'),0) > {limits.BATCH_RECORDS}" in body
     assert f"jsonb_array_length(r->'decisions'),0) > {limits.BATCH_RECORDS}" in body
 
@@ -38,10 +38,15 @@ def test_the_deferred_record_bounds_equal_the_limits():
     assert f"coalesce(jsonb_array_length(r->'assertions'),0)>{limits.BATCH_RECORDS} THEN" in body
 
 
+def test_the_merge_stage_has_no_size_cap():
+    """Operator, 2026-10-14: "merge stage should have no limit"."""
+    for name in ("write_batch", "record_match_proposal", "match_proposal_snapshot"):
+        body = function(name)
+        assert "octet_length" not in body and "10001" not in body and "> 10000" not in body, name
+
+
 def test_the_match_proposal_bounds_equal_the_limits():
     body = function("record_match_proposal")
-    assert f"octet_length(body_text)>{limits.PROPOSAL_INPUT_BYTES}" in body
-    assert f"octet_length(b::text) > {limits.PROPOSAL_BYTES}" in body
     assert f"jsonb_array_length(caller) > {limits.BATCH_RECORDS}" in body
     assert f"jsonb_array_length(automatic) > {limits.BATCH_RECORDS}" in body
 

@@ -1,4 +1,4 @@
-"""One bounded, atomic Merge Stage for all MDM writers.
+"""One atomic Merge Stage for all MDM writers.
 
 The retained decision graph supplies identity; source policy supplies fields.
 Identifier-only automatic binding runs through the same assessment (ticket
@@ -122,11 +122,11 @@ def link_only(claim: dict) -> bool:
     )
 
 
-def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: int):
+def load_closure(conn, assertions: list[dict], decisions: list[dict]):
     """Conservative closure includes historical merges and incoming/outgoing edges.
 
-    Every query is bounded. A component over the budget is rejected before any
-    writes, so operators can plan an isolated-generation rebuild instead.
+    It has no size limit (operator, 2026-10-14: "merge stage should have no
+    limit"): a batch is replayed with everything it is connected to.
     """
     keys = {a["subject"] for a in assertions} | {
         k for d in decisions for k in anchors(d)
@@ -144,17 +144,15 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
             conn,
             """SELECT body FROM mdm.source_reading
             WHERE assertion_id IN (SELECT id FROM mdm.readings_naming(CAST(:keys AS text[])) id
-             UNION ALL SELECT assertion_id FROM mdm.source_reading WHERE source_code=ANY(:retiring)) LIMIT :lim""",
+             UNION ALL SELECT assertion_id FROM mdm.source_reading WHERE source_code=ANY(:retiring))""",
             keys=sorted(keys),
             retiring=retiring,
-            lim=limit + 1,
         )
         decision_rows = rows(
             conn,
             """SELECT body FROM mdm.decision
-            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id) LIMIT :lim""",
+            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)""",
             keys=sorted(keys),
-            lim=limit + 1,
         )
         for r in evidence:
             a = r["body"]
@@ -165,16 +163,13 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
             d = r["body"]
             stored_d[d["decision_id"]] = d
             keys.update(anchors(d))
-        if len(stored_a) + len(stored_d) > limit:
-            raise Conflict("Affected closure exceeds bounded replay budget")
         if keys == before:
             break
     sources = sorted({a["source_code"] for a in [*stored_a.values(), *assertions]})
     for r in rows(
         conn,
-        "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(:sources) LIMIT :lim",
+        "SELECT body FROM mdm.decision WHERE operation='retire_source' AND body->>'source_code'=ANY(:sources)",
         sources=sources,
-        lim=limit + 1,
     ):
         stored_d[r["body"]["decision_id"]] = r["body"]
     id_keys = []
@@ -185,21 +180,15 @@ def load_closure(conn, assertions: list[dict], decisions: list[dict], *, limit: 
             pass
     identities = rows(
         conn,
-        "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(:keys) LIMIT :lim",
+        "SELECT entity_id::text,kind,published_at::text FROM mdm.master_entity WHERE entity_id::text=ANY(:keys)",
         keys=id_keys,
-        lim=limit + 1,
     )
-    if len(identities) + len(stored_a) + len(stored_d) > limit:
-        raise Conflict("Affected closure exceeds bounded replay budget")
     return list(stored_a.values()), list(stored_d.values()), identities
 
 
 class MergeStage:
-    def __init__(self, store: Store, *, closure_limit: int = 10000):
-        if not 1 <= closure_limit <= 10000:
-            raise ValueError("Closure limit must be 1..10000")
+    def __init__(self, store: Store):
         self.store = store
-        self.closure_limit = closure_limit
 
     def apply(self, **command) -> dict:
         """Persist identity assessment, then automatically apply eligible work.
@@ -531,9 +520,7 @@ class MergeStage:
             policy = self._check_rule_proposals(
                 conn, policy_digest, None if preview else automatic, decisions
             )
-            stored_a, stored_d, stored_ids = load_closure(
-                conn, assertions, decisions, limit=self.closure_limit
-            )
+            stored_a, stored_d, stored_ids = load_closure(conn, assertions, decisions)
             check_company_sources(policy, [*stored_a, *assertions])
             context = _context if _context is not None else {}
             proposing = preview or _record is not None
@@ -767,21 +754,16 @@ class MergeStage:
              (object_type='relationship' AND body->>'target_id'=ANY(:ids)) OR
              (object_type='review' AND body->>'entity_id'=ANY(:ids)) OR
              (object_type='review' AND body->>'subject'=ANY(:subjects)) OR
-             (object_type='review' AND body->'affected_subjects' ?| CAST(:subjects AS text[])) LIMIT :lim""",
+             (object_type='review' AND body->'affected_subjects' ?| CAST(:subjects AS text[]))""",
                 ids=sorted(all_ids),
                 subjects=sorted({a["subject"] for a in evidence.values()}),
-                lim=self.closure_limit + 1,
             )
-            if len(old) > self.closure_limit:
-                raise Conflict("Projection retirement exceeds bounded budget")
             live = {(p["object_type"], p["object_id"]) for p in projections}
             for p in old:
                 if (p["object_type"], p["object_id"]) not in live:
                     projections.append(
                         {**p, "body": {**p["body"], "retired": True, "open": False, "waiting_for_end": False}}
                     )
-            if len(projections) > self.closure_limit:
-                raise Conflict("Projection exceeds bounded budget")
             generation = conn.scalar(
                 text("SELECT coalesce(max(generation),0) FROM mdm.batch")
             )
@@ -805,12 +787,6 @@ class MergeStage:
                 },
             }
             encoded = canonical(request)
-            if len(encoded.encode()) > limits.REQUEST_BYTES:
-                # Refused here, before any SQL, with the size and the remedy.
-                raise ValueError(
-                    f"Batch {batch_id} request is {len(encoded.encode()):,} bytes, over "
-                    f"{limits.REQUEST_BYTES:,}; prepare its records in smaller batches"
-                )
             if preview:
                 # Exercise the identical SQL validation/permissions boundary,
                 # through a capability that always rolls back its inner writes.
@@ -826,14 +802,9 @@ class MergeStage:
                     conn,
                     """SELECT 'entity' AS object_type,object_id,body
                     FROM mdm.current_entity
-                    WHERE object_id=ANY(:ids) LIMIT :lim""",
+                    WHERE object_id=ANY(:ids)""",
                     ids=sorted(all_ids),
-                    lim=self.closure_limit + 1,
                 )
-                if len(before) > self.closure_limit:
-                    raise Conflict(
-                        "Assessment projection history exceeds bounded budget"
-                    )
                 candidate = {
                     "version": 1,
                     "command": command,
