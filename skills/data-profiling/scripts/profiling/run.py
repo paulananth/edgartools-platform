@@ -365,7 +365,9 @@ def _own(link: dict, found_links: list[dict], profiles) -> bool:
     if link["cardinality"] == "1:1":
         return True
     source = link["from"]["part"]
-    elsewhere = {x["to"]["part"] for x in found_links if x["from"]["part"] == source} - {source, link["to"]["part"]}
+    # The entities taken out of the part itself are still the part: pointing at them is not elsewhere.
+    elsewhere = {x["to"]["part"] for x in found_links if x["from"]["part"] == source
+                 and not x["to"]["part"].startswith(f"{source}.")} - {source, link["to"]["part"]}
     pointed_at = any(x["to"]["part"] == source and x["from"]["part"] != source for x in found_links)
     counter = any(not c["structure"] and profile.is_integer(c) and identifiers.dense_sequence(c) for c in profiles[source])
     return not elsewhere and not pointed_at and counter
