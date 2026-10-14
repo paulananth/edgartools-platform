@@ -218,6 +218,9 @@ class TestTheRunReport:
                                       path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
         assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
                                      "fixed:state_from_name_tag": 1}
+        # The run report checks count the same committed batches (rebuild ticket 10).
+        (checks,) = result["checks"].values()
+        assert checks["records"] == 1 and checks["set_aside"] == 0
 
 
 class TestTheReviewFixes:
@@ -365,3 +368,41 @@ def test_every_reason_an_ownership_link_sets_aside_never_stops_the_run():
     assert reasons == {"relationship_end_missing", "invalid_relationship_interval"}
     # A date that is not one (invalid_time) waits too.
     assert reasons | {"invalid_time"} <= set(contract["nonblocking_deferred_reasons"])
+
+
+# The run report checks (rebuild ticket 10; operator, 2026-10-02, "Proposed set"):
+# reported on every run, never blocking. Every value here is invented.
+def assertion_of(source="feed.a", effective_at=None, **fields):
+    return {"source_code": source, "effective_at": effective_at,
+            "fields": {k: ({"op": "unknown"} if v is None else {"op": "value", "value": v}) for k, v in fields.items()}}
+
+
+class TestRunChecks:
+    def test_records_set_aside_and_empty_rate_per_field(self):
+        batch = quality.profile(
+            [assertion_of(name="A", city=None), assertion_of(name="B", city="X"), assertion_of(name="", city=None)],
+            [{"source_code": "feed.a", "reason": "quality_name_present"}])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["records"] == 4 and checks["set_aside"] == 1
+        assert checks["empty_rate"] == {"city": 0.6667, "name": 0.3333}
+
+    def test_batches_add_up_per_source(self):
+        one = quality.profile([assertion_of(name="A")], [])
+        two = quality.profile([assertion_of(name=None), assertion_of("feed.b", name="C")], [])
+        checks = quality.run_checks([one, two], as_of="2026-10-14T00:00:00+00:00")
+        assert checks["feed.a"]["records"] == 2 and checks["feed.a"]["empty_rate"] == {"name": 0.5}
+        assert checks["feed.b"]["records"] == 1
+
+    def test_the_newest_record_and_its_age_in_days(self):
+        batch = quality.profile([assertion_of(effective_at="2026-10-01T00:00:00+00:00", name="A"),
+                                 assertion_of(effective_at="2026-10-11T12:00:00+00:00", name="B")], [])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["newest"] == "2026-10-11T12:00:00+00:00" and checks["newest_age_days"] == 2.5
+
+    def test_a_feed_that_states_no_time_reports_its_age_as_unknown(self):
+        batch = quality.profile([assertion_of(name="A")], [])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["newest"] is None and checks["newest_age_days"] == "unknown"
+
+    def test_nothing_committed_reports_nothing(self):
+        assert quality.run_checks([], as_of="2026-10-14T00:00:00+00:00") == {}

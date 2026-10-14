@@ -20,3 +20,4 @@ The old pipeline's ECS task definitions and Step Functions were retired with its
 - [ ] Source activation of SEC Company and GLEIF (from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisition run (manifest, producer counts, checks); GLEIF's `source.yaml` declares an `acquisition` first
 - [ ] `rules run --target mdm` end to end (from ticket 02)
 - [ ] The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)
+- [ ] The run report's row-count change from the last run (from ticket 10, part 2): compare each Bookkeeping run of a target with the last complete run of the same pipeline and target; the per-run counts are each Merge Stage run's `checks`

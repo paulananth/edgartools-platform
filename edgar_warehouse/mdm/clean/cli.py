@@ -20,6 +20,8 @@ from .run import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
 from .quality import counts as quality_counts
+from .quality import profile as quality_profile
+from .quality import run_checks
 from .store import Conflict, Store, current_reading
 
 
@@ -295,6 +297,7 @@ def execute_manifest(
         )
     prerequisites = set()
     quality: Counter = Counter()
+    profiles: list[dict] = []
     for batch in manifest["batches"]:
         if batch["batch_id"] in observed:
             prerequisites.add(batch["batch_id"])
@@ -308,6 +311,7 @@ def execute_manifest(
         assertions, deferred = found["assertions"], found["deferred"]
         occurrences = found["occurrences"]
         batch_quality = quality_counts(assertions, deferred)
+        batch_profile = quality_profile(assertions, deferred)
         cost = (
             0
             if batch["batch_id"] in retained
@@ -360,6 +364,7 @@ def execute_manifest(
         if not result["duplicate"]:
             handled += cost
             quality.update(batch_quality)
+            profiles.append(batch_profile)
     if preview:
         return {"preview": True, "commits": [], "records_processed": 0}
     return {
@@ -367,6 +372,8 @@ def execute_manifest(
         "records_processed": handled,
         # What the data quality rule did to this run's records, per fix and check.
         **({"quality": dict(sorted(quality.items()))} if quality else {}),
+        # The run report checks (rebuild ticket 10): reported, never blocking.
+        **({"checks": run_checks(profiles, as_of=manifest["as_of"])} if profiles else {}),
         **coordinator.reconcile(run_id),
     }
 
