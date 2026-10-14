@@ -145,3 +145,26 @@ def test_a_resolved_link_no_longer_counts_as_waiting(database):
                 identities=[pairs[1][0]], decisions=[pairs[1][1]], **common)
     report = coordinator.reconcile(run_id)
     assert (report["waiting_links"], report["waiting_link_list"]) == (0, [])
+
+
+def test_the_run_report_sums_each_batch_it_merged_across_calls(database):
+    """The run report checks (rebuild ticket 10): each batch's profile is kept
+    with its finished event, so the run's report sums every batch however many
+    calls ran it, and a batch an earlier run merged is not counted again."""
+    store = Store(database.application)
+    coordinator = RunCoordinator(store)
+    run_id = str(uuid4())
+    coordinator.start(run_id, ["c1", "c2"], manifest_digest="c" * 64)
+    profile = {"feed.a": {"records": 2, "set_aside": 1, "filled": {"name": 1}, "newest": None}}
+    for checkpoint, batch in enumerate(("c1", "c2"), start=1):
+        coordinator.execute(run_id, batch, lambda b=batch, c=checkpoint: load(database, run_id, b, c),
+                            checks={"as_of": core.AS_OF, "profile": profile})
+    # A second call (a resumed worker) finds c2 merged: a duplicate, not counted again.
+    coordinator.execute(run_id, "c2", lambda: load(database, run_id, "c2", 2),
+                        checks={"as_of": core.AS_OF, "profile": profile})
+    report = coordinator.reconcile(run_id)
+    assert report["checks"] == {"feed.a": {"records": 4, "set_aside": 2, "empty_rate": {"name": 0.0},
+                                           "newest": None, "newest_age_days": None}}
+    with database.admin.connect() as conn:
+        kept = conn.scalar(text("SELECT report->'checks' FROM mdm.run WHERE run_id=CAST(:r AS uuid)"), {"r": run_id})
+    assert kept == report["checks"]

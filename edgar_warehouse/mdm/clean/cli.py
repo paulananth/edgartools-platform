@@ -20,6 +20,7 @@ from .run import RunCoordinator
 from .evidence import deferred_record
 from .merge import MergeStage
 from .quality import counts as quality_counts
+from .quality import profile as quality_profile
 from .store import Conflict, Store, current_reading
 
 
@@ -349,8 +350,11 @@ def execute_manifest(
         if preview:
             result = MergeStage(store).apply(**command)
         else:
+            # The batch's run report profile is kept with its finished event,
+            # and the run's report (`reconcile`, below) sums them as `checks`.
             result = coordinator.execute(
-                run_id, batch["batch_id"], partial(MergeStage(store).apply, **command)
+                run_id, batch["batch_id"], partial(MergeStage(store).apply, **command),
+                checks={"as_of": manifest["as_of"], "profile": quality_profile(assertions, deferred)},
             )
         if preview:
             return result  # Preview one atomic batch against the current generation.
