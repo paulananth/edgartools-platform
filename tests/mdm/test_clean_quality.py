@@ -119,7 +119,7 @@ class TestTheBlock:
             quality.check_quality(block(**change))
 
     def test_the_repo_quality_rules_are_valid(self):
-        for name in ("sec.submissions.company", "gleif"):
+        for name in ("sec.submissions.company", "gleif", "sec.submissions.person", "sec.ownership"):
             for entry in files.source(name)["mdm"].values():
                 if "quality" in entry["contract"]:
                     quality.check_quality(entry["contract"]["quality"])
@@ -278,7 +278,7 @@ class TestExceptions:
             register_dataset(None, SOURCE_CODE, contract)
 
     def test_every_repo_exception_is_non_blocking(self):
-        for name in ("sec.submissions.company", "gleif"):
+        for name in ("sec.submissions.company", "gleif", "sec.submissions.person", "sec.ownership"):
             for entry in files.source(name)["mdm"].values():
                 if "quality" in entry["contract"]:
                     assert quality.exception_reasons(entry["contract"]["quality"]) <= set(
@@ -327,3 +327,41 @@ def test_a_parent_code_must_agree_with_the_reference_hierarchy(monkeypatch):
         quality.apply({**block, "checks": [{**item, "args": {**item["args"], "sha256": "0" * 64}}]},
                       {"group": "LEAF", "parent_group": "MID"}, {})
     quality._reference_parents.cache_clear()
+
+
+# The Person checks (rebuild ticket 10; operator, 2026-10-02, "Proposed set"),
+# in both feeds that master a Person. Every name here is invented.
+PERSON_CONTRACTS = [("sec.submissions.person", "sec.submissions.person.v1"),
+                    ("sec.ownership", "sec.ownership.reporting_owner.v1")]
+
+
+@pytest.mark.parametrize("source, code", PERSON_CONTRACTS)
+class TestPersonName:
+    @pytest.mark.parametrize("name", ["Zoë Brontë-Ångström", "Kieran M. O\u2019Sullivan", "Linda Marbán, Ph.D.",
+                                      "OTIS CLARENCE JR", "Søren Ødegård III", "李 小龙"])
+    def test_a_name_is_kept_as_filed(self, source, code, name):
+        block = files.mdm_contract(source, code)["quality"]
+        fields = {"legal_name": name}
+        quality.apply(block, fields, None)
+        assert fields == {"legal_name": name}
+
+    @pytest.mark.parametrize("name", ["123", "*", "(1) 2", "--"])
+    def test_a_name_with_no_letter_is_an_exception_that_never_stops_the_run(self, source, code, name):
+        contract = files.mdm_contract(source, code)
+        with pytest.raises(UnsupportedRecord) as caught:
+            quality.apply(contract["quality"], {"legal_name": name}, None)
+        assert caught.value.reason == "quality_legal_name_has_letter"
+        assert caught.value.reason in contract["nonblocking_deferred_reasons"]
+
+    def test_a_bad_cik_never_stops_the_run(self, source, code):
+        reasons = files.mdm_contract(source, code)["nonblocking_deferred_reasons"]
+        assert {"invalid_cik", "missing_record_identity"} <= set(reasons)
+
+
+def test_every_reason_an_ownership_link_sets_aside_never_stops_the_run():
+    contract = files.mdm_contract("sec.ownership", "sec.ownership.reporting_owner.v1")
+    links = contract["adapter"]["relationships"]
+    reasons = {link[rule]["reason"] for link in links for rule in ("ends", "interval")}
+    assert reasons == {"relationship_end_missing", "invalid_relationship_interval"}
+    # A date that is not one (invalid_time) waits too.
+    assert reasons | {"invalid_time"} <= set(contract["nonblocking_deferred_reasons"])

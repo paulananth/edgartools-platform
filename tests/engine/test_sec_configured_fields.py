@@ -17,7 +17,14 @@ RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read
 
 
 def contracts(source):
-    return next(iter(files.source(source)['mdm'].values()))['contract']
+    contract=next(iter(files.source(source)['mdm'].values()))['contract']
+    if source.endswith('person'):
+        # Rebuild ticket 10 made Person's quality v2 (one more check, which these
+        # cases pass); a record names its quality version, so the retired
+        # mapper's outcomes are compared under v1.
+        from tests.support.person_quality import before_ticket_10
+        contract=before_ticket_10(contract)
+    return contract
 
 
 def retired(key, outcome):

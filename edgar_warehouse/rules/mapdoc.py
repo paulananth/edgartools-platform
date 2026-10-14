@@ -41,6 +41,14 @@ HOW_TO_CHANGE = (
     "the Notes sheet: they are kept."
 )
 
+# A link's own rules (adapters._link): each sets the record aside with its
+# reason, the spreadsheet's Path column.
+LINK_RULES = {
+    "ends": "Sets the record aside when the link names no end",
+    "interval": "Sets the record aside when the link has no start, or ends before it starts",
+    "status": "Sets the record aside when the status is not allowed, or needs an end it lacks",
+}
+
 # What each data quality fix and test does, in plain words. A test holds every
 # name in quality.CHECKS and quality.FIXES here.
 QUALITY_WORDS = {
@@ -257,6 +265,10 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
             if relationship.get("each"):  # one link per item of a list
                 fields.append([code, f"relationship {kinds}", "each", _text(relationship["each"]),
                                "One link per item (item.)", f"{at}.adapter.relationships"])
+            for rule, says in LINK_RULES.items():  # what sets the record aside, and its reason
+                if rule in relationship:
+                    fields.append([code, f"relationship {kinds}", rule, _text(relationship[rule].get("reason")),
+                                   says, f"{at}.adapter.relationships"])
             for name, look in (relationship.get("find") or {}).items():  # the matching item of another list
                 # A value read from the record is marked apart from a fixed one.
                 where = "; ".join(f"{path} = " + (f"the value at {_text(want.get('path'))}" if isinstance(want, dict)

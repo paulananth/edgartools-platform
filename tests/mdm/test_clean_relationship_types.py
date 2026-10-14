@@ -134,3 +134,19 @@ def test_a_new_type_declared_only_in_the_rules_is_mastered():
     types = {**BEFORE, "SUPPLIES": {"from": ["company"], "to": ["company"]}}
     edges, reviews = relationships.project(claims, state, entities, "2025-01-01T00:00:00+00:00", types=types)
     assert [(e["type"], e["source_id"], e["target_id"]) for e in edges] == [("SUPPLIES", "e1", "e2")] and not reviews
+
+
+def test_every_capacity_a_contract_states_is_one_its_type_has():
+    """A link's capacity is fixed text in its contract, so the allowed set is
+    held here, not per record (rebuild ticket 10; operator, 2026-10-02)."""
+    types = files.policy()["relationships"]["types"]
+    stated = [
+        (link["type"], link["capacity"])
+        for folder in sorted((files.ROOT / "sources").iterdir()) if (folder / "source.yaml").exists()
+        for entry in (files.source(folder.name).get("mdm") or {}).values()
+        for link in entry["contract"]["adapter"].get("relationships") or []
+        if "capacity" in link
+    ]
+    assert stated, "the ownership feed states capacities"
+    for type_name, capacity in stated:
+        assert capacity in types[type_name].get("capacities", []), (type_name, capacity)

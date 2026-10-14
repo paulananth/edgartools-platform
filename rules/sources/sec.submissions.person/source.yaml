@@ -43,6 +43,11 @@ mdm:
       - classification_deferred
       - classification_entity_undetermined
       - quality_legal_name_present
+      - quality_legal_name_has_letter
+      # A CIK that is not one, or none, sets the record aside and never stops
+      # the run (rebuild ticket 10; operator, 2026-10-02, "Proposed set").
+      - invalid_cik
+      - missing_record_identity
       adapter:
         reading:
           source: sec.submissions.person
