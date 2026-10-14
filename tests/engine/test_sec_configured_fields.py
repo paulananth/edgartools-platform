@@ -22,10 +22,8 @@ def contracts(source):
         # Rebuild ticket 10 made Person's quality v2 (one more check, which these
         # cases pass); a record names its quality version, so the retired
         # mapper's outcomes are compared under v1.
-        quality=contract['quality']
-        assert quality['version']=='sec-person-quality-v2'
-        contract={**contract,'quality':{**quality,'version':'sec-person-quality-v1',
-                  'checks':[c for c in quality['checks'] if c['id']!='legal_name_has_letter']}}
+        from tests.support.person_quality import before_ticket_10
+        contract=before_ticket_10(contract)
     return contract
 
 

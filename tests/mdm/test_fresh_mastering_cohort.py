@@ -20,6 +20,7 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
     import json
 
     from edgar_warehouse.rules import files
+    from tests.support import person_quality
 
     actual = json.dumps(cohort()[2], sort_keys=True).encode()
     assert hashlib.sha256(actual).hexdigest() == "e908d67bbdf589e1081ff77aa025d2e83b89ad154ea0846428f46bdbff10e8d2"
@@ -33,9 +34,7 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
         found = contract(source, code, root)
         if source != "sec.submissions.person":
             return found
-        quality = found["quality"]
-        return {**found, "quality": {**quality, "version": "sec-person-quality-v1",
-                                     "checks": [c for c in quality["checks"] if c["id"] != "legal_name_has_letter"]}}
+        return person_quality.before_ticket_10(found)
 
     monkeypatch.setattr(files, "mdm_contract", before_ticket_10)
     actual = json.dumps(cohort()[2], sort_keys=True).encode()

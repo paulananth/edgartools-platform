@@ -45,9 +45,11 @@ mdm:
       # the run (rebuild ticket 10; operator, 2026-10-02, "Proposed set").
       - invalid_cik
       - missing_record_identity
-      # A link with no issuer or no date (ticket 10): the filing waits, the run goes on.
+      # A link with no issuer, or no date or one that is not a date (ticket 10):
+      # the filing waits, the run goes on.
       - relationship_end_missing
       - invalid_relationship_interval
+      - invalid_time
       adapter:
         # The owner's name, as the filing states it: blank text is no value. The
         # owner's address is never captured into MDM for a reporting owner (Person

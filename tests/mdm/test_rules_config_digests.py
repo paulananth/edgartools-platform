@@ -110,12 +110,11 @@ TICKET_10_REASONS = {"quality_legal_name_has_letter", "invalid_cik", "missing_re
 
 
 def _without_ticket_10_checks(contract: dict) -> dict:
-    quality = contract["quality"]
-    return {**contract,
+    from tests.support.person_quality import before_ticket_10
+
+    return {**before_ticket_10(contract),
             "nonblocking_deferred_reasons": [r for r in contract["nonblocking_deferred_reasons"]
-                                             if r not in TICKET_10_REASONS],
-            "quality": {**quality, "version": quality["version"].removesuffix("-v2") + "-v1",
-                        "checks": [c for c in quality["checks"] if c["id"] != "legal_name_has_letter"]}}
+                                             if r not in TICKET_10_REASONS]}
 
 
 def _with_retired_lists(contract: dict, code: str) -> dict:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from edgar_warehouse.mdm.clean.adapters import MappingError, normalize, subject_key
+from edgar_warehouse.mdm.clean.adapters import MappingError, UnsupportedRecord, normalize, subject_key
 from edgar_warehouse.mdm.clean.relationships import fold_sightings
 from tests.support.reading import reading
 
@@ -62,16 +62,12 @@ def test_a_capacity_link_without_its_date_stops_the_run():
 
 
 def test_a_flag_that_is_not_a_boolean_sets_the_record_aside():
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
-
     with pytest.raises(UnsupportedRecord, match="invalid_field_shape"):
         read({"issuer": "1", "period": "2026-01-05", "is_officer": "1"})
 
 
 @pytest.mark.parametrize("given", ["20260105", "2026-W01-1", "2026-01-05T10:00:00+00:00", "2026-02-30", 20260105])
 def test_a_date_that_is_not_a_calendar_date_sets_the_record_aside(given):
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
-
     with pytest.raises(UnsupportedRecord, match="invalid_time"):
         read({"issuer": "1", "period": given, "is_officer": True})
 
@@ -83,8 +79,6 @@ def test_without_ends_a_link_with_no_target_is_no_link():
 
 
 def test_with_ends_a_link_with_no_target_sets_the_record_aside():
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
-
     with pytest.raises(UnsupportedRecord, match="link_end_missing"):
         read({"period": "2026-01-05", "is_officer": True}, {**OFFICER, "ends": {"reason": "link_end_missing"}})
 
@@ -95,7 +89,5 @@ def test_ends_names_its_reason():
 
 
 def test_an_interval_rule_sets_aside_a_capacity_link_with_no_date():
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
-
     with pytest.raises(UnsupportedRecord, match="link_date_missing"):
         read({"issuer": "1", "is_officer": True}, {**OFFICER, "interval": {"reason": "link_date_missing"}})

@@ -19,8 +19,8 @@ quality:
       test: pattern@1
       value: fields.legal_name
       on_fail: exception
-      # A letter of any script (accents and other alphabets count); a name of
-      # digits and marks alone is no name. The name is kept as filed:
+      # A letter of any script (accents and other alphabets count); a name
+      # with no letter is no name. The name is kept as filed:
       # apostrophes, curly or straight, and degrees such as "Jr." or "PhD" stay.
       args:
         regex: '(?s).*[^\W\d_].*'

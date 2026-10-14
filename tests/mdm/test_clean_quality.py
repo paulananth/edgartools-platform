@@ -363,4 +363,5 @@ def test_every_reason_an_ownership_link_sets_aside_never_stops_the_run():
     links = contract["adapter"]["relationships"]
     reasons = {link[rule]["reason"] for link in links for rule in ("ends", "interval")}
     assert reasons == {"relationship_end_missing", "invalid_relationship_interval"}
-    assert reasons <= set(contract["nonblocking_deferred_reasons"])
+    # A date that is not one (invalid_time) waits too.
+    assert reasons | {"invalid_time"} <= set(contract["nonblocking_deferred_reasons"])

@@ -140,6 +140,12 @@ def test_the_sheets_say_what_the_rules_say():
             "Sets the record aside when the link has no start, or ends before it starts"] in owner
 
 
+def test_every_link_rule_has_plain_words():
+    from edgar_warehouse.mdm.clean.adapters import LINK_RULE_NAMES
+
+    assert tuple(mapdoc.LINK_RULES) == LINK_RULE_NAMES
+
+
 def test_every_quality_test_and_fix_has_plain_words():
     from edgar_warehouse.mdm.clean.quality import CHECKS, FIXES
 

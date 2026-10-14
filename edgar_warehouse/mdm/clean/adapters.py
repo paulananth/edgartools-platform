@@ -475,10 +475,16 @@ def _time(item, spec: dict):
         raise UnsupportedRecord("invalid_time") from None
 
 
+# A link's own rules, each naming the reason it sets the record aside with
+# (the Mapping Document describes each: `mapdoc.LINK_RULES`).
+LINK_RULE_NAMES = ("ends", "interval", "status")
+
+
 def _refuse_link(scope: dict, spec: dict) -> None:
     """A link's own rules, each with the reason it sets the record aside with:
     `interval` (a start, before any end) and `status` (one of `values`, and an
-    end for each status in `need_end`)."""
+    end for each status in `need_end`). `ends` (a link that names no end) is
+    enforced in `_link`, where the ends are read."""
     if not (spec.get("interval") or spec.get("status")):
         return
     start = _time(value(scope, spec["on"] if "capacity" in spec else spec["valid_from"]), spec)
