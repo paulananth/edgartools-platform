@@ -129,7 +129,8 @@ Learned the hard way; each is a standing operator rule.
   `.sql`, `.yaml` or data file, also run that area's test files by name. No
   local test run may take more than five minutes; CI runs everything.
 - Merge only when every CI check is green, and only on the operator's own
-  words for that PR. Approval of a rule, a ruling on a design or a goal is
+  words naming the PRs to merge ("Merge" answering a question about named
+  PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
   not merge approval.
 - Every background watcher (CI, a long test, a proof) has a deadline and an
   exit for every outcome, including the PR merging or closing. Stop test

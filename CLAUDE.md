@@ -178,13 +178,11 @@ step over ten minutes, so the operator can see where the time went.
 Learned the hard way; each is a standing operator rule.
 
 **Tests and CI**
-- Locally, run only the tests a change can affect, with `pytest --testmon`
-  (`TESTMON_DATAFILE=~/.cache/edgartools/testmondata uv run pytest --testmon
-  <folders>`; never with `-p no:cacheprovider`). After a change to a
-  `.sql`, `.yaml` or data file, also run that area's test files by name. No
-  local test run may take more than five minutes; CI runs everything.
+- Run only the tests a change can affect ("Test baseline", below). No local
+  test run may take more than five minutes; CI runs everything.
 - Merge only when every CI check is green, and only on the operator's own
-  words for that PR. Approval of a rule, a ruling on a design or a goal is
+  words naming the PRs to merge ("Merge" answering a question about named
+  PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
   not merge approval.
 - Every background watcher (CI, a long test, a proof) has a deadline and an
   exit for every outcome, including the PR merging or closing. Stop test
@@ -194,9 +192,8 @@ Learned the hard way; each is a standing operator rule.
   minutes before starting it.
 
 **Commits, PRs and secrets**
-- Write commit messages and PR bodies to a file and pass them with
-  `git commit -F` and `gh pr create --body-file`; inline text with backticks
-  gets mangled.
+- Commit and PR text from a file ("Git/GitHub commit and PR text with
+  backticks", below).
 - Never print a secret, a password, a token or a database address, and never
   ask the operator to type one into the chat. Read them from environment
   variables; if one is missing, ask the operator to set it in their own
@@ -219,9 +216,8 @@ Learned the hard way; each is a standing operator rule.
   then ask one question at a time with your recommendation.
 
 **Debugging**
-- Before fixing an error, find its root cause (ask "why" until the answer is
-  a cause, not a trigger) and fix that. Write a recurring lesson where it
-  belongs: a skill, or this file.
+- Root cause first ("Debugging discipline: 5-whys", below); write a recurring
+  lesson where it belongs: a skill, or this file.
 
 ## Git/GitHub commit and PR text with backticks
 
@@ -488,42 +484,18 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   qualify, so the default golden-record writer is the field's only real consumer.
 
 **Postgres / MDM**
-
+- **The MDM store's engineering rules live in the `mdm-engineering` skill**, the one source for them:
+  key-list lookups (join the keys, GIN one key at a time, `plan_cache_mode`), no table scans, set-based
+  reads and writes, migrations on populated tables, partial unique indexes, guarded `GRANT`s, commits only
+  when durable, the Merge Stage record by record, and the cheapest proof. The rules below are about this
+  deployment.
 - `mdm migrate` does not run automatically on deploy. Treat any prod deploy carrying new migration files
   as incomplete until it has been re-run explicitly — "the image is current" and "the migration was
   applied" are separate facts.
-- Test every migration against a genuinely **populated** table. An empty-table-only suite is unproven for
-  exactly what migrations exist to do, and has shipped real breakage here more than once.
-- Postgres cannot defer a **partial** unique index (only a full-table `UNIQUE`/`PRIMARY KEY` backed by a
-  non-partial index can be `DEFERRABLE`), so it is checked at every row-level UPDATE — order and flush
-  multi-row status transitions explicitly instead of trusting SQLAlchemy's unit-of-work ordering.
-- Guard each privileged `GRANT` in a migration with an "already satisfied" check, or a rerun by a role
-  that holds the membership without ADMIN OPTION is rejected outright.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
   `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so `bootstrap-prod-mdm.sh`
   runs `mdm migrate` as its true last database-mutating step. `mdm check-fence`
   (`edgar_warehouse/mdm/fence_monitor.py`) discovers the fenced table set live and verifies no leak.
-- SQLAlchemy's `Session` never auto-commits, and a logged "succeeded" is not evidence of a durable write.
-  Commit only once the work a checkpoint claims is itself durable, and roll staged state back on failure.
-- A PL/pgSQL function that looks rows up against a list of keys held in a variable (`= ANY(keys)`, `&& keys`,
-  `?| keys`) carries `SET plan_cache_mode = force_custom_plan`; no other function does, and never set it for the
-  session. After five calls PL/pgSQL may reuse a generic plan, which cannot hash the list, so each row is compared
-  with every key (the match proposal snapshot: 5.2 s generic, 0.8 s custom, at 4,000 Form ADV filings); per-row
-  statements, re-planned on every call, ran twice as slow. `tests/integration/test_clean_plan_cache_postgres.py`
-  holds the rule for every installed function, including a `CREATE OR REPLACE` that drops the setting
-  (migration 011, profiling ticket 07).
-- Look rows up by a list of keys by **joining** the keys (`unnest(keys) k JOIN t ON t.col = k.key`, one
-  branch per indexed column under `UNION ALL`), never `col = ANY(keys)` under an `OR`, and never an `OR` beside
-  an `IN (subquery)`: both read the whole table. Probe a GIN index one key at a time (`@> ARRAY[k.key]`,
-  `? k.key`), never with the whole list (`&&`/`?|`): at 2,229 keys the whole-list search took 12-21 s, one
-  key at a time 14-18 ms for all of them. Keep `fastupdate = off` on such an index, or every search reads its
-  growing pending list (111 us a probe against 3). The Merge Stage closure and the match proposal snapshot
-  share `mdm.readings_naming`/`mdm.decisions_naming` (migration 012); `tests/integration/
-  test_clean_plan_cache_postgres.py` refuses a whole-list search in any `mdm` function, and
-  `test_clean_lookup_indexes.py` checks every lookup uses its index with sequential scans off.
-- Memoize invariant lookups per batch, and bulk-prefetch/bulk-flush per-row round trips. This N+1 shape
-  has been found and fixed at least five separate times in this codebase — assume any newly-added batch
-  path has it until a real run at scale says otherwise. SQLite-backed unit tests never surface it.
 - MDM chain runtime is ~60-70 min end to end; `Reconcile` (~21 min) and `Publish` (~19 min) are ~65% of it
   and are Snowflake-side work. Relationship derivation (~15 min, bounded by
   `MDM_RELATIONSHIP_CONCURRENCY`, default 4) is no longer the bottleneck — optimise the Snowflake stages,

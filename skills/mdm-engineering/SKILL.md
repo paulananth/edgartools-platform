@@ -99,7 +99,8 @@ network of links makes every batch cost the whole network.
 ## Writes and transactions
 
 - Commit only when the work a checkpoint claims is itself durable, and roll
-  staged state back on failure. A logged "succeeded" is not a durable write.
+  staged state back on failure. A database session commits nothing on its
+  own, and a logged "succeeded" is not a durable write.
 - Write only the rows that changed, set-based, not one row at a time in a
   loop.
 - A function that looks up or writes many keys takes them as one array, not
