@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+from .quality import run_checks
 from .store import Conflict, Store, canonical
 
 
@@ -31,11 +32,14 @@ class RunCoordinator:
                 {"run": run_id},
             )
 
-    def execute(self, run_id: str, batch_id: str, action):
+    def execute(self, run_id: str, batch_id: str, action, *, checks: dict | None = None):
         """Journal one invocation separately from its atomic business commit.
 
         A lost terminal acknowledgement leaves a started attempt. Reconciliation
         derives business completion from observations, never from this event.
+        `checks` is the batch's run report profile (`quality.profile` and the
+        run's `as_of`), kept with the finished event of a batch this run
+        merged, so the run's report sums every batch however many calls ran it.
         """
         attempt = str(uuid4())
 
@@ -60,10 +64,10 @@ class RunCoordinator:
         except Exception as exc:
             record("error", {"error_type": type(exc).__name__})
             raise
-        record(
-            "finished",
-            {"generation": result["generation"], "duplicate": result["duplicate"]},
-        )
+        finished = {"generation": result["generation"], "duplicate": result["duplicate"]}
+        if checks is not None and not result["duplicate"]:
+            finished["checks"] = checks
+        record("finished", finished)
         return result
 
     def start(
@@ -138,6 +142,14 @@ class RunCoordinator:
                 p.body->>'reason' AS reason FROM mdm.current_record p WHERE p.object_type='review'
                 AND p.body->>'waiting_for_end'='true' AND p.body->>'retired' IS DISTINCT FROM 'true'
                 ORDER BY p.object_id LIMIT 101""")).mappings()]
+            # The run report checks (rebuild ticket 10): one profile per batch
+            # this run merged, the last finished attempt's.
+            checks = [r[0] for r in conn.execute(
+                text("""SELECT DISTINCT ON (batch_id) detail->'checks' FROM mdm.attempt_event
+                WHERE run_id=CAST(:run AS uuid) AND event='finished' AND detail ? 'checks'
+                ORDER BY batch_id, occurred_at DESC"""),
+                {"run": run_id},
+            ).all()]
             attempts = {
                 event: count
                 for event, count in conn.execute(
@@ -156,6 +168,7 @@ class RunCoordinator:
             "waiting_links": len(waiting) if len(waiting) <= 100 else _count_waiting_links(self.mdm),
             "waiting_link_list": waiting[:100],
             "attempt_events": attempts,
+            "checks": run_checks([c["profile"] for c in checks], as_of=checks[0]["as_of"]) if checks else {},
         }
         complete = (
             expected == observed

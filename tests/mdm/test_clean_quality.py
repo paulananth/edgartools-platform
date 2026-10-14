@@ -211,16 +211,21 @@ class TestTheRunReport:
         def connect():
             yield SimpleNamespace(scalars=lambda *a, **k: [])
 
-        coordinator = SimpleNamespace(start=lambda *a, **k: None,
-                                      execute=lambda run, batch, work: work(),
-                                      reconcile=lambda run: {})
+        kept = {}
+
+        def execute(run, batch, work, checks=None):
+            kept[batch] = checks
+            return work()
+
+        coordinator = SimpleNamespace(start=lambda *a, **k: None, execute=execute, reconcile=lambda run: {})
         result = cli.execute_manifest(SimpleNamespace(engine=SimpleNamespace(connect=connect)), coordinator,
                                       path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
         assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
                                      "fixed:state_from_name_tag": 1}
-        # The run report checks count the same committed batches (rebuild ticket 10).
-        (checks,) = result["checks"].values()
-        assert checks["records"] == 1 and checks["set_aside"] == 0
+        # Each batch's run report profile goes to the run, which keeps it with
+        # the batch's finished event and sums it in its report (rebuild ticket 10).
+        assert kept["b0"]["as_of"] == "t"
+        assert kept["b0"]["profile"]["sec.submissions.company.v1"]["records"] == 1
 
 
 class TestTheReviewFixes:
@@ -402,7 +407,17 @@ class TestRunChecks:
     def test_a_feed_that_states_no_time_reports_its_age_as_unknown(self):
         batch = quality.profile([assertion_of(name="A")], [])
         (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
-        assert checks["newest"] is None and checks["newest_age_days"] == "unknown"
+        assert checks["newest"] is None and checks["newest_age_days"] is None
+
+    def test_a_field_a_record_leaves_out_is_empty(self):
+        batch = quality.profile([assertion_of(name="A", city="X"), assertion_of(name="B")], [])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["empty_rate"] == {"city": 0.5, "name": 0.0}
+
+    def test_every_record_set_aside_has_no_empty_rate(self):
+        batch = quality.profile([], [{"source_code": "feed.a"}, {"source_code": "feed.a"}])
+        assert quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00") == {"feed.a": {
+            "records": 2, "set_aside": 2, "empty_rate": {}, "newest": None, "newest_age_days": None}}
 
     def test_nothing_committed_reports_nothing(self):
         assert quality.run_checks([], as_of="2026-10-14T00:00:00+00:00") == {}

@@ -485,7 +485,8 @@ contract's `nonblocking_deferred_reasons`.
    - Report the run report checks too: per source, records and those set
      aside, the empty-value rate per field and the newest record's age
      (`quality.run_checks([quality.profile(records, deferred)], as_of=...)`;
-     a Merge Stage run returns them as `checks`). They never block.
+     a Merge Stage run keeps them as `checks` in its report, `mdm.run.report`).
+     They never block.
 2. **A proving run, for anything that matches records.** For a new domain,
    nothing is switched on yet. So the run registers a **copy** of the
    policy, with the new rules added to `automatic_rules` and each stamped
