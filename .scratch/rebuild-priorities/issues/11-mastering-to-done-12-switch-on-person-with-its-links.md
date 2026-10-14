@@ -3,7 +3,7 @@
 Priority: 11, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/12-switch-on-person-with-its-links.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task, then approval
-Status: done (2026-10-14 16:01 ET) once its PR merges: Person feed 1 and its links proved together; source activation moved to ticket 71
+Status: done (2026-10-14 16:58 ET): Person feed 1 and its links proved together; source activation moved to ticket 71
 Blocked by: mastering-to-done 03, 02, mastering-to-done 10, mastering-to-done 11, 10
 
 ## Question
@@ -23,4 +23,4 @@ Switch on Person feed 1 together with its first relationship feed: Forms 3/4/5 (
 - [x] The 4 filers the Person rule calls people and Company's cohort read are individual 13F filers (entity type `other`, no SIC or EIN); the Company rule defers all 4 (step 11), so none is a Company; the proof's 0 CIKs both a Person and a Company confirms it 2026-10-14 16:01 ET
 - [x] The versions: every rule in main's policy is already approved: Person feed 1's classification and `person-cik` (2026-10-01, "Approved"), the ownership rules (2026-10-14, "Approve both (Recommended)"), ticket 10's checks (#967, "Merge when ready"); nothing new to approve 2026-10-14 16:01 ET
 - [ ] ~~Source activation of `sec.submissions.person`~~ moved to ticket 71: source activation needs an acquisition proof from a real acquisition run, as for SEC Company and GLEIF (operator, 2026-10-14: "Move to ticket 71 (Recommended)")
-- [ ] PR, CI, merge on the operator's word
+- [x] PR, CI, merge on the operator's word: #969, CI green (six checks), operator: "Merge when ready"; merged as `4a85313e` 2026-10-14 16:58 ET
