@@ -1,6 +1,6 @@
 # MDM is just MDM: the words
 
-Status: in review (2026-10-13 ET), branch `claude/mdm-naming`
+Status: done (2026-10-13 ET)
 Blocked by: none
 
 The operator, 2026-10-13: "Purge Clean from MDM it's just MDM update readme". Scope chosen: "Words now, code next (Recommended)".
@@ -11,4 +11,4 @@ The operator, 2026-10-13: "Purge Clean from MDM it's just MDM update readme". Sc
 - [x] CONTEXT.md: "There is one MDM. It is not called Clean MDM" (2026-10-13 17:53 ET)
 - [x] Left as written, on purpose: `rules/**` (its bytes make the approved rules digest), `edgar_warehouse/mdm/migrations/001_mdm.sql` (an applied migration), `crates/source-contract/**` (a Codex path; one comment still names the old spec path), the replayed rulings in `.scratch/profiling/trials/proof/rulings.jsonl`, docs/adr and docs/research (records), and ticket prose under .scratch and .planning (2026-10-13 17:53 ET)
 - [x] Affected tests: the CLI, architecture, rules digest, survivorship and catalog tests; 380 pass, and the 17 failures (secrets manifest, dbt secret, install wizard preflight) fail the same way on main without this change (2026-10-13 17:53 ET)
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #956, merged as f9e89470 2026-10-13 19:40 ET

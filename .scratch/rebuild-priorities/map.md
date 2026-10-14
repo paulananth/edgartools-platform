@@ -35,6 +35,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [Which measures analysts use, and the reported concepts behind each](issues/33-company-financials-01-which-measures-and-concepts.md): 19 line items by usage, concepts chosen per period, years keyed on period end
 - [Capture permission and route for company facts](issues/34-company-financials-02-capture-permission.md): one bounded capture now, local only (operator, "a")
 - [Capture the cohort's company facts](issues/36-company-financials-04-capture-the-cohorts-company-facts.md): 329 of 500 Companies have facts; 5.1 million facts in long form
+- [MDM is just MDM: the words](../mastering-to-done/issues/26-mdm-is-just-mdm.md): "Clean MDM" is "MDM" in every living word (#956); the code names are ticket 73
 
 ## Not yet specified
 
