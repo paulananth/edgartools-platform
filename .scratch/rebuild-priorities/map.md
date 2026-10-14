@@ -28,7 +28,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
   - every lookup uses an index;
   - names are the source's own;
   - each checklist part is ticked with its evidence and an ET time.
-- **Open question for the operator (blocks ticket 01's next part):** does the ownership feed create owner records of its own, or only link to owners mastered from submissions?
+- **Answered (operator, 2026-10-13 20:30 ET, "Create its own (Recommended)"):** the ownership feed masters each reporting owner (Person or Company, by CIK) together with its insider link; it does not wait for the submissions feed.
 
 ## Decisions so far
 
@@ -36,6 +36,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [Capture permission and route for company facts](issues/34-company-financials-02-capture-permission.md): one bounded capture now, local only (operator, "a")
 - [Capture the cohort's company facts](issues/36-company-financials-04-capture-the-cohorts-company-facts.md): 329 of 500 Companies have facts; 5.1 million facts in long form
 - [MDM is just MDM: the words](../mastering-to-done/issues/26-mdm-is-just-mdm.md): "Clean MDM" is "MDM" in every living word (#956); the code names are ticket 73
+- [Check a step without redoing it](issues/72-check-a-step-without-redoing-it.md): a check confirms inputs, contract and output shape, and redoes the first unit and a 5% sample (#958)
 
 ## Not yet specified
 
