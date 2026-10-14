@@ -192,21 +192,30 @@ Learned the hard way; each is a standing operator rule.
   minutes before starting it.
 
 **Commits, PRs and secrets**
+- One branch per ticket, cut fresh off `origin/main` in its own worktree;
+  never continue a ticket on a used or merged branch (PRs are squash-merged).
+- Work only in this repository. Never commit, push or open a PR in another
+  repository, even for a task that spans repositories.
 - Commit and PR text from a file ("Git/GitHub commit and PR text with
   backticks", below).
 - Never print a secret, a password, a token or a database address, and never
   ask the operator to type one into the chat. Read them from environment
   variables; if one is missing, ask the operator to set it in their own
-  terminal.
+  terminal. Redact by key name (any key containing `password`, `secret`,
+  `token`, `key`, `dsn` or `url`), never by an exact list, and never pipe a
+  secrets fetch to `head`, `cat` or a variable you print.
 - This repository is public: counts and invented examples only, never a
   value from the data (a name, an identifier, a record).
 - No request to a data provider (its site, API or documentation) without the
   operator's permission for that request.
 
 **Talking with the operator**
+- Every time shown to the operator is local ET, including times read from
+  AWS, Postgres or CI, which report UTC.
 - Report findings with their numbers and what they mean, not the steps you
   are about to take.
-- Use the business words of `CONTEXT.md`; translate engine terms first.
+- Use the business words of `CONTEXT.md`; translate engine terms first (a
+  "matching rule", not a "binding rule").
 - Before asking for any approval, say in plain words what is approved, what
   it changes and on what evidence. A digest, hash or version number goes
   beside the explanation, never instead of it. A rule version has a
@@ -214,6 +223,10 @@ Learned the hard way; each is a standing operator rule.
 - Decide what follows from a ruling already given, say so, and go on. Stop
   only for an approval, a switch-on, a merge or a new kind of decision, and
   then ask one question at a time with your recommendation.
+
+**Stores**
+- Writes into Snowflake's SQL layer go through dbt. MDM's own Postgres store
+  is written by its own code (SQLAlchemy), not dbt.
 
 **Debugging**
 - Root cause first ("Debugging discipline: 5-whys", below); write a recurring
@@ -428,7 +441,7 @@ bugs, infra errors), do a 5-whys root-cause pass before applying a fix:
    the proximate trigger.
 3. Apply the fix at the root cause, not just the symptom.
 4. If the issue is non-trivial or likely to recur, document only the final
-   conclusion in this file or `TODOS.md` so future sessions don't re-debug
+   conclusion in a skill, this file or `TODOS.md` so future sessions don't re-debug
    it from scratch — the numbered why-by-why walkthrough is scaffolding for
    *finding* the root cause, not something a future reader needs preserved.
    Write: **Problem** (1 sentence), **Root cause** (1 sentence), **Fix**

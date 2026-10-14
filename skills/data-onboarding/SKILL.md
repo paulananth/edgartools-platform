@@ -26,13 +26,15 @@ Read these before anything else. Breaking one is never the right call.
 | Never | Instead |
 |---|---|
 | Approve for the operator, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
+| Switch on (activate) a version the operator has not told you to switch on | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
 | Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
 | Ask the operator to approve a digest, hash or version number they cannot read | Say in plain words what the version does, what it changes and on what evidence, under its descriptive name; the digest goes beside it, never instead |
-| Name a version by a number alone | A descriptive name that says what it does (`<source>-<date>.<short change name>`) |
+| Name a Rules version by a number alone | A label that says what it changes (the **test** step's version label, `<source or kind>-<YYYY-MM-DD>.<short change name>`) |
 | Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Request anything from a provider the operator has ruled out, including its documentation (see Examples) | Use the captured files and this repo |
 | Read, print or paste a secret, password or token | Use the environment variables named here. If one is missing, ask the operator to set it outside the chat. |
 | Guess an identifier (any key or issued id) | Take it from the files |
+| Edit code while onboarding, even for a code ticket the operator approved | Configuration only: write the ticket for the code, and ask before coding |
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
@@ -401,8 +403,8 @@ of an existing kind's file, and declare:
 - `defaults.allow_unknown_effective: true` if records carry no effective
   date. If they carry one, map it as `effective_at` in the contract
   ([REFERENCE.md](REFERENCE.md)); a contract that names its effective time
-  in plain words but maps no `effective_at` leaves every record without a
-  time.
+  in plain words but maps no `effective_at` gives its records only the
+  publication's time, often none.
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written

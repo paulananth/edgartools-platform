@@ -28,43 +28,50 @@ where.
   table makes a step slow or hard to follow, prefer the design that deletes
   it over one that speeds it up. Adding an MDM field is data or policy, not a
   schema change spread across files.
-- **No table scans.** Every read is by key, through an index. A test shows it.
-- **Run the GoF consult before code and the three-axis review after it**
-  (see `AGENTS.md`).
+- **No table scans.** Every read is by key, through an index, except a
+  table that stays a handful of rows. A test shows it.
 
 ## The Merge Stage: each batch costs only what its records touch
 
-A batch is at most the input cut's size, in one transaction:
+**Match first.** The batch's records are matched outside the save: each
+identifier is looked up through its index; a record joins the master it
+names, or a new master is proposed. Name rules follow, only where no
+identifier exists. The save then checks the proposal again under the save
+lock, and a proposal another run has overtaken is proposed again (a few
+tries, then the run stops).
 
-1. **Match.** Look up each record's identifier through its index; join the
-   master it names, or insert a new one. Name rules follow, and only where no
-   identifier exists.
-2. **The affected masters.** The masters of the batch's records, and the
-   masters a steward decision in the batch names. Nothing else.
-3. **Recompute each affected master alone**: its records and its decisions by
-   master id; replay its identity; pick its fields by source priority; write
-   it only if its body changed.
-4. **Links the batch states.** Find each end's master by record key. Recompute
-   the link from its own sightings: those its stored body cites, plus the new
-   ones.
-5. **Links of a master whose identity changed** (merged, unbound, a new
-   status or kind): read them by either end, through an index, and recompute
-   each one as in step 4. A new record for an existing master changes none of
-   this, so the master's other links are never read.
-6. **Hierarchies only** walk a chain (to the top, and down to the records
-   whose ultimate parent it gives). Plain links never walk.
-7. **Reviews** only about the affected masters, records and links.
-8. **Save** only the rows that changed. The proposal and the save sit in one
-   transaction, under one lock, so there is nothing to snapshot between them.
+**Then read only what the batch touches,** by key, through an index:
+
+1. **The affected masters:** each record of the batch, and each record or
+   master a steward decision in the batch names, with the decisions that bind
+   or merge them, until each identity is whole. Links are not followed.
+2. **The links those masters start:** every source record of their members,
+   and the source records their stored links cite. A plain link's far end is
+   read as it is stored, never replayed.
+3. **The links into a master whose identity changed** (new, merged, or a
+   changed status, kind or profiles): every source record that links to its
+   records. A new record for an existing master changes none of these, so the
+   links of its other masters are never read.
+4. **A hierarchy whole:** a parent-type link walks its stored chain up and
+   down, so cycles, a second parent and ultimate parents see all of it. Plain
+   links never walk.
+
+A stored row outside this scope is neither rewritten nor retired. Each
+affected master is recomputed alone and written only if it changed; reviews
+cover only the affected masters, records and links. The proposal and the
+batch are saved in one transaction.
 
 Never load "everything connected" to a batch. Through one shared end, a
 network of links makes every batch cost the whole network.
 
 ## Postgres: lookups and indexes
 
-- **Look up a list of keys by joining it:**
-  `unnest(keys) k JOIN t ON t.col = k.key`. When the lookup covers several
-  indexed columns, write one branch per column under `UNION ALL`.
+- **Look up a list of keys one index probe per key:**
+  `unnest(keys) k(key) CROSS JOIN LATERAL (SELECT ... FROM t WHERE t.col =
+  k.key OFFSET 0)`. The `OFFSET 0` keeps PostgreSQL from folding the probe
+  into a join that reads a whole index, which it prefers on a small table and
+  which grows with the store. When the lookup covers several indexed
+  columns, write one branch per column under `UNION ALL`.
 - **Never use `col = ANY(keys)` under an `OR`, nor an `OR` beside an
   `IN (subquery)`.** Both read the whole table.
 - **Probe a GIN index one key at a time** (`@> ARRAY[k.key]`, `? k.key`),
@@ -78,7 +85,10 @@ network of links makes every batch cost the whole network.
 - **Read set-based.** A batch's reads are a few queries over its keys, never
   one query per record. Fetch what a batch needs at once, memoize what does
   not change within it, and write it back in one statement. Assume a new
-  batch path does one query per row until a run at scale shows it does not.
+  batch path does one query per row until a run at scale shows it does not:
+  tests on a small or in-memory store never show it.
+- **A whole read is allowed only for a table that stays a handful of rows**
+  (for example, the decisions that retire a source), and its docstring says so.
 - **Prove it.** A test runs each lookup with sequential scans off and checks
   that it uses its index. Another refuses a whole-list search in any MDM
   function, and a `CREATE OR REPLACE` that drops the plan setting.
@@ -110,8 +120,7 @@ network of links makes every batch cost the whole network.
 
 | The change | The proof |
 |---|---|
-| Any code | The tests the change can affect, locally (`pytest --testmon`, at most 5 minutes); CI runs everything |
-| A `.sql` migration, a rules `.yaml`, a data file | Also that area's test files by name: testmon cannot see a non-Python input |
+| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI") |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
 | The Merge Stage, matching rules, a Dataset Contract, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | Speed | Time per batch over a whole feed: flat, not growing with the store |
@@ -123,7 +132,8 @@ containers when it ends, whatever the outcome.
 
 These name this repo's code and the failures each rule came from.
 
-- **Code:** the Merge Stage is `edgar_warehouse/mdm/clean/merge.py`; the
+- **Code:** the Merge Stage is `edgar_warehouse/mdm/clean/merge.py`, and what
+  a batch reads is `edgar_warehouse/mdm/clean/scope.py`; the
   input cut is `edgar_warehouse/mdm/clean/limits.py` (1,000 records and
   1 MiB a batch); the migrations are registered in
   `edgar_warehouse/mdm/clean/store.py` (`MIGRATIONS`).

@@ -140,22 +140,31 @@ Learned the hard way; each is a standing operator rule.
   minutes before starting it.
 
 **Commits, PRs and secrets**
+- One branch per ticket, cut fresh off `origin/main` in its own worktree;
+  never continue a ticket on a used or merged branch (PRs are squash-merged).
+- Work only in this repository. Never commit, push or open a PR in another
+  repository, even for a task that spans repositories.
 - Write commit messages and PR bodies to a file and pass them with
   `git commit -F` and `gh pr create --body-file`; inline text with backticks
   gets mangled.
 - Never print a secret, a password, a token or a database address, and never
   ask the operator to type one into the chat. Read them from environment
   variables; if one is missing, ask the operator to set it in their own
-  terminal.
+  terminal. Redact by key name (any key containing `password`, `secret`,
+  `token`, `key`, `dsn` or `url`), never by an exact list, and never pipe a
+  secrets fetch to `head`, `cat` or a variable you print.
 - This repository is public: counts and invented examples only, never a
   value from the data (a name, an identifier, a record).
 - No request to a data provider (its site, API or documentation) without the
   operator's permission for that request.
 
 **Talking with the operator**
+- Every time shown to the operator is local ET, including times read from
+  AWS, Postgres or CI, which report UTC.
 - Report findings with their numbers and what they mean, not the steps you
   are about to take.
-- Use the business words of `CONTEXT.md`; translate engine terms first.
+- Use the business words of `CONTEXT.md`; translate engine terms first (a
+  "matching rule", not a "binding rule").
 - Before asking for any approval, say in plain words what is approved, what
   it changes and on what evidence. A digest, hash or version number goes
   beside the explanation, never instead of it. A rule version has a
@@ -163,6 +172,10 @@ Learned the hard way; each is a standing operator rule.
 - Decide what follows from a ruling already given, say so, and go on. Stop
   only for an approval, a switch-on, a merge or a new kind of decision, and
   then ask one question at a time with your recommendation.
+
+**Stores**
+- Writes into Snowflake's SQL layer go through dbt. MDM's own Postgres store
+  is written by its own code (SQLAlchemy), not dbt.
 
 **Debugging**
 - Before fixing an error, find its root cause (ask "why" until the answer is
@@ -212,6 +225,7 @@ Large files should be read in chunks before editing: `edgar_warehouse/runtime.py
 
 - Before writing or modifying code, use the `gof-refactor-reviewer` skill to review the relevant existing code and its git history for evidence-backed Gang of Four refactoring opportunities. If the work is a new design with no existing code to review, use `gof-pattern-selector` instead.
 - During code review, explicitly check whether `gof-refactor-reviewer` is available. When available, invoke it as part of the review; when unavailable, state that limitation and perform a focused manual design-pattern review.
+- Every code review runs three axes, each reported under its own heading: **Standards** (this repo's rules), **Spec** (the ticket and the operator's words) and **GoF** (the `gof-refactor-reviewer` method on the same diff).
 - Do not force a design pattern into the code. Follow the skill's default of leaving the current design in place unless demonstrated change history and present-day costs justify the refactor.
 
 Common setup:
@@ -511,15 +525,11 @@ bash infra/snowflake/streamlit/deploy.sh
 
 ## Tests And Verification
 
-Fast local tests:
+Locally, run the affected tests ("How to work in this repo", above); CI runs
+every folder below on each PR:
 
 ```bash
 uv run pytest tests/unit tests/architecture
-```
-
-MDM tests:
-
-```bash
 uv run pytest tests/mdm
 ```
 

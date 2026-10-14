@@ -2,8 +2,8 @@
 
 Current acquisition status: the active feeds are those a source document
 declares under `acquisition.feeds` (`edgar-warehouse plan resolve-feed`); see
-Examples for the state recorded on 2026-09-29. Branch names, feed suites,
-and test counts below record the earlier implementation state.
+Examples for the state recorded on 2026-09-29. Feed suites and test counts
+below record the earlier implementation state.
 
 The complete supplied plan is the objective. **The current implementation does not yet replace every
 legacy caller or qualify a production cutover.**

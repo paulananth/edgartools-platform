@@ -10,22 +10,17 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCOPE = (
-    "skills/data-profiling",
-    "skills/data-quality",
-    "skills/data-modeling",
-    "docs/specs/rdm",
-    "docs/specs/agent-context",
-    "docs/specs/profiling",
-    # Every skill an agent onboards, reads, combines, refines and runs feeds with (operator,
-    # 2026-10-08: "Skills must not hardcode anything").
-    "skills/data-onboarding",
-    "skills/refining-rules",
-    "skills/data-platform",
-    "skills/bookkeeping",
-    "skills/change-journal",
-    "skills/mdm-engineering",
-)
+# Every skill (operator, 2026-10-08: "Skills must not hardcode anything"), found by its
+# folder so a new skill is checked by default, and the program's specs.
+EXEMPT = {
+    # General teaching skills about data work anywhere; their plain English ("a filing
+    # cabinet", "company data") is a metaphor, not this repo's sources.
+    "data-engineering-fundamentals",
+    "data-scientist",
+}
+SCOPE = tuple(
+    f"skills/{d.name}" for d in sorted((ROOT / "skills").iterdir()) if d.is_dir() and d.name not in EXEMPT
+) + ("docs/specs/rdm", "docs/specs/agent-context", "docs/specs/profiling")
 # Sources, kinds and identifiers this repo happens to hold today. Lowercase
 # "person" stays allowed: "personal data" is generic.
 SPECIFIC = re.compile(
@@ -80,6 +75,10 @@ def specific_names(path: Path, root: Path = ROOT, history: bool | None = None) -
 
 def test_scope_has_files():
     assert _files(), "nothing in scope: the lint would pass vacuously"
+
+
+def test_every_exempt_skill_exists():
+    assert EXEMPT <= {d.name for d in (ROOT / "skills").iterdir() if d.is_dir()}
 
 
 @pytest.mark.parametrize("path", _files(), ids=lambda p: str(p.relative_to(ROOT)))

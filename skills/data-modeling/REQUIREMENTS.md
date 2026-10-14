@@ -61,7 +61,7 @@ approved findings exist, or to say that they do not.
 
 ## Settled since the first version
 
-- The RDM spec is approved and built: the `rdm`
+- The RDM spec is approved (2026-10-05) and built: the `rdm`
   database, the policy's pin of its reference data (ticket 02).
 - `edgar-warehouse context <code set>` reads `rdm.code_context`;
   `edgar-warehouse rdm list` and `rdm describe` give a code set's meaning,
