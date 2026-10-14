@@ -3,7 +3,7 @@
 Priority: 06, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/platform-validation/issues/06-relationship-rules.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task (wayfinding first, then onboarding)
-Status: in progress. 06a (GLEIF accounting parent) merged and approved; step 2
+Status: done (2026-10-14 14:07 ET): GLEIF parents and insider links are switched on; Person feed 1's switch-on is ticket 11
 (the relationship rules document) is next
 
 ## Operator rulings
@@ -56,9 +56,9 @@ Status: in progress. 06a (GLEIF accounting parent) merged and approved; step 2
   the local Rules Database ("approve", 22:21 ET); recorded in #775. Test run:
   86 direct, 110 ultimate and 86 calculated parents; 72 links wait for their
   other end. Tickets `06a-gleif-parent-engine.md`, `06a2-gleif-parent-config.md`
-- [ ] 06b: Forms 3/4/5 capture and reader. Not started: needs the operator's
+- [x] 06b: Forms 3/4/5 reader and owner rules: #951 (the readings), #952 (capacity links), #961 (the owner's contract), #964 (switched on, `ade7139d`), from the local copies with no SEC request 2026-10-14 14:07 ET. Was: Not started: needs the operator's
   permission for SEC requests and code
-- [ ] 3. First relationship feeds onboarded: tickets after the design
-- [ ] 4. Switch-on of Person feed 1 with the relationship feeds
+- [x] 3. First relationship feeds onboarded: the GLEIF parents (06a, #775) and the insider links (director, officer, ten-percent owner; #964) 2026-10-14 14:07 ET
+- [ ] ~~4. Switch-on of Person feed 1 with the relationship feeds~~ moved to ticket 11 (its own ticket)
 - [x] Map entry for slice 6 in `map.md` (2026-10-02)
-- [ ] PR; CI green; merge on the operator's word
+- [x] PR; CI green; merge on the operator's word: each part's PR above; closed by the 02–08 status PR 2026-10-14 14:07 ET

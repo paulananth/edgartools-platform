@@ -14,3 +14,9 @@ The old pipeline's ECS task definitions and Step Functions were retired with its
 - [ ] Design: one state machine shape for any target (submit, per step: work and verify until verified, finalize), its timeouts and retries; GoF consult
 - [ ] Task definitions for the worker and verifier images; the image build (needs a container runtime)
 - [ ] install.sh deploy stages for them; tests; review; PR; deploy only on the operator's word
+
+## Moved here (2026-10-14)
+
+- [ ] Source activation of SEC Company and GLEIF (from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisition run (manifest, producer counts, checks); GLEIF's `source.yaml` declares an `acquisition` first
+- [ ] `rules run --target mdm` end to end (from ticket 02)
+- [ ] The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)

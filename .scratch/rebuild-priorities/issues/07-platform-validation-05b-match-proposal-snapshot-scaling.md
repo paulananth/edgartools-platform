@@ -3,7 +3,7 @@
 Priority: 07, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/platform-validation/issues/05b-match-proposal-snapshot-scaling.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: bug (found by the Person feed 1 Proving Run, 2026-10-01)
-Status: parts 1 (#772) and 2 (#774) merged; the snapshot itself is gone (ticket 77, #963, migration 020: a proposal and its batch are saved in one transaction). Left: the 30,000-reading Person timing run; finding 5 stays deferred.
+Status: done (2026-10-14 14:08 ET): batch times stay flat over the full Person feed; finding 5 stays deferred
 
 ## What was seen
 
@@ -153,6 +153,14 @@ a few GIN entries, not about 1,000.
   flat~~ deferred to the next Person run (operator, 22:36 ET: shorter test
   cycles). The tests prove an index serves every lookup; they do not prove
   PostgreSQL picks it at default settings, which only a real run shows
+- [x] Measured on the record-by-record Merge Stage (ticket 77), the full Person
+  run, 2026-10-14 13:19–14:06 ET (`.scratch/onboarding/sec.submissions.person/proving_run.py`,
+  report local in `proving/person-timing-1014/`, counts only): 76,230 documents,
+  31,097 people bound by CIK and 45,133 set aside (11,095 deferred, 34,038 entity
+  undetermined), 0 CIKs on two people; batches of 1,000 took 4.3–7.1 s in the
+  first pass and 1.7–6.7 s in the second, with no growth from first batch to
+  last; the second pass changed nothing. Finding, counts only: 4 CIKs the rule
+  calls people are also in Company's cohort (to ticket 11's proof) 2026-10-14 14:08 ET
 - [x] Three-axis `/code-review` (2026-10-01 22:42 ET). GoF: leave it; a test
   that SQL and Python agree on a reading's links (added; the SQL now ignores an
   empty name, as Python does). Standards: comments on the role setting and the

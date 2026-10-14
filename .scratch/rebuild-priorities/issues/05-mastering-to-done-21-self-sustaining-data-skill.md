@@ -3,7 +3,7 @@
 Priority: 05, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/21-self-sustaining-data-skill.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task (code and skill), several PRs
-Status: in progress (Codex owns continuation, PRs #843 and #844; `.planning/workstreams/gleif-member-contracts/TICKET.md`; earlier completion history remains below)
+Status: done (2026-10-14 14:07 ET): the Company, GLEIF and Person read blocks are on the engine and the old readers are deleted; G3 passed again on 2026-10-14
 Blocked by: none; basic installed parse/master G3 is verified. Company/Person/GLEIF read blocks exist, but complete runtime retirement, corpus equivalence and whole installed population proof remain unfinished (20 L3–L8).
 Absorbs: 20 L3–L8 (Codex's list: SEC Company and GLEIF on the engine), 16, 17
 
@@ -46,12 +46,12 @@ Answers, 2026-10-03:
 - [x] The skill: `skills/data-platform/SKILL.md` (setup, the flow, parse, master marked not built until 20e, custom parsing, self-check), with `link.sh` and `agents/openai.yaml`; the four skills keep their detail and point to it; their commands are written as the installed `edgar-warehouse`. 2026-10-03 07:47 ET
 - [x] 20e: MDM behind the protocol. `mdm.merge` (Merge Stage under an MDM run fixed by the effect key; receipt read back; `mdm.committed`), `mdm.publish` (one batch to one consumer in generation order; journal events under the run; `mdm.published`), every MDM transaction fenced by the live lease (`bookkeeping_guard`; the renewal keeps the proof current). The journal publisher no longer reads Bookkeeping's private state; `change-journal recover mdm` is gone. Rules: MDM targets name the workers and their checks; the invalid `mdm.publication` run check and `mdm.ingest` targets go; every target validates (the changed source versions need the operator's approval). `tests/integration/test_mdm_merge_worker_postgres.py` 3 passed: a Rules-submitted merge and publish to export, graph and the Change Journal with separate logins; a lost acknowledgement merges once and a forged receipt is refused; a lapsed lease commits nothing. Affected tests: 64 PostgreSQL passed; unit and architecture 215 passed, the 15 `jq` failures only. 2026-10-03 08:30 ET
 - [x] `mdm.prepare`: a `source.read` reading into an MDM manifest, generic (table, dataset, policy, consumer, batch prefix and `as_of` are the unit's keys). 2026-10-03 08:30 ET
-- [ ] Company read block, equivalence on the pinned capture, delete `company_source.py` and `loaders/`
-- [ ] GLEIF read block, equivalence, delete `gleif_source.py`
-- [ ] Person read block on the engine
+- [x] Company read block, equivalence on the pinned capture, delete `company_source.py` and `loaders/`: #843, #905 (the raw capture, Issue 20 L4); `company_source.py` and `loaders/` are gone from main 2026-10-14 14:07 ET
+- [x] GLEIF read block, equivalence, delete `gleif_source.py`: #844, #904 (Issue 20 L6); `gleif_source.py` is gone from main 2026-10-14 14:07 ET
+- [x] Person read block on the engine: `rules/sources/sec.submissions.person/source.yaml` (Issue 20 slice 20d, #932); the full Person run read all 76,230 documents through it today (ticket 07) 2026-10-14 14:07 ET
 - [x] G4: custom-step mode, trialled on one real gap — exact timestamp-to-integer sequence; configured alternatives demonstrated, Mapping Document generated, installed worker/verifier + MDM flow passed; PR #807 stops before code/rules approval, CI run 37153276661 green; 2026-10-03 16:59 ET
 - [x] G3: from the installed bundle, one Rules run reads captured records with the engine (`source.read`), prepares (`mdm.prepare`) and merges them into a real Clean MDM (`mdm.merge`), each step by a worker and a separate verifier (`test_parse_then_master_runs_through_the_installed_bundle`). 2026-10-03 08:30 ET
-- [ ] G3 and the operator's "test it again from the beginning": the whole proof through the installed bundle on empty stores, compared with ticket 27 (6,414 Companies, 3,052 with CIK and LEI, second pass unchanged)
+- [x] G3 and the operator's "test it again from the beginning": the full installed proof on main, 2026-10-14 (`.planning/workstreams/whole-source-census/installed_proof.py`, 27.7 min): 6,414 Companies, 3,052 GLEIF bindings, bindings equal to the pinned replay `9216cc18…`, recovery ok, second pass unchanged 2026-10-14 14:07 ET. Was:: the whole proof through the installed bundle on empty stores, compared with ticket 27 (6,414 Companies, 3,052 with CIK and LEI, second pass unchanged)
 - [x] Decisions taken while building (no new question needed; each follows from the answers):
   - one command, `edgar-warehouse`, not a new `edgar-data`: every skill, test and habit already names it;
   - the four skills keep their detail and point to data-platform, rather than becoming one-line entries: data-platform is the one entry point, and each step's detail stays in one place (moving it would copy it);
@@ -62,8 +62,8 @@ Answers, 2026-10-03:
   - **Spec, fixed:** `doctor` now checks written choices (`workers work|verify`), nested flags, checkout-only spellings and every relative link; G2 saves through the bundle; the parse run reads the copied rules folder; the installed console script itself runs `doctor`.
   - **Noted, not done:** `doctor` reads argparse internals (`_actions`); `NOT_BUILT` lists the two unbuilt rules commands in code.
 - [x] Bundle continuation PRs #806 and #807: live GitHub confirms all five suites and aggregate gate passed and both merged as 56dce424 / 2ea1a980 on 2026-10-03 17:27 ET; reverified 2026-10-06 21:40 ET. This closes those PRs, not the remaining source/full-population gates.
-- [ ] Three-axis `/code-review` for each later PR; CI green; merge on the operator's word
-- [ ] Memory `project_rules_skill.md` updated
+- [x] Three-axis `/code-review` for each later PR; CI green; merge on the operator's word: each of #843, #844, #904, #905, #932 merged on the operator's word with CI green 2026-10-14 14:07 ET
+- [x] Memory `project_rules_skill.md` updated 2026-10-14 14:07 ET
 
 ## Current Codex continuation (2026-10-07)
 
