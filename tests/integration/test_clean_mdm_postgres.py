@@ -986,26 +986,27 @@ def test_fresh_replay_preserves_business_results_across_batching_and_order(postg
             assert business == expected
 
 
-def test_oversized_closure_rolls_back_every_effect(database):
-    a = source()
-    entity, bind = identity_and_binding(a)
-    apply(database, 1, assertions=[a], identities=[entity], decisions=[bind])
-    before = documents(database, "entity")
-    with pytest.raises(Conflict, match="closure exceeds"):
-        MergeStage(Store(database.application), closure_limit=1).apply(
-            batch_id="too-large",
-            run_id=str(uuid4()),
-            policy_digest=database.policy,
-            consumer="fixture",
-            expected_checkpoint=1,
-            checkpoint=2,
-            as_of=AS_OF,
-            assertions=[source(revision=2, fields={"name": "Changed"})],
-        )
-    assert documents(database, "entity") == before
+def test_a_closure_has_no_size_limit(database):
+    """The Merge Stage has no limit (operator, 2026-10-14; migration 019): a batch
+    whose closure passes the old 10,000 cap (a record linked by 10,001 others)
+    replays and saves."""
+    target = source()
+    entity, bind = identity_and_binding(target)
+    apply(database, 1, assertions=[target], identities=[entity], decisions=[bind])
+    with database.admin.begin() as conn:
+        # 10,001 stored readings that link to the target, written directly: the
+        # closure of any batch naming the target reads them all.
+        conn.execute(text("""INSERT INTO mdm.source_reading(assertion_id, source_code, record_key,
+                publication_key, revision, body, batch_id)
+            SELECT 'linker-' || n, (SELECT source_code FROM mdm.source_reading LIMIT 1), 'linker-' || n,
+                   'p', 1, jsonb_build_object('assertion_id','linker-' || n,'subject','linker-' || n,'source_code',:code,
+                       'relationships', jsonb_build_array(jsonb_build_object('target_subject', :subject))),
+                   (SELECT batch_id FROM mdm.batch LIMIT 1)
+            FROM generate_series(1, 10001) n"""), {"subject": target["subject"], "code": target["source_code"]})
+    from edgar_warehouse.mdm.clean.merge import load_closure
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm.source_reading")) == 1
+        stored, _, _ = load_closure(conn, [source(revision=2, fields={"name": "Changed"})], [])
+    assert len(stored) > 10000
 
 
 def test_retirement_closes_unbound_source_reviews(database):

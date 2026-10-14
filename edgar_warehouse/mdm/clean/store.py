@@ -60,6 +60,7 @@ MIGRATIONS: tuple[str, ...] = (
     "016_publication_inputs.sql",
     "017_unchanged_batch_no_outbox.sql",
     "018_publish_changed_records.sql",
+    "019_merge_stage_no_limit.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
