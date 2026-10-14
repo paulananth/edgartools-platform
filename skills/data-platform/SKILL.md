@@ -134,9 +134,9 @@ step:
   Optional `distinct_on` names 1 to 8 columns of the table row: of a file's rows with equal
   values in them, only the first in file order becomes a record, so an entity
   named in many rows of one file (a counterparty listed by every filer) is one
-  record of it per file. Use it when the entity's own rows would otherwise
-  outgrow the Merge Stage's 10,000-record closure; the rows themselves belong
-  in silver. Name the columns of the record key, so one kept row is one
+  record of it per file. Use it when one record per row would repeat the
+  entity many times over; the rows themselves belong in silver. (The Merge
+  Stage has no size limit, migration 019; this is about what a record is.) Name the columns of the record key, so one kept row is one
   record; when the entity's id falls back (one id, else another), make that
   one column in the reading (`coalesce`). Rows empty in every named column
   are one key, so keep such a column filled.

@@ -18,10 +18,12 @@ Operator, 2026-10-14: "Fix the Merge Stage (Recommended)" (a link pulls in only 
 
 ## Checklist
 
-- [ ] GoF consult on `merge.py`'s closure and the limits
-- [ ] Remove the size refusals in Python; the closure and projection queries unbounded
-- [ ] A migration replacing the SQL functions without the byte caps; `test_clean_limits.py` states what stays
-- [ ] Tests: a closure over the old cap applies; a request over 16 MiB saves
+- [x] GoF consult on `merge.py`'s closure and the limits: leave it; the limits were gathered in one module by #906 and this change only deletes (2026-10-14 07:10 ET)
+- [x] Remove the size refusals in Python; the closure and projection queries unbounded: `merge.py` (no `closure_limit`, no `LIMIT :lim`, no request refusal), `limits.py` keeps the input cut and the worker file bounds, which grow with the input only (2026-10-14 07:10 ET)
+- [x] A migration replacing the SQL functions without the byte caps: `019_merge_stage_no_limit.sql` (`write_batch`, `record_match_proposal`, `match_proposal_snapshot`, each its latest body less the caps), registered in `store.MIGRATIONS`; `test_clean_limits.py` holds that none has a size cap (2026-10-14 07:10 ET)
+- [x] Tests: a closure past 10,000 loads; a proposal past 64 MiB and a save request past 16 MiB are stored; 12 passed on PostgreSQL 16 in Docker (2026-10-14 07:10 ET)
+- [x] Living docs: data-platform SKILL (`distinct_on`), candidate-assessments spec; dated reviews and ADRs left as written; the three stale `limit=` callers in `test_clean_lookup_indexes.py` fixed (2026-10-14 08:05 ET)
+- [x] Operator, 2026-10-14: "eventually we will be using snowflake postgress or databricks lakebase postgress do not design for local postgress limitation": no cap here is chosen for a local machine (2026-10-14 08:05 ET)
 - [ ] The ownership Proving Run reruns: both passes, time measured
 - [ ] Three-axis review
 - [ ] The full installed proof (a Merge Stage change)

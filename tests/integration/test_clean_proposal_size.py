@@ -102,8 +102,10 @@ def test_a_proposal_of_any_size_is_stored(database):
 def test_a_save_request_over_16_mib_is_saved(database):
     """No cap on a save request's size (019): a batch whose request passes the
     old 16 MiB cap (here a large field value) is saved."""
-    a = core.source(fields={"name": "x" * (17 * 1024**2)})
+    a = core.source(fields={"name": "x" * (6 * 1024**2)})
     entity, bind = core.identity_and_binding(a)
+    preview = core.apply(database, 1, assertions=[a], identities=[entity], decisions=[bind], preview=True)
+    assert len(canonical(preview["effects"]).encode()) > 16 * 1024**2
     core.apply(database, 1, assertions=[a], identities=[entity], decisions=[bind])
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
