@@ -3,7 +3,7 @@
 Priority: 02, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/06-switch-on-company-and-gleif-parents.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: grilling (HITL)
-Status: in progress (Claude, branch `claude/mastering-06-switch-on`)
+Status: done (2026-10-14 14:07 ET): the merge version is approved and active locally; SEC Company and GLEIF source activation moved to ticket 71
 Blocked by: mastering-to-done 02, mastering-to-done 04, mastering-to-done 05, mastering-to-done 13
 
 ## Question
@@ -44,11 +44,11 @@ Operator, 2026-10-02: "agreed" (to fresh local Rules and MDM stores kept as the 
 - [x] The 72 are now waiting links: the script gained a `waiting_links` count and the run repeated on main 125432d7: `waiting_links: {unresolved_endpoint: 72}`, every other count unchanged (only fresh entity ids differ). 19 min 30 s. Evidence: `report-06a2.json` (sha256 eb50260e…6fbe), `proving-06-rerun2.log`. 2026-10-02 16:52 ET
 - [x] Finding 5: a save of 200 GLEIF records is at most 3.24 MB (second pass, 87 reviews), and a save of 200 links at most 2.44 MB, a fifth of the 16 MiB cap. Reviews' copied lists are 0.01 MB per save after #772. 1,000 records would come to about 16 MB, so the run keeps saves of 200; no code builds GLEIF batches yet (ticket 05), so byte sizing goes to whatever builds them for `rules run` (ticket 04). Evidence: the `{"save": …}` lines in `proving-06-rerun.log`, byte-for-byte equal to the 2026-10-01 log. 2026-10-02 16:33 ET
 - [x] D5 at the cohort's scale: link ends stop the closure. 272 links over 3,716 GLEIF and 6,414 SEC records give review lists of 0.01 MB per save, and saves do not grow from first pass to second. Save times varied between runs (GLEIF first pass 470 s then 279 s, second pass 146 s then 367 s, same bytes), so the timings are machine noise, not a signal. 2026-10-02 16:33 ET
-- [ ] ~~D5 at full GLEIF scale~~ deferred: the full Golden Copy does not fit in the disk that is free (14 GiB)
+- [ ] ~~D5 at full GLEIF scale~~ moot: the Merge Stage no longer loads a closure or refuses a size (tickets 74 and 77, #960, #963); a batch reads only the masters it touches
 - [x] Proof recorded for merge version `platform-2026-10-01.gleif-parents` (4c9d1cee…26f8): `proof-merge-gleif-parents.json` (sha256 d095fbe8…cb2d), passed; `rules pending` lists it with evidence hash 52547d16…6d46. Rules store backed up (`edgartools-rules-local-1653-proven.sql.gz`). 2026-10-02 16:53 ET
 - [x] The operator approved merge version `platform-2026-10-01.gleif-parents` (4c9d1cee…26f8), evidence 52547d16…6d46. Operator, 2026-10-02: "yes". Recorded by `rules approve` (approved_at 17:09 ET). 2026-10-02 17:09 ET
 - [x] Activated into `edgartools-mdm-local` (`rules activate`, `RULES_MDM_ACTIVATION_DATABASE_URL`): Rules shows it `active`, and `mdm.policy` holds policy 4c9d1cee…26f8. Both stores backed up (`edgartools-{rules,mdm}-local-1709-active.sql.gz`). 2026-10-02 17:09 ET
-- [ ] ~~Activate the SEC Company source~~ blocked: activation needs an acquisition proof (manifest, producer counts, checks) from a real acquisition run. That fetches from data.sec.gov through the coupled Bookkeeping path, which `skills/bookkeeping/INDEPENDENCE.md` (#785) says not to use as a fallback. This is the operator's call.
-- [ ] ~~Activate the GLEIF source~~ blocked: `rules/sources/gleif/source.yaml` declares no `acquisition`, which source activation requires
-- [ ] ~~Ticket 04: prove `rules run --target mdm` end to end~~ blocked by the same Bookkeeping gap
-- [ ] PR, CI green, merge on the operator's word
+- [ ] ~~Activate the SEC Company source~~ moved to ticket 71 (operator, 2026-10-14: "Move to ticket 71 (Recommended)"): blocked: activation needs an acquisition proof (manifest, producer counts, checks) from a real acquisition run. That fetches from data.sec.gov through the coupled Bookkeeping path, which `skills/bookkeeping/INDEPENDENCE.md` (#785) says not to use as a fallback. This is the operator's call.
+- [ ] ~~Activate the GLEIF source~~ moved to ticket 71 (same ruling): blocked: `rules/sources/gleif/source.yaml` declares no `acquisition`, which source activation requires
+- [ ] ~~Ticket 04: prove `rules run --target mdm` end to end~~ moved to ticket 71 (same ruling): blocked by the same Bookkeeping gap
+- [x] PR, CI green, merge on the operator's word: the merge version's approval and activation were recorded in #775 and #786; the rest moved to ticket 71 above; closed by the 02–08 status PR 2026-10-14 14:07 ET

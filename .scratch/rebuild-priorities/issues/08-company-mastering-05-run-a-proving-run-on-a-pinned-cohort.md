@@ -3,7 +3,7 @@
 Priority: 08, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-mastering/issues/05-run-a-proving-run-on-a-pinned-cohort.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: Phase 1 done (Claude, branch `claude/company-mastering-05-proving-run`, 2026-09-26 12:53 ET); Phase 2 open
+Status: done (2026-10-14 14:08 ET): Phase 1 (2026-09-26) and Phase 2 (#900, #904, #905, #907; proof repeated 2026-10-14)
 Blocked by: 04's identifier rules and 08's matching rules, both built (Claude, 2026-09-26: the Proving Run is rolled back and publishes nothing, so it does not wait for the operator's answers in ticket 15 on suspension; its counts can inform them)
 
 ## Question
@@ -123,6 +123,12 @@ Checklist (times ET):
 
 This is production code, so it needs `/gof-refactor-reviewer`, TDD and
 review. It gates Company Q12 and the name-rule approval, not ticket 06.
+
+Phase 2 checklist (closed 2026-10-14 14:08 ET):
+- [x] A resumable whole-population preparer: Company preparation as Bookkeeping steps over the raw capture (#905, #929); bundles of at most 512 documents
+- [x] One full capture with a census over it: the Name Census over 43,338 documents (#905); 76,230 submissions documents local (`captures/sec.submissions.company/all-76230`)
+- [x] The GLEIF publication and name-rule outcomes: GLEIF read by its contract (#904); the installed proof (#900), repeated on main 2026-10-14 (27.7 min): 6,414 Companies, 3,052 GLEIF bindings equal to the pinned replay `9216cc18…`, recovery ok, second pass unchanged
+- [x] Batches written once (#907); no size refusal (#960); record by record (#963)
 
 ## Phase 1 results (Claude, 2026-09-26 12:53 ET)
 

@@ -167,7 +167,7 @@ Type: task. Phase: B. Blocked by: profiling 01b inventory, Codex retirement merg
     - [x] The owner's Dataset Contract, the two rules and the source extracts' two new columns: #961; its digests to the operator in plain words (each owner row gains the filing's issuer CIK and period of report): `ownership-xml.yaml` `e97a33d3…` → `4e72321d…`, `ownership-sgml.yaml` `a629b8e1…` → `4b8a9c29…`. Approved and merged, operator: "Approve and merge (Recommended)", as `a5dab46b` (2026-10-14 12:29 ET)
     - [x] The Proving Run, on the record-by-record Merge Stage (tickets 74 and 77): 8,723 filings, 1,706 issuers; 4,820 people by CIK, 0 CIKs on two people, 0 both a person and a Company; links: director 2,477, officer 2,796, ten-percent owner 161; 1,042 owners held back, non-blocking; the second pass changed nothing; 6 min 8 s (2026-10-14 12:29 ET)
     - [x] The 50-owner sample of the 198 with no submissions document (operator's ruling): drawn with seed 20261014, labelled from the filing alone, checked by the operator: "All 50 are people (Recommended)" (counts only in `.scratch/onboarding/sec.ownership/sample-50.json`; names local) (2026-10-14 12:29 ET)
-    - [ ] The switch-on: approved by the operator, "Approve both (Recommended)" (2026-10-14 12:29 ET); PR #964, merge on the operator's word
+    - [x] The switch-on: approved by the operator, "Approve both (Recommended)" (2026-10-14 12:29 ET); PR #964, merged on the operator's word ("Merge both (Recommended)") as `ade7139d` 2026-10-14 14:08 ET
 
 ### A Dataset Contract states a link in a capacity (for the ownership feed's insider links)
 
