@@ -164,6 +164,10 @@ differs), and a fix with its evidence, or `needs_steward: true`.
   entry per source code; the format is in data-onboarding
   [REFERENCE.md](../data-onboarding/REFERENCE.md), "Data quality".
 - A change is a new `version` name, so it is a new source version.
+- Each record names the quality version it was read under, so a new
+  version gives every re-read record a new record id. Say so when asking
+  for approval. A test that pins record ids keeps comparing under the old
+  version, and shows that the version name is the only change.
 - List each `exception` check's reason `quality_<id>` in the contract's
   `nonblocking_deferred_reasons`, or registration refuses the contract.
 - `files.write_source(body, folder)` writes `quality.yaml` without its
@@ -173,6 +177,19 @@ differs), and a fix with its evidence, or `needs_steward: true`.
 
 **Output:** `quality.yaml`, `QUALITY.md` with the operator's decisions, and
 the measured counts, in the log.
+
+### read: the run's checks
+
+Every MDM run keeps `checks` in its report, per source. They never block:
+- `records` and `set_aside`: a set-aside share that jumps from the last run
+  is a delivery or mapping problem; look at its reasons first.
+- `empty_rate` per field, over the records that merge (a field left out,
+  unknown or blank counts as empty): a field that used to be filled and is
+  now empty points at a renamed or moved source field.
+- `newest` and `newest_age_days` on the run's `as_of`: `None` means the
+  records state no time (map `effective_at`, data-onboarding), not that the
+  data is fresh.
+A change worth a check becomes a check here (**plan**), not a note.
 
 ## Examples
 

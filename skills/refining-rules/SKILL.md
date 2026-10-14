@@ -23,6 +23,9 @@ with merge rules.
 |---|---|
 | Approve for the operator or a steward, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](../data-onboarding/APPROVE.md)) |
 | Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
+| Ask the operator to approve a digest, hash or version number they cannot read | Say in plain words what the version does, what it changes and on what evidence, under its descriptive name; the digest goes beside it, never instead |
+| Name a version by a number alone | A descriptive name that says what it does (`<source>-<date>.<short change name>`) |
+| Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Switch on a matching rule with no measured proof | A rule on an issued identifier is deterministic; any other rule needs a proof at its kind's bar |
 | Request anything from a provider the operator has ruled out (data-onboarding, Examples) | Use the captured files and this repo |
 | Read, print or paste a secret | Use the environment variables named in data-onboarding. If one is missing, ask. |
@@ -159,7 +162,9 @@ counts look wrong, or **compare** lists drift handled by data-quality:
    `quality.yaml` on the records built above and fires a planted record per
    check; its **decide** mode asks the operator about each `on_fail` and each
    fix, and its **write** mode gives `quality.yaml` a new `version` name. The
-   source's contract changes with it, so this is a new source version. For
+   source's contract changes with it, so this is a new source version, and
+   every record re-read under it gets a new record id (data-quality,
+   **write**). For
    a new defect a profile found, start at its **plan** mode with the
    delivery's approved findings.
 

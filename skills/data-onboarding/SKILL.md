@@ -27,6 +27,9 @@ Read these before anything else. Breaking one is never the right call.
 |---|---|
 | Approve for the operator, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
 | Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
+| Ask the operator to approve a digest, hash or version number they cannot read | Say in plain words what the version does, what it changes and on what evidence, under its descriptive name; the digest goes beside it, never instead |
+| Name a version by a number alone | A descriptive name that says what it does (`<source>-<date>.<short change name>`) |
+| Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Request anything from a provider the operator has ruled out, including its documentation (see Examples) | Use the captured files and this repo |
 | Read, print or paste a secret, password or token | Use the environment variables named here. If one is missing, ask the operator to set it outside the chat. |
 | Guess an identifier (any key or issued id) | Take it from the files |
@@ -396,7 +399,10 @@ of an existing kind's file, and declare:
   on its proving corpus;
 - `bars`, from the kind's written requirements;
 - `defaults.allow_unknown_effective: true` if records carry no effective
-  date.
+  date. If they carry one, map it as `effective_at` in the contract
+  ([REFERENCE.md](REFERENCE.md)); a contract that names its effective time
+  in plain words but maps no `effective_at` leaves every record without a
+  time.
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written
@@ -488,7 +494,10 @@ contract's `nonblocking_deferred_reasons`.
      (`quality.run_checks([quality.profile(records, deferred)], as_of=...)`;
      a Merge Stage run keeps them as `checks` in its report, `mdm.run.report`).
      They never block.
-2. **A proving run, for anything that matches records.** For a new domain,
+2. **A proving run, for anything that matches records.** Which proof a
+   change needs, and when the full installed proof is required, is in
+   [mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest
+   proof". For a new domain,
    nothing is switched on yet. So the run registers a **copy** of the
    policy, with the new rules added to `automatic_rules` and each stamped
    `approved_by: proving-run` and `reason: "Proving Run only; not an
