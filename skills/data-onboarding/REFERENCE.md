@@ -6,7 +6,7 @@ reads it (`edgar_warehouse/mdm/clean/adapters.py`, `normalize`).
 ## The file
 
 ```yaml
-source: <source>                     # the folder name, e.g. acme.registry or gleif
+source: <source>                     # the folder name, e.g. acme.registry
 bookkeeping: {...}                   # the Bookkeeping skill's section; leave it alone
 bronze:
   family: <bronze family>            # the main captured-file family; name any other in a comment
@@ -129,12 +129,12 @@ source's parser produces it, not from the raw file, when a parser exists.
 |---|---|
 | `version` | The mapping's own version name, e.g. `acme-firm-record-v1`. |
 | `record_key` | A list of paths that together identify one record. |
-| `record_key_format` | A named format from `FORMATS` (`sec_cik`, `lei`), checked and normalized. |
+| `record_key_format` | A named format from `FORMATS` (`edgar_warehouse/mdm/clean/adapters.py`), checked and normalized. |
 | `kind` | Every record is this kind (from `KINDS`). |
 | `kind_field`, `kind_values` | The path holding the source's category, and the kind for each category the source accepts, e.g. `CORP: <kind>`. |
 | `probable_kind_values` | What a record in another category probably is. It sorts the record without making an identity. |
 | `classification` | Instead of a kind: the Mastering Policy rule that decides it: `kind`, `rule_id`, `version`. |
-| `identifiers` | `namespace: path`, e.g. `lei: firm.lei`. |
+| `identifiers` | `namespace: path`, e.g. `registry_id: firm.registry_id`. |
 | `identifier_formats` | `namespace: format`, from `FORMATS`. |
 | `cross_references` | `namespace: path`: an id kept so any document can be looked up by it, **never used to join records** (operator, 2026-09-26: "lookup only"). Matching and binding read `identifiers` only. Name it for what it is (`tax_id`, or `<source>_<id>` for a source's own copy of another register's id); registration refuses a namespace that is also one of `identifiers`, or one a binding rule matches on (the kind's merge rules name them). An empty value is left out. An id of another kind of entity goes on that kind's contract, not here. Look one up with `mdm.cross_reference_lookup(namespace, value)`; `mdm.cross_reference` lists them all. |
 | `cross_reference_formats` | `namespace: format`, from `FORMATS`, for a cross-reference. |
