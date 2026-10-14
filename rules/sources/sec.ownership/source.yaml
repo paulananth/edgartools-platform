@@ -40,6 +40,14 @@ mdm:
       - classification_deferred
       - classification_entity_undetermined
       - quality_legal_name_present
+      - quality_legal_name_has_letter
+      # A CIK that is not one, or none, sets the record aside and never stops
+      # the run (rebuild ticket 10; operator, 2026-10-02, "Proposed set").
+      - invalid_cik
+      - missing_record_identity
+      # A link with no issuer or no date (ticket 10): the filing waits, the run goes on.
+      - relationship_end_missing
+      - invalid_relationship_interval
       adapter:
         # The owner's name, as the filing states it: blank text is no value. The
         # owner's address is never captured into MDM for a reporting owner (Person
@@ -88,6 +96,8 @@ mdm:
           on: period_of_report
           held: is_director
           time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
           scope: SEC ownership
         - type: EMPLOYED_BY
           capacity: officer
@@ -97,6 +107,8 @@ mdm:
           held: is_officer
           title: officer_title
           time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
           scope: SEC ownership
         - type: BENEFICIAL_OWNER_OF
           capacity: ten_percent_owner
@@ -105,4 +117,6 @@ mdm:
           on: period_of_report
           held: is_ten_percent_owner
           time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
           scope: SEC ownership

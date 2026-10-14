@@ -102,6 +102,22 @@ ONE_STATEMENT = {
 }
 
 
+# Rebuild ticket 10 (operator, 2026-10-02, "Proposed set"): Person's name must
+# hold a letter, and a bad CIK sets the record aside without stopping the run.
+PERSON_WITH_TICKET_10_CHECKS = "1ba9cd4cbe86a7d7d75fd177b468e266b884b2ef3d63b9ca8dc0053e8b69d6b2"
+TICKET_10_REASONS = {"quality_legal_name_has_letter", "invalid_cik", "missing_record_identity",
+                     "relationship_end_missing", "invalid_relationship_interval"}
+
+
+def _without_ticket_10_checks(contract: dict) -> dict:
+    quality = contract["quality"]
+    return {**contract,
+            "nonblocking_deferred_reasons": [r for r in contract["nonblocking_deferred_reasons"]
+                                             if r not in TICKET_10_REASONS],
+            "quality": {**quality, "version": quality["version"].removesuffix("-v2") + "-v1",
+                        "checks": [c for c in quality["checks"] if c["id"] != "legal_name_has_letter"]}}
+
+
 def _with_retired_lists(contract: dict, code: str) -> dict:
     assert digest(contract) == ONE_STATEMENT[code], code
     return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[code]}}
@@ -315,8 +331,9 @@ def test_every_rules_file_round_trips_exactly(path):
 
 
 def test_person_configured_fields_preserve_the_previous_contract_digest():
-    contract = _with_retired_lists(files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1"),
-                                   "sec.submissions.person.v1")
+    contract = files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1")
+    assert digest(contract) == PERSON_WITH_TICKET_10_CHECKS
+    contract = _with_retired_lists(_without_ticket_10_checks(contract), "sec.submissions.person.v1")
     assert digest(contract) == PERSON_ONE_PUBLICATION_A_BUNDLE
     contract = {**contract, "publication_key": PERSON_ONE_PUBLICATION_A_DOCUMENT}
     assert digest(contract) == SEC_CONFIGURED_FIELDS["sec.submissions.person"]

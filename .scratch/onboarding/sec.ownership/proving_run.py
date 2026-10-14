@@ -80,10 +80,13 @@ def proving_policy(approval: dict) -> dict:
     """The repo's merge rules with the two ownership rules switched on for this run."""
     body = files.policy()
     person = body["kinds"]["person"]
-    person["identifiers"]["cik"]["verification"] = {"corpus_sha256": "0" * 64, **approval}
+    # Main carries the approved verification (#964); a policy without one gets a stand-in.
+    person["identifiers"]["cik"].setdefault("verification", {"corpus_sha256": "0" * 64, **approval})
     rules = {r["rule_id"]: r for r in person["rules"]}
     measured = rules["sec-ownership-person"]
-    body["automatic_rules"] = [*body["automatic_rules"], {
+    # On main the two rules are switched on (#964); the run adds only what is not.
+    active = {(r["kind"], r["family"], r["rule_id"]) for r in body["automatic_rules"]}
+    body["automatic_rules"] = [*body["automatic_rules"], *(entry for entry in ({
         "kind": "person", "family": "classification", "rule_id": measured["rule_id"],
         "rule_version": measured["version"], "verdict": "person", "activation": "measured",
         # The measured sample (measure.py, measure.json): the owners the proven rule,
@@ -91,7 +94,7 @@ def proving_policy(approval: dict) -> dict:
         "proof": proof(approval)}, {
         "kind": "person", "family": "binding", "rule_id": "sec-ownership-person-cik",
         "rule_version": rules["sec-ownership-person-cik"]["version"], "verdict": "bind",
-        "activation": "deterministic"}]
+        "activation": "deterministic"}) if (entry["kind"], entry["family"], entry["rule_id"]) not in active)]
     return body
 
 

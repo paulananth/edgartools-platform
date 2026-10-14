@@ -1,9 +1,11 @@
 # Data quality for SEC ownership filings read as the reporting owner (profiling
 # ticket 07). Checks run on each record after the mapping and before the merge.
+# Rebuild ticket 10 (operator, 2026-10-02, "Proposed set"): the name must
+# hold a letter, and each link names both ends and its date (source.yaml).
 #
-# One check, as for the Person feed: an owner with no name never merges and never
+# As for the Person feed, an owner with no name never merges and never
 # stops the run; it waits as an open exception (operator, 2026-09-28).
-version: sec-ownership-quality-v1
+version: sec-ownership-quality-v2
 quality:
   sec.ownership.reporting_owner.v1:
     checks:
@@ -11,3 +13,12 @@ quality:
       test: present@1
       value: fields.legal_name
       on_fail: exception
+    - id: legal_name_has_letter
+      test: pattern@1
+      value: fields.legal_name
+      on_fail: exception
+      # A letter of any script (accents and other alphabets count); a name of
+      # digits and marks alone is no name. The name is kept as filed:
+      # apostrophes, curly or straight, and degrees such as "Jr." or "PhD" stay.
+      args:
+        regex: '(?s).*[^\W\d_].*'

@@ -501,6 +501,8 @@ def _refuse_link(scope: dict, spec: dict) -> None:
 
 def _link(scope: dict, spec: dict) -> dict | None:
     """One link a mapping states, read from its scope; none without its ends."""
+    if "ends" in spec and not (isinstance(spec["ends"], dict) and spec["ends"].get("reason")):
+        raise MappingError("A link's ends rule names its reason")
     _refuse_link(scope, spec)
     relationship_type = spec.get("type")
     if "type_field" in spec:
@@ -517,7 +519,11 @@ def _link(scope: dict, spec: dict) -> dict | None:
             else {}
         )
     except ValueError:
-        return None
+        # With `ends`, a record that names no end sets itself aside; without
+        # it, a list item with no end is simply no link.
+        if "ends" not in spec:
+            return None
+        raise UnsupportedRecord(spec["ends"]["reason"]) from None
     link = {
         **start,
         "type": relationship_type,

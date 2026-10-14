@@ -74,3 +74,28 @@ def test_a_date_that_is_not_a_calendar_date_sets_the_record_aside(given):
 
     with pytest.raises(UnsupportedRecord, match="invalid_time"):
         read({"issuer": "1", "period": given, "is_officer": True})
+
+
+# The link checks (rebuild ticket 10; operator, 2026-10-02, "Proposed set"): a
+# link must name both ends and a date; each failure sets the record aside.
+def test_without_ends_a_link_with_no_target_is_no_link():
+    assert read({"period": "2026-01-05", "is_officer": True}) == []
+
+
+def test_with_ends_a_link_with_no_target_sets_the_record_aside():
+    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+    with pytest.raises(UnsupportedRecord, match="link_end_missing"):
+        read({"period": "2026-01-05", "is_officer": True}, {**OFFICER, "ends": {"reason": "link_end_missing"}})
+
+
+def test_ends_names_its_reason():
+    with pytest.raises(MappingError):
+        read({"issuer": "1", "period": "2026-01-05", "is_officer": True}, {**OFFICER, "ends": {}})
+
+
+def test_an_interval_rule_sets_aside_a_capacity_link_with_no_date():
+    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+
+    with pytest.raises(UnsupportedRecord, match="link_date_missing"):
+        read({"issuer": "1", "is_officer": True}, {**OFFICER, "interval": {"reason": "link_date_missing"}})
