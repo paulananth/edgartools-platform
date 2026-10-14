@@ -29,7 +29,7 @@ silently.
 
 from __future__ import annotations
 
-from .codes import determines, name_like
+from .codes import code_like, determines, name_like
 from .identifiers import check_digits, identifier_shaped, stand_in_sql
 from .inputs import sql_name
 from .quality import item
@@ -76,28 +76,49 @@ def _issued(con, part: str, column: str) -> str | None:
     return check_digits(values)["family"]
 
 
-def find(con, part: str, columns: list[dict], existing: set[str]) -> tuple[list[dict], list[str]]:
+def _names_another_part(con, part: str, x: dict, keys_elsewhere: dict[str, list[dict]]) -> str | None:
+    """The other part whose own identifier holds this column's values (at least 90% of them, of
+    the same shape): the column links to that part's records; it carries no entity of its own."""
+    t, cx = sql_name(part), sql_name(x["name"])
+    for other, cols in keys_elsewhere.items():
+        for k in cols:
+            if other == part or k["shape"] != x["shape"]:
+                continue
+            held, total = con.execute(
+                f"SELECT count(*) FILTER (WHERE o.v IS NOT NULL), count(*) FROM (SELECT DISTINCT CAST({cx} AS VARCHAR) v "
+                f"FROM {t} WHERE {_real(cx)}) s LEFT JOIN (SELECT DISTINCT CAST({sql_name(k['name'])} AS VARCHAR) v "
+                f"FROM {sql_name(other)}) o USING (v)").fetchone()
+            if total and held >= 0.9 * total:
+                return other
+    return None
+
+
+def find(con, part: str, columns: list[dict], existing: set[str],
+         keys_elsewhere: dict[str, list[dict]] | None = None) -> tuple[list[dict], list[str]]:
     """The entities carried inside one part, with their evidence; and the names left out
-    because a part of that name already exists."""
+    because a part of that name already exists. `keys_elsewhere`: each other part's unique
+    identifier columns, so a column that names their records is left to the links step."""
     plain = [c for c in columns if not c["structure"] and not c["name"].startswith("_")]
     candidates = []
     for x in plain:
         if not identifier_shaped(x) or repeated_values(con, part, x["name"]) < MIN_REPEATED:
+            continue
+        if keys_elsewhere and _names_another_part(con, part, x, keys_elsewhere):
             continue
         group = _group(x["name"])
         beside = [c for c in plain if c["name"] != x["name"] and _group(c["name"]) == group and c["distinct"] > 1
                   and c["non_null"] >= FILLED * x["non_null"] and not _near_constant(c)]
         shares = {c["name"]: follows_on_repeats(con, part, x["name"], c["name"]) for c in beside}
         follows = {c["name"]: shares[c["name"]] for c in beside if shares[c["name"]] >= FOLLOWS}
-        named = [c for c in beside if name_like(c, set())]
-        issued = None
-        if not any(c["name"] in follows for c in named):
-            issued = _issued(con, part, x["name"])
-            if not issued:
-                continue
-            if named:  # its name as the rows write it most often; the rest are reported
-                best = max(named, key=lambda c: (shares[c["name"]], -plain.index(c)))
-                follows[best["name"]] = shares[best["name"]]
+        # A short code (a country, a currency) is no name, however many values it has.
+        named = [c for c in beside if name_like(c, set()) and not code_like(c)]
+        issued = _issued(con, part, x["name"])
+        if not issued and not any(c["name"] in follows for c in named):
+            continue
+        if issued and named and not any(c["name"] in follows for c in named):
+            # Its name as the rows write it most often; the rows that differ go to quality.
+            best = max(named, key=lambda c: (shares[c["name"]], -plain.index(c)))
+            follows[best["name"]] = shares[best["name"]]
         candidates.append((x, group, follows, issued))
     # Identifiers that determine each other name one entity: keep the better-filled one.
     kept = []

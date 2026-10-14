@@ -279,3 +279,26 @@ def test_an_identifier_that_repeats_on_few_rows_is_an_entity_when_its_name_follo
     rows = [(f"R{i:06d}", f"S{s:09d}", f"{WORDS[s % 10]} {WORDS[s // 10 % 10]} Series {s}") for i, s in enumerate(series)]
     _, found = _entities(rows, "report VARCHAR, series VARCHAR, series_name VARCHAR")
     assert [(e["column"], e["follows"]) for e in found] == [("series", ["series_name"])]
+
+
+def test_an_issued_identifier_carries_its_name_even_when_a_code_follows_it():
+    # A country code follows each security exactly; the name, written three ways, still comes with it.
+    countries = [f"{a}{b}" for a in "ABCDEFGHIJKL" for b in "XYZWV"]
+    rows = [(f"H{i:06d}", _issued_id(i % 60), f"{WORDS[i % 60 % 10]} {WORDS[i % 60 // 10]} {['Inc', 'Corp', 'Co'][i // 60 % 3]}",
+             countries[i % 60]) for i in range(1200)]  # 20 holdings each: the country list is a code list
+    _, found = _entities(rows, "holding VARCHAR, security VARCHAR, issuer_name VARCHAR, country VARCHAR")
+    (security,) = found
+    assert "issuer_name" in security["follows"] and security["evidence"]["issued"]
+
+
+def test_a_column_holding_another_parts_identifiers_is_a_link_not_an_entity():
+    con = duckdb.connect()
+    con.execute("CREATE TABLE h (holding VARCHAR, issuer_name VARCHAR)")
+    con.executemany("INSERT INTO h VALUES (?, ?)", [(f"{100000000 + i}", f"{WORDS[i % 10]} {WORDS[i // 10 % 10]} Ltd") for i in range(80)])
+    con.execute("CREATE TABLE d (detail VARCHAR, holding VARCHAR, issuer_name VARCHAR)")
+    con.executemany("INSERT INTO d VALUES (?, ?, ?)",
+                    [(f"D{i:05d}", f"{100000000 + i % 80}", f"{WORDS[i % 80 % 10]} {WORDS[i % 80 // 10 % 10]} Ltd") for i in range(240)])
+    profiles = {t: profile.columns(con, t) for t in ("h", "d")}
+    elsewhere = {t: [c for c in cols if c["unique"] == 1.0 and identifiers.identifier_shaped(c)] for t, cols in profiles.items()}
+    assert embedded.find(con, "d", profiles["d"], {"h", "d"}, elsewhere)[0] == []
+    assert [e["column"] for e in embedded.find(con, "d", profiles["d"], {"h", "d"})[0]] == ["holding"]

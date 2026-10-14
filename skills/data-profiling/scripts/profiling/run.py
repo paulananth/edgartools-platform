@@ -128,8 +128,11 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     # An entity carried inside a part (its identifier and the columns that follow it) becomes a part.
     carried: dict[str, set[str]] = {}
     entities: dict[str, dict] = {}
+    # Each input part's own identifiers: a column that names their records is a link, not an entity.
+    keys_elsewhere = {p: [c for c in profiles[p] if not c["structure"] and c["unique"] == 1.0 and c["non_null"]
+                          and identifiers.identifier_shaped(c)] for p in parts}
     for p in list(parts):
-        found, clashes = embedded.find(con, p, profiles[p], set(parts))
+        found, clashes = embedded.find(con, p, profiles[p], set(parts), keys_elsewhere)
         approved_only = embedded.known(con, p, profiles[p], known, set(parts) | {e["part"] for e in found})
         for entity in found:
             approved = next((k for k in known if k["part"] == entity["part"]), None)
