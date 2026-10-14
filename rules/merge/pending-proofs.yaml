@@ -115,3 +115,44 @@ sec-person-candidate:
   approved_at: null
   reason: 'person feed 1, rule C-J ported to SEC submissions: fresh random draw, step 3 person
     570/570, step 2 entity 102/102; 57 hard cases, 0 entities called a person'
+# SEC ownership (Forms 3, 4, 5), the reporting owner as a Person (rebuild-priorities
+# ticket 01). Labels: the proven rule sec-person-candidate run on each owner's own
+# SEC submissions document (the pinned all-76230 capture); the 31 it left undecided
+# and a random 50 of the 198 with no document were checked by the operator.
+sec-ownership-person:
+  method: wilson_lower_bound
+  one_sided_confidence: 0.975
+  n: 4622
+  correct: 4622
+  lower_bound: 0.999169
+  adversarial:
+    fixture_sha256: 199091171595270af3002e3da642e8e7b9bb1c95f88f0423707c580b1c57f441
+    n: 363
+    violations: 0
+  cohort:
+    filings: 8723
+    by_step:
+      3-director:
+        n: 2488
+        correct: 2488
+        lower_bound: 0.998458
+      3-officer:
+        n: 2148
+        correct: 2148
+        lower_bound: 0.998214
+    unlabelled_sample:
+      population: 198
+      n: 50
+      correct: 50
+    files:
+      measure.json: 199091171595270af3002e3da642e8e7b9bb1c95f88f0423707c580b1c57f441
+      measure.py: c242834459f699f2b012c7a66d0cf9dcc34746a5f27a14136647a4e74ce31a58
+      sample-50.json: 868c81643e99707d9d03bf81d36a8225b4f40af1a37cae8ebd29f677ac20d6d7
+      proving-run.json: e8df7616ce019967ceec9963328f578b4942228f4e5a6683ed3d2f7f10a71f2a
+  approved_by: null
+  approved_at: null
+  reason: 'SEC ownership owner Proving Run (ticket 01): 4,622 of 4,622 owners labelled people
+    called people (director 2,488, officer 2,148); 0 of 363 owners labelled entities called a
+    person; 50 of 50 sampled owners with no submissions document checked as people; Proving
+    Run: 4,820 people by CIK, 0 CIKs on two people, 0 both person and Company, second pass
+    changed nothing'

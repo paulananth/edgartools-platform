@@ -1,0 +1,11 @@
+{
+ "check": "Owners the rule calls people (director or officer) with no SEC submissions document: a random 50 of 198 (seed 20261014), labelled from the filing alone and checked by the operator",
+ "population": 198,
+ "drawn": 50,
+ "seed": 20261014,
+ "people": 50,
+ "not_people": 0,
+ "checked_by": "operator",
+ "checked_at": "2026-10-14",
+ "words": "All 50 are people (Recommended)"
+}
