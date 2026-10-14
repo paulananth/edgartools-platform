@@ -552,10 +552,9 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
 
 **Test baseline**
 
-- The 8 `tests/integration/test_acquisition_ledger_postgres.py`/`test_conflict_postgres.py` Postgres
-  schema-drift failures against the local test-Postgres instance, and the `fastapi` import-collection
-  errors in `tests/mdm/test_api.py`, `test_temporal_graph_queries.py` and `test_runtime_ops.py`, are
-  pre-existing and unrelated to any current change. "Green except these" is the normal baseline.
+- No test is expected to fail: CI is green on `main`. Locally, the install wizard tests
+  (`tests/architecture/test_install_wizard.py`) run `infra/scripts/install.sh`, which needs a `python3` of
+  3.11 or later and `jq` on `PATH`. macOS's own `/usr/bin/python3` is 3.9, so put a newer one first.
 - **Locally, run the tests a change can affect; CI runs everything** (operator, 2026-09-29, after a
   16-minute integration run). `pytest-testmon` records which code each test executes and re-runs only
   the tests touching changed Python: `TESTMON_DATAFILE=~/.cache/edgartools/testmondata uv run pytest
