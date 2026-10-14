@@ -286,7 +286,16 @@ def _xml_records(stream) -> Iterator[dict]:
 
 def format_of(path: Path) -> str:
     suffix = path.suffix.lower().lstrip(".")
+    if not suffix and path.is_file():
+        return _sniff(path)
     return {"ndjson": "jsonl", "db": "sqlite", "sqlite3": "sqlite", "txt": "csv", "tsv": "csv"}.get(suffix, suffix)
+
+
+def _sniff(path: Path) -> str:
+    """A file with no suffix (captured files often have none): XML or JSON by its first character."""
+    with path.open("rb") as handle:
+        head = handle.read(512).lstrip(b"\xef\xbb\xbf \t\r\n")
+    return "xml" if head.startswith(b"<") else "json" if head[:1] in (b"{", b"[") else ""
 
 
 def sql_name(part: str) -> str:
@@ -598,8 +607,8 @@ def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed:
     part = Part(name, tables[0].location if len(tables) == 1 else location, fmt, size,
                 scan="sampled" if sampled else "full", source_sql=source if sampled else None,
                 encoding=_encoding(tables))
-    if len(tables) == 1 and tables[0].file != Path(tables[0].location):
-        part.sha256 = digest(tables[0].file)  # a zip member's own bytes
+    if len(tables) == 1:
+        part.sha256 = digest(tables[0].file)  # the table's own bytes: a zip member, or one file of a folder
     return [part]
 
 

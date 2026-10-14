@@ -236,7 +236,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
     key_labels = {c["label_column"] for c in code_list if c["label_column"] and [c["column"]] == record_key["columns"]}
     times = timing.roles(con, p, columns, record_key["columns"], personal)
     out = [l for l in found_links if l["from"]["part"] == p and l["to"]["part"] != p]
-    inbound = [l for l in found_links if l["to"]["part"] == p and l["from"]["part"] != p]
+    # A part's own extension or list says nothing about what the part is: only other parts' links count.
+    inbound = [l for l in found_links if l["to"]["part"] == p and l["from"]["part"] != p
+               and not _own(l, found_links, profiles)]
     linked_columns = {c for l in out for c in l["from"]["columns"]}
     # A number with a label column is a code; any other number may be a measure, even with few values.
     measures = [c for c in columns if profile.is_numeric(c) and not c["structure"] and c["name"] not in linked_columns
@@ -351,6 +353,19 @@ def _values(con, p: str, c: dict) -> list[str]:
     return [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs.sql_name(c['name'])} AS VARCHAR) FROM "
                                       f"{inputs.sql_name(p)} WHERE {inputs.sql_name(c['name'])} IS NOT NULL "
                                       "ORDER BY 1 LIMIT 200").fetchall()]
+
+
+def _own(link: dict, found_links: list[dict], profiles) -> bool:
+    """A link from a part that belongs to the one it points at: an extension (one row per row,
+    keyed by the same identifier) or a list of it (it points at nothing else, nothing points at
+    it, and its rows are numbered by a running counter). Neither is another part referring to it."""
+    if link["cardinality"] == "1:1":
+        return True
+    source = link["from"]["part"]
+    elsewhere = {x["to"]["part"] for x in found_links if x["from"]["part"] == source} - {source, link["to"]["part"]}
+    pointed_at = any(x["to"]["part"] == source and x["from"]["part"] != source for x in found_links)
+    counter = any(not c["structure"] and profile.is_integer(c) and identifiers.dense_sequence(c) for c in profiles[source])
+    return not elsewhere and not pointed_at and counter
 
 
 def _rows(profiles, part):

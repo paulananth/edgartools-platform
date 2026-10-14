@@ -227,3 +227,55 @@ def test_approval_rewrites_the_report(findings, tmp_path):
     assert "Approval: **draft**" in (out / "REPORT.md").read_text()
     assert profile_data.main(["approve", "--findings", str(out / "findings.yaml"), "--by", "test", "--words", "yes"]) == 0
     assert "Approval: **approved**" in (out / "REPORT.md").read_text()
+
+
+# ---------------------------------------------------------------- identifiers that name another entity
+
+from profiling import embedded, identifiers, profile  # noqa: E402
+
+duckdb = pytest.importorskip("duckdb")
+
+
+def _issued_id(n: int) -> str:
+    """An 8-character base and the digit that makes it pass Luhn over letter values."""
+    base = f"{n:05d}{'ABC'[n % 3]}{n % 10}{'XYZ'[n % 3]}"
+    return next(base + d for d in "0123456789" if identifiers.luhn_letter_values(base + d))
+
+
+def _entities(rows: list[tuple], columns: str):
+    con = duckdb.connect()
+    con.execute(f"CREATE TABLE t ({columns})")
+    con.executemany(f"INSERT INTO t VALUES ({', '.join('?' * len(rows[0]))})", rows)
+    found, _ = embedded.find(con, "t", profile.columns(con, "t"), set())
+    return con, found
+
+
+def test_an_issued_identifier_names_its_entity_though_the_rows_write_its_name_differently():
+    # 60 securities held 5 times each; each holder writes the name its own way; stand-ins for none.
+    rows = [(f"H{i:06d}", _issued_id(i % 60), f"{WORDS[i % 60 % 10]} {WORDS[i % 60 // 10]} {['Inc', 'Corp', 'Co'][i // 60 % 3]}",
+             float(i)) for i in range(300)]
+    rows += [(f"H{900000 + i:06d}", stand_in, "Cash", 1.0) for i, stand_in in enumerate(["N/A", "000000000"] * 20)]
+    con, found = _entities(rows, "holding VARCHAR, security VARCHAR, issuer_name VARCHAR, balance DOUBLE")
+    (security,) = found
+    assert security["column"] == "security" and security["evidence"]["issued"] == "luhn over letter values"
+    assert security["follows"] == ["issuer_name"]
+    disagree = embedded.register(con, security)
+    assert con.execute('SELECT count(*) FROM "t.security"').fetchone()[0] == 60  # no stand-in is an entity
+    assert disagree["issuer_name"] > 0  # the names written differently go to quality
+
+
+def test_identifiers_that_determine_each_other_are_one_entity():
+    # 60 registrants, each with a number and a file number, filing 3 times.
+    rows = [(f"A{i:05d}", f"{1000000 + i % 60:010d}", f"8-{20000 + i % 60}X", f"{WORDS[i % 60 % 10]} {WORDS[i % 60 // 10]} Fund")
+            for i in range(180)]
+    _, found = _entities(rows, "accession VARCHAR, registrant VARCHAR, file_number VARCHAR, name VARCHAR")
+    assert [e["column"] for e in found] == ["registrant"]
+    assert set(found[0]["follows"]) >= {"file_number", "name"}
+
+
+def test_an_identifier_that_repeats_on_few_rows_is_an_entity_when_its_name_follows_there():
+    # 300 reports of 270 series: 30 series report twice, and each keeps its one name.
+    series = [i if i < 270 else i - 270 for i in range(300)]
+    rows = [(f"R{i:06d}", f"S{s:09d}", f"{WORDS[s % 10]} {WORDS[s // 10 % 10]} Series {s}") for i, s in enumerate(series)]
+    _, found = _entities(rows, "report VARCHAR, series VARCHAR, series_name VARCHAR")
+    assert [(e["column"], e["follows"]) for e in found] == [("series", ["series_name"])]

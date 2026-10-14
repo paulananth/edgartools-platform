@@ -2,17 +2,24 @@
 
 A part may carry another entity's identifier and its attributes on every row
 (the party named by each document, the supplier on each order line). Where an
-identifier-shaped column repeats (at most half as many values as rows) and at
-least one name-like column of the same object follows it (for each identifier
-value, its most common value holds on at least 95% of rows), the group is
-proposed as its own part: one row per identifier value, each following column
-at its most common value (ties broken by the smallest value, so every run gives
-the same row). The part it came from then links to it by the identifier, and
-both are classified by their own tests.
+identifier-shaped column repeats (at least `MIN_REPEATED` of its values on more
+than one row) and at least one name-like column of the same object follows it
+(over the rows whose identifier value repeats, each value's most common name holds
+on at least 95% of them), the group is proposed as its own part: one row per
+identifier value, each following column at its most common value (ties broken by
+the smallest value, so every run gives the same row). The part it came from then
+links to it by the identifier, and both are classified by their own tests.
 
-The columns that follow are those beside the identifier in the same nested
-object (`party.id` with `party.name`), or, for a top-level identifier, the
-other top-level columns: an attribute recorded elsewhere in the row (a role,
+An identifier that passes a check-digit family is issued by an authority: it names
+its entity by itself, so it becomes a part even when the rows write its name in
+different ways; it carries its most common name, and the rows that differ go to
+quality. Two identifiers that determine each other (each follows the other) name
+one entity: it is proposed once, by the better-filled one, carrying the other.
+
+Stand-ins for "no value" in the identifier ("N/A", "000000000") are no entity and
+never evidence. The columns that follow are those beside the identifier in the
+same nested object (`party.id` with `party.name`), or, for a top-level identifier,
+the other top-level columns: an attribute recorded elsewhere in the row (a role,
 an amount) belongs to the row, not to the entity. A column that follows only
 because one value fills nearly every row, or that is filled on fewer than half
 the identifier's rows, is a coincidence and is not carried. Rows whose value
@@ -23,13 +30,13 @@ silently.
 from __future__ import annotations
 
 from .codes import determines, name_like
-from .identifiers import identifier_shaped
+from .identifiers import check_digits, identifier_shaped, stand_in_sql
 from .inputs import sql_name
 from .quality import item
 
-FOLLOWS = 0.95  # share of rows where each identifier value has its most common value
-REPEATS = 0.5   # at most this many distinct identifier values per row
-FILLED = 0.5    # a carried column is filled on at least this share of the identifier's rows
+FOLLOWS = 0.95     # share of repeated rows where each identifier value has its most common value
+MIN_REPEATED = 20  # at least this many identifier values on more than one row: evidence, not chance
+FILLED = 0.5       # a carried column is filled on at least this share of the identifier's rows
 
 
 def _group(column: str) -> str:
@@ -41,27 +48,73 @@ def _near_constant(c: dict) -> bool:
     return bool(c["top"]) and c["top"][0]["rows"] >= FOLLOWS * c["non_null"]
 
 
+def _real(x: str) -> str:
+    """Rows whose identifier holds a value, not a stand-in for none."""
+    return f"{x} IS NOT NULL AND NOT {stand_in_sql(f'CAST({x} AS VARCHAR)')}"
+
+
+def repeated_values(con, part: str, column: str) -> int:
+    t, x = sql_name(part), sql_name(column)
+    return con.execute(f"SELECT count(*) FROM (SELECT {x} FROM {t} WHERE {_real(x)} GROUP BY 1 HAVING count(*) > 1)").fetchone()[0]
+
+
+def follows_on_repeats(con, part: str, a: str, b: str) -> float:
+    """Share of the rows whose A value repeats where B is A's most common B: a column that follows
+    an identifier on rows seen once proves nothing, so only repeated values are evidence."""
+    t, ca, cb = sql_name(part), sql_name(a), sql_name(b)
+    held, rows = con.execute(
+        f"WITH r AS (SELECT {ca} a, {cb} b FROM {t} WHERE {_real(ca)} AND {cb} IS NOT NULL), "
+        "rep AS (SELECT a FROM r GROUP BY a HAVING count(*) > 1), "
+        "p AS (SELECT r.a, r.b, count(*) n FROM r JOIN rep USING (a) GROUP BY 1, 2) "
+        "SELECT (SELECT sum(m) FROM (SELECT max(n) m FROM p GROUP BY a)), (SELECT sum(n) FROM p)").fetchone()
+    return round(held / rows, 6) if rows else 0.0
+
+
+def _issued(con, part: str, column: str) -> str | None:
+    values = [r[0] for r in con.execute(
+        f"SELECT DISTINCT CAST({sql_name(column)} AS VARCHAR) FROM {sql_name(part)} WHERE {_real(sql_name(column))}").fetchall()]
+    return check_digits(values)["family"]
+
+
 def find(con, part: str, columns: list[dict], existing: set[str]) -> tuple[list[dict], list[str]]:
     """The entities carried inside one part, with their evidence; and the names left out
     because a part of that name already exists."""
     plain = [c for c in columns if not c["structure"] and not c["name"].startswith("_")]
-    found, clashes, named = [], [], set()
+    candidates = []
     for x in plain:
-        if not identifier_shaped(x) or x["distinct"] > REPEATS * x["non_null"]:
+        if not identifier_shaped(x) or repeated_values(con, part, x["name"]) < MIN_REPEATED:
             continue
         group = _group(x["name"])
         beside = [c for c in plain if c["name"] != x["name"] and _group(c["name"]) == group and c["distinct"] > 1
                   and c["non_null"] >= FILLED * x["non_null"] and not _near_constant(c)]
-        shares = {c["name"]: determines(con, part, x["name"], c["name"]) for c in beside}
-        follows = [c for c in beside if shares[c["name"]] >= FOLLOWS]
-        if not any(name_like(c, set()) for c in follows):
+        shares = {c["name"]: follows_on_repeats(con, part, x["name"], c["name"]) for c in beside}
+        follows = {c["name"]: shares[c["name"]] for c in beside if shares[c["name"]] >= FOLLOWS}
+        named = [c for c in beside if name_like(c, set())]
+        issued = None
+        if not any(c["name"] in follows for c in named):
+            issued = _issued(con, part, x["name"])
+            if not issued:
+                continue
+            if named:  # its name as the rows write it most often; the rest are reported
+                best = max(named, key=lambda c: (shares[c["name"]], -plain.index(c)))
+                follows[best["name"]] = shares[best["name"]]
+        candidates.append((x, group, follows, issued))
+    # Identifiers that determine each other name one entity: keep the better-filled one.
+    kept = []
+    for x, group, follows, issued in sorted(candidates, key=lambda e: (-e[0]["non_null"], plain.index(e[0]))):
+        if any(x["name"] in f and k["name"] in follows for k, _, f, _ in kept):
             continue
+        kept.append((x, group, follows, issued))
+    found, clashes, names = [], [], set()
+    for x, group, follows, issued in sorted(kept, key=lambda e: plain.index(e[0])):
         name = f"{part}.{group or x['name']}"
-        if name in existing or name in named:
+        if name in existing or name in names:
             clashes.append(name)
             continue
-        named.add(name)
-        found.append(_entity(name, part, x, {c["name"]: shares[c["name"]] for c in follows}))
+        names.add(name)
+        entity = _entity(name, part, x, follows)
+        entity["evidence"]["issued"] = issued
+        found.append(entity)
     return found, clashes
 
 
@@ -106,7 +159,7 @@ def register(con, entity: dict) -> dict[str, int]:
     """The entity as a table: one row per identifier value, each column at its most common value.
     Returns, per carried column, the rows of the source part whose value differs from the one kept."""
     t, target, x = sql_name(entity["from"]), sql_name(entity["part"]), sql_name(entity["column"])
-    con.execute(f"CREATE TABLE {target} AS SELECT DISTINCT {x} FROM {t} WHERE {x} IS NOT NULL")
+    con.execute(f"CREATE TABLE {target} AS SELECT DISTINCT {x} FROM {t} WHERE {_real(x)}")
     disagree = {}
     for column in entity["follows"]:
         c = sql_name(column)
@@ -114,7 +167,7 @@ def register(con, entity: dict) -> dict[str, int]:
         con.execute(f"ALTER TABLE {target} ADD COLUMN {c} {kind}")
         con.execute(f"""UPDATE {target} SET {c} = kept.v FROM (
             SELECT k, first(v ORDER BY n DESC, CAST(v AS VARCHAR)) v FROM (
-                SELECT {x} k, {c} v, count(*) n FROM {t} WHERE {x} IS NOT NULL AND {c} IS NOT NULL GROUP BY 1, 2)
+                SELECT {x} k, {c} v, count(*) n FROM {t} WHERE {_real(x)} AND {c} IS NOT NULL GROUP BY 1, 2)
             GROUP BY k) kept WHERE {target}.{x} = kept.k""")
         disagree[column] = con.execute(
             f"SELECT count(*) FROM {t} JOIN {target} e ON {t}.{x} = e.{x} "

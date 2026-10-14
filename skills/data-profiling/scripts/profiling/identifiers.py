@@ -12,6 +12,24 @@ import string
 
 BASE36 = {ch: i for i, ch in enumerate(string.digits + string.ascii_uppercase)}
 
+# What an identifier column writes for "no value": a written stand-in, compared upper-cased and
+# trimmed with its punctuation kept ("N/A" is one; a bare "NA" may be a real code), or a run of
+# one repeated 0 or 9 of three or more characters. Left out of shape, check-digit and entity
+# tests, and reported to quality, which proposes the engine's placeholder check.
+STAND_INS = ("N/A", "#N/A", "NONE", "NULL", "UNKNOWN", "NOT AVAILABLE", "NOT APPLICABLE")
+
+
+def is_stand_in(value) -> bool:
+    text = str(value).strip().upper()
+    return text in STAND_INS or (len(text) >= 3 and (set(text) == {"0"} or set(text) == {"9"}))
+
+
+def stand_in_sql(text: str) -> str:
+    """The same test in SQL, over a VARCHAR expression."""
+    listed = ", ".join("'" + s.replace("'", "''") + "'" for s in STAND_INS)
+    return (f"(upper(trim({text})) IN ({listed}) OR regexp_full_match(trim({text}), '0{{3,}}') "
+            f"OR regexp_full_match(trim({text}), '9{{3,}}'))")
+
 
 def mod97_10(value: str) -> bool:
     """ISO 7064 mod 97-10: letters read as 10-35; the number mod 97 is 1."""
@@ -50,6 +68,25 @@ def mod37_36(value: str) -> bool:
     return check == 1
 
 
+def luhn_letter_values(value: str) -> bool:
+    """Luhn over letters and digits, each character read as its value (0-9, A-Z as 10-35): double
+    every second value from the right and add the digits of each result."""
+    if len(value) < 2 or not value.isalnum() or not value.isascii():
+        return False
+    total = 0
+    for i, ch in enumerate(reversed(value.upper())):
+        d = BASE36[ch] * (2 if i % 2 else 1)
+        total += d // 10 + d % 10
+    return total % 10 == 0
+
+
+def luhn_letter_digits(value: str) -> bool:
+    """Luhn over the digits of each character's value (A-Z as 10-35, so each letter is two digits)."""
+    if len(value) < 2 or not value.isalnum() or not value.isascii() or value.isdigit():
+        return False
+    return luhn("".join(str(BASE36[ch]) for ch in value.upper()))
+
+
 def luhn(value: str) -> bool:
     """Luhn mod 10: double every second digit from the right."""
     if len(value) < 2 or not value.isdigit():
@@ -85,6 +122,8 @@ FAMILIES = {
     "mod 11-10": (mod11_10, 1 / 10),
     "mod 37-36": (mod37_36, 1 / 36),
     "luhn": (luhn, 1 / 10),
+    "luhn over letter values": (luhn_letter_values, 1 / 10),
+    "luhn over letter digits": (luhn_letter_digits, 1 / 10),
     "damm": (damm, 1 / 10),
 }
 CHECKED = 20_000  # distinct values tested per column, chosen with a fixed seed
@@ -93,14 +132,16 @@ PASS, LIFT = 0.99, 5
 
 def check_digits(values: list[str], seed: int = 0) -> dict:
     """Pass rate per family over distinct values, and the family that clears both bars (or None)."""
-    values = sorted({str(v).strip() for v in values if v is not None and str(v).strip()})
+    values = sorted({str(v).strip() for v in values if v is not None and str(v).strip() and not is_stand_in(v)})
     if len(values) > CHECKED:
         values = random.Random(seed).sample(values, CHECKED)
     if not values:
         return {"family": None, "rates": {}, "tested": 0}
     rates = {name: round(sum(map(test, values)) / len(values), 6) for name, (test, _) in FAMILIES.items()}
     passing = [(rates[n], n) for n, (_, chance) in FAMILIES.items() if rates[n] >= PASS and rates[n] >= LIFT * chance]
-    best = max(passing)[1] if passing else None
+    # The highest pass rate; on a tie the family listed first (plain Luhn over letter-value Luhn on digits).
+    order = list(FAMILIES)
+    best = max(passing, key=lambda rn: (rn[0], -order.index(rn[1])))[1] if passing else None
     return {"family": best, "pass_rate": rates[best] if best else None,
             "chance_rate": round(FAMILIES[best][1], 6) if best else None, "rates": rates, "tested": len(values)}
 
