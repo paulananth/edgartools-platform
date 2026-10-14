@@ -4,10 +4,14 @@
 # person-cik 17:12 ET, each "Approved"). The classification rule's proof (in
 # policy.yaml and pending-proofs.yaml) is tied to this exact version, so any edit
 # to its steps or lists is a new version that must be measured again.
-version: person-2026-09-30.1
+version: person-2026-10-13.1
 defaults:
   sources:
   - sec.submissions.person.v1
+  # SEC ownership filings (profiling ticket 07), after the submissions document:
+  # the owner's name as a filing states it fills a field only where no submissions
+  # document did.
+  - sec.ownership.reporting_owner.v1
   allow_unknown_effective: true
 rules:
 # Rule C-J (docs/specs/person/consumer.md; prototype policy-person.json), ported under
@@ -108,6 +112,136 @@ rules:
   version: "2026-09-30"
   family: binding
   source: sec.submissions.person.v1
+  applies_to_verdict: person
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cik
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cik
+# The Person rule (sec-person-candidate) ported to SEC ownership filings (profiling
+# ticket 07, 2026-10-13): the same name tests on the owner's name as the filing states
+# it, and a person only when the filing names the owner a director or officer
+# (operator, 2026-10-13, "Persons by role first (Recommended)"). A Form 4 states no
+# entity type and none of the structural fields, so steps 1 and the structural test
+# have nothing to read; the role is the evidence instead. Measured on the local
+# ownership copies against sec-person-candidate on each owner's own submissions
+# document (all-76230): see pending-proofs.yaml.
+- rule_id: sec-ownership-person
+  version: 2026-10-13.1
+  family: classification
+  source: sec.ownership.reporting_owner.v1
+  emits:
+  - person
+  - entity_undetermined
+  - deferred
+  steps:
+  - step: 2-guard
+    verdict: deferred
+    when:
+    - primitive: token_match@1
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        token_list: entity_legal_form
+        min_count: 1
+        max_count: 1
+    - primitive: name_shape@1
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        min_tokens: 2
+        max_tokens: 5
+        suffix_list: person_suffix
+        forbid_digits:
+          value: true
+          applies_to: raw
+        forbid_characters:
+          value:
+          - "&"
+          applies_to: raw
+  - step: "2"
+    verdict: entity_undetermined
+    when:
+    - primitive: token_match@1
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        token_list: entity_legal_form
+        exclude_list: ambiguous
+        min_count: 1
+  - step: 3-director
+    verdict: person
+    when:
+    - primitive: token_match@1
+      negate: true
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        token_list: entity_legal_form
+        min_count: 1
+    - primitive: name_shape@1
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        min_tokens: 2
+        max_tokens: 5
+        suffix_list: person_suffix
+        forbid_digits:
+          value: true
+          applies_to: raw
+        forbid_characters:
+          value:
+          - "&"
+          applies_to: raw
+    - primitive: field_in_set@1
+      args:
+        field: is_director
+        values:
+        - true
+  - step: 3-officer
+    verdict: person
+    when:
+    - primitive: token_match@1
+      negate: true
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        token_list: entity_legal_form
+        min_count: 1
+    - primitive: name_shape@1
+      args:
+        field: rpt_owner_name
+        normalizer: conformed
+        min_tokens: 2
+        max_tokens: 5
+        suffix_list: person_suffix
+        forbid_digits:
+          value: true
+          applies_to: raw
+        forbid_characters:
+          value:
+          - "&"
+          applies_to: raw
+    - primitive: field_in_set@1
+      args:
+        field: is_officer
+        values:
+        - true
+  - step: "4"
+    verdict: deferred
+    otherwise: true
+# The owner's issued CIK, as person-cik: one CIK, one Person. Activates on the CIK
+# Identifier Contract once its sources list this one and the operator approves it on
+# the Proving Run's cohort.
+- rule_id: sec-ownership-person-cik
+  version: 2026-10-13.1
+  family: binding
+  source: sec.ownership.reporting_owner.v1
   applies_to_verdict: person
   emits:
   - bind
@@ -304,6 +438,7 @@ identifiers:
     authority: SEC/EDGAR
     sources:
     - sec.submissions.person.v1
+    - sec.ownership.reporting_owner.v1
     normalizer: normalize_identifier@sec-cik-v1
     claim:
       forward: 1

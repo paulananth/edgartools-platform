@@ -138,3 +138,10 @@ def test_a_document_that_is_not_an_ownership_document_is_refused():
     with pytest.raises(SourceRejected) as refused:
         bare(filing(root="edgarSubmission"))
     assert refused.value.code == "wrong_root"
+
+
+def test_each_owner_row_carries_the_filings_issuer_and_event_date():
+    """The owner's Dataset Contract states its link to the issuer, dated by the filing."""
+    for tables in (bare(filing(date="2026-01-05-05:00")), wrapped(filing(date="2026-01-05-05:00"))):
+        (owner,) = tables["reporting_owner"]
+        assert (owner["issuer_cik"], owner["period_of_report"], owner["is_director"]) == ("0000000001", "2026-01-05", True)
