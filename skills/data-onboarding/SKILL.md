@@ -71,8 +71,9 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
 
 The files in `rules/sources/` show Dataset Contracts and publication rules.
-For configured complete JSON source extract, use `sec.submissions.person` and
-[data-platform READING](../data-platform/READING.md). A declared target is
+For configured complete JSON source extract, find a feed that keeps each
+document whole (`grep -l "format: json" rules/sources/*/source.yaml`, then
+its `read:` block) and read [data-platform READING](../data-platform/READING.md). A declared target is
 not evidence that its workers exist; check every profile before submitting.
 
 ## Two targets: MDM and silver
@@ -325,7 +326,7 @@ blocks; do not ask whether it does.
     "Proven name rules may bind"), and a name id stays lookup only. Adding a
     joining identifier is a merge-rule change for the operator.
   - An identifier another authority issues is named for who stated it
-    (`sec_lei`), never for the issuer.
+    (`<stating source>_<id>`), never for the issuer.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
 - **Relationships:** type, the other end's key, the source it lives in,
@@ -526,7 +527,7 @@ contract's `nonblocking_deferred_reasons`.
      and `note`. `--proof-uri` is `file://<absolute path>` locally or
      `s3://…`, and `--proof-sha256` is the file's sha256.
    - **Version label:** `<source or kind>-<YYYY-MM-DD>.<short change name>`,
-     e.g. `sec.submissions.person-2026-09-30.first`.
+     e.g. `acme.registry-2026-09-30.first`.
 4. **Save and record the test run:**
    ```bash
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<source>/source.yaml

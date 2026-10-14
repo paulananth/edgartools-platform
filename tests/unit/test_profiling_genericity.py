@@ -30,6 +30,8 @@ SCOPE = (
 SPECIFIC = re.compile(
     r"\b(SEC|sec\.gov|EDGAR|GLEIF|LEI|CIK|EIN|SIC|10-K|8-K|Company|company|companies|Person|"
     r"Contoso|accession\w*|tickers?|mdm\.company|filings?)\b"
+    # Source codes and format names as written in rules files (`gleif`, `sec.ownership`, `sec_cik`, `lei`).
+    r"|\b(gleif\w*|sec[._]\w+|lei)\b"
 )
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 
@@ -77,5 +79,6 @@ def test_no_specific_names_outside_examples(path):
 
 def test_lint_catches_a_name_and_spares_examples(tmp_path):
     doc = tmp_path / "x.md"
-    doc.write_text("# A\nKeys such as a CIK.\n## Examples\nA CIK.\n### More\nAn LEI.\n## B\nA Company.\n")
-    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path)] == ["CIK", "Company"]
+    doc.write_text("# A\nKeys such as a CIK.\n## Examples\nA CIK.\n### More\nAn LEI.\n## B\nA Company.\n"
+                   "Run `--source gleif` with `sec_cik`; selected, secure.\n")
+    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path)] == ["CIK", "Company", "gleif", "sec_cik"]
