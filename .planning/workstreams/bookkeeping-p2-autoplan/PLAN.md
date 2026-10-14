@@ -1,8 +1,9 @@
 <!-- /autoplan restore point: /Users/aneenaananth/.gstack/projects/paulananth-edgartools-platform/codex-bookkeeping-p2-autoplan-20261013-autoplan-restore-20261013-201216.md -->
 # Bookkeeping P2: bounded validation of admitted work
 
-Status: reviewed proposal in progress; operator approval pending. No runtime changes,
-no deployment and no activation are authorized by this plan review.
+Status: **APPROVED AS-IS** — operator selected A at 2026-10-14 07:40 ET.
+Approval covers this reviewed plan; implementation and deployment qualification
+remain separate work.
 Current source baseline: main `bebebcb2` after verified rebase. Original review
 and measurement baseline: `db2e7ce3`; research was `042e2910`, now rebased as
 `af713546`. Original motivating code quotations remain explicitly tied to
@@ -162,7 +163,7 @@ and direct-call tests before choosing to omit a revision counter. Do not add a n
 finalizing lifecycle state by default. If the proof fails, amend the plan and rerun
 engineering review before enabling fast mode.
 
-### Integrity detection policy, pending operator approval
+### Integrity detection policy, approved as-is
 
 Ordinary calls authenticate the selected unit and relevant evidence. Whole original
 input manifests, unrelated expansion artifacts and unrelated privileged row
@@ -171,8 +172,9 @@ A relevant failure blocks the whole run immediately when detected. An unrelated
 failure may permit other work/delivery until a full audit detects it. This includes
 missing/unreadable artifact-store objects, not only administrator database changes.
 No timer service or periodic auditor is introduced. Operators may call existing
-`bookkeeping checks` for a deliberate full audit during long runs. The final gate
-must approve this policy or retain whole-run auditing at ordinary-command boundaries.
+`bookkeeping checks` for a deliberate full audit during long runs. The operator approved this policy
+with option A at 2026-10-14 07:40 ET; the explicit full-audit tightening override remains
+part of the accepted plan.
 
 ## Operator contract and safe enablement
 
@@ -778,7 +780,7 @@ requires explicit admission trust and a declared global-audit detection policy.
 - [ ] **T4 (P1, human: 1 day / AI: 1-2 hours)** Qualify readiness and coherent terminal reconciliation. Files: edgar_warehouse/bookkeeping/clean/engine.py, tests/integration/test_generated_bookkeeping_postgres.py, tests/integration/test_configured_bookkeeping_postgres.py. Verification: corresponding PostgreSQL/command or benchmark gate in this plan.
 - [ ] **T5 (P2, human: 1 day / AI: 2-3 hours)** Measure complete control paths with fixed dependency closures. Files: scripts/benchmarks/benchmark_bookkeeping_control.py, tests/integration/test_configured_bookkeeping_postgres.py, tests/integration/test_generated_bookkeeping_postgres.py. Verification: corresponding PostgreSQL/command or benchmark gate in this plan.
 
-CEO spec review: one independent round, all five dimensions PASS, overall 9/10; zero remaining spec issues. Acceptance gates and timing policy remain proposed and pending operator approval.
+CEO spec review: one independent round, all five dimensions PASS, overall 9/10; zero remaining spec issues. Acceptance gates and timing policy were accepted at the final A gate; implementation evidence remains pending.
 
 ## Decision Audit Trail
 
@@ -1368,27 +1370,27 @@ by this scope ruling, not silently substituted for P2.
 | 31 | Coordination | Follow Claude's current MDM-only removal of Merge Stage size refusals | User-confirmed | Operator ruling/P3 | Explicit 2026-10-14 scope answer; preserve ownership and hosted-capacity intent | Remove Bookkeeping128/control-document caps in this plan |
 
 Decision accounting: 31 total, 23 mechanical auto-decisions, seven taste
-recommendations awaiting the final gate, one operator-confirmed scope ruling,
+recommendations accepted at the final A gate, one operator-confirmed scope ruling,
 zero user-direction challenges. Claude's unused broader recommendation remains
 visible in the archived consult; no claim of active-session messaging is made.
 
 ## GSTACK REVIEW REPORT
 
-VERDICT: **DONE_WITH_CONCERNS — reviews complete, operator plan approval pending.**
+VERDICT: **APPROVED — review ticket complete.** Operator selected A at 2026-10-14 07:40 ET.
 Current base `bebebcb2`; rebased dedicated Codex worktree, recovery branch retained.
 This is a review/qualification plan. Runtime implementation and deployment remain
 unstarted; no P2 speedup or hosted qualification is claimed.
 
 | Review | Trigger / reason | Runs | Status | Findings / evidence |
 |---|---|---|---|---|
-| CEO | User invoked autoplan on researched P2 fix | Full ten sections, Claude→Codex + independent spec pass | Complete; seven cross-phase taste choices remain at gate | Six concerns per voice;5/6 consensus; spec9/10 |
+| CEO | User invoked autoplan on researched P2 fix | Full ten sections, Claude→Codex + independent spec pass | Complete; all seven cross-phase taste choices accepted | Six concerns per voice;5/6 consensus; spec9/10 |
 | UI design | No visual/user-interface change | Skipped by scope | Not applicable | CLI/control platform only |
 | DX | CLI/roles/setup/recovery affected | Full eight passes, Claude→Codex | Complete; plan8.5/10, execution proof pending | Five concerns per voice;6/6 consensus; TTHW target<5min prepared, unmeasured |
 | Engineering | Required final review of amended plan | Four full sections, Claude→Codex, post-rebase delta Claude→Codex | Complete; plan8.5/10; admission/closure gates unimplemented | Six concerns per original voice;5/6 consensus; delta three gaps per voice resolved |
 | Coordination | Operator requested Codex/main sync and Claude limit check | Live refs/PR/worktrees, clean rebase/range-diff, fresh Opus consultation | Complete; explicit MDM-only scope recorded | All six own commits preserved; Claude Ticket74 branch read; broader proposal deferred |
 | Verification | Current baseline and plan artifact integrity | Exact three-file suite via isolated native-wheel overlay; ownership/diff/links/task checks |80 tests passed in9.89s; plan checks complete | Native release build4m11s; no P2 migration tests/speed results claimed |
 
-Decision accounting: **31 total:23 mechanical auto-decisions,7 taste recommendations,
+Decision accounting: **31 total:23 mechanical auto-decisions,7 operator-accepted taste recommendations,
 1 operator-confirmed scope ruling;0 user-direction challenges.** The Decision Audit
 Trail above contains all decisions; task aggregation produced seven exact-deduped
 tasks with original review provenance retained after rebase.
@@ -1407,18 +1409,16 @@ Deferred in TODOS.md: P1 destination authority; P1 runtime fingerprint; P3 long-
 full-audit cadence; P2 generated-first-unit sampling clarification; P3 future uncapped
 Bookkeeping protocol after explicit operator scope change. None is claimed repaired.
 
-Final recommendation: approve the complete staged A→B→C plan, keeping current
-Bookkeeping bounds and Claude's operator-confirmed MDM-only refusal removal. The
-31st scope decision is already answered and must not be re-asked at the final gate.
-Only plan approval remains unchecked in the review ticket.
+Final disposition: operator approved the complete staged A→B→C plan as-is at
+2026-10-14 07:40 ET, including choices3/5/6/7/10/14/20. Current Bookkeeping bounds and
+Claude's operator-confirmed MDM-only refusal removal remain accepted. Decision31
+was separately answered and is unchanged. Every part of the review ticket is
+checked; implementation tasks remain unstarted.
+
+Approval evidence: user reply `A` to D1, “Approve this reviewed plan?” No overrides
+were requested. The clean review logs bind to the approval checkpoint and identify
+their scope as plan-only; they do not qualify runtime changes or deployment.
 
 **UNRESOLVED DECISIONS:**
 
-- Choice3: staged complete A→B→C (recommended) versus treating command reuse as the final scope.
-- Choice5: internal validation tag/new runs only/legacy drain (recommended) versus a public protocol change or conversion.
-- Choice6: immediate relevant-evidence checks/full boundary audits for unrelated evidence (recommended) versus retaining global checks on every ordinary call.
-- Choice7: omit a worklist revision counter/new lifecycle state only if closed-scope proof passes (recommended); recovery blocking-generation CAS is still required.
-- Choice10: keep proposed full-process numeric gates (recommended) versus choosing different thresholds before implementation.
-- Choice14: retain an explicit tightening-only full-audit override (recommended) versus manual boundary audits alone.
-- Choice20: raw-byte generic SQL insertion proof plus bounded Python child revalidation (recommended) versus Python-only detect-before-work; alternative needs explicit weaker-insertion-policy acceptance.
-- Operator approval of this concrete reviewed plan is pending; implementation and deployment are unstarted.
+NO UNRESOLVED DECISIONS

@@ -1,7 +1,7 @@
 # Autoplan: bounded Bookkeeping validation
 
-Status: review complete; incomplete until operator plan approval. Implementation
-and deployment are outside this ticket.
+Status: complete — reviewed plan approved as-is by operator reply A; 2026-10-14 07:40 ET.
+Implementation and deployment are outside this review ticket.
 
 Scope: turn the researched P2 fix into a concrete reviewed plan. Source
 baseline: main `bebebcb2` after synchronization; original research/review
@@ -16,7 +16,7 @@ baseline `db2e7ce3` retained in provenance.
 - [x] Consult Claude on Ticket 74 and align P2 with operator-confirmed MDM-only cap removal — active branch904f7318 read, fresh Opus consult completed, exact operator scope answer and remaining input/read-back bounds recorded; 2026-10-14 07:19 ET.
 - [x] Write the test-plan artifact, aggregated tasks, deferred items and terminal review report —28 areas,7 tasks,5 scoped TODOs,31 decisions and terminal report/links validated; 2026-10-14 07:22 ET.
 - [x] Verify outputs and ownership; prepare the final approval gate — all links/decision counts/task artifacts/terminal report validated, exact80-test rerun passed, overlap guard9 paths passed; 2026-10-14 07:23 ET.
-- [ ] Present and obtain operator approval of the reviewed plan (the autoplan final gate); final brief is ready, approval remains pending.
+- [x] Present and obtain operator approval of the reviewed plan (the autoplan final gate) — user replied A to D1, accepting all recommendations; plan status and final unresolved-decision marker verified; 2026-10-14 07:40 ET.
 
 Every checked part records its ET completion time and verification evidence.
 Plan: `PLAN.md` in this directory. Runtime work remains unstarted.
