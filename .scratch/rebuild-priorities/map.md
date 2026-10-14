@@ -45,6 +45,8 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [Relationship rules](issues/06-platform-validation-06-relationship-rules.md): GLEIF parents and insider links switched on; Person feed 1 is ticket 11
 - [Match proposal snapshot scaling](issues/07-platform-validation-05b-match-proposal-snapshot-scaling.md): the snapshot is gone; batch times flat over the full Person feed
 - [Proving Run on a pinned cohort](issues/08-company-mastering-05-run-a-proving-run-on-a-pinned-cohort.md): whole population proved (6,414 Companies, 3,052 GLEIF bindings)
+- [Person and link quality rules](issues/10-mastering-to-done-18-person-and-link-quality-rules.md): name-has-letter and link checks set records aside, never block (#967); each run reports its checks (#968); row-count change moved to ticket 71
+- [Switch on Person feed 1 with its links](issues/11-mastering-to-done-12-switch-on-person-with-its-links.md): both feeds proved together, 31,326 people, 0 CIK conflicts; source activation moved to ticket 71
 - [Check a step without redoing it](issues/72-check-a-step-without-redoing-it.md): a check confirms inputs, contract and output shape, and redoes the first unit and a 5% sample (#958)
 - [The Merge Stage has no limit](issues/74-merge-stage-has-no-limit.md): no size refusal anywhere; how the input is cut stays (#960)
 - [The Merge Stage merges record by record](issues/77-merge-one-record-at-a-time.md): a batch reads only the masters it touches and their links; proposal and batch in one transaction; the outbox reads a batch once (#963)
@@ -53,6 +55,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 
 - **Where gold stands in the rebuild.** The agent decision inputs, the unified Company dimension, the dashboards and the promotion criteria (tickets 49–62) were written against the Snowflake gold layer. Once the silver writer (ticket 17) and the context views (ticket 18) land, each needs a decision: re-point it at the rebuild's silver, or retire it.
 - **Hosting the rebuild.** Hosted Snowflake Postgres (ticket 68) and the AWS worker runtime (ticket 71) need the operator's destinations. The order of hosting and the recreation proof is not yet set.
+- **Ownership contract follow-ups.** The ownership contract names its effective time but maps no `effective_at`, so its records state no time and the run checks report none; an issuer CIK that is malformed names no Company, so its link waits forever (none in the local copies). Each is a contract change that moves record ids.
 
 ## Out of scope
 
