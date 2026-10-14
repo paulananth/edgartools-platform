@@ -329,6 +329,8 @@ class Bookkeeping:
                 "effect_key": digest({"rules": rules, "step": claim.step, "key": claim.key, "unit": row["unit"]}),
                 "rules": rules, "input": item["unit"]["input"], "output": item["unit"]["output"],
                 "keys": row["unit"]["keys"], "cursor": row["unit"]["cursor"],
+                # The unit's place in its step: a check redoes the step's first unit in full (ticket 72).
+                "ordinal": row["ordinal"],
                 "checks": [name for name in step["checks"] if name not in STEP_CHECKS],
                 "heartbeat_seconds": config["heartbeat_seconds"], "retry": config["retry"],
                 "deadline": min(str(p["expires_at"]) for p in claim.proof)}

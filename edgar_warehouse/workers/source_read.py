@@ -298,3 +298,31 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if found != expected:
         raise ValueError("Written source output differs from the configured reading")
     return {name: True for name in envelope["checks"]}, []
+
+
+def confirm(envelope: dict, artifacts) -> tuple[dict, list]:
+    """The check without redoing the work (ticket 72). The inputs and contract
+    pass the step's own checks, and the written output parses, names this
+    contract and these inputs in order, and holds only the contract's tables.
+    Bookkeeping has already pinned the worker's runtime for the run and hashes
+    the input and the output; a sample of units is still redone in full."""
+    if envelope["candidate"]["uri"] != envelope["output"]:
+        raise ValueError("Candidate URI differs from the intended output")
+    manifest, contract, _, inputs = _documents(envelope, artifacts)
+    read = contract.get("read")
+    if isinstance(read, dict) and "stream" in read:
+        return verify(envelope, artifacts)  # streamed output has its own shape: always redone
+    body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES))
+    if (not isinstance(body, dict) or set(body) != {"version", "contract", "artifacts"} or body["version"] != 1
+            or body["contract"] != manifest["contract"] or not isinstance(body["artifacts"], list)):
+        raise ValueError("Written source output does not name this contract")
+    if [artifact.get("input") if isinstance(artifact, dict) else None for artifact in body["artifacts"]] != [
+            _entry(manifest, entry) for entry in inputs]:
+        raise ValueError("Written source output does not name these inputs in order")
+    declared = set(read["tables"])
+    for artifact in body["artifacts"]:
+        tables = artifact.get("tables")
+        if (not isinstance(tables, dict) or not set(tables) <= declared or not isinstance(artifact.get("deferred"), list)
+                or any(not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows) for rows in tables.values())):
+            raise ValueError("Written source output holds tables the contract does not declare")
+    return {name: True for name in envelope["checks"]}, []

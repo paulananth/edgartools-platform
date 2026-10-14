@@ -140,7 +140,9 @@ def _encode(body, max_bytes=None):
     return buffer.getvalue()
 
 
-def _documents(envelope, artifacts):
+def _checked(envelope, artifacts):
+    """The combination's inputs and contract, checked without combining:
+    (manifest, reading receipts, plan, whether the contract reduces)."""
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError("source.combine verifies source.combined only")
     keys = envelope.get("keys", {})
@@ -169,10 +171,15 @@ def _documents(envelope, artifacts):
         raise ValueError("Combination requires reading receipts")
     contract = artifacts.json(manifest["contract"])
     if isinstance(contract, dict) and "reduce" in contract:
-        plan = source_reduction.contract(contract, refs)
+        return manifest, refs, source_reduction.contract(contract, refs), True
+    return manifest, refs, _contract(contract, refs), False
+
+
+def _documents(envelope, artifacts):
+    manifest, refs, plan, reduced = _checked(envelope, artifacts)
+    if reduced:
         tables = source_reduction.tables(plan, refs, artifacts)
         return _output(envelope, manifest, refs, tables, max_bytes=plan["max_output_bytes"])
-    plan = _contract(contract, refs)
     inputs, size, count = {}, 0, 0
     for name, ref in refs.items():
         body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"],
@@ -190,10 +197,15 @@ def _documents(envelope, artifacts):
     return _output(envelope, manifest, refs, tables)
 
 
-def _output(envelope, manifest, refs, tables, *, max_bytes=None):
+def _scope(envelope, manifest):
+    """The combination's pinned inputs, written beside its output: (receipt, bytes)."""
     scope = canonical(manifest).encode()
     scope_hash = hashlib.sha256(scope).hexdigest()
-    scope_ref = {"uri": f"{envelope['output'].rsplit('/', 1)[0]}/combine-inputs/{scope_hash}.json", "sha256": scope_hash}
+    return {"uri": f"{envelope['output'].rsplit('/', 1)[0]}/combine-inputs/{scope_hash}.json", "sha256": scope_hash}, scope
+
+
+def _output(envelope, manifest, refs, tables, *, max_bytes=None):
+    scope_ref, scope = _scope(envelope, manifest)
     output = _encode({"version": 1, "contract": manifest["contract"], "readings": refs,
                       "artifacts": [{"input": scope_ref, "tables": tables, "deferred": []}]}, max_bytes)
     return scope_ref, scope, output
@@ -213,4 +225,26 @@ def verify(envelope, artifacts):
         raise ValueError("Written combination scope differs from pinned inputs")
     if artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES) != expected:
         raise ValueError("Written combined reading differs from pinned inputs and configuration")
+    return {CHECK: True}, []
+
+
+def confirm(envelope, artifacts):
+    """The check without combining again (ticket 72). The inputs and contract
+    pass the step's own checks, the written scope equals these inputs, and the
+    written output parses as one combined reading of this contract and these
+    receipts. Bookkeeping has already pinned the worker's runtime for the run
+    and hashes the input and the output; a sample of units is still redone."""
+    if envelope["candidate"]["uri"] != envelope["output"]:
+        raise ValueError("Candidate URI differs from intended combined output")
+    manifest, refs, _, _ = _checked(envelope, artifacts)
+    scope_ref, scope = _scope(envelope, manifest)
+    if artifacts.verified(scope_ref, max_bytes=INPUT_BYTES) != scope:
+        raise ValueError("Written combination scope differs from pinned inputs")
+    body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES))
+    if (not isinstance(body, dict) or set(body) != {"version", "contract", "readings", "artifacts"}
+            or body["contract"] != manifest["contract"] or body["readings"] != refs):
+        raise ValueError("Written combined reading does not name this contract and these receipts")
+    _reading_body(body)
+    if [artifact["input"] for artifact in body["artifacts"]] != [scope_ref]:
+        raise ValueError("Written combined reading does not name its scope")
     return {CHECK: True}, []
