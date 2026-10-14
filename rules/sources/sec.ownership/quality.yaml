@@ -1,0 +1,13 @@
+# Data quality for SEC ownership filings read as the reporting owner (profiling
+# ticket 07). Checks run on each record after the mapping and before the merge.
+#
+# One check, as for the Person feed: an owner with no name never merges and never
+# stops the run; it waits as an open exception (operator, 2026-09-28).
+version: sec-ownership-quality-v1
+quality:
+  sec.ownership.reporting_owner.v1:
+    checks:
+    - id: legal_name_present
+      test: present@1
+      value: fields.legal_name
+      on_fail: exception

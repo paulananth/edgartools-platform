@@ -1,0 +1,34 @@
+{
+ "adversarial": {
+  "n": 363,
+  "violations": 0
+ },
+ "filings": 8723,
+ "owner_rows": 9313,
+ "person_owners_by_label": {
+  "no document": 198,
+  "person": 4622
+ },
+ "person_owners_by_step": {
+  "3-director": {
+   "no document": 100,
+   "person": 2488
+  },
+  "3-officer": {
+   "no document": 98,
+   "person": 2148
+  }
+ },
+ "refused": {},
+ "rows": {
+  "deferred | deferred": 58,
+  "deferred | entity_undetermined": 72,
+  "deferred | no document": 5,
+  "deferred | person": 226,
+  "entity_undetermined | deferred": 30,
+  "entity_undetermined | entity_undetermined": 519,
+  "entity_undetermined | no document": 131,
+  "person | no document": 750,
+  "person | person": 7522
+ }
+}
