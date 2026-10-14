@@ -35,6 +35,13 @@ left the machine. Names stay out of this file (the repo is public).
    of more than 10,000 records. Operator, 2026-10-14: "Fix the Merge Stage
    (Recommended)", then "merge stage should have no limt". A separate ticket.
 
+6. A ten-percent owner: `BENEFICIAL_OWNER_OF`, or `CONTROLS` (where the older built-in type list puts
+   `ten_percent_owner`)? Operator, 2026-10-14 08:19 ET: "BENEFICIAL_OWNER_OF (Recommended)": the SEC's own
+   words (beneficial ownership of more than 10%); holding 10% is not control.
+7. The 198 director or officer owners with no submissions document have no label, so the proof does not
+   cover them. Operator, 2026-10-14 08:19 ET: "Check a sample first (Recommended)": a random 50, labelled from the
+   filing alone, checked by the operator before the switch-on.
+
 ## identify
 
 - Source `sec.ownership`, source code `sec.ownership.reporting_owner.v1`, bronze
