@@ -76,3 +76,17 @@ Holding details (`DEBT_SECURITY_REF_INSTRUMENT`, `REPURCHASE_AGREEMENT`, `DESC_R
 ## 13F Security: Proving Run under the approved merge rules (2026-10-15 06:38 ET)
 
 - Re-run with the repo's merge rules as switched on (no stand-in verification): **20,311 Securities, 0 CUSIPs on two Securities, 9,631 set aside, the second pass changed nothing**, as before. 9 min 40 s in all; first pass 271 s, second 295 s (75 s on the first run: not investigated, recorded).
+
+## Part 1, Security from N-PORT: the source (2026-10-15 08:47 ET)
+
+Known before any run (the run-once rule; no new scan of the data):
+- `rules/identifiers/cusip.yaml`: nine characters, check digit `luhn over letter values`; `000000000` and `999999999` are filers' stand-ins for none, refused (`refuse_one_repeated_character`).
+- `rules/identifiers/isin.yaml`: two-letter country, nine letters or digits, check digit `luhn over letter digits`; a US or Canadian ISIN holds the CUSIP as characters 3-11.
+- Approved findings (`profiling/sec.nport-2026q2-final/`): 5,347,869 holdings, `ISSUER_CUSIP` always filled; 614,038 rows `000000000`, 17,511 `999999999`, 1,772 failing the check digit; 385,381 distinct CUSIPs. `IDENTIFIERS`: 6,749,116 rows linked by `HOLDING_ID`, ISIN filled on 64%, 397,025 distinct, 110 not ISINs (FIGI-shaped).
+- Not in the findings: how CUSIP and ISIN pair. Ticket 90 adds it to profiling for the next source; here the one test run counts it.
+
+## Part 1: rulings (2026-10-15)
+
+- Security key, operator: "Two contracts (Recommended)": `sec.nport.security.v1`, one record per CUSIP, carrying its ISIN as a second joining identifier when the pair is one to one; `sec.nport.security_isin.v1`, one record per ISIN, for holdings with no usable CUSIP. Both join through `security-cusip` and a new `security-isin` matching rule, proved and brought for approval.
+- Engine facts that block the ISIN join in configuration: a reading's lookup set answers membership only (at most 1,000,000 values per set); a `select` cannot split rows by a pattern; a reduction holds its output rows in Python (about 5.3 million holdings). Ticket 91 written: a reading looks up a value in a large set.
+- Operator: "Code 91 first": both contracts are built after ticket 91 merges, so the Security is onboarded once, with ISIN from the start.
