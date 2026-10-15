@@ -1,0 +1,52 @@
+# One row per CUSIP: every CUSIP the reduction names, joined with its filed
+# name and title groups and the lexically first FIGI filed with it, each if
+# any (ticket 79). Its one input is the reduction's output, named
+# `securities`. Pin canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    name:
+      source: securities
+      table: names
+      key: cusip
+      value: .
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {}
+    figi:
+      source: securities
+      table: figis
+      key: cusip
+      value: figi
+      mode: first
+      order_by: [figi]
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {}
+    title:
+      source: securities
+      table: titles
+      key: cusip
+      value: .
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {}
+  tables:
+    security:
+      source: securities
+      table: securities
+      checks: {}
+      where: {}
+      joins:
+        name: {group: name, key: cusip, on_missing: skip, replace: false}
+        title: {group: title, key: cusip, on_missing: skip, replace: false}
+        figi: {group: figi, key: cusip, on_missing: skip, replace: false}

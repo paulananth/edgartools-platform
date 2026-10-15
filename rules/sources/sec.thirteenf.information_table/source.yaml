@@ -1,0 +1,143 @@
+# SEC Form 13F information tables, read for the Security master (ticket 79),
+# drafted from the profiling findings the operator approved on 2026-10-14
+# ("yes approve the 13F findings"; profiling/thirteenf-check/findings.yaml).
+# Rulings it rests on (operator, 2026-10-14):
+# - "CUSIP and ISIN join": one CUSIP is one Security; FIGI, ticker and SEDOL
+#   are lookup only.
+# - "Securities only, options aside": the holdings wait for the manager
+#   filings (the information tables name no manager), so only the Securities
+#   are mastered here; a CUSIP failing its check digit (mostly an option's
+#   invented issue number) is a data quality exception, never a stop.
+# - "A": the Security carries the issuer name and class title as filed. The
+#   tables carry no filing date, so of each CUSIP's filed spellings the
+#   lexically first is kept (reduce.yaml); the title ticket later replaces it.
+# - FIGI is a cross-reference, lookup only (approved findings); a CUSIP keeps
+#   the lexically first FIGI filed with it, like its name and title.
+# The run: each reading unit (up to 512 files; an output over 32 MiB is written
+# in pieces, ticket 83) is read by the `read` block below; reduce.yaml groups
+# every unit's rows by CUSIP; combine.yaml joins name, title and FIGI into one
+# row per CUSIP; mdm.prepare (table `security`) gives the Dataset Contract one
+# record each.
+source: sec.thirteenf.information_table
+bronze:
+  # The capture family the prototype reading names.
+  family: sec.thirteenf_infotable
+execution: {profile: source.read, workers: 2, max_artifacts: 512}
+read:
+  format: xml
+  root: informationTable
+  on_parse_error: retry_without_control_chars
+  limits: {max_bytes: 33554432, max_records: 100000}
+  tables:
+    sec_thirteenf_holding:
+      each: infoTable
+      columns:
+        holding_index: {ordinal: {}}
+        # A reduction groups exact text, so the CUSIP is upper-cased here and a
+        # missing one is blank text (the Dataset Contract refuses it).
+        cusip:
+          text: {path: cusip.$, default: "", transforms: [{case: upper}]}
+        issuer_name:
+          text: {path: nameOfIssuer.$, default: "", null_if: [""]}
+        security_title:
+          text: {path: titleOfClass.$, default: "", null_if: [""]}
+        figi:
+          text: {path: figi.$, default: "", null_if: [""]}
+        shares_held: {number: {path: shrsOrPrnAmt.sshPrnamt.$, default: null}}
+        share_type:
+          text: {path: shrsOrPrnAmt.sshPrnamtType.$, default: "", null_if: ["", "none", "nan"], ignore_case: true}
+        market_value: {number: {path: value.$, default: null}}
+        put_call:
+          text: {path: putCall.$, default: "", null_if: ["", "none", "nan"], ignore_case: true}
+        discretion_type:
+          text: {path: investmentDiscretion.$, default: "", null_if: ["", "none", "nan"], ignore_case: true}
+        voting_auth_sole: {number: {path: votingAuthority.Sole.$, default: null}}
+        voting_auth_shared: {number: {path: votingAuthority.Shared.$, default: null}}
+        voting_auth_none: {number: {path: votingAuthority.None.$, default: null}}
+    # The filed words, each only from the rows that carry it, so a CUSIP filed
+    # with and without one keeps it (reduce.yaml).
+    sec_thirteenf_name:
+      each: infoTable
+      select: {test: {path: nameOfIssuer.$, kind: truthy}}
+      columns:
+        cusip:
+          text: {path: cusip.$, default: "", transforms: [{case: upper}]}
+        issuer_name:
+          text: {path: nameOfIssuer.$, default: ""}
+    sec_thirteenf_title:
+      each: infoTable
+      select: {test: {path: titleOfClass.$, kind: truthy}}
+      columns:
+        cusip:
+          text: {path: cusip.$, default: "", transforms: [{case: upper}]}
+        security_title:
+          text: {path: titleOfClass.$, default: ""}
+    sec_thirteenf_figi:
+      each: infoTable
+      select: {test: {path: figi.$, kind: truthy}}
+      columns:
+        cusip:
+          text: {path: cusip.$, default: "", transforms: [{case: upper}]}
+        figi:
+          text: {path: figi.$, default: "", transforms: [{case: upper}]}
+mdm:
+  sec.thirteenf.information_table.security.v1:
+    contract:
+      provider: SEC
+      family: sec.thirteenf_infotable
+      schema_version: sec-thirteenf-security-v1
+      record_key: the CUSIP, upper-cased; one record per CUSIP over the data set
+      publication_key: the data set's reading units and the reduction and combine contracts
+      effective_time: unknown; the information tables carry no filing date
+      semantics: patch
+      completeness: the CUSIPs one data set names; no retirement by absence
+      # A CUSIP that is not one, or none, sets the record aside and never stops
+      # the run (operator, 2026-10-14: "Securities only, options aside").
+      nonblocking_deferred_reasons:
+      - invalid_cusip
+      - invalid_cusip_checksum
+      - missing_record_identity
+      adapter:
+        reading:
+          source: sec.thirteenf.information_table
+          read:
+            format: json
+            limits: {max_bytes: 33554432, max_records: 1}
+            assertions:
+            - test: {test: {path: ., kind: object}}
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        # The 13F's own words (nameOfIssuer, titleOfClass), as
+                        # filed: the lexically first of each CUSIP's spellings.
+                        name_of_issuer:
+                          join: {path: name.name_sample, item_path: issuer_name, separator: "", max_items: 1}
+                        title_of_class:
+                          join: {path: title.title_sample, item_path: security_title, separator: "", max_items: 1}
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - cusip
+          - name
+          - title
+          - figi
+        version: sec-thirteenf-security-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: security
+        record_key:
+        - cusip
+        record_key_format: cusip
+        identifiers:
+          cusip: cusip
+        identifier_formats:
+          cusip: cusip
+        # Lookup only, never joins (approved findings: FIGI is a cross-reference).
+        cross_references:
+          figi: figi

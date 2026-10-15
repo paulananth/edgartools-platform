@@ -1,0 +1,50 @@
+# Security merge rules (a new kind, ticket 79). Source: the SEC Form 13F
+# information tables, one record per CUSIP over a data set
+# (rules/sources/sec.thirteenf.information_table). Rulings it rests on
+# (operator, 2026-10-14): "CUSIP and ISIN join" (one CUSIP is one Security;
+# FIGI, ticker and SEDOL are lookup only); "Securities only, options aside";
+# "A" (the Security carries the issuer name and class title as filed).
+# Declared, not switched on: the matching rule activates on its Identifier
+# Contract, verified on the Proving Run's cohort and approved by the operator.
+version: security-2026-10-14.1
+defaults:
+  sources:
+  - sec.thirteenf.information_table.security.v1
+  allow_unknown_effective: true
+rules:
+# Tier A: the issued CUSIP. A record joins the one Security that holds its
+# CUSIP, or creates it. A CUSIP failing its check digit never reaches this
+# rule: the Dataset Contract sets it aside (invalid_cusip_checksum).
+- rule_id: security-cusip
+  version: 2026-10-14.1
+  family: binding
+  source: sec.thirteenf.information_table.security.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cusip
+identifiers:
+  cusip:
+    authority: CUSIP Global Services (ANSI X9.6)
+    sources:
+    - sec.thirteenf.information_table.security.v1
+    # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
+    # verified, upper-cased.
+    normalizer: normalize_identifier@cusip-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5

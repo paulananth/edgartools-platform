@@ -1,0 +1,58 @@
+# The 13F Securities of one data set: every CUSIP the information tables name,
+# with one filed issuer name and class title each (ticket 79; operator,
+# 2026-10-14: "A", the Security carries the filed words). A data set is too
+# large for one reading unit, so each group reads every unit (ticket 82).
+# The information tables carry no filing date, so the filed words kept are the
+# lexically first of each CUSIP, read only from the rows that carry it
+# (source.yaml). `securities` names every CUSIP; `figis` counts each CUSIP and
+# FIGI pair, and combine.yaml keeps the lexically first per CUSIP.
+# Pin canonical JSON of this file as the source.combine contract; list the
+# run's reading units under `source`.
+execution:
+  profile: source.combine
+reduce:
+  # Measured on the 999 local files: 2,953,581 holding rows (about 11M rows over
+  # the four tables the reading writes, all counted), 31,071 CUSIPs as filed,
+  # 83,785 CUSIP and name pairs, 89,557 CUSIP and title pairs.
+  max_rows: 40000000
+  max_input_bytes: 4294967296
+  max_state_bytes: 1073741824
+  max_keys: 1000000
+  max_members: 1000000
+  max_output_rows: 1000000
+  max_output_bytes: 1073741824
+  groups:
+    securities:
+      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      table: sec_thirteenf_holding
+      keys: [cusip]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
+    names:
+      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      table: sec_thirteenf_name
+      keys: [cusip]
+      mode: members
+      member: issuer_name
+      count: names
+      sample: name_sample
+      sample_limit: 1
+    titles:
+      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      table: sec_thirteenf_title
+      keys: [cusip]
+      mode: members
+      member: security_title
+      count: titles
+      sample: title_sample
+      sample_limit: 1
+    figis:
+      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      table: sec_thirteenf_figi
+      keys: [cusip, figi]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
