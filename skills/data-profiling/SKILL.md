@@ -257,9 +257,11 @@ that matter most:
   design (a parent key plus the place in a list, or a surrogate with its rule)
   that needs approval.
 - **identifiers:** other identifier-shaped columns. A check-digit family is
-  named only when at least 99% of values pass and the rate is at least five
-  times chance; the family names are the ones an identifier type is declared
-  with (data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md),
+  named when its pass rate is at least five times chance and at least 99%
+  (clean), or at least 50% (`defective`: the failing values are mistyped or
+  invented identifiers, handed to quality, and the column is still issued);
+  the family names are the ones an identifier type is declared with
+  (data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md),
   "Identifier types"). `cross_reference` means "propose for the MDM cross-reference
   table": lookup only, never used to join (a Dataset Contract's
   `cross_references`, in data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md)).

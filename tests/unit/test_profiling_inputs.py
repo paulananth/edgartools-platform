@@ -389,3 +389,18 @@ def test_mac_resource_entries_in_a_zip_are_left_out(con, tmp_path):
         archive.writestr("t.csv", "x\n1\n")
         archive.writestr("__MACOSX/._t.csv", b"\x00\x05\x16\x07")
     assert [(p.name, p.not_read) for p in inputs.register(con, "m", str(tmp_path / "m.zip"), tmp_path / "w")] == [("m", None)]
+
+
+def test_each_table_of_a_folder_keeps_its_own_hash(con, tmp_path):
+    (tmp_path / "f").mkdir()
+    (tmp_path / "f" / "a.csv").write_text("k\n1\n")
+    (tmp_path / "f" / "b.csv").write_text("j,m\n2,3\n")
+    parts = {p.name: p for p in inputs.register(con, "f", str(tmp_path / "f"), tmp_path / "w")}
+    assert parts["a"].sha256 == inputs.digest(tmp_path / "f" / "a.csv") != parts["b"].sha256
+
+
+def test_a_file_with_no_suffix_is_read_by_its_first_character(con, tmp_path):
+    (tmp_path / "doc").write_text('<?xml version="1.0"?>\n<table><row><id>1</id></row><row><id>2</id></row></table>')
+    assert inputs.format_of(tmp_path / "doc") == "xml"
+    (tmp_path / "rec").write_text('[{"id": 1}]')
+    assert inputs.format_of(tmp_path / "rec") == "json"

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import duckdb
 
+from .identifiers import stand_in_sql
 from .inputs import PARENT, POSITION, ROW, sql_name
 
 STRUCTURE = (ROW, PARENT, POSITION)  # columns the input step adds
@@ -66,32 +67,42 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
     if not non_null:
         return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0,
                 "pattern": None, "pattern_share": 0.0}
+    # Shape, length and pattern are measured over real values: an identifier column's stand-ins for
+    # "no value" ("N/A", "000000000") are counted apart and do not make it look like two formats.
+    stand_ins = con.execute(f"SELECT count(*) FROM {t} WHERE {c} IS NOT NULL AND {stand_in_sql(text)}").fetchone()[0] \
+        if kind == "VARCHAR" else 0  # a number is a value, never a stand-in
+    real = f"{c} IS NOT NULL AND NOT {stand_in_sql(text)}" if stand_ins else f"{c} IS NOT NULL"
+    measured = non_null - stand_ins
+    if not measured:
+        return {**profile, "top": [], "shape": None, "shape_share": 0.0, "length_share": 0.0, "tokens": 0.0,
+                "pattern": None, "pattern_share": 0.0, "stand_in_rows": stand_ins}
     # The pattern comes from the shapes' counts, not another pass over the rows.
     modal_shape, shape_count, modal_pattern, pattern_count = con.execute(
-        f"WITH s AS (SELECT {shape(text)} AS s, count(*) AS n FROM {t} WHERE {c} IS NOT NULL GROUP BY 1), "
+        f"WITH s AS (SELECT {shape(text)} AS s, count(*) AS n FROM {t} WHERE {real} GROUP BY 1), "
         f"p AS (SELECT {pattern('s')} AS p, sum(n) AS n FROM s GROUP BY 1) "
         "SELECT * FROM (SELECT s, n FROM s ORDER BY n DESC, s LIMIT 1), (SELECT p, n FROM p ORDER BY n DESC, p LIMIT 1)"
     ).fetchone()
     length_count = con.execute(
-        f"SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY length({text}) ORDER BY 1 DESC LIMIT 1").fetchone()[0]
+        f"SELECT count(*) FROM {t} WHERE {real} GROUP BY length({text}) ORDER BY 1 DESC LIMIT 1").fetchone()[0]
     tokens = con.execute(
         f"SELECT avg(len(string_split(trim({text}), ' '))) FROM {t} WHERE {c} IS NOT NULL").fetchone()[0]
     top = con.execute(
         f"SELECT {text}, count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT {TOP}").fetchall()
     profile.update({
-        "shape": modal_shape, "shape_share": round(shape_count / non_null, 6),
-        "length_share": round(length_count / non_null, 6),
-        "pattern": modal_pattern, "pattern_share": round(pattern_count / non_null, 6),
+        "shape": modal_shape, "shape_share": round(shape_count / measured, 6),
+        "length_share": round(length_count / measured, 6),
+        "pattern": modal_pattern, "pattern_share": round(pattern_count / measured, 6),
+        "stand_in_rows": stand_ins,
         "tokens": round(float(tokens), 3),
         "top": [{"value": v, "rows": n} for v, n in top],
     })
-    if kind == "VARCHAR" and pattern_count >= 0.99 * non_null and any(s in modal_pattern for s in SEPARATORS):
+    if kind == "VARCHAR" and pattern_count >= 0.99 * measured and any(s in modal_pattern for s in SEPARATORS):
         # A separated pattern: is the part before the first separator one prefix, and is
         # the value a date or a time written without padding?
         prefix_count, dated = con.execute(
-            f"SELECT (SELECT count(*) FROM {t} WHERE {c} IS NOT NULL GROUP BY regexp_extract({text}, '{_PREFIX}') "
+            f"SELECT (SELECT count(*) FROM {t} WHERE {real} GROUP BY regexp_extract({text}, '{_PREFIX}') "
             f"ORDER BY 1 DESC LIMIT 1), (SELECT count(try_strptime({text}, {DATE_FORMATS})) FROM {t})").fetchone()
-        profile.update({"prefix_share": round(prefix_count / non_null, 6), "pattern_temporal_share": round(dated / non_null, 6)})
+        profile.update({"prefix_share": round(prefix_count / measured, 6), "pattern_temporal_share": round(dated / measured, 6)})
     if kind == "VARCHAR" and (modal_shape or "").startswith("9999-99-99"):
         # Dates written in more than one format: count what reads as a timestamp at all.
         converts = con.execute(f"SELECT count(TRY_CAST({c} AS TIMESTAMP)) FROM {t}").fetchone()[0]

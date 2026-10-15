@@ -128,8 +128,11 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     # An entity carried inside a part (its identifier and the columns that follow it) becomes a part.
     carried: dict[str, set[str]] = {}
     entities: dict[str, dict] = {}
+    # Each input part's own identifiers: a column that names their records is a link, not an entity.
+    keys_elsewhere = {p: [c for c in profiles[p] if not c["structure"] and c["unique"] == 1.0 and c["non_null"]
+                          and identifiers.identifier_shaped(c)] for p in parts}
     for p in list(parts):
-        found, clashes = embedded.find(con, p, profiles[p], set(parts))
+        found, clashes = embedded.find(con, p, profiles[p], set(parts), keys_elsewhere)
         approved_only = embedded.known(con, p, profiles[p], known, set(parts) | {e["part"] for e in found})
         for entity in found:
             approved = next((k for k in known if k["part"] == entity["part"]), None)
@@ -236,7 +239,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
     key_labels = {c["label_column"] for c in code_list if c["label_column"] and [c["column"]] == record_key["columns"]}
     times = timing.roles(con, p, columns, record_key["columns"], personal)
     out = [l for l in found_links if l["from"]["part"] == p and l["to"]["part"] != p]
-    inbound = [l for l in found_links if l["to"]["part"] == p and l["from"]["part"] != p]
+    # A part's own extension or list says nothing about what the part is: only other parts' links count.
+    inbound = [l for l in found_links if l["to"]["part"] == p and l["from"]["part"] != p
+               and not _own(l, found_links, profiles)]
     linked_columns = {c for l in out for c in l["from"]["columns"]}
     # A number with a label column is a code; any other number may be a measure, even with few values.
     measures = [c for c in columns if profile.is_numeric(c) and not c["structure"] and c["name"] not in linked_columns
@@ -353,6 +358,21 @@ def _values(con, p: str, c: dict) -> list[str]:
                                       "ORDER BY 1 LIMIT 200").fetchall()]
 
 
+def _own(link: dict, found_links: list[dict], profiles) -> bool:
+    """A link from a part that belongs to the one it points at: an extension (one row per row,
+    keyed by the same identifier) or a list of it (it points at nothing else, nothing points at
+    it, and its rows are numbered by a running counter). Neither is another part referring to it."""
+    if link["cardinality"] == "1:1":
+        return True
+    source = link["from"]["part"]
+    # The entities taken out of the part itself are still the part: pointing at them is not elsewhere.
+    elsewhere = {x["to"]["part"] for x in found_links if x["from"]["part"] == source
+                 and not x["to"]["part"].startswith(f"{source}.")} - {source, link["to"]["part"]}
+    pointed_at = any(x["to"]["part"] == source and x["from"]["part"] != source for x in found_links)
+    counter = any(not c["structure"] and profile.is_integer(c) and identifiers.dense_sequence(c) for c in profiles[source])
+    return not elsewhere and not pointed_at and counter
+
+
 def _rows(profiles, part):
     return profiles[part][0]["rows"] if profiles[part] else 0
 
@@ -400,6 +420,7 @@ def _identifier(con, p, c, record_key) -> dict | None:
     return {"column": c["name"], "shape": sensitivity.mask(c["shape"]) if c["shape"] else None,
             "shape_test": identifiers.shape_test(c),
             "check_digit": checked["family"], "pass_rate": checked["pass_rate"], "chance_rate": checked["chance_rate"],
+            "defective": checked["defective"],
             "fill": c["fill"], "unique": c["unique"], "local_counter": dense, "proposal": proposal, "why": why}
 
 
