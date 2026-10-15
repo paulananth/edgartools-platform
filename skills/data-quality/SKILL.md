@@ -175,6 +175,11 @@ differs), and a fix with its evidence, or `needs_steward: true`.
   comments. For a small change to a live file, edit it as text, keeping the
   comments.
 - `files.source('<source>')` must load with `quality` inside each contract.
+- **No checks, no file.** When the plan drafts no check and no fix (each
+  item set aside by an identifier type, or a disagreement between source rows
+  that one record cannot show), write no `quality.yaml`: an empty one adds a
+  quality version and changes every record id for nothing. Say why in the
+  log, and give a row-level disagreement its own ticket.
 
 **Output:** `quality.yaml`, `QUALITY.md` with the operator's decisions, and
 the measured counts, in the log.
