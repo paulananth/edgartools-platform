@@ -13,29 +13,9 @@ failed it in the profiled delivery). For the data set: the RDM code sets it need
 
 from __future__ import annotations
 
+from . import codes, silver
+
 VERSION = 1
-
-
-def code_set_name(part: dict, code: dict) -> str:
-    """A code list's code set: the existing one, else the proposed name, else the part's column."""
-    return code["code_set"] or code["proposed_code_set"] or f"{part['part']}.{code['column']}"
-
-
-def code_sets(parts: list[dict]) -> list[dict]:
-    """The RDM code sets the data set needs: one per existing or proposed code set, naming
-    every column that uses it (findings spec section 2). Counts and names only: the codes
-    themselves go to RDM as a draft (data-profiling, "Reference data")."""
-    sets: dict[str, dict] = {}
-    for f in parts:
-        for code in f["code_lists"]:
-            name = code_set_name(f, code)
-            entry = sets.setdefault(name, {"code_set": name, "existing": bool(code["code_set"]),
-                                           "columns": [], "codes": 0, "label_columns": []})
-            entry["columns"].append(f"{f['part']}.{code['column']}")
-            entry["codes"] = max(entry["codes"], code["distinct"])
-            if code["label_column"]:
-                entry["label_columns"].append(f"{f['part']}.{code['label_column']}")
-    return sorted(sets.values(), key=lambda s: s["code_set"])
 
 
 def summary(findings: dict) -> dict:
@@ -53,15 +33,14 @@ def summary(findings: dict) -> dict:
         # Rebuilt from the parts, as profiling builds them, so findings approved before
         # `code_sets` and silver for every part existed give the same catalog.
         "code_sets": [{"code_set": s["code_set"], "existing": s["existing"], "codes": s["codes"],
-                       "columns": s["columns"]} for s in code_sets(findings["parts"])],
+                       "columns": s["columns"]} for s in codes.code_sets(findings["parts"])],
     }
 
 
 def _part(part: dict, findings: dict) -> dict:
-    from .run import silver_spec  # the spec profiling writes, for findings made before every part had one
     by_name = {p["part"]: p for p in findings["parts"]}
-    silver = part.get("silver") or silver_spec(part, findings.get("relationships") or [], by_name)
-    codes = {c["column"]: code_set_name(part, c) for c in part.get("code_lists") or []}
+    table = part.get("silver") or silver.spec(part, findings.get("relationships") or [], by_name)
+    code_of = {c["column"]: codes.code_set_name(part, c) for c in part.get("code_lists") or []}
     return {
         "part": part["part"],
         "class": part["class"],
@@ -69,14 +48,14 @@ def _part(part: dict, findings: dict) -> dict:
         "rows": part["rows"],
         "record_key": list(part["record_key"]["columns"]),
         "silver": {
-            "table": silver.get("table"),
-            "load_mode": silver.get("load_mode"),
-            "key": list(silver.get("key") or []),
+            "table": table.get("table"),
+            "load_mode": table.get("load_mode"),
+            "key": list(table.get("key") or []),
             "fields": [{"name": c["name"], "type": c["type"], "nullable": c["nullable"],
-                        "sensitivity": c["sensitivity"], **({"code_set": codes[c["name"]]} if c["name"] in codes else {})}
-                       for c in silver.get("columns") or []],
+                        "sensitivity": c["sensitivity"], **({"code_set": code_of[c["name"]]} if c["name"] in code_of else {})}
+                       for c in table.get("columns") or []],
             "links": [{"source_key": link["source_key"], "to_part": link["to_part"],
-                       "mdm_id_column": link["mdm_id_column"]} for link in silver.get("links") or []],
+                       "mdm_id_column": link["mdm_id_column"]} for link in table.get("links") or []],
         },
         "quality": [{"check": q["check"], "column": q["column"], "failed_rows": q["rows"],
                      "proposal": q["proposal"], "why": q["why"]} for q in part.get("quality") or []],

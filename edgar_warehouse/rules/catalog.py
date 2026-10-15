@@ -43,7 +43,8 @@ SERVICE = "edgartools-rules"
 SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
-# A silver field's logical type, as the catalog names it; any other type is text.
+# A silver field's logical type, as the catalog names it (OpenMetadata calls a 32-bit
+# integer INT); any other type is text.
 TYPES = {"BIGINT": "BIGINT", "INTEGER": "INT", "DOUBLE": "DOUBLE", "DECIMAL": "DECIMAL", "BOOLEAN": "BOOLEAN",
          "DATE": "DATE", "TIMESTAMP": "TIMESTAMP", "TIMESTAMP WITH TIME ZONE": "TIMESTAMP"}
 
@@ -163,14 +164,10 @@ def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
     return tables, uses
 
 
-def plan(root: Path | None = None) -> dict:
-    """The whole catalog the rules under `root` describe, sorted, so the same
-    rules always give the same plan."""
-    root = root or files.ROOT
-    policy = files.policy(root)
-    kinds = policy.get("kinds") or {}
-    by_kind = winners(policy, root)
-    schemas, tables, lineage = [], [], []
+def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
+    """Every source's approved profile: its silver schema and tables, a table per code set
+    the profiled data needs, and lineage from each code set to the tables using it."""
+    tables, lineage = [], []
     silver_schemas, code_sets, used_by = [], {}, defaultdict(set)
     for path in sorted((root / "sources").glob("*/profile.yaml")):
         profile, source = files.load(path), path.parent.name
@@ -195,6 +192,20 @@ def plan(root: Path | None = None) -> dict:
                                    {"name": "label", "dataType": TEXT, "description": "What the code means."}]})
         lineage += [{"from": fqn(SERVICE, RDM, CODE_SETS, name), "to": at, "columns": [],
                      "description": f"Values of `{at}` are codes of `{name}`."} for at in sorted(used_by[name])]
+    return silver_schemas, tables, lineage
+
+
+def plan(root: Path | None = None) -> dict:
+    """The whole catalog the rules under `root` describe, sorted, so the same
+    rules always give the same plan."""
+    root = root or files.ROOT
+    policy = files.policy(root)
+    kinds = policy.get("kinds") or {}
+    by_kind = winners(policy, root)
+    schemas, tables, lineage = [], [], []
+    silver_schemas, profiled, profiled_lineage = _profiles(root)
+    tables += profiled
+    lineage += profiled_lineage
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
         source = body.get("source") or path.parent.name

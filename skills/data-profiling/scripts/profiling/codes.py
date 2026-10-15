@@ -70,3 +70,26 @@ def name_like(profile: dict, code_columns: set[str]) -> bool:
     return (is_text(profile) and not profile["structure"] and profile["name"] not in code_columns
             and not identifier_shaped(profile) and not is_temporal(profile)
             and profile["distinct"] > 50 and any(ch.isalpha() for ch in (profile["shape"] or "")))
+
+
+def code_set_name(part: dict, code: dict) -> str:
+    """A code list's code set: the existing one, else the proposed name, else the part's column."""
+    return code["code_set"] or code["proposed_code_set"] or f"{part['part']}.{code['column']}"
+
+
+def code_sets(parts: list[dict]) -> list[dict]:
+    """The RDM code sets the data set needs: one per existing or proposed code set, naming
+    every column that uses it (findings spec section 2). Counts and names only: the codes
+    themselves go to RDM as a draft (data-profiling, "Reference data")."""
+    sets: dict[str, dict] = {}
+    for f in parts:
+        for code in f["code_lists"]:
+            name = code_set_name(f, code)
+            entry = sets.setdefault(name, {"code_set": name, "existing": bool(code["code_set"]),
+                                           "columns": [], "codes": 0, "label_columns": []})
+            entry["columns"].append(f"{f['part']}.{code['column']}")
+            entry["codes"] = max(entry["codes"], code["distinct"])
+            entry["existing"] = entry["existing"] or bool(code["code_set"])
+            if code["label_column"]:
+                entry["label_columns"].append(f"{f['part']}.{code['label_column']}")
+    return sorted(sets.values(), key=lambda s: s["code_set"])

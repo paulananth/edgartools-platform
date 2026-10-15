@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from . import identifiers, profile, sensitivity
+from . import codes, identifiers, profile, sensitivity
 from .inputs import sql_name, sql_text
 
 EXAMPLES = 3
@@ -162,10 +162,16 @@ def check_digits(facts: Facts) -> list[dict]:
 
 
 def code_list_guards(facts: Facts) -> list[dict]:
-    """A small code list is guarded as a whole: a code not seen in this delivery is flagged."""
+    """A small code list is guarded as a whole: a code not seen in this delivery is flagged.
+    Any other code list (a long one, a masked one, a key) is a code of its RDM code set: a rule
+    the engine checks once RDM publishes the set (`in_reference@1` with its published version)."""
     found = []
     for code in facts.code_lists:
         if code["distinct"] > GUARDED_CODES or code["column"] in facts.masked or code["column"] in facts.key:
+            name = codes.code_set_name({"part": facts.part}, code)
+            found.append(item("code_set", code["column"], 0, [],
+                              f"a code of code set {name}, checked once RDM publishes it",
+                              args={"code_set": name}))
             continue
         c = sql_name(code["column"])
         values = [r[0] for r in facts.con.execute(

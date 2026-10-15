@@ -38,6 +38,8 @@ CATALOG = {
 NEW_CODE = {
     "check_digit": "the value passes its check-digit family (args.family)",
     "link_not_found": "the value is a key of the part it points at (args.to)",
+    "code_set": "the value is a code of its RDM code set (args.code_set), by in_reference@1 once RDM publishes "
+                "the set and the Mastering Policy pins its version",
     "hierarchy_invalid": "the row's parent exists, is not the row itself, is not on a cycle, and is the "
                          "parent its code has; each invalid row is in invalid_rows.jsonl",
     "no_natural_key": "the designed record key is filled and unique",

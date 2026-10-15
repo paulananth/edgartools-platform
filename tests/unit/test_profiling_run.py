@@ -1,6 +1,7 @@
 """A whole data-profiling run on the synthetic set: classes, links, hierarchies, masking."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -81,6 +82,9 @@ def test_clean_data_still_gets_its_quality_rules(result):
     assert visits[("missing", "visit_id")] == 0 and visits[("link_not_found", "member_id")] > 0  # a defect
     lines = {(q["check"], q["column"]): q["rows"] for q in part(result, "line")["quality"]}
     assert lines[("link_not_found", "item_code")] == 0  # a link that always resolves is a rule
+    groups = {(q["check"], q["column"]): q for q in part(result, "grp")["quality"]}
+    rule = groups[("code_set", "grp_code")]  # a code list that is the key: a code of its RDM code set
+    assert rule["rows"] == 0 and rule["args"]["code_set"]
 
 
 def test_code_sets_name_every_column_that_uses_them(result):
@@ -108,7 +112,11 @@ def test_the_catalog_summary_names_and_counts_but_never_a_value(result, tmp_path
     assert {f["name"] for f in body["parts"][0]["silver"]["fields"]} == {c["name"] for c in findings["parts"][0]["columns"]}
     seen = {str(v) for f in findings["parts"] for c in f["columns"] for v in c.get("top") or []}
     seen |= {str(v) for f in findings["parts"] for q in f["quality"] for v in q["examples"]}
-    assert not [v for v in seen if len(v) > 3 and v in text]  # no sample, example or code from the data
+    seen |= {str(v) for f in findings["parts"] for q in f["quality"] for v in (q["args"] or {}).get("values") or []}
+    names = {f["part"] for f in findings["parts"]} | {c["name"] for f in findings["parts"] for c in f["columns"]}
+    tokens = set(re.findall(r"[^\s:,'`\[\]{}()]+", text))
+    # No sample, example or code from the data, however short; a name or a number may match by chance.
+    assert not {v for v in seen if v in tokens and v not in names and not v.replace(".", "").isdigit()}
 
 
 def test_the_catalog_summary_refuses_findings_not_approved(tmp_path):
