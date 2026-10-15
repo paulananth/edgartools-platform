@@ -122,11 +122,11 @@ impl Reduction {
         for (value, maximum) in [
             (plan.max_rows, 40_000_000),
             (plan.max_input_bytes, 16 * 1024usize.pow(3)),
-            (plan.max_state_bytes, 256 * 1024usize.pow(2)),
+            (plan.max_state_bytes, 16 * 1024usize.pow(3)),
             (plan.max_keys, 10_000_000),
             (plan.max_members, 10_000_000),
-            (plan.max_output_rows, 100_000),
-            (plan.max_output_bytes, 32 * 1024usize.pow(2)),
+            (plan.max_output_rows, 10_000_000),
+            (plan.max_output_bytes, 16 * 1024usize.pow(3)),
         ] {
             if value == 0 || value > maximum {
                 return Err("Invalid reduction bound".into());

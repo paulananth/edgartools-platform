@@ -24,11 +24,14 @@ def _encode(value):
 def stream_policy(contract):
     read = contract["read"]
     spec = read["stream"]
-    maxima = {"max_input_bytes": 1024**3, "max_bytes": 16 * 1024**3,
-              "max_record": 32 * 1024**2, "max_records": 10_000_000,
+    # Ceilings a contract may declare (ticket 83): the spool is a private
+    # file and the index names any number of pieces, so only one record (and
+    # one piece) is bounded below the machine.
+    maxima = {"max_input_bytes": 2**40, "max_bytes": 2**40,
+              "max_record": 32 * 1024**2, "max_records": 10**12,
               "max_depth": 64, "partition_bytes": 8 * 1024**2,
-              "partition_records": 100_000, "max_partitions": 4096,
-              "max_spool_bytes": 1024**3, "max_output_rows": 10_000_000}
+              "partition_records": 100_000, "max_partitions": 10**7,
+              "max_spool_bytes": 2**40, "max_output_rows": 10**12}
     framing = spec.get("framing", "json_array") if isinstance(spec, dict) else None
     if framing not in ("json_array", "xml_records"):
         raise ValueError("Unknown configured stream framing")

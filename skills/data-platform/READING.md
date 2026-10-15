@@ -69,9 +69,11 @@ read:
 
 Every stream field is required. `container` is `none` or `zip`; ZIP requires
 one unencrypted file, verifies its CRC through EOF and enforces the expanded
-byte limit. `max_input_bytes` bounds the authenticated snapshot (at most 1 GiB);
-`max_bytes` bounds expanded bytes (at most 16 GiB). Private spool storage is
-capped at 1 GiB and each partition at 8 MiB. `max_record` applies the explicitly selected
+byte limit. `max_input_bytes` bounds the authenticated snapshot and
+`max_bytes` the expanded bytes (each at most 1 TiB); the private spool is a
+file (at most 1 TiB), `max_partitions` at most 10,000,000, and each partition
+at most 8 MiB and 100,000 records (ticket 83: only one record, `max_record`,
+is bounded below the machine). `max_record` applies the explicitly selected
 native or Python compact JSON encoding. Recursive object key order is retained
 before projection. `read.limits` bounds each projected record, and assertions
 run on each record. Ordinary `ordinal` expressions refer to rows within that
@@ -104,9 +106,9 @@ partitions for retry; the index is written last.
 `source.combine` and `mdm.prepare` accept both inline and partitioned source extracts.
 They authenticate every partition and enforce aggregate consumer byte and row
 budgets before writing output. Partitions retain the original artifact/context
-identity and row order; they do not create additional MDM batches. Consumers
-materialize the selected tables within their existing 32 MiB input budget,
-so a full archive needs configured selection before this boundary. Finish
+identity and row order; they do not create additional MDM batches. `mdm.prepare` reads one
+input file at a time and writes each records file as it is made; `source.combine`
+holds its inputs in memory (16 GiB at most). Finish
 installed source/population proof before activating a streamed source.
 Direct `SourceEngine.read` rejects stream contracts so they cannot silently
 take the eager path. A source's active parsing is retired only under its own ticket.
@@ -262,10 +264,11 @@ selected table holds complete records in a column. Every selected value must
 be an object. Preparation writes those exact objects as JSON Lines; its
 verifier rebuilds the same selection. Without `record_column`, the entire
 table row remains the record. A missing/null/list/scalar selection fails
-before output files are written. Source-extract outputs are bounded to the source
-verifier's 128 MiB budget; MDM preparation reads at most 32 MiB and refuses
-records files above 16 MiB or a manifest above 32 MiB before writing. Partition
-large inputs explicitly; source extract has no MDM-specific budget.
+before output files are written. No output is refused for its size (ticket 83). A
+source extract over 32 MiB is written in pieces of at most 8 MiB and 100,000
+rows behind a version-2 index; only one row larger than a piece is refused.
+MDM preparation reads up to 16 GiB and 100,000,000 rows, cuts batches of 1,000
+records or 1 MiB, and refuses only one record larger than 16 MiB.
 No field renaming or classification happens
 in this worker; MDM uses its registered Dataset Contract and pinned policy.
 
@@ -1203,7 +1206,8 @@ Without `take`, framing consumes every projected row through EOF. Dates become
 ISO text; unsupported scalars and nonfinite numbers refuse. No provider logic
 runs in framing. Do not omit fencing columns when projecting/deduplicating.
 
-Materialized execution may declare `execution.max_input_bytes` (1..256 MiB).
+Materialized execution may declare `execution.max_input_bytes` (1..16 GiB per
+file, read whole in memory) and `read.limits.max_records` up to 100,000,000.
 Otherwise the existing 32 MiB physical limit applies. `read.limits` bounds the
 framed/decoded document and emitted records independently; the output remains
 bounded. Streamed framing declares its own physical bounds and refuses this

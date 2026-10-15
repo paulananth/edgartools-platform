@@ -43,8 +43,11 @@ from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
-INPUT_BYTES = 32 * 1024**2
-INPUT_ROWS = 100_000
+# Bounds, not budgets (ticket 83): the input is read one input file at a time
+# and each batch's records file written as it fills, so memory holds one input
+# file's rows and one batch.
+INPUT_BYTES = 16 * 1024**3
+INPUT_ROWS = 100_000_000
 
 
 def runtime_files():
@@ -60,29 +63,31 @@ def _lines(rows: list[dict]) -> bytes:
 READINGS = 256  # as many as a composed input lists
 
 
-def _readings(envelope: dict, artifacts) -> list[dict]:
-    """The unit's readings: one source.read output, or a readings list
-    `{"version": 1, "readings": [ref, ...]}` (a composed input naming many);
-    the byte and row budgets are spent across all of them."""
-    document = artifacts.json(envelope["input"])
+def _artifacts(envelope: dict, artifacts):
+    """Each input file of the unit's readings, whole, in order: one source.read
+    output, or a readings list `{"version": 1, "readings": [ref, ...]}` (a
+    composed input naming many). A reading written in pieces is gathered one
+    file at a time; the byte and row bounds are spent across all of them."""
     refs = [envelope["input"]]
+    try:  # a readings list is small; a larger input is a reading, read below
+        document = artifacts.json(envelope["input"])
+    except artifact_store.Blocked:
+        document = {}
     if set(document) == {"version", "readings"}:
         if (document["version"] != 1 or not isinstance(document["readings"], list)
                 or not 1 <= len(document["readings"]) <= READINGS):
             raise ValueError(f"mdm.prepare reads a readings list of 1 to {READINGS} readings (version 1)")
         refs = [reference(ref) for ref in document["readings"]]
-    readings, consumed, rows = [], 0, 0
+    consumed = rows = 0
     for ref in refs:
-        reading, size = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES - consumed,
-                                             max_rows=INPUT_ROWS - rows)
-        if reading.get("version") != 1 or not isinstance(reading.get("artifacts"), list):
-            raise ValueError("mdm.prepare reads a source.read output (version 1)")
-        consumed += size
-        rows += sum(len(t) for a in reading["artifacts"] for t in a["tables"].values() if isinstance(t, list))
-        if rows > INPUT_ROWS:
-            raise ValueError("mdm.prepare readings exceed their row budget")
-        readings.append(reading)
-    return readings
+        used = 0
+        for artifact, used in source_readings.iter_artifacts(
+                ref, artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows):
+            rows += sum(len(t) for t in artifact["tables"].values() if isinstance(t, list))
+            if rows > INPUT_ROWS:
+                raise ValueError("mdm.prepare readings exceed their row budget")
+            yield artifact
+        consumed += used
 
 
 def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
@@ -138,8 +143,8 @@ def _batch(keys: dict, name: str, batch_id: str, chunk: list[dict], publication:
                             "record_count": len(chunk), "source_code": keys["dataset"], "publication": publication}}
 
 
-def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
-    """{name: bytes} of the records files, and the manifest's bytes.
+def _documents(envelope: dict, artifacts, on_file) -> bytes:
+    """The manifest's bytes; `on_file(name, data)` receives each records file as it is made.
 
     Without `publication_key` each artifact is its own publication (revision 1) and its own batches;
     with it, the unit's rows, in reading and artifact order, are one publication cut into batches once."""
@@ -147,23 +152,23 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     if not KEYS <= set(keys):
         raise ValueError(f"mdm.prepare needs the unit keys {sorted(KEYS)}")
     published = _published(keys)
-    files, batches, pooled = {}, [], []
-    for reading in _readings(envelope, artifacts):
-        for artifact in reading["artifacts"]:
+    batches = []
+    if published is None:
+        for artifact in _artifacts(envelope, artifacts):
             source, rows, publication = _artifact_rows(artifact, keys)
-            if published is not None:  # one publication: _published refused per-artifact times
-                pooled.extend(rows)
-                continue
-            for n, chunk in enumerate(limits.batches(rows, lambda row: _lines([row]))):
+            for n, chunk in enumerate(limits.iter_batches(rows, lambda row: _lines([row]))):
                 name = f"{source}.{n}.jsonl"
-                files[name], batch = _batch(keys, name, f"{keys['batch_id']}:{source[:16]}:{n}", chunk,
-                                            {"publication_key": f"{keys['dataset']}:{source}", "revision": 1,
-                                             **publication})
+                data, batch = _batch(keys, name, f"{keys['batch_id']}:{source[:16]}:{n}", chunk,
+                                     {"publication_key": f"{keys['dataset']}:{source}", "revision": 1,
+                                      **publication})
+                on_file(name, data)
                 batches.append(batch)
-    if published is not None:
-        for n, chunk in enumerate(limits.batches(pooled, lambda row: _lines([row]))):
+    else:  # one publication: _published refused per-artifact times; its rows are cut as they come
+        pooled = (row for artifact in _artifacts(envelope, artifacts) for row in _artifact_rows(artifact, keys)[1])
+        for n, chunk in enumerate(limits.iter_batches(pooled, lambda row: _lines([row]))):
             name = f"records.{n}.jsonl"
-            files[name], batch = _batch(keys, name, f"{keys['batch_id']}:{n}", chunk, published)
+            data, batch = _batch(keys, name, f"{keys['batch_id']}:{n}", chunk, published)
+            on_file(name, data)
             batches.append(batch)
     if not batches:
         raise ValueError(f"The reading's {keys['table']} table holds no rows")
@@ -174,7 +179,7 @@ def _documents(envelope: dict, artifacts) -> tuple[dict[str, bytes], bytes]:
     encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     if len(encoded) > limits.MANIFEST_BYTES:
         raise ValueError("mdm.prepare manifest exceeds the verifier byte budget; partition the input")
-    return files, encoded
+    return encoded
 
 
 def _optional_text(keys: dict, name: str) -> str | None:
@@ -236,19 +241,20 @@ def _beside(output: str, name: str) -> str:
 def execute(envelope: dict, artifacts) -> dict:
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"mdm.prepare verifies {CHECK} only")
-    files, manifest = _documents(envelope, artifacts)
-    for name, data in files.items():  # records first: the manifest names them
-        artifacts.put_bytes(_beside(envelope["output"], name), data)
+    # Records first, each as it is made: the manifest names them.
+    manifest = _documents(envelope, artifacts,
+                          lambda name, data: artifacts.put_bytes(_beside(envelope["output"], name), data))
     return artifacts.put_bytes(envelope["output"], manifest)
 
 
 def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
-    files, manifest = _documents(envelope, artifacts)
-    if artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES) != manifest:
-        raise ValueError("The manifest differs from the reading")
-    for name, data in files.items():
+    def check(name, data):
         if artifacts.read(_beside(envelope["output"], name), max_bytes=limits.RECORDS_FILE_BYTES) != data:
             raise ValueError(f"The records file {name} differs from the reading")
+
+    manifest = _documents(envelope, artifacts, check)
+    if artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES) != manifest:
+        raise ValueError("The manifest differs from the reading")
     return {CHECK: True}, []
