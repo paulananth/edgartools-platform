@@ -145,3 +145,9 @@ def test_a_declared_version_is_never_changed_in_place():
     for name, body in files.identifiers().items():
         seen = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         assert PINNED.get((name, body["version"])) == seen, f"{name} v{body['version']} changed: bump its version"
+
+
+def test_a_type_states_its_family_length_and_checksum_reason():
+    cusip, isin = identifier_types.TYPES["cusip"], identifier_types.TYPES["isin"]
+    assert (cusip.family, cusip.length, cusip.checksum_reason) == ("luhn over letter values", 9, "invalid_cusip_checksum")
+    assert isin.length == 12 and isin.family is not None

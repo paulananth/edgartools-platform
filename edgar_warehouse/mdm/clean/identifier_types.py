@@ -159,10 +159,18 @@ class IdentifierType:
     check: Callable[[str], bool] | None
     refuse_runs: bool
     stand_ins: frozenset = frozenset()
+    # The check-digit family as profiling names it, and the parts' total length.
+    family: str | None = None
+    length: int = 0
 
     @property
     def normalizer_name(self) -> str:
         return f"normalize_identifier@{self.name}-v{self.version}"
+
+    @property
+    def checksum_reason(self) -> str:
+        """The reason a value failing its check digit is set aside."""
+        return f"invalid_{self.name}_checksum"
 
     def normalize(self, item) -> str:
         value = str("" if item is None else item).strip()
@@ -175,7 +183,7 @@ class IdentifierType:
                 or (self.refuse_runs and len(set(value)) == 1)):
             return value, f"invalid_{self.name}"
         if self.check and not self.check(value):
-            return value, f"invalid_{self.name}_checksum"
+            return value, self.checksum_reason
         return value, None
 
 
@@ -193,7 +201,7 @@ def declared(body: dict, name: str) -> IdentifierType:
     parts = body.get("parts")
     if not isinstance(parts, list) or not parts:
         raise DeclarationError(f"{where}: `parts` lists the identifier's parts")
-    pattern, allowed = "", frozenset()
+    pattern, allowed, total = "", frozenset(), 0
     for part in parts:
         length = part.get("length") if isinstance(part, dict) else None
         if type(length) is not int or length < 1:
@@ -201,6 +209,7 @@ def declared(body: dict, name: str) -> IdentifierType:
         cls, chars = _characters(part, where)
         pattern += cls + "{%d}" % length
         allowed |= chars
+        total += length
     case = body.get("case", "as filed")
     if case not in ("upper", "as filed"):
         raise DeclarationError(f"{where}: `case` is upper or as filed")
@@ -221,6 +230,8 @@ def declared(body: dict, name: str) -> IdentifierType:
         refuse_runs=body.get("refuse_one_repeated_character") is True,
         # Compared as the value is kept (trimmed, and upper-cased when declared so).
         stand_ins=frozenset(v.strip().upper() if case == "upper" else v.strip() for v in stand_ins),
+        family=family,
+        length=total,
     )
 
 

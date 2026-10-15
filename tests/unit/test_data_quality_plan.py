@@ -65,6 +65,20 @@ def test_a_check_digit_maps_only_where_the_engine_test_fits():
     assert quality_plan.draft(findings, "acct", FIELDS, "v1")["new_code"]
 
 
+def test_a_check_digit_an_identifier_type_declares_needs_no_check():
+    # Ticket 81: a declared identifier type's contract sets a failing record aside itself.
+    findings = _findings()
+    findings["parts"][0]["quality"] = [{"check": "check_digit", "column": "ref", "rows": 9, "examples": [],
+                                        "args": {"family": "luhn over letter values", "length": 9},
+                                        "proposal": "withhold"}]
+    plan = quality_plan.draft(findings, "acct", FIELDS, "acct-quality-v1")
+    assert plan["block"]["checks"] == [] and plan["new_code"] == []
+    assert [(i["identifier"], i["reason"]) for i in plan["identifier_types"]] == [("cusip", "invalid_cusip_checksum")]
+    assert "invalid_cusip_checksum" in quality_plan.report(plan)
+    unmapped = quality_plan.draft(findings, "acct", {}, "acct-quality-v1")  # no field: listed, not set aside
+    assert unmapped["identifier_types"] == [] and [i["column"] for i in unmapped["unmapped"]] == ["ref"]
+
+
 def test_a_column_with_no_field_is_listed_not_guessed():
     plan = quality_plan.draft(_findings(), "acct", {"id": "fields.id"}, "v1")
     assert [c["id"] for c in plan["block"]["checks"]] == ["missing_id"]

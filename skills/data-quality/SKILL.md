@@ -76,6 +76,7 @@ It writes `quality.yaml` (checked by the engine's own `check_quality`),
 | `code_list`: a small code list | `in_set@1` (a code not seen is flagged) | flag |
 | any item proposed as `blank`, with the values to blank | `blank_values@1` (a fix) | — |
 | `check_digit` with a mod 97-10 family on 20 characters | `lei_check_digit@1` | withhold |
+| `check_digit` whose family and length a declared identifier type has (`rules/identifiers/<name>.yaml`) | none: the Dataset Contract that formats the column with the type sets the record aside as `invalid_<name>_checksum`; list that reason in `nonblocking_deferred_reasons` | — |
 | any other `check_digit`, `link_not_found`, `hierarchy_invalid`, `no_natural_key` | none: new code, with what its check would test (for `hierarchy_invalid`, see below) | — |
 
 An item whose column has no field in the map is listed as "no field mapped":
@@ -174,6 +175,11 @@ differs), and a fix with its evidence, or `needs_steward: true`.
   comments. For a small change to a live file, edit it as text, keeping the
   comments.
 - `files.source('<source>')` must load with `quality` inside each contract.
+- **No checks, no file.** When the plan drafts no check and no fix (each
+  item set aside by an identifier type, or a disagreement between source rows
+  that one record cannot show), write no `quality.yaml`: an empty one adds a
+  quality version and changes every record id for nothing. Say why in the
+  log, and give a row-level disagreement its own ticket.
 
 **Output:** `quality.yaml`, `QUALITY.md` with the operator's decisions, and
 the measured counts, in the log.
