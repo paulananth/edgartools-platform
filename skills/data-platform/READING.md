@@ -1375,6 +1375,13 @@ The interpreter retains ordinary functions and declared expressions:
   `value_type`. At most 128 parts and 1 MiB (`concat_limit`). It builds a key
   from parts, such as a batch named in context and a row's position:
   `concat: [{context: {name: batch}}, {const: {value: ":"}}, {ordinal: {}}]`.
+- `pluck: {value: EXPRESSION, fields: [name, ...]}` takes, from each object
+  in a list and in order, the text of each named field (ticket 95): a field
+  missing or null is skipped, a null list gives null, an empty list an empty
+  one. An item that is not an object, or a field that is not text, refuses
+  with `value_type`; 1 to 16 different fields, at most 100,000 values
+  (`pluck_limit`). It gives a list of identifiers to compare, such as every
+  FIGI of an answer's listings: `pluck: {value: {value: {path: data}}, fields: [figi, compositeFIGI]}`.
 - `transform: {value: EXPRESSION, transforms: [...]}` applies existing bounded
   text operations to text, preserves null, and refuses other types.
 - `tokens: {STREET: ST, SOUTH: S}` replaces whole whitespace-separated tokens.
