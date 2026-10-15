@@ -155,3 +155,7 @@ Capture (operator: "Yes, run it (Recommended)"; key kept outside the repository,
 
 - An answer names no identifier: it is matched to its request by position. Probed on an invented two-job request and answer (no data, no request): one row per job works (`each: item`), its position works, its FIGIs only as one text; two gaps: no number turned into text for a key (batch and position), and no list of one field from a list of objects (each job's FIGIs as a list for `overlap`).
 - Operator, asked whether to code tickets 94 and 95 for them: **"Open figi rarely changes do not download again fix engine"**. So: tickets 94 and 95 are coded; the capture of 2026-10-15 is kept and reused, and a later quarter asks OpenFIGI only for identifiers it has not been asked (ticket 80, Refresh).
+
+## Standing approval of rules (2026-10-15 18:56 ET)
+
+- Operator: **"Approved the rules always"**. Read as: each rules approval for this onboarding (Rules versions, quality checks and their `on_fail`, merge-rule declarations) is recorded with these words and its test evidence, without a question. Still needs a passing test first. Not covered: switch-on, merges, provider requests; each keeps its own word.

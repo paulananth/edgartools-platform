@@ -50,9 +50,11 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cusip
-# An N-PORT CUSIP record also joins by its ISIN, carried only when the pair is
-# one to one in the quarter (rules/sources/sec.nport.security/combine.yaml).
-# Its CUSIP and ISIN pointing at two Securities defers to review, never binds.
+# An N-PORT CUSIP record also joins by its ISIN, carried only when OpenFIGI
+# agrees the CUSIP and ISIN are one security and neither is offered twice
+# (operator, 2026-10-15: "Use FIGI to add pairs too";
+# rules/sources/sec.nport.security/figi-agree.yaml, combine.yaml). Its CUSIP
+# and ISIN pointing at two Securities defers to review, never binds.
 - rule_id: nport-security-isin
   version: 2026-10-15.1
   family: binding

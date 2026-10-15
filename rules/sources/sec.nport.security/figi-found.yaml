@@ -1,0 +1,18 @@
+# One identifier kind's OpenFIGI answers as one table (ticket 80): the 8
+# readings of figi-answers.yaml for that kind (`answers_1` .. `answers_8`, at
+# most 512 files each) put together, so figi-pairs.yaml takes each kind under
+# one name (a combination takes at most 8 names). Run once for CUSIPs and once
+# for ISINs. Pin canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  # Measured (2026-10-15 capture): 383,612 CUSIPs and 387,607 ISINs asked.
+  max_rows: 1000000
+  groups: {}
+  tables:
+    found:
+      source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8]
+      table: found
+      checks: {}
+      where: {}
+      joins: {}
