@@ -27,6 +27,6 @@ Plan: `PLAN.md` in this directory. Runtime work remains unstarted.
 Status: in progress under the operator's `$ship` instruction.
 
 - [x] Synchronize with current main and check Claude's merged MDM scope — merge of `67cedee4` completed cleanly; no intervening Bookkeeping runtime changes; Ticket74 merged as PR960; 2026-10-14 21:07 ET.
-- [ ] Verify the merged branch, audit planning completion and run pre-landing reviews.
+- [x] Verify the merged branch, audit planning completion and run pre-landing reviews — fresh scoped `--testmon` run: 80 passed in65.04s; wheel built; artifact checks passed (3 measurements,28 areas,7 future tasks,9 local links); independent completion audit15/15 and Claude re-review clear; whole unit/architecture run interrupted after908 passes and both retry shards reached285-second deadlines, so full-suite success is not claimed; 2026-10-14 21:20 ET.
 - [ ] Publish this dedicated branch and open a planning-only PR with validation evidence.
 - [x] Learning → skill — none; this delivery records a proposed design and its qualification gates, with no newly qualified runtime practice or skill change; checked against current AGENTS.md; 2026-10-14 21:12 ET.

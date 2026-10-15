@@ -449,8 +449,8 @@ run. N100/1,000/10,000 are qualification samples, not supported-volume maxima.
 Local PostgreSQL16 proves correctness, restricted roles and race behavior; capacity
 claims target a separately qualified hosted PostgreSQL environment. Do not derive
 production limits from local machine measurements. Preserve no-limit Merge Stage
-behavior in the future matched worker/MDM compatibility proof after Ticket74 lands;
-never cherry-pick or edit Claude's active implementation to make this plan concrete.
+behavior, now merged as PR960, in the future matched worker/MDM compatibility proof;
+no cherry-pick or edit of Claude's implementation is needed for this planning delivery.
 
 ## What already exists
 
@@ -734,7 +734,7 @@ full-path adoption/performance gates. Missing voice: none; both actual CLIs comp
 | NOT in scope / leverage / dream state | Written, 7 exclusions, existing-code map and ideal delta |
 | Registries / diagrams | 10 error/rescue paths and 10 failure modes; architecture, data, flow, rollout diagrams |
 | Deferred items | P1 fence, P1 fingerprint, persistent-service exploration only if future benchmarks justify it |
-| Scope proposals / CEO plan | 5 small control-path additions accepted, no new infrastructure; CEO snapshot to be written |
+| Scope proposals / CEO plan | 5 small control-path additions accepted, no new infrastructure; CEO snapshot and review logs archived |
 | Outside voices / completeness | Claude 6 and Codex 6 findings; 5/6 consensus; full staged approach selected |
 | Remaining taste choices | Detection policy, validation format/drain, no-default-counter proof, full-path gates |
 
@@ -1403,6 +1403,7 @@ unstarted; no P2 speedup or hosted qualification is claimed.
 | Engineering | Required final review of amended plan | Four full sections, Claude→Codex, post-rebase delta Claude→Codex | Complete; plan8.5/10; admission/closure gates unimplemented | Six concerns per original voice;5/6 consensus; delta three gaps per voice resolved |
 | Coordination | Operator requested Codex/main sync and Claude limit check | Live refs/PR/worktrees, clean rebase/range-diff, fresh Opus consultation | Complete; explicit MDM-only scope recorded | All six own commits preserved; Claude Ticket74 branch read; broader proposal deferred |
 | Verification | Current baseline and plan artifact integrity | Exact three-file suite via isolated native-wheel overlay; ownership/diff/links/task checks |80 tests passed in9.89s; plan checks complete | Native release build4m11s; no P2 migration tests/speed results claimed |
+| Publication verification | Main67cedee4 merged; research/planning-only diff | Independent completion audit15/15; Claude pre-landing re-review clear; artifact checks and wheel build passed | Fresh scoped `--testmon`:80 passed in65.04s; nine local links resolve | Broad unit/architecture run interrupted after908 passes; two retry shards hit285-second deadlines; full-suite success is not claimed |
 
 Decision accounting: **31 total:23 mechanical auto-decisions,7 operator-accepted taste recommendations,
 1 operator-confirmed scope ruling;0 user-direction challenges.** The Decision Audit
