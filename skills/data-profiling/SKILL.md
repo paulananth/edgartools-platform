@@ -111,6 +111,31 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   code counts, so after a fix say which sources it changes and profile only
   those. A database input has no file to fingerprint, so it is always profiled
   again.
+- **One run captures everything** (operator, 2026-10-15: "Do not repeat
+  profiling many times do it once and capture all relevant information for
+  mdm rdm data quality data catalog and silver"). The one run's findings are
+  the only profiling every later step reads:
+
+  | Consumer | Findings it reads |
+  |---|---|
+  | MDM | `class`, `kind`, `record_key`, `identifiers` (shape, check digit, join or cross-reference), `relationships`, `master_data` hierarchies, `time` |
+  | RDM | `code_sets`, `reference` hierarchies, `code_lists` |
+  | Data quality | `quality` (every rule with its failing rows), `invalid_rows.jsonl` |
+  | Data catalog | `catalog` (`profile.yaml`), from approved findings |
+  | Silver | `silver` (a table spec per part), `sensitivity`, `time` |
+
+  Before the run, make sure it can finish and leaves nothing to ask the data
+  again:
+  - pass every input of the data set in one run, so links between its parts
+    are measured;
+  - pass the existing kinds (`--kinds`);
+  - check that no limit is below the inputs' sizes.
+
+  A question the findings leave open goes to onboarding's one test or Proving
+  Run, never to a second scan of the data. A gap in what the profiler
+  measures is a profiler fix with its own ticket, used on the next source.
+  Never re-profile a source whose findings are already approved just to fill
+  that gap.
 - **One data set per source.** Profile each source into its own `--out`, so a
   change to one source, or a fix to a rule only one source needs, profiles that
   source alone. Before profiling, look for findings that already cover the
