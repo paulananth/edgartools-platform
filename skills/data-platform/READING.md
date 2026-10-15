@@ -161,6 +161,19 @@ Python JSON formatting policies inside assertions. Assertions run even when
 every table is empty and cannot defer records. The source worker writes no
 source-extract output on rejection; the existing parser and byte limits still apply.
 
+`overlap` tells whether two lists of text share a value (ticket 93): true when
+they share one, false when they share none (an empty list shares nothing), null
+when either is null or missing. Anything but a list of text refuses with
+`value_type`. Use it where a reading compares two sets, such as the identifiers
+two records were each found under:
+
+```yaml
+same_security:
+  overlap:
+    left: {value: {path: cusip_figis}}
+    right: {value: {path: isin_figis}}
+```
+
 A contract may require an object document, require a member to be an object
 when present, take a row only from an object member, or convert a looked-up
 code with Python text semantics to keep a historical mapping of nontext codes.

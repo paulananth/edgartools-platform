@@ -112,7 +112,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 5] = ["xml", "json", "jsonl", "csv", "tsv"];
-const PRIMITIVES: [&str; 23] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member", "member_value", "project", "recover", "transform", "sequence"];
+const PRIMITIVES: [&str; 24] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -404,9 +404,11 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
             if let Some(child) = args.get(key) { children.push(child); }
         }
     }
-    if let Some(args) = expr.get("equal") {
-        for key in ["left", "right"] {
-            if let Some(child) = args.get(key) { children.push(child); }
+    for call in ["equal", "overlap"] {
+        if let Some(args) = expr.get(call) {
+            for key in ["left", "right"] {
+                if let Some(child) = args.get(key) { children.push(child); }
+            }
         }
     }
     for name in ["project", "recover", "transform"] {
@@ -675,14 +677,14 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             validate_expr(&args["value"], steps)?;
             text_transform::Recipe::compile(&args["transforms"])?;
         }
-        "equal" => {
+        "equal" | "overlap" => {
             let map = args.as_mapping().filter(|m| m.len() == 2)
-                .ok_or("equal requires left and right expressions")?;
+                .ok_or(format!("{name} requires left and right expressions"))?;
             if map.keys().any(|k| !matches!(k.as_str(), Some("left" | "right"))) {
-                return Err("equal requires only left and right expressions".into());
+                return Err(format!("{name} requires only left and right expressions"));
             }
             for key in ["left", "right"] {
-                validate_expr(args.get(key).ok_or("equal requires left and right expressions")?, steps)?;
+                validate_expr(args.get(key).ok_or(format!("{name} requires left and right expressions"))?, steps)?;
             }
         }
         "test" => predicate::validate(args)?,
@@ -1220,6 +1222,26 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
             let left = eval(engine, context, lookups, document, item, ordinal, &args["left"])?;
             let right = eval(engine, context, lookups, document, item, ordinal, &args["right"])?;
             Ok(Val::Bool(left == right))
+        }
+        "overlap" => {
+            // Two lists of text share a value (ticket 93); null when either is null.
+            let texts = |value: Val| -> Result<Option<Vec<String>>, Rejected> {
+                match value {
+                    Val::Null => Ok(None),
+                    Val::List(items) if items.iter().all(|item| matches!(item, Val::Str(_))) =>
+                        Ok(Some(items.into_iter().filter_map(|item| match item { Val::Str(text) => Some(text), _ => None }).collect())),
+                    _ => Err(Rejected::new("value_type", "overlap compares lists of text")),
+                }
+            };
+            let left = texts(eval(engine, context, lookups, document, item, ordinal, &args["left"])?)?;
+            let right = texts(eval(engine, context, lookups, document, item, ordinal, &args["right"])?)?;
+            Ok(match (left, right) {
+                (Some(left), Some(right)) => {
+                    let left: std::collections::BTreeSet<_> = left.into_iter().collect();
+                    Val::Bool(right.iter().any(|value| left.contains(value)))
+                }
+                _ => Val::Null,
+            })
         }
         "member" => {
             let key = eval(engine, context, lookups, document, item, ordinal, &args["key"])?;
