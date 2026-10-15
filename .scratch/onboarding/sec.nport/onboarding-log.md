@@ -143,3 +143,10 @@ Capture (operator: "Yes, run it (Recommended)"; key kept outside the repository,
 - **The filed one-to-one pairs: 346,535 the same security, 128 different, 7,710 not both found.** Where FIGI can judge, the rule "ISIN joins when the pair is one to one in the quarter" is right on 99.96%.
 - The 17,219 ISINs filed with several CUSIPs: FIGI names exactly one of them for 4,338, none for 12,880, several for 1.
 - ISIN-only Securities (35,309): 5,395 share a FIGI with an N-PORT CUSIP; 27,438 share none; 2,476 not found.
+
+## Part 1: the ISIN rule, with OpenFIGI (2026-10-15 14:07 ET)
+
+- Operator, asked which ISIN rule goes into the one Proving Run (filed one to one; filed and FIGI agree; FIGI adds pairs too): **"Use FIGI to add pairs too"**. Read as the option said: it decides which ISIN a CUSIP Security carries; FIGI is not made an MDM identifier. OpenFIGI is now part of how Securities are identified (the earlier "FIGI lookup only" ruling is changed for this decision).
+- Counted from the captured answers only (`security_figi_attachment.py`, `security-figi-attachment.json`), under "share a listing or composite FIGI" and again with share class: identical. The narrower meaning is used.
+- **350,873 CUSIP Securities carry an ISIN**: 346,535 filed one to one and FIGI agrees; 4,338 where FIGI names the one CUSIP among several filed. Dropped: 7,838 filed pairs (128 FIGI disagrees, 7,710 cannot judge); 12,881 ISINs FIGI ties to none or several of their CUSIPs. Refused, counted: 1 CUSIP offered two ISINs; 1 ISIN FIGI ties to several CUSIPs. The 5,394 ISIN-only holdings FIGI ties to a CUSIP are all one-to-one pairs of that CUSIP already.
+- The engine cannot tell whether two lists share a value: ticket 93 (a generic `overlap` expression), waiting for the operator's word. Then: OpenFIGI's reading (ticket 80), re-run only the stages after the reduction, then the one Proving Run.

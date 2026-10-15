@@ -1,0 +1,24 @@
+{
+ "listing or composite": {
+  "1 dropped: FIGI disagrees or cannot judge": 7838,
+  "1 filed one to one, FIGI agrees": 346535,
+  "2 dropped: FIGI names none or several": 12881,
+  "2 several CUSIPs, FIGI names one": 4338,
+  "3 ISIN-only, FIGI ties one CUSIP": 5394,
+  "3 refused: FIGI ties several CUSIPs": 1,
+  "refused: a CUSIP offered two ISINs": 1,
+  "refused: an ISIN offered to two CUSIPs": 0,
+  "CUSIP Securities carrying an ISIN": 350873
+ },
+ "with share class": {
+  "1 dropped: FIGI disagrees or cannot judge": 7838,
+  "1 filed one to one, FIGI agrees": 346535,
+  "2 dropped: FIGI names none or several": 12881,
+  "2 several CUSIPs, FIGI names one": 4338,
+  "3 ISIN-only, FIGI ties one CUSIP": 5394,
+  "3 refused: FIGI ties several CUSIPs": 1,
+  "refused: a CUSIP offered two ISINs": 1,
+  "refused: an ISIN offered to two CUSIPs": 0,
+  "CUSIP Securities carrying an ISIN": 350873
+ }
+}
