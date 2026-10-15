@@ -30,6 +30,6 @@ Root cause: every identifier type (CIK, LEI, CRD, and the new CUSIP and ISIN) is
 - [x] Out-of-date docs fixed: `docs/specs/source-contract/spec.md` (formats list), `docs/research/custom-parsing-inventory-2026-10-02.md`. 2026-10-14 20:31 ET
 - [x] Affected tests pass locally: testmon over tests/mdm, tests/unit, tests/architecture, 1,034 passed, and the install wizard's 34 with Python 3.12 first on PATH (6 min 27 s). The Rules Database export test (Postgres) runs in CI. 2026-10-14 20:31 ET
 - [x] Three-axis /code-review (Standards, Spec, GoF). Fixed: a family that cannot read a character crashed the run (now refused at load); the Rules Database export left the types behind (now copied); a version could change in place (digest test); a list of stand-in values. Kept: the families are written in the engine and in profiling (a transient skill script the engine cannot import), held equal by test; types load once per process from `EDGAR_RULES_ROOT`. GoF: leave it. 2026-10-14 20:31 ET
-- [ ] PR, CI green, merge on the operator's word
-- [ ] Close `claude/security-id-formats` unmerged, replaced by this ticket
+- [x] PR #975, CI green, merged on the operator's word ("yes", merge `4da40b6a`). 2026-10-14 20:41 ET
+- [x] Close `claude/security-id-formats` unmerged, replaced by this ticket: it had no PR; remote branch and worktree deleted. 2026-10-14 22:47 ET
 - [x] Learning → skill: data-onboarding REFERENCE.md "Identifier types" (a new identifier is declared, never coded) and SKILL.md map step. 2026-10-14 20:31 ET

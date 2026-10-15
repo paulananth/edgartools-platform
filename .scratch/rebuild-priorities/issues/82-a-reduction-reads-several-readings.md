@@ -27,5 +27,5 @@ Ticket 79 onboards the Security master from the 13F information tables, one Secu
 - [x] Tests: Rust `a_group_reads_one_source_or_a_list_and_last_needs_one`; Python `test_a_group_reduces_several_readings_as_one` (two readings equal one reading of their rows; `last` over a list refused; empty, repeated and undeclared lists refused); the old form's tests unchanged and passing. 2026-10-14 21:26 ET
 - [x] COMBINING.md. 2026-10-14 21:26 ET
 - [x] Affected tests locally: tests/engine (914) with the rebuilt engine, Rust reduction tests (5). Three-axis /code-review: a malformed source list crashed instead of being refused (fixed, tested); the two-line `_sources` copy kept (importing combine would be circular); two reading names for one receipt would double a count reduction, as in combine (noted). GoF: leave it. 2026-10-14 21:29 ET
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR #978, CI green, merged on the operator's word ("merge 978 and code ticket 83", merge `b295e994`). 2026-10-14 21:37 ET
 - [x] Learning → skill: data-platform COMBINING.md (a reduction over several reading units). 2026-10-14 21:29 ET
