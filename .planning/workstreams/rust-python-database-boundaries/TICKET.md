@@ -20,8 +20,8 @@ Planning complete. Runtime implementation, benchmarking and deployment are subse
 Status: in progress. Complete and publish this architecture-planning ticket;
 future runtime execution remains separately scoped.
 
-- [ ] Rebase this clean, unpublished branch onto freshly fetched main and verify preserved changes.
-- [ ] Refresh the responsibility plan against current Rust kernels, Merge Stage behavior, storage-first ruling and canonical architecture guidance.
-- [ ] Verify source links, design/history evidence, skill impact and focused checks; run the ownership guard.
+- [x] Rebase this clean, unpublished branch onto freshly fetched main and verify preserved changes — clean rebase onto82f4e5ce; range-diff shows both original/intake commits unchanged; 0 behind/2 ahead after a second fetch; original9d3dfeba retained in the verified private cleanup bundle; 2026-10-14 21:51 ET.
+- [x] Refresh the responsibility plan against current Rust kernels, Merge Stage behavior, storage-first ruling and canonical architecture guidance; correct stale snapshot claims in docs/architecture/runtime-responsibilities.md after ownership validation — current native/caller source and migrations019/020 checked; removed snapshot/load_closure guidance corrected, existing native ports acknowledged, P1 authority qualification kept separate; prospective canonical-path guard passed before editing; 2026-10-14 21:56 ET.
+- [x] Verify source links, design/history evidence, skill impact and focused checks; run the ownership guard — 90 local links,6 facade entry points,9 caller symbols and4 migration/lock/effects source assertions validated; two focused `--testmon` tests passed in4.32s; GoF/source history reviewed, no skill capability changes; diff check and four-file overlap guard passed; evidence in VERIFICATION.md; 2026-10-14 21:56 ET.
 - [ ] Publish the completed planning branch and create a reviewable PR with verification evidence.
-- [ ] Learning → skill — record the existing guidance reused or a newly qualified skill change.
+- [x] Learning → skill — none; existing data-platform Master guidance already assigns Rust kernels, Python callers/custom code and database authority correctly; this ticket adds no new runtime capability or operational procedure, and retains separate authority/qualification work; 2026-10-14 21:56 ET.

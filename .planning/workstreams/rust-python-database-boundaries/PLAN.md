@@ -1,89 +1,151 @@
 # Rust, Python, and database boundaries
 
-## One goal
+## Goal and status
 
-Assign platform responsibilities to Rust, Python, and the database, and identify existing SQL computation that can safely move into code. Optimize the complete pipeline while preserving correctness, recovery, and the AWS architecture.
+Use Rust for generic configured computation, Python for callers and all custom
+code, and databases for durable storage and authoritative shared-state enforcement.
+Programs prepare effects; the destination validates and commits them atomically.
 
-Status: proposed architecture and execution plan, based on source inspection. No runtime change, benchmark, database qualification, or deployment was performed for this plan.
+This is a completed architecture-planning ticket, refreshed against main
+`82f4e5ce` on 2026-10-14. It changes documentation only. Existing implementation
+and qualification records are linked below; this ticket neither implements a new
+kernel nor claims a new benchmark, PostgreSQL qualification or deployment.
 
-Baseline: fetched `origin/main`, commit `51b45916018f48f30b76c582fe61e23365587026`, on 2026-10-11. Branch: `codex/rust-python-database-boundaries`. Dedicated worktree: `/Users/aneenaananth/projects/edgartools-platform-rust-python-database-boundaries`. The shared checkout and its dirty files were preserved. This work owns only this planning directory; the inherited `fix-pipelines` active-workstream pointer is not changed.
+The original proposal was inspected at `51b45916` and committed as `9d3dfeba`.
+The requested rebase preserves that proposal's history; this revision supersedes
+its outdated recommendations. The inherited `fix-pipelines` pointer and unrelated
+worktrees are untouched. Completion owns this directory and the related corrections
+in the [canonical responsibility map](../../../docs/architecture/runtime-responsibilities.md).
 
-## Proposed boundary
+## Accepted responsibility boundary
 
-**Rust computes bounded data transformations. Python coordinates the work and implements evolving domain policy. Databases select stored data efficiently and enforce durable state transitions.**
+**The configured core belongs in Rust. All custom code stays Python.**
+Versioned Rules express source mappings and domain policy; choosing an execution
+language does not grant authority to approve or activate those rules. Python owns
+CLI commands, AWS/SEC/S3 transport, workers, retries, artifact authentication,
+independent verification, database clients, orchestration and recovery decisions.
 
-There is no technical rule that orchestration must use Python forever. Here, “must remain Python” means preserve the existing CLI, integrations, and operator contracts for this work. Likewise, a computation being possible in Rust is not evidence that moving it improves the pipeline.
+Databases provide storage, indexes, constraints and transactions that arbitrate
+current shared state. Python may issue transactional SQL through the current
+restricted APIs. Do not move business policy into stored functions by default,
+and do not remove locking, uniqueness, history, leases or fencing as a side effect
+of moving computation into programs. Retain database computation for a storage
+invariant or demonstrated complete-path efficiency, including transfer and refresh
+costs. Existing SQL alone is not evidence that it is the preferred future owner.
 
-| Work | Recommended home | Current evidence and decision |
+The canonical map supplies the detailed placement contract. The current
+[platform skill](../../../skills/data-platform/SKILL.md) already states the native
+kernel, Python caller/custom-code and database authority boundary. This closeout
+changes no operational skill instructions or approval procedures.
+
+## Current implementation, checked after rebase
+
+| Responsibility | Current owner and inspected source | Remaining boundary |
 |---|---|---|
-| Configured XML/JSON/CSV/container reading, projection, coercion, predicates, lookup membership, record rejection | Rust | `crates/source-contract/src/lib.rs:143`; retain configured engine and source-specific limits. |
-| Streaming framing and native projection | Rust kernel, Python transport and authenticated publication | `crates/source-contract/src/python.rs:158`, `edgar_warehouse/rules/source_engine.py:54`; EOF and verification must precede publication. |
-| Large grouping, distinct-member counting, sorting, bounded local joins | Rust candidate after profiling | `edgar_warehouse/workers/source_reduction.py:94` and `source_combine.py` currently compute in Python. Preserve order, null rules, output hashes, limits, and failure semantics. |
-| CLI, AWS/SEC/S3 transport, retries, Bookkeeping workers, manifests, verification, SQLAlchemy/Snowflake integrations | Python | `edgar_warehouse/workers/source_read.py:276`, `edgar_warehouse/mdm/clean/store.py:461`; preserve existing integration surface. |
-| Source adapters and custom steps using Python APIs | Python, behind existing facade | `edgar_warehouse/rules/steps.py:1`; callbacks are a last resort. Pure hot callbacks can become configured native primitives after parity qualification. |
-| Identity replay, match proposals, survivorship, relationship policy, review decisions | Python initially | `edgar_warehouse/mdm/clean/merge.py:197` and calls to `identity`, `matching`, `survivorship`, `relationships`; these are already application computations. Port only an independently measurable pure kernel. |
-| Versioned rule bodies, policies, source mappings, reference data | Rules configuration with durable registration/approval | Keep policy out of hard-coded Rust/Python source. Rules authority and approval enforcement retain their current owner. |
-| Bounded indexed lookup of stored evidence, decisions, entities, relationships | PostgreSQL | `edgar_warehouse/mdm/migrations/012_key_join_lookups.sql:26`; avoid exporting full tables for application filtering. |
-| Atomic MDM commit, generations/checkpoints, proposal freshness, uniqueness, history, fencing, outbox metadata | PostgreSQL | `014_outbox_names_batch.sql:39`, `013_proposal_effects_hash.sql:19`, `015_company_fields_once.sql:26`; keep a restricted write API. |
-| Rule approval and immutable history enforcement; Change Journal append/idempotency | PostgreSQL | `rules/migrations/003_approval_on_evidence.sql`; `change_journal/migrations/001_event.sql:14`. Application prechecks supplement these guarantees. |
-| Warehouse joins, lag/rank/window calculations, cross-company factors and dynamic-table refresh | Snowflake/dbt | `models/gold/financial_derived.sql:33`, `financial_factors.sql:6`, `institutional_holdings.sql:9`; retain database computation by default. |
+| Configured parsing, projection, coercion, assertions and framing | Rust [engine](../../../crates/source-contract/src/lib.rs) and [PyO3 bridge](../../../crates/source-contract/src/python.rs), reached through Python [SourceEngine](../../../edgar_warehouse/rules/source_engine.py) | Python authenticates transport/artifacts and supplies supported custom callbacks; conversion and callback costs still matter. |
+| Materialized combinations, collections, ordering and joins | Rust [combination kernel](../../../crates/source-contract/src/combination.rs); Python [source_combine](../../../edgar_warehouse/workers/source_combine.py), `_documents`, calls the facade | Python retains input/output authentication and opaque payload/canonical callbacks. PR921 already delivered this port. |
+| Complete-set reduction | Rust [reduction kernel](../../../crates/source-contract/src/reduction.rs) through `ReductionEngine`; Python [source_reduction](../../../edgar_warehouse/workers/source_reduction.py), `tables`, exhausts authenticated input streams | PR911 already delivered the native kernel; PR978 allows several declared sources/tables. Retain finalization only after complete successful exhaustion. |
+| Accepted identity-decision replay | Rust [identity kernel](../../../crates/source-contract/src/identity.rs); Python [identity.replay](../../../edgar_warehouse/mdm/clean/identity.py) prepares metadata and time semantics | Replay does not infer a merge from field priority or acquire policy authority. PR920 already delivered this port. |
+| Eligible field/profile claim ranking | Rust [ranking kernel](../../../crates/source-contract/src/survivorship.rs), called from Python [survivorship](../../../edgar_warehouse/mdm/clean/survivorship.py), `_select_values` | Source-history folding, profile qualification, authority/time preparation and canonical value comparison remain Python. Do not describe all survivorship as native. |
+| Publication object preparation | Rust [PostgreSQL JSONB preparation](../../../crates/source-contract/src/postgres_jsonb.rs); Python [payloads.prepare](../../../edgar_warehouse/mdm/clean/payloads.py) checks bytes against the committed expected hash | Preserve raw numeric spelling and previously stored payload bytes. The database still independently derives authoritative expected hashes and commits publication intent. PR925 already delivered preparation. |
+| Merge orchestration, matching, quality and relationship projection | Python [MergeStage](../../../edgar_warehouse/mdm/clean/merge.py), [matching](../../../edgar_warehouse/mdm/clean/matching.py), [quality](../../../edgar_warehouse/mdm/clean/quality.py), [relationships](../../../edgar_warehouse/mdm/clean/relationships.py) and [scope](../../../edgar_warehouse/mdm/clean/scope.py) | Future reusable configured kernels belong in Rust after qualification. All source-specific/custom behavior stays Python. |
+| Indexed selection and authoritative writes | PostgreSQL [lookup migration012](../../../edgar_warehouse/mdm/migrations/012_key_join_lookups.sql), restricted Store APIs and [migration020](../../../edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql) | Preserve destination current-state checks, atomic effects/history/checkpoints and proposal lifecycle. Read the latest migrations, not only the original function definition. |
+| Warehouse formulas and history/population-wide analytics | Current Snowflake [dbt models](../../../infra/snowflake/dbt/edgartools_gold/models) | A program-side replacement is conditional on exact semantics, complete dependency/history handling, refresh/publication and measured total cost. SQL is the current implementation, not a permanent placement exemption. |
 
-## What database work can move into code?
+Existing evidence, with its own scope and dates:
+[reduction results](../rust-configured-reduction/RESULTS.md),
+[merge-kernel results](../rust-configured-merging/RESULTS.md),
+[join results](../rust-configured-joins/RESULTS.md), and
+[publication placement decisions](../database-computation-preparation/DECISIONS.md).
+Those records are not new qualification performed by this planning ticket.
 
-Yes: computations that depend only on explicit immutable inputs can move. Code may also prepare a proposed write. Database enforcement must still validate the proposed write against current state inside its transaction. Moving SQL text into a Python module does not move its execution out of the database.
+## Changes that supersede the original proposal
 
-| Existing database work | Can it move? | Proposed treatment and qualification requirement |
-|---|---|---|
-| `mdm.entity_name(body)` and `mdm.relationship_holds(body, at)` in migration 006 | Pure computation can move | Use pure Python equivalents when preparing application artifacts, or Rust if hot. Retain SQL versions while views/query consumers need them. Preserve missing/empty values, periods, timezone and boundary semantics. A small function alone is unlikely to justify migration. |
-| Outbox JSON assembly in `mdm.outbox_delivery`, migration 014:23 | Conditional candidate | Publisher can construct the payload from the immutable committed batch plus consumer. Retain database claim ordering, leases, expected hash, verification state, and old stored-payload handling. Preserve existing JSONB hash bytes or explicitly version the protocol; Python JSON spelling is not interchangeable with PostgreSQL JSONB text. Prefer a publisher experiment over moving authoritative commit hashing first. |
-| Request shaping and structural validation in `mdm.write_batch` | Preparation can move; enforcement stays | Python already prepares requests. Native checks can accelerate repeated processing, but DB bounds, source authority, collisions, and stale-state checks remain for every writer. Do not grant direct table DML to bypass functions. |
-| Company field extraction from the projection in `mdm.record_company_version`, migration 015 | Conditional candidate | Code can prepare scalar columns from the projection. Database still closes/opens versions atomically and checks consistency with the canonical body. Measure round trips, transferred bytes, parameter overhead and write cost; today's deduplication change may already solve the larger cost. |
-| Canonical JSON and hashing in `journal.canonical`, migration 001:4 | Producer computation already belongs in code; DB validation stays | Inspect producer canonicalization alongside DB rules. Preserve hash and canonical-body checks and append identity collision detection. Only port producer computation to Rust after byte-level parity for Unicode, integers, floats, null and ordering. |
-| `mdm.match_proposal_snapshot(scope)`, migration 012:73 | Keep authoritative snapshot in DB | Application can consume a bounded snapshot, but the commit path must recheck it under the current locking protocol. Outside-transaction hashing cannot replace the freshness check. Profile query and hashing costs separately. |
-| `mdm.readings_naming`, `mdm.decisions_naming`, context joins and parent-chain traversal | Retain DB selection by default | Indexed selection stays near stored data. Rust may walk an already-loaded bounded closure; use a consistent snapshot and unchanged closure completeness checks. Moving recursive SQL wholesale needs evidence that retrieval plus code traversal beats the indexed query. |
-| Bookkeeping claims, role authorization, destination lease validation at commit | Keep DB enforcement | `bookkeeping/clean/migrations/destination_guard.sql:8` and `:29` enforce stale fences and expiry. Python decides when to request work; server time, row locking and deferred commit validation remain authoritative. |
-| Snowflake row-local formulas, such as ratios | Technically movable, conditional candidate | A versioned Python/Rust kernel could compute them before export. Preserve SQL decimal precision, scale, null/zero semantics and refresh dependencies. Test using fixed inputs against SQL outputs. |
-| Snowflake YoY/TTM, peer percentiles and ownership ranking | Keep SQL for this plan | These depend on history or a population. Code migration would also need dependency closure, late-arrival/restatement handling, publication and refresh machinery. Include data extraction and re-ingestion costs in any future comparison. |
+1. **Several proposed ports are already implemented.** Combining, reduction,
+   accepted identity replay, field ranking and publication preparation must not
+   be scheduled again as new work. Distinguish each native kernel from remaining
+   Python preparation, callbacks, orchestration and policy authority.
+2. **Proposal freshness no longer uses a whole-scope snapshot.**
+   [Migration020](../../../edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql)
+   drops `mdm.match_proposal_snapshot(jsonb)`. `MergeStage._execute` acquires the
+   Merge Stage transaction lock and computes/records the proposal and batch in
+   the same transaction. `apply_assessment` recomputes an earlier proposal under
+   that lock; `save_batch` rejects mismatched assessed effects and already-used
+   proposals. Preserve this complete protocol. Do not recreate the retired
+   snapshot or replace transaction authority with an unchecked cached digest.
+3. **Merge Stage size refusals were removed.**
+   [Migration019](../../../edgar_warehouse/mdm/migrations/019_merge_stage_no_limit.sql)
+   and PR960 remove Merge Stage closure/projection/request/proposal size refusals;
+   PR963 scopes replay and projection to affected masters and links. Existing
+   input batching, shape checks and read-back bounds remain. Benchmarks use
+   bounded samples; they do not introduce a new total-work ceiling or a limit
+   inferred from a local machine. Bookkeeping's separate protocol bounds remain
+   under the operator's MDM-only ruling.
+4. **An ownership requirement is not proof of a repaired implementation.**
+   Database authority must ultimately authenticate fencing and current-state
+   transitions. The [Bookkeeping plan](../bookkeeping-p2-autoplan/PLAN.md) and
+   [follow-ups](../../../TODOS.md) retain separate P1 work on destination proof
+   authentication and complete runtime fingerprints. This architecture ticket
+   does not close those findings or qualify a per-unit Bookkeeping fast path.
+5. **The old example thresholds are not adopted release requirements.**
+   The original 20%/10% examples were proposed, not accepted or measured here.
+   Set workload-specific acceptance criteria in each execution ticket. A CPU
+   optimization needs complete-path benefit; a placement change for simpler
+   program ownership may instead document acceptable performance and resource
+   costs explicitly, consistently with the canonical map.
 
-The invariant is **prepare in code; validate and commit at the destination**. A Python-controlled transaction can technically preserve database atomicity, but replacing the current restricted function API would require redesigning grants and independently proving every enforcement path. That is a larger change than extracting a pure computation.
+## Remaining database-to-code candidates
 
-PostgreSQL releases row locks at transaction end, and `FOR UPDATE` coordinates competing writers; keep checks and dependent writes within that protection. See [PostgreSQL 16 locking](https://www.postgresql.org/docs/16/explicit-locking.html). Uniqueness, foreign keys and checks remain database constraints; see [PostgreSQL 16 constraints](https://www.postgresql.org/docs/16/ddl-constraints.html). These support the concurrency boundary; the extraction recommendations above are project-specific design judgments.
-
-## Design review
-
-`gof-refactor-reviewer` is available and was applied to the facade, merge stage, callback bridge and relevant git history. Overall verdict: retain existing seams; no new GoF hierarchy is justified by this review.
-
-- `SourceEngine` (`rules/source_engine.py:98`) already supplies the adapter/facade between Python callers and native reading. `python.rs:109` reacquires the GIL for custom steps, while `:177` releases it for native reading. The useful investigation is batching/callback/materialization cost, not additional wrapper classes.
-- Merge Stage (`mdm/clean/merge.py:197`) coordinates domain computation and the Store boundary. Its proposal/apply work changed in `4ace81d3` and size handling in `9a72285b`; retain that contract rather than adding a generic Strategy class for language selection.
-- Stored-key lookup tuning in `c16968be` centralized selection used by closure and snapshot; migration 012 records the prior scan cost and the new indexed lookup behavior. Keep the shared query. Reimplementing its selection independently would introduce drift and extra data movement.
-
-The cost of preserving these seams is continued Python/native conversion and some SQL-specific behavior. That cost should be measured before paying the migration and semantic duplication cost of a replacement.
-
-Earlier parser memory recommended Rust+Python and described an incomplete 200-filing 13F run. That is historical context, not current qualification: this branch has newer native framing/projection work (`337e737e`, `716cb999`, `f8f7876e`, `3368da36`). This plan makes no current speedup claim from those older measurements.
-
-## Execution sequence
-
-Each later execution ticket must have its own current checklist, ownership check, baseline and acceptance evidence. These are planned stages, not completed implementation work.
-
-1. **Establish a component and full-path baseline.** Pin the source artifacts, active rule versions, runtime digest and database state. Measure reading, native/Python conversion, combine/reduce, closure lookup, domain computation, serialization, DB commit, outbox materialization and delivery separately. Capture wall time, CPU, peak RSS, input/output bytes, SQL calls and lock duration. Include small and large workloads, serial/2/4 workers, malformed final input, retries and no-change runs. Long scans need an announced duration and elapsed-time reporting. Offline profiling should precede any separately authorized live qualification.
-2. **Choose one measured pure kernel.** First evaluate `source_reduction.tables` because its bounded grouping/counting state is explicit. It is a candidate, not a promised bottleneck. If SQL computation dominates instead, compare outbox assembly or Company extraction; if indexed selection dominates, tune SQL first. Publish the measured choice before a port.
-3. **Extract behind the existing facade.** Keep orchestration, authentication, persisted contracts and operator output in Python. Add a native batch interface only for the selected computation. Avoid one Python callback per row when a bounded batch is sufficient. Pin native code/binary changes in the execution digest. No database connections or external requests inside the pure kernel.
-4. **Qualify exact behavior.** Compare tables, deferred records, rejection codes, ordering, scalar types, canonical bytes and hashes. Cover null versus missing, integer bounds, decimal precision, Unicode, duplicate keys, ties, last-occurrence order, byte/key/member budgets and late EOF failures. Reuse existing tests; add differential cases at the boundary. For SQL extraction, compare the original SQL and code on the same fixed snapshot.
-5. **Prove persistence and recovery remain intact.** Run real PostgreSQL 16 with restricted roles. Competing writers, stale assessments, expired/replaced leases, duplicate batch/event keys, rollback after partial preparation, and crash between commit and publication must retain current outcomes. Batch, history, checkpoint and required outbox rows commit together. Bookkeeping, Rules, MDM and Change Journal have separate transactions; preserve idempotent delivery reconciliation across databases and S3.
-6. **Decide from full-path results.** Adopt only if output/rejection parity is exact, bounds and recovery hold, and improvement remains after transport/conversion/persistence costs. Proposed gate: at least 20% median end-to-end wall-time improvement over five equivalent trials, no material p95 latency regression, and no more than 10% peak-RSS growth. These are proposed decision thresholds, not measured results or previously agreed requirements. If they fail, retain the current implementation and record the result.
-7. **Cut over one path and retain recovery.** Recheck current branch/ownership and the overlap guard. Use the reviewed configuration/execution version; preserve existing durable batches, receipts and archived payload compatibility. One authoritative writer remains active. Roll back new executions to the prior compatible version while reconciling already committed work; never remove commit checks or undo history to roll back a compute port.
-
-## Validation targets for later implementation
-
-| Change | Existing coverage to reuse |
+| Work | Treatment before any future port |
 |---|---|
-| Native reading and bridge | `crates/source-contract/tests/`, `tests/engine/test_source_engine.py`, `test_source_stream_worker.py`, `test_source_input_pins.py` |
-| Combine/reduce kernel | `tests/engine/test_source_combine.py`, `test_source_nested_combine.py`, `test_source_reduction.py` |
-| Domain-policy kernel | `tests/mdm/test_clean_survivorship.py`, `test_clean_identity_correction.py`, `tests/integration/test_mdm_merge_worker_postgres.py` |
-| Outbox/materialization or Company preparation | `tests/integration/test_clean_outbox_names_batch.py`, `test_clean_company_versions.py`, `test_clean_relationship_version_postgres.py` |
-| Transaction guards and authority | `tests/integration/test_configured_bookkeeping_postgres.py`, `test_rules_approval_postgres.py`, `test_change_journal_postgres.py`, `test_change_journal_independence_postgres.py` |
-| Snowflake formula experiment | Compile/test affected dbt models and compare fixed SQL outputs; use `SNOW_CONNECTION=snowconn` for any separately authorized dev verification. |
+| `entity_name` and `relationship_holds` in [migration006](../../../edgar_warehouse/mdm/migrations/006_relationship_context.sql) | Pure evaluation is movable. Retain SQL query/view consumers until replaced; qualify null/empty, timezone and half-open interval behavior. A small helper alone does not justify a new subsystem. |
+| Company scalar extraction from canonical projections in [migration015](../../../edgar_warehouse/mdm/migrations/015_company_fields_once.sql) | Programs may prepare fields; database consistency, close/open version transitions and atomic history remain authoritative. Measure transferred bytes, parameters and total write cost. |
+| Producer canonicalization and hashing for [Change Journal](../../../edgar_warehouse/change_journal/store.py) | A reusable Rust primitive is possible; preserve the existing byte protocol and independent database validation. MDM JSONB text and compact producer JSON are distinct protocols. |
+| Relationship traversal and population/history-dependent analytics | Compare complete indexed retrieval plus program computation with current SQL. Preserve snapshot/closure completeness, interval/cycle semantics, late-arrival dependencies and publication. |
+| Request validation, locks, constraints, leases and atomic effects | Programs can preflight and prepare. Destination enforcement remains mandatory for every writer; moving SQL text into Python still executes it in the database. Any restricted-API redesign needs separate grant/concurrency/recovery proof. |
 
-## Completion definition
+## Sequence for a later execution ticket
 
-This planning ticket is complete when the responsibility matrix, database extraction classification, source/history evidence and execution gates are recorded and checked. Implementation is a subsequent task. The first proposed execution is a bounded profiling baseline, followed by one measured kernel; a whole-platform Rust rewrite or wholesale removal of stored functions is not supported by the evidence reviewed here.
+1. Pin current artifacts, Rules, runtime inputs and stored state. Measure reading,
+   conversion, combine/reduce, scope retrieval, remaining policy computation,
+   serialization, commit and delivery on the complete caller path. Announce long
+   work; local test invocations remain below the repository's five-minute limit.
+2. Choose one measured, still-unported generic kernel or database preparation
+   step. Compare algorithm/query improvements before changing language. The
+   historical proposal to start by porting reduction is superseded by PR911.
+3. Reuse the facade and current Python caller interfaces. Add no per-row callback
+   framework, language-selection hierarchy or external requests in a pure kernel.
+   Runtime artifacts and code dependencies must remain reproducibly identified.
+4. Qualify exact outputs, types, ordering, null/missing rules, rejection behavior,
+   canonical bytes/hashes, late EOF, all applicable bounds and error paths. For
+   SQL extraction, compare original SQL and program output on the same inputs.
+5. For a changed persistence/authority boundary, use real PostgreSQL16 with
+   restricted roles. Prove competing writers, stale effects, expired/replaced
+   leases, idempotent replay, rollback and lost acknowledgements. MDM, Rules,
+   Bookkeeping, Change Journal and S3 do not share a single atomic transaction.
+6. Run installed caller paths and complete-path cost measurements, including
+   serial/2-worker/4-worker comparison where concurrency is relevant. Adopt only
+   when the recorded execution-ticket criteria pass; otherwise retain the current
+   implementation and publish the result.
+7. Update operational skills only for qualified capability/interface changes.
+   Follow existing operator review and activation rules. Preserve old committed
+   artifacts and reconcile in-flight writes during rollback; do not undo durable
+   history or remove destination checks.
+
+## Design review and completion
+
+Applied `gof-refactor-reviewer` to current source and change history. The existing
+`SourceEngine` facade, Rust kernels, Python workers and Store boundary already
+supply the required seams. PR911/920/921/925 extend those seams; PR960/963 change
+MDM scope and transaction behavior without introducing a language-dispatch
+hierarchy. Adding another Proxy/Strategy/Mediator layer would add conversion,
+indirection and duplicated authority without an evidenced present-day benefit.
+Retain the current design; measure remaining conversion/callback costs.
+
+Completion means the rebased planning artifacts and canonical map agree with
+current source, existing skill guidance and the operator's storage-first ruling,
+with verification and a reviewable PR. New ports, full performance qualification,
+provider requests, AWS deployment and activation remain separate work.
+
+Fresh documentation/source checks and their limits are recorded in
+[verification](VERIFICATION.md).
