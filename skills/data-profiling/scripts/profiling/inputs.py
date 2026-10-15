@@ -69,9 +69,15 @@ class Part:
         """A part read from an input as it is: not a nested list, not an entity found inside a part."""
         return self.parent is None and self.derived_from is None
 
+    @property
+    def declared_format(self) -> str:
+        """The format a Dataset Contract declares to read it: a tab-separated file is read as CSV
+        here, and as `tsv` by the engine, which splits on tabs and does not unquote."""
+        return "tsv" if self.format == "csv" and self.location.lower().rsplit("#", 1)[-1].endswith(".tsv") else self.format
+
     def finding(self, rows: int) -> dict:
         return {"kind": "table" if self.format in {"sqlite", "postgres", "duckdb"} else "file",
-                "location": self.location, "format": self.format, "bytes": self.bytes, "rows": rows,
+                "location": self.location, "format": self.declared_format, "bytes": self.bytes, "rows": rows,
                 "sha256": self.sha256} | ({"encoding": self.encoding} if self.encoding else {})
 
 

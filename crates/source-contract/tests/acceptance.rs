@@ -192,8 +192,8 @@ fn tsv_reads_as_csv_does_with_tabs_and_no_quoting() {
     let from_tsv = tsv.read(b"a\tb\nx y\t1\nz\t\n", &Lookups::new()).unwrap();
     assert_eq!(from_csv, from_tsv); // the same rows, the same types
     // A quote mark is an ordinary character: a tab never occurs inside a value.
-    let quoted = tsv.read(b"a\tb\n6\" PIPE \"A\t2\n", &Lookups::new()).unwrap();
-    assert_eq!(quoted.tables["rows"][0]["a"], Val::Str("6\" PIPE \"A".into()));
+    let quoted = tsv.read(b"a\tb\nsay \"x\" and \"y\t2\n", &Lookups::new()).unwrap();
+    assert_eq!(quoted.tables["rows"][0]["a"], Val::Str("say \"x\" and \"y".into()));
     assert_eq!(tsv.read(b"a\tb\n1\t2\t3\n", &Lookups::new()).unwrap_err().code, "malformed");
     let encoded = contract("tsv").replace("read:\n", "read:\n  encoding: windows-1252\n");
     let e = configured(&encoded, Steps::new()).unwrap();

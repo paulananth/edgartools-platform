@@ -30,4 +30,6 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [x] ticket 81 (identifier types as configuration, #975 merged), ticket 82 (a reduction reads several source extracts, #978 merged), profiler reuse (#976 merged)
   - [x] ticket 83 (no output caps, #981), data-quality and identifier types (#982), profiler issued identifiers (#983): CI green, merged one by one on the operator's words "merge one by one" 2026-10-15 06:07 ET
 - [ ] PR, CI green, merge on the operator's word
+  - [x] #984, the 13F Security, switched on: CI green, merged by the operator 2026-10-15 06:55 ET
+  - [ ] the N-PORT parts: their own PRs, after ticket 89 (a large CSV or TSV is read in pieces)
 - [ ] Learning → skill
