@@ -1,0 +1,16 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Arial, sans-serif', 'fontSize': '16px', 'primaryColor': '#e8f1fb', 'primaryTextColor': '#132d46', 'primaryBorderColor': '#32638d', 'lineColor': '#52677a'}, 'flowchart': {'curve': 'basis', 'nodeSpacing': 26, 'rankSpacing': 35}}}%%
+flowchart TD
+  EXTRACT["Source extract + Dataset Contract"] --> STAGE["Prepare evidence<br/>Newest source-record readings"]
+  STAGE --> PROPOSE["Propose identity bindings<br/>Approved identifiers, then eligible name rules"]
+  PROPOSE --> TX["Merge Stage: one transaction<br/>Recheck proposal and live lease<br/>Resolve identities; select fields and profiles<br/>Validate relationships; retain decisions and history"]
+  TX --> MASTER["Stable master identities<br/>Fields, provenance and relationship periods"]
+  TX --> REVIEW["Unresolved cases<br/>Unbound records or steward review"]
+  TX --> INTENT["Durable publication intent<br/>Committed with master state"]
+  INTENT --> PUBLISH["Publish in generation order<br/>Changed records to consumers; whole batch to journal"]
+  PUBLISH --> VERIFY["Independent destination read-back<br/>Bookkeeping admits verified completion"]
+  classDef storage fill:#e8f1fb,stroke:#32638d,color:#132d46;
+  classDef compute fill:#e8f5ee,stroke:#317451,color:#183d2a;
+  classDef attention fill:#fff3dd,stroke:#9b6b21,color:#583c14;
+  class STAGE,MASTER,INTENT storage;
+  class PROPOSE,TX,PUBLISH,VERIFY compute;
+  class REVIEW attention;

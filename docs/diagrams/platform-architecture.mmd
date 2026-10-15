@@ -1,11 +1,19 @@
-flowchart LR
-  SEC["SEC EDGAR"] --> CLI["edgar-warehouse<br/>CLI + ECS"]
-  ET["edgartools<br/>parsers"] --> CLI
-  CLI --> B["S3 Bronze<br/>raw filings"]
-  CLI --> S["S3 Silver<br/>DuckDB tables"]
-  CLI --> X["S3 Export<br/>Parquet + manifests"]
-  S --> MDM["MDM<br/>entities + graph"]
-  X --> SRC["Snowflake<br/>SOURCE"]
-  SRC --> GOLD["dbt Gold<br/>dynamic tables"]
-  GOLD --> DASH["Streamlit<br/>dashboards"]
-  MDM --> DASH
+%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Arial, sans-serif', 'fontSize': '16px', 'primaryColor': '#e8f1fb', 'primaryTextColor': '#132d46', 'primaryBorderColor': '#32638d', 'lineColor': '#52677a'}, 'flowchart': {'curve': 'basis', 'nodeSpacing': 28, 'rankSpacing': 40}}}%%
+flowchart TD
+    CAP["Configured processing<br/>Captured source files"] --> BRONZE["Bronze<br/>Immutable evidence"]
+    BRONZE --> READ["Read, combine, reduce<br/>Rust through Python"]
+    READ --> MDM["MDM<br/>Identities and relationships"]
+    READ --> SILVER["Silver<br/>Source-shaped rows"]
+    READ --> RDM["RDM<br/>Approved reference data"]
+    MDM --> CONTEXT["Consumers and agents<br/>Publication and context"]
+    SILVER --> CONTEXT
+    RDM --> CONTEXT
+    S3["AWS analytics target<br/>S3 warehouse and exports"] --> SNOW["Snowflake<br/>Native S3 pull"]
+    SNOW --> GOLD["dbt gold<br/>Analytics models"]
+    GOLD --> DASH["Streamlit<br/>Dashboards"]
+  classDef storage fill:#e8f1fb,stroke:#32638d,color:#132d46;
+  classDef compute fill:#e8f5ee,stroke:#317451,color:#183d2a;
+  classDef output fill:#fff3dd,stroke:#9b6b21,color:#583c14;
+  class BRONZE,MDM,SILVER,RDM,S3,SNOW storage;
+  class READ,GOLD compute;
+  class CAP,CONTEXT,DASH output;
