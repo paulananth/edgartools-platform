@@ -123,3 +123,11 @@ fn a_pair_set_and_a_membership_set_are_never_read_as_each_other() {
     let bound = pair_sets(&[("1", "US0000000001"), ("2", "US0000000002"), ("3", "US0000000003"), ("4", "US0000000004"), ("5", "US0000000005")]);
     assert_eq!(engine(pair_recipe("null")).read(input.as_bytes(), &bound).unwrap_err().code, "limit_exceeded");
 }
+
+#[test]
+fn an_in_lookup_check_on_a_pair_set_is_refused_when_the_contract_loads() {
+    let mut body = pair_recipe("null");
+    body["read"]["tables"]["rows"]["checks"] = json!([{"check":"in_lookup","column":"id","lookup":"isin","on_fail":"defer","reason":"x"}]);
+    let refused = Engine::from_yaml(&body.to_string(), Steps::new()).err().unwrap();
+    assert!(refused.detail.contains("pair set"), "{}", refused.detail);
+}

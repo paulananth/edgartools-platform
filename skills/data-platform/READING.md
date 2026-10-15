@@ -719,10 +719,14 @@ read:
 `member_value` gives the key's one value, null for an absent or null key, and
 for a key with several distinct values either null (`on_many: "null"`) or a
 refusal (`on_many: error`, code `lookup_many`). A value is never chosen from
-several. Each item of a pair set is a key and a value, both text;
+several. Write `on_many: "null"` quoted: unquoted, YAML reads it as no value
+and the contract is refused. Each item of a pair set is a key and a value,
+both text (a list in a JSON receipt; a tuple when Python supplies the set);
 `max_value_bytes` bounds each, `max_bytes` both together and `max_values`
-counts pairs. `member` and `in_lookup` refuse a pair set and `member_value`
-refuses a membership set, so one is never read as the other. Derive the set
+counts pairs. A contract whose `member` or `in_lookup` names a pair set, or
+whose `member_value` names a membership set, is refused when it loads, and a
+supplied set of the other kind is refused when it is read, so one is never
+read as the other. Derive the set
 from a verified source extract (version-2 receipt, below) with `value_column`
 beside `column`: the reading is streamed once, with no materialized join.
 
@@ -1324,7 +1328,6 @@ A version-2 lookup receipt derives declared sets instead of embedding values:
       "max_input_bytes": 67108864,
       "max_input_rows": 100000
     }
-
   }
 }
 ```

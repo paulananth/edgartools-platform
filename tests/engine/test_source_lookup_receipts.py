@@ -259,3 +259,33 @@ def test_a_pair_set_without_its_value_column_refuses_before_the_source_is_read(t
     with pytest.raises(ValueError, match="Derived lookup"):
         source_read.execute(envelope, store)
     assert not (tmp_path / "reading.json").exists()
+
+
+@pytest.mark.parametrize("sets, message", [
+    ({"isin": [["1", "US0000000001"], ["2"]]}, "key and a value"),                       # a malformed item
+    ({"isin": [["1", "US00000000001234"]]}, "UTF-8 bound"),                              # a value over max_value_bytes
+    ({"isin": [[str(i), "US0000000001"] for i in range(11)]}, "declared count"),          # over max_values
+])
+def test_an_inline_pair_receipt_is_refused_before_the_source_is_read(tmp_path, sets, message):
+    store = Artifacts()
+    envelope = _pair_task(tmp_path, store, [{"holding": "1", "isin": "US0000000001"}])
+    manifest = store.json(envelope["input"])
+    entry = manifest["artifacts"][0]
+    entry["lookups"] = store.put(tmp_path.as_uri(), {"version": 1, "input": entry["input"], "sets": sets})
+    envelope["input"] = store.put(tmp_path.as_uri(), manifest)
+    with pytest.raises(ValueError, match=message):
+        source_read.execute(envelope, store)
+    assert not (tmp_path / "reading.json").exists()
+
+
+def test_a_derived_pair_set_over_its_bounds_is_refused(tmp_path):
+    store = Artifacts()
+    ids = [{"holding": str(i), "isin": "US0000000001"} for i in range(11)]  # max_values is 10
+    with pytest.raises(ValueError, match="Derived lookup exceeds"):
+        source_read.execute(_pair_task(tmp_path, store, ids), store)
+
+
+def test_the_worker_and_the_engine_share_the_lookup_ceiling():
+    text = (Path(__file__).resolve().parents[2] / "crates/source-contract/src/lookup_sets.rs").read_text()
+    assert "pub const MAX_AGGREGATE_BYTES: usize = 16 * 1024 * 1024 * 1024;" in text
+    assert source_read.LOOKUP_AGGREGATE_BYTES == 16 * 1024**3

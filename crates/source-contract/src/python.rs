@@ -36,17 +36,17 @@ fn indexed_sets(engine: &Engine, lookups: Option<&Bound<'_, PyDict>>) -> PyResul
             if bounds.is_some_and(|(maximum, _, _, _)| count > maximum) {
                 return Err(limit("lookup raw values exceed max_values"));
             }
-            // A pair set's item is a key and its value; a membership set's, one text.
-            let texts: Vec<String> = if pairs {
+            // A pair set's item is a key and its value (a tuple); a membership set's, one text.
+            let (key, value): (String, Option<String>) = if pairs {
                 let (key, value): (String, String) = item.extract()
-                    .map_err(|_| rejected(Rejected::new("invalid_lookup", "a pair set item is a key and a value, both text")))?;
-                vec![key, value]
+                    .map_err(|_| rejected(Rejected::new("invalid_lookup", "a pair set item is a tuple of a key and a value, both text")))?;
+                (key, Some(value))
             } else {
-                vec![item.downcast::<PyString>()?.to_str()?.to_owned()]
+                (item.downcast::<PyString>()?.to_str()?.to_owned(), None)
             };
             if let Some((_, maximum, max_value, _)) = bounds {
-                for text in &texts {
-                    if text.len() > max_value { return Err(limit("lookup key exceeds max_value_bytes")); }
+                for text in std::iter::once(&key).chain(value.as_ref()) {
+                    if text.len() > max_value { return Err(limit("a lookup key or value exceeds max_value_bytes")); }
                     bytes = bytes.checked_add(text.len()).ok_or_else(|| limit("lookup byte count overflow"))?;
                     aggregate = aggregate.checked_add(text.len()).ok_or_else(|| limit("lookup byte count overflow"))?;
                 }
@@ -54,11 +54,9 @@ fn indexed_sets(engine: &Engine, lookups: Option<&Bound<'_, PyDict>>) -> PyResul
                     return Err(limit("lookup raw values exceed byte budget"));
                 }
             }
-            let mut texts = texts.into_iter();
-            match (texts.next(), texts.next()) {
-                (Some(key), Some(value)) => { keyed.insert((key, value)); }
-                (Some(text), None) => { members.insert(text); }
-                _ => unreachable!(),
+            match value {
+                Some(value) => { keyed.insert((key, value)); }
+                None => { members.insert(key); }
             }
         }
         sets.insert(name, if pairs { LookupSet::Pairs(keyed) } else { LookupSet::Members(members) });

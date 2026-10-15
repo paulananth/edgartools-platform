@@ -35,6 +35,12 @@ impl From<BTreeSet<(String, String)>> for LookupSet {
 }
 
 impl LookupSet {
+    pub fn len(&self) -> usize {
+        match self { Self::Members(values) => values.len(), Self::Pairs(pairs) => pairs.len() }
+    }
+
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
+
     pub(crate) fn contains(&self, value: &str) -> Result<bool, Rejected> {
         match self {
             Self::Members(values) => Ok(values.contains(value)),
@@ -67,7 +73,7 @@ pub(crate) fn validate_value_call(args: &Value) -> Result<(), String> {
     if map.keys().any(|k| !matches!(k.as_str(), Some("lookup" | "key" | "on_many")))
         || !args.get("lookup").is_some_and(valid_name) || args.get("key").is_none()
         || !matches!(setting(args, "on_many"), Some("null" | "error")) {
-        return Err("member_value requires a bounded lookup name, a key expression and on_many: null or error".into());
+        return Err("member_value requires a bounded lookup name, a key expression and on_many: \"null\" (quoted, so YAML keeps it text) or error".into());
     }
     Ok(())
 }
@@ -79,7 +85,7 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
         for (name, spec) in specs {
             if !valid_name(name) { return Err("lookup set names are bounded nonempty text".into()); }
             let map = spec.as_mapping().filter(|m| m.len() == 3 + usize::from(m.contains_key("pairs")))
-                .ok_or("lookup set requires max_values, max_bytes and max_value_bytes")?;
+                .ok_or("lookup set requires max_values, max_bytes and max_value_bytes, and optionally pairs: true")?;
             if map.keys().any(|k| !matches!(k.as_str(), Some("max_values" | "max_bytes" | "max_value_bytes" | "pairs"))) {
                 return Err("lookup set has an unknown bound".into());
             }
@@ -122,14 +128,13 @@ pub(crate) fn check(read: &Value, sets: &Lookups) -> Result<(), Rejected> {
             (LookupSet::Pairs(values), true) => values.iter().flat_map(|(k, v)| [k.as_str(), v.as_str()]).collect(),
             _ => return Err(invalid()),
         };
-        let count = match set { LookupSet::Members(v) => v.len(), LookupSet::Pairs(v) => v.len() };
-        if count as u64 > spec["max_values"].as_u64().unwrap() {
+        if set.len() as u64 > spec["max_values"].as_u64().unwrap() {
             return Err(Rejected::new("limit_exceeded", "lookup set exceeds max_values"));
         }
         let mut bytes = 0usize;
         for value in texts {
             if value.len() as u64 > spec["max_value_bytes"].as_u64().unwrap() {
-                return Err(Rejected::new("limit_exceeded", "lookup key exceeds max_value_bytes"));
+                return Err(Rejected::new("limit_exceeded", "a lookup key or value exceeds max_value_bytes"));
             }
             bytes = bytes.checked_add(value.len()).ok_or_else(|| Rejected::new("limit_exceeded", "lookup byte count overflow"))?;
             if bytes as u64 > spec["max_bytes"].as_u64().unwrap() {

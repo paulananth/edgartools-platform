@@ -30,9 +30,9 @@ INPUT_RECORDS = 100_000_000
 # the engine's own (lookup_sets.rs, ticket 91): a set derived from a reading may
 # be as large as the reading.
 RECEIPT_BYTES = 64 * 1024**2
-LOOKUP_AGGREGATE_BYTES = 16 * 1024**3
-DERIVED_INPUT_BYTES = 16 * 1024**3
-DERIVED_INPUT_ROWS = 100_000_000
+LOOKUP_AGGREGATE_BYTES = 16 * 1024**3  # lookup_sets.rs MAX_AGGREGATE_BYTES; a test holds them equal
+DERIVED_INPUT_BYTES = INPUT_BYTES
+DERIVED_INPUT_ROWS = INPUT_RECORDS
 # Capture the actual loaded codec location; later wrapper metadata changes
 # do not relocate this dependency.
 ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
@@ -116,17 +116,20 @@ def _lookups(manifest, entry, artifacts, contract):
     sets = (bound["sets"] if bound["version"] == 1
             else _derived_sets(bound["sets"], declared, artifacts))
     total = 0
+    checked = {}
     for name, values in sets.items():
         spec = declared[name]
+        pairs = bool(spec.get("pairs"))
         if not isinstance(values, list) or len(values) > spec["max_values"]:
             raise ValueError("Lookup raw values exceed their declared count or list shape")
-        if spec.get("pairs"):  # each item a key and its value (JSON gives a list)
+        if pairs:  # each item a key and its value; JSON gives a list, the engine takes a tuple
             if not all(isinstance(item, (list, tuple)) and len(item) == 2 for item in values):
                 raise ValueError("A pair set's items are a key and a value")
-            sets[name] = values = [tuple(item) for item in values]
+            values = [tuple(item) for item in values]
+        checked[name] = values
         size = 0
         for item in values:
-            for value in (item if spec.get("pairs") else (item,)):
+            for value in (item if pairs else (item,)):
                 if not isinstance(value, str):
                     raise ValueError("Lookup values require exact text")
                 length = len(value.encode("utf-8"))
@@ -138,7 +141,7 @@ def _lookups(manifest, entry, artifacts, contract):
         total += size
         if total > LOOKUP_AGGREGATE_BYTES:
             raise ValueError("Lookup sets exceed the aggregate UTF-8 byte bound")
-    return sets, {"lookups": entry["lookups"]}
+    return checked, {"lookups": entry["lookups"]}
 
 
 def _derived_sets(specs, declared, artifacts):

@@ -624,7 +624,13 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
             let subject = setting(check, "column").or(setting(check, "path"));
             let complete = match kind {
                 "in_set" => subject.is_some() && check.get("values").and_then(Value::as_sequence).is_some(),
-                "in_lookup" => subject.is_some() && setting(check, "lookup").is_some(),
+                "in_lookup" => {
+                    let named = read.get("lookup_sets").and_then(|sets| sets.get(setting(check, "lookup").unwrap_or_default()));
+                    if named.and_then(|spec| spec.get("pairs")).is_some() {
+                        return Err("check in_lookup needs a membership set, not a pair set".into());
+                    }
+                    subject.is_some() && setting(check, "lookup").is_some()
+                }
                 "count" => setting(check, "path").is_some() && check.get("equals").and_then(Value::as_u64).is_some(),
                 "before" => setting(check, "column").is_some() && setting(check, "until").is_some(),
                 _ => subject.is_some(),
