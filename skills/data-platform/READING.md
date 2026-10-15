@@ -155,6 +155,19 @@ conversion produces text. Explicitly parse source counts with `integer` before
 comparing them to integer context. Nested calls still validate before reading.
 The existing `const` primitive renders boolean literals as text; such a value
 refuses with `assertion_condition`.
+
+`overlap` tells whether two lists of text share a value (ticket 93): true when
+they share one, false when they share none (an empty list shares nothing), null
+when either is null or missing. Anything but a list of text refuses with
+`value_type`. Use it where a reading compares two sets, such as the identifiers
+two records were each found under:
+
+```yaml
+same_security:
+  overlap:
+    left: {value: {path: cusip_figis}}
+    right: {value: {path: isin_figis}}
+```
 Expressions, context names, references and custom steps are validated when
 the contract loads. The expression inventory also enables exact numeric and
 Python JSON formatting policies inside assertions. Assertions run even when
