@@ -23,7 +23,7 @@ The reading, reduction and combine group, count, join and choose. They cannot te
 - Configuration then does the rest (data-onboarding, configuration only):
   - an OpenFIGI reading of the capture (ticket 80);
   - the FIGIs of each CUSIP and ISIN, reduced;
-  - joined onto each filed pair, with `overlap` deciding agreement;
+  - joined onto each filed pair in combine, then a reading over the combined rows applies `overlap` (combine and reduction never evaluate expressions; only a reading does);
   - cases 2 and 3 counted by reduction;
   - the CUSIP's one ISIN chosen in combine with `mode: one`.
 - Re-run only the stages after the change (the holdings are not read again), then the one Proving Run.
@@ -33,5 +33,7 @@ The reading, reduction and combine group, count, join and choose. They cannot te
 - [x] The operator's word to code it: "Yes, code 93 (Recommended)" (2026-10-15)
 - [x] GoF consult before code: add `overlap` beside `equal` (no table of primitives: 23 differing arms, one file); test a nested expression inside it, since `expression_children` must list it (2026-10-15 14:15 ET)
 - [x] `overlap` in Rust beside `equal` (PRIMITIVES, children, validate, eval); `tests/overlap.rs`: shared, none, empty, null, missing, non-text refused, a nested `context` read, arguments refused; all 31 crate test binaries pass (2026-10-15 14:15 ET)
-- [ ] READING.md; three-axis review; PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] READING.md: `overlap`, after the assertions section (2026-10-15 14:18 ET)
+- [x] Three-axis review (Standards, Spec, GoF): GoF leave it; fixed the doc's place, one refusal for any non-text list (a null item included, tested), and the ticket now says a reading over the combined rows applies `overlap`. Rust: 31 crate test binaries pass; Python: 336 engine, stream, lookup and architecture tests pass (2026-10-15 14:18 ET)
+- [ ] PR, CI green, merge on the operator's word
+- [x] Learning → skill: data-platform READING.md, `overlap` (compare two sets in a reading; combine and reduction never evaluate expressions) (2026-10-15 14:18 ET)

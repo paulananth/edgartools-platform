@@ -1228,10 +1228,8 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
             let texts = |value: Val| -> Result<Option<Vec<String>>, Rejected> {
                 match value {
                     Val::Null => Ok(None),
-                    Val::List(items) => items.into_iter().map(|item| match item {
-                        Val::Str(text) => Ok(text),
-                        _ => Err(Rejected::new("value_type", "overlap compares lists of text")),
-                    }).collect::<Result<Vec<_>, _>>().map(Some),
+                    Val::List(items) if items.iter().all(|item| matches!(item, Val::Str(_))) =>
+                        Ok(Some(items.into_iter().filter_map(|item| match item { Val::Str(text) => Some(text), _ => None }).collect())),
                     _ => Err(Rejected::new("value_type", "overlap compares lists of text")),
                 }
             };

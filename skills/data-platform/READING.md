@@ -155,6 +155,11 @@ conversion produces text. Explicitly parse source counts with `integer` before
 comparing them to integer context. Nested calls still validate before reading.
 The existing `const` primitive renders boolean literals as text; such a value
 refuses with `assertion_condition`.
+Expressions, context names, references and custom steps are validated when
+the contract loads. The expression inventory also enables exact numeric and
+Python JSON formatting policies inside assertions. Assertions run even when
+every table is empty and cannot defer records. The source worker writes no
+source-extract output on rejection; the existing parser and byte limits still apply.
 
 `overlap` tells whether two lists of text share a value (ticket 93): true when
 they share one, false when they share none (an empty list shares nothing), null
@@ -168,11 +173,6 @@ same_security:
     left: {value: {path: cusip_figis}}
     right: {value: {path: isin_figis}}
 ```
-Expressions, context names, references and custom steps are validated when
-the contract loads. The expression inventory also enables exact numeric and
-Python JSON formatting policies inside assertions. Assertions run even when
-every table is empty and cannot defer records. The source worker writes no
-source-extract output on rejection; the existing parser and byte limits still apply.
 
 A contract may require an object document, require a member to be an object
 when present, take a row only from an object member, or convert a looked-up

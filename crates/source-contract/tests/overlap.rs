@@ -32,7 +32,8 @@ fn shared_none_and_null() {
 #[test]
 fn only_lists_of_text_are_compared() {
     let both = engine(json!({"value": {"path": "a"}}), json!({"value": {"path": "b"}}));
-    for items in [json!([{"a": "F1", "b": ["F1"]}]), json!([{"a": [1], "b": ["1"]}]), json!([{"a": [["F1"]], "b": ["F1"]}])] {
+    for items in [json!([{"a": "F1", "b": ["F1"]}]), json!([{"a": [1], "b": ["1"]}]), json!([{"a": [["F1"]], "b": ["F1"]}]),
+                  json!([{"a": ["F1", null], "b": ["F1"]}])] {  // a null inside a list is not text
         assert_eq!(read(&both, items).unwrap_err().code, "value_type");
     }
 }
