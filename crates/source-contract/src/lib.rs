@@ -112,7 +112,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 5] = ["xml", "json", "jsonl", "csv", "tsv"];
-const PRIMITIVES: [&str; 25] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat"];
+const PRIMITIVES: [&str; 26] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat", "pluck"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -413,7 +413,7 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
             }
         }
     }
-    for name in ["project", "recover", "transform"] {
+    for name in ["project", "recover", "transform", "pluck"] {
         if let Some(args) = expr.get(name) {
             for key in ["value", "then", "fallback"] {
                 if let Some(child) = args.get(key) { children.push(child); }
@@ -672,6 +672,16 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             if codes.iter().any(|v| !matches!(v.as_str(), Some("value_type" | "join_shape"))) { return Err("recover catches only value_type and join_shape".into()); }
             validate_expr(&args["value"], steps)?;
             validate_expr(&args["fallback"], steps)?;
+        }
+        "pluck" => {
+            let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("pluck requires value and fields")?;
+            if map.keys().any(|k| !matches!(k.as_str(), Some("value" | "fields"))) {
+                return Err("pluck requires value and fields only".into());
+            }
+            validate_expr(&args["value"], steps)?;
+            args.get("fields").and_then(Value::as_sequence)
+                .filter(|f| (1..=16).contains(&f.len()) && f.iter().all(|n| n.as_str().is_some_and(|n| !n.is_empty())))
+                .ok_or("pluck fields are 1 to 16 names")?;
         }
         "transform" => {
             let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("transform requires value and transforms")?;
@@ -1228,6 +1238,33 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
             let mut budget = (0usize, 0usize);
             let projected = projected_tree(value, 0, &mut budget)?;
             eval(engine, context, lookups, &projected, &projected, ordinal, &args["then"])
+        }
+        "pluck" => {
+            // The named fields of each object in a list, as one list of text (ticket 95).
+            let fields: Vec<&str> = args["fields"].as_sequence().unwrap().iter().filter_map(Value::as_str).collect();
+            match eval(engine, context, lookups, document, item, ordinal, &args["value"])? {
+                Val::Null => Ok(Val::Null),
+                Val::List(items) => {
+                    let mut out = Vec::new();
+                    for item in items {
+                        let Val::Map(object) = item else {
+                            return Err(Rejected::new("value_type", "pluck reads a list of objects"));
+                        };
+                        for field in &fields {
+                            match object.get(*field) {
+                                None | Some(Val::Null) => {}
+                                Some(Val::Str(text)) => out.push(Val::Str(text.clone())),
+                                Some(_) => return Err(Rejected::new("value_type", "pluck takes text fields")),
+                            }
+                        }
+                        if out.len() > 100_000 {
+                            return Err(Rejected::new("pluck_limit", "pluck gives at most 100000 values"));
+                        }
+                    }
+                    Ok(Val::List(out))
+                }
+                _ => Err(Rejected::new("value_type", "pluck reads a list of objects")),
+            }
         }
         "recover" => match eval(engine, context, lookups, document, item, ordinal, &args["value"]) {
             Err(error) if args["codes"].as_sequence().unwrap().iter().any(|v| v.as_str() == Some(error.code.as_str())) =>
