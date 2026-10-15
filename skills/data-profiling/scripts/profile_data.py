@@ -6,6 +6,8 @@
         --input <part>=<new delivery> ... --out <folder>
     uv run --with duckdb --with pyyaml python profile_data.py approve --findings <folder>/findings.yaml \
         --by <operator> --words "<their exact words>"
+    uv run --with duckdb --with pyyaml python profile_data.py catalog --findings <folder>/findings.yaml \
+        --out <repo>/rules/sources/<source>/profile.yaml
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import yaml  # noqa: E402
 
-from profiling import drift, embedded, inputs, report, run  # noqa: E402
+from profiling import catalog, drift, embedded, inputs, report, run  # noqa: E402
 
 
 def _stop(signum, _frame) -> None:
@@ -101,6 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("--findings", required=True, type=Path)
     approve.add_argument("--by", required=True)
     approve.add_argument("--words", required=True)
+    public = commands.add_parser("catalog", help="Write the approved findings' names and counts for the Data Catalog "
+                                                  "(rules/sources/<source>/profile.yaml); never a data value")
+    public.add_argument("--findings", required=True, type=Path)
+    public.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -121,6 +127,17 @@ def main(argv: list[str] | None = None) -> int:
         findings["dataset"]["profiled_with"] = basis
         data, text = report.write(findings, args.out)
         print(f"wrote {data} and {text}")
+        return 0
+    if args.command == "catalog":
+        findings = yaml.safe_load(args.findings.read_text(encoding="utf-8"))
+        try:
+            body = catalog.summary(findings)
+        except ValueError as error:
+            raise SystemExit(str(error)) from None
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text("# Written by data-profiling `catalog` from approved findings: names and counts only.\n"
+                            + yaml.safe_dump(body, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
+        print(f"wrote {args.out}: {len(body['parts'])} parts, {len(body['code_sets'])} code sets")
         return 0
     if args.command == "compare":
         approved = yaml.safe_load(args.approved.read_text(encoding="utf-8"))

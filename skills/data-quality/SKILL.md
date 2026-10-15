@@ -8,9 +8,13 @@ description: Turn the defects found while profiling a data set into data quality
 > Part of the **data-platform** skill set. data-onboarding and refining-rules
 > call it; it writes only `rules/sources/<source>/quality.yaml`.
 
-It answers: **which defects does this part have, which check or fix carries
-each, and what does each one do on the records?** Profiling finds the defects
-(the `quality` items in `findings.yaml`, and `invalid_rows.jsonl` beside it).
+It answers: **which rules does this part need, which defects does it have,
+which check or fix carries each, and what does each one do on the records?**
+Profiling proposes every rule the part needs, each with the rows that fail it
+(the `quality` items in `findings.yaml`; `rows` above 0 is a defect, 0 a rule
+the clean data passes, which still runs on every load), and marks invalid
+hierarchy rows (`invalid_rows.jsonl` beside it). The Data Catalog shows the
+same rules beside each silver field (data-profiling `catalog`).
 This skill turns them into the engine's checks and fixes, measures them, and
 writes them once the operator decides.
 

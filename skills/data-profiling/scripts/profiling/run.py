@@ -16,7 +16,7 @@ from pathlib import Path
 
 import duckdb
 
-from . import classify, codes, embedded, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
+from . import catalog, classify, codes, embedded, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
 
 VERSION = "data-profiling 1"
 SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
@@ -198,7 +198,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     _propose_kinds(findings_parts)
     for f in findings_parts:
         f["store_suggestion"] = classify.store(f["class"])
-        f["silver"] = _silver(f, relationships, by_name) if f["class"] in {"transaction", "reference"} else None
+        f["silver"] = silver_spec(f, relationships, by_name)
     con.close()
     return {
         "version": 1,
@@ -214,6 +214,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
                     "profiled_by": VERSION},
         "parts": findings_parts,
         "relationships": relationships,
+        "code_sets": catalog.code_sets(findings_parts),
         "hierarchies": hierarchies,
         "dependencies_not_hierarchies": not_levels,
         "questions": _questions(findings_parts),
@@ -510,15 +511,34 @@ def _relationships(links, parts: dict) -> list[dict]:
     return found
 
 
-def _silver(f: dict, relationships: list[dict], parts: dict) -> dict:
-    """The silver table spec (findings spec section 6). Links point to masters only:
-    a link to another transaction or reference part stays a relationship finding.
-    Each link's kind and Dataset Contract are filled by data-onboarding."""
+# How each class lands in silver, and why (findings spec section 6).
+LOAD = {
+    "transaction": ("append", "events are appended and never changed"),
+    "reference": ("snapshot", "a published code-set version replaces the previous one"),
+    "master": ("upsert", "a record keeps its key and its values change; MDM masters it, silver keeps the source's copy"),
+    "relationship": ("upsert", "a link keeps its key and its dates change"),
+    "metadata": ("upsert", "a delivery's own facts change only when the delivery is corrected"),
+    "unknown": ("append", "its class is not decided: kept as delivered"),
+}
+
+
+def silver_spec(f: dict, relationships: list[dict], parts: dict) -> dict:
+    """The silver table spec (findings spec section 6), for every part: every column a
+    silver field. Links point to masters only: a link to another transaction or reference
+    part stays a relationship finding. A master part with a one-column key also links to
+    itself, so each row carries its own MDM id. Each link's kind and Dataset Contract are
+    filled by data-onboarding."""
     links = [r for r in relationships if r["from"]["part"] == f["part"]
              and parts.get(r["to"]["part"], {}).get("class") == "master"]
+    key = f["record_key"]["columns"]
+    if f["class"] == "master" and len(key) == 1:
+        links = [{"from": {"part": f["part"], "columns": key}, "to": {"part": f["part"], "columns": key},
+                  "inclusion": 1.0, "self": True}, *links]
     taken = [r["from"]["columns"][0] for r in links]
 
     def id_column(r):
+        if r.get("self"):  # the row's own MDM id, under a name no source column takes
+            return "mdm_id" if "mdm_id" not in {c["name"] for c in f["columns"]} else f"{f['part']}_mdm_id"
         column = r["from"]["columns"][0]
         name = f"{column}_mdm_id" if taken.count(column) == 1 else f"{column}_{r['to']['part']}_mdm_id"
         if len(name.encode()) <= 63:  # PostgreSQL's longest name
@@ -539,9 +559,8 @@ def _silver(f: dict, relationships: list[dict], parts: dict) -> dict:
         "time": {"as_of": f["time"]["as_of"]["from"], "as_at": f["time"]["as_at"] or "loaded_at",
                  "event_time": f["time"]["event_time"]},
         "partition": [f["time"]["event_time"]] if f["time"]["event_time"] else [],
-        "load_mode": "append" if f["class"] == "transaction" else "snapshot",
-        "why": "events are appended and never changed" if f["class"] == "transaction"
-        else "a published code-set version replaces the previous one",
+        "load_mode": LOAD[f["class"]][0],
+        "why": LOAD[f["class"]][1],
     }
 
 

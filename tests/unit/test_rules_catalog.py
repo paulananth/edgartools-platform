@@ -116,3 +116,46 @@ def test_publish_stops_when_the_server_names_a_table_otherwise():
 
     with pytest.raises(catalog.CatalogError, match="The server named table"):
         catalog.publish(plan, call)
+
+
+def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_the_catalog(tmp_path: Path):
+    root = tmp_path / "rules"
+    shutil.copytree(files.ROOT, root)
+    folder = root / "sources" / "example.profiled"
+    folder.mkdir()
+    profile = {"version": 1, "dataset": "example", "profiled_at": "2026-10-15T06:00:00-04:00",
+               "approved_at": "2026-10-15T06:10:00-04:00",
+               "parts": [{"part": "visit", "class": "transaction", "kind": None, "rows": 3000,
+                          "record_key": ["visit_id"],
+                          "silver": {"table": "visit", "load_mode": "append", "key": ["visit_id"],
+                                     "fields": [{"name": "visit_id", "type": "BIGINT", "nullable": False,
+                                                 "sensitivity": "none"},
+                                                {"name": "kind_code", "type": "VARCHAR", "nullable": True,
+                                                 "sensitivity": "none", "code_set": "visit_kind"}],
+                                     "links": [{"source_key": "member_id", "to_part": "member",
+                                                "mdm_id_column": "member_id_mdm_id"}]},
+                          "quality": [{"check": "missing", "column": "visit_id", "failed_rows": 0,
+                                       "proposal": "exception", "why": "a record key column is empty"},
+                                      {"check": "code_list", "column": "kind_code", "failed_rows": 4,
+                                       "proposal": "flag", "why": "a new code is flagged"}]}],
+               "code_sets": [{"code_set": "visit_kind", "existing": False, "codes": 5,
+                              "columns": ["visit.kind_code"]}]}
+    (folder / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
+    plan = catalog.plan(root)
+    assert {"silver", "rdm"} <= {d["name"] for d in plan["databases"]}
+    tables = _tables(plan)
+    visit = tables['edgartools-rules.silver."example.profiled".visit']
+    assert [c["name"] for c in visit["columns"]] == ["visit_id", "kind_code"]
+    assert visit["columns"][0]["dataType"] == "BIGINT" and "Always filled" in visit["columns"][0]["description"]
+    assert "missing (exception)" in visit["columns"][0]["description"]
+    assert "4 rows failed it when profiled" in visit["columns"][1]["description"]
+    assert "`member_id_mdm_id` holds the MDM id of `member`" in visit["description"]
+    code_set = tables["edgartools-rules.rdm.code_sets.visit_kind"]
+    assert "proposed" in code_set["description"] and "5 codes" in code_set["description"]
+    edge = next(e for e in plan["lineage"] if e["from"].endswith("code_sets.visit_kind"))
+    assert edge["to"] == 'edgartools-rules.silver."example.profiled".visit'
+    assert catalog.plan(root) == plan  # the same rules, the same catalog
+
+
+def test_without_a_profile_the_catalog_has_no_silver_or_rdm_database():
+    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm"}

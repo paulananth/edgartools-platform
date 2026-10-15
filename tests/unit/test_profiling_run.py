@@ -60,13 +60,35 @@ def test_personal_values_never_reach_the_outputs(result):
                    for c in p["columns"])
 
 
-def test_silver_spec_for_transactions_and_new_kind_questions(result):
+def test_every_part_gets_a_silver_table_and_new_kind_questions(result):
     visit = part(result, "visit")
     assert visit["silver"]["key"] == ["visit_id"] and visit["silver"]["load_mode"] == "append"
     assert visit["silver"]["links"][0]["mdm_id_column"] == "member_id_mdm_id"
-    assert part(result, "member")["silver"] is None
+    for f in result["findings"]["parts"]:  # every column of every part is a silver field
+        assert [c["name"] for c in f["silver"]["columns"]] == [c["name"] for c in f["columns"]]
+    member = part(result, "member")["silver"]  # a master's rows carry their own MDM id
+    assert member["load_mode"] == "upsert"
+    assert member["links"][0] == {"columns": ["member_id"], "kind": None, "source_code": None, "to_part": "member",
+                                  "source_key": "member_id", "mdm_id_column": "mdm_id", "inclusion": 1.0}
     asked = [q["about"] for q in result["findings"]["questions"]]
     assert "member" in asked and result["findings"]["approval"]["status"] == "draft"
+
+
+def test_clean_data_still_gets_its_quality_rules(result):
+    rules = {(q["check"], q["column"]): q["rows"] for q in part(result, "member")["quality"]}
+    assert rules[("missing", "member_id")] == 0  # a key column always filled is still a rule
+    visits = {(q["check"], q["column"]): q["rows"] for q in part(result, "visit")["quality"]}
+    assert visits[("missing", "visit_id")] == 0 and visits[("link_not_found", "member_id")] > 0  # a defect
+    lines = {(q["check"], q["column"]): q["rows"] for q in part(result, "line")["quality"]}
+    assert lines[("link_not_found", "item_code")] == 0  # a link that always resolves is a rule
+
+
+def test_code_sets_name_every_column_that_uses_them(result):
+    sets = result["findings"]["code_sets"]
+    assert sets == sorted(sets, key=lambda s: s["code_set"]) and all(s["codes"] > 0 for s in sets)
+    used = {c for s in sets for c in s["columns"]}
+    listed = {f"{f['part']}.{c['column']}" for f in result["findings"]["parts"] for c in f["code_lists"]}
+    assert used == listed and listed
 
 
 def test_approve_records_exact_words(result):
@@ -74,6 +96,26 @@ def test_approve_records_exact_words(result):
     profile_data.main(["approve", "--findings", str(path), "--by", "operator", "--words", "approved as shown"])
     approval = yaml.safe_load(path.read_text())["approval"]
     assert approval["status"] == "approved" and approval["approved_words"] == "approved as shown"
+
+
+def test_the_catalog_summary_names_and_counts_but_never_a_value(result, tmp_path):
+    path, out = result["out"] / "findings.yaml", tmp_path / "rules" / "sources" / "fixture" / "profile.yaml"
+    findings = yaml.safe_load(path.read_text())
+    assert findings["approval"]["status"] == "approved"  # approved by the test above
+    assert profile_data.main(["catalog", "--findings", str(path), "--out", str(out)]) == 0
+    text, body = out.read_text(), yaml.safe_load(out.read_text())
+    assert [p["part"] for p in body["parts"]] == [p["part"] for p in findings["parts"]]
+    assert {f["name"] for f in body["parts"][0]["silver"]["fields"]} == {c["name"] for c in findings["parts"][0]["columns"]}
+    seen = {str(v) for f in findings["parts"] for c in f["columns"] for v in c.get("top") or []}
+    seen |= {str(v) for f in findings["parts"] for q in f["quality"] for v in q["examples"]}
+    assert not [v for v in seen if len(v) > 3 and v in text]  # no sample, example or code from the data
+
+
+def test_the_catalog_summary_refuses_findings_not_approved(tmp_path):
+    draft = {"approval": {"status": "draft"}}
+    (tmp_path / "f.yaml").write_text(yaml.safe_dump(draft))
+    with pytest.raises(SystemExit, match="not approved"):
+        profile_data.main(["catalog", "--findings", str(tmp_path / "f.yaml"), "--out", str(tmp_path / "p.yaml")])
 
 
 def test_report_names_every_part_and_says_advice_only(result):

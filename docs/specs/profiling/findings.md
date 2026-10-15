@@ -45,6 +45,9 @@ dataset:
      # null for a database input, which is always profiled again
 parts: [...]                    # §3, one per table, file or child table
 relationships: [...]            # §4
+code_sets:                      # the RDM code sets the data set needs, one per existing or proposed set
+  - {code_set: <name>, existing: true|false, codes: <n, the most any column holds>,
+     columns: [<part.column>, ...], label_columns: [<part.column>, ...]}
 hierarchies: [...]              # §5
 dependencies_not_hierarchies: [...] # §5, a flag or a coincidence, never a hierarchy
 questions: [...]                # §8, open questions for the operator, one at a time
@@ -99,11 +102,13 @@ approval:                       # §9
     versions_per_key: {p50: <n>, p99: <n>}|null   # when the key holds its recording or valid-from time
     series: {key: [<cols>], time: <col>, step: <duration>, gaps: <n>}|null
     refresh: <duration|unknown>
-  quality:                      # handed to data-quality
+  quality:                      # handed to data-quality: every rule the part needs, with the rows that
+                                # fail it (0 for a rule the clean data passes: a key column filled, an
+                                # identifier's one shape or check digit, a link that resolves, a code list)
     - {check: <id from the check list>, column: <col>, rows: <n>, examples: [<masked>],
        args: {<what a check needs: regex, values, family, length>}, why: <words>,
        proposal: exception|withhold|flag|blank, fix: <proposed fix|null>, fix_evidence: <words|null>}
-  silver: <silver table spec, §6, for parts MDM does not own; else null>
+  silver: <silver table spec, §6, for every part>
   store_suggestion: {store: mdm|rdm|mdm_relationships|silver|bronze_only|bookkeeping, why: <words>, advisory: true}
 ```
 
@@ -274,9 +279,18 @@ approved code list as `codes_new`.
 
 ## 6. The silver table spec
 
-For every part MDM does not own: transaction and event data, and published
-reference data (plan decision 13). The writer (plan row 6) reads this spec; the
-spec does not depend on the store.
+For every part, every column a field (operator, 2026-10-15: "all silver
+fields"; plan decision 13 first named only the parts MDM does not own). Load
+mode by class: transaction `append`, reference `snapshot`, master,
+relationship and metadata `upsert`, unknown `append`. A master part with a
+one-column key also links to itself (`to_part` its own name, `mdm_id_column`
+`mdm_id`), so each row carries its own MDM id. The writer (plan row 6) reads
+this spec; the spec does not depend on the store.
+
+Its public summary, with the part's quality rules and the code sets, is what
+the Data Catalog shows: data-profiling's `catalog` writes it to
+`rules/sources/<source>/profile.yaml` from approved findings, names, types and
+counts only (no example, top value, distribution or check argument).
 
 ```yaml
 table: <silver table name>

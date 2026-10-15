@@ -14,7 +14,13 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   fields, each naming the datasets that fill it in order (the first with a
   value wins);
 - lineage: feed to the datasets it captures, and dataset to kind, column by
-  column (the source paths that fill each MDM field).
+  column (the source paths that fill each MDM field);
+- from a source's approved profile (`profile.yaml`, written by data-profiling's
+  `catalog` from approved findings: names and counts only), database `silver`:
+  a schema per source, a table per part, a column per silver field, each with
+  the data quality rules it needs; and database `rdm`, schema `code_sets`: a
+  table per code set the data needs, with lineage from each silver table that
+  uses it.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
 """
@@ -35,7 +41,11 @@ from .mapdoc import critical_elements, mapped, paths, winners
 
 SERVICE = "edgartools-rules"
 SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
+SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
+# A silver field's logical type, as the catalog names it; any other type is text.
+TYPES = {"BIGINT": "BIGINT", "INTEGER": "INT", "DOUBLE": "DOUBLE", "DECIMAL": "DECIMAL", "BOOLEAN": "BOOLEAN",
+         "DATE": "DATE", "TIMESTAMP": "TIMESTAMP", "TIMESTAMP WITH TIME ZONE": "TIMESTAMP"}
 
 
 def quote(name: str) -> str:
@@ -122,6 +132,37 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: di
     return table, lineage
 
 
+def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
+    """A source's approved profile: a silver table per part, and which of its tables
+    use each code set (for the rdm tables and their lineage)."""
+    tables, uses = [], defaultdict(set)
+    for part in profile.get("parts") or []:
+        silver = part["silver"]
+        rules = defaultdict(list)
+        for rule in part.get("quality") or []:
+            failed = f", {rule['failed_rows']} rows failed it when profiled" if rule["failed_rows"] else ""
+            rules[rule["column"]].append(f"{rule['check']} ({rule['proposal']}{failed}): {rule['why']}")
+        columns = []
+        for field in silver["fields"]:
+            about = [f"{'Nullable' if field['nullable'] else 'Always filled'}; sensitivity {field['sensitivity']}."]
+            if field.get("code_set"):
+                about.append(f"A code of RDM code set `{field['code_set']}`.")
+                uses[field["code_set"]].add(fqn(SERVICE, SILVER, source, silver["table"]))
+            about += [f"Data quality: {r}." for r in rules.get(field["name"], [])]
+            columns.append({"name": field["name"], "dataType": TYPES.get(str(field["type"]).upper(), TEXT),
+                            "description": " ".join(about)})
+        about = [f"Part `{part['part']}` of `{profile['dataset']}`: {part['class']} data, {part['rows']} rows when "
+                 f"profiled.", f"Key: {', '.join(silver['key']) or 'none found'}; load mode {silver['load_mode']}."]
+        if part.get("kind"):
+            about.append(f"MDM kind `{part['kind']}`.")
+        about += [f"`{link['mdm_id_column']}` holds the MDM id of `{link['to_part']}` by `{link['source_key']}`."
+                  for link in silver.get("links") or []]
+        about += [f"Data quality: {r}." for r in rules.get(None, [])]
+        tables.append({"name": silver["table"], "databaseSchema": fqn(SERVICE, SILVER, source),
+                       "description": " ".join(about), "columns": columns})
+    return tables, uses
+
+
 def plan(root: Path | None = None) -> dict:
     """The whole catalog the rules under `root` describe, sorted, so the same
     rules always give the same plan."""
@@ -130,6 +171,30 @@ def plan(root: Path | None = None) -> dict:
     kinds = policy.get("kinds") or {}
     by_kind = winners(policy, root)
     schemas, tables, lineage = [], [], []
+    silver_schemas, code_sets, used_by = [], {}, defaultdict(set)
+    for path in sorted((root / "sources").glob("*/profile.yaml")):
+        profile, source = files.load(path), path.parent.name
+        silver_schemas.append({"name": source, "database": fqn(SERVICE, SILVER),
+                               "description": f"Silver tables of `{source}`, from its approved profile "
+                                              f"(rules/sources/{source}/profile.yaml)."})
+        found, uses = _profile(source, profile)
+        tables += found
+        for code_set in profile.get("code_sets") or []:
+            known = code_sets.setdefault(code_set["code_set"], {"codes": 0, "columns": [], "existing": False})
+            known["codes"] = max(known["codes"], code_set["codes"])
+            known["columns"] += [f"{source}: {c}" for c in code_set["columns"]]
+            known["existing"] |= code_set["existing"]
+        for name, at in uses.items():
+            used_by[name] |= at
+    for name, known in sorted(code_sets.items()):
+        tables.append({"name": name, "databaseSchema": fqn(SERVICE, RDM, CODE_SETS),
+                       "description": f"RDM code set `{name}`" + (" (published)" if known["existing"] else
+                                                                 " (proposed: a draft until approved in RDM)")
+                       + f": {known['codes']} codes when profiled. Used by " + ", ".join(sorted(known["columns"])) + ".",
+                       "columns": [{"name": "code", "dataType": TEXT, "description": "The code."},
+                                   {"name": "label", "dataType": TEXT, "description": "What the code means."}]})
+        lineage += [{"from": fqn(SERVICE, RDM, CODE_SETS, name), "to": at, "columns": [],
+                     "description": f"Values of `{at}` are codes of `{name}`."} for at in sorted(used_by[name])]
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
         source = body.get("source") or path.parent.name
@@ -177,9 +242,15 @@ def plan(root: Path | None = None) -> dict:
                                    f"not this catalog. Rules digest: `{rules_digest(root)}`."},
         "databases": [
             {"name": SOURCES, "service": SERVICE, "description": "Every source: its feeds and datasets."},
-            {"name": MDM, "service": SERVICE, "description": "MDM: every kind and its fields."}],
+            {"name": MDM, "service": SERVICE, "description": "MDM: every kind and its fields."},
+            *([{"name": SILVER, "service": SERVICE,
+                "description": "Silver: every profiled part's table and fields, with their data quality rules."},
+               {"name": RDM, "service": SERVICE, "description": "RDM: the code sets the profiled data needs."}]
+              if silver_schemas else [])],
         "schemas": schemas + [{"name": CLEAN, "database": fqn(SERVICE, MDM),
-                               "description": "The kinds MDM masters."}],
+                               "description": "The kinds MDM masters."}] + silver_schemas
+                   + ([{"name": CODE_SETS, "database": fqn(SERVICE, RDM), "description": "Code sets, by name."}]
+                      if silver_schemas else []),
         "tables": tables,
         "lineage": lineage,
     }
