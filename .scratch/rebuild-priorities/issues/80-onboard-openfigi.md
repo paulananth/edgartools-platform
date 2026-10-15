@@ -36,3 +36,13 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
 - [ ] Every skill gap found on the way: fixed in the skill, on its own branch
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Learning → skill
+
+## Findings from the first request (2026-10-15 13:02 ET, explored, counts only)
+
+One mapping request of 100 N-PORT CUSIPs (the first 100 of the test run's prepared records, all beginning `00`: a biased sample), answer kept on this machine with its receipt:
+- **76 "Invalid idValue format."**: every one a CUSIP failing its check digit (the records the Dataset Contract sets aside). OpenFIGI checks the CUSIP check digit as `rules/identifiers/cusip.yaml` does, so only accepted CUSIPs are worth sending.
+- Of the 24 valid CUSIPs: **13 found, 11 "No identifier found."**
+- 81 listings for the 13 found (about 6 each: one per exchange, each with ticker and exchange code), under 12 composite FIGIs and 1 share-class FIGI; every listing carries all ten fields (`figi`, `name`, `ticker`, `exchCode`, `compositeFIGI`, `shareClassFIGI`, `securityType`, `securityType2`, `marketSector`, `securityDescription`).
+- An answer is per job: `data`, `warning` or `error`, inside one status-200 array, so the reading after capture must keep each job's outcome.
+
+For the full capture: 383,595 accepted N-PORT CUSIPs (3,836 requests of 100) and 354,274 one-to-one plus 35,309 ISIN-only ISINs (about 3,900 requests) at 4 a second: about 16 minutes each, through the configured capture (ticket 92).
