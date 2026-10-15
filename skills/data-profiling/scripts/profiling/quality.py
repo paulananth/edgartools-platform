@@ -1,5 +1,11 @@
 """Quality items found while profiling, handed to the data-quality skill.
 
+An item is a rule the part needs on every load, with the rows that fail it in
+this delivery: a defect when `rows` is above 0, a rule the clean data passes
+when it is 0 (a record key column filled, an identifier's one shape or check
+digit, a code in its list, a link that resolves). So a part with clean data
+still gets its rules.
+
 Each detector is a plain function over one part's facts and returns items:
 `{check, column, rows, examples, args, proposal, fix, fix_evidence, why}`.
 `check` names the kind of defect; `args` holds what a check needs (a pattern,
@@ -16,7 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from . import identifiers, profile, sensitivity
+from . import codes, identifiers, profile, sensitivity
 from .inputs import sql_name, sql_text
 
 EXAMPLES = 3
@@ -24,6 +30,7 @@ EXAMPLES = 3
 # is left out: once folded it equals a real two-letter code or a short name ("NA", "Na").
 PLACEHOLDERS = ("NONE", "NULL", "UNKNOWN", "TBD", "NOTAPPLICABLE", "NOTAVAILABLE")
 NEAR_SHAPE = 0.95   # a column this close to one shape has outliers, not two formats
+SHAPED_ROLES = {"key", "identifier", "link", "code"}  # a column whose one shape is a rule when no value breaks it
 GUARDED_CODES = 50  # a code list this small is guarded as a whole
 
 
@@ -68,13 +75,10 @@ def _text(c: dict) -> bool:
 
 
 def missing_key(facts: Facts) -> list[dict]:
-    found = []
-    for c in facts.columns:
-        if c["name"] in facts.key and c["non_null"] < c["rows"]:
-            found.append(item("missing", c["name"], c["rows"] - c["non_null"], [],
-                              "a record key column is empty: the record cannot be identified",
-                              proposal="exception"))
-    return found
+    """Every record key column must be filled: a rule for each, a defect where it is empty."""
+    return [item("missing", c["name"], c["rows"] - c["non_null"], [],
+                 "a record key column is empty: the record cannot be identified", proposal="exception")
+            for c in facts.columns if c["name"] in facts.key]
 
 
 def placeholders(facts: Facts) -> list[dict]:
@@ -111,17 +115,22 @@ def shape_outliers(facts: Facts) -> list[dict]:
     # A code column is guarded by its code list: a code of another length is not an outlier.
     guarded = {code["column"] for code in facts.code_lists}
     for c in facts.columns:
-        if not _text(c) or not c["shape"] or not NEAR_SHAPE <= c["shape_share"] < 1.0 or c.get("tokens", 0) > 1.0 \
+        if not _text(c) or not c["shape"] or not NEAR_SHAPE <= c["shape_share"] or c.get("tokens", 0) > 1.0 \
                 or facts.roles.get(c["name"]) in {"name", "text", "date", "measure"} or c["name"] in guarded:
             continue
+        if c["shape_share"] >= 1.0 and facts.roles.get(c["name"]) not in SHAPED_ROLES:
+            continue  # one shape throughout is a rule only for a column that identifies something
         pattern = _regex(c["shape"])
         where = f"{sql_name(c['name'])} IS NOT NULL AND NOT regexp_full_match(CAST({sql_name(c['name'])} AS VARCHAR), " \
                 f"{sql_text(pattern)})"
+        if c["name"] in {i["column"] for i in facts.identifiers}:  # a stand-in is a placeholder, not another shape
+            text = f"CAST({sql_name(c['name'])} AS VARCHAR)"
+            where += f" AND NOT ({identifiers.stand_in_sql(text)})"
         rows = _count(facts, where)
-        if rows:
-            found.append(item("shape_outlier", c["name"], rows, _examples(facts, c["name"], where),
-                              f"{c['shape_share']:.2%} of values share one shape; these do not",
-                              args={"regex": pattern}))
+        found.append(item("shape_outlier", c["name"], rows, _examples(facts, c["name"], where) if rows else [],
+                          f"{c['shape_share']:.2%} of values share one shape; these do not" if rows
+                          else "every value shares one shape; another shape is flagged",
+                          args={"regex": pattern}))
     return found
 
 
@@ -129,7 +138,7 @@ def check_digits(facts: Facts) -> list[dict]:
     found = []
     for ident in facts.identifiers:
         family = ident.get("check_digit")
-        if not family or ident["pass_rate"] >= 1.0:
+        if not family:
             continue
         test = identifiers.FAMILIES[family][0]
         c = sql_name(ident["column"])
@@ -137,26 +146,32 @@ def check_digits(facts: Facts) -> list[dict]:
             f"SELECT DISTINCT CAST({c} AS VARCHAR) FROM {sql_name(facts.part)} WHERE {c} IS NOT NULL").fetchall()]
         # A stand-in is a placeholder (above), never a failing check digit.
         failing = [v for v in values if not identifiers.is_stand_in(v) and not test(str(v).strip())]
-        if not failing:
-            continue  # the pass rate came from a sample of distinct values
         where = f"CAST({c} AS VARCHAR) IN (SELECT unnest(?::VARCHAR[]))"
-        rows = facts.con.execute(f"SELECT count(*) FROM {sql_name(facts.part)} WHERE {where}", [failing]).fetchone()[0]
+        rows = facts.con.execute(f"SELECT count(*) FROM {sql_name(facts.part)} WHERE {where}",
+                                 [failing]).fetchone()[0] if failing else 0
         shown = sorted(failing)[:EXAMPLES]
         # The identifier's one length, its stand-ins left out (an "N/A" is not a shorter identifier).
         lengths = {len(str(v).strip()) for v in values if not identifiers.is_stand_in(v)}
         length = lengths.pop() if len(lengths) == 1 else None
         found.append(item("check_digit", ident["column"], rows,
                           [sensitivity.mask(v) for v in shown] if ident["column"] in facts.masked else shown,
-                          f"the {family} check digit fails: a mistyped or invented identifier",
+                          f"the {family} check digit fails: a mistyped or invented identifier" if rows
+                          else f"every value passes the {family} check digit",
                           proposal="withhold", args={"family": family, "length": length}))
     return found
 
 
 def code_list_guards(facts: Facts) -> list[dict]:
-    """A small code list is guarded as a whole: a code not seen in this delivery is flagged."""
+    """A small code list is guarded as a whole: a code not seen in this delivery is flagged.
+    Any other code list (a long one, a masked one, a key) is a code of its RDM code set: a rule
+    the engine checks once RDM publishes the set (`in_reference@1` with its published version)."""
     found = []
     for code in facts.code_lists:
         if code["distinct"] > GUARDED_CODES or code["column"] in facts.masked or code["column"] in facts.key:
+            name = codes.code_set_name({"part": facts.part}, code)
+            found.append(item("code_set", code["column"], 0, [],
+                              f"a code of code set {name}, checked once RDM publishes it",
+                              args={"code_set": name}))
             continue
         c = sql_name(code["column"])
         values = [r[0] for r in facts.con.execute(
@@ -170,14 +185,16 @@ def code_list_guards(facts: Facts) -> list[dict]:
 def unlinked(facts: Facts) -> list[dict]:
     found = []
     for link in facts.links:
-        if link["inclusion"] >= 1.0 or len(link["from"]["columns"]) != 1:
+        if len(link["from"]["columns"]) != 1:
             continue
         a, b = sql_name(link["from"]["columns"][0]), sql_name(link["to"]["columns"][0])
         where = f"{a} IS NOT NULL AND CAST({a} AS VARCHAR) NOT IN " \
                 f"(SELECT CAST({b} AS VARCHAR) FROM {sql_name(link['to']['part'])} WHERE {b} IS NOT NULL)"
-        found.append(item("link_not_found", link["from"]["columns"][0], _count(facts, where),
-                          _examples(facts, link["from"]["columns"][0], where),
-                          f"values not found in {link['to']['part']}.{link['to']['columns'][0]}",
+        rows = _count(facts, where) if link["inclusion"] < 1.0 else 0
+        found.append(item("link_not_found", link["from"]["columns"][0], rows,
+                          _examples(facts, link["from"]["columns"][0], where) if rows else [],
+                          f"values not found in {link['to']['part']}.{link['to']['columns'][0]}" if rows
+                          else f"every value is found in {link['to']['part']}.{link['to']['columns'][0]}",
                           args={"to": link["to"]}))
     return found
 

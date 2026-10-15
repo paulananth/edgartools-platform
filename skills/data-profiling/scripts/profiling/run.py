@@ -7,7 +7,6 @@ Samples of personal and free-text columns are masked to their shape.
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import shutil
 import sys
 import tempfile
@@ -16,10 +15,9 @@ from pathlib import Path
 
 import duckdb
 
-from . import classify, codes, embedded, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, timing
+from . import classify, codes, embedded, hierarchy, identifiers, inputs, keys, names, profile, quality, sensitivity, silver, timing
 
 VERSION = "data-profiling 1"
-SILVER_INTEGER = "BIGINT"  # count-derived integers are never narrower (CLAUDE.md, schema conventions)
 MB_PER_SECOND = 40
 SHORT_LABEL = 6  # words, on average: a code's label, not free text  # records read by Python, for the time estimate before a long pass
 
@@ -198,7 +196,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
     _propose_kinds(findings_parts)
     for f in findings_parts:
         f["store_suggestion"] = classify.store(f["class"])
-        f["silver"] = _silver(f, relationships, by_name) if f["class"] in {"transaction", "reference"} else None
+        f["silver"] = silver.spec(f, relationships, by_name)
     con.close()
     return {
         "version": 1,
@@ -214,6 +212,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
                     "profiled_by": VERSION},
         "parts": findings_parts,
         "relationships": relationships,
+        "code_sets": codes.code_sets(findings_parts),
         "hierarchies": hierarchies,
         "dependencies_not_hierarchies": not_levels,
         "questions": _questions(findings_parts),
@@ -508,41 +507,6 @@ def _relationships(links, parts: dict) -> list[dict]:
             "valid": {"from": a["time"]["as_of"]["from"], "to": a["time"]["as_of"]["to"]},
             "onboard": "together" if together else "separate", "why": why, "evidence": link["evidence"]})
     return found
-
-
-def _silver(f: dict, relationships: list[dict], parts: dict) -> dict:
-    """The silver table spec (findings spec section 6). Links point to masters only:
-    a link to another transaction or reference part stays a relationship finding.
-    Each link's kind and Dataset Contract are filled by data-onboarding."""
-    links = [r for r in relationships if r["from"]["part"] == f["part"]
-             and parts.get(r["to"]["part"], {}).get("class") == "master"]
-    taken = [r["from"]["columns"][0] for r in links]
-
-    def id_column(r):
-        column = r["from"]["columns"][0]
-        name = f"{column}_mdm_id" if taken.count(column) == 1 else f"{column}_{r['to']['part']}_mdm_id"
-        if len(name.encode()) <= 63:  # PostgreSQL's longest name
-            return name
-        short = hashlib.sha256(name.encode()).hexdigest()[:8]
-        return f"{column.encode()[:40].decode(errors='ignore')}_{short}_mdm_id"
-
-    return {
-        "table": f["part"].replace(".", "_").lower(),
-        "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
-        "columns": [{"name": c["name"], "type": SILVER_INTEGER if c["type"] in profile.INTEGERS else c["type"],
-                     "nullable": c["fill"] < 1.0, "definition": None,
-                     "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in f["columns"]],
-        "key": f["record_key"]["columns"],
-        "links": [{"columns": r["from"]["columns"], "kind": None, "source_code": None, "to_part": r["to"]["part"],
-                   "source_key": r["from"]["columns"][0], "mdm_id_column": id_column(r),
-                   "inclusion": r["inclusion"]} for r in links],
-        "time": {"as_of": f["time"]["as_of"]["from"], "as_at": f["time"]["as_at"] or "loaded_at",
-                 "event_time": f["time"]["event_time"]},
-        "partition": [f["time"]["event_time"]] if f["time"]["event_time"] else [],
-        "load_mode": "append" if f["class"] == "transaction" else "snapshot",
-        "why": "events are appended and never changed" if f["class"] == "transaction"
-        else "a published code-set version replaces the previous one",
-    }
 
 
 def _mask_samples(hierarchies: list[dict], parts: dict) -> None:

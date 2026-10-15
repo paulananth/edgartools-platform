@@ -86,8 +86,10 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | hierarchies | Per source: parent columns, functional dependencies, code nesting, separate level tables (a list naming its coarser list); a yes/no flag, or a dependency that holds by coincidence (a near-constant parent, or child values seen once), is listed apart, never a hierarchy | `hierarchies`, `dependencies_not_hierarchies` |
 | time | As of (valid from/to), as at (record time), event time, time series | `time` |
 | sensitivity | none, personal, sensitive personal, each with its signals: words in the column's name, detectors on its values, a vote over its values (a column named for people whose values are mostly people's names), and whether the part describes people (then its address counts too); samples masked, and free-text samples too, since a sentence can name anyone | `sensitivity`, `sensitivity_signals` |
-| quality | Defects found on the way, with exact rows and masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
-| suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec for transaction and reference parts | `store_suggestion`, `silver` |
+| quality | Every data quality rule each part needs on every load, with the rows that fail it: a defect when above 0, a rule the clean data passes at 0 (a key column filled, an identifier's one shape or check digit, a link that resolves, a code list); masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
+| code sets | The RDM code sets the data set needs: each existing or proposed set, the columns that use it, how many codes | `code_sets` |
+| suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec for every part, every column a field (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
+| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only | `rules/sources/<source>/profile.yaml` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
 
@@ -199,12 +201,15 @@ uv run --with duckdb --with pyyaml python profile_data.py approve \
   --findings <folder>/findings.yaml --by "<operator>" --words "<their exact words>"
 ```
 
-6. **Hand over.** data-onboarding reads the approved `findings.yaml`, plans one
-   onboarding per part in dependency order (reference data, then master kinds
-   with their "together" relationships, then transaction data and "separate"
-   relationships), and prefills its steps. The `quality` items and
-   `invalid_rows.jsonl` go to the [data-quality](../data-quality/SKILL.md)
-   skill.
+6. **Write the catalog summary** (`catalog`, above) into
+   `rules/sources/<source>/profile.yaml`, so the Data Catalog shows every
+   silver field, its quality rules and the code sets.
+7. **Hand over.** data-onboarding reads the approved `findings.yaml`, plans one
+   onboarding per part in dependency order (master kinds with their "together"
+   relationships first, then reference data as RDM code sets, then
+   transaction data and "separate" relationships), and prefills its steps.
+   The `quality` items and `invalid_rows.jsonl` go to the
+   [data-quality](../data-quality/SKILL.md) skill.
 
 ## Reference data: a draft code set in RDM
 
@@ -273,10 +278,18 @@ that matter most:
   `invalid_rows.jsonl` beside the findings, never dropped. Each part's key
   sample for `compare` (hashes only) is in `fingerprints.json` beside them;
   keep it with the approved findings.
-- **silver:** the table spec for a part MDM does not own. Its links point to
-  master parts only, each with an empty `kind` and `source_code` that
-  data-onboarding fills; `edgar-warehouse silver register` makes the table and
-  `silver land` writes the part's rows into it.
+- **silver:** the table spec for every part, every column a field. Its links
+  point to master parts only, each with an empty `kind` and `source_code` that
+  data-onboarding fills; a master part's rows link to themselves (`mdm_id`).
+  `edgar-warehouse silver register` makes the table and `silver land` writes
+  the part's rows into it.
+- **code_sets:** the RDM code sets the data needs, one per existing or
+  proposed set, with every column that uses it (see "Reference data", below).
+- **catalog:** once approved, `profile_data.py catalog --findings <folder>/findings.yaml
+  --out rules/sources/<source>/profile.yaml` writes the public summary; the
+  Data Catalog (`edgar-warehouse rules catalog`) shows it as the `silver` and
+  `rdm` databases. It holds names, types and counts only: never an example, a
+  top value or a check's values, since the repository is public.
 
 ## Compare a new delivery
 

@@ -61,8 +61,10 @@ def _items(findings, part, check):
 
 def test_shape_outliers_have_rows_examples_and_a_pattern(found):
     findings, _ = found
-    item, = _items(findings, "account", "shape_outlier")
+    item, = [q for q in _items(findings, "account", "shape_outlier") if q["rows"]]
     assert item["column"] == "ref_code" and item["rows"] == 2
+    clean = [q for q in _items(findings, "account", "shape_outlier") if not q["rows"]]
+    assert all(q["examples"] == [] and q["args"]["regex"] for q in clean)  # a rule the clean data passes
     assert set(item["examples"]) == {"A7", "A8"}
     assert item["args"]["regex"] == "[A-Z][A-Z][0-9][0-9][0-9][0-9]"
 

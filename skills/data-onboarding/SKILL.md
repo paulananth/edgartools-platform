@@ -191,15 +191,30 @@ findings.
 
 ### plan-parts: one onboarding per part, in dependency order
 
-From the approved findings, list one onboarding per part, in this order:
-1. reference parts (code sets for RDM; until RDM is built, log them);
-2. master parts, each with the relationships marked `onboard: together`;
+From the approved findings, list one onboarding per part, in this order
+(operator, 2026-10-15: "first do mdm"):
+1. master parts (MDM), each with the relationships marked `onboard: together`;
+2. reference parts: the findings' `code_sets` become RDM code sets, needed
+   where a value's meaning comes from a code (a master keeps its values as
+   filed until then);
 3. transaction parts and the relationships marked `separate` (silver target).
 
 Metadata parts go to Bookkeeping, not here. Show the list to the operator,
 then take the first part through **identify**.
 
-**Output:** the ordered list of parts, in the log.
+Write the approved findings' public summary into the repo, so the Data
+Catalog shows every part's silver fields, its data quality rules and the code
+sets (names and counts only, never a value from the data):
+
+```bash
+uv run --with duckdb --with pyyaml python <data-profiling>/scripts/profile_data.py catalog \
+  --findings <folder>/findings.yaml --out rules/sources/<source>/profile.yaml
+```
+
+`edgar-warehouse rules catalog plan` then shows them in its `silver` and `rdm`
+databases.
+
+**Output:** the ordered list of parts, in the log; `profile.yaml`.
 
 ### init: create the Rules Database schema
 
