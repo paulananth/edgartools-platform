@@ -1,0 +1,14 @@
+%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'Arial, sans-serif', 'fontSize': '16px', 'primaryColor': '#e8f1fb', 'primaryTextColor': '#132d46', 'primaryBorderColor': '#32638d', 'lineColor': '#52677a'}, 'flowchart': {'curve': 'basis', 'nodeSpacing': 28, 'rankSpacing': 38}}}%%
+flowchart TD
+  FIND["Approved profiling findings<br/>Parts, fields, quality and code-set needs"] --> SUMMARY["profile.yaml<br/>Public metadata summary"]
+  RULES["Source Contracts + mastering rules<br/>Mappings and field priorities"] --> PLAN["rules catalog plan<br/>Deterministic metadata plan"]
+  SUMMARY --> PLAN
+  RULES --> MAP["Mapping Documents<br/>Generated steward spreadsheets"]
+  PLAN -->|"Explicit publish; one way"| OM["OpenMetadata<br/>Sources, MDM fields, silver, RDM and lineage"]
+  OM --> PEOPLE["People and agents<br/>Discover and understand data"]
+  classDef storage fill:#e8f1fb,stroke:#32638d,color:#132d46;
+  classDef compute fill:#e8f5ee,stroke:#317451,color:#183d2a;
+  classDef output fill:#fff3dd,stroke:#9b6b21,color:#583c14;
+  class SUMMARY,RULES,OM storage;
+  class PLAN compute;
+  class FIND,MAP,PEOPLE output;
