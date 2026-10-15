@@ -1338,7 +1338,12 @@ with `zip_members`, and so does an encrypted member. Without `member`, the
 archive must hold exactly one member, as before. The member is read no further
 than `max_member_bytes`; a larger one refuses with `limit_exceeded`.
 
-CSV text is UTF-8 unless `read.encoding` declares otherwise (CSV only):
+`format: tsv` reads tab-separated tables exactly as `csv` reads comma-separated
+ones (a header line, then one record per line; the same `encoding`, `member`,
+limits and refusals), except that TSV has no quoting: a tab never occurs inside
+a value, so a quote mark is an ordinary character.
+
+CSV and TSV text is UTF-8 unless `read.encoding` declares otherwise (CSV and TSV only):
 `utf-8` or `windows-1252`, or the list `[utf-8, windows-1252]` for a source
 whose publications changed encoding: an artifact whose bytes are valid UTF-8
 is read as UTF-8, any other as windows-1252. UTF-8 comes first or not at all,

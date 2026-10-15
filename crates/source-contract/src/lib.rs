@@ -108,7 +108,7 @@ pub struct Reading {
     pub deferred: Vec<Deferred>,
 }
 
-const FORMATS: [&str; 4] = ["xml", "json", "jsonl", "csv"];
+const FORMATS: [&str; 5] = ["xml", "json", "jsonl", "csv", "tsv"];
 const PRIMITIVES: [&str; 22] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member", "project", "recover", "transform", "sequence"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
@@ -334,6 +334,7 @@ impl Engine {
             "json" => formats::json(bytes, self.json_integer, self.json_python_text || self.json_iteration_order),
             "jsonl" => formats::jsonl(bytes, max_records, self.json_integer, self.json_python_text),
             "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
+            "tsv" => formats::tsv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
                     Err(error)
@@ -548,9 +549,9 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
         let named = encodings(read);
         let fits = !named.is_empty() && named.len() <= 2 && named.iter().all(|e| formats::ENCODINGS.contains(&e.as_str()))
             && (named.len() == 1 || (named[0] == "utf-8" && named[1] != "utf-8"));
-        if !fits || format != "csv" {
+        if !fits || !matches!(format, "csv" | "tsv") {
             return Err(format!(
-                "read.encoding is one of {:?}, or [utf-8, <another>] (UTF-8 when the bytes are UTF-8), for CSV",
+                "read.encoding is one of {:?}, or [utf-8, <another>] (UTF-8 when the bytes are UTF-8), for CSV or TSV",
                 formats::ENCODINGS
             ));
         }
