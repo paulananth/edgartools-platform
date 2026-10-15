@@ -1,6 +1,7 @@
 # Autoplan: bounded Bookkeeping validation
 
-Status: complete — reviewed plan approved as-is by operator reply A; 2026-10-14 07:40 ET.
+Status: review approved as-is by operator reply A at 2026-10-14 07:40 ET;
+publication in progress.
 Implementation and deployment are outside this review ticket.
 
 Scope: turn the researched P2 fix into a concrete reviewed plan. Source
@@ -20,3 +21,12 @@ baseline `db2e7ce3` retained in provenance.
 
 Every checked part records its ET completion time and verification evidence.
 Plan: `PLAN.md` in this directory. Runtime work remains unstarted.
+
+## Publish the approved planning artifacts
+
+Status: in progress under the operator's `$ship` instruction.
+
+- [x] Synchronize with current main and check Claude's merged MDM scope — merge of `67cedee4` completed cleanly; no intervening Bookkeeping runtime changes; Ticket74 merged as PR960; 2026-10-14 21:07 ET.
+- [ ] Verify the merged branch, audit planning completion and run pre-landing reviews.
+- [ ] Publish this dedicated branch and open a planning-only PR with validation evidence.
+- [x] Learning → skill — none; this delivery records a proposed design and its qualification gates, with no newly qualified runtime practice or skill change; checked against current AGENTS.md; 2026-10-14 21:12 ET.

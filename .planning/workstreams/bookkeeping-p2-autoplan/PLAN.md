@@ -1,13 +1,19 @@
-<!-- /autoplan restore point: /Users/aneenaananth/.gstack/projects/paulananth-edgartools-platform/codex-bookkeeping-p2-autoplan-20261013-autoplan-restore-20261013-201216.md -->
+<!-- /autoplan restore point: <local-gstack-project-artifacts>/codex-bookkeeping-p2-autoplan-20261013-autoplan-restore-20261013-201216.md -->
 # Bookkeeping P2: bounded validation of admitted work
 
 Status: **APPROVED AS-IS** — operator selected A at 2026-10-14 07:40 ET.
 Approval covers this reviewed plan; implementation and deployment qualification
 remain separate work.
-Current source baseline: main `bebebcb2` after verified rebase. Original review
-and measurement baseline: `db2e7ce3`; research was `042e2910`, now rebased as
+Approved source baseline: main `bebebcb2` after verified rebase. Original review
+baseline: `db2e7ce3`; research measurements used `f9e89470`, whose Bookkeeping
+runtime and acceptance fixtures are identical to `db2e7ce3`. Research was
+`042e2910`, now rebased as
 `af713546`. Original motivating code quotations remain explicitly tied to
 `db2e7ce3`; upstream ordinal insertion shifts later engine line numbers by two.
+Shipping synchronization: merged main `67cedee4` at 2026-10-14 21:07 ET. The
+17 intervening commits change no Bookkeeping runtime code. Ticket74 is now merged
+as PR960 (`9da59e01`); the coordination snapshot below remains historical evidence.
+The approved design and MDM-only scope ruling are unchanged.
 Research: [baseline and primary sources](../../../docs/research/bookkeeping-per-unit-validation-2026-10-13.md).
 Measurements: [raw observations](../bookkeeping-scan-research/MEASUREMENTS.json).
 
@@ -179,8 +185,12 @@ part of the accepted plan.
 ## Operator contract and safe enablement
 
 These are proposed additions, not commands available in the baseline. Use
-`BOOKKEEPING_SUBMITTER_DATABASE_URL` only for initial `rules run` submission;
-worker/verifier processes continue using their own `BOOKKEEPING_CLEAN_DATABASE_URL`.
+`BOOKKEEPING_SUBMITTER_DATABASE_URL` for tagged-run initial `rules run` submission,
+explicit recovery resume and ready terminal reconciliation through `finalize`/
+`record_checks`, consistently with the authority amendment below. Bounded outbox
+delivery before readiness continues under its existing runtime authority; the
+terminal full audit and completion transition require control credentials.
+Worker/verifier processes continue using their own `BOOKKEEPING_CLEAN_DATABASE_URL`.
 Missing submitter configuration fails closed rather than falling back to the worker
 URL for new-format submission. Add owner-only `bookkeeping grant-submitter --login
 <login>` to the existing CLI/database modules. Its grant qualification rejects
@@ -410,7 +420,8 @@ that Ticket74 removes Merge Stage size refusals but does not change Bookkeeping'
 inferred permission to redesign the expansion protocol. Retain its current bounds
 for P2; do not justify them as PostgreSQL capacity or local Mac limitations.
 
-Claude's active worktree `edgartools-platform-claude-nolimit`, branch
+At the consultation snapshot, Claude's active worktree was
+`edgartools-platform-claude-nolimit`, branch
 `claude/merge-no-limit`, committed `904f7318` plus living-doc edits. Ticket74 removes
 Merge Stage closure/projection/assessment-history refusals, save-request16MiB,
 proposal stored16MiB/sent64MiB and snapshot/query caps via migration019. It preserves
@@ -418,7 +429,8 @@ input batch cutting (1,000 records / 1MiB), per-batch shape checks and input/rea
 bounds. Some retained read-back bounds can still refuse oversized input; describe
 the scope as **Merge Stage size-refusal removal**, not “all PostgreSQL limits gone.”
 The ticket reports twelve PostgreSQL tests passed; this review did not rerun them.
-Ownership rerun, installed proof, review and publication remain Claude's checklist.
+At that snapshot, ownership rerun, installed proof, review and publication remained
+Claude's checklist.
 No open PR or merge was observed for Ticket74 at the checked snapshot.
 
 A fresh independent Claude CLI consultation completed after the skill's Fable5.1
@@ -1057,7 +1069,7 @@ available natively; it does not itself prove semantic child/compiler equivalence
 
 **E1 [P1, confidence 9/10] — generated origin is a construction, not current proof.**
 The motivating plan requirement is “The direct SQL path must reject fabricated child
-lists even under a verifier login” (PLAN.md:104–105). Existing engine.py:489–494
+lists even under a verifier login” (section B, generated admission). Existing engine.py:489–494
 computes `children = generated_worklist(expansion, config, ...)` in Python and passes
 `"children": canonical(children)`; 004_generated_work.sql:53–55 then does
 `INSERT INTO bookkeeping.work_item ... ON CONFLICT DO NOTHING`. Shape/replay checks
@@ -1107,7 +1119,7 @@ Rules approved export + ORIGINAL manifest bytes
 ```
 
 **E2 [P1, confidence 9/10] — snapshot propagation and closure need explicit proof.**
-The plan says “Once ready, take one coherent read-only audit snapshot” (PLAN.md:150–151),
+The plan says “Once ready, take one coherent read-only audit snapshot” (section C),
 but current `_frozen`, `_receipt`, status and `_run` each open connections; for
 example engine.py:226 says `with self.engine.connect() as conn:`. Thread the same
 repeatable-read audit connection through all run/work/status/dependency reads,
@@ -1291,7 +1303,8 @@ Completion summary: Step0 scope accepted A→B→C, complexity addressed without
 services. Architecture: E1/E2 plus six outside-voice amendments; code quality: E3
 and shared validator/root error boundary; tests: complete diagram and 28 qualification
 areas specified; performance: E4/E5 plus historical lease/lock/startup obligations.
-NOT-in-scope and existing-code map written. Three deferred TODOs recorded. Zero
+NOT-in-scope and existing-code map written. Three deferred TODOs were recorded at
+engineering review; two added during sync/coordination bring the final total to five. Zero
 unaddressed silent critical plan gaps; authority/origin/concurrency qualification
 is still required before activation. Both independent voices ran. Sequential work;
 no parallel source lane. Lake Score: all 28 recorded recommendations select the
@@ -1329,9 +1342,10 @@ The first rebased local check had 72 passes and eight failures because the reuse
 source-contract binary lacked combine_tables/Reduction. Built current Rust source
 into an isolated abi3 wheel/target (release build 4m11s), checked the native APIs,
 and reran the exact same three-file command through a transient uv overlay:
-**80 passed in 9.89s**. Shared .venv stayed unchanged. Command:
-`PYTHONPATH="$PWD" UV_PROJECT_ENVIRONMENT=/Users/aneenaananth/projects/edgartools-platform/.venv
-uv run --no-sync --with /tmp/bookkeeping-p2-sync-wheels/source_contract-0.1.0-cp312-abi3-macosx_10_12_x86_64.whl
+**80 passed in 9.89s**. Shared .venv stayed unchanged. Historical command with
+machine-local environment/wheel paths parameterized:
+`PYTHONPATH="$PWD" UV_PROJECT_ENVIRONMENT="$PREPARED_VENV"
+uv run --no-sync --with "$SOURCE_CONTRACT_WHEEL"
 pytest -q tests/engine/test_check_confirms.py tests/unit/test_configured_bookkeeping_contract.py
 tests/architecture/test_bookkeeping_control_only.py`.
 This is current baseline/compatibility evidence, not qualification of unimplemented
@@ -1377,7 +1391,7 @@ visible in the archived consult; no claim of active-session messaging is made.
 ## GSTACK REVIEW REPORT
 
 VERDICT: **APPROVED — review ticket complete.** Operator selected A at 2026-10-14 07:40 ET.
-Current base `bebebcb2`; rebased dedicated Codex worktree, recovery branch retained.
+Approval base `bebebcb2`; rebased dedicated Codex worktree, recovery branch retained.
 This is a review/qualification plan. Runtime implementation and deployment remain
 unstarted; no P2 speedup or hosted qualification is claimed.
 

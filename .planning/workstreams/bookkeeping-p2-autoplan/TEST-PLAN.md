@@ -1,7 +1,7 @@
 # Bookkeeping P2 qualification plan
 
 Status: proposed acceptance, not implementation or deployment evidence.
-Current baseline: `bebebcb2`; original research baseline: `db2e7ce3`. Runtime functions/migrations remain unchanged by this review.
+Approved baseline: `bebebcb2`; original review baseline: `db2e7ce3`; research measurements: `f9e89470`. Shipping synchronization merged `67cedee4`; no intervening Bookkeeping runtime changes. Runtime functions/migrations remain unchanged by this review.
 Framework: pytest, real PostgreSQL 16 (`tests/support/pg16.py`), restricted database
 logins, separate installed processes and pinned local artifact/Company fixtures.
 Existing tests are useful scaffolding; passing them does not qualify new branches.
@@ -123,8 +123,8 @@ not justify dropping a failing role, integrity, race, renewal or RSS gate.
 
 ## Coordinated MDM scope (operator, 2026-10-14)
 
-Preserve Claude Ticket74's Merge Stage size-refusal removal in the matched future
-worker/MDM installed proof after it lands. No new closure, request/proposal or
+Preserve Claude Ticket74's Merge Stage size-refusal removal (merged as PR960) in
+the matched future worker/MDM installed proof. No new closure, request/proposal or
 projection cap comes from P2. Retain existing input batching and current Bookkeeping
 protocol bounds under the operator's explicit MDM-only scope answer. Test sample
 sizes and CLI page limits are not total-work ceilings. Local PG16 is correctness

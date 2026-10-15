@@ -4,6 +4,9 @@ Aggregated after verified rebase to `bebebcb2`, using latest phase task JSONL
 for this branch and the last-five-commit window. Exact-match task deduplication
 produced seven tasks. Original review provenance is retained in the JSONL records.
 These overlap the same control modules: implement sequentially, A then B then C.
+The list below is priority-sorted, not execution order: A starts with T1; B covers
+T2 and T6's authority/bootstrap; C covers T3/T4/T5 and T6's enablement. T7 documents
+and rehearses each delivery before that delivery is enabled.
 Effort is provisional active work; large qualification trials add elapsed time.
 
 - [ ] **T2 (P1, human: 2 days / CC: 3-4 hours) — admission** — Protect root and generated admission and freeze definitions

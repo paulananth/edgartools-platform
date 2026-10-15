@@ -2,6 +2,11 @@
 
 Date: 2026-10-13. Code baseline: main `f9e89470`. Status: researched proposal with local baseline measurements; no fix implemented, deployment, or performance qualification. Scope: architectural finding 3 (P2), repeated full-manifest/full-work-table validation during ordinary control operations.
 
+The later [approved plan](../../.planning/workstreams/bookkeeping-p2-autoplan/PLAN.md)
+supersedes alternatives below where they differ: enable the new format only on new
+runs; old runs drain without conversion. Add a revision counter only if the required
+closed-scope completion proof fails. This note preserves the original research.
+
 ## Research checklist
 
 - [x] Compare three designs against official primary sources — PostgreSQL 16, Python docs, and RFC 6962 sections read; 2026-10-13 19:46 ET.
