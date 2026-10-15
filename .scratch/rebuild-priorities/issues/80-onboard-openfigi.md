@@ -24,15 +24,15 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
 
 ## Checklist
 
-- [ ] Ticket 92 merged (blocker): the configured capture makes one GET only, and OpenFIGI's mapping is a POST with a key header (found 2026-10-15)
-- [ ] The operator's permission for the capture, and its route: the mapping API with a free key (the key in an environment variable, never printed or typed into the chat), or the Snowflake Marketplace copy read in place
-- [ ] Capture: the Security master's CUSIPs and ISINs (ticket 79) sent to the mapping API, each response kept whole with its request, a receipt per file (key, sha256, bytes); counts only in the repo
+- [x] Ticket 92 merged (blocker): #994, 2026-10-15 13:11 ET: the configured capture makes one GET only, and OpenFIGI's mapping is a POST with a key header (found 2026-10-15)
+- [x] The operator's permission for the capture, and its route: the mapping API at `https://api.openfigi.com/v3` with the operator's test key (held outside the repo, never printed); "Yes, run it" (2026-10-15): the mapping API with a free key (the key in an environment variable, never printed or typed into the chat), or the Snowflake Marketplace copy read in place
+- [x] Capture (explored; transport only, no Bookkeeping or Journal), 2026-10-15 13:04–13:42 ET, 38 min: 7,714 requests (383,612 CUSIPs, 387,607 ISINs), 0 retries, 621 MB, kept outside the repo with a receipt per file. A probe of 100 CUSIPs found 76 refused as malformed (all failed the CUSIP check digit). Capture: the Security master's CUSIPs and ISINs (ticket 79) sent to the mapping API, each response kept whole with its request, a receipt per file (key, sha256, bytes); counts only in the repo
 - [ ] discover: data-profiling over the capture; approved findings
 - [ ] plan-parts: the listing (FIGI, ticker, exchange) as a cross-reference and attributes of a Security; the three-level hierarchy (listing, composite, share class) as a master data hierarchy or a relationship, for the operator; `securityType`, `securityType2`, `marketSector`, `exchCode` as code sets for RDM
 - [ ] map: the Dataset Contract (source `openfigi`), with FIGI, composite FIGI and share-class FIGI under `cross_references`; how a ticker attaches to a Security when one CUSIP has many listings (per exchange, or the composite's), for the operator
 - [ ] quality: checks for FIGI shape and check digit, ticker and exchange present together; set aside a response that names no instrument
 - [ ] metadata, test, approve, switch-on, as data-onboarding says
-- [ ] Refresh: how often the mapping is re-run for new and changed Securities (Bookkeeping)
+- [ ] Refresh: the operator ruled "Open figi rarely changes do not download again" (2026-10-15): reuse this capture; a later run sends only identifiers not yet captured. How often the mapping is re-run for new and changed Securities (Bookkeeping)
 - [ ] Every skill gap found on the way: fixed in the skill, on its own branch
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Learning → skill
