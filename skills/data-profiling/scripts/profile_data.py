@@ -61,18 +61,20 @@ def profiled_with(sources: dict[str, str], args) -> dict | None:
     None for a database input, which has no file to fingerprint and is always profiled again."""
     if any(location.startswith("env:") for location in sources.values()):
         return None
-    return {"profiler_sha256": profiler_sha256(),
-            "inputs": {name: inputs.digest(Path(location)) for name, location in sorted(sources.items())},
+    import duckdb
+
+    located = {name: Path(location).expanduser().resolve() for name, location in sorted(sources.items())}
+    # Each input by where it is and what it holds: the findings name its location.
+    return {"profiler_sha256": profiler_sha256(), "duckdb": duckdb.__version__,
+            "python": ".".join(map(str, sys.version_info[:3])), "name": args.name,
+            "inputs": {name: {"location": str(path), "sha256": inputs.digest(path)} for name, path in located.items()},
             "kinds": sorted(k for k in args.kinds.split(",") if k), "limit_gb": args.limit_gb,
             "sample": args.sample, "seed": args.seed}
 
 
-def reusable(out: Path, basis: dict | None) -> bool:
-    """The findings already in `out` were made from these same inputs by this same profiler."""
-    existing = out / "findings.yaml"
-    if basis is None or not existing.exists():
-        return False
-    return (yaml.safe_load(existing.read_text(encoding="utf-8")).get("dataset") or {}).get("profiled_with") == basis
+def existing(out: Path) -> dict:
+    path = out / "findings.yaml"
+    return (yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None) or {}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -105,10 +107,14 @@ def main(argv: list[str] | None = None) -> int:
         sources = dict(item.split("=", 1) for item in args.input)
         # Profile once: findings made from these same inputs by this same profiler are reused, and an
         # approval on them is kept. A changed input or a changed profiler rule profiles again.
-        basis = profiled_with(sources, args)
-        if not args.again and reusable(args.out, basis):
+        basis, before = profiled_with(sources, args), existing(args.out)
+        if not args.again and basis is not None and (before.get("dataset") or {}).get("profiled_with") == basis:
             print(f"reused {args.out / 'findings.yaml'}: the inputs and the profiler are unchanged")
             return 0
+        if not args.again and (before.get("approval") or {}).get("status") == "approved":
+            raise SystemExit(f"{args.out / 'findings.yaml'} is approved and was made from other inputs, settings or "
+                             "profiler: compare the new delivery against it, or profile into another --out "
+                             "(--again replaces it and drops the approval)")
         with _work() as work:
             findings = run.profile_inputs(sources, args.name, int(args.limit_gb * inputs.GB), args.sample, args.seed,
                                           tuple(k for k in args.kinds.split(",") if k), work)

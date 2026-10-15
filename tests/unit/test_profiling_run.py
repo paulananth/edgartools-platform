@@ -438,7 +438,24 @@ def test_unchanged_inputs_and_profiler_reuse_the_findings(tmp_path, capsys):
     assert yaml.safe_load((out / "findings.yaml").read_text())["approval"]["status"] == "approved"
 
     first = sorted(p for p in folder.rglob("*") if p.is_file())[0]
-    first.write_text(first.read_text() + "\n")  # a changed input is profiled again
-    assert profile_data.main(argv) == 0
+    first.write_text(first.read_text() + "\n")  # a changed input is profiled again, never over an approval
+    with pytest.raises(SystemExit, match="approved"):
+        profile_data.main(argv)
+    assert profile_data.main([*argv, "--again"]) == 0
     assert "reused" not in capsys.readouterr().out
     assert yaml.safe_load((out / "findings.yaml").read_text())["approval"]["status"] == "draft"
+
+
+def test_a_renamed_set_or_moved_input_is_profiled_again(tmp_path, capsys):
+    folder = build(tmp_path / "set")
+    out = tmp_path / "out"
+    argv = ["run", "--name", "fixture", "--input", f"set={folder}", "--out", str(out)]
+    assert profile_data.main(argv) == 0
+    capsys.readouterr()
+    assert profile_data.main([*argv[:2], "renamed", *argv[3:]]) == 0
+    assert "reused" not in capsys.readouterr().out
+    moved = folder.rename(tmp_path / "moved")
+    assert profile_data.main([*argv[:2], "renamed", "--input", f"set={moved}", "--out", str(out)]) == 0
+    assert "reused" not in capsys.readouterr().out
+    (out / "findings.yaml").write_text("")  # an empty findings file is no findings
+    assert profile_data.main([*argv[:2], "renamed", "--input", f"set={moved}", "--out", str(out)]) == 0

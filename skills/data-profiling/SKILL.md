@@ -100,12 +100,15 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 ```
 
 - **Profile once.** The findings record what they were made from
-  (`dataset.profiled_with`): the profiler's sha256, each input's sha256 and the
-  run's settings. A run into the same `--out` with the same inputs, settings
-  and profiler prints `reused` and changes nothing, so an approval stands.
-  Only a changed input, setting or profiler rule profiles again (`--again`
-  forces it). A database input has no file to fingerprint, so it is always
-  profiled again.
+  (`dataset.profiled_with`): the profiler's sha256 and its DuckDB and Python
+  versions, the data set's name, each input's location and sha256, and the
+  run's settings. A run into the same `--out` with all of them unchanged prints
+  `reused` and changes nothing, so an approval stands. Anything changed profiles
+  again (`--again` forces it), but never over approved findings: compare the
+  new delivery, or profile into another `--out`. Any change to the profiler's
+  code counts, so after a fix say which sources it changes and profile only
+  those. A database input has no file to fingerprint, so it is always profiled
+  again.
 - **One data set per source.** Profile each source into its own `--out`, so a
   change to one source, or a fix to a rule only one source needs, profiles that
   source alone. Before profiling, look for findings that already cover the
