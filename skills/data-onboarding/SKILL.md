@@ -161,7 +161,45 @@ A new data set runs **discover → plan-parts**, then each part runs
 **identify → profile → map → quality → metadata → test → approve →
 switch-on**. Set up the Rules Database first if it is not there (**init**).
 
+**Run each long step once per part** (operator, 2026-10-15: "Data onboarding
+should not run this many times"). One master part took about ten runs: five
+profiling runs, three test runs and two Proving Runs. Each repeat came
+from a fault found mid-run, or from a re-check that proved nothing new.
+- Profiling, the test run and the Proving Run each run once per part.
+- Before a long run, check what can stop it partway: the reader accepts the
+  format; no size bound, cap or limit is below the data's measured size
+  (profiling gives it); the profiler or engine has no open fix pending.
+  Fix those first.
+- Run a step again only when its input files, its rules or the engine
+  changed. Log which changed, and re-run only that step, never the steps
+  before it.
+- Never re-run a step to confirm a result. The first run's report is the
+  evidence.
+- A Proving Run is not repeated after approval when the approved rules
+  differ from the proved copy only in their approval fields.
+- Questions the findings do not answer go to that part's one test or Proving
+  Run. Never run another scan of the data for them.
+
 ### discover: profile the whole data set first
+
+**Know the source first** (operator, 2026-10-15). Before the one profiling
+run, read once what is already known about the source, and write it in the
+onboarding log under "The source":
+- the repo: `rules/identifiers/` (each identifier type: shape, check digit,
+  stand-ins), `docs/specs/`, `rules/reference/published/`, existing
+  contracts and their comments, and earlier onboarding logs for the same
+  provider;
+- the provider's own documentation for the data set (field definitions, its
+  identifiers, stand-in values such as all-zero ids, how often it publishes,
+  full files or changes only), only with the operator's permission for that
+  request (Hard stops);
+- what MDM already holds: `edgar-warehouse context <kind> --search "<words>"`.
+
+Then pass what it gives to the run: the existing kinds (`--kinds`), and each
+known stand-in and identifier type, named in the log, so a finding that
+matches it is expected and not news. Whatever the source's documentation
+leaves open, the one profiling run measures. This is the same reading the
+**map** step's "Research first" asks for, done once here; map reuses the log.
 
 Before running profiling, inventory the captured formats against its supported
 inputs. When an input is unsupported, record the actual reader refusal. Keep
@@ -301,7 +339,9 @@ blocks; do not ask whether it does.
 
 ### map: write the Dataset Contract
 
-**Research first.** If a document named here is missing, go on and log it.
+**Research first.** Start from "The source" in the log (**discover**, "Know the
+source first"); read here only what it left out. If a document named here is
+missing, go on and log it.
 - `CONTEXT.md`: the words MDM uses.
 - What MDM and RDM already hold: `edgar-warehouse context <kind|relationship|code set> <key|--search words>`
   (read only, at most 8 KB; [REFERENCE.md](REFERENCE.md), "Reading MDM's context").
