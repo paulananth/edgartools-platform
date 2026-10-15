@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from edgar_warehouse.mdm.clean import quality
+from edgar_warehouse.mdm.clean import identifier_types, quality
 
 # A profiling check → the engine check that carries it. `when` limits it to the
 # items whose args fit what the engine test checks exactly.
@@ -54,6 +54,15 @@ TRIPS = {
 }
 
 
+def identifier_type(args: dict) -> identifier_types.IdentifierType | None:
+    """The declared identifier type (`rules/identifiers/<name>.yaml`) whose
+    check-digit family and length are the item's, if any: the Dataset Contract
+    that formats the column with it already sets a failing value's record aside
+    (its `checksum_reason`), so no quality check is needed (ticket 81)."""
+    return next((t for t in identifier_types.TYPES.values()
+                 if t.family is not None and t.family == args.get("family") and t.length == args.get("length")), None)
+
+
 class PlanError(ValueError):
     """Findings or a map the plan cannot use."""
 
@@ -74,13 +83,20 @@ def draft(findings: dict, part: str, fields: dict[str, str], version: str) -> di
     found = next((p for p in findings["parts"] if p["part"] == part), None)
     if found is None:
         raise PlanError(f"no part {part} in the findings")
-    checks, fixes, new_code, unmapped, expected = [], [], [], [], {}
+    checks, fixes, new_code, unmapped, set_aside, expected = [], [], [], [], [], {}
     for item in found.get("quality") or []:
         target = CATALOG.get(item["check"])
         args = item.get("args") or {}
         if item.get("proposal") == "blank" and args.get("values"):
             target = {"fix": "blank_values@1"}  # the values are written for "none": blanked, not checked
         elif target is None or not target.get("when", lambda a: True)(args):
+            declared = identifier_type(args) if item["check"] == "check_digit" else None
+            if declared is not None and item["column"] in fields:
+                set_aside.append({**item, "identifier": declared.name, "reason": declared.checksum_reason})
+                continue
+            if declared is not None:
+                unmapped.append(item)
+                continue
             new_code.append({**item, "check_would_test": NEW_CODE.get(item["check"])})
             continue
         path = fields.get(item["column"])
@@ -99,7 +115,7 @@ def draft(findings: dict, part: str, fields: dict[str, str], version: str) -> di
     block = {"version": version, **({"fixes": fixes} if fixes else {}), "checks": checks}
     quality.check_quality(block)
     return {"part": part, "block": block, "expected": expected, "new_code": new_code, "unmapped": unmapped,
-            "items": found.get("quality") or []}
+            "identifier_types": set_aside, "items": found.get("quality") or []}
 
 
 def mapped(row: dict, fields: dict[str, str]) -> dict:
@@ -184,6 +200,14 @@ def report(plan: dict) -> str:
     for c in plan["block"]["checks"]:
         lines.append(f"| {c['id']} | {c['test']} | {c['value']} | {c['on_fail']} | {plan['expected'][c['id']]} |")
     lines += ["", "Examples per item are in the findings (`quality`), masked for a personal column."]
+    if plan.get("identifier_types"):
+        lines += ["", "## Set aside by the identifier type (no check)", "",
+                  "Format the column with the type (`record_key_format` or `identifier_formats`) and list "
+                  "the reason in `nonblocking_deferred_reasons`: the Dataset Contract sets each failing "
+                  "record aside, and the run goes on.", "",
+                  "| Check | Column | Rows | Identifier type | Reason |", "|---|---|---|---|---|"]
+        lines += [f"| {i['check']} | {i['column']} | {i['rows']} | {i['identifier']} | {i['reason']} |"
+                  for i in plan["identifier_types"]]
     for title, items, extra in (("New code (log a ticket; not written)", plan["new_code"], "check_would_test"),
                                 ("No field mapped (map the column, or drop the item)", plan["unmapped"], "why")):
         if items:
@@ -216,7 +240,8 @@ def main(argv: list[str] | None = None) -> int:
         (args.out / "expected.yaml").write_text(yaml.safe_dump(plan["expected"], sort_keys=False))
         (args.out / "QUALITY.md").write_text(report(plan), encoding="utf-8")
         print(f"wrote {args.out}/quality.yaml, expected.yaml and QUALITY.md: {len(plan['block']['checks'])} checks, "
-              f"{len(plan['new_code'])} new code, {len(plan['unmapped'])} unmapped")
+              f"{len(plan['new_code'])} new code, {len(plan['unmapped'])} unmapped, "
+              f"{len(plan['identifier_types'])} set aside by an identifier type")
         return 0
     body = yaml.safe_load(args.quality.read_text())
     block = {"version": body["version"], **body["quality"][args.source_code]}
