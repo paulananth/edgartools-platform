@@ -49,3 +49,9 @@ Skill: data-onboarding (with data-profiling and data-quality, which it calls). T
 - Second pass (75 s) **changed nothing**.
 - (The report's `read.assertions` 40,622 counts each assertion twice, once per apply loop; the stage counts are the measure.)
 - Next: the operator's approval of the Security matching rule and its CUSIP Identifier Contract, then switch-on.
+
+## 13F Security: quality (2026-10-15 05:30 ET)
+
+- The data-quality helper drafts **0 checks** for part `thirteenf.cusip`. Of profiling's two items: the CUSIP check digit is the identifier type's (ticket 81: a failing CUSIP is set aside as `invalid_cusip_checksum`, 9,603 records); the class title disagreement (381,219 of 2,953,581 holding rows differ from their CUSIP's most common title) is between holding rows, and each Security record keeps one title after the reduction, so no record-level check can catch it.
+- Decided (follows from the rulings, nothing for the operator to choose): **no `quality.yaml`** for this source. A file with no checks adds a quality version and changes every record id for nothing. The skill now says so (PR #982).
+- The title disagreement, and the reduction keeping the lexically first filed word rather than the most common one, are ticket 84 (A Security's issuer name and class title: which filed words it keeps).
