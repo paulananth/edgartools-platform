@@ -4,7 +4,7 @@ import json
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.workers import mdm_prepare, source_combine
+from edgar_warehouse.workers import mdm_prepare, source_combine, source_readings
 
 
 def group(source, table, key, value, *, mode="collect", order_by=(), distinct=False, where=None, checks=None):
@@ -139,15 +139,48 @@ def test_refusal_never_writes_partial_output(tmp_path, mutation):
     assert not (tmp_path / "output").exists()
 
 
-@pytest.mark.parametrize("budget", ["rows", "input_bytes", "total_bytes", "output_bytes"])
+@pytest.mark.parametrize("budget", ["rows", "input_bytes", "total_bytes"])
 def test_budgets_fail_before_any_output(tmp_path, monkeypatch, budget):
     store = Artifacts()
     refs = {"main": reading(store, tmp_path, {"companies": [{"cik": 1}, {"cik": 2}]})}
     body = plan({}, {"companies": table("main", "companies", {})}, limit=1 if budget == "rows" else 1000)
-    if budget != "rows": monkeypatch.setattr(source_combine, {"input_bytes": "INPUT_BYTES", "total_bytes": "TOTAL_BYTES", "output_bytes": "OUTPUT_BYTES"}[budget], 1)
+    if budget != "rows": monkeypatch.setattr(source_combine, {"input_bytes": "INPUT_BYTES", "total_bytes": "TOTAL_BYTES"}[budget], 1)
     work = envelope(store, tmp_path, body, refs)
     with pytest.raises(ValueError): source_combine.execute(work, store)
     assert not (tmp_path / "output").exists()
+
+
+def test_a_large_combination_is_written_in_pieces_that_read_back_whole(tmp_path, monkeypatch):
+    # Ticket 83: an output over the index bound is cut into pieces, never refused.
+    store = Artifacts()
+    rows = [{"cik": i, "name": "x" * 64} for i in range(1, 21)]
+    refs = {"main": reading(store, tmp_path, {"companies": rows})}
+    work = envelope(store, tmp_path, plan({}, {"companies": table("main", "companies", {})}), refs)
+    whole = store.json(source_combine.execute(work, store))
+    monkeypatch.setattr(source_combine, "OUTPUT_BYTES", 64)
+    monkeypatch.setattr(source_readings, "PART_BYTES", 400)
+    split = {**work, "output": (tmp_path / "split.json").as_uri()}
+    receipt = source_combine.execute(split, store)
+    index = store.json(receipt)
+    assert index["version"] == 2 and len(index["artifacts"][0]["partitions"]) > 1
+    assert source_combine.verify({**split, "candidate": receipt}, store)[1] == []
+    loaded, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100)
+    assert loaded["artifacts"][0]["tables"] == whole["artifacts"][0]["tables"]
+
+
+def test_more_pieces_than_the_old_index_limit_read_back_whole(tmp_path, monkeypatch):
+    # Ticket 83: the reader refused more than 4,096 pieces and 10M rows an artifact; the
+    # writer bounds neither, so the reader bounds only what the index states.
+    store = Artifacts()
+    rows = [{"cik": i} for i in range(1, 5001)]
+    refs = {"main": reading(store, tmp_path, {"companies": rows})}
+    work = envelope(store, tmp_path, plan({}, {"companies": table("main", "companies", {})}, limit=200_000), refs)
+    monkeypatch.setattr(source_combine, "OUTPUT_BYTES", 64)
+    monkeypatch.setattr(source_readings, "PART_ROWS", 1)
+    receipt = source_combine.execute(work, store)
+    assert len(store.json(receipt)["artifacts"][0]["partitions"]) == 5000
+    loaded, _ = source_readings.load(receipt, store, max_bytes=1024**3, max_rows=10_000)
+    assert loaded["artifacts"][0]["tables"]["companies"] == rows
 
 
 @pytest.mark.parametrize("changed", ["reading", "candidate", "scope"])

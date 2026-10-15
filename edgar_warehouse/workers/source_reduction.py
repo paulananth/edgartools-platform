@@ -29,9 +29,9 @@ def contract(body, refs):
         raise ValueError("Reduction requires source.combine execution and reduce only")
     plan = body["reduce"]
     bounds = {"max_rows": 40_000_000, "max_input_bytes": 16 * 1024**3,
-              "max_state_bytes": 256 * 1024**2, "max_keys": 10_000_000,
-              "max_members": 10_000_000, "max_output_rows": 100_000,
-              "max_output_bytes": 32 * 1024**2}
+              "max_state_bytes": 16 * 1024**3, "max_keys": 10_000_000,
+              "max_members": 10_000_000, "max_output_rows": 10_000_000,
+              "max_output_bytes": 16 * 1024**3}
     if not isinstance(plan, dict) or set(plan) != {*bounds, "groups"}:
         raise ValueError("Reduction requires all input, state and output bounds and groups")
     for name, maximum in bounds.items():

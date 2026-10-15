@@ -354,8 +354,8 @@ pub fn combine_tables(
     canon: &Bound<'_, PyAny>,
 ) -> PyResult<Py<PyDict>> {
     let maximum: usize = item(plan, "max_rows")?.extract()?;
-    if maximum == 0 || maximum > 100_000 {
-        return Err(fail("Combination max_rows must be 1..100000"));
+    if maximum == 0 || maximum > 40_000_000 {
+        return Err(fail("Combination max_rows must be 1..40000000"));
     }
     let specs = item(plan, "groups")?;
     let specs = specs.downcast::<PyDict>()?;

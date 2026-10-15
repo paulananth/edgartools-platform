@@ -7,6 +7,8 @@ artifact and keeps its existing byte and row limits.
 from __future__ import annotations
 
 import copy
+import json
+import hashlib
 import re
 
 from edgar_warehouse.bookkeeping.clean.artifacts import json_value
@@ -14,7 +16,13 @@ from edgar_warehouse.control_contract import reference
 
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
 PART_BYTES = 8 * 1024**2
+PART_ROWS = 100_000
 INDEX_BYTES = 32 * 1024**2
+# One artifact's rows and bytes in a version-2 reading. No output is refused
+# for its size (ticket 83): these only bound integers the index states; the
+# index's own byte bound limits how many pieces it names.
+ARTIFACT_ROWS = 10**12
+ARTIFACT_BYTES = 2**50
 MAX_ARTIFACTS = 512  # documents one reading may hold (`source.read`); byte and row budgets bound the rest
 
 
@@ -66,19 +74,18 @@ def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
             if evidence in artifact:
                 reference(artifact[evidence])
         names = table_names(artifact["table_names"])
-        if (not _integer(artifact["record_count"], 0, 10_000_000)
-                or not _integer(artifact["expanded_bytes"], 1, 16 * 1024**3)
-                or not isinstance(artifact["partitions"], list)
-                or len(artifact["partitions"]) > 4096):
+        if (not _integer(artifact["record_count"], 0, ARTIFACT_ROWS)
+                or not _integer(artifact["expanded_bytes"], 1, ARTIFACT_BYTES)
+                or not isinstance(artifact["partitions"], list)):
             raise ValueError("Partitioned artifact has invalid source accounting")
         ordinal = 1
         # Validate complete range accounting before exposing a prefix. Content
         # authentication still proceeds one bounded partition at a time.
         for part in artifact["partitions"]:
             if (not isinstance(part, dict) or set(part) != {"receipt", "first_ordinal", "record_count", "bytes"}
-                    or not _integer(part["first_ordinal"], 1, 10_000_000)
+                    or not _integer(part["first_ordinal"], 1, ARTIFACT_ROWS)
                     or part["first_ordinal"] != ordinal
-                    or not _integer(part["record_count"], 1, 100_000)
+                    or not _integer(part["record_count"], 1, PART_ROWS)
                     or not _integer(part["bytes"], 1, PART_BYTES)):
                 raise ValueError("Partition source ranges must be bounded and contiguous")
             reference(part["receipt"])
@@ -176,17 +183,105 @@ def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=Fals
         yield _event(body, private_ref, index, copy.deepcopy(artifact), size)
 
 
+def _whole(body, artifacts, *, size, max_bytes, max_rows):
+    """A reading in pieces, one whole artifact (with its cumulative bytes) at a time."""
+    current, at = None, None
+    for index, chunk, size, _ in _partition_chunks(
+            body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
+        if index != at:
+            if current is not None:
+                yield current, size
+            current, at = {**chunk, "tables": {name: [] for name in chunk["tables"]}, "deferred": []}, index
+        for name, values in chunk["tables"].items():
+            current["tables"][name].extend(values)
+        current["deferred"].extend(chunk["deferred"])
+    if current is not None:
+        yield current, size
+
+
+def iter_artifacts(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
+    """Yield (one whole artifact as version 1, cumulative bytes): a whole
+    reading's artifacts as written, a reading in pieces one artifact at a
+    time, so memory holds one artifact (ticket 83)."""
+    body, size = _index(ref, artifacts, max_bytes, allow_lookup_receipts)
+    if body["version"] == 1:
+        if not isinstance(body.get("artifacts"), list):
+            raise ValueError("A whole reading lists its artifacts")
+        for artifact in body["artifacts"]:
+            yield artifact, size
+        return
+    yield from _whole(body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows)
+
+
 def load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
     """Return normalized version-1 tables and total authenticated bytes read."""
     body, size = _index(ref, artifacts, max_bytes, allow_lookup_receipts)
     if body["version"] == 1:
         return body, size
     normalized = []
-    for index, chunk, size, _ in _partition_chunks(
-            body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
-        if index == len(normalized):
-            normalized.append({**chunk, "tables": {name: [] for name in chunk["tables"]}, "deferred": []})
-        for name, values in chunk["tables"].items():
-            normalized[index]["tables"][name].extend(values)
-        normalized[index]["deferred"].extend(chunk["deferred"])
+    for artifact, size in _whole(body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
+        normalized.append(artifact)
     return {**body, "version": 1, "artifacts": normalized}, size
+
+
+def _encode(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def publish(artifacts):
+    """A piece sink that writes each piece (before the index that names it)."""
+    def sink(receipt, data):
+        if artifacts.put_bytes(receipt["uri"], data) != receipt:
+            raise ValueError("Written partition receipt differs from its bytes")
+    return sink
+
+
+def check(artifacts):
+    """A piece sink that compares each written piece with the one made again."""
+    def sink(receipt, data):
+        if artifacts.verified(receipt, max_bytes=PART_BYTES) != data:
+            raise ValueError("Written partition differs from pinned inputs and configuration")
+    return sink
+
+
+def pieces(output_uri: str, evidence: dict, tables: dict, deferred: list, names: list[str],
+           input_bytes: int, sink) -> dict:
+    """One input's rows, then its deferred records, in order, cut into version-1
+    chunks of at most PART_BYTES and PART_ROWS (ticket 83), each handed to
+    `sink(receipt, bytes)` as it is made: the input's entry in a version-2
+    index. Only one row larger than a piece is refused."""
+    items = [(name, row) for name in names for row in tables.get(name, [])]
+    items += [(None, item) for item in deferred]
+    parts, ordinal = [], 1
+
+    def fresh():
+        return {"version": 1, "tables": {name: [] for name in names}, "deferred": []}
+
+    def flush(pending, count):
+        nonlocal ordinal
+        data = _encode(pending)
+        sha = hashlib.sha256(data).hexdigest()
+        receipt = {"uri": f"{output_uri}.parts/{sha}.json", "sha256": sha}
+        parts.append({"receipt": receipt, "first_ordinal": ordinal, "record_count": count, "bytes": len(data)})
+        sink(receipt, data)
+        ordinal += count
+
+    pending, count = fresh(), 0
+    empty = size = len(_encode(pending))
+    for name, item in items:
+        target = pending["deferred"] if name is None else pending["tables"][name]
+        extra = len(_encode(item)) + (1 if target else 0)
+        if count and (size + extra > PART_BYTES or count == PART_ROWS):
+            flush(pending, count)
+            pending, count, size = fresh(), 0, empty
+            target = pending["deferred"] if name is None else pending["tables"][name]
+            extra = len(_encode(item))
+        if size + extra > PART_BYTES:
+            raise ValueError("One source row exceeds the partition byte bound")
+        target.append(item)
+        size, count = size + extra, count + 1
+    if count:
+        flush(pending, count)
+    entry = {**evidence, "record_count": ordinal - 1, "expanded_bytes": max(1, input_bytes),
+             "table_names": names, "partitions": parts}
+    return entry

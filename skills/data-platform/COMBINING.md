@@ -36,8 +36,9 @@ Its partition marker is null; inline events have no partition marker.
 Yielded metadata is isolated from private traversal: editing returned evidence
 cannot change a later authenticated receipt or declared schema.
 
-The incremental index is bounded to 32 MiB and each partition to 8 MiB.
-The materializing loader retains its caller's existing index limit. Explicit byte and
+The index is bounded to 32 MiB and each partition to 8 MiB and 100,000 rows;
+an artifact's rows and bytes have no lower ceiling, so the index names some
+150,000 partitions, over a terabyte (ticket 83). Explicit byte and
 row budgets apply across every table, deferral, partition and artifact.
 Complete contiguous range and EOF accounting are checked before traversing
 an artifact's content. Each partition's exact hash, byte count and schema are
@@ -48,8 +49,8 @@ Consumers must resolve deferrals and explicitly opt in to lookup receipts
 only when all those receipts participate in output identity.
 
 The iterator supplies traversal. Use a declared reduction contract for
-complete-set aggregation. The existing `combine` contract below retains its
-original materializing row/byte limits.
+complete-set aggregation. The `combine` contract below still holds its inputs
+in memory, so its bounds are the machine's memory, not a size refusal.
 
 ### Bounded complete-set reduction
 
@@ -81,9 +82,9 @@ replacing that run's execution identity.
 Use `execution: {profile: source.combine}` and `reduce` in place of `combine`.
 Pin the contract as JSON and use the same input manifest and verification check.
 Declare all limits: `max_rows` (1..40,000,000), `max_input_bytes`
-(1..16 GiB), `max_state_bytes` (1..256 MiB), `max_keys` and `max_members`
-(each 1..10,000,000), `max_output_rows` (1..100,000), and
-`max_output_bytes` (1..32 MiB). Choose measured limits for the approved scope.
+(1..16 GiB), `max_state_bytes` (1..16 GiB), `max_keys` and `max_members`
+(each 1..10,000,000), `max_output_rows` (1..10,000,000), and
+`max_output_bytes` (1..16 GiB). Choose measured limits for the approved scope.
 Input limits cover every supplied source extract, artifact, partition and table,
 including unselected rows. State limits cover all groups together. State bytes
 measure canonical UTF-8 key/member/value payload; key/member counts separately
@@ -216,11 +217,13 @@ frozen units.
 - Optional output-table `drop` removes at most 64 distinct named columns after
   all joins. Missing columns refuse. Use it to remove declared helper keys.
 - Bounds: 1–8 named source extracts, at most 32 groups, 1–16 output tables and
-  at most 32 joins per output. Each source extract is at most 32 MiB, all source extracts
-  together at most 64 MiB, and input **and** output rows each respect
-  `max_rows` (1–100,000). Counts include every input table. Combined output
-  is at most 32 MiB. Partition work explicitly when a limit is exceeded;
-  validation and output-budget failures occur before any destination write.
+  at most 32 joins per output. Source extracts together are at most 16 GiB,
+  and input **and** output rows each respect `max_rows` (1–40,000,000).
+  Counts include every input table. A combined output over 32 MiB is written
+  in pieces of at most 8 MiB behind a version-2 index, never refused for its
+  size (ticket 83); only one row larger than a piece is refused. Validation
+  failures occur before any destination write; pieces are written before the
+  index that names them. A combination in pieces is checked by redoing it.
 
 ## One installed pipeline
 

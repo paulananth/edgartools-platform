@@ -6,7 +6,7 @@ import pytest
 
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
-from edgar_warehouse.workers import source_read, mdm_prepare
+from edgar_warehouse.workers import source_readings, source_read, mdm_prepare
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import limits
 from edgar_warehouse.mdm.clean.adapters import normalize, UnsupportedRecord
@@ -89,10 +89,16 @@ def test_worker_byte_budgets_fail_before_writing_unverifiable_output(tmp_path, m
     output = tmp_path / "reading.json"
     source = {"input": manifest, "output": output.as_uri(), "checks": ["source.output"]}
     if stage == "source":
+        # Ticket 83: a reading over the whole-output size is written in pieces, never refused.
+        whole = store.json(source_read.execute(source, store))
         monkeypatch.setattr(source_read, "OUTPUT_BYTES", 128)
-        with pytest.raises(ValueError, match="verifier byte budget"):
-            source_read.execute(source, store)
-        assert not output.exists()
+        pieces = tmp_path / "pieces.json"
+        split = {**source, "output": pieces.as_uri()}
+        receipt = source_read.execute(split, store)
+        assert source_read.verify({**split, "candidate": receipt}, store) == ({"source.output": True}, [])
+        assert store.json(receipt)["version"] == 2
+        loaded, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100)
+        assert [a["tables"] for a in loaded["artifacts"]] == [a["tables"] for a in whole["artifacts"]]
         return
     reading = source_read.execute(source, store)
     if stage == "records":
@@ -104,4 +110,30 @@ def test_worker_byte_budgets_fail_before_writing_unverifiable_output(tmp_path, m
     target = tmp_path / "mdm" / "manifest.json"
     with pytest.raises(ValueError, match="verifier byte budget"):
         mdm_prepare.execute({"input": reading, "output": target.as_uri(), "checks": ["mdm.prepared"], "keys": keys}, store)
-    assert not target.parent.exists()
+    # Records files are written as they are made (ticket 83); the manifest that names them never is.
+    assert not target.exists()
+
+
+def test_a_large_reading_is_cut_into_pieces_that_read_back_whole(tmp_path, monkeypatch):
+    # Ticket 83: no size refusal; one input's rows are cut into pieces under the partition bound.
+    store = Artifacts()
+    payload = {"cik": "1", "name": "JOHN DOE", "nested": {"text": "x" * 256}}
+    contract = store.put(tmp_path.as_uri(), PERSON)
+    inputs = [store.put_bytes((tmp_path / f"raw{i}.json").as_uri(), json.dumps({**payload, "cik": str(i)}).encode())
+              for i in range(1, 4)]
+    manifest = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": inputs})
+    whole = store.json(source_read.execute({"input": manifest, "output": (tmp_path / "whole.json").as_uri(),
+                                            "checks": ["source.output"]}, store))
+    monkeypatch.setattr(source_read, "OUTPUT_BYTES", 64)
+    monkeypatch.setattr(source_readings, "PART_BYTES", 700)
+    work = {"input": manifest, "output": (tmp_path / "split.json").as_uri(), "checks": ["source.output"]}
+    receipt = source_read.execute(work, store)
+    index = store.json(receipt)
+    assert index["version"] == 2 and len(index["artifacts"]) == 3
+    assert all(part["bytes"] <= 700 for a in index["artifacts"] for part in a["partitions"])
+    assert source_read.verify({**work, "candidate": receipt}, store) == ({"source.output": True}, [])
+    loaded, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100)
+    assert [a["tables"] for a in loaded["artifacts"]] == [a["tables"] for a in whole["artifacts"]]
+    monkeypatch.setattr(source_readings, "PART_BYTES", 40)  # one row larger than a piece is refused
+    with pytest.raises(ValueError, match="partition byte bound"):
+        source_read.execute({**work, "output": (tmp_path / "tiny.json").as_uri()}, store)

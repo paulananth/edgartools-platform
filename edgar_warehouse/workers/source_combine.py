@@ -13,13 +13,15 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse import control_contract
 from edgar_warehouse.control_contract import canonical, reference
-from . import source_readings, source_reduction
+from . import Redo, source_readings, source_reduction
 
 CHECK = "source.combined"
-INPUT_BYTES = 32 * 1024**2
-TOTAL_BYTES = 64 * 1024**2
-OUTPUT_BYTES = 32 * 1024**2
-MAX_ROWS = 100_000
+# Bounds, not budgets (ticket 83): an output over the index bound is written in
+# pieces, so neither the inputs nor the output are refused for their size.
+INPUT_BYTES = 16 * 1024**3
+TOTAL_BYTES = 16 * 1024**3
+OUTPUT_BYTES = source_readings.INDEX_BYTES
+MAX_ROWS = 40_000_000
 NAME = source_readings.NAME
 COLLECTION_MODES = frozenset(("collect", "collect_flat"))
 ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
@@ -62,7 +64,7 @@ def _contract(body, inputs):
     plan = body["combine"]
     if (not isinstance(plan, dict) or set(plan) != {"max_rows", "groups", "tables"}
             or type(plan["max_rows"]) is not int or not 1 <= plan["max_rows"] <= MAX_ROWS):
-        raise ValueError("Combination names max_rows 1..100000, groups and tables")
+        raise ValueError(f"Combination names max_rows 1..{MAX_ROWS}, groups and tables")
     groups = _mapping(plan["groups"], 32, "Groups")
     for spec in groups.values():
         required = {"source", "table", "key", "value", "mode", "order_by", "distinct", "skip_null_values", "checks", "where"}
@@ -128,14 +130,12 @@ def _reading_body(body):
 
 
 def _encode(body, max_bytes=None):
-    """Bound output before publishing, including repeated joined collections."""
+    """The body's bytes, refused past `max_bytes` (a reduction's declared output bound)."""
     buffer = io.BytesIO()
-    if max_bytes is None:
-        max_bytes = OUTPUT_BYTES
     for chunk in json.JSONEncoder(sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).iterencode(body):
         data = chunk.encode()
-        if buffer.tell() + len(data) > max_bytes:
-            raise ValueError("Combined reading exceeds output byte budget; partition inputs")
+        if max_bytes is not None and buffer.tell() + len(data) > max_bytes:
+            raise ValueError("Combined reading exceeds its declared output byte bound")
         buffer.write(data)
     return buffer.getvalue()
 
@@ -175,11 +175,11 @@ def _checked(envelope, artifacts):
     return manifest, refs, _contract(contract, refs), False
 
 
-def _documents(envelope, artifacts):
+def _documents(envelope, artifacts, sink):
     manifest, refs, plan, reduced = _checked(envelope, artifacts)
     if reduced:
         tables = source_reduction.tables(plan, refs, artifacts)
-        return _output(envelope, manifest, refs, tables, max_bytes=plan["max_output_bytes"])
+        return _output(envelope, manifest, refs, tables, sink, max_bytes=plan["max_output_bytes"])
     inputs, size, count = {}, 0, 0
     for name, ref in refs.items():
         body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"],
@@ -194,7 +194,7 @@ def _documents(envelope, artifacts):
         inputs[name] = reading
     from edgar_warehouse.rules.source_engine import combine_tables
     tables = combine_tables(plan, inputs, canonical)
-    return _output(envelope, manifest, refs, tables)
+    return _output(envelope, manifest, refs, tables, sink)
 
 
 def _scope(envelope, manifest):
@@ -204,15 +204,26 @@ def _scope(envelope, manifest):
     return {"uri": f"{envelope['output'].rsplit('/', 1)[0]}/combine-inputs/{scope_hash}.json", "sha256": scope_hash}, scope
 
 
-def _output(envelope, manifest, refs, tables, *, max_bytes=None):
+def _output(envelope, manifest, refs, tables, sink, *, max_bytes=None):
+    """(scope receipt, scope bytes, output bytes). An output over the index
+    bound is cut into pieces, each handed to `sink`, behind a version-2 index;
+    its scope, which pins the readings, is its one input (ticket 83)."""
     scope_ref, scope = _scope(envelope, manifest)
     output = _encode({"version": 1, "contract": manifest["contract"], "readings": refs,
                       "artifacts": [{"input": scope_ref, "tables": tables, "deferred": []}]}, max_bytes)
-    return scope_ref, scope, output
+    if len(output) <= OUTPUT_BYTES:
+        return scope_ref, scope, output
+    entry = source_readings.pieces(envelope["output"], {"input": scope_ref}, tables, [],
+                                   list(tables), len(output), sink)
+    index = _encode({"version": 2, "contract": manifest["contract"], "artifacts": [entry]})
+    if len(index) > source_readings.INDEX_BYTES:
+        raise ValueError("Combined reading index exceeds its byte bound")
+    return scope_ref, scope, index
 
 
 def execute(envelope, artifacts):
-    scope_ref, scope, output = _documents(envelope, artifacts)
+    # Every piece is written as it is made, before the index that names it.
+    scope_ref, scope, output = _documents(envelope, artifacts, source_readings.publish(artifacts))
     artifacts.put_bytes(scope_ref["uri"], scope)
     return artifacts.put_bytes(envelope["output"], output)
 
@@ -220,10 +231,10 @@ def execute(envelope, artifacts):
 def verify(envelope, artifacts):
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from intended combined output")
-    scope_ref, scope, expected = _documents(envelope, artifacts)
-    if artifacts.verified(scope_ref, max_bytes=INPUT_BYTES) != scope:
+    scope_ref, scope, expected = _documents(envelope, artifacts, source_readings.check(artifacts))
+    if artifacts.verified(scope_ref, max_bytes=source_readings.INDEX_BYTES) != scope:
         raise ValueError("Written combination scope differs from pinned inputs")
-    if artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES) != expected:
+    if artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES) != expected:
         raise ValueError("Written combined reading differs from pinned inputs and configuration")
     return {CHECK: True}, []
 
@@ -239,10 +250,12 @@ def confirm(envelope, artifacts):
         raise ValueError("Candidate URI differs from intended combined output")
     manifest, refs, plan, reduced = _checked(envelope, artifacts)
     scope_ref, scope = _scope(envelope, manifest)
-    if artifacts.verified(scope_ref, max_bytes=INPUT_BYTES) != scope:
+    if artifacts.verified(scope_ref, max_bytes=source_readings.INDEX_BYTES) != scope:
         raise ValueError("Written combination scope differs from pinned inputs")
-    data = artifacts.verified(envelope["candidate"], max_bytes=plan["max_output_bytes"] if reduced else OUTPUT_BYTES)
+    data = artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES)
     body = artifact_store.json_value(data)
+    if isinstance(body, dict) and body.get("version") == 2:
+        raise Redo("a combination written in pieces is checked by redoing it")
     if (not isinstance(body, dict) or set(body) != {"version", "contract", "readings", "artifacts"}
             or body["contract"] != manifest["contract"] or body["readings"] != refs):
         raise ValueError("Written combination does not name this contract and these receipts")

@@ -6,6 +6,7 @@ mastering. Bookkeeping sees only task envelopes and immutable output receipts.
 from __future__ import annotations
 
 import json
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -15,7 +16,16 @@ from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import canonical, reference
 from . import Redo, source_stream, source_readings, source_parquet
 
-OUTPUT_BYTES = 128 * 1024**2
+# The whole-output form is kept up to the index bound, the size every consumer
+# reads a reading's index under (a reduction refused a 112 MB whole output). A
+# larger reading is written in pieces of at most PART_BYTES behind an index
+# (ticket 83): no size refusal, and the worker and verifier hold one input's
+# reading at a time.
+OUTPUT_BYTES = source_readings.INDEX_BYTES
+# The ceilings a contract may declare for one file, which is read whole in
+# memory (ticket 83: no fixed cap below the machine; a larger file streams).
+INPUT_BYTES = 16 * 1024**3
+INPUT_RECORDS = 100_000_000
 # Capture the actual loaded codec location; later wrapper metadata changes
 # do not relocate this dependency.
 ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
@@ -48,8 +58,8 @@ def _documents(envelope: dict, artifacts):
             or type(execution["max_artifacts"]) is not int or not 1 <= execution["max_artifacts"] <= source_readings.MAX_ARTIFACTS):
         raise ValueError(f"Source execution requires source.read with 1..2 workers and 1..{source_readings.MAX_ARTIFACTS} artifacts")
     if "max_input_bytes" in execution and (type(execution['max_input_bytes']) is not int
-            or not 1 <= execution['max_input_bytes'] <= 256*1024**2):
-        raise ValueError('Source max_input_bytes is 1..256 MiB')
+            or not 1 <= execution['max_input_bytes'] <= INPUT_BYTES):
+        raise ValueError('Source max_input_bytes is 1..16 GiB')
     read = contract.get("read")
     if "max_input_bytes" in execution and isinstance(read, dict) and "stream" in read:
         raise ValueError('Streamed framing declares its own physical input bounds')
@@ -248,9 +258,9 @@ def _limits(contract, execution) -> tuple[int, int]:
     max_bytes = contract["read"].get("limits", {}).get("max_bytes", 32 * 1024**2)
     max_records = contract["read"].get("limits", {}).get("max_records")
     if max_bytes > execution.get("max_input_bytes", 32 * 1024**2):
-        raise ValueError("source.read accepts at most 32 MiB per artifact")
-    if type(max_records) is not int or not 1 <= max_records <= 100000:
-        raise ValueError("source.read requires a limit of at most 100000 records")
+        raise ValueError("source.read reads a file of at most its max_input_bytes (32 MiB unless declared)")
+    if type(max_records) is not int or not 1 <= max_records <= INPUT_RECORDS:
+        raise ValueError(f"source.read requires a limit of 1..{INPUT_RECORDS} records")
     return max_bytes, max_records
 
 
@@ -262,29 +272,62 @@ def _receipts(manifest, entry) -> dict:
             **({"lookups": entry["lookups"]} if manifest["version"] == 3 else {})}
 
 
-def _output(envelope: dict, artifacts, documents=None) -> bytes:
+def _encode(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def _output(envelope: dict, artifacts, documents=None, sink=None) -> bytes:
+    """The output's bytes: the whole reading, or, past OUTPUT_BYTES, the index
+    of its pieces, each handed to `sink` as it is made. Readings are spooled
+    to a private file one input at a time, so memory holds one input's
+    reading and one piece, never the whole output."""
     manifest, contract, execution, inputs = documents or _documents(envelope, artifacts)
     read = contract.get("read")
     parquet = isinstance(read, dict) and read.get("format") == "parquet"
     engine = source_engine.SourceEngine(source_parquet.engine_contract(contract) if parquet else contract)
     max_bytes, _ = _limits(contract, execution)
+    names = list(read["tables"])
 
-    def read(entry):
+    def read_one(entry):
         ref, context, evidence = _context(manifest, entry, artifacts)
         lookups, lookup_evidence = _lookups(manifest, entry, artifacts, contract)
         evidence.update(lookup_evidence)
         data = artifacts.verified(ref, max_bytes=execution.get("max_input_bytes", max_bytes))
         result = engine.read(source_parquet.document(data, contract) if parquet else data,
                              context=context, lookups=lookups)
-        return {"input": ref, **evidence, "tables": result.tables, "deferred": result.deferred}
+        reading = {"input": ref, **evidence, "tables": result.tables, "deferred": result.deferred}
+        return _encode(reading), len(data)
 
-    with ThreadPoolExecutor(max_workers=execution["workers"]) as pool:
-        readings = list(pool.map(read, inputs))
-    output = json.dumps({"version": 1, "contract": manifest["contract"], "artifacts": readings},
-                      sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    if len(output) > OUTPUT_BYTES:
-        raise ValueError("source.read output exceeds the verifier byte budget; partition the inputs")
-    return output
+    with tempfile.TemporaryFile(mode="w+b") as spool:
+        spooled = []  # (offset, length, input bytes) per input, in order
+        with ThreadPoolExecutor(max_workers=execution["workers"]) as pool:
+            batch = 4 * execution["workers"]
+            for start in range(0, len(inputs), batch):
+                for encoded, input_bytes in pool.map(read_one, inputs[start:start + batch]):
+                    spooled.append((spool.tell(), len(encoded), input_bytes))
+                    spool.write(encoded)
+
+        def each():
+            for offset, length, input_bytes in spooled:
+                spool.seek(offset)
+                yield spool.read(length), input_bytes
+
+        whole = (len(b'{"artifacts":[],"contract":') + len(_encode(manifest["contract"])) + len(b',"version":1}')
+                 + sum(length for _, length, _ in spooled) + max(0, len(spooled) - 1))
+        if whole <= OUTPUT_BYTES:
+            output = (b'{"artifacts":[' + b",".join(encoded for encoded, _ in each())
+                      + b'],"contract":' + _encode(manifest["contract"]) + b',"version":1}')
+            return output
+        index = []
+        for encoded, input_bytes in each():
+            reading = json.loads(encoded)
+            evidence = {k: v for k, v in reading.items() if k not in ("tables", "deferred")}
+            index.append(source_readings.pieces(envelope["output"], evidence, reading["tables"],
+                                                reading["deferred"], names, input_bytes, sink))
+        output = _encode({"version": 2, "contract": manifest["contract"], "artifacts": index})
+        if len(output) > source_readings.INDEX_BYTES:
+            raise ValueError("source.read index exceeds its byte bound")
+        return output
 
 
 def execute(envelope: dict, artifacts) -> dict:
@@ -294,7 +337,8 @@ def execute(envelope: dict, artifacts) -> dict:
         output = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=True,
                                       max_index_bytes=OUTPUT_BYTES)
     else:
-        output = _output(envelope, artifacts, documents)
+        # Every piece is written as it is made, before the index that names it.
+        output = _output(envelope, artifacts, documents, source_readings.publish(artifacts))
     return artifacts.put_bytes(envelope["output"], output)
 
 
@@ -307,8 +351,8 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         expected = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=False,
                                         max_index_bytes=OUTPUT_BYTES)
     else:
-        expected = _output(envelope, artifacts, documents)
-    found = artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES)
+        expected = _output(envelope, artifacts, documents, source_readings.check(artifacts))
+    found = artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES)
     if found != expected:
         raise ValueError("Written source output differs from the configured reading")
     return {name: True for name in envelope["checks"]}, []
@@ -328,7 +372,9 @@ def confirm(envelope: dict, artifacts) -> tuple[dict, list]:
     if isinstance(read, dict) and "stream" in read:
         raise Redo("a streamed source extract has its own output shape")
     _limits(contract, execution)  # the contract's limits, as the work checks them
-    body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=OUTPUT_BYTES))
+    body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES))
+    if isinstance(body, dict) and body.get("version") == 2:
+        raise Redo("a source extract written in pieces is checked by redoing it")
     if (not isinstance(body, dict) or set(body) != {"version", "contract", "artifacts"} or body["version"] != 1
             or body["contract"] != manifest["contract"] or not isinstance(body["artifacts"], list)
             or len(body["artifacts"]) != len(inputs)):
