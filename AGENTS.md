@@ -132,6 +132,9 @@ Learned the hard way; each is a standing operator rule.
   words naming the PRs to merge ("Merge" answering a question about named
   PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
   not merge approval.
+- A conclusion reached by reading code is not proof of behaviour: test each
+  case the claim covers (one test per kind, per source), since the untested
+  case is where a gap hides.
 - Every background watcher (CI, a long test, a proof) has a deadline and an
   exit for every outcome, including the PR merging or closing. Stop test
   containers when a run ends, however it ends.
@@ -176,6 +179,20 @@ Learned the hard way; each is a standing operator rule.
 **Stores**
 - Writes into Snowflake's SQL layer go through dbt. MDM's own Postgres store
   is written by its own code (SQLAlchemy), not dbt.
+
+**Code and infrastructure**
+- A "same calendar day" check names its timezone, the business process's:
+  `America/New_York` (through `pytz`; `zoneinfo` needs a tz database the
+  images do not install).
+- Provisioning that is not Terraform or a committed script does not survive an
+  account rebuild, however well a runbook describes it. When one stage turns
+  out to be an uncommitted manual step, assume every later stage in the same
+  family is too.
+- Before trusting a clean check, confirm the code under test is what is
+  running: a check against stale, superseded infrastructure makes a false
+  positive and a false negative look the same as success.
+- Before running a multi-step workflow by hand, look for a machine already
+  built for it (`aws stepfunctions list-state-machines`).
 
 **Debugging**
 - Before fixing an error, find its root cause (ask "why" until the answer is
@@ -226,6 +243,7 @@ Large files should be read in chunks before editing: `edgar_warehouse/runtime.py
 - Before writing or modifying code, use the `gof-refactor-reviewer` skill to review the relevant existing code and its git history for evidence-backed Gang of Four refactoring opportunities. If the work is a new design with no existing code to review, use `gof-pattern-selector` instead.
 - During code review, explicitly check whether `gof-refactor-reviewer` is available. When available, invoke it as part of the review; when unavailable, state that limitation and perform a focused manual design-pattern review.
 - Every code review runs three axes, each reported under its own heading: **Standards** (this repo's rules), **Spec** (the ticket and the operator's words) and **GoF** (the `gof-refactor-reviewer` method on the same diff).
+- The consult before code does not replace the review after it: a consult can bless a design while the diff still gets a load-bearing detail wrong.
 - Do not force a design pattern into the code. Follow the skill's default of leaving the current design in place unless demonstrated change history and present-day costs justify the refactor.
 
 Common setup:

@@ -184,6 +184,9 @@ Learned the hard way; each is a standing operator rule.
   words naming the PRs to merge ("Merge" answering a question about named
   PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
   not merge approval.
+- A conclusion reached by reading code is not proof of behaviour: test each
+  case the claim covers (one test per kind, per source), since the untested
+  case is where a gap hides.
 - Every background watcher (CI, a long test, a proof) has a deadline and an
   exit for every outcome, including the PR merging or closing. Stop test
   containers when a run ends, however it ends.
@@ -487,14 +490,10 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   loading session, including owner's-rights procedures, which run with the *caller's* timezone. Guarded by
   `tests/unit/test_loader_task_timezone_sql.py`.
 - `snowflake-connector-python` reads the module-global `paramstyle` once, at `connect()` time, and caches
-  it on the connection — mutating the global afterward has no effect. Use the shared
-  `connect_with_qmark_paramstyle()` for `?`-style placeholders.
-- `EDGARTOOLS_PROD_LOADER` is the single runtime role for `mdm export`, `mdm sync-graph` and
-  `mdm verify-graph` (all three read the same `MDM_SNOWFLAKE_SECRET_JSON`), and it also owns the gold
-  objects `REFRESH_AFTER_LOAD` refreshes, so it needs `OPERATE` + `SELECT` on everything a gold model
-  references, `EDGARTOOLS_SILVER` included. That secret's `MDM_SNOWFLAKE_SCHEMA` must stay
-  `EDGARTOOLS_GOLD`: the mirror writer hardcodes its own `MDM` schema and the graph commands fully
-  qualify, so the default golden-record writer is the field's only real consumer.
+  it on the connection — mutating the global afterward has no effect. Set it before `connect()` for `?`-style placeholders.
+- `EDGARTOOLS_PROD_LOADER` owns the gold objects `REFRESH_AFTER_LOAD` refreshes, so it needs `OPERATE` +
+  `SELECT` on everything a gold model references, `EDGARTOOLS_SILVER` included. Its secret
+  (`MDM_SNOWFLAKE_SECRET_JSON`) keeps `MDM_SNOWFLAKE_SCHEMA` at `EDGARTOOLS_GOLD`.
 
 **Postgres / MDM**
 - **The MDM store's engineering rules live in the `mdm-engineering` skill**, the one source for them:
@@ -507,24 +506,12 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   applied" are separate facts.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
   `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so `bootstrap-prod-mdm.sh`
-  runs `mdm migrate` as its true last database-mutating step. `mdm check-fence`
-  (`edgar_warehouse/mdm/fence_monitor.py`) discovers the fenced table set live and verifies no leak.
-- MDM chain runtime is ~60-70 min end to end; `Reconcile` (~21 min) and `Publish` (~19 min) are ~65% of it
-  and are Snowflake-side work. Relationship derivation (~15 min, bounded by
-  `MDM_RELATIONSHIP_CONCURRENCY`, default 4) is no longer the bottleneck — optimise the Snowflake stages,
-  not derivation.
+  runs `mdm migrate` as its true last database-mutating step.
 
 **Pipeline / runtime**
 
-- A bounded CIK input does not imply a bounded artifact input — carry the daily index's exact accession
-  union through submissions refresh, intersect form selection against it, and fail closed on expansion,
-  retry exhaustion or an opened circuit.
-- Key idempotency on the durable artifact (the bronze S3 object), not on bookkeeping a crash can discard.
-  `write_immutable_bytes` is the only writer to a canonical bronze key and enforces content-identity
-  atomically at write time (conditional PUT, `IfNoneMatch: *`).
-- Recurring runs abort only on `unresolved_errors`: oversized responses
-  (`WAREHOUSE_SEC_MAX_RESPONSE_BYTES`, now 150MB) and immutable-object conflicts are isolated,
-  individually-recoverable skips. Any *unclassified* error still fails the run closed.
+- Bounded work and idempotent output are the `bookkeeping` skill's (DESIGN: a bounded, validated
+  child-work manifest; immutable output by conditional creation, `IfNoneMatch: *`), the one source for them.
 - Any "same calendar day" check needs an explicit timezone, and the right one is the business
   process's — `America/New_York` via `pytz` (`zoneinfo` needs a tz database these images don't install).
 - A one-time backfill CLI's `--dry-run` needs a `--limit` from the start: proving the logic on real data
