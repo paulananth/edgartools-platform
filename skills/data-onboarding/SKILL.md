@@ -337,11 +337,21 @@ blocks; do not ask whether it does.
     joining identifier is a merge-rule change for the operator.
   - An identifier another authority issues is named for who stated it
     (`<stating source>_<id>`), never for the issuer.
+  - A flag, role or type the source states about a record is evidence for a
+    rule, never a key and never a decider on its own: such fields are often
+    wrong or partial for the very records that matter.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
 - **Relationships:** type, the other end's key, the source it lives in,
   start and end. List every type the source carries. Label each mapped one's
   `scope` `<Provider> <relationship family>`.
+  - A relationship ends only on an end the source states. A record missing
+    from a later file, or a source that falls silent, closes nothing.
+  - Order and compare by the date the event happened, never the date it was
+    reported: a late report is not a conflict.
+- **Evidence not captured:** when a rule needs evidence the capture does not
+  hold yet, the record waits (set aside, with the reason) and the capture is
+  a task. Never decide from the row alone.
 - **A value of another kind** (an identifier of a different kind of entity)
   stays out of this kind; log it for that kind.
 - **Provenance:** trace stays beside the record (operator, 2026-09-27).
