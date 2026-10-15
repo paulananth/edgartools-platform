@@ -1,0 +1,71 @@
+[
+  {
+    "units": 10,
+    "full_scans_by_operation": {
+      "claim": 3,
+      "renew": 2,
+      "report": 1,
+      "verify_claim": 2,
+      "admit": 2,
+      "journal_delivery": 3
+    },
+    "work_rows_read_by_operation": {
+      "claim": 30,
+      "renew": 20,
+      "report": 10,
+      "verify_claim": 20,
+      "admit": 20,
+      "journal_delivery": 30
+    },
+    "one_unit_with_renewal_seconds": 0.1792,
+    "rules_reads_before_delivery": 10,
+    "manifest_reads_before_delivery": 10,
+    "one_event_delivered": 1
+  },
+  {
+    "units": 100,
+    "full_scans_by_operation": {
+      "claim": 3,
+      "renew": 2,
+      "report": 1,
+      "verify_claim": 2,
+      "admit": 2,
+      "journal_delivery": 3
+    },
+    "work_rows_read_by_operation": {
+      "claim": 300,
+      "renew": 200,
+      "report": 100,
+      "verify_claim": 200,
+      "admit": 200,
+      "journal_delivery": 300
+    },
+    "one_unit_with_renewal_seconds": 0.2605,
+    "rules_reads_before_delivery": 10,
+    "manifest_reads_before_delivery": 10,
+    "one_event_delivered": 1
+  },
+  {
+    "units": 1000,
+    "full_scans_by_operation": {
+      "claim": 3,
+      "renew": 2,
+      "report": 1,
+      "verify_claim": 2,
+      "admit": 2,
+      "journal_delivery": 3
+    },
+    "work_rows_read_by_operation": {
+      "claim": 3000,
+      "renew": 2000,
+      "report": 1000,
+      "verify_claim": 2000,
+      "admit": 2000,
+      "journal_delivery": 3000
+    },
+    "one_unit_with_renewal_seconds": 1.7254,
+    "rules_reads_before_delivery": 10,
+    "manifest_reads_before_delivery": 10,
+    "one_event_delivered": 1
+  }
+]
