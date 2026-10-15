@@ -1207,16 +1207,17 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
             // a null part makes the whole null, so a key never loses a part.
             let mut out = String::new();
             for part in args.as_sequence().unwrap() {
-                match eval(engine, context, lookups, document, item, ordinal, part)? {
+                let text = match eval(engine, context, lookups, document, item, ordinal, part)? {
                     Val::Null => return Ok(Val::Null),
-                    Val::Str(text) => out.push_str(&text),
-                    Val::Int(number) => out.push_str(&number.to_string()),
-                    Val::UInt(number) => out.push_str(&number.to_string()),
+                    Val::Str(text) => text,
+                    Val::Int(number) => number.to_string(),
+                    Val::UInt(number) => number.to_string(),
                     _ => return Err(Rejected::new("value_type", "concat joins text and integers")),
-                }
-                if out.len() > 1024 * 1024 {
+                };
+                if text.len() > (1024 * 1024usize).saturating_sub(out.len()) {
                     return Err(Rejected::new("concat_limit", "concat exceeds 1048576 bytes"));
                 }
+                out.push_str(&text);
             }
             Ok(Val::Str(out))
         }

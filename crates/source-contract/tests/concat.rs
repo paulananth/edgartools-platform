@@ -33,6 +33,18 @@ fn other_types_and_long_text_are_refused() {
 }
 
 #[test]
+fn a_large_integer_is_written_in_decimal() {
+    assert_eq!(read(json!([{"value": {"path": "n"}}]), json!([{"n": u64::MAX}])).unwrap(), vec![Val::Str(u64::MAX.to_string())]);
+}
+
+#[test]
+fn an_undeclared_context_inside_concat_is_refused_at_load() {
+    let body = json!({"read": {"format": "json", "tables": {"rows": {"each": "items",
+        "columns": {"key": {"concat": [{"context": {"name": "missing"}}]}}}}}});
+    assert!(Engine::from_yaml(&body.to_string(), source_contract::Steps::new()).is_err());
+}
+
+#[test]
 fn concat_takes_a_list_of_at_most_128_parts() {
     for parts in [json!({"a": 1}), Value::Array(vec![json!({"ordinal": {}}); 129])] {
         let body = json!({"read": {"format": "json", "tables": {"rows": {"each": "items", "columns": {"key": {"concat": parts}}}}}});
