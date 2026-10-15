@@ -680,8 +680,9 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
             validate_expr(&args["value"], steps)?;
             args.get("fields").and_then(Value::as_sequence)
-                .filter(|f| (1..=16).contains(&f.len()) && f.iter().all(|n| n.as_str().is_some_and(|n| !n.is_empty())))
-                .ok_or("pluck fields are 1 to 16 names")?;
+                .filter(|f| (1..=16).contains(&f.len()) && f.iter().all(|n| n.as_str().is_some_and(|n| !n.is_empty()))
+                    && f.iter().collect::<std::collections::HashSet<_>>().len() == f.len())
+                .ok_or("pluck fields are 1 to 16 different names")?;
         }
         "transform" => {
             let map = args.as_mapping().filter(|m| m.len() == 2).ok_or("transform requires value and transforms")?;

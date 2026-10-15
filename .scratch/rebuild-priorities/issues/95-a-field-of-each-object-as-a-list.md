@@ -18,5 +18,8 @@ Each OpenFIGI answer holds a list of listings (objects), each with its own FIGI 
 - [x] The operator's word to code it: "Open figi rarely changes do not download again fix engine" (2026-10-15, answering whether to code tickets 94 and 95)
 - [x] GoF consult before code: add both plainly, the way existing primitives are; reuse `sequence`'s shape for `concat` and the `project` children loop for `pluck`; no `as_text`, `join.rs` or `value::element` reuse (their meanings differ) (2026-10-15 17:10 ET)
 - [x] `pluck` in Rust; tests (fields in order, missing and null skipped, a null list, other types refused, bounds, a nested expression read): `tests/pluck.rs`; all 31 crate test binaries pass (2026-10-15 17:10 ET)
-- [ ] READING.md; three-axis review; PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] READING.md: `pluck` documented with the OpenFIGI answer example (2026-10-15 18:27 ET)
+- [x] Three-axis review (Standards, Spec, GoF): no blocking findings; fixed: a test now reaches the 100,000-value limit, a repeated field name is refused at load, and READING.md no longer names `overlap` before ticket 93 merges; GoF: leave it. Crate tests 190 pass (2026-10-15 18:27 ET)
+- [ ] PR, CI green
+- [ ] Merge on the operator's word
+- [ ] Learning → skill: data-platform READING.md gains `pluck` (this PR); nothing else learned

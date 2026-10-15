@@ -38,7 +38,15 @@ fn pluck_takes_a_value_and_1_to_16_field_names() {
     let names: Vec<String> = (0..17).map(|i| format!("f{i}")).collect();
     for args in [json!({"value": {"value": {"path": "data"}}}), json!({"value": {"value": {"path": "data"}}, "fields": []}),
                  json!({"value": {"value": {"path": "data"}}, "fields": names}), json!({"value": {"value": {"path": "data"}}, "fields": [""]}),
-                 json!({"value": {"value": {"path": "data"}}, "fields": ["figi"], "extra": 1})] {
+                 json!({"value": {"value": {"path": "data"}}, "fields": ["figi"], "extra": 1}),
+                 json!({"value": {"value": {"path": "data"}}, "fields": ["figi", "figi"]})] {
         assert!(engine(args).is_err());
     }
+}
+
+#[test]
+fn more_than_100000_values_are_refused() {
+    let args = json!({"value": {"value": {"path": "data"}}, "fields": ["a", "b"]});
+    let data: Vec<Value> = (0..50_001).map(|_| json!({"a": "x", "b": "y"})).collect();
+    assert_eq!(read(args, json!([{"data": data}])).unwrap_err().code, "pluck_limit");
 }
