@@ -10,6 +10,11 @@ from edgar_warehouse.rules.source_engine import ReductionEngine
 from . import source_readings
 
 
+def _sources(spec):
+    """One source extract, or an ordered list of 1..8, as `combine` takes."""
+    return [spec["source"]] if isinstance(spec["source"], str) else spec["source"]
+
+
 def _name(value):
     return isinstance(value, str) and source_readings.NAME.fullmatch(value) is not None
 
@@ -44,10 +49,13 @@ def contract(body, refs):
                 or set(spec) - required - {"member", "last", "last_null", "exclude"}):
             raise ValueError("Reduction group has unknown or missing fields")
         tables = _selected_tables(spec)
-        if (not _name(spec["source"]) or spec["source"] not in refs
+        sources = _sources(spec)
+        if (not isinstance(sources, list) or not 1 <= len(sources) <= 8
+                or not all(_name(source) and source in refs for source in sources)
+                or len(set(sources)) != len(sources)
                 or not isinstance(tables, list) or not 1 <= len(tables) <= 8
                 or not all(_name(table) for table in tables) or len(set(tables)) != len(tables)):
-            raise ValueError("Reduction group selects a declared source and 1..8 distinct tables")
+            raise ValueError("Reduction group selects 1..8 distinct declared sources and 1..8 distinct tables")
         keys = spec["keys"]
         if (not isinstance(keys, list) or not 1 <= len(keys) <= 8
                 or not all(_name(key) for key in keys) or len(set(keys)) != len(keys)):
@@ -68,8 +76,8 @@ def contract(body, refs):
                 raise ValueError("Member reduction requires member and distinct sample columns")
             if "last" in spec and spec["last"] == spec["member"]:
                 raise ValueError("Member and last columns must differ")
-            if "last" in spec and len(tables) != 1:
-                raise ValueError("Last occurrence requires a single table; unions lack source order")
+            if "last" in spec and (len(tables) != 1 or len(sources) != 1):
+                raise ValueError("Last occurrence requires a single table and a single source; unions lack source order")
             if "last_null" in spec and ("last" not in spec or not isinstance(spec["last_null"], str)):
                 raise ValueError("last_null requires a last column and a text replacement")
             if "exclude" in spec:
@@ -94,7 +102,7 @@ def tables(plan, refs, artifacts):
     engine = ReductionEngine(plan)
     input_bytes = row_count = 0
     for source, ref in refs.items():
-        selected = [(name, spec) for name, spec in groups.items() if spec["source"] == source]
+        selected = [(name, spec) for name, spec in groups.items() if source in _sources(spec)]
         consumed = 0
         for _, _, chunk, consumed in source_readings.iter_load(
                 ref, artifacts, max_bytes=plan["max_input_bytes"] - input_bytes,

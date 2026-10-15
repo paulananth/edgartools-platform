@@ -12,7 +12,7 @@ type Members = HashMap<String, Option<String>>;
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
-    pub source: String,
+    pub source: Value,
     pub table: Value,
     pub keys: Vec<String>,
     pub mode: String,
@@ -136,6 +136,15 @@ impl Reduction {
             return Err("Reduction requires 1..32 named groups".into());
         }
         for (group_name, g) in &plan.groups {
+            // One source extract, or an ordered list of 1..8 (as `combine` takes).
+            let sources: Vec<&str> = match &g.source {
+                Value::String(s) => vec![s],
+                Value::Array(a) => a
+                    .iter()
+                    .map(|v| v.as_str().ok_or("Invalid reduction source"))
+                    .collect::<Result<_, _>>()?,
+                _ => return Err("Invalid reduction source".into()),
+            };
             let tables: Vec<&str> = match &g.table {
                 Value::String(s) => vec![s],
                 Value::Array(a) => a
@@ -145,7 +154,14 @@ impl Reduction {
                 _ => return Err("Invalid reduction table".into()),
             };
             if !name(group_name)
-                || !name(&g.source)
+                || sources.is_empty()
+                || sources.len() > 8
+                || sources.iter().any(|s| !name(s))
+                || sources
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != sources.len()
                 || tables.is_empty()
                 || tables.len() > 8
                 || tables.iter().any(|s| !name(s))
@@ -182,7 +198,10 @@ impl Reduction {
                             .as_ref()
                             .is_some_and(|s| name(s) && !g.keys.contains(s) && s != &g.count)
                         && g.last.as_ref().is_none_or(|s| {
-                            name(s) && Some(s) != g.member.as_ref() && tables.len() == 1
+                            name(s)
+                                && Some(s) != g.member.as_ref()
+                                && tables.len() == 1
+                                && sources.len() == 1
                         })
                         && (g.last_null.is_none() || g.last.is_some()) => {}
                 _ => return Err("Invalid reduction mode or columns".into()),
@@ -456,6 +475,29 @@ mod tests {
         let mut refused = Reduction::new(&body.to_string()).unwrap();
         assert!(refused.push("a", vec![row("A", "")]).is_err());
         assert!(refused.finish().is_err());
+    }
+
+    #[test]
+    fn a_group_reads_one_source_or_a_list_and_last_needs_one() {
+        let mut listed = member(None);
+        listed["source"] = serde_json::json!(["first", "second"]);
+        listed.as_object_mut().unwrap().remove("last");
+        assert!(
+            Reduction::new(&plan(serde_json::json!({"a": listed.clone()})).to_string()).is_ok()
+        );
+        let mut with_last = listed.clone();
+        with_last["last"] = Value::String("time".into());
+        assert!(Reduction::new(&plan(serde_json::json!({"a": with_last})).to_string()).is_err());
+        for bad in [
+            serde_json::json!([]),
+            serde_json::json!(["x", "x"]),
+            serde_json::json!([1]),
+            serde_json::json!(["a", "b", "c", "d", "e", "f", "g", "h", "i"]),
+        ] {
+            let mut group = listed.clone();
+            group["source"] = bad;
+            assert!(Reduction::new(&plan(serde_json::json!({"a": group})).to_string()).is_err());
+        }
     }
 
     #[test]
