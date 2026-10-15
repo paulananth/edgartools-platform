@@ -95,7 +95,7 @@ Known before any run (the run-once rule; no new scan of the data):
 
 - Operator, asked whether OpenFIGI comes before the N-PORT Security: "Both, in parallel". The N-PORT Security test run goes ahead now (no provider requests); ticket 80's capture is set up beside it, and its requests wait for the operator's word for them and a key in their own terminal. FIGI's evidence is compared with the filed CUSIP and ISIN pairs before the ISIN matching rule is brought for approval.
 
-## Part 1: the one test run, planned (2026-10-15 12:31 ET)
+## Part 1: the one test run, planned (2026-10-15 12:00 ET)
 
 Configuration: `rules/sources/sec.nport.security/` (`identifiers.yaml`, `source.yaml`, `reduce.yaml`, `combine-pairs.yaml`, `combine.yaml`). Checked first on invented rows only: ISIN cleaning, and which table each holding goes to.
 
