@@ -246,6 +246,7 @@ def test_two_way_rules_migration_preserves_all_document_digests(databases, tmp_p
     for name in ("gleif", "sec.submissions.company"):
         assert digest(files.source(name, tmp_path)) == digest(files.source(name))
     assert digest(files.pipeline("graph-publication", tmp_path)) == digest(files.pipeline("graph-publication"))
+    assert files.identifiers(tmp_path) == files.identifiers()  # the build's identifier types travel with it
 
 
 def test_invalid_proof_and_unsafe_document_names_refused(databases):
