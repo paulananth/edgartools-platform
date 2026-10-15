@@ -72,3 +72,13 @@ change cost. No runtime refactor proposed or performed.
 
 None. This task explains existing contracts and corrects stale entry-point
 documentation. No skill behavior or approval process changed.
+
+## PR preparation
+
+Fresh ship verification: 57 links/anchors, all three editable diagram scenes,
+CLI forms and worker descriptions, and deterministic catalog plan passed.
+The eight catalog tests passed again in 6.96 s. Main is already incorporated.
+Independent coverage audit found zero executable-path changes and no gaps;
+plan audit found all seven original parts complete; pre-landing Standards,
+Spec and GoF review found no issues. No VERSION or CHANGELOG exists, so no
+release files were introduced; package version remains unchanged.
