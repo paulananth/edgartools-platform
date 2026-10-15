@@ -123,7 +123,22 @@ pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool, python_text:
 }
 
 pub fn csv(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
-    let mut reader = ::csv::ReaderBuilder::new().has_headers(true).from_reader(bytes);
+    delimited(bytes, b',', true, max_records)
+}
+
+/// Tab-separated text, read as CSV is: a header line, then one record per
+/// line. A tab never occurs inside a value, so nothing is quoted: a quote
+/// mark is an ordinary character.
+pub fn tsv(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
+    delimited(bytes, b'\t', false, max_records)
+}
+
+fn delimited(bytes: &[u8], delimiter: u8, quoting: bool, max_records: usize) -> Result<El, Rejected> {
+    let mut reader = ::csv::ReaderBuilder::new()
+        .has_headers(true)
+        .delimiter(delimiter)
+        .quoting(quoting)
+        .from_reader(bytes);
     let headers = reader.headers().map_err(malformed)?.clone();
     let mut rows = Vec::new();
     for row in reader.records() {

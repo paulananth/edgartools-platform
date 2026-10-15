@@ -181,6 +181,29 @@ fn jsonl_and_csv_read_one_record_per_line() {
     assert_eq!(csv.read(b"a,b\n1,2,3\n", &Lookups::new()).unwrap_err().code, "malformed");
 }
 
+#[test]
+fn tsv_reads_as_csv_does_with_tabs_and_no_quoting() {
+    let contract = |format: &str| {
+        format!("read:\n  format: {format}\n  tables:\n    rows:\n      each: record\n      columns:\n        a: {{ text: {{ path: a }} }}\n        b: {{ number: {{ path: b }} }}\n")
+    };
+    let csv = configured(&contract("csv"), Steps::new()).unwrap();
+    let tsv = configured(&contract("tsv"), Steps::new()).unwrap();
+    let from_csv = csv.read(b"a,b\nx y,1\nz,\n", &Lookups::new()).unwrap();
+    let from_tsv = tsv.read(b"a\tb\nx y\t1\nz\t\n", &Lookups::new()).unwrap();
+    assert_eq!(from_csv, from_tsv); // the same rows, the same types
+    // A quote mark is an ordinary character: a tab never occurs inside a value.
+    let quoted = tsv.read(b"a\tb\n6\" PIPE \"A\t2\n", &Lookups::new()).unwrap();
+    assert_eq!(quoted.tables["rows"][0]["a"], Val::Str("6\" PIPE \"A".into()));
+    assert_eq!(tsv.read(b"a\tb\n1\t2\t3\n", &Lookups::new()).unwrap_err().code, "malformed");
+    let encoded = contract("tsv").replace("read:\n", "read:\n  encoding: windows-1252\n");
+    let e = configured(&encoded, Steps::new()).unwrap();
+    assert_eq!(e.read(b"a\tb\nSOCI\xC9T\xC9\t1\n", &Lookups::new()).unwrap().tables["rows"][0]["a"], Val::Str("SOCI\u{c9}T\u{c9}".into()));
+    let zip = "read:\n  format: tsv\n  container: zip\n  member: \"B*.tsv\"\n  limits: { max_bytes: 100000, max_member_bytes: 1000 }\n  tables:\n    rows:\n      each: record\n      columns:\n        a: { text: { path: a } }\n";
+    let z = configured(zip, Steps::new()).unwrap();
+    let many = zipped(&[("A.tsv", "a\nx\n"), ("B.tsv", "a\ny\n")]);
+    assert_eq!(z.read(&many, &Lookups::new()).unwrap().tables["rows"][0]["a"], Val::Str("y".into()));
+}
+
 fn zipped(members: &[(&str, &str)]) -> Vec<u8> {
     let mut out = std::io::Cursor::new(Vec::new());
     let mut zip = zip::ZipWriter::new(&mut out);
