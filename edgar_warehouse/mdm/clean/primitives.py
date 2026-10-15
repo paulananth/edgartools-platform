@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
+from .identifier_types import TYPES
 from .names import legal_form_key, sec_legal_form_key
 from .store import Conflict
 
@@ -87,6 +88,12 @@ NORMALIZERS: dict[str, Callable[[Any], str]] = {
     "normalize_text@legal-form-kept-v1": legal_form_key,
     "normalize_text@sec-legal-form-kept-v1": sec_legal_form_key,
 }
+# Ticket 81: each declared identifier type's normalizer, by its versioned name;
+# a declared name never replaces a hand-written one.
+for _kind in TYPES.values():
+    if _kind.normalizer_name in NORMALIZERS:
+        raise ValueError(f"{_kind.normalizer_name} is declared and also written in code")
+    NORMALIZERS[_kind.normalizer_name] = _kind.normalize
 
 
 def normalizer(name: str, doc: dict) -> Callable[[Any], str]:

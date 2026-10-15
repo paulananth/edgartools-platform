@@ -129,16 +129,16 @@ source's parser produces it, not from the raw file, when a parser exists.
 |---|---|
 | `version` | The mapping's own version name, e.g. `acme-firm-record-v1`. |
 | `record_key` | A list of paths that together identify one record. |
-| `record_key_format` | A named format from `FORMATS` (`edgar_warehouse/mdm/clean/adapters.py`), checked and normalized. |
+| `record_key_format` | A named format, checked and normalized: a declared identifier type ("Identifier types", below) or one written in code (`FORMATS`, `edgar_warehouse/mdm/clean/adapters.py`). |
 | `kind` | Every record is this kind (from `KINDS`). |
 | `kind_field`, `kind_values` | The path holding the source's category, and the kind for each category the source accepts, e.g. `CORP: <kind>`. |
 | `probable_kind_values` | What a record in another category probably is. It sorts the record without making an identity. |
 | `classification` | Instead of a kind: the Mastering Policy rule that decides it: `kind`, `rule_id`, `version`. |
 | `effective_at` | The path of the time the record states for itself (when it took effect, or was last updated). Map it whenever the records carry one: without it each record takes the publication's time, if the publication states one, and otherwise none, so a source cannot win a field on recency and the run's checks report no newest record and no age. |
 | `identifiers` | `namespace: path`, e.g. `registry_id: firm.registry_id`. |
-| `identifier_formats` | `namespace: format`, from `FORMATS`. |
+| `identifier_formats` | `namespace: format`, a named format as for `record_key_format`. |
 | `cross_references` | `namespace: path`: an id kept so any document can be looked up by it, **never used to join records** (operator, 2026-09-26: "lookup only"). Matching and binding read `identifiers` only. Name it for what it is (`tax_id`, or `<source>_<id>` for a source's own copy of another register's id); registration refuses a namespace that is also one of `identifiers`, or one a binding rule matches on (the kind's merge rules name them). An empty value is left out. An id of another kind of entity goes on that kind's contract, not here. Look one up with `mdm.cross_reference_lookup(namespace, value)`; `mdm.cross_reference` lists them all. |
-| `cross_reference_formats` | `namespace: format`, from `FORMATS`, for a cross-reference. |
+| `cross_reference_formats` | `namespace: format`, a named format as for `record_key_format`, for a cross-reference. |
 | `name_id` (a cross-reference) | **Only when the records carry no id another source shares.** Map the name: `cross_references: {name_id: <name path>}`, `cross_reference_formats: {name_id: name_id@1}`. The format keeps every token of the name (a share class or series number stays), so one name gives one id in every source, and `mdm.cross_reference_lookup('name_id', <id>)` finds the records named so. Lookup only, like any cross-reference. Measure it first with the data-profiling skill's `match_names.py` (operator, 2026-10-06: "no id exists you just need to create a id using name"). |
 | `reading` | The record's fields and matching values, read by the configured engine: the contract's one statement of them (Issue 20 L7 retired the older `fields`, `matching` and `field_shape` lists, and registration refuses them). One table, `mapped`, read from the whole record (`each: .`), with two object columns: `fields` (`mdm_field: expression`) and `matching` (`name: expression`, the values the matching rules compare, kept with the record outside its fields; `fields: {}` when there are none). Name fields as MDM already names them for the kind (its field list in code, or, for a kind with none, its consumer spec; see Examples). For text, write `value: {path: <path>, path_mode: literal, type: text, null_if_blank: true}`: blank text is no value, and a value that is not text sets the record aside (`invalid_field_shape`). An address is `object: {fields: {<part>: <value, with trim: true>}, omit_nulls: true, null_if_empty: true}` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`; a list of lines is `join: {path, item_path, separator, trim, skip_empty}`. Expressions are the source engine's (`skills/data-platform/READING.md`); the workbook and the catalog read each field's path from here. |
 | `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a relationship record that starts at another record of the same source), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. The `type` must be declared in `rules/merge/relationships.yaml` (below). A path reads one value; for a list, `each: <path>` makes one link per item, its paths starting `item.` (an item with no target key makes no link), and `find: {<name>: {in: <path>, where: {<path>: <text>, a list of texts (any of them), or {path: <path>}}}}` adds the first item of another list whose `where` paths all match, read under `<name>.`; a `where` path through a nested list matches when any element does, and no match leaves `<name>.` paths empty. Neither name may be a field of the record; a mapping that breaks this, or a `find` without `in` and `where`, stops the run. A link in a capacity (a type with `capacities`) names it with `capacity` (fixed text) and replaces `valid_from` with `on` (the record's event date) and `held` (a boolean: true is held; false or absent is a drop, since each record restates its capacities; any other value sets the record aside, `invalid_field_shape`), both required, and an optional `title`: each record is a dated sighting, and the Merge Stage folds the sightings into periods. A link's times are read as they are, unless `time_format` says otherwise: `instant` reads ISO 8601 instants; `date` reads a calendar date (`YYYY-MM-DD`) as the instant its day starts in UTC; a value that is not one sets the record aside (`invalid_time`). Three optional rules set the record aside, each with its own `reason` (list it in `nonblocking_deferred_reasons` when it must not stop the run): `ends: {reason}`, a record whose link names no end (without it, a link with no end is no link); `interval: {reason}`, a link with no start (`valid_from`, or `on` for a capacity), or an end not after its start; `status: {path, values, need_end, reason}`, a status outside `values`, or one in `need_end` with no end. |
@@ -147,6 +147,32 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
 | `retain_deferred` | `true`: keep a record MDM cannot take yet, with its reason. |
 | `native_member` | For a source parsed by native code, the member this contract maps. |
+
+## Identifier types
+
+A new identifier is configuration: declare it once in
+`rules/identifiers/<name>.yaml`, and never write it in code. The declaration
+gives the format `<name>` (for `record_key_format`, `identifier_formats` and
+`cross_reference_formats`) and the normalizer
+`normalize_identifier@<name>-v<version>` (for an Identifier Contract and a
+matching rule).
+
+| Key | Meaning |
+|---|---|
+| `identifier` | The file's name. |
+| `version` | A whole number from 1. Any change to the file is a new version, so a normalizer an approved contract names never changes under it. |
+| `description` | What the identifier is, in plain words. |
+| `parts` | The identifier from left to right: each part a `length` and the `characters` it may hold: `digits`, `letters`, or one character such as `"#"`. |
+| `case` | `upper` (the value is upper-cased) or `as filed`. Outer spaces are always trimmed. |
+| `check_digit` | A family, named as data-profiling names it: `mod 97-10`, `mod 11-2`, `mod 11-10`, `mod 37-36`, `luhn`, `luhn over letter values`, `luhn over letter digits`, `damm`. Leave it out when there is none. |
+| `refuse_one_repeated_character` | `true`: a run of one character (all zeros, all nines) is a stand-in for none, refused even when its check digit holds. |
+
+A value refused for its shape gets the reason `invalid_<name>`; one with a
+wrong check digit, `invalid_<name>_checksum`. Write the declaration from the
+profiling finding: its shape gives `parts` and `case`, its check-digit family
+gives `check_digit`, and its stand-ins say whether to refuse runs. A
+declaration the build cannot run (an unknown key or family) stops the import,
+so a test run catches it.
 
 ## Relationship types
 

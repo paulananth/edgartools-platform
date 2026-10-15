@@ -1,0 +1,15 @@
+# ISIN (ISO 6166): a two-letter country, nine letters or digits, a check digit.
+# A US or Canadian ISIN holds the security's CUSIP as characters 3-11.
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: isin
+version: 1
+description: "Country (2 letters), national number (9), check digit. Upper-cased."
+case: upper
+parts:
+  - length: 2
+    characters: [letters]
+  - length: 9
+    characters: [digits, letters]
+  - length: 1
+    characters: [digits]
+check_digit: luhn over letter digits

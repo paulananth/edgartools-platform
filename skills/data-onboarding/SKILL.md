@@ -323,6 +323,9 @@ blocks; do not ask whether it does.
   The order is part of each record's identity.
 - **Identifiers:** each namespace and its format.
   - Ask about every identifier the source carries; never drop one silently.
+  - An identifier with no format yet is declared, not coded: write
+    `rules/identifiers/<name>.yaml` from its profiling finding
+    ([REFERENCE.md](REFERENCE.md), "Identifier types").
   - Recommend keeping a cross-reference identifier as lookup-only, under its
     own name (operator, 2026-09-26): map it under `cross_references`
     ([REFERENCE.md](REFERENCE.md)).

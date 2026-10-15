@@ -10,6 +10,7 @@ from typing import Any
 from .activation import activated
 from .classification import fired, probable_kind, resolve_rule
 from .evidence import KINDS, assertion, subject_key
+from .identifier_types import TYPES, IdentifierType
 from .store import Conflict, canonical
 
 
@@ -72,6 +73,16 @@ def _name_id(item) -> str:
     return hashlib.sha256(("name_id@1\x1f" + " ".join(tokens)).encode("utf-8")).hexdigest()
 
 
+def _declared(kind: IdentifierType):
+    def checked(item) -> str:
+        value, reason = kind.refusal(item)
+        if reason:
+            raise UnsupportedRecord(reason)
+        return value
+
+    return checked
+
+
 # One table of named formats, read by identifiers, record keys and
 # registration alike, so adding one is one entry here (GoF consult,
 # 2026-09-24: the names were listed in two places and a third was coming).
@@ -80,6 +91,12 @@ FORMATS = {
     "lei": _lei,
     "name_id@1": _name_id,
 }
+# Ticket 81: the declared identifier types (`rules/identifiers/`) are formats
+# too; a declared name never replaces a hand-written one.
+for _name, _kind in TYPES.items():
+    if _name in FORMATS:
+        raise ValueError(f"Identifier type {_name} is declared and also written in code")
+    FORMATS[_name] = _declared(_kind)
 
 
 def format_value(item, format_name=None):

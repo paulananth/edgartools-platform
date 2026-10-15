@@ -205,6 +205,12 @@ def write_source(body: dict, folder: Path) -> None:
         quality_path.write_text(dumps({"version": versions.pop(), "quality": blocks}), encoding="utf-8")
 
 
+def identifiers(root: Path | None = None) -> dict[str, dict]:
+    """The declared identifier types: `rules/identifiers/<name>.yaml`, by name."""
+    folder = (root or ROOT) / "identifiers"
+    return {path.stem: load(path) for path in sorted(folder.glob("*.yaml"))}
+
+
 def pipeline(name: str, root: Path | None = None) -> dict:
     """A platform job uses the same Rules lifecycle as a source document."""
     return load((root or ROOT) / "pipelines" / name / "pipeline.yaml")
