@@ -28,6 +28,6 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
 - [ ] Funds hold securities: `HOLDS` from a fund to a Security
 - [ ] Every gap in a skill found on the way: fixed in the skill, on its own branch
   - [x] ticket 81 (identifier types as configuration, #975 merged), ticket 82 (a reduction reads several source extracts, #978 merged), profiler reuse (#976 merged)
-  - [ ] ticket 83 (no output caps, #981), data-quality and identifier types (#982), profiler issued identifiers (#983): CI green, waiting for the merge word
+  - [x] ticket 83 (no output caps, #981), data-quality and identifier types (#982), profiler issued identifiers (#983): CI green, merged one by one on the operator's words "merge one by one" 2026-10-15 06:07 ET
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Learning → skill
