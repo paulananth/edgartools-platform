@@ -4,8 +4,9 @@
 # (operator, 2026-10-14): "CUSIP and ISIN join" (one CUSIP is one Security;
 # FIGI, ticker and SEDOL are lookup only); "Securities only, options aside";
 # "A" (the Security carries the issuer name and class title as filed).
-# Declared, not switched on: the matching rule activates on its Identifier
-# Contract, verified on the Proving Run's cohort and approved by the operator.
+# Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
+# the matching rule activates on its Identifier Contract, verified on the
+# Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
 version: security-2026-10-14.1
 defaults:
   sources:
@@ -44,6 +45,15 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      # The SEC 13F Proving Run's report (.scratch/onboarding/sec.thirteenf.information_table/proving-run.json).
+      corpus_sha256: 52cb44699ee932e8422bb9a6c5390ef52933308b3482e33d7a739bf81fbffc80
+      approved_by: operator
+      approved_at: "2026-10-15T10:27:01Z"
+      reason: "SEC 13F Security Proving Run (ticket 79), approved in the operator's words: merge 985 when green agreed for the rest.
+        999 local 13F information tables: 20,311 Securities by their CUSIP, 0 CUSIPs on two
+        Securities, 9,631 records set aside (9,603 check digit fails, 28 not CUSIP-shaped),
+        a second pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000

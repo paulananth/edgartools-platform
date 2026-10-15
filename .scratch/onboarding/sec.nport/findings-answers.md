@@ -1,10 +1,10 @@
-# N-PORT findings: answers from the operator's rulings (draft, for approval)
+# N-PORT findings: answers from the operator's rulings (approved)
 
 Findings: `~/.local/share/edgartools/clean-mdm/profiling/sec.nport-2026q2-final/findings.yaml`
 (reused as profiled, operator 2026-10-14: "why cant we reuse the already completed profiling").
 Each of its 25 questions is answered below from a ruling already given (2026-10-14, onboarding log),
 or, where none applies, by the skill's default for a part the tests did not class: kept in bronze
-until a need is ruled. Nothing here is approved until the operator says so.
+until a need is ruled. Approved by the operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest". Each answer is now in its question's `answer` in the findings, and the findings carry `approval.status: approved` (recorded 06:29 ET with data-profiling's `approve`).
 
 ## Masters (what MDM masters from N-PORT)
 

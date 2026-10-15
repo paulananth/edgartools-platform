@@ -55,3 +55,24 @@ Skill: data-onboarding (with data-profiling and data-quality, which it calls). T
 - The data-quality helper drafts **0 checks** for part `thirteenf.cusip`. Of profiling's two items: the CUSIP check digit is the identifier type's (ticket 81: a failing CUSIP is set aside as `invalid_cusip_checksum`, 9,603 records); the class title disagreement (381,219 of 2,953,581 holding rows differ from their CUSIP's most common title) is between holding rows, and each Security record keeps one title after the reduction, so no record-level check can catch it.
 - Decided (follows from the rulings, nothing for the operator to choose): **no `quality.yaml`** for this source. A file with no checks adds a quality version and changes every record id for nothing. The skill now says so (PR #982).
 - The title disagreement, and the reduction keeping the lexically first filed word rather than the most common one, are ticket 84 (A Security's issuer name and class title: which filed words it keeps).
+
+## Approvals (2026-10-15 06:27 ET)
+
+- Operator's words: "merge 985 when green agreed for the rest". "The rest" were the two other questions asked: switch on the Security matching rule `security-cusip` with its CUSIP Identifier Contract, and approve the N-PORT findings answers.
+- `security-cusip` switched on: `rules/merge/policy.yaml` (`automatic_rules`, deterministic) and `rules/merge/kinds/security.yaml` (`identifiers.cusip.verification`: the Proving Run report's sha256 `52cb4469...fc80`, approved 2026-10-15T10:27:01Z). The merge rules load; 367 tests that read them pass.
+- N-PORT findings: the 25 answers written into the questions, then approved with data-profiling's `approve` (06:29 ET).
+
+## plan-parts: N-PORT 2026q2, in dependency order (2026-10-15 06:29 ET)
+
+From the approved findings (`profiling/sec.nport-2026q2-final/findings.yaml`). Reference parts: none ruled (code lists stay in bronze until RDM work picks them up). Metadata: SUBMISSION goes to Bookkeeping.
+
+1. **Security from N-PORT holdings** (master, kind `security`, existing rules `rules/merge/kinds/security.yaml`): CUSIP (`FUND_REPORTED_HOLDING.ISSUER_CUSIP`) joins through `security-cusip`; ISIN (`IDENTIFIERS`) is a second joining identifier and needs its own matching rule, declared and proved before switch-on. Issuer name and issuer LEI as filed, on the Security. Source folder `rules/sources/sec.nport.security/`, code `sec.nport.security.v1`.
+2. **Company: the registrant by CIK** (master, existing kind `company`, a new source for it): `REGISTRANT.CIK` joins through the Company CIK rule; folder `rules/sources/sec.nport.registrant/`.
+3. **Fund** (master, kind `fund_structure`, `fund` profile, new merge rules): series id and series LEI join; IS_SUBFUND_OF its registrant, onboarded together with it.
+4. **HOLDS and the holdings** (transaction, silver target, onboarded separately): each quarter's `FUND_REPORTED_HOLDING` rows land in silver with the Fund's and the Security's MDM ids; MDM keeps one HOLDS link per Fund and Security.
+
+Holding details (`DEBT_SECURITY_REF_INSTRUMENT`, `REPURCHASE_AGREEMENT`, `DESC_REF_*`, `MONTHLY_RETURN_CAT_INSTRUMENT`, `FUND_VAR_INFO`, `NONFOREIGN_EXCHANGE_SWAP`, `EXPLANATORY_NOTE`) stay in bronze. Next: part 1, identify.
+
+## 13F Security: Proving Run under the approved merge rules (2026-10-15 06:38 ET)
+
+- Re-run with the repo's merge rules as switched on (no stand-in verification): **20,311 Securities, 0 CUSIPs on two Securities, 9,631 set aside, the second pass changed nothing**, as before. 9 min 40 s in all; first pass 271 s, second 295 s (75 s on the first run: not investigated, recorded).

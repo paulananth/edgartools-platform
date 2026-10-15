@@ -57,9 +57,10 @@ def proving_policy(approval: dict) -> dict:
     security = body["kinds"]["security"]
     security["identifiers"]["cusip"].setdefault("verification", {"corpus_sha256": "0" * 64, **approval})
     rule = next(r for r in security["rules"] if r["rule_id"] == "security-cusip")
-    body["automatic_rules"] = [*body["automatic_rules"], {
-        "kind": "security", "family": "binding", "rule_id": rule["rule_id"],
-        "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}]
+    if not any(r["rule_id"] == rule["rule_id"] for r in body["automatic_rules"]):  # switched on since
+        body["automatic_rules"] = [*body["automatic_rules"], {
+            "kind": "security", "family": "binding", "rule_id": rule["rule_id"],
+            "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}]
     return body
 
 
