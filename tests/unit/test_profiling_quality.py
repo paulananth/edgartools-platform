@@ -42,6 +42,7 @@ def found(tmp_path_factory):
         issued = _luhn_value(1000 + n) if n != 20 else f"{1000 + n:09d}5"  # one check digit wrong
         if identifiers.luhn(issued) and n == 20:
             issued = f"{1000 + n:09d}6"
+        issued = {30: "N/A", 31: "9999999999"}.get(n, issued)  # stand-ins for no value
         accounts.append([n, ref, status, note, issued])
     _write(folder / "account.csv", ["account_id", "ref_code", "status", "note", "issued_no"], accounts)
     nodes = [["N001", ""]] + [[f"N{n:03d}", f"N{(n - 1) // 3 + 1:03d}"] for n in range(2, 121)]
@@ -68,7 +69,7 @@ def test_shape_outliers_have_rows_examples_and_a_pattern(found):
 
 def test_placeholders_are_counted_with_their_values(found):
     findings, _ = found
-    item, = _items(findings, "account", "placeholder")
+    item, = [q for q in _items(findings, "account", "placeholder") if q["column"] == "note"]
     assert item["column"] == "note" and item["rows"] == 3 and item["examples"] == ["unknown"]
     assert item["proposal"] == "withhold"
 
@@ -77,6 +78,15 @@ def test_check_digit_failures_name_the_family(found):
     findings, _ = found
     item, = _items(findings, "account", "check_digit")
     assert item["column"] == "issued_no" and item["rows"] == 1 and item["args"] == {"family": "luhn", "length": 10}
+
+
+def test_an_identifier_stand_in_is_a_placeholder_not_a_check_digit_defect(found):
+    findings, _ = found
+    item, = [q for q in _items(findings, "account", "placeholder") if q["column"] == "issued_no"]
+    assert item["rows"] == 2 and {"NA", "9999999999"} <= set(item["args"]["values"])
+    part = next(x for x in findings["parts"] if x["part"].endswith("account"))
+    ident, = [i for i in part["identifiers"] if i["column"] == "issued_no"]
+    assert ident["check_digit"] == "luhn" and ident["defective"] is False
 
 
 def test_a_code_list_gets_a_guard_for_codes_not_seen(found):

@@ -85,11 +85,19 @@ def placeholders(facts: Facts) -> list[dict]:
         # Folded as the engine's placeholder test folds: upper case, then only letters and digits of any script.
         plain = f"regexp_replace(upper(CAST({sql_name(c['name'])} AS VARCHAR)), '[^\\pL\\pN]', '', 'g')"
         where = f"{plain} IN ({', '.join(sql_text(p) for p in PLACEHOLDERS)}) OR regexp_full_match({plain}, '0+')"
+        values = list(PLACEHOLDERS)
+        if c["name"] in {i["column"] for i in facts.identifiers}:
+            # An identifier column's stand-ins (`identifiers.STAND_INS`, runs of 0 or 9), as the
+            # engine's test folds them, so they reach quality as placeholders, not check-digit defects.
+            stand_in = identifiers.stand_in_sql(f"CAST({sql_name(c['name'])} AS VARCHAR)")
+            values += sorted({r[0] for r in facts.con.execute(
+                f"SELECT DISTINCT {plain} FROM {sql_name(facts.part)} WHERE {stand_in}").fetchall()} - set(values))
+            where = f"({where}) OR {stand_in}"
         rows = _count(facts, where)
         if rows:
             found.append(item("placeholder", c["name"], rows, _examples(facts, c["name"], where),
                               "a stand-in for no value, which must not match or merge",
-                              proposal="withhold", args={"values": list(PLACEHOLDERS)}))
+                              proposal="withhold", args={"values": values}))
     return found
 
 
@@ -127,14 +135,16 @@ def check_digits(facts: Facts) -> list[dict]:
         c = sql_name(ident["column"])
         values = [r[0] for r in facts.con.execute(
             f"SELECT DISTINCT CAST({c} AS VARCHAR) FROM {sql_name(facts.part)} WHERE {c} IS NOT NULL").fetchall()]
-        failing = [v for v in values if not test(str(v).strip())]
+        # A stand-in is a placeholder (above), never a failing check digit.
+        failing = [v for v in values if not identifiers.is_stand_in(v) and not test(str(v).strip())]
         if not failing:
             continue  # the pass rate came from a sample of distinct values
         where = f"CAST({c} AS VARCHAR) IN (SELECT unnest(?::VARCHAR[]))"
         rows = facts.con.execute(f"SELECT count(*) FROM {sql_name(facts.part)} WHERE {where}", [failing]).fetchone()[0]
         shown = sorted(failing)[:EXAMPLES]
-        column = next((c for c in facts.columns if c["name"] == ident["column"]), {})
-        length = column.get("min_length") if column.get("min_length") == column.get("max_length") else None
+        # The identifier's one length, its stand-ins left out (an "N/A" is not a shorter identifier).
+        lengths = {len(str(v).strip()) for v in values if not identifiers.is_stand_in(v)}
+        length = lengths.pop() if len(lengths) == 1 else None
         found.append(item("check_digit", ident["column"], rows,
                           [sensitivity.mask(v) for v in shown] if ident["column"] in facts.masked else shown,
                           f"the {family} check digit fails: a mistyped or invented identifier",

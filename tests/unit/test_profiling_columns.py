@@ -216,3 +216,13 @@ def test_numbers_issued_under_a_prefix_are_identifier_shaped_but_amounts_are_not
     for name in columns:
         if name != "reg":
             assert not identifiers.identifier_shaped(cols[name]), name
+
+
+def test_the_letter_value_family_reads_as_the_identifier_type_does():
+    # `*@#` read as 36-38 (a private placement's issue number), as the engine's declared type reads them.
+    from edgar_warehouse.mdm.clean import identifier_types
+    rng = random.Random(7)
+    chars = string.digits + string.ascii_uppercase + "*@#"
+    for _ in range(500):
+        value = "".join(rng.choice(chars) for _ in range(9))
+        assert identifiers.luhn_letter_values(value) == identifier_types.luhn_letter_values(value)

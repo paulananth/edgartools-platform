@@ -76,7 +76,8 @@ approval:                       # §9
     evidence: {unique: true, null_rows: 0, persistence: <0..1|null>}
   identifiers:                  # other identifier-shaped columns
     - {column: <col>, shape: <pattern>, check_digit: <family|null>,
-       pass_rate: <0..1>, chance_rate: <0..1>, fill: <0..1>, unique: <0..1>,
+       pass_rate: <0..1>, chance_rate: <0..1>, defective: <bool>,  # under 0.99: failures go to quality
+       fill: <0..1>, unique: <0..1>,
        proposal: cross_reference|record_key|none, why: <words>}
   columns:
     - {name: <col>, type: <detected>, fill: <0..1>, distinct: <n>,

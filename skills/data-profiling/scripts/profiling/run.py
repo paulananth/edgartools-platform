@@ -420,6 +420,7 @@ def _identifier(con, p, c, record_key) -> dict | None:
     return {"column": c["name"], "shape": sensitivity.mask(c["shape"]) if c["shape"] else None,
             "shape_test": identifiers.shape_test(c),
             "check_digit": checked["family"], "pass_rate": checked["pass_rate"], "chance_rate": checked["chance_rate"],
+            "defective": checked["defective"],
             "fill": c["fill"], "unique": c["unique"], "local_counter": dense, "proposal": proposal, "why": why}
 
 

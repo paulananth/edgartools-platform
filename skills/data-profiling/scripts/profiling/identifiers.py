@@ -12,6 +12,9 @@ import random
 import string
 
 BASE36 = {ch: i for i, ch in enumerate(string.digits + string.ascii_uppercase)}
+# A letter-value family also reads `*`, `@` and `#` as 36, 37 and 38, as an identifier type
+# declares it (data-onboarding REFERENCE.md, "Identifier types").
+VALUES = {**BASE36, "*": 36, "@": 37, "#": 38}
 
 # What an identifier column writes for "no value": a written stand-in, compared upper-cased and
 # trimmed with its punctuation kept ("N/A" is one; a bare "NA" may be a real code), or a run of
@@ -70,22 +73,24 @@ def mod37_36(value: str) -> bool:
 
 
 def luhn_letter_values(value: str) -> bool:
-    """Luhn over letters and digits, each character read as its value (0-9, A-Z as 10-35): double
-    every second value from the right and add the digits of each result."""
-    if len(value) < 2 or not value.isalnum() or not value.isascii():
+    """Luhn over letters and digits, each character read as its value (0-9, A-Z as 10-35, then
+    `*@#`): double every second value from the right and add the digits of each result."""
+    value = value.upper()
+    if len(value) < 2 or any(ch not in VALUES for ch in value):
         return False
     total = 0
-    for i, ch in enumerate(reversed(value.upper())):
-        d = BASE36[ch] * (2 if i % 2 else 1)
+    for i, ch in enumerate(reversed(value)):
+        d = VALUES[ch] * (2 if i % 2 else 1)
         total += d // 10 + d % 10
     return total % 10 == 0
 
 
 def luhn_letter_digits(value: str) -> bool:
     """Luhn over the digits of each character's value (A-Z as 10-35, so each letter is two digits)."""
-    if len(value) < 2 or not value.isalnum() or not value.isascii() or value.isdigit():
+    value = value.upper()
+    if len(value) < 2 or any(ch not in VALUES for ch in value) or value.isdigit():
         return False
-    return luhn("".join(str(BASE36[ch]) for ch in value.upper()))
+    return luhn("".join(str(VALUES[ch]) for ch in value))
 
 
 def luhn(value: str) -> bool:
@@ -141,7 +146,7 @@ def check_digits(values: list[str], seed: int = 0) -> dict:
     if len(values) > CHECKED:
         values = random.Random(seed).sample(values, CHECKED)
     if not values:
-        return {"family": None, "rates": {}, "tested": 0}
+        return {"family": None, "pass_rate": None, "defective": False, "chance_rate": None, "rates": {}, "tested": 0}
     rates = {name: round(sum(map(test, values)) / len(values), 6) for name, (test, _) in FAMILIES.items()}
     passing = [(rates[n], n) for n, (_, chance) in FAMILIES.items()
                if rates[n] >= DEFECTIVE and rates[n] >= LIFT * chance]
