@@ -46,6 +46,11 @@ def setup(databases, tmp_path, monkeypatch, request):
         body['acquisition']['feeds']['fixture']['completeness']['format'] = request.param
     elif getattr(request, 'param', None) == 'oversize_bound':
         body['acquisition']['feeds']['fixture']['completeness']['max_bytes'] = transport.MAX_BYTES + 1
+    elif getattr(request, 'param', None) == 'post':  # ticket 92: a mapping API, a JSON array back
+        feed = body['acquisition']['feeds']['fixture']
+        feed['capabilities']['fetch'] = 'https.post'
+        feed['secret_header'] = {'name': 'X-Fixture-Key', 'environment': 'FIXTURE_API_KEY'}
+        feed['completeness'].update(format='json_array', required=[])
     elif getattr(request, 'param', None) == 'invalid_native_contract':
         body['acquisition']['feeds']['fixture']['completeness']['required'] = ['x' * 4096]
     saved = databases.rules.save('source', name, '1', body)
@@ -214,7 +219,7 @@ def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypa
     book, start, _ = setup
     calls = []
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
-    with pytest.raises(ValueError, match='bounded JSON object completeness'):
+    with pytest.raises(ValueError, match='bounded JSON object or array completeness'):
         capture.execute(start(), book.artifacts)
     assert calls == []
 
@@ -378,3 +383,74 @@ def test_corrupt_predecessor_fails_before_get(setup, monkeypatch, damage):
     with pytest.raises((Blocked, ValueError)):
         capture.execute(next_envelope, book.artifacts)
     assert len(calls) == 1
+
+
+SECRET = 'fixture-secret-never-stored'
+JOBS = [{'idType': 'ID_CUSIP', 'idValue': 'FIXTURE01'}]
+
+
+@pytest.mark.parametrize('setup', ['post'], indirect=True)
+def test_post_sends_its_frozen_body_and_key_and_never_keeps_the_key(setup, databases, monkeypatch, tmp_path):
+    book, start, finish = setup
+    monkeypatch.setenv('FIXTURE_API_KEY', SECRET)
+    envelope = start(body=JOBS)
+    called = []
+    def response(request):
+        called.append(request)
+        assert request.method == 'POST' and request.headers['X-Fixture-Key'] == SECRET
+        assert request.headers['Content-Type'] == 'application/json'
+        assert 'If-None-Match' not in request.headers
+        assert request.read() == b'[{"idType":"ID_CUSIP","idValue":"FIXTURE01"}]'
+        return httpx.Response(200, content=b'[{"data":[]}]')
+    http(monkeypatch, response)
+    candidate = capture.execute(envelope, book.artifacts)
+    assert capture.execute(envelope, book.artifacts) == candidate and len(called) == 1  # a retry reuses the snapshot
+    finish(envelope, candidate)
+    written = b''.join(path.read_bytes() for path in tmp_path.rglob('*') if path.is_file())
+    assert SECRET.encode() not in written
+    from sqlalchemy import text
+    with databases.admin.connect() as conn:  # nor in any Journal or control row
+        for schema, table in conn.execute(text("SELECT table_schema, table_name FROM information_schema.tables "
+                                               "WHERE table_schema IN ('change_journal', 'bookkeeping')")):
+            found = conn.execute(text(f'SELECT count(*) FROM "{schema}"."{table}" t WHERE t::text LIKE :s'),
+                                 {'s': f'%{SECRET}%'}).scalar()
+            assert found == 0, (schema, table)
+
+
+@pytest.mark.parametrize('setup', ['post'], indirect=True)
+@pytest.mark.parametrize('case', ['missing_key', 'no_body', 'object_back'])
+def test_post_refusals(setup, monkeypatch, case):
+    book, start, _ = setup
+    if case != 'missing_key':
+        monkeypatch.setenv('FIXTURE_API_KEY', SECRET)
+    else:
+        monkeypatch.delenv('FIXTURE_API_KEY', raising=False)
+    envelope = start() if case == 'no_body' else start(body=JOBS)
+    called = []
+    http(monkeypatch, lambda request: called.append(request) or httpx.Response(200, content=b'{"ok":true}'))
+    from edgar_warehouse.rules.source_engine import SourceRejected
+    with pytest.raises((ValueError, SourceRejected)) as refused:  # an object back fails its array completeness
+        capture.execute(envelope, book.artifacts)
+    assert SECRET not in str(refused.value)
+    assert len(called) == (1 if case == 'object_back' else 0)
+
+
+def test_a_get_feed_never_sends_a_body(setup, monkeypatch):
+    book, start, _ = setup
+    called = []
+    http(monkeypatch, lambda request: called.append(request) or httpx.Response(200, content=b'{"ok":true}'))
+    with pytest.raises(ValueError, match='Only a POST feed'):
+        capture.execute(start(body=JOBS), book.artifacts)
+    assert not called
+
+
+@pytest.mark.parametrize('setup', ['post'], indirect=True)
+def test_a_failed_post_keeps_no_key_in_its_error(setup, monkeypatch):
+    book, start, _ = setup
+    monkeypatch.setenv('FIXTURE_API_KEY', SECRET)
+    def broken(request):
+        raise httpx.ConnectError('refused', request=request)
+    http(monkeypatch, broken)
+    with pytest.raises(ValueError, match='Provider request failed: ConnectError') as refused:
+        capture.execute(start(body=JOBS), book.artifacts)
+    assert refused.value.__suppress_context__ and SECRET not in str(refused.value)  # the httpx error, with its headers, is not chained

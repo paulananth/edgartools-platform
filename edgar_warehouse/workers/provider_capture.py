@@ -58,7 +58,7 @@ def _load(envelope, artifacts):
     request = json_value(artifacts.verified(envelope['input'], max_bytes=HEADER_BYTES))
     required = {'version', 'feed', 'url', 'scope', 'requested_at', 'requests_per_second', 'document'}
     if (not isinstance(request, dict) or not required <= set(request)
-            or set(request) - required - {'previous'} or type(request['version']) is not int
+            or set(request) - required - {'previous', 'body'} or type(request['version']) is not int
             or request['version'] != 1 or request['document'] not in ('main', 'page')):
         raise ValueError('Unsupported configured capture request')
     export = artifacts.json(envelope['rules'])
@@ -75,10 +75,16 @@ def _load(envelope, artifacts):
     if type(request['requests_per_second']) is not int or not 1 <= request['requests_per_second'] <= 9:
         raise ValueError('Capture rate must be an exact integer from 1 to 9')
     completeness = configuration.get('page_completeness') if request['document'] == 'page' else configuration['completeness']
-    if (completeness is None or completeness['format'] != 'json'
+    if (completeness is None or completeness['format'] not in ('json', 'json_array')
             or not 1 <= completeness['max_bytes'] <= transport.MAX_BYTES):
-        raise ValueError('Capture v1 supports bounded JSON object completeness only')
+        raise ValueError('Capture v1 supports bounded JSON object or array completeness only')
     capability = configuration['capabilities']['fetch']
+    if capability == 'https.post':
+        # The body sits in the request document, itself at most HEADER_BYTES (1 MiB).
+        if 'body' not in request or 'previous' in request:
+            raise ValueError('A POST capture carries its frozen body and no predecessor')
+    elif 'body' in request:
+        raise ValueError('Only a POST feed sends a body')
     url = transport.approved_url(request['url'], configuration['url_prefixes'], capability)
     resource = transport.provider_resource(url, capability)
     if resource not in {p['resource'] for p in envelope['claim']['proof']}:
@@ -94,11 +100,27 @@ def _load(envelope, artifacts):
     return request, authority, completeness, url
 
 
+def _sending(configuration, request):
+    """The method, body and extra headers of one request. A POST feed's key is read
+    here, for this request only: never stored, logged or put in an error (ticket 92)."""
+    if configuration['capabilities']['fetch'] != 'https.post':
+        return 'GET', None, {}
+    headers = {'Content-Type': 'application/json'}
+    secret = configuration.get('secret_header')
+    if secret:
+        key = os.environ.get(secret['environment'], '')
+        if not key or any(ord(c) < 33 or ord(c) > 126 for c in key):
+            raise ValueError(f"Capture needs {secret['environment']} set in the operator's environment")
+        headers[secret['name']] = key
+    return 'POST', canonical(request['body']).encode(), headers
+
+
 def _completeness_engine(configuration):
     # Only checks cross into Rust; no Python JSON-domain parsing or body copying
     # into a Python row. Required member paths are literal, including dots.
-    assertions = [{'test': {'test': {'path': '.', 'kind': 'object'}},
-                   'reason': 'Capture payload must be a JSON object'}]
+    shape = 'array' if configuration['format'] == 'json_array' else 'object'
+    assertions = [{'test': {'test': {'path': '.', 'kind': shape}},
+                   'reason': f'Capture payload must be a JSON {shape}'}]
     assertions += [{'test': {'test': {'path': k, 'kind': 'present', 'path_mode': 'member'}},
                     'reason': f'Capture payload lacks required member {k}'} for k in configuration['required']]
     if not configuration['allow_empty']:
@@ -271,14 +293,16 @@ def execute(envelope, artifacts):
             identity = os.environ.get('EDGAR_IDENTITY', '')
             if authority['configuration']['capabilities']['fetch'] == 'sec.conditional' and '@' not in identity:
                 raise ValueError('SEC capture requires the configured identity with email')
+            method, body, headers = _sending(authority['configuration'], request)
             def permission():
                 control.renew(envelope)
                 journal.append(_event(envelope, request, authority, 'authorized', [envelope['input'], envelope['rules']], at=request['requested_at']))
-                control.renew(envelope)  # Journal readback may outlive a lease; check again before GET.
+                control.renew(envelope)  # Journal readback may outlive a lease; check again before the request.
             response = transport.fetch(url, identity, max_bytes=completeness['max_bytes'],
                                        requests_per_second=request['requests_per_second'], before_request=permission,
                                        etag=previous[0]['etag'] if previous else None,
-                                       last_modified=previous[0]['last_modified'] if previous else None)
+                                       last_modified=previous[0]['last_modified'] if previous else None,
+                                       method=method, body=body, extra_headers=headers)
             data = previous[1] if response.status == 304 else response.content
             _complete(data, completeness)
             control.renew(envelope)
