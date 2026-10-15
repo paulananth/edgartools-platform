@@ -26,6 +26,8 @@ AUTHORIZATION = 'acquisition'
 OUTCOME = 'acquisition.outcome'
 HEADER_BYTES = 1024**2
 SNAPSHOT_OVERHEAD = HEADER_BYTES + 65536
+# A POST feed's request carries its JSON body, frozen with the request (ticket 92).
+BODY_BYTES = 1024**2
 
 
 def runtime_files():
@@ -58,7 +60,7 @@ def _load(envelope, artifacts):
     request = json_value(artifacts.verified(envelope['input'], max_bytes=HEADER_BYTES))
     required = {'version', 'feed', 'url', 'scope', 'requested_at', 'requests_per_second', 'document'}
     if (not isinstance(request, dict) or not required <= set(request)
-            or set(request) - required - {'previous'} or type(request['version']) is not int
+            or set(request) - required - {'previous', 'body'} or type(request['version']) is not int
             or request['version'] != 1 or request['document'] not in ('main', 'page')):
         raise ValueError('Unsupported configured capture request')
     export = artifacts.json(envelope['rules'])
@@ -75,10 +77,15 @@ def _load(envelope, artifacts):
     if type(request['requests_per_second']) is not int or not 1 <= request['requests_per_second'] <= 9:
         raise ValueError('Capture rate must be an exact integer from 1 to 9')
     completeness = configuration.get('page_completeness') if request['document'] == 'page' else configuration['completeness']
-    if (completeness is None or completeness['format'] != 'json'
+    if (completeness is None or completeness['format'] not in ('json', 'json_array')
             or not 1 <= completeness['max_bytes'] <= transport.MAX_BYTES):
         raise ValueError('Capture v1 supports bounded JSON object completeness only')
     capability = configuration['capabilities']['fetch']
+    if capability == 'https.post':
+        if 'body' not in request or 'previous' in request or len(canonical(request['body']).encode()) > BODY_BYTES:
+            raise ValueError('A POST capture carries its frozen body, at most 1 MiB, and no predecessor')
+    elif 'body' in request:
+        raise ValueError('Only a POST feed sends a body')
     url = transport.approved_url(request['url'], configuration['url_prefixes'], capability)
     resource = transport.provider_resource(url, capability)
     if resource not in {p['resource'] for p in envelope['claim']['proof']}:
@@ -97,8 +104,9 @@ def _load(envelope, artifacts):
 def _completeness_engine(configuration):
     # Only checks cross into Rust; no Python JSON-domain parsing or body copying
     # into a Python row. Required member paths are literal, including dots.
-    assertions = [{'test': {'test': {'path': '.', 'kind': 'object'}},
-                   'reason': 'Capture payload must be a JSON object'}]
+    shape = 'array' if configuration['format'] == 'json_array' else 'object'
+    assertions = [{'test': {'test': {'path': '.', 'kind': shape}},
+                   'reason': f'Capture payload must be a JSON {shape}'}]
     assertions += [{'test': {'test': {'path': k, 'kind': 'present', 'path_mode': 'member'}},
                     'reason': f'Capture payload lacks required member {k}'} for k in configuration['required']]
     if not configuration['allow_empty']:
@@ -271,6 +279,17 @@ def execute(envelope, artifacts):
             identity = os.environ.get('EDGAR_IDENTITY', '')
             if authority['configuration']['capabilities']['fetch'] == 'sec.conditional' and '@' not in identity:
                 raise ValueError('SEC capture requires the configured identity with email')
+            post = authority['configuration']['capabilities']['fetch'] == 'https.post'
+            secret = authority['configuration'].get('secret_header')
+            headers = {}
+            if secret:
+                # Read for this request only: never stored, logged or put in an error.
+                key = os.environ.get(secret['environment'], '')
+                if not key or any(ord(c) < 33 or ord(c) > 126 for c in key):
+                    raise ValueError(f"Capture needs {secret['environment']} set in the operator's environment")
+                headers[secret['name']] = key
+            if post:
+                headers['Content-Type'] = 'application/json'
             def permission():
                 control.renew(envelope)
                 journal.append(_event(envelope, request, authority, 'authorized', [envelope['input'], envelope['rules']], at=request['requested_at']))
@@ -278,7 +297,10 @@ def execute(envelope, artifacts):
             response = transport.fetch(url, identity, max_bytes=completeness['max_bytes'],
                                        requests_per_second=request['requests_per_second'], before_request=permission,
                                        etag=previous[0]['etag'] if previous else None,
-                                       last_modified=previous[0]['last_modified'] if previous else None)
+                                       last_modified=previous[0]['last_modified'] if previous else None,
+                                       method='POST' if post else 'GET',
+                                       body=canonical(request['body']).encode() if post else None,
+                                       extra_headers=headers)
             data = previous[1] if response.status == 304 else response.content
             _complete(data, completeness)
             control.renew(envelope)

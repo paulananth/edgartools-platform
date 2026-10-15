@@ -1,4 +1,5 @@
-"""One bounded authorized GET; scheduling, retries and receipts belong to callers."""
+"""One bounded authorized GET, or POST of a frozen body (ticket 92); scheduling, retries and
+receipts belong to callers."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -60,14 +61,21 @@ class Response:
 
 
 def fetch(url: str, identity: str, *, max_bytes: int, requests_per_second: int,
-          before_request, etag=None, last_modified=None) -> Response:
+          before_request, etag=None, last_modified=None, method='GET', body=None,
+          extra_headers=None) -> Response:
+    """A POST sends `body` with `extra_headers` (a key the caller read for this request
+    only) and takes status 200 only; it is never conditional."""
     if type(max_bytes) is not int or not 1 <= max_bytes <= MAX_BYTES:
         raise ValueError('Capture requires a supported explicit response byte bound')
     if type(requests_per_second) is not int or not 1 <= requests_per_second <= 9:
         raise ValueError('Capture rate must be an exact integer from 1 to 9')
     if not isinstance(identity, str) or not identity or any(ord(c) < 32 or ord(c) > 126 for c in identity):
         raise ValueError('Capture requires a printable User-Agent')
-    headers = {'User-Agent': identity, 'Accept': '*/*'}
+    if method not in ('GET', 'POST') or (method == 'POST') != (body is not None):
+        raise ValueError('Capture is a GET, or a POST with its frozen body')
+    if method == 'POST' and (etag is not None or last_modified is not None):
+        raise ValueError('A POST capture is never conditional')
+    headers = {'User-Agent': identity, 'Accept': '*/*', **(extra_headers or {})}
     if validator(etag) is not None:
         headers['If-None-Match'] = etag
     if validator(last_modified) is not None:
@@ -79,8 +87,8 @@ def fetch(url: str, identity: str, *, max_bytes: int, requests_per_second: int,
         before_request()
         started = time.monotonic()
         try:
-            with client.stream('GET', url, headers=headers) as response:
-                if response.status_code not in (200, 304):
+            with client.stream(method, url, headers=headers, content=body) as response:
+                if response.status_code not in ((200, 304) if method == 'GET' else (200,)):
                     raise ValueError('Provider did not return 200 or conditional 304')
                 found_etag = validator(response.headers.get('etag'))
                 modified = validator(response.headers.get('last-modified'))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from uuid import NAMESPACE_URL, uuid5
 
 from edgar_warehouse.control_contract import Blocked, digest, reference
@@ -35,6 +37,7 @@ def acquisition(document: dict) -> dict:
                 "required_producers",
                 "url_prefixes",
                 "authorizations",
+                "secret_header",
             }
             or not {
                 "family",
@@ -67,19 +70,34 @@ def acquisition(document: dict) -> dict:
             raise Blocked("Feed requires capture and fetch capability selections")
         if value["capabilities"]["capture"] != "provider.capture" or value[
             "capabilities"
-        ]["fetch"] not in {"http.conditional", "sec.conditional"}:
+        ]["fetch"] not in {"http.conditional", "sec.conditional", "https.post"}:
             raise Blocked("Unsupported acquisition capability")
+        # A provider that wants a key gets it in one named header, read from a
+        # named environment variable at the request (ticket 92); only a POST
+        # feed (`https.post`: a frozen JSON body, status 200 only) declares one.
+        secret = value.get("secret_header")
+        if secret is not None and (
+            value["capabilities"]["fetch"] != "https.post"
+            or not isinstance(secret, dict)
+            or set(secret) != {"name", "environment"}
+            or not isinstance(secret["name"], str)
+            or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", secret["name"])
+            or not isinstance(secret["environment"], str)
+            or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", secret["environment"])
+        ):
+            raise Blocked("A secret header is a header name and an environment variable, on a POST feed only")
         completeness = value["completeness"]
         if (
             not isinstance(completeness, dict)
             or set(completeness) != {"format", "required", "allow_empty", "max_bytes"}
             or completeness["format"]
-            not in {"json", "xml", "zip", "text", "ticker_catalog"}
+            not in {"json", "json_array", "xml", "zip", "text", "ticker_catalog"}
             or not isinstance(completeness["required"], list)
             or any(not isinstance(k, str) or not k for k in completeness["required"])
             or type(completeness["allow_empty"]) is not bool
             or type(completeness["max_bytes"]) is not int
             or not 1 <= completeness["max_bytes"] <= 1024**3
+            or completeness["format"] == "json_array" and completeness["required"]
         ):
             raise Blocked(
                 "Feed completeness requires supported format, required members, empty policy and size bound"

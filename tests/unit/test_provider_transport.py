@@ -123,3 +123,27 @@ def test_capture_runtime_pins_transport_evidence_and_native_engine(tmp_path, mon
     first = runtime(capture)
     binary.write_bytes(b'changed')
     assert runtime(capture) != first
+
+
+def test_a_post_sends_its_body_and_extra_headers_and_takes_200_only(monkeypatch):
+    seen = []
+    def respond(request):
+        seen.append((request.method, request.read(), request.headers.get('X-Key')))
+        return httpx.Response(200, content=b'[]')
+    client(monkeypatch, respond)
+    monkeypatch.setattr(transport.time, 'sleep', lambda pause: None)
+    result = fetch(before_request=lambda: None, method='POST', body=b'[1]', extra_headers={'X-Key': 'k'})
+    assert seen == [('POST', b'[1]', 'k')] and result.status == 200
+    client(monkeypatch, lambda request: httpx.Response(304))
+    with pytest.raises(ValueError, match='did not return'):
+        fetch(before_request=lambda: None, method='POST', body=b'[1]')
+
+
+@pytest.mark.parametrize('kwargs', [{'method': 'POST'}, {'body': b'[1]'}, {'method': 'PUT', 'body': b'x'},
+                                    {'method': 'POST', 'body': b'[1]', 'etag': 'W/"one"'}])
+def test_a_post_is_frozen_and_never_conditional(monkeypatch, kwargs):
+    calls = []
+    client(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
+    with pytest.raises(ValueError):
+        fetch(before_request=lambda: None, **kwargs)
+    assert not calls

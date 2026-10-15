@@ -5,7 +5,8 @@ worker/verifier protocol. The configured Rust engine checks JSON syntax, the
 object root, required members and the empty policy. Bookkeeping enforces frozen
 work and leases; Change Journal records authorization and completed evidence.
 
-The offline qualification covers HTTPS JSON objects only, at most 128 MiB and
+The offline qualification covers HTTPS JSON objects (and, for a POST feed,
+JSON arrays), at most 128 MiB and
 1–9 requests per second. XML, ZIP, text and `ticker_catalog` completeness are
 refused before HTTP. The Company source still selects `artifact.copy` for
 capture. Live SEC acquisition, continuation discovery/expansion, producer
@@ -56,6 +57,36 @@ edgar-warehouse workers verify provider.capture "$RUN_ID" --reports "$REPORTS_UR
 Set `BOOKKEEPING_CLEAN_DATABASE_URL` to the appropriate login and
 `CHANGE_JOURNAL_DATABASE_URL` to the restricted Journal login. These commands
 do not author, qualify, approve or activate a Source version.
+
+## A POST with a key (ticket 92)
+
+A provider whose data is a mapping API (it answers a JSON body of identifiers)
+is captured with the fetch capability `https.post`. That one setting means: a
+POST of the request's frozen `body` (any JSON value, at most 1 MiB, written in
+the request document, so its hash is in the snapshot's `request` reference and
+in the Journal evidence), `Content-Type: application/json`, no conditional
+headers and no `previous`, and status 200 only. A GET feed's request may not
+carry a `body`.
+
+A feed may declare one `secret_header: {name, environment}` (only with
+`https.post`): the header's value is read from the named environment variable
+for each request and sent only to the provider. It never enters the request,
+the snapshot, the receipt, the Journal, a log or an error. A missing or empty
+variable stops the capture before the authorization event and before any
+request. The operator sets it in their own terminal; it is never typed into a
+chat.
+
+A mapping API answers with a JSON array: declare completeness
+`format: json_array` with `required: []` (members of an array are not
+named). Everything else above (approved URL prefix, rate, leases, byte
+bound, snapshot, retry without sending again, independent readback) is the
+same as for GET.
+
+```json
+{"version": 1, "feed": "mapping", "url": "https://provider.example/v3/mapping",
+ "scope": {"batch": "0001"}, "document": "main", "requested_at": "2026-10-15T00:00:00+00:00",
+ "requests_per_second": 4, "body": [{"idType": "ID_CUSIP", "idValue": "000000000"}]}
+```
 
 ## Evidence and recovery
 

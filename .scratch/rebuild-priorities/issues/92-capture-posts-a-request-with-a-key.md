@@ -2,7 +2,7 @@
 
 Priority: 92, tier 2. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine). Status: open, waiting for the operator's word to code it. Unblocks: 80 (Onboard OpenFIGI with the skills).
+Type: task (engine). Status: in progress (branch `claude/openfigi-capture`). Unblocks: 80 (Onboard OpenFIGI with the skills).
 
 ## Why
 
@@ -19,9 +19,9 @@ The configured capture (`edgar_warehouse/workers/provider_capture.py` over `prov
 
 ## Checklist
 
-- [ ] The operator's word to code it
-- [ ] GoF consult: `provider_capture.py`, `provider_transport.py`, `acquisition_authority.py`
-- [ ] POST with a frozen body; one secret header from a named environment variable, redacted everywhere
-- [ ] Tests on a local HTTP server only (no provider request): body frozen and replayed, header sent, never stored or printed, a missing variable refused before any request, GET captures unchanged
+- [x] The operator's word to code it: "Code 92 and test (Recommended)" (2026-10-15, answering "Do I have your word to code ticket 92 ... and then to run a first small test capture"); approved URL from the operator: `https://api.openfigi.com/v3` ("Use this url"); the documentation page shows the Apache 2.0 licence
+- [x] GoF consult before code: the fetch capability (`https.post`) is the one setting, not a second `request.method`; POST as keyword arguments of `fetch` so the GET safety code is not copied (2026-10-15 12:16 ET)
+- [x] POST with a frozen body; one secret header from a named environment variable, never stored; completeness `json_array` (2026-10-15 12:33 ET)
+- [x] Tests offline only (httpx MockTransport, no provider request): body sent and frozen, a retry reuses the snapshot, the key header sent and found in no written byte, a missing key refused before any request, a POST without body, a GET with a body and an object answer refused; GET captures unchanged. 60 unit and 41 integration (disposable PostgreSQL 16) tests pass (2026-10-15 12:33 ET)
 - [ ] READING.md or the data-platform skill's capture section; three-axis review; PR, CI green, merge on the operator's word
 - [ ] Learning → skill
