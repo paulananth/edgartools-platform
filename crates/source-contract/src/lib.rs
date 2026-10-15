@@ -43,7 +43,7 @@ mod combination;
 mod tree;
 mod xml;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -91,8 +91,10 @@ impl std::error::Error for Rejected {}
 pub type Step = Box<dyn Fn(&Val) -> Result<Val, String> + Send + Sync>;
 pub type Steps = BTreeMap<String, Step>;
 pub type Row = BTreeMap<String, Val>;
-/// Named sets the caller supplies for `in_lookup` checks (an approved scope).
-pub type Lookups = BTreeMap<String, BTreeSet<String>>;
+/// Named sets the caller supplies for `in_lookup` checks, `member` and
+/// `member_value` (an approved scope, or a key's values).
+pub type Lookups = BTreeMap<String, LookupSet>;
+pub use lookup_sets::LookupSet;
 
 /// A record set aside by a check, with the rules file's reason.
 #[derive(Clone, Debug, PartialEq)]
@@ -110,7 +112,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 5] = ["xml", "json", "jsonl", "csv", "tsv"];
-const PRIMITIVES: [&str; 22] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member", "project", "recover", "transform", "sequence"];
+const PRIMITIVES: [&str; 23] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "join", "member", "member_value", "project", "recover", "transform", "sequence"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -382,7 +384,7 @@ impl Engine {
 /// Child calls only: literal const/default/reference data is never executable.
 pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
     let mut children = Vec::new();
-    for call in ["lookup", "member"] {
+    for call in ["lookup", "member", "member_value"] {
         if let Some(key) = expr.get(call).and_then(|args| args.get("key")) { children.push(key); }
     }
     if let Some(steps) = expr.get("steps").and_then(Value::as_sequence) { children.extend(steps); }
@@ -622,7 +624,13 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
             let subject = setting(check, "column").or(setting(check, "path"));
             let complete = match kind {
                 "in_set" => subject.is_some() && check.get("values").and_then(Value::as_sequence).is_some(),
-                "in_lookup" => subject.is_some() && setting(check, "lookup").is_some(),
+                "in_lookup" => {
+                    let named = read.get("lookup_sets").and_then(|sets| sets.get(setting(check, "lookup").unwrap_or_default()));
+                    if named.and_then(|spec| spec.get("pairs")).is_some() {
+                        return Err("check in_lookup needs a membership set, not a pair set".into());
+                    }
+                    subject.is_some() && setting(check, "lookup").is_some()
+                }
                 "count" => setting(check, "path").is_some() && check.get("equals").and_then(Value::as_u64).is_some(),
                 "before" => setting(check, "column").is_some() && setting(check, "until").is_some(),
                 _ => subject.is_some(),
@@ -753,6 +761,10 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             lookup_sets::validate_call(args)?;
             validate_expr(&args["key"], steps)?;
         }
+        "member_value" => {
+            lookup_sets::validate_value_call(args)?;
+            validate_expr(&args["key"], steps)?;
+        }
         "lookup" => {
             reference::validate_call(args)?;
             validate_expr(&args["key"], steps)?;
@@ -880,7 +892,7 @@ impl Record<'_> {
                             let set = lookups
                                 .get(name)
                                 .ok_or_else(|| Rejected::new("missing_lookup", format!("the caller gave no {name}")))?;
-                            text.is_some_and(|t| set.contains(&t))
+                            match text { Some(t) => set.contains(&t)?, None => false }
                         }
                     };
                     (!held).then_some("")
@@ -1212,6 +1224,10 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
         "member" => {
             let key = eval(engine, context, lookups, document, item, ordinal, &args["key"])?;
             lookup_sets::member(lookups, setting(args,"lookup").unwrap(), &key)
+        }
+        "member_value" => {
+            let key = eval(engine, context, lookups, document, item, ordinal, &args["key"])?;
+            lookup_sets::member_value(lookups, setting(args,"lookup").unwrap(), &key, setting(args,"on_many").unwrap())
         }
         "ordinal" => Ok(Val::Int(ordinal)),
         "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),

@@ -689,13 +689,46 @@ lazy. This declaration also bounds supplied sets used by `in_lookup`; legacy
 undeclared eager membership retains its existing semantics.
 
 Declare at most 16 sets, with nonempty names of at most 128 UTF-8 bytes.
-Each set declares positive `max_values` (at most 1,000,000), `max_bytes`
-(at most 64 MiB), and `max_value_bytes` (at most 16,384). Supplied names must
+Each set declares positive `max_values` (at most 100,000,000), `max_bytes`
+(at most 16 GiB), and `max_value_bytes` (at most 16,384): ceilings, not caps
+(ticket 91, as ticket 83); declare the measured size. Supplied names must
 exactly match the declarations, including for empty input. Raw counts and
-UTF-8 bytes are bounded before duplicate removal; aggregate raw key bytes
-across sets must not exceed 64 MiB. The native reader freezes and indexes
-values once before callbacks. They belong in lookup receipts, not scalar
-context or oversized frozen reference tables.
+UTF-8 bytes are bounded before duplicate removal; aggregate raw bytes across
+sets must not exceed 16 GiB. The native reader freezes and indexes values once
+before callbacks. They belong in lookup receipts, not scalar context or
+oversized frozen reference tables.
+
+### A key's value from a pair set (a join in one streamed pass)
+
+When a table needs a value that sits in another table under the same key (a
+holding's identifier, kept in a table of identifier rows), declare a **pair
+set** with `pairs: true` and read the value with `member_value`:
+
+```yaml
+read:
+  lookup_sets:
+    isin: {max_values: 5000000, max_bytes: 134217728, max_value_bytes: 64, pairs: true}
+  tables:
+    holdings:
+      each: '.'
+      columns:
+        isin:
+          member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+```
+
+`member_value` gives the key's one value, null for an absent or null key, and
+for a key with several distinct values either null (`on_many: "null"`) or a
+refusal (`on_many: error`, code `lookup_many`). A value is never chosen from
+several. Write `on_many: "null"` quoted: unquoted, YAML reads it as no value
+and the contract is refused. Each item of a pair set is a key and a value,
+both text (a list in a JSON receipt; a tuple when Python supplies the set);
+`max_value_bytes` bounds each, `max_bytes` both together and `max_values`
+counts pairs. A contract whose `member` or `in_lookup` names a pair set, or
+whose `member_value` names a membership set, is refused when it loads, and a
+supplied set of the other kind is refused when it is read, so one is never
+read as the other. Derive the set
+from a verified source extract (version-2 receipt, below) with `value_column`
+beside `column`: the reading is streamed once, with no materialized join.
 
 The `source.read` **worker input manifest** uses version 3 for these receipts;
 this is distinct from the pipeline's run manifest:
@@ -1299,7 +1332,9 @@ A version-2 lookup receipt derives declared sets instead of embedding values:
 }
 ```
 
-`readings` contains 1..256 pinned producer source extracts. Bounds cover every
+`readings` contains 1..256 pinned producer source extracts. `max_input_bytes`
+is at most 16 GiB and `max_input_rows` at most 100,000,000. A pair set
+(`pairs: true`) also names `value_column`. Bounds cover every
 producer table and partition, including unselected rows. Selected values must
 be present text. Raw duplicates count toward declared set limits before
 indexing; authentication must reach every producer's end before target input

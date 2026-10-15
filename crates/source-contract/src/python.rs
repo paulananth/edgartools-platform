@@ -17,33 +17,49 @@ fn rejected(error: Rejected) -> PyErr {
 }
 
 fn indexed_sets(engine: &Engine, lookups: Option<&Bound<'_, PyDict>>) -> PyResult<Lookups> {
+    use crate::lookup_sets::{LookupSet, MAX_AGGREGATE_BYTES};
+    let limit = |detail: &str| rejected(Rejected::new("limit_exceeded", detail));
     let mut sets = Lookups::new();
     let Some(lookups) = lookups else { return Ok(sets) };
     let mut aggregate = 0usize;
     for (name, values) in lookups.iter() {
         let name: String = name.extract()?;
         let bounds = crate::lookup_sets::input_bounds(&engine.read, &name).map_err(rejected)?;
-        let mut chosen = std::collections::BTreeSet::new();
+        let pairs = bounds.is_some_and(|(_, _, _, pairs)| pairs);
+        let mut members = std::collections::BTreeSet::new();
+        let mut keyed = std::collections::BTreeSet::new();
         let mut count = 0usize;
         let mut bytes = 0usize;
         for item in values.try_iter()? {
             let item = item?;
-            count = count.checked_add(1).ok_or_else(|| rejected(Rejected::new("limit_exceeded", "lookup count overflow")))?;
-            if bounds.is_some_and(|(maximum,_,_)| count > maximum) {
-                return Err(rejected(Rejected::new("limit_exceeded", "lookup raw values exceed max_values")));
+            count = count.checked_add(1).ok_or_else(|| limit("lookup count overflow"))?;
+            if bounds.is_some_and(|(maximum, _, _, _)| count > maximum) {
+                return Err(limit("lookup raw values exceed max_values"));
             }
-            let text = item.downcast::<PyString>()?.to_str()?;
-            if let Some((_,maximum,max_value)) = bounds {
-                if text.len() > max_value { return Err(rejected(Rejected::new("limit_exceeded", "lookup key exceeds max_value_bytes"))); }
-                bytes = bytes.checked_add(text.len()).ok_or_else(|| rejected(Rejected::new("limit_exceeded", "lookup byte count overflow")))?;
-                aggregate = aggregate.checked_add(text.len()).ok_or_else(|| rejected(Rejected::new("limit_exceeded", "lookup byte count overflow")))?;
-                if bytes > maximum || aggregate > 64 * 1024 * 1024 {
-                    return Err(rejected(Rejected::new("limit_exceeded", "lookup raw values exceed byte budget")));
+            // A pair set's item is a key and its value (a tuple); a membership set's, one text.
+            let (key, value): (String, Option<String>) = if pairs {
+                let (key, value): (String, String) = item.extract()
+                    .map_err(|_| rejected(Rejected::new("invalid_lookup", "a pair set item is a tuple of a key and a value, both text")))?;
+                (key, Some(value))
+            } else {
+                (item.downcast::<PyString>()?.to_str()?.to_owned(), None)
+            };
+            if let Some((_, maximum, max_value, _)) = bounds {
+                for text in std::iter::once(&key).chain(value.as_ref()) {
+                    if text.len() > max_value { return Err(limit("a lookup key or value exceeds max_value_bytes")); }
+                    bytes = bytes.checked_add(text.len()).ok_or_else(|| limit("lookup byte count overflow"))?;
+                    aggregate = aggregate.checked_add(text.len()).ok_or_else(|| limit("lookup byte count overflow"))?;
+                }
+                if bytes > maximum || aggregate > MAX_AGGREGATE_BYTES {
+                    return Err(limit("lookup raw values exceed byte budget"));
                 }
             }
-            chosen.insert(text.to_owned());
+            match value {
+                Some(value) => { keyed.insert((key, value)); }
+                None => { members.insert(key); }
+            }
         }
-        sets.insert(name, chosen);
+        sets.insert(name, if pairs { LookupSet::Pairs(keyed) } else { LookupSet::Members(members) });
     }
     Ok(sets)
 }

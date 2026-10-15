@@ -30,7 +30,7 @@ fn fixture() -> String {
 fn scope(leis: &[&str]) -> Lookups {
     BTreeMap::from([(
         "eligible_leis".to_string(),
-        leis.iter().map(|l| l.to_string()).collect::<BTreeSet<_>>(),
+        leis.iter().map(|l| l.to_string()).collect::<BTreeSet<_>>().into(),
     )])
 }
 
