@@ -101,30 +101,6 @@ def test_a_link_record_starts_at_the_record_it_names(database):
                    for r in documents(database, "review").values())
 
 
-def test_a_match_proposals_snapshot_sees_a_link_that_starts_at_its_key(database):
-    """Migration 002: a proposal about a record goes stale when a link starting
-    at that record arrives, as when a link ending at it does."""
-    import json
-
-    from sqlalchemy import text
-
-    child, owner = source("child"), source("owner")
-    pairs = bound(child, owner)
-    apply(database, 1, assertions=[child, owner], identities=[i for i, _ in pairs],
-          decisions=[d for _, d in pairs])
-    scope = json.dumps({"keys": [child["subject"]], "sources": [], "consumer": "load"})
-
-    def snapshot():
-        with database.application.connect() as conn:
-            return conn.scalar(text("SELECT mdm.match_proposal_snapshot(CAST(:s AS jsonb))"), {"s": scope})
-
-    before = snapshot()
-    record = source("child|owner|ACCOUNTING_PARENT", source_code="fixture.secondary", fields={},
-                    relationships=[parent(owner, source_subject=child["subject"])])
-    apply(database, 2, assertions=[record])
-    assert snapshot() != before
-
-
 def test_a_link_whose_parent_is_not_a_company_yet_waits_quietly(database):
     """Mastering to-do 13 (operator, 2026-10-02: "Wait quietly"): a link
     whose other end is not an entity yet is not an open steward review. It

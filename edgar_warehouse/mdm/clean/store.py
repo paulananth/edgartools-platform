@@ -60,6 +60,8 @@ MIGRATIONS: tuple[str, ...] = (
     "016_publication_inputs.sql",
     "017_unchanged_batch_no_outbox.sql",
     "018_publish_changed_records.sql",
+    "019_merge_stage_no_limit.sql",
+    "020_merge_record_by_record.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -75,7 +77,6 @@ RUNTIME_FUNCTIONS = (
     "record_attempt(uuid,uuid,text,text,jsonb)",
     "start_run(uuid,jsonb)",
     "finish_run(uuid,jsonb,boolean)",
-    "match_proposal_snapshot(jsonb)",
     "reading_link_subjects(jsonb)",
     "readings_naming(text[])",
     "decisions_naming(text[])",

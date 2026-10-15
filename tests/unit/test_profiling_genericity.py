@@ -10,27 +10,28 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCOPE = (
-    "skills/data-profiling",
-    "skills/data-quality",
-    "skills/data-modeling",
-    "docs/specs/rdm",
-    "docs/specs/agent-context",
-    "docs/specs/profiling",
-    # Every skill an agent onboards, reads, combines, refines and runs feeds with (operator,
-    # 2026-10-08: "Skills must not hardcode anything").
-    "skills/data-onboarding",
-    "skills/refining-rules",
-    "skills/data-platform",
-    "skills/bookkeeping",
-    "skills/change-journal",
-)
+# Every skill (operator, 2026-10-08: "Skills must not hardcode anything"), found by its
+# folder so a new skill is checked by default, and the program's specs.
+EXEMPT = {
+    # General teaching skills about data work anywhere; their plain English ("a filing
+    # cabinet", "company data") is a metaphor, not this repo's sources.
+    "data-engineering-fundamentals",
+    "data-scientist",
+}
+SCOPE = tuple(
+    f"skills/{d.name}" for d in sorted((ROOT / "skills").iterdir()) if d.is_dir() and d.name not in EXEMPT
+) + ("docs/specs/rdm", "docs/specs/agent-context", "docs/specs/profiling")
 # Sources, kinds and identifiers this repo happens to hold today. Lowercase
 # "person" stays allowed: "personal data" is generic.
 SPECIFIC = re.compile(
     r"\b(SEC|sec\.gov|EDGAR|GLEIF|LEI|CIK|EIN|SIC|10-K|8-K|Company|company|companies|Person|"
     r"Contoso|accession\w*|tickers?|mdm\.company|filings?)\b"
+    # Source codes and format names as written in rules files (`gleif`, `sec.ownership`, `sec_cik`, `lei`).
+    r"|\b(gleif\w*|sec[._]\w+|lei)\b"
 )
+# In a skill, a pull request number is history: it belongs in a ticket or an Examples section,
+# not in the how-to. A spec may cite the PR that approved it.
+HISTORY = re.compile(r"(?<![\w/&])#\d{3,}\b")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
@@ -45,8 +46,11 @@ def _files() -> list[Path]:
     return found
 
 
-def specific_names(path: Path, root: Path = ROOT) -> list[str]:
-    """Each line naming a specific source, kind or identifier outside an Examples section."""
+def specific_names(path: Path, root: Path = ROOT, history: bool | None = None) -> list[str]:
+    """Each line naming a specific source, kind or identifier outside an Examples section;
+    in a skill (or with `history`), also each pull request number."""
+    if history is None:
+        history = path.relative_to(root).parts[0] == "skills"
     hits, examples_level = [], None
     in_code = False
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -62,12 +66,19 @@ def specific_names(path: Path, root: Path = ROOT) -> list[str]:
                     examples_level = level
             if examples_level is not None:
                 continue
-        hits += [f"{path.relative_to(root)}:{number}: {m.group(0)}" for m in SPECIFIC.finditer(line)]
+        found = list(SPECIFIC.finditer(line))
+        if history:
+            found += list(HISTORY.finditer(line))
+        hits += [f"{path.relative_to(root)}:{number}: {m.group(0)}" for m in sorted(found, key=lambda m: m.start())]
     return hits
 
 
 def test_scope_has_files():
     assert _files(), "nothing in scope: the lint would pass vacuously"
+
+
+def test_every_exempt_skill_exists():
+    assert EXEMPT <= {d.name for d in (ROOT / "skills").iterdir() if d.is_dir()}
 
 
 @pytest.mark.parametrize("path", _files(), ids=lambda p: str(p.relative_to(ROOT)))
@@ -77,5 +88,6 @@ def test_no_specific_names_outside_examples(path):
 
 def test_lint_catches_a_name_and_spares_examples(tmp_path):
     doc = tmp_path / "x.md"
-    doc.write_text("# A\nKeys such as a CIK.\n## Examples\nA CIK.\n### More\nAn LEI.\n## B\nA Company.\n")
-    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path)] == ["CIK", "Company"]
+    doc.write_text("# A\nKeys such as a CIK.\n## Examples\nA CIK.\n### More\nAn LEI.\n## B\nA Company.\n"
+                   "Run `--source gleif` with `sec_cik`; selected, secure.\nBuilt by #960; color #fff.\n")
+    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path, history=True)] == ["CIK", "Company", "gleif", "sec_cik", "#960"]

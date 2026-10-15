@@ -21,7 +21,8 @@ def test_every_committed_mapping_document_equals_its_rules():
 
 def test_only_sources_that_feed_mdm_have_one():
     assert {name for name, _, _ in mapdoc.documents().values()} == {
-        "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person", "iapd.adv"}
+        "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person", "iapd.adv",
+        "sec.ownership"}
 
 
 @pytest.fixture
@@ -132,6 +133,17 @@ def test_the_sheets_say_what_the_rules_say():
     links = [row[2:5] for row in found["gleif"]["Fields"] if row[0] == "gleif.relationships.v1"]
     assert ["from", "RelationshipRecord.Relationship.StartNode.NodeID.$", "Link from gleif.level1.v1"] in links
     assert ["to", "RelationshipRecord.Relationship.EndNode.NodeID.$", "Link to gleif.level1.v1"] in links
+    # A link's own rules, with the reason each sets the record aside with (rebuild ticket 10).
+    owner = [row[2:5] for row in found["sec.ownership"]["Fields"] if row[1] == "relationship EMPLOYED_BY"]
+    assert ["ends", "relationship_end_missing", "Sets the record aside when the link names no end"] in owner
+    assert ["interval", "invalid_relationship_interval",
+            "Sets the record aside when the link has no start, or ends before it starts"] in owner
+
+
+def test_every_link_rule_has_plain_words():
+    from edgar_warehouse.mdm.clean.adapters import LINK_RULE_NAMES
+
+    assert tuple(mapdoc.LINK_RULES) == LINK_RULE_NAMES
 
 
 def test_every_quality_test_and_fix_has_plain_words():

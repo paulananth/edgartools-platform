@@ -140,7 +140,7 @@ The old `edgar_warehouse/parsers/` directory and old `runtime.py` are absent at 
 | Area | Configuration controls | Code controls |
 | --- | --- | --- |
 | [`adapters.normalize`](../../edgar_warehouse/mdm/clean/adapters.py#L245) | Field paths, kind/kind values/classification, identifiers, profiles and relationships | Path traversal, shape validation and projection algorithms. |
-| [`adapters.FORMATS`](../../edgar_warehouse/mdm/clean/adapters.py#L36) | `sec_cik` / `lei` format names | Zero-padding/nonzero numeric CIK checks and LEI syntax/mod-97 checksum. |
+| [`adapters.FORMATS`](../../edgar_warehouse/mdm/clean/adapters.py#L36) | `sec_cik` / `lei` format names; since rebuild priorities ticket 81, declared identifier types (`rules/identifiers/`: parts, case, check-digit family) | Zero-padding/nonzero numeric CIK checks and LEI syntax/mod-97 checksum; one implementation of each check-digit family. |
 | [`quality.CHECKS` / `FIXES`](../../edgar_warehouse/mdm/clean/quality.py#L237) | Versioned checks/fixes and arguments from source quality YAML | State-tag regex, blanking and address-standardization implementations. [`_UNIT` / `_WORDS`](../../edgar_warehouse/mdm/clean/quality.py#L178) encode unit removal and abbreviation spellings. |
 | [`primitives.NORMALIZERS`](../../edgar_warehouse/mdm/clean/primitives.py#L76) | Normalizer names and policy predicate arguments/order | Fixed implementations including [`names.legal_form_key`](../../edgar_warehouse/mdm/clean/names.py#L23), legal-form spellings and SEC conformed-name tag removal. |
 | [`names.edgar_jurisdiction`](../../edgar_warehouse/mdm/clean/names.py#L62) | SEC place-code reference file | Lookup/country/subdivision comparison algorithms and US territory handling. |

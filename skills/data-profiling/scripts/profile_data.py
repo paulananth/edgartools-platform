@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 import signal
 import sys
@@ -46,6 +47,36 @@ class _work:
         shutil.rmtree(self.path, ignore_errors=True)
 
 
+def profiler_sha256() -> str:
+    """sha256 of this profiler's code: a changed rule is a changed profiler."""
+    here = Path(__file__).resolve().parent
+    total = hashlib.sha256()
+    for file in [here / "profile_data.py", *sorted((here / "profiling").glob("*.py"))]:
+        total.update(file.name.encode() + b"\0" + file.read_bytes())
+    return total.hexdigest()
+
+
+def profiled_with(sources: dict[str, str], args) -> dict | None:
+    """What a run's findings depend on: the profiler, each input's sha256 and the run's settings.
+    None for a database input, which has no file to fingerprint and is always profiled again."""
+    if any(location.startswith("env:") for location in sources.values()):
+        return None
+    import duckdb
+
+    located = {name: Path(location).expanduser().resolve() for name, location in sorted(sources.items())}
+    # Each input by where it is and what it holds: the findings name its location.
+    return {"profiler_sha256": profiler_sha256(), "duckdb": duckdb.__version__,
+            "python": ".".join(map(str, sys.version_info[:3])), "name": args.name,
+            "inputs": {name: {"location": str(path), "sha256": inputs.digest(path)} for name, path in located.items()},
+            "kinds": sorted(k for k in args.kinds.split(",") if k), "limit_gb": args.limit_gb,
+            "sample": args.sample, "seed": args.seed}
+
+
+def existing(out: Path) -> dict:
+    path = out / "findings.yaml"
+    return (yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None) or {}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="profile_data.py", description="Profile a data set for the data-profiling skill")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -58,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     profile.add_argument("--sample", type=int, default=inputs.SAMPLE_RECORDS)
     profile.add_argument("--seed", type=int, default=0)
     profile.add_argument("--kinds", default="", help="existing master kinds, comma separated")
+    profile.add_argument("--again", action="store_true",
+                         help="profile even when the findings in --out came from these same inputs and profiler")
     compare = commands.add_parser("compare", help="Profile a new delivery and list its drift from approved findings")
     compare.add_argument("--approved", required=True, type=Path, help="the approved findings.yaml")
     compare.add_argument("--input", action="append", required=True, metavar="NAME=LOCATION")
@@ -72,9 +105,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         sources = dict(item.split("=", 1) for item in args.input)
+        # Profile once: findings made from these same inputs by this same profiler are reused, and an
+        # approval on them is kept. A changed input or a changed profiler rule profiles again.
+        basis, before = profiled_with(sources, args), existing(args.out)
+        if not args.again and basis is not None and (before.get("dataset") or {}).get("profiled_with") == basis:
+            print(f"reused {args.out / 'findings.yaml'}: the inputs and the profiler are unchanged")
+            return 0
+        if not args.again and (before.get("approval") or {}).get("status") == "approved":
+            raise SystemExit(f"{args.out / 'findings.yaml'} is approved and was made from other inputs, settings or "
+                             "profiler: compare the new delivery against it, or profile into another --out "
+                             "(--again replaces it and drops the approval)")
         with _work() as work:
             findings = run.profile_inputs(sources, args.name, int(args.limit_gb * inputs.GB), args.sample, args.seed,
                                           tuple(k for k in args.kinds.split(",") if k), work)
+        findings["dataset"]["profiled_with"] = basis
         data, text = report.write(findings, args.out)
         print(f"wrote {data} and {text}")
         return 0

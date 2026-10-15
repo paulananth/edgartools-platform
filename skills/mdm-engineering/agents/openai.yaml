@@ -1,0 +1,4 @@
+interface:
+  display_name: "MDM Engineering"
+  short_description: "Change the MDM store's code or schema, and choose the cheapest proof"
+  default_prompt: "Use $mdm-engineering to review the change in <branch> to the Merge Stage or its migrations."

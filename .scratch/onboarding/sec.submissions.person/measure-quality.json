@@ -1,0 +1,32 @@
+{
+  "submissions_person": {
+    "people": 31097,
+    "findings": {
+      "degree_suffix": 43,
+      "generational_suffix": 980,
+      "straight_apostrophe": 156
+    }
+  },
+  "ownership": {
+    "owner_rows": 9313,
+    "findings": {
+      "degree_suffix": 10,
+      "director_or_officer degree_suffix": 10,
+      "director_or_officer generational_suffix": 218,
+      "director_or_officer mark:any_digit": 4,
+      "director_or_officer straight_apostrophe": 35,
+      "generational_suffix": 235,
+      "mark:any_digit": 88,
+      "mark:trailing_digit": 3,
+      "straight_apostrophe": 40
+    },
+    "links": {
+      "held is_director": 4811,
+      "held is_officer": 4994,
+      "held is_ten_percent_owner": 1854,
+      "held, owner is the issuer": 2,
+      "is_other true": 203,
+      "no capacity held": 149
+    }
+  }
+}

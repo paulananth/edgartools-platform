@@ -1,7 +1,7 @@
 # Bookkeeping without loader dependencies
 
 Owner: Codex. Date: 2026-10-02. Status: proposed design, not implemented.
-Inspected main: `417147e8`, including the experiments in PR #784.
+Inspected main: `417147e8`, including its experiments.
 
 ## Decision
 
@@ -192,8 +192,8 @@ Acceptance gates for implementation:
 
 ## Design review and cost
 
-The reviewed history includes the generic core (#732), stage worklists (#734),
-Journal/fencing (#738) and the first source's integration (#755). Their present interface
+The reviewed history includes the generic core, stage worklists,
+Journal/fencing and the first source's integration. Their present interface
 exposes control internals to several actual workloads; this is demonstrated
 coupling, not a hypothetical need for interchangeable parsers.
 

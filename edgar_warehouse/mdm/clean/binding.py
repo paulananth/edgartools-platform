@@ -110,13 +110,15 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
             raise ValueError(f"Unsupported identifier namespace: {namespace}")
         # The Stage row holds each record's latest reading and its binding.
         # Containment, one value at a time, so the GIN index on identifiers
-        # (`stage_record_identifiers`) serves every namespace alike.
+        # (`stage_record_identifiers`) serves every namespace alike; `OFFSET 0`
+        # keeps each value its own probe (ticket 77: 1.3 s a call before).
         found_rows = rows(
             conn,
             """SELECT s.reading->'identifiers'->>:namespace AS value,
                       s.entity_id::text AS entity_id, i.kind
-            FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc)
-            JOIN mdm.stage_record s ON (s.reading->'identifiers') @> w.doc
+            FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
+                SELECT reading, entity_id, subject, source_code FROM mdm.stage_record
+                WHERE (reading->'identifiers') @> w.doc OFFSET 0) s
             JOIN mdm.master_entity i ON i.entity_id = s.entity_id
             WHERE s.source_code = ANY(:sources) AND NOT s.subject = ANY(:released)""",
             namespace=namespace,
@@ -398,10 +400,9 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
       Company (another Company acquired it, or the Company was merged away);
     - an identity of a new Company's kind has since been published at or
       after the new Company's publish time (`publish_floor`).
-    Changes to a target Company itself (a merge, or review) move the
-    assessment's snapshot, which `assessment.check` already refuses. A join
-    to a Company this batch's own caller binds is not in `joins`: it has no
-    stored holding yet, and the caller's decision covers it.
+    - a Company a join rests on has since gone into review.
+    A join to a Company this batch's own caller binds is not in `joins`: it
+    has no stored holding yet, and the caller's decision covers it.
     """
     mints = automatic.get("mints") or []
     joins = automatic.get("joins") or []
@@ -418,6 +419,8 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
     if any(held(m) for m in mints):
         return True
     if any(set(held(j)) != {j["entity_id"]} for j in joins):
+        return True
+    if in_review(conn, {j["entity_id"] for j in joins}):
         return True
     # One read per kind: every new Company of a kind in a batch shares the
     # earliest publish time among them.

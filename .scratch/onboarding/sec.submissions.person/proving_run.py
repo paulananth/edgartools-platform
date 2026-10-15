@@ -84,9 +84,11 @@ def proving_policy(approval: dict) -> dict:
     person = body["kinds"]["person"]
     person["identifiers"]["cik"]["verification"] = {"corpus_sha256": RECEIPTS_SHA256, **approval}
     rule = next(r for r in person["rules"] if r["rule_id"] == "person-cik")
-    body["automatic_rules"] = [*body["automatic_rules"], {
-        "kind": "person", "family": "binding", "rule_id": rule["rule_id"],
-        "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}]
+    # Switched on in the repo since 2026-10-01: add it only to an older policy.
+    if not any(e.get("rule_id") == "person-cik" for e in body["automatic_rules"]):
+        body["automatic_rules"] = [*body["automatic_rules"], {
+            "kind": "person", "family": "binding", "rule_id": rule["rule_id"],
+            "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}]
     return body
 
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Modeling"
+  short_description: "Decide where a profiled part sits in the model: class, kind or code set, identity, links, silver table"
+  default_prompt: "Use $data-modeling to place part <part> from the approved findings in <folder>."

@@ -269,6 +269,7 @@ class Rules:
                 folder, filename = ("sources", "source.yaml") if row["kind"] == "source" else ("pipelines", "pipeline.yaml")
                 path = root / folder / row["name"] / filename
             self.to_file(row["kind"], row["name"], version, path)
+        files.copy_identifiers(root)
         return [{"kind": row["kind"], "name": row["name"], "digest": row["digest"]} for row in documents]
 
 

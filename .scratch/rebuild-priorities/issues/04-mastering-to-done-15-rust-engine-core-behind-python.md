@@ -3,7 +3,7 @@
 Priority: 04, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/15-rust-engine-core-behind-python.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task (code)
-Status: in progress (Claude, branch `claude/mastering-15-rust-engine`)
+Status: done (2026-10-14 14:07 ET): #799 merged; streaming and multi-input steps are tickets 16 and 17
 Blocked by: mastering-to-done 08
 
 ## Question
@@ -85,4 +85,4 @@ The operator asked for fewer questions, so I settled the three open points mysel
 - [ ] ~~Each custom step listed in its source's Mapping Document~~ deferred to tickets 16 and 17: no source is on the engine yet.
 - [ ] ~~Codex's 41 Python research tests as CI acceptance~~ not taken: they test the Python adapters, not the engine. The engine's acceptance is the Rust suite plus the mapping above. The research file stays research.
 - [ ] ~~A non-numeric value in a `number` column defers the record~~ not changed: it reads as the column's default, as `parse_thirteenf` does. A `required` check on that column catches it when a source needs that.
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #799, merged as `125432d7` ("The configured source engine: Rust behind Python"); its deferred parts are tickets 16 and 17 2026-10-14 14:07 ET

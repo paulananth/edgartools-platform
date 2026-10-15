@@ -2,12 +2,10 @@
 
 Current acquisition status: the active feeds are those a source document
 declares under `acquisition.feeds` (`edgar-warehouse plan resolve-feed`); see
-Examples for the state recorded on 2026-09-29. Branch names, feed suites,
-and test counts below record the earlier implementation state.
+Examples for the state recorded on 2026-09-29. Feed suites and test counts
+below record the earlier implementation state.
 
-Core branch: `codex/configured-bookkeeping` (PR #732). Stage work continues on
-`codex/bookkeeping-stage-work`, based on the refreshed core branch. The complete supplied
-plan is the objective. **The current implementation does not yet replace every
+The complete supplied plan is the objective. **The current implementation does not yet replace every
 legacy caller or qualify a production cutover.**
 
 ## Implemented boundary
@@ -270,15 +268,15 @@ request authorization migrations retain the five-table control boundary;
 see [Change Journal](../change-journal/SPEC.md) for their transaction/recovery contract.
 
 ```bash
-edgar-warehouse rules save --source gleif --version <new-version> rules/sources/gleif/source.yaml
-edgar-warehouse rules record-proof --source gleif --version <new-version> --proof-uri <URI> --proof-sha256 <SHA256>
+edgar-warehouse rules save --source <source> --version <new-version> rules/sources/<source>/source.yaml
+edgar-warehouse rules record-proof --source <source> --version <new-version> --proof-uri <URI> --proof-sha256 <SHA256>
 edgar-warehouse rules pending
 # Only on the person's own words, for the version they read.
-edgar-warehouse rules approve --source gleif --version <new-version> --evidence <evidence_hash from pending> \
+edgar-warehouse rules approve --source <source> --version <new-version> --evidence <evidence_hash from pending> \
   --by "<name>" --words "<their exact words>"
-edgar-warehouse rules activate --source gleif --version <new-version>
-edgar-warehouse rules run --source gleif --target mdm --input-manifest <URI> --input-sha256 <SHA256> --limit 100
-edgar-warehouse rules run --source gleif --target mdm --resume-run-id <UUID> --limit 100
+edgar-warehouse rules activate --source <source> --version <new-version>
+edgar-warehouse rules run --source <source> --target mdm --input-manifest <URI> --input-sha256 <SHA256> --limit 100
+edgar-warehouse rules run --source <source> --target mdm --resume-run-id <UUID> --limit 100
 edgar-warehouse bookkeeping status <UUID>
 edgar-warehouse bookkeeping runs --state waiting --limit 100
 edgar-warehouse bookkeeping checks <UUID>

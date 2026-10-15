@@ -29,6 +29,8 @@ import unicodedata
 from collections import Counter
 from typing import Any
 
+from .evidence import instant
+
 ON_FAIL = frozenset({"exception", "withhold", "flag"})
 _ID = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -358,6 +360,66 @@ def counts(assertions: list[dict], deferred: list[dict]) -> dict:
         if str(d.get("reason", "")).startswith("quality_"):
             tally[f"exception:{d['reason'].removeprefix('quality_')}"] += 1
     return dict(sorted(tally.items()))
+
+
+def _newer(a: str | None, b: str | None) -> str | None:
+    """The later of two instants; either may be absent."""
+    if a is None or b is None:
+        return a or b
+    return a if instant(a) >= instant(b) else b
+
+
+def profile(assertions: list[dict], deferred: list[dict]) -> dict:
+    """One batch's records per source, for the run report checks (rebuild
+    ticket 10; operator, 2026-10-02): how many, how many set aside, per field
+    how many fill it, and the newest time a record states."""
+    found: dict = {}
+
+    def of(source: str) -> dict:
+        return found.setdefault(source, {"records": 0, "set_aside": 0, "filled": {}, "newest": None})
+
+    for a in assertions:
+        entry = of(a["source_code"])
+        entry["records"] += 1
+        for name, item in (a.get("fields") or {}).items():
+            filled = item.get("op") == "value" and item.get("value") not in ("", {}, [])
+            entry["filled"][name] = entry["filled"].get(name, 0) + int(filled)
+        entry["newest"] = _newer(entry["newest"], a.get("effective_at"))
+    for d in deferred:
+        entry = of(d["source_code"])
+        entry["records"] += 1
+        entry["set_aside"] += 1
+    return found
+
+
+def run_checks(profiles: list[dict], *, as_of: str) -> dict:
+    """The run report checks over a run's committed batches, per source:
+    records and those set aside; the empty-value rate per field over the
+    records that merge (a field a record leaves out, leaves unknown or
+    blank is empty); and the newest record's time and age in days on the
+    run's `as_of`, both None for a feed that states no time (the operator's
+    "unknown"). Reported on every run, never blocking."""
+    total: dict = {}
+    for batch in profiles:
+        for source, entry in batch.items():
+            into = total.setdefault(source, {"records": 0, "set_aside": 0, "filled": Counter(), "newest": None})
+            into["records"] += entry["records"]
+            into["set_aside"] += entry["set_aside"]
+            into["filled"].update(entry["filled"])
+            into["newest"] = _newer(into["newest"], entry["newest"])
+    report = {}
+    for source, entry in sorted(total.items()):
+        merged = entry["records"] - entry["set_aside"]
+        age = (instant(as_of) - instant(entry["newest"])).total_seconds() / 86400 if entry["newest"] else None
+        report[source] = {
+            "records": entry["records"],
+            "set_aside": entry["set_aside"],
+            "empty_rate": {name: round(1 - n / merged, 4) for name, n in sorted(entry["filled"].items())}
+            if merged else {},
+            "newest": entry["newest"],
+            "newest_age_days": round(age, 2) if age is not None else None,
+        }
+    return report
 
 
 def exception_reasons(block: dict) -> set[str]:

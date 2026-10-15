@@ -92,6 +92,10 @@ read:
         is_other: {choose: {condition: {test: {path: reportingOwnerRelationship.isOther.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOther.$}}, on_missing: error}}, else: {const: {value: null}}}}
         officer_title: {text: {path: reportingOwnerRelationship.officerTitle.$}}
         other_text: {text: {path: reportingOwnerRelationship.otherText.$}}
+        # The filing's issuer and event date on each owner row (from the document), so the
+        # owner's Dataset Contract can state its link to the issuer, dated by the filing.
+        issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
+        period_of_report: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}
     non_derivative_transaction:
       each: nonDerivativeTable.nonDerivativeTransaction
       columns:

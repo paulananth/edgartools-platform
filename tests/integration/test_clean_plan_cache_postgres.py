@@ -32,7 +32,6 @@ from edgar_warehouse.mdm.clean.store import migrate
 from tests.integration.test_clean_mdm_postgres import database, postgres  # noqa: F401
 
 SETTING = "plan_cache_mode=force_custom_plan"
-SNAPSHOT = "mdm.match_proposal_snapshot(jsonb)"
 
 
 def key_lists(arguments: str, source: str) -> set[str]:
@@ -81,26 +80,6 @@ def test_only_functions_that_look_up_key_lists_plan_with_their_keys(database):
     assert functions
     wrong = [(name, sorted(lists), has) for name, lists, has in functions if bool(lists) != has]
     assert wrong == []
-    assert (SNAPSHOT, {"keys", "sources"}, True) in functions
-
-
-def test_a_store_with_rows_at_010_takes_011(database):
-    """A store migrated before 011 gains the setting on the next migrate, with
-    its rows kept."""
-    with database.admin.begin() as conn:
-        conn.execute(text(f"ALTER FUNCTION {SNAPSHOT} RESET plan_cache_mode"))
-        # The migration ledger is append-only; only this simulation of an older
-        # store goes around that, as the database owner.
-        conn.execute(text("SET LOCAL session_replication_role = replica"))
-        conn.execute(text("DELETE FROM mdm.migration WHERE name='011_key_list_plans.sql'"))
-        conn.execute(text("SET LOCAL session_replication_role = origin"))
-        before = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in ("policy", "dataset")}
-    assert before["policy"] and before["dataset"]
-    migrate(database.admin, application_role="clean_application")
-    with database.admin.connect() as conn:
-        config = conn.scalar(text(f"SELECT proconfig FROM pg_proc WHERE oid = '{SNAPSHOT}'::regprocedure"))
-        assert SETTING in config
-        assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in before} == before
 
 
 def test_whole_list_searches_finds_overlap_and_any_key():

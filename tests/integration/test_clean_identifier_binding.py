@@ -443,8 +443,9 @@ def _command(policy, batch, *assertions, consumer=None, as_of=None):
 def test_a_join_is_rechecked_when_another_company_acquires_the_identifier(database):
     """Ticket 04: a join to a stored Company is re-checked under the lock.
 
-    The assessment's snapshot covers the Company itself, not a *different*
-    Company acquiring the same CIK meanwhile; only the re-check sees that.
+    The batch is computed under the lock with the Company as stored; a
+    *different* Company acquiring the same CIK meanwhile is seen only by the
+    re-check of the rule's proposal.
     """
     policy = matching_policy(database)
     stage = MergeStage(Store(database.application))

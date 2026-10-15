@@ -1,20 +1,15 @@
-"""The bounds a Merge Stage batch is held to, in one place.
+"""How a run's records are cut into Merge Stage batches, in one place.
 
-The SQL functions in `../migrations/` state the same numbers (`save_batch`'s
-request, `record_match_proposal`'s stored body); `tests/mdm/test_clean_limits.py`
-holds them equal. A batch grows on its way through the Stage: a SEC batch's
-1.4 MB records file became a 6.1 MB save request (2026-10-10), so the records
-of one batch are cut well below the request bound.
+The Merge Stage refuses nothing by size (operator, 2026-10-14: "merge stage
+should have no limit"; migration 019): its closure, save request and match
+proposal have no cap. These numbers only divide the input: `mdm.prepare` cuts
+a run's records into batches, and `write_batch` states the same record count
+(`tests/mdm/test_clean_limits.py` holds them equal). The file bounds are what
+the workers read back of one batch's records and manifest.
 """
 
 # Assertions (with deferred records), decisions and identities in one batch.
 BATCH_RECORDS = 1000
-# One save request (`save_batch`, `preview_batch`).
-REQUEST_BYTES = 16 * 1024**2
-# One match proposal as stored.
-PROPOSAL_BYTES = 16 * 1024**2
-# A match proposal as sent: its `effects` are stored as their hash.
-PROPOSAL_INPUT_BYTES = 64 * 1024**2
 # One batch's records file, as read back by the Stage and the workers.
 RECORDS_FILE_BYTES = 16 * 1024**2
 # One batch manifest, as read back by the Stage and its verifier.
@@ -25,8 +20,7 @@ BATCH_RECORD_BYTES = 1024**2
 
 def batches(rows: list, encode) -> list[list]:
     """Rows cut into batches of at most `BATCH_RECORDS` records and, past the first record,
-    `BATCH_RECORD_BYTES` (`encode(row)` is one row's bytes): a batch grows several times over
-    on its way through the Merge Stage, whose request and match proposal are bounded."""
+    `BATCH_RECORD_BYTES` (`encode(row)` is one row's bytes), so each batch stays small."""
     found, current, size = [], [], 0
     for row in rows:
         length = len(encode(row))

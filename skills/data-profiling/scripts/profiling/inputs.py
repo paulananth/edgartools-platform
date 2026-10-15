@@ -4,7 +4,9 @@ Each part is read once into a table (a remote database stays a read-only view),
 and later steps read tables only, never asking what format a part came from.
 
 - CSV and Parquet are read by DuckDB directly, with a full type scan; a zip of
-  CSV or Parquet files gives each member as a file. A CSV that is not UTF-8 is
+  CSV or Parquet files gives each member as a file. Any other file beside the
+  tables (a readme, a metadata file, records) is listed as not read, with its
+  reason; records there can be profiled as their own input. A CSV that is not UTF-8 is
   read as Windows-1252 (or Latin-1), and the findings say so. A table DuckDB
   cannot read is reported as not read, and the rest of the input is profiled.
 - JSON, JSON Lines, XML and zip members are read by the Python standard
@@ -354,32 +356,54 @@ class Table:
     unreadable: str | None = None  # why the bytes are no text the reader can take
 
 
-def _tables(path: Path, work: Path) -> list[Table] | None:
-    """The CSV or Parquet tables of an input, a zip's members copied out to `work`;
-    None when the input holds anything else."""
-    tables = []
+RECORDS = {"json", "jsonl", "xml"}
+
+
+def _set_aside(location: str, fmt: str, size: int) -> Part:
+    """A file beside an input's tables that is not one of them: listed with its reason, never read."""
+    why = ("records beside the tables; profile this file as its own input to read it" if fmt in RECORDS
+           else "a document beside the tables, not profiled")
+    stem = re.sub(r"[^0-9A-Za-z]+", "_", Path(location.rpartition("#")[2] or location).stem).strip("_") or "file"
+    return Part(stem, location, fmt, size, not_read=f"not a table ({fmt}); {why}")
+
+
+def _tables(path: Path, work: Path) -> tuple[list[Table], list[Part]] | None:
+    """The CSV or Parquet tables of an input, a zip's members copied out to `work`, and every
+    other file beside them, set aside with its reason (a readme, a metadata file); None when
+    the input holds no table at all."""
+    tables: list[Table] = []
+    aside: list[Part] = []
     for file in _members(path):
         if format_of(file) != "zip":
-            tables.append(Table(file, str(file)))
+            if format_of(file) in TABULAR:
+                tables.append(Table(file, str(file)))
+            else:
+                aside.append(_set_aside(str(file), format_of(file), file.stat().st_size))
             continue
         with zipfile.ZipFile(file) as archive:
             # A zip made on a Mac carries `__MACOSX/._name` resource entries: no data.
             members = [i for i in archive.infolist() if not i.is_dir()
                        and not i.filename.startswith("__MACOSX/") and not Path(i.filename).name.startswith("._")]
-            if not members or any(format_of(Path(i.filename)) not in TABULAR for i in members):
-                return None
             for info in members:
+                fmt = format_of(Path(info.filename))
+                if fmt not in TABULAR:
+                    aside.append(_set_aside(f"{file}#{info.filename}", fmt, info.file_size))
+                    continue
                 # One folder per member: two members (or two zips) may share a file name.
                 target = work / "members" / str(len(tables)) / Path(info.filename).name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(info) as source, target.open("wb") as copy:
                     shutil.copyfileobj(source, copy)
                 tables.append(Table(target, f"{file}#{info.filename}"))
-    formats = {format_of(t.file) for t in tables}
-    if len(formats) != 1 or not formats <= TABULAR:
+    if not tables or len({format_of(t.file) for t in tables}) != 1:
         return None
     _name_tables(tables)
-    return tables
+    taken = {t.name for t in tables}
+    for part in aside:
+        while part.name in taken:
+            part.name += "_file"
+        taken.add(part.name)
+    return tables, aside
 
 
 def _name_tables(tables: list[Table]) -> None:
@@ -597,11 +621,12 @@ def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Pat
     path = Path(location).expanduser()
     if format_of(path) in {"sqlite", "duckdb"}:
         return _attach_file(con, name, path, format_of(path))
-    tables = _tables(path, work)
-    if tables is not None:
+    found = _tables(path, work)
+    if found is not None:
+        tables, aside = found
         for index, table in enumerate(tables):
             _decode(table, work, index)
-        return _tabular(con, name, tables, limit, sample, seed, str(path))
+        return _tabular(con, name, tables, limit, sample, seed, str(path)) + aside
     fmt, records, wrappers = _record_reader(path)
     size = size_of(path)
     scan = "sampled" if size > limit else "full"

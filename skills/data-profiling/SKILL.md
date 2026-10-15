@@ -28,6 +28,7 @@ advice only.
 | Request anything from a provider's website | Profile the local copies only |
 | Pin a finding on one source or one domain | Use the tests; names in this skill are generic |
 | Start a long pass silently | Say the size and the time estimate first (the run prints both) |
+| Profile the same inputs twice | Profile once; reuse the findings while the inputs and the profiler are unchanged ("Profile once", below) |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
 ## Tell the discovery story as you work
@@ -95,12 +96,29 @@ One run does inventory to report:
 ```
 uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>" \
   --input <name>=<file|folder|zip|database file|env:VARIABLE> [--input ...] \
-  --out <folder> [--kinds <existing kind>,...] [--limit-gb 5] [--sample 100000] [--seed 0]
+  --out <folder> [--kinds <existing kind>,...] [--limit-gb 5] [--sample 100000] [--seed 0] [--again]
 ```
+
+- **Profile once.** The findings record what they were made from
+  (`dataset.profiled_with`): the profiler's sha256 and its DuckDB and Python
+  versions, the data set's name, each input's location and sha256, and the
+  run's settings. A run into the same `--out` with all of them unchanged prints
+  `reused` and changes nothing, so an approval stands. Anything changed profiles
+  again (`--again` forces it), but never over approved findings: compare the
+  new delivery, or profile into another `--out`. Any change to the profiler's
+  code counts, so after a fix say which sources it changes and profile only
+  those. A database input has no file to fingerprint, so it is always profiled
+  again.
+- **One data set per source.** Profile each source into its own `--out`, so a
+  change to one source, or a fix to a rule only one source needs, profiles that
+  source alone. Before profiling, look for findings that already cover the
+  inputs (an earlier `--out`) and reuse them. After a profiler fix, profile
+  again only the sources the fix changes, and say which and why.
 
 - **Formats:** CSV, Parquet, JSON (an array, one object per file, or an object
   wrapping one list), JSON Lines, XML, zip members (a zip of CSV or Parquet
-  files gives each member as its own file), a SQLite or DuckDB file, or a
+  files gives each member as its own file; a readme or metadata file beside
+  the tables is listed under `dataset.not_read`), a SQLite or DuckDB file, or a
   read-only database whose address is in an environment variable.
 - **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
   Latin-1); its input's `encoding` says so, marked inferred, with the first byte
@@ -240,7 +258,9 @@ that matter most:
   that needs approval.
 - **identifiers:** other identifier-shaped columns. A check-digit family is
   named only when at least 99% of values pass and the rate is at least five
-  times chance. `cross_reference` means "propose for the MDM cross-reference
+  times chance; the family names are the ones an identifier type is declared
+  with (data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md),
+  "Identifier types"). `cross_reference` means "propose for the MDM cross-reference
   table": lookup only, never used to join (a Dataset Contract's
   `cross_references`, in data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md)).
 - **relationships:** `onboard: together` is mastered with its master (a link

@@ -8,47 +8,41 @@ candidate generation, fuzzy scoring or automatic-rule qualification.
 ## Execution contract
 
 `MergeStage.apply(**command)` preserves its existing command arguments. For a
-new `bind` or `merge`, it computes the bounded batch once and commits an
-immutable assessment of it in its own transaction, then applies that same
-batch through the master transaction (no rollback preview and no second
-computation, 2026-10-11). No human pause is added. Field-only refreshes retain
+new `bind` or `merge`, it computes the batch once, under the Merge Stage lock,
+and records an immutable assessment of it first, then saves that same batch,
+in one transaction (ticket 77; operator, 2026-10-14: "Same transaction"). A
+refused batch keeps a rejected assessment, recorded in its own transaction.
+No human pause is added. Field-only refreshes retain
 the existing path. `MergeStage.assess` alone, for inspection before
 application, still checks the batch through a rollback preview.
 
 The assessment includes the proposed command, policy digest, validation rule
-version, retained assertion and decision IDs, component identities, affected
-keys, a dependency snapshot, prior projections and proposed entity/field/relationship/review
+version, prior projections and proposed entity/field/relationship/review
 effects. Source assertion bodies retain publication identity and provenance.
 Rejected well-formed proposals retain their command, available replay context
 and veto. Invalid/unbounded input is still rejected at the API boundary.
 
-The final transaction holds the existing advisory lock, checks the
-assessment's dependency snapshot and each rule proposal against concurrent
-runs, saves at the current generation, and has PostgreSQL check that the batch
-equals the assessed effects (by their hash) and fence its dependencies. A batch
-PostgreSQL refuses at this point keeps a rejected assessment beside the ready
-one, which stays open until its batch is saved. Master changes, the applied event, journal effects,
-checkpoint and publication intent commit together. The SQL capability rejects
-an assessment created in that same transaction: the assessment must already
-be durable. Installed migrations 023–027 remain unchanged.
+The transaction holds the existing advisory lock, re-checks each rule proposal
+against concurrent runs (an identifier taken since, or a Company merged away or
+put in review), and has PostgreSQL check that the batch equals the assessed
+effects (by their hash). Nothing can change between the assessment and the
+save, so no dependency snapshot is kept (migration 020). Master changes, the
+assessment, the applied event, journal effects, checkpoint and publication
+intent commit together.
 
-Dependency checks cover retained and newly arrived source assertions, relevant
-identity decisions (including source retirement), component identities, affected
-projections and the command's consumer checkpoint. An unrelated generation
-alone does not invalidate a proposal. Source registry attestations and policies
-remain immutable. Future matching qualification registries must extend the
-snapshot before automatic rules can be enabled.
-
-A stale proposal is superseded, never copied into the master. `apply()` retries
-assessment up to three times when affected state races with application. A
+An assessment recorded earlier (`assess`) and applied later
+(`apply_assessment`) is computed again under the lock; it applies only if the
+batch writes exactly its effects, and is superseded otherwise. A stale proposal
+is never copied into the master. `apply()` proposes again up to three times
+when a rule's proposal no longer holds. A
 checkpoint conflict or continued contention fails safely for the existing
 bounded run retry mechanism. It does not silently change the frozen command.
 
 ## Inspect and resume
 
 For explicit pre-application inspection, use the Python API with the same
-bounded command used by the existing Merge Stage (at most 1,000 identity
-decisions and a 16 MiB serialized assessment; partition larger work):
+command used by the existing Merge Stage (at most 1,000 identity decisions, as
+mdm.prepare cuts a batch; no cap on the assessment's size, migration 019):
 
 ```python
 prepared = stage.assess(**command)

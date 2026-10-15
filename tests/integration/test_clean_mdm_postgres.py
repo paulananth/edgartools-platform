@@ -986,26 +986,38 @@ def test_fresh_replay_preserves_business_results_across_batching_and_order(postg
             assert business == expected
 
 
-def test_oversized_closure_rolls_back_every_effect(database):
-    a = source()
-    entity, bind = identity_and_binding(a)
-    apply(database, 1, assertions=[a], identities=[entity], decisions=[bind])
-    before = documents(database, "entity")
-    with pytest.raises(Conflict, match="closure exceeds"):
-        MergeStage(Store(database.application), closure_limit=1).apply(
-            batch_id="too-large",
-            run_id=str(uuid4()),
-            policy_digest=database.policy,
-            consumer="fixture",
-            expected_checkpoint=1,
-            checkpoint=2,
-            as_of=AS_OF,
-            assertions=[source(revision=2, fields={"name": "Changed"})],
-        )
-    assert documents(database, "entity") == before
-    with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm.source_reading")) == 1
+def test_a_batch_reads_as_much_in_a_small_network_as_in_a_large_one(database):
+    """Ticket 77 (operator, 2026-10-14: "find a match if not found insert"): a
+    batch that changes a record's fields reads that record's master, and as
+    many rows with 10,001 records linking to it as with none. Those records
+    are read only when the master's identity changes."""
+    from edgar_warehouse.mdm.clean import scope as scoping
+
+    target = source()
+    entity, bind = identity_and_binding(target)
+    apply(database, 1, assertions=[target], identities=[entity], decisions=[bind])
+    changed = source(revision=2, fields={"name": "Changed"})
+
+    def reads(changed_masters=frozenset()):
+        with database.application.connect() as conn:
+            scope = scoping.identities(conn, [changed], [])
+            scoping.links(conn, scope, {entity["entity_id"]}, set(changed_masters), {}, [changed])
+            return len(scope.readings)
+
+    small = reads()
+    with database.admin.begin() as conn:
+        # 10,001 stored source records that link to the target, written directly.
+        conn.execute(text("""INSERT INTO mdm.source_reading(assertion_id, source_code, record_key,
+                publication_key, revision, body, batch_id)
+            SELECT 'linker-' || n, (SELECT source_code FROM mdm.source_reading LIMIT 1), 'linker-' || n,
+                   'p', 1, jsonb_build_object('assertion_id','linker-' || n,'subject','linker-' || n,'source_code',:code,
+                       'relationships', jsonb_build_array(jsonb_build_object('target_subject', :subject))),
+                   (SELECT batch_id FROM mdm.batch LIMIT 1)
+            FROM generate_series(1, 10001) n"""), {"subject": target["subject"], "code": target["source_code"]})
+    assert reads() == small == 1
+    assert reads({entity["entity_id"]}) == 10002
+    apply(database, 2, assertions=[changed])
+    assert documents(database, "entity")[entity["entity_id"]]["fields"]["name"]["value"] == "Changed"
 
 
 def test_retirement_closes_unbound_source_reviews(database):
@@ -1331,10 +1343,6 @@ def test_rejected_identity_proposal_retains_veto_without_master_change(database)
         ).one()
         assert rejected[1]["command"]["decisions"] == [merge]
         assert "authoritative" in rejected[1]["vetoes"][0]
-        assert set(rejected[1]["retained"]["assertion_ids"]) == {
-            a["assertion_id"],
-            b["assertion_id"],
-        }
     with pytest.raises(Conflict, match="Rejected"):
         MergeStage(Store(database.application)).apply_assessment(
             rejected[0], run_id=str(uuid4())
@@ -1371,7 +1379,7 @@ def test_assessment_application_failure_rolls_back_applied_event(database, monke
     stage.apply_assessment(candidate["assessment_id"], run_id=command["run_id"])
 
 
-def test_assessment_sql_fences_bypass_stale_and_modified_effects(database):
+def test_assessment_sql_fences_bypass_and_modified_effects(database):
     from edgar_warehouse.mdm.clean.store import canonical
 
     stage = MergeStage(Store(database.application))
@@ -1389,27 +1397,16 @@ def test_assessment_sql_fences_bypass_stale_and_modified_effects(database):
         database.application.begin() as conn,
     ):
         stage.store.commit(conn, {**assessed, "projections": []}, command["run_id"])
-    # The capability requires a previously committed assessment, even for the
-    # privileged runtime API; staging plus application in one txn is rejected.
+    # A proposal recorded first in the save's own transaction is enough (Q13;
+    # operator, 2026-10-14: "Same transaction").
     body = {k: v for k, v in candidate.items() if k != "assessment_id"}
     body["rule_version"] = "same-transaction-test"
-    with (
-        pytest.raises(DBAPIError, match="ready assessment"),
-        database.application.begin() as conn,
-    ):
+    with database.application.begin() as conn:
         key = conn.scalar(
             text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
             {"body": canonical(body), "run": command["run_id"]},
         )
-        stage.store.commit(conn, {**effects, "assessment_id": key}, command["run_id"])
-    apply(database, 1, assertions=[source(revision=2)])
-    with (
-        pytest.raises(DBAPIError, match="Stale identity assessment"),
-        database.application.begin() as conn,
-    ):
-        stage.store.commit(
-            conn, {**assessed, "expected_generation": 1}, command["run_id"]
-        )
+        assert stage.store.commit(conn, {**effects, "assessment_id": key}, command["run_id"])["generation"] == 1
 
 
 def test_preview_capability_cannot_commit_or_leak_assessments(database):
@@ -1478,50 +1475,31 @@ def test_assessment_history_permissions_and_concurrent_lost_ack(database):
             conn.execute(text(f"DELETE FROM mdm.{table}"))
 
 
-def test_automatic_progression_reassesses_a_concurrent_correction(
+def test_a_batch_is_computed_with_what_another_run_saved_since_it_was_proposed(
     database, monkeypatch
 ):
+    """The rules propose outside the lock; the batch is computed and saved under
+    it, with its proposal, in one transaction (ticket 77), so a correction
+    another run saved in between is in what it writes."""
     stage = MergeStage(Store(database.application))
     command = assessment_command(database)
-    original = stage._save_assessed
-    raced = False
+    original = stage.propose
 
-    def race_once(key, *args):
-        # Another run commits between the proposal's commit and the save.
-        nonlocal raced
-        if not raced:
-            raced = True
-            apply(
-                database, 1, assertions=[source(revision=2, fields={"name": "Current"})]
-            )
-        return original(key, *args)
+    def race_once(**args):
+        proposed = original(**args)
+        apply(database, 1, assertions=[source(revision=2, fields={"name": "Current"})])
+        return proposed
 
-    monkeypatch.setattr(stage, "_save_assessed", race_once)
+    monkeypatch.setattr(stage, "propose", race_once)
     result = stage.apply(**command)
     assert result["generation"] == 2
     entity = command["identities"][0]["entity_id"]
     assert documents(database, "entity")[entity]["fields"]["name"]["value"] == "Current"
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 2
-        assert (
-            conn.scalar(
-                text(
-                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='superseded'"
-                )
-            )
-            == 1
-        )
-        assert (
-            conn.scalar(
-                text(
-                    "SELECT count(*) FROM mdm.match_proposal_event WHERE event='applied'"
-                )
-            )
-            == 1
-        )
+        assert conn.scalar(text("SELECT count(*) FROM mdm.match_proposal")) == 1
 
 
-def test_assessment_resume_uses_timezone_independent_dependency_snapshot(database):
+def test_a_recorded_proposal_applies_from_another_timezone(database):
     stage = MergeStage(Store(database.application))
     command = assessment_command(database)
     stage.apply(**command)

@@ -26,10 +26,15 @@ Read these before anything else. Breaking one is never the right call.
 | Never | Instead |
 |---|---|
 | Approve for the operator, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
+| Switch on (activate) a version the operator has not told you to switch on | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
 | Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
+| Ask the operator to approve a digest, hash or version number they cannot read | Say in plain words what the version does, what it changes and on what evidence, under its descriptive name; the digest goes beside it, never instead |
+| Name a Rules version by a number alone | A label that says what it changes (the **test** step's version label, `<source or kind>-<YYYY-MM-DD>.<short change name>`) |
+| Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Request anything from a provider the operator has ruled out, including its documentation (see Examples) | Use the captured files and this repo |
 | Read, print or paste a secret, password or token | Use the environment variables named here. If one is missing, ask the operator to set it outside the chat. |
 | Guess an identifier (any key or issued id) | Take it from the files |
+| Edit code while onboarding, even for a code ticket the operator approved | Configuration only: write the ticket for the code, and ask before coding |
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
@@ -71,8 +76,9 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
 
 The files in `rules/sources/` show Dataset Contracts and publication rules.
-For configured complete JSON source extract, use `sec.submissions.person` and
-[data-platform READING](../data-platform/READING.md). A declared target is
+For configured complete JSON source extract, find a feed that keeps each
+document whole (`grep -l "format: json" rules/sources/*/source.yaml`, then
+its `read:` block) and read [data-platform READING](../data-platform/READING.md). A declared target is
 not evidence that its workers exist; check every profile before submitting.
 
 ## Two targets: MDM and silver
@@ -173,7 +179,9 @@ leave production format support open until it has its own qualification.
 Use the [data-profiling](../data-profiling/SKILL.md) skill on every file or
 table of the data set, unless approved findings for these same copies already
 exist (`approval.status: approved` in its `findings.yaml`, and the same input
-files). It says what each part is (master, reference, relationship,
+files). Profile each source once, into its own folder, and reuse its findings
+while its inputs and the profiler are unchanged (data-profiling, "Profile
+once"). It says what each part is (master, reference, relationship,
 transaction or metadata), its record key, its links, code lists, hierarchies,
 time roles and personal columns, with evidence. Its questions and its
 approval are the operator's, one at a time. Do not go on without approved
@@ -317,6 +325,9 @@ blocks; do not ask whether it does.
   The order is part of each record's identity.
 - **Identifiers:** each namespace and its format.
   - Ask about every identifier the source carries; never drop one silently.
+  - An identifier with no format yet is declared, not coded: write
+    `rules/identifiers/<name>.yaml` from its profiling finding
+    ([REFERENCE.md](REFERENCE.md), "Identifier types").
   - Recommend keeping a cross-reference identifier as lookup-only, under its
     own name (operator, 2026-09-26): map it under `cross_references`
     ([REFERENCE.md](REFERENCE.md)).
@@ -325,7 +336,7 @@ blocks; do not ask whether it does.
     "Proven name rules may bind"), and a name id stays lookup only. Adding a
     joining identifier is a merge-rule change for the operator.
   - An identifier another authority issues is named for who stated it
-    (`sec_lei`), never for the issuer.
+    (`<stating source>_<id>`), never for the issuer.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
 - **Relationships:** type, the other end's key, the source it lives in,
@@ -395,7 +406,10 @@ of an existing kind's file, and declare:
   on its proving corpus;
 - `bars`, from the kind's written requirements;
 - `defaults.allow_unknown_effective: true` if records carry no effective
-  date.
+  date. If they carry one, map it as `effective_at` in the contract
+  ([REFERENCE.md](REFERENCE.md)); a contract that names its effective time
+  in plain words but maps no `effective_at` gives its records only the
+  publication's time, often none.
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written
@@ -482,7 +496,15 @@ contract's `nonblocking_deferred_reasons`.
      `UnsupportedRecord("quality_<id>")`. Report the counts
      (`edgar_warehouse.mdm.clean.quality.counts(records, deferred)`) and up
      to 10 examples of each.
-2. **A proving run, for anything that matches records.** For a new domain,
+   - Report the run report checks too: per source, records and those set
+     aside, the empty-value rate per field and the newest record's age
+     (`quality.run_checks([quality.profile(records, deferred)], as_of=...)`;
+     a Merge Stage run keeps them as `checks` in its report, `mdm.run.report`).
+     They never block.
+2. **A proving run, for anything that matches records.** Which proof a
+   change needs, and when the full installed proof is required, is in
+   [mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest
+   proof". For a new domain,
    nothing is switched on yet. So the run registers a **copy** of the
    policy, with the new rules added to `automatic_rules` and each stamped
    `approved_by: proving-run` and `reason: "Proving Run only; not an
@@ -521,7 +543,7 @@ contract's `nonblocking_deferred_reasons`.
      and `note`. `--proof-uri` is `file://<absolute path>` locally or
      `s3://…`, and `--proof-sha256` is the file's sha256.
    - **Version label:** `<source or kind>-<YYYY-MM-DD>.<short change name>`,
-     e.g. `sec.submissions.person-2026-09-30.first`.
+     e.g. `acme.registry-2026-09-30.first`.
 4. **Save and record the test run:**
    ```bash
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<source>/source.yaml

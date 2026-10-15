@@ -10,6 +10,7 @@ from typing import Any
 from .activation import activated
 from .classification import fired, probable_kind, resolve_rule
 from .evidence import KINDS, assertion, subject_key
+from .identifier_types import TYPES, IdentifierType
 from .store import Conflict, canonical
 
 
@@ -72,6 +73,16 @@ def _name_id(item) -> str:
     return hashlib.sha256(("name_id@1\x1f" + " ".join(tokens)).encode("utf-8")).hexdigest()
 
 
+def _declared(kind: IdentifierType):
+    def checked(item) -> str:
+        value, reason = kind.refusal(item)
+        if reason:
+            raise UnsupportedRecord(reason)
+        return value
+
+    return checked
+
+
 # One table of named formats, read by identifiers, record keys and
 # registration alike, so adding one is one entry here (GoF consult,
 # 2026-09-24: the names were listed in two places and a third was coming).
@@ -80,6 +91,12 @@ FORMATS = {
     "lei": _lei,
     "name_id@1": _name_id,
 }
+# Ticket 81: the declared identifier types (`rules/identifiers/`) are formats
+# too; a declared name never replaces a hand-written one.
+for _name, _kind in TYPES.items():
+    if _name in FORMATS:
+        raise ValueError(f"Identifier type {_name} is declared and also written in code")
+    FORMATS[_name] = _declared(_kind)
 
 
 def format_value(item, format_name=None):
@@ -475,10 +492,16 @@ def _time(item, spec: dict):
         raise UnsupportedRecord("invalid_time") from None
 
 
+# A link's own rules, each naming the reason it sets the record aside with
+# (the Mapping Document describes each: `mapdoc.LINK_RULES`).
+LINK_RULE_NAMES = ("ends", "interval", "status")
+
+
 def _refuse_link(scope: dict, spec: dict) -> None:
     """A link's own rules, each with the reason it sets the record aside with:
     `interval` (a start, before any end) and `status` (one of `values`, and an
-    end for each status in `need_end`)."""
+    end for each status in `need_end`). `ends` (a link that names no end) is
+    enforced in `_link`, where the ends are read."""
     if not (spec.get("interval") or spec.get("status")):
         return
     start = _time(value(scope, spec["on"] if "capacity" in spec else spec["valid_from"]), spec)
@@ -501,6 +524,8 @@ def _refuse_link(scope: dict, spec: dict) -> None:
 
 def _link(scope: dict, spec: dict) -> dict | None:
     """One link a mapping states, read from its scope; none without its ends."""
+    if "ends" in spec and not (isinstance(spec["ends"], dict) and spec["ends"].get("reason")):
+        raise MappingError("A link's ends rule names its reason")
     _refuse_link(scope, spec)
     relationship_type = spec.get("type")
     if "type_field" in spec:
@@ -517,7 +542,11 @@ def _link(scope: dict, spec: dict) -> dict | None:
             else {}
         )
     except ValueError:
-        return None
+        # With `ends`, a record that names no end sets itself aside; without
+        # it, a list item with no end is simply no link.
+        if "ends" not in spec:
+            return None
+        raise UnsupportedRecord(spec["ends"]["reason"]) from None
     link = {
         **start,
         "type": relationship_type,

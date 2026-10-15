@@ -8,9 +8,117 @@
 #   ownership-sgml.yaml: the SGML submission file (the accession from its header).
 # The issuer is the existing Company (by CIK); the owner is master data, a Person
 # or Company (by CIK), and the owner on a filing is a relationship onboarded
-# with both masters (operator, 2026-10-12, "approved"). Their Dataset Contracts,
-# the transaction tables' silver specs and a Bookkeeping target come in a later
-# change, after a Proving Run; nothing here is mastered or landed yet. Its bronze
+# with both masters (operator, 2026-10-12, "approved"). The owner's Dataset
+# Contract is below (profiling ticket 07, 2026-10-13); the transaction tables'
+# silver specs and a Bookkeeping target come in a later change. Its bronze
 # family is named with its capture: today's local copies sit in two (the cohort's
 # primary documents and the filing_artifact submission files).
 source: sec.ownership
+bronze:
+  # Bronze: filing_artifact/sec/cik=<issuer>/<accession>/<accession>.txt (the SGML
+  # submission file); the cohort's bare primary documents sit under filings/.
+  family: filing_artifact
+mdm:
+  sec.ownership.reporting_owner.v1:
+    contract:
+      provider: SEC
+      family: filing_artifact
+      schema_version: sec-ownership-reporting-owner-v1
+      record_key: one reporting owner on one filing (accession, the owner's CIK); each
+        filing is its own record (mastering-to-done 02, D3), so its capacities are a dated
+        sighting
+      publication_key: the filing's accession number
+      effective_time: the filing's period of report (the event date)
+      semantics: patch
+      completeness: the owners one filing names; no retirement by absence
+      # The ownership feed masters its own owners (operator, 2026-10-13 20:30 ET,
+      # "Create its own (Recommended)"), first only the owners a filing proves are
+      # people: a person-shaped name the filing names a director or officer (operator,
+      # 2026-10-13, "Persons by role first (Recommended)"). Every other owner is held
+      # back and never stops the run: the submissions feeds master it by the same CIK.
+      nonblocking_deferred_reasons:
+      - classification_deferred
+      - classification_entity_undetermined
+      - quality_legal_name_present
+      - quality_legal_name_has_letter
+      # A CIK that is not one, or none, sets the record aside and never stops
+      # the run (rebuild ticket 10; operator, 2026-10-02, "Proposed set").
+      - invalid_cik
+      - missing_record_identity
+      # A link with no issuer, or no date or one that is not a date (ticket 10):
+      # the filing waits, the run goes on.
+      - relationship_end_missing
+      - invalid_relationship_interval
+      - invalid_time
+      adapter:
+        # The owner's name, as the filing states it: blank text is no value. The
+        # owner's address is never captured into MDM for a reporting owner (Person
+        # consumer spec, The Person projection).
+        reading:
+          source: sec.ownership
+          read:
+            format: json
+            limits: {max_bytes: 33554432, max_records: 1}
+            assertions:
+            - test: {test: {path: ., kind: object}}
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        legal_name: {value: {path: rpt_owner_name, path_mode: literal, type: text, null_if_blank: true}}
+                  matching:
+                    object:
+                      fields: {}
+        version: sec-ownership-reporting-owner-v1
+        retain_deferred: true
+        source_record_provenance: true
+        record_key:
+        - accession
+        - rpt_owner_cik
+        classification:
+          kind: person
+          rule_id: sec-ownership-person
+          version: 2026-10-13.1
+        identifiers:
+          cik: rpt_owner_cik
+        identifier_formats:
+          cik: sec_cik
+        # The owner's capacities at the issuer, restated on every filing: each filing
+        # is a dated sighting (held, or dropped), and the Merge Stage folds them into
+        # periods. The issuer is the Company mastered from its submissions document.
+        relationships:
+        - type: EMPLOYED_BY
+          capacity: director
+          target_key: [issuer_cik]
+          target_source: sec.submissions.company.v1
+          on: period_of_report
+          held: is_director
+          time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
+          scope: SEC ownership
+        - type: EMPLOYED_BY
+          capacity: officer
+          target_key: [issuer_cik]
+          target_source: sec.submissions.company.v1
+          on: period_of_report
+          held: is_officer
+          title: officer_title
+          time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
+          scope: SEC ownership
+        - type: BENEFICIAL_OWNER_OF
+          capacity: ten_percent_owner
+          target_key: [issuer_cik]
+          target_source: sec.submissions.company.v1
+          on: period_of_report
+          held: is_ten_percent_owner
+          time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
+          scope: SEC ownership

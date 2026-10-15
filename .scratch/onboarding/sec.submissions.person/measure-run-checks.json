@@ -1,0 +1,23 @@
+{
+ "as_of": "2026-10-14T00:00:00+00:00",
+ "checks": {
+  "sec.ownership.reporting_owner.v1": {
+   "empty_rate": {
+    "legal_name": 0.0
+   },
+   "newest": null,
+   "newest_age_days": null,
+   "records": 9313,
+   "set_aside": 1041
+  },
+  "sec.submissions.person.v1": {
+   "empty_rate": {
+    "legal_name": 0.0
+   },
+   "newest": null,
+   "newest_age_days": null,
+   "records": 76230,
+   "set_aside": 45133
+  }
+ }
+}

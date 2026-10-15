@@ -205,6 +205,22 @@ def write_source(body: dict, folder: Path) -> None:
         quality_path.write_text(dumps({"version": versions.pop(), "quality": blocks}), encoding="utf-8")
 
 
+def identifiers(root: Path | None = None) -> dict[str, dict]:
+    """The declared identifier types: `rules/identifiers/<name>.yaml`, by name."""
+    folder = (root or ROOT) / "identifiers"
+    return {path.stem: load(path) for path in sorted(folder.glob("*.yaml"))}
+
+
+def copy_identifiers(root: Path) -> None:
+    """Put the declared identifier types beside an export, so it runs on its
+    own: they are formats and normalizers of the build, not stored versions."""
+    if (Path(root) / "identifiers").resolve() == (ROOT / "identifiers").resolve():
+        return
+    (Path(root) / "identifiers").mkdir(parents=True, exist_ok=True)
+    for path in sorted((ROOT / "identifiers").glob("*.yaml")):
+        shutil.copyfile(path, Path(root) / "identifiers" / path.name)
+
+
 def pipeline(name: str, root: Path | None = None) -> dict:
     """A platform job uses the same Rules lifecycle as a source document."""
     return load((root or ROOT) / "pipelines" / name / "pipeline.yaml")

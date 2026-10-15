@@ -3,7 +3,7 @@
 Priority: 07, tier 1, in flight. Map: [Rebuild priorities](../map.md). Moved from `.scratch/platform-validation/issues/05b-match-proposal-snapshot-scaling.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: bug (found by the Person feed 1 Proving Run, 2026-10-01)
-Status: parts 1 (#772) and 2 (#774) merged; the Person timing run and finding 5 remain, deferred.
+Status: done (2026-10-14 14:08 ET): batch times stay flat over the full Person feed; finding 5 stays deferred
 
 ## What was seen
 
@@ -100,7 +100,7 @@ about. No pattern; leave the rest.
   reviews get new ids once (they now name `entities`); the old ones are
   retired by the next save of their family.
 - [x] PR #772; CI green; merged on the operator's "merge" (2026-10-01 21:50 ET)
-- [ ] Open for slice 6: the closure follows links, so a save loads the whole
+- [x] Resolved by ticket 77 (#963, 2026-10-14 12:50 ET): a batch no longer loads a closure; it reads the masters it touches and their links, and a parent hierarchy whole. Was: the closure follows links, so a save loads the whole
   corporate family; at full GLEIF scale a family may reach the closure limit
   or the byte cap. Whether link ends should stop the closure is a design
   question.
@@ -145,7 +145,7 @@ a few GIN entries, not about 1,000.
   shape change, not tuning
 
 - [x] GoF consult on `match_proposal_snapshot` and `assessment.py` (Part 2 note above, 2026-10-01 22:25 ET)
-- [ ] ~~Profile `save_batch` for a 1,000-Person batch (`track_functions`)~~ deferred to the next Person run, with its timings
+- [x] Profile `save_batch` with `track_functions` on 1,000-record Person batches (the ownership Proving Run, ticket 77): `queue_outbox` 81.4 of 88 s, `outbox_delivery` decompressing the batch document once per changed record; fixed in migration 020 (2026-10-14 12:50 ET)
 - [x] Make each branch an indexed lookup by key (subject, affected subjects,
   relationship targets), keeping the hash the same for the same state
   (migration 003 and its tests, above)
@@ -153,6 +153,14 @@ a few GIN entries, not about 1,000.
   flat~~ deferred to the next Person run (operator, 22:36 ET: shorter test
   cycles). The tests prove an index serves every lookup; they do not prove
   PostgreSQL picks it at default settings, which only a real run shows
+- [x] Measured on the record-by-record Merge Stage (ticket 77), the full Person
+  run, 2026-10-14 13:19–14:06 ET (`.scratch/onboarding/sec.submissions.person/proving_run.py`,
+  report local in `proving/person-timing-1014/`, counts only): 76,230 documents,
+  31,097 people bound by CIK and 45,133 set aside (11,095 deferred, 34,038 entity
+  undetermined), 0 CIKs on two people; batches of 1,000 took 4.3–7.1 s in the
+  first pass and 1.7–6.7 s in the second, with no growth from first batch to
+  last; the second pass changed nothing. Finding, counts only: 4 CIKs the rule
+  calls people are also in Company's cohort (to ticket 11's proof) 2026-10-14 14:08 ET
 - [x] Three-axis `/code-review` (2026-10-01 22:42 ET). GoF: leave it; a test
   that SQL and Python agree on a reading's links (added; the SQL now ignores an
   empty name, as Python does). Standards: comments on the role setting and the

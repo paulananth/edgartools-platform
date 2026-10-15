@@ -1,0 +1,77 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 9977
+  },
+  "identities": {
+   "company": 1705,
+   "person": 4820
+  },
+  "open_reviews": {
+   "classification_deferred": 362,
+   "classification_entity_undetermined": 680
+  },
+  "relationship_bodies": "d1e68527cc57ebc0e096708a9a718fe3",
+  "relationships": {
+   "BENEFICIAL_OWNER_OF / ten_percent_owner": 161,
+   "EMPLOYED_BY / director": 2477,
+   "EMPLOYED_BY / officer": 2796
+  },
+  "stage_records": {
+   "company": 1705,
+   "person": 8272
+  },
+  "waiting": {
+   "classification_deferred / -": 362,
+   "classification_entity_undetermined / -": 680
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 9977
+  },
+  "identities": {
+   "company": 1705,
+   "person": 4820
+  },
+  "open_reviews": {
+   "classification_deferred": 362,
+   "classification_entity_undetermined": 680
+  },
+  "relationship_bodies": "d1e68527cc57ebc0e096708a9a718fe3",
+  "relationships": {
+   "BENEFICIAL_OWNER_OF / ten_percent_owner": 161,
+   "EMPLOYED_BY / director": 2477,
+   "EMPLOYED_BY / officer": 2796
+  },
+  "stage_records": {
+   "company": 1705,
+   "person": 8272
+  },
+  "waiting": {
+   "classification_deferred / -": 362,
+   "classification_entity_undetermined / -": 680
+  }
+ },
+ "batches": 28,
+ "cik_both_person_and_company": 0,
+ "cik_on_two_persons": 0,
+ "filings": 8723,
+ "issuer_companies_in_cm27": 1706,
+ "issuers": 1920,
+ "persons_by_cik": 4820,
+ "policy_digest": "f996a8c37ae9e17d981b045cda48b5529b21fc85dca80259d483858ae06ba174",
+ "read": {
+  "assertions": 16544,
+  "deferred: classification_deferred": 722,
+  "deferred: classification_entity_undetermined": 1360
+ },
+ "run": "SEC ownership, Proving Run of sec.ownership.reporting_owner.v1",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 244.1,
+  "read": 35.5,
+  "second_pass": 124.1
+ },
+ "slowest_batch_seconds": 18.4
+}

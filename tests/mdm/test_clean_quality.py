@@ -119,7 +119,7 @@ class TestTheBlock:
             quality.check_quality(block(**change))
 
     def test_the_repo_quality_rules_are_valid(self):
-        for name in ("sec.submissions.company", "gleif"):
+        for name in ("sec.submissions.company", "gleif", "sec.submissions.person", "sec.ownership"):
             for entry in files.source(name)["mdm"].values():
                 if "quality" in entry["contract"]:
                     quality.check_quality(entry["contract"]["quality"])
@@ -211,13 +211,21 @@ class TestTheRunReport:
         def connect():
             yield SimpleNamespace(scalars=lambda *a, **k: [])
 
-        coordinator = SimpleNamespace(start=lambda *a, **k: None,
-                                      execute=lambda run, batch, work: work(),
-                                      reconcile=lambda run: {})
+        kept = {}
+
+        def execute(run, batch, work, checks=None):
+            kept[batch] = checks
+            return work()
+
+        coordinator = SimpleNamespace(start=lambda *a, **k: None, execute=execute, reconcile=lambda run: {})
         result = cli.execute_manifest(SimpleNamespace(engine=SimpleNamespace(connect=connect)), coordinator,
                                       path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
         assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
                                      "fixed:state_from_name_tag": 1}
+        # Each batch's run report profile goes to the run, which keeps it with
+        # the batch's finished event and sums it in its report (rebuild ticket 10).
+        assert kept["b0"]["as_of"] == "t"
+        assert kept["b0"]["profile"]["sec.submissions.company.v1"]["records"] == 1
 
 
 class TestTheReviewFixes:
@@ -278,7 +286,7 @@ class TestExceptions:
             register_dataset(None, SOURCE_CODE, contract)
 
     def test_every_repo_exception_is_non_blocking(self):
-        for name in ("sec.submissions.company", "gleif"):
+        for name in ("sec.submissions.company", "gleif", "sec.submissions.person", "sec.ownership"):
             for entry in files.source(name)["mdm"].values():
                 if "quality" in entry["contract"]:
                     assert quality.exception_reasons(entry["contract"]["quality"]) <= set(
@@ -327,3 +335,89 @@ def test_a_parent_code_must_agree_with_the_reference_hierarchy(monkeypatch):
         quality.apply({**block, "checks": [{**item, "args": {**item["args"], "sha256": "0" * 64}}]},
                       {"group": "LEAF", "parent_group": "MID"}, {})
     quality._reference_parents.cache_clear()
+
+
+# The Person checks (rebuild ticket 10; operator, 2026-10-02, "Proposed set"),
+# in both feeds that master a Person. Every name here is invented.
+PERSON_CONTRACTS = [("sec.submissions.person", "sec.submissions.person.v1"),
+                    ("sec.ownership", "sec.ownership.reporting_owner.v1")]
+
+
+@pytest.mark.parametrize("source, code", PERSON_CONTRACTS)
+class TestPersonName:
+    @pytest.mark.parametrize("name", ["Zoë Brontë-Ångström", "Kieran M. O\u2019Sullivan", "Linda Marbán, Ph.D.",
+                                      "OTIS CLARENCE JR", "Søren Ødegård III", "李 小龙"])
+    def test_a_name_is_kept_as_filed(self, source, code, name):
+        block = files.mdm_contract(source, code)["quality"]
+        fields = {"legal_name": name}
+        quality.apply(block, fields, None)
+        assert fields == {"legal_name": name}
+
+    @pytest.mark.parametrize("name", ["123", "*", "(1) 2", "--"])
+    def test_a_name_with_no_letter_is_an_exception_that_never_stops_the_run(self, source, code, name):
+        contract = files.mdm_contract(source, code)
+        with pytest.raises(UnsupportedRecord) as caught:
+            quality.apply(contract["quality"], {"legal_name": name}, None)
+        assert caught.value.reason == "quality_legal_name_has_letter"
+        assert caught.value.reason in contract["nonblocking_deferred_reasons"]
+
+    def test_a_bad_cik_never_stops_the_run(self, source, code):
+        reasons = files.mdm_contract(source, code)["nonblocking_deferred_reasons"]
+        assert {"invalid_cik", "missing_record_identity"} <= set(reasons)
+
+
+def test_every_reason_an_ownership_link_sets_aside_never_stops_the_run():
+    contract = files.mdm_contract("sec.ownership", "sec.ownership.reporting_owner.v1")
+    links = contract["adapter"]["relationships"]
+    reasons = {link[rule]["reason"] for link in links for rule in ("ends", "interval")}
+    assert reasons == {"relationship_end_missing", "invalid_relationship_interval"}
+    # A date that is not one (invalid_time) waits too.
+    assert reasons | {"invalid_time"} <= set(contract["nonblocking_deferred_reasons"])
+
+
+# The run report checks (rebuild ticket 10; operator, 2026-10-02, "Proposed set"):
+# reported on every run, never blocking. Every value here is invented.
+def assertion_of(source="feed.a", effective_at=None, **fields):
+    return {"source_code": source, "effective_at": effective_at,
+            "fields": {k: ({"op": "unknown"} if v is None else {"op": "value", "value": v}) for k, v in fields.items()}}
+
+
+class TestRunChecks:
+    def test_records_set_aside_and_empty_rate_per_field(self):
+        batch = quality.profile(
+            [assertion_of(name="A", city=None), assertion_of(name="B", city="X"), assertion_of(name="", city=None)],
+            [{"source_code": "feed.a", "reason": "quality_name_present"}])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["records"] == 4 and checks["set_aside"] == 1
+        assert checks["empty_rate"] == {"city": 0.6667, "name": 0.3333}
+
+    def test_batches_add_up_per_source(self):
+        one = quality.profile([assertion_of(name="A")], [])
+        two = quality.profile([assertion_of(name=None), assertion_of("feed.b", name="C")], [])
+        checks = quality.run_checks([one, two], as_of="2026-10-14T00:00:00+00:00")
+        assert checks["feed.a"]["records"] == 2 and checks["feed.a"]["empty_rate"] == {"name": 0.5}
+        assert checks["feed.b"]["records"] == 1
+
+    def test_the_newest_record_and_its_age_in_days(self):
+        batch = quality.profile([assertion_of(effective_at="2026-10-01T00:00:00+00:00", name="A"),
+                                 assertion_of(effective_at="2026-10-11T12:00:00+00:00", name="B")], [])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["newest"] == "2026-10-11T12:00:00+00:00" and checks["newest_age_days"] == 2.5
+
+    def test_a_feed_that_states_no_time_reports_its_age_as_unknown(self):
+        batch = quality.profile([assertion_of(name="A")], [])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["newest"] is None and checks["newest_age_days"] is None
+
+    def test_a_field_a_record_leaves_out_is_empty(self):
+        batch = quality.profile([assertion_of(name="A", city="X"), assertion_of(name="B")], [])
+        (checks,) = quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00").values()
+        assert checks["empty_rate"] == {"city": 0.5, "name": 0.0}
+
+    def test_every_record_set_aside_has_no_empty_rate(self):
+        batch = quality.profile([], [{"source_code": "feed.a"}, {"source_code": "feed.a"}])
+        assert quality.run_checks([batch], as_of="2026-10-14T00:00:00+00:00") == {"feed.a": {
+            "records": 2, "set_aside": 2, "empty_rate": {}, "newest": None, "newest_age_days": None}}
+
+    def test_nothing_committed_reports_nothing(self):
+        assert quality.run_checks([], as_of="2026-10-14T00:00:00+00:00") == {}

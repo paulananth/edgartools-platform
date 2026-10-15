@@ -1,0 +1,16 @@
+# CUSIP: the nine-character number a North American security is issued under
+# (six for the issuer, two for the issue, one check digit).
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: cusip
+version: 1
+description: "Issuer (6), issue (2) and a check digit. Upper-cased; * @ # mark private placements."
+case: upper
+parts:
+  - length: 8
+    characters: [digits, letters, "*", "@", "#"]
+  - length: 1
+    characters: [digits]
+check_digit: luhn over letter values
+# 000000000 and 999999999 are filers' stand-ins for none; the first even
+# passes the check digit (ticket 79's N-PORT profile: 614,038 and 17,511 rows).
+refuse_one_repeated_character: true

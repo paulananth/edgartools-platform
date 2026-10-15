@@ -182,3 +182,58 @@ automatic_rules:
   rule_version: "2026-09-30"
   verdict: bind
   activation: deterministic
+# sec-ownership-person: switched on by operator, 2026-10-14T16:26:29Z, in their words: Approve both (Recommended)
+- kind: person
+  family: classification
+  rule_id: sec-ownership-person
+  rule_version: 2026-10-13.1
+  verdict: person
+  activation: measured
+  proof:
+    method: wilson_lower_bound
+    one_sided_confidence: 0.975
+    n: 4622
+    correct: 4622
+    lower_bound: 0.999169
+    adversarial:
+      fixture_sha256: 199091171595270af3002e3da642e8e7b9bb1c95f88f0423707c580b1c57f441
+      n: 363
+      violations: 0
+    cohort:
+      filings: 8723
+      by_step:
+        3-director:
+          n: 2488
+          correct: 2488
+          lower_bound: 0.998458
+        3-officer:
+          n: 2148
+          correct: 2148
+          lower_bound: 0.998214
+      unlabelled_sample:
+        population: 198
+        n: 50
+        correct: 50
+      files:
+        measure.json: 199091171595270af3002e3da642e8e7b9bb1c95f88f0423707c580b1c57f441
+        measure.py: c242834459f699f2b012c7a66d0cf9dcc34746a5f27a14136647a4e74ce31a58
+        sample-50.json: 868c81643e99707d9d03bf81d36a8225b4f40af1a37cae8ebd29f677ac20d6d7
+        proving-run.json: e8df7616ce019967ceec9963328f578b4942228f4e5a6683ed3d2f7f10a71f2a
+    approved_by: operator
+    approved_at: "2026-10-14T16:26:29Z"
+    reason: 'SEC ownership owner Proving Run (ticket 01): 4,622 of 4,622 owners labelled people
+      called people (director 2,488, officer 2,148); 0 of 363 owners labelled entities called
+      a person; 50 of 50 sampled owners with no submissions document checked as people; Proving
+      Run: 4,820 people by CIK, 0 CIKs on two people, 0 both person and Company, second pass
+      changed nothing'
+    approved_words: Approve both (Recommended)
+# sec-ownership-person-cik: switched on by operator, 2026-10-14T16:26:29Z, in their words: Approve both (Recommended).
+# It activates on the Person CIK Identifier Contract (kinds/person.yaml, identifiers.cik),
+# re-verified with the ownership feed among its sources on the SEC ownership Proving
+# Run (proving-run.json, sha256 e8df7616...1a2f).
+- kind: person
+  family: binding
+  rule_id: sec-ownership-person-cik
+  rule_version: 2026-10-13.1
+  verdict: bind
+  activation: deterministic
