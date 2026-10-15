@@ -133,3 +133,13 @@ Expected: about 15 minutes in all; peak memory 2 to 3 GB. Reported: records per 
 - Mapping Documents: `rules/sources/sec.nport.security/MAPPING.xlsx`, `rules/merge/kinds/security.xlsx` and 13F's (its "who wins" rows name N-PORT now); `rules mapdoc check` passes; `rules catalog plan` shows the new source.
 - Quality (data-quality `draft`, then `measure` on the test run's normalized records, rebuilt from its prepared batches in 4 min, not a new read): one engine check drafted, an issuer name filed as a stand-in (`placeholder@1`, proposed `withhold`): **0 of 383,595 CUSIP and 0 of 35,309 ISIN Securities**, since each keeps its lexically first filed name. Not written yet: its `on_fail` is the operator's, asked with the approval. New code, logged not written: issuer LEI check digit (179,389 holdings; the LEI is a filed word, ruled); filed words differing between a key's holdings (ticket 84).
 - The Proving Run waits for the OpenFIGI comparison (operator: "Both, in parallel"), so a rule FIGI changes is proved once, not twice. Ticket 92 (#994) is the capture; its first request waits for `OPENFIGI_API_KEY` in the operator's environment.
+
+## Part 1: OpenFIGI's evidence on the filed pairs (2026-10-15 13:45 ET, explored)
+
+Capture (operator: "Yes, run it (Recommended)"; key kept outside the repository, operator: "Reuse the OPENFIGI_API_KEY"): 7,714 mapping requests of 100 (383,612 CUSIPs, 387,607 ISINs; every accepted N-PORT one), 13:04-13:42 ET, 0 retries, through the capture's transport (ticket 92), each answer kept whole on this machine with its request and a receipt line (621 MB; `captures/openfigi/2026q2-nport/receipts.jsonl`). Not run as a Bookkeeping capture (no Journal, no leases): that is the scheduled feed's, later.
+
+`security_figi_comparison.py` beside this log; result `security-figi-comparison.json` (counts only). Two securities are the same when any FIGI of one's listings (its own, composite or share class) is one of the other's: a bond or loan has no composite FIGI (all Mtge, Muni, Corp, Govt listings; every Equity listing has one), so composites alone called 337,521 agreeing pairs "different" (caught, rerun).
+- Found: 353,491 of 383,612 CUSIPs; 380,047 of 387,607 ISINs.
+- **The filed one-to-one pairs: 346,535 the same security, 128 different, 7,710 not both found.** Where FIGI can judge, the rule "ISIN joins when the pair is one to one in the quarter" is right on 99.96%.
+- The 17,219 ISINs filed with several CUSIPs: FIGI names exactly one of them for 4,338, none for 12,880, several for 1.
+- ISIN-only Securities (35,309): 5,395 share a FIGI with an N-PORT CUSIP; 27,438 share none; 2,476 not found.
