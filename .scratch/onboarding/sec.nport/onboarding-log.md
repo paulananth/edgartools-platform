@@ -41,3 +41,11 @@ Skill: data-onboarding (with data-profiling and data-quality, which it calls). T
 - A field's source path must be a plain path or a join for the Mapping Document, so the reading keeps the filed name, title and FIGI in their own tables of only the rows that carry them (`select`), instead of marking blanks.
 - Tested locally, all 999 files, the ticket 83 engine: read 276 s, reduction 90 s, no refusals. 29,942 CUSIP records: 20,311 Securities accepted, all with issuer name and class title, 10,681 with a FIGI (lookup only); 9,603 set aside, check digit fails (options, ruled a data quality exception); 28 set aside, not CUSIP-shaped.
 - Next: quality checks (data-quality skill), the Proving Run on MDM, approval, switch-on.
+
+## 13F Security: Proving Run (2026-10-14 22:51 ET)
+
+- Disposable PostgreSQL 16 (container removed), `.scratch/onboarding/sec.thirteenf.information_table/proving_run.py`; report `proving-run.json` (counts only). The matching rule `security-cusip` switched on only in the run's copy of the policy, stamped "proving-run".
+- First pass 251 s, 62 batches, slowest 18 s: **20,311 Securities, one per CUSIP**; 20,311 bind decisions; every Security carries issuer name and class title. **0 CUSIPs on two Securities.** 9,631 records set aside, each an open review: 9,603 `invalid_cusip_checksum`, 28 `invalid_cusip`.
+- Second pass (75 s) **changed nothing**.
+- (The report's `read.assertions` 40,622 counts each assertion twice, once per apply loop; the stage counts are the measure.)
+- Next: the operator's approval of the Security matching rule and its CUSIP Identifier Contract, then switch-on.
