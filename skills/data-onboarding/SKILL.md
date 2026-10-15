@@ -179,7 +179,9 @@ leave production format support open until it has its own qualification.
 Use the [data-profiling](../data-profiling/SKILL.md) skill on every file or
 table of the data set, unless approved findings for these same copies already
 exist (`approval.status: approved` in its `findings.yaml`, and the same input
-files). It says what each part is (master, reference, relationship,
+files). Profile each source once, into its own folder, and reuse its findings
+while its inputs and the profiler are unchanged (data-profiling, "Profile
+once"). It says what each part is (master, reference, relationship,
 transaction or metadata), its record key, its links, code lists, hierarchies,
 time roles and personal columns, with evidence. Its questions and its
 approval are the operator's, one at a time. Do not go on without approved

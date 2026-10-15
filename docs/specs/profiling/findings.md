@@ -39,6 +39,10 @@ dataset:
   scan: {mode: full|sampled, reason: <e.g. "6.2 GB > 5 GB">, seed: <n|null>, elapsed_seconds: <n>}
   profiled_at: <ISO time>
   profiled_by: <agent and skill version>
+  profiled_with:                # what the findings were made from; a rerun with all of it unchanged reuses them
+    {profiler_sha256: <sha256 of the profiler's code>, duckdb: <version>, python: <version>, name: <the data set's name>,
+     inputs: {<input name>: {location: <absolute path>, sha256: <hex>}}, kinds: [<kind>], limit_gb: <n>, sample: <n>, seed: <n>}
+     # null for a database input, which is always profiled again
 parts: [...]                    # §3, one per table, file or child table
 relationships: [...]            # §4
 hierarchies: [...]              # §5
