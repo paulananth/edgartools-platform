@@ -34,3 +34,10 @@ Operator ruling on the split (2026-10-14, "Agreed"): no "workflow" skill. A skil
 - [x] Operator, 2026-10-14: "Check if failed tests can be removed". `CLAUDE.md`'s test baseline listed 8 Postgres failures and 3 import errors as normal; all five files are deleted, so the paragraph went. The only local failures were the two install wizard tests, from macOS's Python 3.9 (`datetime.UTC`) and `jq` off PATH: with Python 3.12 and `jq` first, all 261 architecture tests pass, so nothing is removed and the baseline says what they need 2026-10-14 17:26 ET
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Learning → skill: this ticket is the rule itself
+
+## Handoff (2026-10-15 ET, account change)
+
+Resuming the sweep part on branch `claude/ticket78-sweep` (worktree `../edgartools-platform-claude-sweep`, fresh off main; #972 merged 2026-10-14 17:43 ET, so the "PR" line can be ticked and the memory trim is unblocked). Found so far:
+- `warehouse_orchestrator.py`, `write_immutable_bytes`, `unresolved_errors`, `connect_with_qmark_paramstyle`, `check-fence` and the legacy `mdm export/sync-graph/verify-graph/reconcile/publish-relationships` commands no longer exist; `mdm migrate`, `bootstrap-prod-mdm.sh`, `IfNoneMatch` (in `edgar_warehouse/bookkeeping/clean/artifacts.py`) and the Snowflake bootstrap SQL do.
+- Plan: route CLAUDE.md's ~22 non-Postgres hard-won rules first (Snowflake stays in CLAUDE.md by ruling, reworded off dead names; idempotency on the durable artifact goes to bookkeeping; "none" only for a deleted pipeline or command, with the evidence); then grep closed tickets for `Lesson`/`Root cause`/`Learning` lines rather than reading all 870; a legacy map gets one "none" line with evidence.
+- Codex #979 touches `skills/data-platform/SKILL.md`: do not route anything there until it merges.
