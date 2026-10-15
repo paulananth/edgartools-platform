@@ -108,9 +108,11 @@ Merge Stage for consolidation; field priority does not establish identity.
 The implemented Rust kernels replay accepted identity decisions and rank
 eligible field claims, including profile claims. Python retains policy
 approval, automatic matching, profile qualification, source-history folding,
-timestamps and canonical value comparisons. Publication envelopes now use Rust
-object preparation from immutable database JSONB text; Python checks the
-committed hash before sending and retains previously stored payload bytes. All
+timestamps and canonical value comparisons. Contract 2 publication envelopes use
+Rust object preparation from immutable database JSONB text. Contract 3
+changed-record envelopes currently use SQL-built `payload_text`; stored payloads
+retain their original bytes. Python checks every path against the committed hash
+before sending. All
 custom code stays Python; add reusable generic primitives to the Rust core.
 Python also owns CLI, orchestration, integrations, retries, verification and
 database clients. The database owns storage, indexed retrieval, constraints,
