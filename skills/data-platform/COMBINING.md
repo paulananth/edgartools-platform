@@ -91,7 +91,11 @@ bound native container allocations. Python still decodes one authenticated
 artifact chunk and materializes output rows; native conversion uses batches of
 at most 1,024 rows. These limits are not an RSS measurement or disk spill.
 
-`groups` names 1..32 output tables. Each group requires one declared `source`,
+`groups` names 1..32 output tables. Each group requires one declared `source`
+(one source-extract name, or an ordered list of 1..8 distinct names, so a set
+too large for one reading unit is read in several and reduced as one; a list
+gives what one reading of all its rows gives, and `last` requires a single
+source),
 `table` (one name or an ordered list of 1..8 distinct names), `keys`
 (1..8 distinct text columns), `mode`, `count` (new output
 column), `sample` and `sample_limit` (0..1,000). Text keys are exact; missing,

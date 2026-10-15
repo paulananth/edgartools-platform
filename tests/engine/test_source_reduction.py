@@ -154,6 +154,31 @@ def test_cross_table_last_refuses_partition_dependent_source_order(tmp_path, spl
     assert not (tmp_path / "output").exists()
 
 
+def test_a_group_reduces_several_readings_as_one(tmp_path):
+    # Ticket 82: a set too large for one reading unit is read in several; a group over
+    # all of them gives what one reading of their rows together gives.
+    store = Artifacts()
+    first = [{"key": "a", "holder": "B"}, {"key": "b", "holder": "A"}]
+    second = [{"key": "a", "holder": "A"}, {"key": "a", "holder": "B"}]
+    split = {"one": partitioned(store, tmp_path, [{"rows": first}]),
+             "two": partitioned(store, tmp_path, [{"rows": second}])}
+    whole = {"main": partitioned(store, tmp_path, [{"rows": first + second}])}
+    many = store.json(source_combine.execute(envelope(store, tmp_path / "many", plan(
+        {"rows": member("rows", source=["one", "two"])}), split), store))
+    one = store.json(source_combine.execute(envelope(store, tmp_path / "one", plan(
+        {"rows": member("rows")}), whole), store))
+    assert many["artifacts"][0]["tables"] == one["artifacts"][0]["tables"] == {"rows": [
+        {"key": "a", "count": 2, "sample": [{"holder": "A"}, {"holder": "B"}]},
+        {"key": "b", "count": 1, "sample": [{"holder": "A"}]}]}
+    with pytest.raises(ValueError, match="single table and a single source"):
+        source_combine.execute(envelope(store, tmp_path / "last", plan(
+            {"rows": member("rows", source=["one", "two"], last="holder2")}), split), store)
+    for bad in ([], ["one", "one"], ["one", "missing"]):
+        with pytest.raises(ValueError, match="distinct declared sources"):
+            source_combine.execute(envelope(store, tmp_path / "bad", plan(
+                {"rows": member("rows", source=bad)}), split), store)
+
+
 @pytest.mark.parametrize("bound,value", [("max_keys", 1), ("max_members", 1),
                                          ("max_state_bytes", 1), ("max_output_rows", 1),
                                          ("max_input_bytes", 1), ("max_rows", 1), ("max_output_bytes", 1)])
