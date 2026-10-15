@@ -12,7 +12,7 @@ Root cause: every identifier type (CIK, LEI, CRD, and the new CUSIP and ISIN) is
 
 ## What changes
 
-- An identifier type is declared once, in `rules/identifiers/<name>.yaml`: its pattern, its case, the values refused as stand-ins, and its check-digit family, named as data-profiling names it.
+- An identifier type is declared once, in `rules/identifiers/<name>.yaml`: its parts (each a length and the characters it may hold), its case, the values refused as stand-ins, and its check-digit family, named as data-profiling names it.
 - The engine implements each check-digit family once. Profiling's families and the engine's share their names, so a finding becomes a declaration with no translation.
 - Each declared type gives a format (`<name>`, refusing with `invalid_<name>` or `invalid_<name>_checksum`) and a matching normalizer (`normalize_identifier@<name>-v<version>`), so an Identifier Contract can name it.
 - CUSIP and ISIN are the first two declared types. They replace the hand-written versions on the unmerged branch `claude/security-id-formats`, whose tests carry over.
