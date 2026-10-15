@@ -20,5 +20,6 @@ Found onboarding N-PORT (ticket 79): the SEC publishes the N-PORT data set as a 
 - [x] Test: the same rows from CSV and TSV; a quote mark kept; a ragged row refused; windows-1252; a ZIP member (`cargo test --test acceptance`: 23 passed) 2026-10-15 06:51 ET
 - [x] READING.md: TSV beside CSV 2026-10-15 06:51 ET
 - [ ] ~~The N-PORT holdings table read through the engine~~ deferred to ticket 89 (a large CSV or TSV is read in pieces): read whole, the 910 MB member was killed by the system after 159 s and 266 s on this 8 GB machine (peak resident 1.7 and 2.1 GB, no error from Python); the reader holds every row in memory, as it does for CSV
-- [ ] Three-axis review; PR, CI green, merge on the operator's word
+- [x] Three-axis review 2026-10-15 06:59 ET: GoF leave (the format list grew once in its life). Spec: the profiler wrote a TSV input's format as `csv`, so a contract written from its findings would split on commas: fixed, findings now declare `tsv` (test in `test_profiling_inputs.py`). Standards: the overlap guard ran before every commit and push (no overlap; `crates/source-contract/**` and READING.md are Codex's paths, taken on by the operator's words); a test value replaced with a neutral one; the bare `quoting` flag left (private, two callers)
+- [ ] PR #986, CI green, merge on the operator's word
 - [ ] Learning → skill

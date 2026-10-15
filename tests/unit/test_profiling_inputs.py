@@ -33,6 +33,14 @@ def test_csv_is_one_view_with_full_type_scan(con, tmp_path):
     assert con.execute('SELECT typeof(code) FROM item LIMIT 1').fetchone()[0] == "VARCHAR"
 
 
+def test_a_tsv_is_read_as_csv_and_declared_tsv_for_its_contract(con, tmp_path):
+    f = tmp_path / "item.tsv"
+    f.write_text("id\tcode\n1\tA1\n2\tB2\n")
+    part, = inputs.register(con, "item", str(f), tmp_path / "w")
+    assert rows(con, "item") == [(1, "A1"), (2, "B2")]
+    assert part.finding(2)["format"] == "tsv"  # the engine reads it as `format: tsv`
+
+
 def test_folder_of_different_tables_gives_one_part_each(con, tmp_path):
     (tmp_path / "d").mkdir()
     (tmp_path / "d" / "a.csv").write_text("x\n1\n")
