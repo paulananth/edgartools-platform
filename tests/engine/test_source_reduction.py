@@ -173,7 +173,7 @@ def test_a_group_reduces_several_readings_as_one(tmp_path):
     with pytest.raises(ValueError, match="single table and a single source"):
         source_combine.execute(envelope(store, tmp_path / "last", plan(
             {"rows": member("rows", source=["one", "two"], last="holder2")}), split), store)
-    for bad in ([], ["one", "one"], ["one", "missing"]):
+    for bad in ([], ["one", "one"], ["one", "missing"], [["one"]], [{"one": 1}]):
         with pytest.raises(ValueError, match="distinct declared sources"):
             source_combine.execute(envelope(store, tmp_path / "bad", plan(
                 {"rows": member("rows", source=bad)}), split), store)

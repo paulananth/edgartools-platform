@@ -50,8 +50,9 @@ def contract(body, refs):
             raise ValueError("Reduction group has unknown or missing fields")
         tables = _selected_tables(spec)
         sources = _sources(spec)
-        if (not isinstance(sources, list) or not 1 <= len(sources) <= 8 or len(set(sources)) != len(sources)
+        if (not isinstance(sources, list) or not 1 <= len(sources) <= 8
                 or not all(_name(source) and source in refs for source in sources)
+                or len(set(sources)) != len(sources)
                 or not isinstance(tables, list) or not 1 <= len(tables) <= 8
                 or not all(_name(table) for table in tables) or len(set(tables)) != len(tables)):
             raise ValueError("Reduction group selects 1..8 distinct declared sources and 1..8 distinct tables")
