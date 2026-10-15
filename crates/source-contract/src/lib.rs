@@ -19,6 +19,7 @@
 mod formats;
 pub mod json_sequence;
 pub mod xml_sequence;
+pub mod delimited_sequence;
 mod integer;
 mod reference;
 mod lookup_sets;
