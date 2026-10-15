@@ -147,24 +147,11 @@ impl PyEngine {
         };
         let sets = indexed_sets(&self.inner, lookups)?;
         let projection = self.inner.prepare_json_projection(&sets).map_err(rejected)?;
-        let mut values = crate::context::from_json(context).map_err(rejected)?;
-        if let Some(name) = &ordinal_context {
-            if values.contains_key(name) {
-                return Err(rejected(crate::Rejected::new("invalid_context", "stream ordinal context is generated, never supplied")));
-            }
-            values.insert(name.clone(), Val::Int(1));
-        }
+        let mut values = stream_context(context, &ordinal_context)?;
         self.inner.validate_context(&values).map_err(rejected)?;
         let limits = crate::json_sequence::Limits { max_bytes, max_record, max_records, max_depth, min_integer, record_encoding };
         let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), &wrapper, limits, |record, ordinal| {
-            if let Some(name) = &ordinal_context {
-                let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
-                    .ok_or_else(|| crate::Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
-                values.insert(name.clone(), Val::Int(position));
-            }
-            let reading = projection.read_json_value(record, &values)?;
-            Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
-                .map_err(|error| crate::Rejected::new("stream_consumer", error))
+            emit(&mut values, &ordinal_context, ordinal, &on_reading, |values| projection.read_json_value(record, values))
         })).map_err(rejected)?;
         Ok((result.records, result.bytes))
     }
@@ -176,25 +163,12 @@ impl PyEngine {
         let format = crate::delimited_sequence::Format::named(format).map_err(rejected)?;
         let sets = indexed_sets(&self.inner, lookups)?;
         let projection = self.inner.prepare_json_projection(&sets).map_err(rejected)?;
-        let mut values = crate::context::from_json(context).map_err(rejected)?;
-        if let Some(name) = &ordinal_context {
-            if values.contains_key(name) {
-                return Err(rejected(Rejected::new("invalid_context", "stream ordinal context is generated, never supplied")));
-            }
-            values.insert(name.clone(), Val::Int(1));
-        }
+        let mut values = stream_context(context, &ordinal_context)?;
         self.inner.validate_context(&values).map_err(rejected)?;
         let limits = crate::delimited_sequence::Limits { max_bytes, max_record, max_records };
         let encoding = encoding.to_string();
         let result = py.allow_threads(|| crate::delimited_sequence::scan(PythonReader(stream), format, &encoding, limits, |record, ordinal| {
-            if let Some(name) = &ordinal_context {
-                let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
-                    .ok_or_else(|| Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
-                values.insert(name.clone(), Val::Int(position));
-            }
-            let reading = projection.read_json_value(record, &values)?;
-            Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
-                .map_err(|error| Rejected::new("stream_consumer", error))
+            emit(&mut values, &ordinal_context, ordinal, &on_reading, |values| projection.read_json_value(record, values))
         })).map_err(rejected)?;
         Ok((result.records, result.bytes))
     }
@@ -218,11 +192,7 @@ impl PyEngine {
             .map_err(|error| rejected(Rejected::new("contract", error)))?;
         self.inner.validate_json_projection().map_err(rejected)?;
         header_engine.inner.validate_json_projection().map_err(rejected)?;
-        let mut values = crate::context::from_json(context).map_err(rejected)?;
-        if let Some(name) = &ordinal_context {
-            if values.contains_key(name) { return Err(rejected(Rejected::new("invalid_context", "stream ordinal context is generated, never supplied"))); }
-            values.insert(name.clone(), Val::Int(1));
-        }
+        let mut values = stream_context(context, &ordinal_context)?;
         self.inner.validate_context(&values).map_err(rejected)?;
         header_engine.inner.validate_context(&values).map_err(rejected)?;
         let header_context = values.clone();
@@ -233,17 +203,35 @@ impl PyEngine {
             if !reading.deferred.is_empty() { return Err(Rejected::new("xml_header", "XML header assertions must pass, not defer")); }
             Ok(())
         }, |record, ordinal| {
-            if let Some(name) = &ordinal_context {
-                let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
-                    .ok_or_else(|| Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
-                values.insert(name.clone(), Val::Int(position));
-            }
-            let reading = self.inner.read_json_value(record, &Lookups::new(), &values)?;
-            Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
-                .map_err(|error| Rejected::new("stream_consumer", error))
+            emit(&mut values, &ordinal_context, ordinal, &on_reading, |values| self.inner.read_json_value(record, &Lookups::new(), values))
         })).map_err(rejected)?;
         Ok((result.records, result.bytes))
     }
+}
+
+/// The caller's facts for a stream, with the generated ordinal seeded at 1.
+fn stream_context(context: &str, ordinal_context: &Option<String>) -> PyResult<crate::Row> {
+    let mut values = crate::context::from_json(context).map_err(rejected)?;
+    if let Some(name) = ordinal_context {
+        if values.contains_key(name) {
+            return Err(rejected(Rejected::new("invalid_context", "stream ordinal context is generated, never supplied")));
+        }
+        values.insert(name.clone(), Val::Int(1));
+    }
+    Ok(values)
+}
+
+/// Stamps the record's one-based ordinal, projects it and hands the reading to Python.
+fn emit(values: &mut crate::Row, ordinal_context: &Option<String>, ordinal: usize, on_reading: &Py<PyAny>,
+        project: impl FnOnce(&crate::Row) -> Result<crate::Reading, Rejected>) -> Result<(), Rejected> {
+    if let Some(name) = ordinal_context {
+        let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
+            .ok_or_else(|| Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
+        values.insert(name.clone(), Val::Int(position));
+    }
+    let reading = project(values)?;
+    Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
+        .map_err(|error| Rejected::new("stream_consumer", error))
 }
 
 fn reading_to_py(py: Python<'_>, reading: &crate::Reading) -> PyResult<PyObject> {

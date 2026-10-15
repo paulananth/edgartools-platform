@@ -50,6 +50,12 @@ fn a_ragged_row_bytes_records_and_encoding_are_refused_as_reading_whole_refuses_
     assert_eq!(streamed(b"a\tb\n1\t2\n3\t4\n", Format::Tsv, "utf-8", small).unwrap_err().code, "limit_exceeded");
     let short = Limits { max_record: 3, ..limits() };
     assert_eq!(streamed(b"a\tb\n12\t34\n", Format::Tsv, "utf-8", short).unwrap_err().code, "limit_exceeded");
+    // Bytes as written: the quotes count, and so does a long header.
+    let exact = Limits { max_record: 8, ..limits() };
+    assert_eq!(streamed(b"a,b\n\"1\",\"2\"\n", Format::Csv, "utf-8", exact).unwrap().1, 1);
+    assert_eq!(streamed(b"a,b\n\"\"\"1\",\"2\"\n", Format::Csv, "utf-8", exact).unwrap_err().code, "limit_exceeded");
+    assert_eq!(streamed(b"abcdefgh,b\n1,2\n", Format::Csv, "utf-8", exact).unwrap_err().code, "limit_exceeded");
+    assert_eq!(streamed(b"a\ta\n1\t2\n", Format::Tsv, "utf-8", limits()).unwrap_err().code, "malformed");
     assert_eq!(streamed(b"a\tb\nA\x81B\t1\n", Format::Tsv, "windows-1252", limits()).unwrap_err().code, "encoding");
     let (rows, _) = streamed(b"a\tb\nSOCI\xC9T\xC9\t1\n", Format::Tsv, "windows-1252", limits()).unwrap();
     assert_eq!(rows[0]["a"], Val::Str("SOCI\u{c9}T\u{c9}".into()));

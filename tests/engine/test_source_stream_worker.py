@@ -307,6 +307,6 @@ def test_a_delimited_stream_declares_its_format_and_one_encoding(tmp_path, delim
 def test_a_ragged_row_refuses_the_whole_stream_before_any_piece_is_published(tmp_path):
     store = Artifacts()
     body = zipped({"A.tsv": "n\tname\n1\tx\n2\ty\textra\n"})
-    with pytest.raises(Exception):
+    with pytest.raises(SourceRejected, match="malformed"):
         source_read.execute(task(tmp_path, store, [body], delimited_contract(member="A.tsv")), store)
     assert not list(tmp_path.glob("reading.json*"))

@@ -13,7 +13,7 @@ use crate::{json_sequence::Stats, Rejected};
 #[derive(Clone, Copy)]
 pub struct Limits {
     pub max_bytes: usize,
-    /// One record's bytes as written, separators included.
+    /// One record's bytes as written: quotes, separators and its line end.
     pub max_record: usize,
     pub max_records: usize,
 }
@@ -88,14 +88,23 @@ pub fn scan<R: Read, F: FnMut(Value, usize) -> Result<(), Rejected>>(
         }
     };
     let headers = reader.byte_headers().map_err(failed)?.clone();
+    let mut end = reader.position().byte();
+    if end > limits.max_record as u64 {
+        return Err(Rejected::new("limit_exceeded", format!("the header is over {} bytes", limits.max_record)));
+    }
     let names = headers.iter().map(|name| text(name, encoding)).collect::<Result<Vec<_>, _>>()?;
+    if names.iter().enumerate().any(|(i, name)| names[..i].contains(name)) {
+        // Reading whole keeps both columns; one record object cannot.
+        return Err(Rejected::new("malformed", "a header name occurs twice"));
+    }
     let mut record = ::csv::ByteRecord::new();
     let mut count = 0usize;
     while reader.read_byte_record(&mut record).map_err(failed)? {
         if count == limits.max_records {
             return Err(Rejected::new("limit_exceeded", format!("more than {} records", limits.max_records)));
         }
-        if record.as_slice().len() + record.len() > limits.max_record {
+        let start = std::mem::replace(&mut end, reader.position().byte());
+        if end - start > limits.max_record as u64 {
             return Err(Rejected::new("limit_exceeded", format!("record {} is over {} bytes", count + 1, limits.max_record)));
         }
         let mut object = Map::with_capacity(names.len());
