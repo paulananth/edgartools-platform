@@ -107,3 +107,22 @@ Stages, each run once, on `2026q2_nport.zip` (440,699,889 bytes, read in place b
 5. `mdm.prepare` for `security` and `security_isin`, then each record through its Dataset Contract (counts only).
 
 Expected: about 15 minutes in all; peak memory 2 to 3 GB. Reported: records per contract, set-aside reasons, ISINs attached, pairs one to one, CUSIPs with several ISINs, ISINs with several CUSIPs, holdings with no usable CUSIP and no single ISIN.
+
+## Part 1: the one test run (2026-10-15 12:01-12:27 ET, tested locally)
+
+`security_test_run.py` beside this log; report `security-test-run.json` (counts only). Run once, 26 min 3 s, peak resident 3.6 GB (planned 15 min, 2-3 GB: the reduction took 480 s at 3.38 GB). First checked on an invented 6-holding ZIP (every stage, each case as designed).
+
+| Stage | Time | Peak |
+|---|---|---|
+| identifiers reading (IDENTIFIERS.tsv) | 205 s | 0.11 GB |
+| pair set + holdings reading | 460 s | 1.42 GB |
+| reduce | 480 s | 3.38 GB |
+| combine-pairs + combine | 155 s | 3.38 GB |
+| prepare + contract, by CUSIP | 227 s | |
+| prepare + contract, by ISIN | 35 s | |
+
+- Holdings: 4,716,318 with a usable CUSIP, 417,552 with none but one ISIN; the rest (stand-in CUSIP and no single ISIN) make no record.
+- `sec.nport.security.v1`: 385,382 records; **383,595 accepted**, every one with issuer name, class title and issuer LEI as filed; **354,274 carry their one-to-one ISIN**. Set aside: 1,769 `invalid_cusip_checksum`, 1 `invalid_cusip`, 17 `invalid_isin_checksum` (a FIGI filed as the CUSIP's one ISIN: the Security is set aside for its secondary ISIN).
+- `sec.nport.security_isin.v1`: **35,309 accepted**, none set aside.
+- Pairs: 414,777 distinct CUSIP and ISIN pairs; 354,373 one to one; 353,329 pairs where the ISIN holds the CUSIP (the US/CA rule); 520 CUSIPs filed with several ISINs; **17,219 ISINs filed with several CUSIPs** (attached to none). The OpenFIGI comparison (operator: "Both, in parallel") says which.
+- Open for the operator before the Proving Run: the 17 Securities set aside for a bad secondary ISIN; adding N-PORT to the Security kind's sources (`defaults.sources`, a merge-rule change); the ISIN matching rule.
