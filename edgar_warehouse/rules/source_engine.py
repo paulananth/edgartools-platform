@@ -148,6 +148,26 @@ class SourceEngine:
             raise _rejected(error) from None
         return {"record_count": records, "expanded_bytes": size}
 
+    def stream_delimited(self, stream, *, format: str, encoding: str, on_reading, max_bytes: int,
+                         max_record: int, max_records: int, context: Mapping[str, object] | None = None,
+                         ordinal_context: str | None = None,
+                         lookups: Mapping[str, Iterable[str]] | None = None) -> dict:
+        """Read a CSV or TSV one record at a time inside Rust: each record is a JSON
+        object of header to text, projected by the configured JSON rules. Callbacks
+        prepare readings until valid EOF."""
+        bounds = {"max_bytes": max_bytes, "max_record": max_record, "max_records": max_records}
+        if any(type(value) is not int or not 0 <= value <= 2**63 - 1 for value in bounds.values()):
+            raise SourceRejected("contract", "delimited stream bounds must be nonnegative signed integers")
+        def receive(body, index):
+            on_reading(Reading(tables=body["tables"], deferred=body["deferred"]), index)
+        try:
+            records, size = self._engine.scan_delimited(stream, format, encoding, receive,
+                context=json.dumps(dict(context or {}), ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+                ordinal_context=ordinal_context, lookups=_lookup_iterables(lookups), **bounds)
+        except source_contract.SourceRejected as error:
+            raise _rejected(error) from None
+        return {"record_count": records, "expanded_bytes": size}
+
     def validate_context(self, context: Mapping[str, object]) -> None:
         """Check declared caller facts before a stream can yield zero records."""
         try:

@@ -6,6 +6,7 @@ in the ordinary source contract. No source-specific loader is called here.
 from __future__ import annotations
 
 import copy
+import fnmatch
 import hashlib
 import json
 import tempfile
@@ -33,15 +34,27 @@ def stream_policy(contract):
               "partition_records": 100_000, "max_partitions": 10**7,
               "max_spool_bytes": 2**40, "max_output_rows": 10**12}
     framing = spec.get("framing", "json_array") if isinstance(spec, dict) else None
-    if framing not in ("json_array", "xml_records"):
+    if framing not in ("json_array", "xml_records", "delimited"):
         raise ValueError("Unknown configured stream framing")
     required = {*maxima, "container", "ordinal_context"}
-    required |= ({"wrapper", "min_integer", "record_encoding"} if framing == "json_array"
-                 else {"framing", "xml", "header_read"})
+    required |= {"json_array": {"wrapper", "min_integer", "record_encoding"},
+                 "xml_records": {"framing", "xml", "header_read"},
+                 "delimited": {"framing", "delimited"}}[framing]
     if (not isinstance(spec, dict) or not required <= set(spec)
-            or set(spec) - required - {"expected_records_context", "framing"} -
+            or set(spec) - required - {"expected_records_context", "framing", "member"} -
                 ({"max_header"} if framing == "xml_records" else set())):
         raise ValueError("read.stream must declare every framing, partition and spool bound")
+    member = spec.get("member")
+    if "member" in spec and (spec["container"] != "zip" or not isinstance(member, str)
+                             or not 1 <= len(member.encode()) <= 256 or "[" in member):
+        raise ValueError("read.stream member is a ZIP member name pattern of 1 to 256 bytes (* and ?)")
+    if framing == "delimited":
+        delimited = spec["delimited"]
+        if (not isinstance(delimited, dict) or set(delimited) != {"format", "encoding"}
+                or delimited["format"] not in ("csv", "tsv")
+                or delimited["encoding"] not in ("utf-8", "windows-1252")):
+            raise ValueError("A delimited stream declares its format (csv or tsv) and one encoding "
+                             "(utf-8 or windows-1252; choosing between two needs the whole file)")
     for key, maximum in maxima.items():
         minimum = 0 if key == "max_records" else 1
         if type(spec[key]) is not int or not minimum <= spec[key] <= maximum:
@@ -113,8 +126,8 @@ def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, 
             ref, context, evidence = context_for(manifest, entry, artifacts)
             lookups, lookup_evidence = lookup_for(manifest, entry, artifacts, contract)
             evidence.update(lookup_evidence)
-            if header_engine is not None and contract["read"].get("lookup_sets"):
-                raise ValueError("Indexed stream lookup receipts currently require JSON framing")
+            if spec.get("framing") == "xml_records" and contract["read"].get("lookup_sets"):
+                raise ValueError("Indexed stream lookup receipts currently require JSON or delimited framing")
             ordinal = spec["ordinal_context"]
             if ordinal is not None and ordinal in context:
                 raise ValueError("Stream ordinal context is generated, never supplied by a caller")
@@ -181,12 +194,20 @@ def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, 
                 if spec["container"] == "zip":
                     archive = stack.enter_context(zipfile.ZipFile(snapshot))
                     members = archive.infolist()
+                    if "member" in spec:  # one table of a ZIP of tables, as read.member chooses it
+                        members = [m for m in members if fnmatch.fnmatchcase(m.filename, spec["member"])]
                     if len(members) != 1 or members[0].is_dir() or members[0].flag_bits & 1:
-                        raise ValueError("Stream ZIP requires exactly one unencrypted file")
+                        raise ValueError("Stream ZIP requires exactly one unencrypted file"
+                                         + (" matching its member pattern" if "member" in spec else ""))
                     if members[0].file_size > spec["max_bytes"]:
                         raise ValueError("Stream ZIP member exceeds expanded byte bound")
                     stream = stack.enter_context(archive.open(members[0]))
-                if header_engine is None:
+                if spec.get("framing") == "delimited":
+                    scan = engine.stream_delimited(stream, format=spec["delimited"]["format"],
+                        encoding=spec["delimited"]["encoding"], on_reading=project, context=context,
+                        ordinal_context=ordinal, lookups=lookups,
+                        **{key: spec[key] for key in ("max_bytes", "max_record", "max_records")})
+                elif header_engine is None:
                     scan = engine.stream_json_array(stream, wrapper=spec["wrapper"], on_reading=project,
                         context=context, ordinal_context=ordinal, lookups=lookups,
                         **{key: spec[key] for key in ("max_bytes", "max_record", "max_records", "max_depth",

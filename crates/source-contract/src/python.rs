@@ -169,6 +169,36 @@ impl PyEngine {
         Ok((result.records, result.bytes))
     }
 
+    #[pyo3(signature = (stream, format, encoding, on_reading, *, max_bytes, max_record, max_records, context="{}", ordinal_context=None, lookups=None))]
+    fn scan_delimited(&self, py: Python<'_>, stream: Py<PyAny>, format: &str, encoding: &str, on_reading: Py<PyAny>,
+                      max_bytes: usize, max_record: usize, max_records: usize, context: &str,
+                      ordinal_context: Option<String>, lookups: Option<&Bound<'_, PyDict>>) -> PyResult<(usize, usize)> {
+        let format = crate::delimited_sequence::Format::named(format).map_err(rejected)?;
+        let sets = indexed_sets(&self.inner, lookups)?;
+        let projection = self.inner.prepare_json_projection(&sets).map_err(rejected)?;
+        let mut values = crate::context::from_json(context).map_err(rejected)?;
+        if let Some(name) = &ordinal_context {
+            if values.contains_key(name) {
+                return Err(rejected(Rejected::new("invalid_context", "stream ordinal context is generated, never supplied")));
+            }
+            values.insert(name.clone(), Val::Int(1));
+        }
+        self.inner.validate_context(&values).map_err(rejected)?;
+        let limits = crate::delimited_sequence::Limits { max_bytes, max_record, max_records };
+        let encoding = encoding.to_string();
+        let result = py.allow_threads(|| crate::delimited_sequence::scan(PythonReader(stream), format, &encoding, limits, |record, ordinal| {
+            if let Some(name) = &ordinal_context {
+                let position = i64::try_from(ordinal).ok().and_then(|n| n.checked_add(1))
+                    .ok_or_else(|| Rejected::new("limit_exceeded", "stream ordinal exceeds signed integer range"))?;
+                values.insert(name.clone(), Val::Int(position));
+            }
+            let reading = projection.read_json_value(record, &values)?;
+            Python::with_gil(|py| on_reading.call1(py, (reading_to_py(py, &reading)?, ordinal)).map(|_| ()))
+                .map_err(|error| Rejected::new("stream_consumer", error))
+        })).map_err(rejected)?;
+        Ok((result.records, result.bytes))
+    }
+
     #[pyo3(signature = (data, lookups, context="{}"))]
     fn read(&self, py: Python<'_>, data: &[u8], lookups: &Bound<'_, PyDict>, context: &str) -> PyResult<PyObject> {
         let sets = indexed_sets(&self.inner, Some(lookups))?;

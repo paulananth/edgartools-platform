@@ -292,7 +292,7 @@ pub fn decode<'a>(bytes: &'a [u8], encodings: &[String]) -> Result<std::borrow::
     decode_one(bytes, last)
 }
 
-fn decode_one<'a>(bytes: &'a [u8], encoding: &str) -> Result<std::borrow::Cow<'a, [u8]>, Rejected> {
+pub(crate) fn decode_one<'a>(bytes: &'a [u8], encoding: &str) -> Result<std::borrow::Cow<'a, [u8]>, Rejected> {
     match encoding {
         "windows-1252" => {
             let mut out = String::with_capacity(bytes.len());

@@ -245,3 +245,68 @@ def test_stream_publication_count_is_bound_to_input_and_checked_through_eof(tmp_
     assert store.json(receipt)["artifacts"][0]["record_count"] == 2
     assert store.json(receipt)["artifacts"][0]["context"] == context
     assert source_read.verify({**envelope,"candidate":receipt}, store) == ({"source.output":True},[])
+
+
+def delimited_contract(member=None, encoding="utf-8"):
+    """Ticket 89: one TSV of a ZIP of tables, read one record at a time."""
+    rules = contract()
+    rules["read"]["tables"]["rows"]["columns"] = {"n": {"integer": {"path": "n"}}, "name": {"text": {"path": "name"}},
+                                                  "index": {"context": {"name": "source_index"}}}
+    stream = rules["read"]["stream"]
+    for key in ("wrapper", "min_integer", "record_encoding"):
+        del stream[key]
+    stream.update(framing="delimited", delimited={"format": "tsv", "encoding": encoding}, container="zip",
+                  **({"member": member} if member else {}))
+    return rules
+
+
+def zipped(members):
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, body in members.items():
+            archive.writestr(name, body)
+    return out.getvalue()
+
+
+def test_a_tsv_of_a_zip_of_tables_streams_into_pieces_and_verifies(tmp_path):
+    store = Artifacts()
+    table = "n\tname\n" + "".join(f"{i}\tissuer {i} \"A\"\n" for i in range(5))
+    body = zipped({"OTHER.tsv": "x\n1\n", "HOLDING.tsv": table, "README.txt": "about"})
+    envelope = task(tmp_path, store, [body], delimited_contract(member="HOLDING*.tsv"))
+    receipt = source_read.execute(envelope, store)
+    reading = store.json(receipt)["artifacts"][0]
+    assert reading["record_count"] == 5 and reading["expanded_bytes"] == len(table.encode())
+    assert [(p["first_ordinal"], p["record_count"]) for p in reading["partitions"]] == [(1, 2), (3, 2), (5, 1)]
+    rows = [row for part in reading["partitions"] for row in store.json(part["receipt"])["tables"]["rows"]]
+    assert rows == [{"n": i, "name": f'issuer {i} "A"', "index": i + 1} for i in range(5)]
+    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"member": "NOTHING*.tsv"}, "member pattern"),
+    ({"member": "*.tsv"}, "member pattern"),  # two tables match: never a guess
+])
+def test_a_member_pattern_must_name_exactly_one_table(tmp_path, change, message):
+    store = Artifacts()
+    body = zipped({"A.tsv": "n\tname\n1\tx\n", "B.tsv": "n\tname\n2\ty\n"})
+    with pytest.raises(Exception, match=message):
+        source_read.execute(task(tmp_path, store, [body], delimited_contract(**change)), store)
+    assert not list(tmp_path.glob("reading.json*"))
+
+
+@pytest.mark.parametrize("delimited", [{"format": "psv", "encoding": "utf-8"},
+                                       {"format": "tsv", "encoding": ["utf-8", "windows-1252"]},
+                                       {"format": "tsv"}])
+def test_a_delimited_stream_declares_its_format_and_one_encoding(tmp_path, delimited):
+    rules = delimited_contract(member="A.tsv")
+    rules["read"]["stream"]["delimited"] = delimited
+    with pytest.raises(Exception, match="format"):
+        source_read.execute(task(tmp_path, Artifacts(), [zipped({"A.tsv": "n\n1\n"})], rules), Artifacts())
+
+
+def test_a_ragged_row_refuses_the_whole_stream_before_any_piece_is_published(tmp_path):
+    store = Artifacts()
+    body = zipped({"A.tsv": "n\tname\n1\tx\n2\ty\textra\n"})
+    with pytest.raises(Exception):
+        source_read.execute(task(tmp_path, store, [body], delimited_contract(member="A.tsv")), store)
+    assert not list(tmp_path.glob("reading.json*"))

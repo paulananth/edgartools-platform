@@ -982,6 +982,27 @@ and independent verification use the same configured source boundary. Complete
 captured XML parity, installed mastering and active consumer replacement
 remain required before an old XML parser can be removed.
 
+## Configured delimited record framing (a large CSV or TSV)
+
+A delimited file read whole holds every row in memory; a large one (hundreds of
+megabytes, millions of rows) is read as a stream instead, one record at a time.
+Declare `read.stream.framing: delimited` with `delimited: {format: csv|tsv,
+encoding: utf-8|windows-1252}`. `read.format: json` describes the record
+presented to the table interpreter: one object of header to text per line, as
+reading the file whole gives (`each: .`, then the same columns). CSV keeps its
+quoting; TSV has none. A row with another field count, a byte the encoding does
+not define, and the byte, record and count bounds refuse the source as reading
+whole does; nothing is published before every input reaches EOF.
+
+Only one encoding is declared: choosing between UTF-8 and windows-1252 needs
+the whole file, so the list form is for reading whole. Omit the JSON-only
+`wrapper`, `min_integer` and `record_encoding` fields; `max_depth` stays
+declared, as for every framing. `max_record` bounds one record's bytes as
+written. With `container: zip`, `read.stream.member` picks one table of a ZIP of
+tables by a name pattern (`*`, `?`; exactly one member must match), as
+`read.member` does when reading whole. `SourceEngine.stream_delimited` frames
+and projects in Rust.
+
 ## Member templates and publication headers
 
 A source folder may bundle one template per member and format. Read them
