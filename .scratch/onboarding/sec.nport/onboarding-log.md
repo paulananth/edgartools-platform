@@ -1,0 +1,78 @@
+# Onboarding log: SEC Form N-PORT data set (funds, securities, holdings)
+
+Skill: data-onboarding (with data-profiling and data-quality, which it calls). Ticket: rebuild priorities 79.
+
+## 2026-10-14
+
+- 17:37 ET. Capture: the 2026q2 N-PORT data set, one download with the operator's permission ("One N-PORT quarter (Recommended)"); 440,699,889 bytes, sha256 `077cc836a978a593b29012219395fbe9c303d5e930f5be3b5f4353c3b02296fc`; kept at `~/.local/share/edgartools/clean-mdm/captures/sec.nport-datasets/2026q2/`. No other provider request.
+- Operator: "Tickers and cusips are attached to securities ie 13F". "You must use only the data onboarding skills nothing else". "To build new source extract and mastering".
+- discover: the data-profiling skill is not installed as its own skill on this machine (`Unknown skill: data-profiling`); its instructions were read from `skills/data-profiling/SKILL.md` in the repo. Logged as a gap: `data-platform`'s `skill install` or each `link.sh` should link it.
+- 17:39 ET. discover, first run: the profiler refused the whole zip before reading a table: "one part holds JSON, JSON Lines or XML records of one format, found ['csv', 'htm', 'json']". The 30 tables sit beside a readme (`nport_readme.htm`) and a metadata file (`nport_metadata.json`). Skill fix (operator, standing, and 2026-10-14: "Fix the skills as you find problems"): a zip's table members are read as tables and every other member is listed under `dataset.not_read` with its reason. Branch `claude/profile-zip-documents`, 223 profiling tests pass; this onboarding uses that branch's profiler until it merges.
+- The linked skills on this machine pointed at a main checkout 30+ commits behind `origin/main`; fast-forwarded. data-profiling, data-quality and data-platform were never linked; linked. data-modeling had no `link.sh`: added on the same fix branch.
+- 17:43 ET. discover, second run started with the fixed profiler; full read (1.55 GB, under the 5 GB limit).
+- 18:06 ET. discover, second run (zip fix only): 30 parts read, 24 minutes. Findings not used for approval: they came from a profiler with the gaps below. Investigation for the skill fixes (DuckDB over three tables, counts only): of 5,347,869 holdings, 3,564,226 carry a real CUSIP (385,382 distinct); the rest are stand-ins: "N/A" 1,169,603, "000000000" 614,038, "999999999" 17,511. "N/A" stands in for the issuer LEI on 1,953,420 holdings. Only 61% of CUSIPs carry one issuer name (each fund writes it its own way). 12,944 fund series over 14,416 reports; 99.9% keep one name. ISIN on 64% of identifier rows, ticker on 10% (with values such as "USD"), SEDOL on 195,610.
+- Profiler gaps found, each fixed in the skill (branch `claude/profile-identifiers`, stacked on #973): stand-ins hid identifier shapes and check digits; no check-digit family for letter-and-digit identifiers; an entity had to repeat on half its part's rows and have a name agreeing on 95% of all rows; one registrant came out as three parts (CIK, file number, LEI); a part's own extensions and lists counted as evidence it was master data (holdings classed master at 1.0); every table of a folder got the folder's hash; files with no suffix (the 13F tables) were refused. Trial B still scores 52 of 52.
+- `#973` (zip with documents, data-modeling link) review: two defects fixed (records beside tables called documents; a readme split tables of one header).
+- 18:23 ET. discover, third run: the N-PORT quarter and the 999 local 13F information tables in one run, with the fixed profiler.
+- 19:38 ET. discover, third run (N-PORT and 13F, 36 minutes): Security by CUSIP (385,381, carrying issuer name and LEI), Fund by series LEI (13,545, carrying series id and name), registrant by CIK (1,947), issuer by LEI (28,430); holding ids are links, not entities. Holdings still class master (0.833): their lists keyed by a shared sequence cannot be told from other parts by tests; decided by the operator below. 13F CUSIPs pass their check digit on 70% of distinct values (options: issue number 90x/95x); no 13F-to-N-PORT link at the 90% bar. The 13F files carry no manager.
+- Profiler gaps found in this run and fixed (`claude/profile-identifiers`): the check-digit test ran only when no name followed and a country code counted as a name; a column of another part's keys became an entity; a list pointing at its own entity counted as pointing elsewhere. The new-kind questions name the column, not the existing kinds: the data-modeling skill places the parts (a fund is a profile on `fund_structure`).
+- Operator rulings (2026-10-14, AskUserQuestion, exact answers):
+  - Holdings: "Silver + MDM link (Recommended)": each quarter's holdings land in silver with the fund's and the security's MDM ids; MDM keeps one HOLDS link per fund and security.
+  - Security identity: "CUSIP and ISIN join (Recommended)": ticker, FIGI and SEDOL are cross-references, lookup only.
+  - Fund identity: "Series id and LEI join (Recommended)".
+  - 13F: "Securities only, options aside (Recommended)": CUSIP joins, FIGI lookup only; Put and Call rows set aside as options; a CUSIP failing its check digit is a data quality exception; 13F holdings wait for the manager filings.
+  - Issuer and registrant: "Registrant yes, issuer later (Recommended)": the registrant joins the Company master by CIK and each Fund links to it with IS_SUBFUND_OF; issuer LEI and name stay on the Security until rebuild priorities 22.
+- 19:52 ET. discover, final run started with the finished profiler; its findings go to the operator for approval.
+
+## 13F findings approved (2026-10-14 20:54 ET)
+
+- Findings: `~/.local/share/edgartools/clean-mdm/profiling/thirteenf-check/findings.yaml` (13F information tables profiled alone, 422 s, full scan: 2,953,581 holding rows; 31,071 CUSIPs; 19,997 FIGIs).
+- Profiler fix first (branch `claude/profile-identifiers`): a check-digit family passing at least 50% and five times chance is still the column's family, its failures defects. 13F CUSIPs pass 70% (options carry invented issue numbers), so before the fix the Security was keyed by FIGI.
+- The four questions answered from earlier rulings: no designed key for the holding rows (they wait for manager filings, bronze); the CUSIP entity is the kind `security`; FIGI a cross-reference, lookup only; Put/Call rows set aside.
+- Operator's words: "yes approve the 13F findings".
+- N-PORT findings: reuse `profiling/sec.nport-2026q2-final/` (operator, 2026-10-14: "why cant we reuse the already completed profiling"); its questions come later.
+- CUSIP shape (operator asked "cusip is 9 digit with checkdigit"): nine characters, the ninth a check digit; 377,553 of 385,381 distinct N-PORT CUSIPs carry a letter in the first eight.
+
+## 13F Security: map and test (2026-10-14 22:31 ET)
+
+- Configuration (config only): `rules/sources/sec.thirteenf.information_table/` (`source.yaml`, `reduce.yaml`, `combine.yaml`) and the new kind's rules `rules/merge/kinds/security.yaml` (matching rule `security-cusip`: a CUSIP joins the one Security that holds it, or creates it; its Identifier Contract `normalize_identifier@cusip-v1`; declared, not switched on). Mapping Documents generated.
+- The run: `source.read` (8 units of 999 files) → a reduction over all units (`securities` every CUSIP, `names`, `titles`, `figis`) → `source.combine` (one row per CUSIP, name, title and the lexically first FIGI joined) → `mdm.prepare` → the Dataset Contract.
+- Size caps stopped the first trials (a 112 MB source extract refused by the reduction; FIGI dropped for a 100,000-row output cap). Operator: "i told you to not to have caps". Fixed in the engine, ticket 83 (PR #981, CI green): large outputs are written in pieces.
+- A field's source path must be a plain path or a join for the Mapping Document, so the reading keeps the filed name, title and FIGI in their own tables of only the rows that carry them (`select`), instead of marking blanks.
+- Tested locally, all 999 files, the ticket 83 engine: read 276 s, reduction 90 s, no refusals. 29,942 CUSIP records: 20,311 Securities accepted, all with issuer name and class title, 10,681 with a FIGI (lookup only); 9,603 set aside, check digit fails (options, ruled a data quality exception); 28 set aside, not CUSIP-shaped.
+- Next: quality checks (data-quality skill), the Proving Run on MDM, approval, switch-on.
+
+## 13F Security: Proving Run (2026-10-14 22:51 ET)
+
+- Disposable PostgreSQL 16 (container removed), `.scratch/onboarding/sec.thirteenf.information_table/proving_run.py`; report `proving-run.json` (counts only). The matching rule `security-cusip` switched on only in the run's copy of the policy, stamped "proving-run".
+- First pass 251 s, 62 batches, slowest 18 s: **20,311 Securities, one per CUSIP**; 20,311 bind decisions; every Security carries issuer name and class title. **0 CUSIPs on two Securities.** 9,631 records set aside, each an open review: 9,603 `invalid_cusip_checksum`, 28 `invalid_cusip`.
+- Second pass (75 s) **changed nothing**.
+- (The report's `read.assertions` 40,622 counts each assertion twice, once per apply loop; the stage counts are the measure.)
+- Next: the operator's approval of the Security matching rule and its CUSIP Identifier Contract, then switch-on.
+
+## 13F Security: quality (2026-10-15 05:30 ET)
+
+- The data-quality helper drafts **0 checks** for part `thirteenf.cusip`. Of profiling's two items: the CUSIP check digit is the identifier type's (ticket 81: a failing CUSIP is set aside as `invalid_cusip_checksum`, 9,603 records); the class title disagreement (381,219 of 2,953,581 holding rows differ from their CUSIP's most common title) is between holding rows, and each Security record keeps one title after the reduction, so no record-level check can catch it.
+- Decided (follows from the rulings, nothing for the operator to choose): **no `quality.yaml`** for this source. A file with no checks adds a quality version and changes every record id for nothing. The skill now says so (PR #982).
+- The title disagreement, and the reduction keeping the lexically first filed word rather than the most common one, are ticket 84 (A Security's issuer name and class title: which filed words it keeps).
+
+## Approvals (2026-10-15 06:27 ET)
+
+- Operator's words: "merge 985 when green agreed for the rest". "The rest" were the two other questions asked: switch on the Security matching rule `security-cusip` with its CUSIP Identifier Contract, and approve the N-PORT findings answers.
+- `security-cusip` switched on: `rules/merge/policy.yaml` (`automatic_rules`, deterministic) and `rules/merge/kinds/security.yaml` (`identifiers.cusip.verification`: the Proving Run report's sha256 `52cb4469...fc80`, approved 2026-10-15T10:27:01Z). The merge rules load; 367 tests that read them pass.
+- N-PORT findings: the 25 answers written into the questions, then approved with data-profiling's `approve` (06:29 ET).
+
+## plan-parts: N-PORT 2026q2, in dependency order (2026-10-15 06:29 ET)
+
+From the approved findings (`profiling/sec.nport-2026q2-final/findings.yaml`). Reference parts: none ruled (code lists stay in bronze until RDM work picks them up). Metadata: SUBMISSION goes to Bookkeeping.
+
+1. **Security from N-PORT holdings** (master, kind `security`, existing rules `rules/merge/kinds/security.yaml`): CUSIP (`FUND_REPORTED_HOLDING.ISSUER_CUSIP`) joins through `security-cusip`; ISIN (`IDENTIFIERS`) is a second joining identifier and needs its own matching rule, declared and proved before switch-on. Issuer name and issuer LEI as filed, on the Security. Source folder `rules/sources/sec.nport.security/`, code `sec.nport.security.v1`.
+2. **Company: the registrant by CIK** (master, existing kind `company`, a new source for it): `REGISTRANT.CIK` joins through the Company CIK rule; folder `rules/sources/sec.nport.registrant/`.
+3. **Fund** (master, kind `fund_structure`, `fund` profile, new merge rules): series id and series LEI join; IS_SUBFUND_OF its registrant, onboarded together with it.
+4. **HOLDS and the holdings** (transaction, silver target, onboarded separately): each quarter's `FUND_REPORTED_HOLDING` rows land in silver with the Fund's and the Security's MDM ids; MDM keeps one HOLDS link per Fund and Security.
+
+Holding details (`DEBT_SECURITY_REF_INSTRUMENT`, `REPURCHASE_AGREEMENT`, `DESC_REF_*`, `MONTHLY_RETURN_CAT_INSTRUMENT`, `FUND_VAR_INFO`, `NONFOREIGN_EXCHANGE_SWAP`, `EXPLANATORY_NOTE`) stay in bronze. Next: part 1, identify.
+
+## 13F Security: Proving Run under the approved merge rules (2026-10-15 06:38 ET)
+
+- Re-run with the repo's merge rules as switched on (no stand-in verification): **20,311 Securities, 0 CUSIPs on two Securities, 9,631 set aside, the second pass changed nothing**, as before. 9 min 40 s in all; first pass 271 s, second 295 s (75 s on the first run: not investigated, recorded).

@@ -1,0 +1,65 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 20311
+  },
+  "fields_filled": {
+   "name_of_issuer": 20311,
+   "title_of_class": 20311
+  },
+  "identities": {
+   "security": 20311
+  },
+  "open_reviews": {
+   "invalid_cusip": 28,
+   "invalid_cusip_checksum": 9603
+  },
+  "stage_records": {
+   "security": 20311
+  },
+  "waiting": {
+   "invalid_cusip": 28,
+   "invalid_cusip_checksum": 9603
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 20311
+  },
+  "fields_filled": {
+   "name_of_issuer": 20311,
+   "title_of_class": 20311
+  },
+  "identities": {
+   "security": 20311
+  },
+  "open_reviews": {
+   "invalid_cusip": 28,
+   "invalid_cusip_checksum": 9603
+  },
+  "stage_records": {
+   "security": 20311
+  },
+  "waiting": {
+   "invalid_cusip": 28,
+   "invalid_cusip_checksum": 9603
+  }
+ },
+ "batches": 62,
+ "cusip_on_two_securities": 0,
+ "policy_digest": "3089406bd485d07a6da7c199a6263bf530e50a9032eda66ac9de224a1ce1e982",
+ "prepared_batches": 30,
+ "read": {
+  "assertions": 40622,
+  "deferred: invalid_cusip": 56,
+  "deferred: invalid_cusip_checksum": 19206
+ },
+ "run": "SEC 13F, Proving Run of sec.thirteenf.information_table.security.v1",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 251.0,
+  "second_pass": 75.4
+ },
+ "securities_by_cusip": 20311,
+ "slowest_batch_seconds": 18.0
+}
