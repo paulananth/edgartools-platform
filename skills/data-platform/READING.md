@@ -1369,6 +1369,12 @@ The interpreter retains ordinary functions and declared expressions:
   source document for this iteration form.
 - `sequence: [EXPRESSION, ...]` produces at most 128 typed values, preserving
   nulls. It can supply a configured `join` through `project`.
+- `concat: [EXPRESSION, ...]` builds one text from its parts in order (ticket
+  94): text as it is, an integer in decimal. A null part makes the whole null,
+  so a key never silently loses a part; any other type refuses with
+  `value_type`. At most 128 parts and 1 MiB (`concat_limit`). It builds a key
+  from parts, such as a batch named in context and a row's position:
+  `concat: [{context: {name: batch}}, {const: {value: ":"}}, {ordinal: {}}]`.
 - `transform: {value: EXPRESSION, transforms: [...]}` applies existing bounded
   text operations to text, preserves null, and refuses other types.
 - `tokens: {STREET: ST, SOUTH: S}` replaces whole whitespace-separated tokens.

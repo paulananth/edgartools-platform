@@ -112,7 +112,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 5] = ["xml", "json", "jsonl", "csv", "tsv"];
-const PRIMITIVES: [&str; 24] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence"];
+const PRIMITIVES: [&str; 25] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -388,7 +388,9 @@ pub(crate) fn expression_children(expr: &Value) -> Vec<&Value> {
         if let Some(key) = expr.get(call).and_then(|args| args.get("key")) { children.push(key); }
     }
     if let Some(steps) = expr.get("steps").and_then(Value::as_sequence) { children.extend(steps); }
-    if let Some(values) = expr.get("sequence").and_then(Value::as_sequence) { children.extend(values); }
+    for call in ["sequence", "concat"] {
+        if let Some(values) = expr.get(call).and_then(Value::as_sequence) { children.extend(values); }
+    }
     if let Some(inputs) = expr.get("custom").and_then(|args| args.get("inputs")).and_then(Value::as_mapping) {
         children.extend(inputs.values());
     }
@@ -653,8 +655,8 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
         return Err(format!("primitive {name} is not known"));
     }
     match name {
-        "sequence" => {
-            let values = args.as_sequence().filter(|v| v.len() <= 128).ok_or("sequence has at most 128 expressions")?;
+        "sequence" | "concat" => {
+            let values = args.as_sequence().filter(|v| v.len() <= 128).ok_or(format!("{name} has at most 128 expressions"))?;
             for value in values { validate_expr(value, steps)?; }
         }
         "project" => {
@@ -1200,6 +1202,24 @@ fn projected_tree(value: Val, depth: usize, budget: &mut (usize, usize)) -> Resu
 fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: &El, ordinal: i64, expr: &Value) -> Result<Val, Rejected> {
     let (name, args) = expr.as_mapping().and_then(|m| m.iter().next()).ok_or_else(|| contract_error("expression"))?;
     match name.as_str().unwrap_or_default() {
+        "concat" => {
+            // One text from its parts (ticket 94): text as it is, an integer in decimal;
+            // a null part makes the whole null, so a key never loses a part.
+            let mut out = String::new();
+            for part in args.as_sequence().unwrap() {
+                match eval(engine, context, lookups, document, item, ordinal, part)? {
+                    Val::Null => return Ok(Val::Null),
+                    Val::Str(text) => out.push_str(&text),
+                    Val::Int(number) => out.push_str(&number.to_string()),
+                    Val::UInt(number) => out.push_str(&number.to_string()),
+                    _ => return Err(Rejected::new("value_type", "concat joins text and integers")),
+                }
+                if out.len() > 1024 * 1024 {
+                    return Err(Rejected::new("concat_limit", "concat exceeds 1048576 bytes"));
+                }
+            }
+            Ok(Val::Str(out))
+        }
         "sequence" => args.as_sequence().unwrap().iter().map(|value|
             eval(engine, context, lookups, document, item, ordinal, value)).collect::<Result<Vec<_>, _>>().map(Val::List),
         "project" => {
