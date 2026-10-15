@@ -28,6 +28,7 @@ advice only.
 | Request anything from a provider's website | Profile the local copies only |
 | Pin a finding on one source or one domain | Use the tests; names in this skill are generic |
 | Start a long pass silently | Say the size and the time estimate first (the run prints both) |
+| Profile the same inputs twice | Profile once; reuse the findings while the inputs and the profiler are unchanged ("Profile once", below) |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
 
 ## Tell the discovery story as you work
@@ -95,8 +96,21 @@ One run does inventory to report:
 ```
 uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>" \
   --input <name>=<file|folder|zip|database file|env:VARIABLE> [--input ...] \
-  --out <folder> [--kinds <existing kind>,...] [--limit-gb 5] [--sample 100000] [--seed 0]
+  --out <folder> [--kinds <existing kind>,...] [--limit-gb 5] [--sample 100000] [--seed 0] [--again]
 ```
+
+- **Profile once.** The findings record what they were made from
+  (`dataset.profiled_with`): the profiler's sha256, each input's sha256 and the
+  run's settings. A run into the same `--out` with the same inputs, settings
+  and profiler prints `reused` and changes nothing, so an approval stands.
+  Only a changed input, setting or profiler rule profiles again (`--again`
+  forces it). A database input has no file to fingerprint, so it is always
+  profiled again.
+- **One data set per source.** Profile each source into its own `--out`, so a
+  change to one source, or a fix to a rule only one source needs, profiles that
+  source alone. Before profiling, look for findings that already cover the
+  inputs (an earlier `--out`) and reuse them. After a profiler fix, profile
+  again only the sources the fix changes, and say which and why.
 
 - **Formats:** CSV, Parquet, JSON (an array, one object per file, or an object
   wrapping one list), JSON Lines, XML, zip members (a zip of CSV or Parquet
