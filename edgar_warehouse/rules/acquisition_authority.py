@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-
 from uuid import NAMESPACE_URL, uuid5
 
 from edgar_warehouse.control_contract import Blocked, digest, reference
@@ -82,6 +81,9 @@ def acquisition(document: dict) -> dict:
             or set(secret) != {"name", "environment"}
             or not isinstance(secret["name"], str)
             or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", secret["name"])
+            # The capture's own headers are never replaced by a secret.
+            or secret["name"].lower() in {"user-agent", "accept", "content-type", "content-length",
+                                          "host", "if-none-match", "if-modified-since"}
             or not isinstance(secret["environment"], str)
             or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", secret["environment"])
         ):
@@ -97,7 +99,8 @@ def acquisition(document: dict) -> dict:
             or type(completeness["allow_empty"]) is not bool
             or type(completeness["max_bytes"]) is not int
             or not 1 <= completeness["max_bytes"] <= 1024**3
-            or completeness["format"] == "json_array" and completeness["required"]
+            or completeness["format"] == "json_array" and (
+                completeness["required"] or value["capabilities"]["fetch"] != "https.post")
         ):
             raise Blocked(
                 "Feed completeness requires supported format, required members, empty policy and size bound"

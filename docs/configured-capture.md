@@ -2,7 +2,7 @@
 
 `provider.capture` is a Python integration through the existing external
 worker/verifier protocol. The configured Rust engine checks JSON syntax, the
-object root, required members and the empty policy. Bookkeeping enforces frozen
+object root (an array root for a POST feed), required members and the empty policy. Bookkeeping enforces frozen
 work and leases; Change Journal records authorization and completed evidence.
 
 The offline qualification covers HTTPS JSON objects (and, for a POST feed,
@@ -78,7 +78,11 @@ chat.
 
 A mapping API answers with a JSON array: declare completeness
 `format: json_array` with `required: []` (members of an array are not
-named). Everything else above (approved URL prefix, rate, leases, byte
+named); only a POST feed may. A header name the capture sets itself
+(`User-Agent`, `Accept`, `Content-Type`, `Content-Length`, `Host`, the
+conditional headers) is refused as a secret header. A failed request's error
+keeps only its type, so no header rides out in a traceback. A per-job error
+inside a 200 answer passes completeness; the reading after capture handles it. Everything else above (approved URL prefix, rate, leases, byte
 bound, snapshot, retry without sending again, independent readback) is the
 same as for GET.
 
@@ -90,7 +94,7 @@ same as for GET.
 
 ## Evidence and recovery
 
-Before GET, public renewal validates frozen task binding and live lease
+Before the request, public renewal validates frozen task binding and live lease
 authority; the worker appends and reads back the `acquisition` authorization,
 then renews immediately before the request. The outcome uses
 `acquisition.outcome`. Both producers retain the logical effect key.
@@ -106,7 +110,7 @@ no-overwrite semantics and readback; output is a file URI offline or S3 in AWS.
 A retry with a durable snapshot validates its frozen binding, payload and
 acknowledged authorization, then reconciles the outcome and receipt without
 GET. Corruption, unreadable storage, Journal outages or orphaned candidates
-fail closed. A crash before any complete durable snapshot may repeat the GET;
+fail closed. A crash before any complete durable snapshot may repeat the request (a POST too);
 there is no atomic transaction spanning HTTP, storage and Journal.
 
 A 304 requires a declared predecessor with validators and verified receipt,

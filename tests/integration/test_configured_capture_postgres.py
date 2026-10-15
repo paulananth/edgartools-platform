@@ -219,7 +219,7 @@ def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypa
     book, start, _ = setup
     calls = []
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
-    with pytest.raises(ValueError, match='bounded JSON object completeness'):
+    with pytest.raises(ValueError, match='bounded JSON object or array completeness'):
         capture.execute(start(), book.artifacts)
     assert calls == []
 
@@ -390,7 +390,7 @@ JOBS = [{'idType': 'ID_CUSIP', 'idValue': 'FIXTURE01'}]
 
 
 @pytest.mark.parametrize('setup', ['post'], indirect=True)
-def test_post_sends_its_frozen_body_and_key_and_never_keeps_the_key(setup, monkeypatch, tmp_path):
+def test_post_sends_its_frozen_body_and_key_and_never_keeps_the_key(setup, databases, monkeypatch, tmp_path):
     book, start, finish = setup
     monkeypatch.setenv('FIXTURE_API_KEY', SECRET)
     envelope = start(body=JOBS)
@@ -408,6 +408,13 @@ def test_post_sends_its_frozen_body_and_key_and_never_keeps_the_key(setup, monke
     finish(envelope, candidate)
     written = b''.join(path.read_bytes() for path in tmp_path.rglob('*') if path.is_file())
     assert SECRET.encode() not in written
+    from sqlalchemy import text
+    with databases.admin.connect() as conn:  # nor in any Journal or control row
+        for schema, table in conn.execute(text("SELECT table_schema, table_name FROM information_schema.tables "
+                                               "WHERE table_schema IN ('change_journal', 'bookkeeping')")):
+            found = conn.execute(text(f'SELECT count(*) FROM "{schema}"."{table}" t WHERE t::text LIKE :s'),
+                                 {'s': f'%{SECRET}%'}).scalar()
+            assert found == 0, (schema, table)
 
 
 @pytest.mark.parametrize('setup', ['post'], indirect=True)
@@ -435,3 +442,15 @@ def test_a_get_feed_never_sends_a_body(setup, monkeypatch):
     with pytest.raises(ValueError, match='Only a POST feed'):
         capture.execute(start(body=JOBS), book.artifacts)
     assert not called
+
+
+@pytest.mark.parametrize('setup', ['post'], indirect=True)
+def test_a_failed_post_keeps_no_key_in_its_error(setup, monkeypatch):
+    book, start, _ = setup
+    monkeypatch.setenv('FIXTURE_API_KEY', SECRET)
+    def broken(request):
+        raise httpx.ConnectError('refused', request=request)
+    http(monkeypatch, broken)
+    with pytest.raises(ValueError, match='Provider request failed: ConnectError') as refused:
+        capture.execute(start(body=JOBS), book.artifacts)
+    assert refused.value.__suppress_context__ and SECRET not in str(refused.value)  # the httpx error, with its headers, is not chained

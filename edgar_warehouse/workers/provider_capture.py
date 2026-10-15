@@ -14,6 +14,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 import zipfile
 
+import httpx
+
 from edgar_warehouse.bookkeeping.clean.artifacts import json_value
 from edgar_warehouse.control_contract import canonical, reference
 from edgar_warehouse.rules.acquisition_authority import frozen_authority
@@ -26,8 +28,6 @@ AUTHORIZATION = 'acquisition'
 OUTCOME = 'acquisition.outcome'
 HEADER_BYTES = 1024**2
 SNAPSHOT_OVERHEAD = HEADER_BYTES + 65536
-# A POST feed's request carries its JSON body, frozen with the request (ticket 92).
-BODY_BYTES = 1024**2
 
 
 def runtime_files():
@@ -79,11 +79,12 @@ def _load(envelope, artifacts):
     completeness = configuration.get('page_completeness') if request['document'] == 'page' else configuration['completeness']
     if (completeness is None or completeness['format'] not in ('json', 'json_array')
             or not 1 <= completeness['max_bytes'] <= transport.MAX_BYTES):
-        raise ValueError('Capture v1 supports bounded JSON object completeness only')
+        raise ValueError('Capture v1 supports bounded JSON object or array completeness only')
     capability = configuration['capabilities']['fetch']
     if capability == 'https.post':
-        if 'body' not in request or 'previous' in request or len(canonical(request['body']).encode()) > BODY_BYTES:
-            raise ValueError('A POST capture carries its frozen body, at most 1 MiB, and no predecessor')
+        # The body sits in the request document, itself at most HEADER_BYTES (1 MiB).
+        if 'body' not in request or 'previous' in request:
+            raise ValueError('A POST capture carries its frozen body and no predecessor')
     elif 'body' in request:
         raise ValueError('Only a POST feed sends a body')
     url = transport.approved_url(request['url'], configuration['url_prefixes'], capability)
@@ -99,6 +100,21 @@ def _load(envelope, artifacts):
         reference(request['previous'])
     _completeness_engine(completeness)  # Native contract validation must precede every HTTP effect.
     return request, authority, completeness, url
+
+
+def _sending(configuration, request):
+    """The method, body and extra headers of one request. A POST feed's key is read
+    here, for this request only: never stored, logged or put in an error (ticket 92)."""
+    if configuration['capabilities']['fetch'] != 'https.post':
+        return 'GET', None, {}
+    headers = {'Content-Type': 'application/json'}
+    secret = configuration.get('secret_header')
+    if secret:
+        key = os.environ.get(secret['environment'], '')
+        if not key or any(ord(c) < 33 or ord(c) > 126 for c in key):
+            raise ValueError(f"Capture needs {secret['environment']} set in the operator's environment")
+        headers[secret['name']] = key
+    return 'POST', canonical(request['body']).encode(), headers
 
 
 def _completeness_engine(configuration):
@@ -279,28 +295,21 @@ def execute(envelope, artifacts):
             identity = os.environ.get('EDGAR_IDENTITY', '')
             if authority['configuration']['capabilities']['fetch'] == 'sec.conditional' and '@' not in identity:
                 raise ValueError('SEC capture requires the configured identity with email')
-            post = authority['configuration']['capabilities']['fetch'] == 'https.post'
-            secret = authority['configuration'].get('secret_header')
-            headers = {}
-            if secret:
-                # Read for this request only: never stored, logged or put in an error.
-                key = os.environ.get(secret['environment'], '')
-                if not key or any(ord(c) < 33 or ord(c) > 126 for c in key):
-                    raise ValueError(f"Capture needs {secret['environment']} set in the operator's environment")
-                headers[secret['name']] = key
-            if post:
-                headers['Content-Type'] = 'application/json'
+            method, body, headers = _sending(authority['configuration'], request)
             def permission():
                 control.renew(envelope)
                 journal.append(_event(envelope, request, authority, 'authorized', [envelope['input'], envelope['rules']], at=request['requested_at']))
-                control.renew(envelope)  # Journal readback may outlive a lease; check again before GET.
-            response = transport.fetch(url, identity, max_bytes=completeness['max_bytes'],
-                                       requests_per_second=request['requests_per_second'], before_request=permission,
-                                       etag=previous[0]['etag'] if previous else None,
-                                       last_modified=previous[0]['last_modified'] if previous else None,
-                                       method='POST' if post else 'GET',
-                                       body=canonical(request['body']).encode() if post else None,
-                                       extra_headers=headers)
+                control.renew(envelope)  # Journal readback may outlive a lease; check again before the request.
+            try:
+                response = transport.fetch(url, identity, max_bytes=completeness['max_bytes'],
+                                           requests_per_second=request['requests_per_second'], before_request=permission,
+                                           etag=previous[0]['etag'] if previous else None,
+                                           last_modified=previous[0]['last_modified'] if previous else None,
+                                           method=method, body=body, extra_headers=headers)
+            except httpx.HTTPError as error:
+                # An httpx error holds the request and its headers, so a key could ride
+                # out in a traceback: keep only the error's type.
+                raise ValueError(f'Provider request failed: {type(error).__name__}') from None
             data = previous[1] if response.status == 304 else response.content
             _complete(data, completeness)
             control.renew(envelope)

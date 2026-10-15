@@ -24,7 +24,7 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
 
 ## Checklist
 
-- [ ] ~~blocked~~ The capture needs ticket 92 first: the configured capture makes one GET only, and OpenFIGI's mapping is a POST with a key header (found 2026-10-15)
+- [ ] Ticket 92 merged (blocker): the configured capture makes one GET only, and OpenFIGI's mapping is a POST with a key header (found 2026-10-15)
 - [ ] The operator's permission for the capture, and its route: the mapping API with a free key (the key in an environment variable, never printed or typed into the chat), or the Snowflake Marketplace copy read in place
 - [ ] Capture: the Security master's CUSIPs and ISINs (ticket 79) sent to the mapping API, each response kept whole with its request, a receipt per file (key, sha256, bytes); counts only in the repo
 - [ ] discover: data-profiling over the capture; approved findings
