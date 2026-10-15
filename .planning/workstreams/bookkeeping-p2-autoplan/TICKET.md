@@ -1,7 +1,7 @@
 # Autoplan: bounded Bookkeeping validation
 
 Status: review approved as-is by operator reply A at 2026-10-14 07:40 ET;
-publication in progress.
+published as PR977 at 2026-10-14 21:23 ET.
 Implementation and deployment are outside this review ticket.
 
 Scope: turn the researched P2 fix into a concrete reviewed plan. Source
@@ -24,9 +24,9 @@ Plan: `PLAN.md` in this directory. Runtime work remains unstarted.
 
 ## Publish the approved planning artifacts
 
-Status: in progress under the operator's `$ship` instruction.
+Status: complete under the operator's `$ship` instruction; PR977 opened.
 
 - [x] Synchronize with current main and check Claude's merged MDM scope — merge of `67cedee4` completed cleanly; no intervening Bookkeeping runtime changes; Ticket74 merged as PR960; 2026-10-14 21:07 ET.
 - [x] Verify the merged branch, audit planning completion and run pre-landing reviews — fresh scoped `--testmon` run: 80 passed in65.04s; wheel built; artifact checks passed (3 measurements,28 areas,7 future tasks,9 local links); independent completion audit15/15 and Claude re-review clear; whole unit/architecture run interrupted after908 passes and both retry shards reached285-second deadlines, so full-suite success is not claimed; 2026-10-14 21:20 ET.
-- [ ] Publish this dedicated branch and open a planning-only PR with validation evidence.
+- [x] Publish this dedicated branch and open a planning-only PR with validation evidence — branch pushed, documentation audit required no further changes, title/body scans clear, [PR977](https://github.com/paulananth/edgartools-platform/pull/977) created with scoped passing checks and explicit full-suite time-limit evidence; 2026-10-14 21:23 ET.
 - [x] Learning → skill — none; this delivery records a proposed design and its qualification gates, with no newly qualified runtime practice or skill change; checked against current AGENTS.md; 2026-10-14 21:12 ET.
