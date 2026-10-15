@@ -161,6 +161,25 @@ A new data set runs **discover → plan-parts**, then each part runs
 **identify → profile → map → quality → metadata → test → approve →
 switch-on**. Set up the Rules Database first if it is not there (**init**).
 
+**Run each long step once per part** (operator, 2026-10-15: "Data onboarding
+should not run this many times"). One master part took about ten runs: five
+profiling runs, three test runs and two Proving Runs. Each repeat came
+from a fault found mid-run, or from a re-check that proved nothing new.
+- Profiling, the test run and the Proving Run each run once per part.
+- Before a long run, check what can stop it partway: the reader accepts the
+  format; no size bound, cap or limit is below the data's measured size
+  (profiling gives it); the profiler or engine has no open fix pending.
+  Fix those first.
+- Run a step again only when its input files, its rules or the engine
+  changed. Log which changed, and re-run only that step, never the steps
+  before it.
+- Never re-run a step to confirm a result. The first run's report is the
+  evidence.
+- A Proving Run is not repeated after approval when the approved rules
+  differ from the proved copy only in their approval fields.
+- Questions the findings do not answer go to that part's one test or Proving
+  Run. Never run another scan of the data for them.
+
 ### discover: profile the whole data set first
 
 Before running profiling, inventory the captured formats against its supported
