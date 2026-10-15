@@ -11,7 +11,7 @@ Found onboarding N-PORT (ticket 79): the SEC publishes the N-PORT data set as a 
 ## What changes
 
 - `read.format: tsv`: a header line, then one record per line, split on tabs; everything `csv` accepts works for it (`encoding`, `container: zip` with `member`, limits, refusals).
-- A tab never occurs inside a TSV value, so TSV has no quoting: a quote mark is an ordinary character (N-PORT issuer titles carry inch marks).
+- A tab never occurs inside a TSV value, so TSV has no quoting: a quote mark is an ordinary character (the N-PORT holdings table holds none, and no row with another field count).
 
 ## Checklist
 
