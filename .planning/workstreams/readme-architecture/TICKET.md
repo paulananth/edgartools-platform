@@ -19,6 +19,6 @@ Only README, diagram artifacts and this workstream's records are owned here.
 - [x] Validate links, command examples, diagram rendering and factual claims; review Standards, Spec and GoF. — 57 links/anchors; five command forms and three live worker descriptions; 8 catalog tests passed; three-axis review in VERIFICATION.md; 2026-10-15 07:26 ET.
 - [x] Run the overlap guard and preserve the reviewed documentation on the dedicated branch. — guard passed for 15 files; documentation committed locally on the dedicated Codex branch; 2026-10-15 07:26 ET.
 - [x] Revalidate the branch against current main and complete the ship audits. — main already current; fresh 57-link/diagram/CLI checks and 8 catalog tests (6.96 s); independent coverage, plan and Standards/Spec/GoF audits pass; 2026-10-15 07:39 ET.
-- [ ] Push the documentation branch and create the pull request.
-- [ ] Verify the PR base/head and report CI status.
+- [x] Push the documentation branch and create the pull request. — branch pushed; PR #991 created: https://github.com/paulananth/edgartools-platform/pull/991; 2026-10-15 07:40 ET.
+- [x] Verify the PR base/head and report CI status. — GitHub confirms OPEN, base main and the expected Codex branch/head; checks not yet reported at creation; 2026-10-15 07:40 ET.
 - [x] Learning → skill: assess whether this documentation task uncovered a reusable skill correction. — none; existing skill contracts explained, no behavior changes; 2026-10-15 07:26 ET.
