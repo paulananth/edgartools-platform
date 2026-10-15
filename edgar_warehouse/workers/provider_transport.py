@@ -103,5 +103,9 @@ def fetch(url: str, identity: str, *, max_bytes: int, requests_per_second: int,
                         raise ValueError('Provider response exceeds its approved byte bound')
                     chunks.append(chunk)
                 return Response(200, b''.join(chunks), found_etag, modified)
+        except httpx.HTTPError as error:
+            # An httpx error holds the request and its headers, so a key could ride
+            # out in a traceback: keep only the error's type.
+            raise ValueError(f'Provider request failed: {type(error).__name__}') from None
         finally:
             time.sleep(max(0, 1 / requests_per_second - (time.monotonic() - started)))

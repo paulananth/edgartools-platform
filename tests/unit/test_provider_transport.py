@@ -103,8 +103,10 @@ def test_network_error_is_not_retried(monkeypatch):
         calls.append(request)
         raise httpx.ReadTimeout('offline', request=request)
     client(monkeypatch, timeout)
-    with pytest.raises(httpx.ReadTimeout):
+    # Only the error's type leaves the transport, never the request and its headers.
+    with pytest.raises(ValueError, match='Provider request failed: ReadTimeout') as refused:
         fetch(before_request=lambda: None)
+    assert refused.value.__suppress_context__
     assert len(calls) == 1
 
 

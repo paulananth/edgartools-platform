@@ -14,8 +14,6 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 import zipfile
 
-import httpx
-
 from edgar_warehouse.bookkeeping.clean.artifacts import json_value
 from edgar_warehouse.control_contract import canonical, reference
 from edgar_warehouse.rules.acquisition_authority import frozen_authority
@@ -300,16 +298,11 @@ def execute(envelope, artifacts):
                 control.renew(envelope)
                 journal.append(_event(envelope, request, authority, 'authorized', [envelope['input'], envelope['rules']], at=request['requested_at']))
                 control.renew(envelope)  # Journal readback may outlive a lease; check again before the request.
-            try:
-                response = transport.fetch(url, identity, max_bytes=completeness['max_bytes'],
-                                           requests_per_second=request['requests_per_second'], before_request=permission,
-                                           etag=previous[0]['etag'] if previous else None,
-                                           last_modified=previous[0]['last_modified'] if previous else None,
-                                           method=method, body=body, extra_headers=headers)
-            except httpx.HTTPError as error:
-                # An httpx error holds the request and its headers, so a key could ride
-                # out in a traceback: keep only the error's type.
-                raise ValueError(f'Provider request failed: {type(error).__name__}') from None
+            response = transport.fetch(url, identity, max_bytes=completeness['max_bytes'],
+                                       requests_per_second=request['requests_per_second'], before_request=permission,
+                                       etag=previous[0]['etag'] if previous else None,
+                                       last_modified=previous[0]['last_modified'] if previous else None,
+                                       method=method, body=body, extra_headers=headers)
             data = previous[1] if response.status == 304 else response.content
             _complete(data, completeness)
             control.renew(envelope)
