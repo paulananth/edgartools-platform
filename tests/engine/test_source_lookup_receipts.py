@@ -208,3 +208,54 @@ def test_approved_input_hash_pins_work_with_version_three_and_reject_changed_sou
     envelope['input'] = store.put(tmp_path.as_uri(), manifest)
     with pytest.raises(ValueError, match='approved artifact hash'):
         source_read.execute(envelope, store)
+
+
+def _pair_task(tmp_path, store, ids, *, value_column="isin"):
+    """Ticket 91: a streamed TSV of holdings takes each holding's ISIN from a pair set
+    derived from another verified reading (the holdings' identifier rows)."""
+    from edgar_warehouse.control_contract import canonical
+    from tests.engine.test_source_stream_worker import delimited_contract, zipped
+    rules = delimited_contract(member="A.tsv")
+    rules["read"]["tables"]["rows"]["columns"] = {
+        "n": {"text": {"path": "n"}},
+        "isin": {"member_value": {"lookup": "isin", "key": {"text": {"path": "n"}}, "on_many": "null"}}}
+    rules["read"]["lookup_sets"] = {"isin": {"max_values": 10, "max_bytes": 256, "max_value_bytes": 12, "pairs": True}}
+    envelope = task(tmp_path, store, [zipped({"A.tsv": "n\tname\n1\tx\n2\ty\n3\tz\n"})], rules)
+    manifest = store.json(envelope["input"])
+    ref = manifest["artifacts"][0]
+    chunk = {"version": 1, "tables": {"ids": ids}, "deferred": []}
+    part = {"receipt": store.put(tmp_path.as_uri(), chunk), "bytes": len(canonical(chunk).encode()),
+            "first_ordinal": 1, "record_count": len(ids)}
+    reading = store.put(tmp_path.as_uri(), {"version": 2, "contract": envelope["input"], "artifacts": [{
+        "input": store.put(tmp_path.as_uri(), {"captured": "identifiers"}), "record_count": len(ids),
+        "expanded_bytes": 100, "table_names": ["ids"], "partitions": [part]}]})
+    spec = {"readings": [reading], "table": "ids", "column": "holding", "max_input_bytes": 1024**2, "max_input_rows": 100}
+    if value_column:
+        spec["value_column"] = value_column
+    context = store.put(tmp_path.as_uri(), {"version": 1, "input": ref, "values": {}})
+    lookups = store.put(tmp_path.as_uri(), {"version": 2, "input": ref, "sets": {"isin": spec}})
+    manifest.update(version=3, artifacts=[{"input": ref, "context": context, "lookups": lookups}])
+    envelope["input"] = store.put(tmp_path.as_uri(), manifest)
+    return envelope
+
+
+def test_a_streamed_table_takes_each_keys_value_from_a_derived_pair_set(tmp_path):
+    store = Artifacts()
+    ids = [{"holding": "1", "isin": "US0000000001"}, {"holding": "2", "isin": "GB0000000002"},
+           {"holding": "2", "isin": "GB0000000003"}, {"holding": "1", "isin": "US0000000001"}]
+    envelope = _pair_task(tmp_path, store, ids)
+    receipt = source_read.execute(envelope, store)
+    assert source_read.execute(envelope, store) == receipt
+    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    found, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100, allow_lookup_receipts=True)
+    rows = found["artifacts"][0]["tables"]["rows"]
+    # One value; several distinct values give none (on_many: null); a holding with none, none.
+    assert [(row["n"], row["isin"]) for row in rows] == [("1", "US0000000001"), ("2", None), ("3", None)]
+
+
+def test_a_pair_set_without_its_value_column_refuses_before_the_source_is_read(tmp_path):
+    store = Artifacts()
+    envelope = _pair_task(tmp_path, store, [{"holding": "1", "isin": "US0000000001"}], value_column=None)
+    with pytest.raises(ValueError, match="Derived lookup"):
+        source_read.execute(envelope, store)
+    assert not (tmp_path / "reading.json").exists()

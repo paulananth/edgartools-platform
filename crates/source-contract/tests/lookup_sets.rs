@@ -11,7 +11,7 @@ fn recipe() -> Value {
 }
 fn engine(body: Value) -> Engine { Engine::from_yaml(&body.to_string(), Steps::new()).unwrap() }
 fn sets(values: &[&str]) -> Lookups {
-    [("scope".into(), values.iter().map(|v| (*v).into()).collect())].into_iter().collect()
+    [("scope".into(), values.iter().map(|v| (*v).to_string()).collect::<std::collections::BTreeSet<_>>().into())].into_iter().collect()
 }
 
 #[test]
@@ -74,4 +74,52 @@ fn malformed_declarations_and_membership_arguments_refuse_at_load() {
         let mut body=recipe(); body["read"]["tables"]["rows"]["select"]=json!({"member":args});
         assert!(Engine::from_yaml(&body.to_string(),Steps::new()).is_err());
     }
+}
+
+// Ticket 91: a pair set gives a key's value, so a large table is joined in one streamed pass.
+fn pair_recipe(on_many: &str) -> Value {
+    json!({"read":{"format":"json", "lookup_sets":{"isin":{
+        "max_values":4,"max_bytes":64,"max_value_bytes":12,"pairs":true}},
+        "tables":{"rows":{"each":"items",
+            "columns":{"id":{"value":{"path":"id"}},
+                       "isin":{"member_value":{"lookup":"isin","key":{"value":{"path":"id"}},"on_many":on_many}}}}}}})
+}
+fn pair_sets(pairs: &[(&str, &str)]) -> Lookups {
+    let set: std::collections::BTreeSet<(String, String)> = pairs.iter().map(|(k, v)| ((*k).into(), (*v).into())).collect();
+    [("isin".into(), set.into())].into_iter().collect()
+}
+
+#[test]
+fn a_pair_set_gives_one_value_null_for_none_and_null_or_a_refusal_for_several() {
+    let sets = pair_sets(&[("1", "US0000000001"), ("2", "GB0000000002"), ("2", "GB0000000003"), ("3", "XS0000000004")]);
+    let input = json!({"items":[{"id":"1"},{"id":"2"},{"id":"9"},{"id":null}]});
+    let read = engine(pair_recipe("null")).read(input.to_string().as_bytes(), &sets).unwrap();
+    assert_eq!(read.tables["rows"].iter().map(|r| r["isin"].clone()).collect::<Vec<_>>(),
+               vec![Val::Str("US0000000001".into()), Val::Null, Val::Null, Val::Null]);
+    let refused = engine(pair_recipe("error")).read(input.to_string().as_bytes(), &sets).unwrap_err();
+    assert_eq!(refused.code, "lookup_many");
+    let projected = engine(pair_recipe("null"));
+    let scope = projected.prepare_json_projection(&sets).unwrap();
+    assert_eq!(scope.read_json_value(json!({"items":[{"id":1}]}), &Row::new()).unwrap_err().code, "lookup_key");
+}
+
+#[test]
+fn a_pair_set_and_a_membership_set_are_never_read_as_each_other() {
+    let mut membership = recipe();
+    membership["read"]["lookup_sets"]["scope"]["pairs"] = json!(true);
+    assert!(Engine::from_yaml(&membership.to_string(), Steps::new()).is_err(), "member needs a membership set");
+    let mut value = pair_recipe("null");
+    value["read"]["lookup_sets"]["isin"].as_object_mut().unwrap().remove("pairs");
+    assert!(Engine::from_yaml(&value.to_string(), Steps::new()).is_err(), "member_value needs a pair set");
+    let mut many = pair_recipe("first");
+    assert!(Engine::from_yaml(&many.to_string(), Steps::new()).is_err(), "on_many is null or error");
+    many = pair_recipe("null");
+    many["read"]["lookup_sets"]["isin"]["pairs"] = json!(false);
+    assert!(Engine::from_yaml(&many.to_string(), Steps::new()).is_err(), "pairs is true when declared");
+    // Supplied sets must match their declaration's kind.
+    let members = sets(&["1"]).into_iter().map(|(_, set)| ("isin".to_string(), set)).collect::<Lookups>();
+    let input = json!({"items":[{"id":"1"}]}).to_string();
+    assert_eq!(engine(pair_recipe("null")).read(input.as_bytes(), &members).unwrap_err().code, "invalid_lookup");
+    let bound = pair_sets(&[("1", "US0000000001"), ("2", "US0000000002"), ("3", "US0000000003"), ("4", "US0000000004"), ("5", "US0000000005")]);
+    assert_eq!(engine(pair_recipe("null")).read(input.as_bytes(), &bound).unwrap_err().code, "limit_exceeded");
 }
