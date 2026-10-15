@@ -33,10 +33,12 @@ of moving computation into programs. Retain database computation for a storage
 invariant or demonstrated complete-path efficiency, including transfer and refresh
 costs. Existing SQL alone is not evidence that it is the preferred future owner.
 
-The canonical map supplies the detailed placement contract. The current
-[platform skill](../../../skills/data-platform/SKILL.md) already states the native
-kernel, Python caller/custom-code and database authority boundary. This closeout
-changes no operational skill instructions or approval procedures.
+The canonical map supplies the detailed placement contract. The
+[platform skill](../../../skills/data-platform/SKILL.md) states the native kernel,
+Python caller/custom-code and database authority boundary. A separate focused
+skill correction in [PR979](https://github.com/paulananth/edgartools-platform/pull/979)
+distinguishes contract2 native publication preparation from contract3 SQL
+preparation. Neither change alters approval or activation procedures.
 
 ## Current implementation, checked after rebase
 
@@ -47,7 +49,7 @@ changes no operational skill instructions or approval procedures.
 | Complete-set reduction | Rust [reduction kernel](../../../crates/source-contract/src/reduction.rs) through `ReductionEngine`; Python [source_reduction](../../../edgar_warehouse/workers/source_reduction.py), `tables`, exhausts authenticated input streams | PR911 already delivered the native kernel; PR978 allows several declared sources/tables. Retain finalization only after complete successful exhaustion. |
 | Accepted identity-decision replay | Rust [identity kernel](../../../crates/source-contract/src/identity.rs); Python [identity.replay](../../../edgar_warehouse/mdm/clean/identity.py) prepares metadata and time semantics | Replay does not infer a merge from field priority or acquire policy authority. PR920 already delivered this port. |
 | Eligible field/profile claim ranking | Rust [ranking kernel](../../../crates/source-contract/src/survivorship.rs), called from Python [survivorship](../../../edgar_warehouse/mdm/clean/survivorship.py), `_select_values` | Source-history folding, profile qualification, authority/time preparation and canonical value comparison remain Python. Do not describe all survivorship as native. |
-| Publication object preparation | Rust [PostgreSQL JSONB preparation](../../../crates/source-contract/src/postgres_jsonb.rs); Python [payloads.prepare](../../../edgar_warehouse/mdm/clean/payloads.py) checks bytes against the committed expected hash | Preserve raw numeric spelling and previously stored payload bytes. The database still independently derives authoritative expected hashes and commits publication intent. PR925 already delivered preparation. |
+| Publication object preparation | Contract2 uses Rust [PostgreSQL JSONB preparation](../../../crates/source-contract/src/postgres_jsonb.rs); contract3 obtains SQL-built `payload_text` through [migration018](../../../edgar_warehouse/mdm/migrations/018_publish_changed_records.sql) and the view updated by020. Python [payloads.prepare](../../../edgar_warehouse/mdm/clean/payloads.py) checks either path against the committed expected hash | PR925 delivered contract2 preparation, not every later publication contract. Preserve raw numeric spelling, changed-record order/flags and stored bytes. The database derives expected hashes and commits publication intent. |
 | Merge orchestration, matching, quality and relationship projection | Python [MergeStage](../../../edgar_warehouse/mdm/clean/merge.py), [matching](../../../edgar_warehouse/mdm/clean/matching.py), [quality](../../../edgar_warehouse/mdm/clean/quality.py), [relationships](../../../edgar_warehouse/mdm/clean/relationships.py) and [scope](../../../edgar_warehouse/mdm/clean/scope.py) | Future reusable configured kernels belong in Rust after qualification. All source-specific/custom behavior stays Python. |
 | Indexed selection and authoritative writes | PostgreSQL [lookup migration012](../../../edgar_warehouse/mdm/migrations/012_key_join_lookups.sql), restricted Store APIs and [migration020](../../../edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql) | Preserve destination current-state checks, atomic effects/history/checkpoints and proposal lifecycle. Read the latest migrations, not only the original function definition. |
 | Warehouse formulas and history/population-wide analytics | Current Snowflake [dbt models](../../../infra/snowflake/dbt/edgartools_gold/models) | A program-side replacement is conditional on exact semantics, complete dependency/history handling, refresh/publication and measured total cost. SQL is the current implementation, not a permanent placement exemption. |
@@ -65,6 +67,9 @@ Those records are not new qualification performed by this planning ticket.
    accepted identity replay, field ranking and publication preparation must not
    be scheduled again as new work. Distinguish each native kernel from remaining
    Python preparation, callbacks, orchestration and policy authority.
+   Publication is contract-specific: contract3 SQL materialization remains a
+   separate code-placement candidate; the Python `payload_text` path bypasses
+   native object construction while retaining the committed-hash check.
 2. **Proposal freshness no longer uses a whole-scope snapshot.**
    [Migration020](../../../edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql)
    drops `mdm.match_proposal_snapshot(jsonb)`. `MergeStage._execute` acquires the
@@ -98,6 +103,7 @@ Those records are not new qualification performed by this planning ticket.
 
 | Work | Treatment before any future port |
 |---|---|
+| Contract3 changed-record publication shaping in migration018/020 | Still SQL computation, unlike the native contract2 path. A program-side replacement must preserve forced-publication flags, changed-record membership/order, numeric spelling, exact bytes/hashes, no-change behavior and compatibility. Database change records, expected hashes and atomic intent remain authoritative. |
 | `entity_name` and `relationship_holds` in [migration006](../../../edgar_warehouse/mdm/migrations/006_relationship_context.sql) | Pure evaluation is movable. Retain SQL query/view consumers until replaced; qualify null/empty, timezone and half-open interval behavior. A small helper alone does not justify a new subsystem. |
 | Company scalar extraction from canonical projections in [migration015](../../../edgar_warehouse/mdm/migrations/015_company_fields_once.sql) | Programs may prepare fields; database consistency, close/open version transitions and atomic history remain authoritative. Measure transferred bytes, parameters and total write cost. |
 | Producer canonicalization and hashing for [Change Journal](../../../edgar_warehouse/change_journal/store.py) | A reusable Rust primitive is possible; preserve the existing byte protocol and independent database validation. MDM JSONB text and compact producer JSON are distinct protocols. |

@@ -8,10 +8,15 @@ reduction is merged (#911); accepted merge replay and field ranking are merged
 and CI-qualified (#920). Materialized collections/joins are merged and
 CI-qualified (#921), with exact cached Company/whole-census parity. The local
 and installed qualifications are recorded separately. Deployment and activation are separate gates.
-Publication preparation is merged (#925) and uses native object construction and UTF-8 bytes
-through Python callers; its PostgreSQL qualification is recorded separately
+Contract2 publication preparation is merged (#925) and uses native object
+construction and UTF-8 bytes through Python callers; its PostgreSQL qualification is recorded separately
 from CI/merge in [its ticket](../../.planning/workstreams/database-computation-preparation/TICKET.md).
 Current owners describe code execution, not production qualification.
+
+Contract3 changed-record payloads use SQL materialization from `outbox_delivery`
+through migration018's `outbox_input.payload_text`; Python authenticates those
+bytes without native reconstruction. Migration020 optimizes that SQL view.
+The contract2 native port is not evidence of a contract3 preparation port.
 
 Migration020 replaces proposal-snapshot checks with recomputation under the Merge
 Stage lock, same-transaction proposal/batch saving and assessed-effects validation.
@@ -108,7 +113,7 @@ Moving SQL text into a Python module still executes that computation in SQL.
 | Existing work / current owner | Classification and recommended owner | Prerequisites before migration |
 |---|---|---|
 | PostgreSQL `entity_name` and `relationship_holds` in [006](../../edgar_warehouse/mdm/migrations/006_relationship_context.sql) | Movable pure evaluation: Rust configured core; Python only for custom behavior | Keep SQL functions for query/view consumers until replaced. Match SQL coalesce (empty text does not fall through), missing/null, retired/derived flags, timestamp casts and half-open periods. Accept explicit timezone-normalized inputs. |
-| PostgreSQL outbox JSON assembly in [014](../../edgar_warehouse/mdm/migrations/014_outbox_names_batch.sql), `outbox_delivery` | Active publication preparation moved to Rust [JSONB object preparation](../../crates/source-contract/src/postgres_jsonb.rs), behind Python [payloads](../../edgar_warehouse/mdm/clean/payloads.py); [016](../../edgar_warehouse/mdm/migrations/016_publication_inputs.sql) exposes indexed immutable inputs | Preserve raw PostgreSQL numeric scale/precision and existing payloads; compare final bytes with the committed expected hash before sending. DB retains independent expected-hash derivation at commit, claim ordering, fencing and atomic intent. Existing view/claim APIs remain compatible for frozen runtimes. See [placement decisions and qualification](../../.planning/workstreams/database-computation-preparation/DECISIONS.md). |
+| PostgreSQL outbox JSON assembly in `outbox_delivery` | Contract2 preparation uses Rust [JSONB object preparation](../../crates/source-contract/src/postgres_jsonb.rs) behind Python [payloads](../../edgar_warehouse/mdm/clean/payloads.py) and [016](../../edgar_warehouse/mdm/migrations/016_publication_inputs.sql). Contract3 remains SQL in [018](../../edgar_warehouse/mdm/migrations/018_publish_changed_records.sql), with the view optimized by020; `payload_text` bypasses native reconstruction | Contract3 program preparation remains a candidate. Preserve changed-record membership/order, forced flags, raw PostgreSQL numeric spelling, existing payloads and exact expected-hash bytes. DB retains independent expected hashes, claims, fencing and atomic intent. See the historical contract2 [placement decisions and qualification](../../.planning/workstreams/database-computation-preparation/DECISIONS.md). |
 | PostgreSQL request structure checks in `write_batch` | Movable configured preflight: Rust; Python custom checks; retained authoritative validation: DB | Preparation already happens in Python. Every writer still faces applicable input/shape, source authority, collision and current-state checks through restricted functions. Migration019 removed Merge Stage size refusals; do not reintroduce them through placement work. Preflight cannot replace authoritative checks. |
 | PostgreSQL scalar extraction from Company projection in [015](../../edgar_warehouse/mdm/migrations/015_company_fields_once.sql), `record_company_version` | Conditionally movable configured preparation: Rust through Python caller; retained version transitions: DB | Keep canonical-body/scalar consistency, alias routing, microsecond version progression and atomic close/open. Compare total round trips, parameters and bytes after existing deduplication improvements. |
 | PostgreSQL `journal.canonical` and envelope hashing in [001_event](../../edgar_warehouse/change_journal/migrations/001_event.sql) | Movable generic canonicalization/hashing: Rust; current Python producer in [journal store](../../edgar_warehouse/change_journal/store.py); retained canonical/hash validation: DB | Native producer port needs exact Unicode/key ordering, numeric spelling, null and byte parity. MDM compact Python JSON and PostgreSQL JSONB text are distinct protocols. Retain append uniqueness and conflicting-key rejection. |
@@ -151,7 +156,7 @@ Moving SQL text into a Python module still executes that computation in SQL.
 
 | Skill document | Update now | Trigger for later changes |
 |---|---|---|
-| [data-platform/SKILL.md](../../skills/data-platform/SKILL.md) | Existing guidance already covers these boundaries; no skill edit for the planning closeout | Update capability statements only after implementation and installed-path proof. |
+| [data-platform/SKILL.md](../../skills/data-platform/SKILL.md) | Existing guidance covers the general boundaries; separate [PR979](https://github.com/paulananth/edgartools-platform/pull/979) clarifies current contract2/contract3 publication placement | Update capability statements only after implementation and installed-path proof; a wording correction adds no capability. |
 | [READING.md](../../skills/data-platform/READING.md) | None: native interfaces, configuration, limits and verifier behavior are unchanged | A reading interface/configuration/bounds/authentication change requires corresponding examples and qualification. |
 | [COMBINING.md](../../skills/data-platform/COMBINING.md) | Reduction and materialized collections/joins reflect Rust computation, Python payload/canonical overhead, unchanged bounds and independent verification | Update when grammar, bounds, authentication, materialization or verification actually change. |
 | [data-onboarding](../../skills/data-onboarding/SKILL.md) and [refining-rules](../../skills/refining-rules/SKILL.md) | None: authoring, test qualification, operator approval and activation steps are unchanged | Change only when those actual steps change; implementation language alone does not change Rules authority. |
