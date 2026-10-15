@@ -106,3 +106,42 @@ def test_the_engine_and_profiling_agree_on_each_family(family):
 
 def test_every_profiling_family_is_one_the_engine_runs():
     assert set(profiled.FAMILIES) <= set(FAMILIES)
+
+
+@pytest.mark.parametrize("family, characters", [
+    ("luhn", ["digits", "letters"]),
+    ("damm", ["digits", "-"]),
+    ("mod 11-2", ["digits", "letters"]),
+    ("luhn over letter digits", ["digits", "letters", "*"]),
+])
+def test_a_family_with_characters_it_cannot_read_is_refused(family, characters):
+    # A value it cannot read would stop the whole run instead of setting one record aside.
+    with pytest.raises(DeclarationError, match="cannot read"):
+        declared({**WIDGET, "parts": [{"length": 6, "characters": characters}], "check_digit": family}, "widget")
+
+
+def test_a_declared_stand_in_is_refused_as_kept():
+    widget = declared({**WIDGET, "parts": [{"length": 4, "characters": ["letters"]}], "check_digit": None,
+                       "stand_ins": ["none"]}, "widget")
+    assert widget.refusal(" None ")[1] == "invalid_widget"
+    assert widget.refusal("ABCD")[1] is None
+
+
+# Each declared version's digest. A declaration changed in place would change
+# what an approved Identifier Contract's normalizer does: bump its version
+# (a new normalizer name) and add the new digest here instead.
+PINNED = {
+    ("cusip", 1): "622c3994cb2c47f427e464085ec8e06b281e6eec9ea0d62f0195ea7af307e826",
+    ("isin", 1): "563fbaf4640901d001ff271df72a262eed1cf14cc96e0d8905f8bf63a52e2be1",
+}
+
+
+def test_a_declared_version_is_never_changed_in_place():
+    import hashlib
+    import json
+
+    from edgar_warehouse.rules import files
+
+    for name, body in files.identifiers().items():
+        seen = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        assert PINNED.get((name, body["version"])) == seen, f"{name} v{body['version']} changed: bump its version"

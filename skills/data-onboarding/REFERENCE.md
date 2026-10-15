@@ -160,19 +160,22 @@ matching rule).
 | Key | Meaning |
 |---|---|
 | `identifier` | The file's name. |
-| `version` | A whole number from 1. Any change to the file is a new version, so a normalizer an approved contract names never changes under it. |
+| `version` | A whole number from 1. Any change to the file is a new version, so a normalizer an approved contract names never changes under it; a test holds each version's digest and fails on a change in place. |
 | `description` | What the identifier is, in plain words. |
 | `parts` | The identifier from left to right: each part a `length` and the `characters` it may hold: `digits`, `letters`, or one character such as `"#"`. |
 | `case` | `upper` (the value is upper-cased) or `as filed`. Outer spaces are always trimmed. |
-| `check_digit` | A family, named as data-profiling names it: `mod 97-10`, `mod 11-2`, `mod 11-10`, `mod 37-36`, `luhn`, `luhn over letter values`, `luhn over letter digits`, `damm`. Leave it out when there is none. |
+| `check_digit` | A family, named as data-profiling names it (a family that cannot read a character the parts allow is refused): `mod 97-10`, `mod 11-2`, `mod 11-10`, `mod 37-36`, `luhn`, `luhn over letter values`, `luhn over letter digits`, `damm`. Leave it out when there is none. |
 | `refuse_one_repeated_character` | `true`: a run of one character (all zeros, all nines) is a stand-in for none, refused even when its check digit holds. |
+| `stand_ins` | Other values written for none, refused as kept (trimmed, and upper-cased when `case` is `upper`). |
 
 A value refused for its shape gets the reason `invalid_<name>`; one with a
 wrong check digit, `invalid_<name>_checksum`. Write the declaration from the
 profiling finding: its shape gives `parts` and `case`, its check-digit family
 gives `check_digit`, and its stand-ins say whether to refuse runs. A
 declaration the build cannot run (an unknown key or family) stops the import,
-so a test run catches it.
+so a test run catches it. They are read from the rules folder the process runs
+with (`EDGAR_RULES_ROOT`), not from a `--root` passed to one command, and an
+export of the Rules Database carries them.
 
 ## Relationship types
 

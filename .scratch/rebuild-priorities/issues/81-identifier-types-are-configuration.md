@@ -20,16 +20,16 @@ Root cause: every identifier type (CIK, LEI, CRD, and the new CUSIP and ISIN) is
 
 ## Checklist
 
-- [ ] GoF consult before code
-- [ ] The declaration format and its loader (`edgar_warehouse.rules.files`)
-- [ ] Check-digit families in the engine, named as profiling names them; a test that the engine and profiling agree on each family
-- [ ] Declared types feed `FORMATS` and `NORMALIZERS`
-- [ ] `rules/identifiers/cusip.yaml` and `isin.yaml`; the CUSIP and ISIN tests carried over from `claude/security-id-formats`
-- [ ] An Identifier Contract naming `normalize_identifier@cusip-v1` passes activation's check
-- [ ] data-onboarding REFERENCE.md and data-profiling: how a finding becomes a declared type
-- [ ] Out-of-date docs fixed: `docs/specs/source-contract/spec.md` (formats list), `docs/research/custom-parsing-inventory-2026-10-02.md`
-- [ ] Affected tests pass locally
-- [ ] Three-axis /code-review (Standards, Spec, GoF)
+- [x] GoF consult before code: `FORMATS` grew five times along one axis (CIK, LEI, name id, CUSIP, ISIN) and each change also touched `NORMALIZERS`; table-driven declarations justified, CIK/LEI/CRD left in code. 2026-10-14 20:31 ET
+- [x] The declaration format and its loader (`edgar_warehouse.rules.files`): parts, case, check digit, stand-ins; a family that cannot read the parts' characters is refused (review finding). Tests in `tests/mdm/test_clean_identifier_types.py`. 2026-10-14 20:31 ET
+- [x] Check-digit families in the engine, named as profiling names them; a test that the engine and profiling agree on each family both hold (six on main; the two letter families join when `claude/profile-identifiers` merges). 2026-10-14 20:31 ET
+- [x] Declared types feed `FORMATS` and `NORMALIZERS`; a declared name never replaces a hand-written one. 2026-10-14 20:31 ET
+- [x] `rules/identifiers/cusip.yaml` and `isin.yaml`; the CUSIP and ISIN tests carried over from `claude/security-id-formats` pass (18). A test pins each version's digest. 2026-10-14 20:31 ET
+- [x] An Identifier Contract naming `normalize_identifier@cusip-v1` passes activation's check (test). 2026-10-14 20:31 ET
+- [x] data-onboarding REFERENCE.md and SKILL.md, and data-profiling: how a finding becomes a declared type; genericity lint passes. 2026-10-14 20:31 ET
+- [x] Out-of-date docs fixed: `docs/specs/source-contract/spec.md` (formats list), `docs/research/custom-parsing-inventory-2026-10-02.md`. 2026-10-14 20:31 ET
+- [x] Affected tests pass locally: testmon over tests/mdm, tests/unit, tests/architecture, 1,034 passed, and the install wizard's 34 with Python 3.12 first on PATH (6 min 27 s). The Rules Database export test (Postgres) runs in CI. 2026-10-14 20:31 ET
+- [x] Three-axis /code-review (Standards, Spec, GoF). Fixed: a family that cannot read a character crashed the run (now refused at load); the Rules Database export left the types behind (now copied); a version could change in place (digest test); a list of stand-in values. Kept: the families are written in the engine and in profiling (a transient skill script the engine cannot import), held equal by test; types load once per process from `EDGAR_RULES_ROOT`. GoF: leave it. 2026-10-14 20:31 ET
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Close `claude/security-id-formats` unmerged, replaced by this ticket
-- [ ] Learning → skill
+- [x] Learning → skill: data-onboarding REFERENCE.md "Identifier types" (a new identifier is declared, never coded) and SKILL.md map step. 2026-10-14 20:31 ET

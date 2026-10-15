@@ -110,28 +110,44 @@ FAMILIES: dict[str, Callable[[str], bool]] = {
     "luhn over letter digits": luhn_letter_digits,
     "damm": damm,
 }
-_CLASSES = {"digits": "0-9", "letters": "A-Z"}
+_DIGITS, _LETTERS = frozenset(string.digits), frozenset(string.ascii_uppercase)
+# The characters each family reads; a declaration whose parts allow any other
+# is refused, so a value can never reach a family that cannot read it.
+READS = {
+    "mod 97-10": _DIGITS | _LETTERS,
+    "mod 11-2": _DIGITS | {"X"},
+    "mod 11-10": _DIGITS,
+    "mod 37-36": _DIGITS | _LETTERS,
+    "luhn": _DIGITS,
+    "luhn over letter values": _DIGITS | _LETTERS | {"*", "@", "#"},
+    "luhn over letter digits": _DIGITS | _LETTERS,
+    "damm": _DIGITS,
+}
+_CLASSES = {"digits": ("0-9", _DIGITS), "letters": ("A-Z", _LETTERS)}
 _KEYS = {"identifier", "version", "description", "parts", "case", "check_digit",
-         "refuse_one_repeated_character"}
+         "refuse_one_repeated_character", "stand_ins"}
 
 
 class DeclarationError(ValueError):
     """A declaration this build cannot run as written."""
 
 
-def _characters(part: dict, where: str) -> str:
+def _characters(part: dict, where: str) -> tuple[str, frozenset]:
+    """A part's character class, and the characters it allows."""
     chars = part.get("characters")
     if not isinstance(chars, list) or not chars:
         raise DeclarationError(f"{where}: a part lists the characters it may hold")
-    out = []
+    out, allowed = [], set()
     for c in chars:
         if c in _CLASSES:
-            out.append(_CLASSES[c])
+            out.append(_CLASSES[c][0])
+            allowed |= _CLASSES[c][1]
         elif isinstance(c, str) and len(c) == 1:
             out.append(re.escape(c))
+            allowed.add(c)
         else:
             raise DeclarationError(f"{where}: a character is digits, letters or one character, not {c!r}")
-    return "[" + "".join(out) + "]"
+    return "[" + "".join(out) + "]", frozenset(allowed)
 
 
 @dataclass(frozen=True)
@@ -142,6 +158,7 @@ class IdentifierType:
     upper: bool
     check: Callable[[str], bool] | None
     refuse_runs: bool
+    stand_ins: frozenset = frozenset()
 
     @property
     def normalizer_name(self) -> str:
@@ -154,7 +171,8 @@ class IdentifierType:
     def refusal(self, item) -> tuple[str, str | None]:
         """The value as kept, and the reason it is refused (None when it is not)."""
         value = self.normalize(item)
-        if not self.shape.fullmatch(value) or (self.refuse_runs and len(set(value)) == 1):
+        if (not self.shape.fullmatch(value) or value in self.stand_ins
+                or (self.refuse_runs and len(set(value)) == 1)):
             return value, f"invalid_{self.name}"
         if self.check and not self.check(value):
             return value, f"invalid_{self.name}_checksum"
@@ -175,18 +193,25 @@ def declared(body: dict, name: str) -> IdentifierType:
     parts = body.get("parts")
     if not isinstance(parts, list) or not parts:
         raise DeclarationError(f"{where}: `parts` lists the identifier's parts")
-    pattern = ""
+    pattern, allowed = "", frozenset()
     for part in parts:
         length = part.get("length") if isinstance(part, dict) else None
         if type(length) is not int or length < 1:
             raise DeclarationError(f"{where}: each part has a `length` from 1")
-        pattern += _characters(part, where) + "{%d}" % length
+        cls, chars = _characters(part, where)
+        pattern += cls + "{%d}" % length
+        allowed |= chars
     case = body.get("case", "as filed")
     if case not in ("upper", "as filed"):
         raise DeclarationError(f"{where}: `case` is upper or as filed")
     family = body.get("check_digit")
     if family is not None and family not in FAMILIES:
         raise DeclarationError(f"{where}: unknown check-digit family {family!r}; known: {sorted(FAMILIES)}")
+    if family is not None and not allowed <= READS[family]:
+        raise DeclarationError(f"{where}: {family} cannot read {''.join(sorted(allowed - READS[family]))!r}")
+    stand_ins = body.get("stand_ins", [])
+    if not isinstance(stand_ins, list) or not all(isinstance(v, str) and v for v in stand_ins):
+        raise DeclarationError(f"{where}: `stand_ins` lists the values written for none")
     return IdentifierType(
         name=name,
         version=version,
@@ -194,10 +219,15 @@ def declared(body: dict, name: str) -> IdentifierType:
         upper=case == "upper",
         check=FAMILIES[family] if family else None,
         refuse_runs=body.get("refuse_one_repeated_character") is True,
+        # Compared as the value is kept (trimmed, and upper-cased when declared so).
+        stand_ins=frozenset(v.strip().upper() if case == "upper" else v.strip() for v in stand_ins),
     )
 
 
 def load(root: Path | None = None) -> dict[str, IdentifierType]:
+    """The rules root's declarations (`EDGAR_RULES_ROOT`, read once at import:
+    a trial with its own rules folder sets it, since a declaration is a
+    format and a normalizer for the whole process, not for one policy)."""
     from edgar_warehouse.rules import files
 
     return {name: declared(body, name) for name, body in files.identifiers(root).items()}
