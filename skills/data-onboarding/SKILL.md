@@ -182,6 +182,25 @@ from a fault found mid-run, or from a re-check that proved nothing new.
 
 ### discover: profile the whole data set first
 
+**Know the source first** (operator, 2026-10-15). Before the one profiling
+run, read once what is already known about the source, and write it in the
+onboarding log under "The source":
+- the repo: `rules/identifiers/` (each identifier type: shape, check digit,
+  stand-ins), `docs/specs/`, `rules/reference/published/`, existing
+  contracts and their comments, and earlier onboarding logs for the same
+  provider;
+- the provider's own documentation for the data set (field definitions, its
+  identifiers, stand-in values such as all-zero ids, how often it publishes,
+  full files or changes only), only with the operator's permission for that
+  request (Hard stops);
+- what MDM already holds: `edgar-warehouse context <kind> --search "<words>"`.
+
+Then pass what it gives to the run: the existing kinds (`--kinds`), and each
+known stand-in and identifier type, named in the log, so a finding that
+matches it is expected and not news. Whatever the source's documentation
+leaves open, the one profiling run measures. This is the same reading the
+**map** step's "Research first" asks for, done once here; map reuses the log.
+
 Before running profiling, inventory the captured formats against its supported
 inputs. When an input is unsupported, record the actual reader refusal. Keep
 that format gap separate from any exploratory export: a profile of an export
@@ -320,7 +339,9 @@ blocks; do not ask whether it does.
 
 ### map: write the Dataset Contract
 
-**Research first.** If a document named here is missing, go on and log it.
+**Research first.** Start from "The source" in the log (**discover**, "Know the
+source first"); read here only what it left out. If a document named here is
+missing, go on and log it.
 - `CONTEXT.md`: the words MDM uses.
 - What MDM and RDM already hold: `edgar-warehouse context <kind|relationship|code set> <key|--search words>`
   (read only, at most 8 KB; [REFERENCE.md](REFERENCE.md), "Reading MDM's context").
