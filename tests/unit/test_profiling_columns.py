@@ -59,6 +59,19 @@ def test_random_values_pass_only_at_chance_and_name_no_family():
     assert 0.05 < found["rates"]["luhn"] < 0.15  # about 1 in 10, by chance alone
 
 
+def test_a_family_with_defects_is_still_the_family():
+    # 70% pass: seven times chance, so the column holds that check digit and 30% of its values are
+    # defects (a security id column where options carry invented issue numbers).
+    values = [with_luhn(digits(9)) for _ in range(700)] + [d for d in (digits(10) for _ in range(600))
+                                                           if not identifiers.luhn(d)][:300]
+    found = identifiers.check_digits(values)
+    assert found["family"] == "luhn" and found["defective"] and 0.6 < found["pass_rate"] < 0.8
+
+
+def test_a_clean_family_is_not_defective():
+    assert identifiers.check_digits([with_luhn(digits(9)) for _ in range(500)])["defective"] is False
+
+
 def test_a_ten_percent_luhn_pass_is_noise():
     values = [with_luhn(digits(9)) for _ in range(10)] + [digits(10) for _ in range(90)]
     assert identifiers.check_digits(values)["family"] is None

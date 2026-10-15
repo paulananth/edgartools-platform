@@ -2,7 +2,8 @@
 
 No list of known identifier types: a column is identifier-shaped when its values
 share one length or one shape, and a check-digit family counts only when its pass
-rate is at least 0.99 and at least five times its chance rate.
+rate is at least five times its chance rate: clean at 0.99, and at 0.5 with its
+failing values reported as defects.
 """
 
 from __future__ import annotations
@@ -128,6 +129,10 @@ FAMILIES = {
 }
 CHECKED = 20_000  # distinct values tested per column, chosen with a fixed seed
 PASS, LIFT = 0.99, 5
+# A family passing at least half the values and five times chance is still the column's family:
+# no random column reaches that, so the failing values are defects (mistyped or invented
+# identifiers, such as an option's made-up issue number on a security id), handed to quality.
+DEFECTIVE = 0.5
 
 
 def check_digits(values: list[str], seed: int = 0) -> dict:
@@ -138,11 +143,13 @@ def check_digits(values: list[str], seed: int = 0) -> dict:
     if not values:
         return {"family": None, "rates": {}, "tested": 0}
     rates = {name: round(sum(map(test, values)) / len(values), 6) for name, (test, _) in FAMILIES.items()}
-    passing = [(rates[n], n) for n, (_, chance) in FAMILIES.items() if rates[n] >= PASS and rates[n] >= LIFT * chance]
+    passing = [(rates[n], n) for n, (_, chance) in FAMILIES.items()
+               if rates[n] >= DEFECTIVE and rates[n] >= LIFT * chance]
     # The highest pass rate; on a tie the family listed first (plain Luhn over letter-value Luhn on digits).
     order = list(FAMILIES)
     best = max(passing, key=lambda rn: (rn[0], -order.index(rn[1])))[1] if passing else None
     return {"family": best, "pass_rate": rates[best] if best else None,
+            "defective": bool(best) and rates[best] < PASS,
             "chance_rate": round(FAMILIES[best][1], 6) if best else None, "rates": rates, "tested": len(values)}
 
 
