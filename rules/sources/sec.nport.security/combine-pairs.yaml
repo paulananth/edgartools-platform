@@ -1,0 +1,42 @@
+# Each CUSIP and ISIN pair filed on one holding, with how many ISINs its CUSIP
+# has and how many CUSIPs its ISIN has (ticket 79, part 1). combine.yaml keeps
+# a pair only when both are 1: the ISIN joins the Security only when the pair
+# is one to one (operator, 2026-10-15: "Two contracts (Recommended)"). Its one
+# input is the reduction's output, named `securities`. Pin canonical JSON of
+# this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 10000000
+  groups:
+    isins_of_cusip:
+      source: securities
+      table: cusip_isins
+      key: cusip
+      value: isins
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {}
+    cusips_of_isin:
+      source: securities
+      table: isin_cusips
+      key: isin
+      value: cusips
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {}
+  tables:
+    pairs:
+      source: securities
+      table: pairs
+      checks: {}
+      where: {}
+      joins:
+        cusip_isins: {group: isins_of_cusip, key: cusip, on_missing: error, replace: false}
+        isin_cusips: {group: cusips_of_isin, key: isin, on_missing: error, replace: false}

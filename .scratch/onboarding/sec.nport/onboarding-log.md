@@ -90,3 +90,20 @@ Known before any run (the run-once rule; no new scan of the data):
 - Security key, operator: "Two contracts (Recommended)": `sec.nport.security.v1`, one record per CUSIP, carrying its ISIN as a second joining identifier when the pair is one to one; `sec.nport.security_isin.v1`, one record per ISIN, for holdings with no usable CUSIP. Both join through `security-cusip` and a new `security-isin` matching rule, proved and brought for approval.
 - Engine facts that block the ISIN join in configuration: a reading's lookup set answers membership only (at most 1,000,000 values per set); a `select` cannot split rows by a pattern; a reduction holds its output rows in Python (about 5.3 million holdings). Ticket 91 written: a reading looks up a value in a large set.
 - Operator: "Code 91 first": both contracts are built after ticket 91 merges, so the Security is onboarded once, with ISIN from the start.
+
+## Part 1: OpenFIGI order (2026-10-15)
+
+- Operator, asked whether OpenFIGI comes before the N-PORT Security: "Both, in parallel". The N-PORT Security test run goes ahead now (no provider requests); ticket 80's capture is set up beside it, and its requests wait for the operator's word for them and a key in their own terminal. FIGI's evidence is compared with the filed CUSIP and ISIN pairs before the ISIN matching rule is brought for approval.
+
+## Part 1: the one test run, planned (2026-10-15 12:31 ET)
+
+Configuration: `rules/sources/sec.nport.security/` (`identifiers.yaml`, `source.yaml`, `reduce.yaml`, `combine-pairs.yaml`, `combine.yaml`). Checked first on invented rows only: ISIN cleaning, and which table each holding goes to.
+
+Stages, each run once, on `2026q2_nport.zip` (440,699,889 bytes, read in place by hash):
+1. `identifiers.yaml`: IDENTIFIERS.tsv streamed into pieces (about 2 min).
+2. The pair set `isin`, derived from step 1 (about 4.3 million pairs; ticket 91 measured 1.5 GB peak at this size).
+3. `source.yaml`: FUND_REPORTED_HOLDING.tsv streamed once, each holding given its ISIN (about 6 min).
+4. `reduce.yaml`, `combine-pairs.yaml`, `combine.yaml` (about 4 min together).
+5. `mdm.prepare` for `security` and `security_isin`, then each record through its Dataset Contract (counts only).
+
+Expected: about 15 minutes in all; peak memory 2 to 3 GB. Reported: records per contract, set-aside reasons, ISINs attached, pairs one to one, CUSIPs with several ISINs, ISINs with several CUSIPs, holdings with no usable CUSIP and no single ISIN.

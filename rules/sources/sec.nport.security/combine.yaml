@@ -1,0 +1,40 @@
+# One row per usable CUSIP (table `security`) and one per ISIN of a holding
+# with no usable CUSIP (table `security_isin`), each joined with its filed
+# name, title and issuer LEI, and a CUSIP with its ISIN when the pair is one
+# to one (ticket 79, part 1). Inputs: the reduction's output (`securities`)
+# and combine-pairs.yaml's output (`pairs`). Pin canonical JSON of this file
+# as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 10000000
+  groups:
+    cusip_name: {source: securities, table: cusip_names, key: cusip, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    cusip_title: {source: securities, table: cusip_titles, key: cusip, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    cusip_lei: {source: securities, table: cusip_leis, key: cusip, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    # Only a pair whose CUSIP has one ISIN and whose ISIN has one CUSIP; each
+    # CUSIP then has at most one such pair, so `one` never chooses.
+    cusip_isin: {source: pairs, table: pairs, key: cusip, value: isin, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {cusip_isins: 1, isin_cusips: 1}}
+    isin_name: {source: securities, table: isin_names, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    isin_title: {source: securities, table: isin_titles, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    isin_lei: {source: securities, table: isin_leis, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    security:
+      source: securities
+      table: cusips
+      checks: {}
+      where: {}
+      joins:
+        name: {group: cusip_name, key: cusip, on_missing: skip, replace: false}
+        title: {group: cusip_title, key: cusip, on_missing: skip, replace: false}
+        lei: {group: cusip_lei, key: cusip, on_missing: skip, replace: false}
+        isin: {group: cusip_isin, key: cusip, on_missing: skip, replace: false}
+    security_isin:
+      source: securities
+      table: isins
+      checks: {}
+      where: {}
+      joins:
+        name: {group: isin_name, key: isin, on_missing: skip, replace: false}
+        title: {group: isin_title, key: isin, on_missing: skip, replace: false}
+        lei: {group: isin_lei, key: isin, on_missing: skip, replace: false}
