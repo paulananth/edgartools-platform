@@ -31,9 +31,6 @@ from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_clean_mdm_postgres as core
 from tests.support.rules_authority import register_dataset
 
-postgres = core.postgres
-database = core.database
-
 NAME, FILINGS, CUSTODIANS = "iapd.adv", "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
 FOLDER = files.ROOT / "sources" / NAME
 CRD, BD, LEI = "999001", "8-99901", "9999000000EXAMPLE016"  # invented; the LEI's check digits are valid
