@@ -18,7 +18,7 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
 - [ ] For each part: identify, profile, map (the source extract and the Dataset Contract), quality, metadata, test, approve, switch-on
   - [x] Part 1, N-PORT Security with OpenFIGI deciding a CUSIP's ISIN: test run, quality (issuer name stand-in withheld), Proving Run (423,562 Securities, 0 CUSIPs and 0 ISINs on two, second pass changed nothing), rules approved under the standing words; #999 merged 2026-10-16 06:29 ET
   - [x] Part 2, the registrant as a Company: test run, Proving Run (1,947 Companies, 0 CIKs on two, second pass changed nothing), rules approved under the standing words; #1001 merged 2026-10-16 07:55 ET
-  - [x] Part 3, the Fund (kind `fund_structure`): test run, Proving Run (12,937 Funds, 0 series ids and 0 LEIs on two, second pass changed nothing), rules approved under the standing words; #1003 open, CI green 2026-10-16 08:21 ET
+  - [x] Part 3, the Fund (kind `fund_structure`): test run, Proving Run (12,937 Funds, 0 series ids and 0 LEIs on two, second pass changed nothing), rules approved under the standing words; #1003 merged on the operator's words "merge one by one" 2026-10-16 09:13 ET
   - [ ] ~~IS_SUBFUND_OF from a Fund to its registrant~~ deferred (operator, 2026-10-16: "Funds now, link later (Recommended)"): a profile needs a stated start date and no capture states when a series began; the registrant's CIK stays on each Fund, lookup only
   - [ ] Switch-on of parts 1-3's matching rules: waits for the operator's word
 - [ ] Securities from 13F: CUSIP and ticker attached to the Security
@@ -32,12 +32,12 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
 - [x] N-PORT findings answered from the rulings (`.scratch/onboarding/sec.nport/findings-answers.md`) and approved: operator, 2026-10-15 06:27 ET, "merge 985 when green agreed for the rest"; each answer in its question, `approval.status: approved` 2026-10-15 06:29 ET
 - [ ] Funds hold securities: `HOLDS` from a fund to a Security
   - [x] Measured (2026q2): 5,347,869 holding rows make 3,251,006 distinct Fund-to-Security links by CUSIP from 12,387 Funds; 830,315 rows come from registrants with no series (the link starts at the Company) 2026-10-16 08:21 ET
-  - [ ] The Merge Stage made fast enough to apply them (ticket 96 first; the rest measured there)
+  - [ ] The Merge Stage made fast enough to apply them: ticket 96 merged (#1007, 2026-10-16 09:12 ET; a batch 4.4 s to 2.5 s); the rest is `mdm.save_batch` (1.3-1.5 s a batch), measured there
 - [ ] Every gap in a skill found on the way: fixed in the skill, on its own branch
   - [x] ticket 81 (identifier types as configuration, #975 merged), ticket 82 (a reduction reads several source extracts, #978 merged), profiler reuse (#976 merged)
   - [x] ticket 83 (no output caps, #981), data-quality and identifier types (#982), profiler issued identifiers (#983): CI green, merged one by one on the operator's words "merge one by one" 2026-10-15 06:07 ET
 - [ ] PR, CI green, merge on the operator's word
   - [x] #984, the 13F Security, switched on: CI green, merged by the operator 2026-10-15 06:55 ET
   - [x] the N-PORT parts 1 and 2: #999 and #1001, CI green, merged on the operator's words "merge one by one" 2026-10-16 07:55 ET
-  - [ ] part 3: #1003 (CI green), waits for the operator's word
+  - [x] part 3: #1003, CI green, merged on the operator's words "merge one by one" 2026-10-16 09:13 ET; main's CI green after it
 - [ ] Learning → skill
