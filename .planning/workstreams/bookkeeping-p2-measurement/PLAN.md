@@ -1,8 +1,8 @@
 <!-- /autoplan restore point: /Users/aneenaananth/.gstack/projects/paulananth-edgartools-platform/codex-bookkeeping-p2-measurement-autoplan-autoplan-restore-20261015-210600.md -->
 # Bookkeeping P2 measurement harness
 
-Status: CEO and DX completed; engineering pending; not approved or implemented.
-Baseline: `origin/main` at `8ed547ab`, 2026-10-15 ET.
+Status: CEO, DX and final engineering reviews completed; awaiting operator approval; not implemented.
+Code inspected at `8ed547ab`; planning branch rebased onto current `origin/main` at `3064a4e4`, 2026-10-16 ET. Since the review, Claude merged ticket bookkeeping and N-PORT onboarding. The inspected Bookkeeping/Rules/Journal runtime, shared support, targeted integration tests, CLI, pyproject and lockfile are unchanged; verified with a scoped Git diff before this final rebase.
 
 ## Problem and decision this enables
 
@@ -10,8 +10,8 @@ An approved P2 design already exists at
 `../bookkeeping-p2-autoplan/PLAN.md` (PR #977). Its runtime work is unstarted.
 This smaller plan makes the current control cost reproducible before changing it:
 how much does work on K selected units and dependency closure D grow as total run size N, unrelated work U
-and undelivered journal backlog B grow? Which cost is validation, destination work,
-PostgreSQL round trips or process startup? A baseline is evidence for a later fix,
+and undelivered journal backlog B grow? Which observations identify repeated validation work, and which elapsed costs
+remain unattributed? Record process startup separately. A baseline is evidence for a later fix,
 not a fix, a performance improvement, or domain/source qualification.
 
 ## User boundary and ownership
@@ -19,7 +19,7 @@ not a fix, a performance improvement, or domain/source qualification.
 User selected the measurement harness after a live coordination review. Keep every
 production module, source rule, skill and existing test unchanged. Claude owns
 N-PORT/OpenFIGI onboarding, Rust primitives, test cleanup and existing proof work.
-Only new harness/test files and this private workstream's planning files are candidates.
+Only new harness/test files and this dedicated workstream's planning files are candidates.
 No edits to `tests/integration/test_configured_bookkeeping_postgres.py`, shared
 fixtures, `edgar_warehouse/bookkeeping/clean/engine.py`, database grants or migrations.
 Recheck open PRs/worktrees and run overlap guard before each commit and push.
@@ -56,8 +56,8 @@ Smoke uses small inputs; larger N is opt-in with a deadline and a declared case
 matrix. Never stop the runtime by adding workload size refusals. Workload sizing
 and test deadlines bound the experiment, not production work.
 
-Record wall-clock nanoseconds, SQL statements, rows returned, `_frozen`/artifact
-reads, selected K and dependency closure D, N, backlog B, process mode and runtime
+Record elapsed nanoseconds, application SQL executions, the explicitly partial
+Bookkeeping _rows materialization subtotal, `_frozen`/base-artifact reads/bytes, selected K and dependency closure D, N, backlog B, process mode and runtime
 fingerprints. Rows returned are not rows visited by the database. Run untimed
 instrumented diagnostics separately from plain timed trials, and keep setup,
 migration, instrumentation and command startup costs distinct. A fresh process
@@ -70,7 +70,7 @@ alone. State correctness and expected outcome are checked for every case.
 Emit a versioned JSON report plus a short plain-language summary, with only
 allowlisted metadata and counts. Do not log SQL parameters, exception text,
 connection strings, environment values or source records. Missing requirements,
-failed assertions, incompatible comparisons, timeouts and expected protocol
+failed assertions, invalid eligibility metadata, timeouts and expected protocol
 refusals have distinct outcomes. A report states complete/incomplete explicitly.
 Successful reruns require matching experiment eligibility, not just matching code.
 Separate normalized fixture identity from runtime identity. Preserve metadata for future
@@ -145,11 +145,11 @@ This plan leaves optimization, source qualification and deployment entirely unfi
 
 | Approach | Human / coding-agent estimate | Completeness | Risk and maintenance | Decision |
 |---|---|---|---|---|
-| Extend one existing acceptance test with counters | 1 day / 2–3h | Partial: reproducible counts, weak standalone lifecycle and CLI evidence | Overlaps Claude's existing test ownership; makes a correctness suite carry benchmark semantics | Reject for this slice. |
-| New bounded harness and new tests, using existing stores/support | 2–3 days / 6–9h | Complete for the selected local synthetic baseline | Four new code/test files; explicit small lifecycle helper required | Recommend. |
+| New main script with inline lifecycle + two new test modules (three files) | 3–4 days / 7–10h | Complete if the larger main script remains clear | Avoids ownership overlap; fewer files but lifecycle/report/fixture concerns share one module | Viable smaller alternative. |
+| New bounded harness and new tests, using existing stores/support | 3–4 days / 7–10h | Complete for the selected local synthetic baseline | Four new code/test files; explicit small lifecycle helper required | Recommend. |
 | Adopt pgbench/pyperf or build a benchmark service | 3–5 days / 1–2 days | SQL-only pgbench misses Python control; pyperf calibration needs bounded integration; service adds unrelated infrastructure | New dependency or service does not remove protocol fixture work | Defer service; borrow measurement principles, add no dependency. |
 
-The first two could both produce useful diagnostic counts. Dedicated files win because they avoid active ownership and make failure, process and report boundaries reviewable. Four files is a borderline-size taste choice, surfaced at the final gate.
+The first two could both produce useful diagnostic counts. The dedicated lifecycle helper wins because it makes failure, process and report boundaries reviewable; both alternatives use only new files and avoid active Claude ownership. Four files is a borderline-size taste choice, surfaced at the final gate.
 
 ## Step 0D — Expansion decisions
 
@@ -219,7 +219,7 @@ Do not reuse a mutated state between trials. Claims lease units, reports advance
 
 ## 5. Code quality and GoF
 
-Review of engine history and support shape favors plain functions and a context manager with an explicit owned-resource record. There is no evidence for a Strategy/Observer hierarchy, plug-in framework or production refactor. Keep lifecycle in a small optional sibling helper and report/spec/operation orchestration in the main script; never copy all acceptance-test configuration or alter existing shared helpers.
+Review of engine history and support shape favors plain functions and a context manager with an explicit owned-resource record. There is no evidence for a Strategy/Observer hierarchy, plug-in framework or production refactor. Keep lifecycle in a small sibling lifecycle helper and report/spec/operation orchestration in the main script; never copy all acceptance-test configuration or alter existing shared helpers.
 
 Use business-facing names such as selected units, dependency closure, run size and journal backlog. Private `_frozen` and artifact access instrumentation is a reversible diagnostic hook scoped to one child; detach it in `finally` and never patch validation results. Source-contract Rust and Python module fingerprints describe the actual imported code, not merely the current checkout.
 
@@ -295,7 +295,7 @@ System, data, state/error, local execution and rollback diagrams are above. Stat
 
 - [ ] **Learning → skill** — record the skill line changed, or none; check only after actual verification and an ET clock read.
 
-Verification: future new unit and PostgreSQL lifecycle/report tests. File ownership: new main script, optional new sibling helper, new unit and integration modules only. Other sections add no independent implementation tasks; they refine these two contracts.
+Verification: future new unit and PostgreSQL lifecycle/report tests. File ownership: new main script, new sibling lifecycle helper, new unit and integration modules only. Other sections add no independent implementation tasks; they refine these two contracts.
 
 ## CEO completion summary
 
@@ -687,3 +687,399 @@ written. Independent Codex found five issues and their plan resolutions are abov
 Claude unavailable is explicit. No UI/design score. New TODOs: 0. Future task D1
 covers the DX work; existing C1/C2 receive the locality/provenance/report refinements.
 All DX changes are specified before engineering starts.
+
+Engineering input refreshed after its initial rebase; final checkpoint refreshed on 2026-10-16 ET after main advanced. This branch changes five new planning files only. Claude runtime/fixtures/skills remain untouched.
+
+# Phase 3 — Engineering review (last)
+
+## Step 0 — Scope challenge, reuse, research and confidence
+
+The minimum complete delivery is a reproducible local synthetic baseline with
+correct case semantics, trustworthy measurements and bounded owned cleanup. Four
+new code/test files are justified: main orchestration/report/CLI, small lifecycle
+support, unit tests and one dedicated PG16 integration module. There is no new
+service/class hierarchy, source feed, packaged binary or production migration.
+Distribution is the checked-out repository and uv, with existing CI discovery of
+new test files; standalone package/image publishing is explicitly out of scope.
+
+Current engine and CLI, migration/grant code, Artifacts and the actual PG16/support
+helpers were reread. Existing configured/generated tests provide format/protocol
+precedents, not coverage of the new harness. Root `cli.main` routes Bookkeeping
+before loading other domains: do not introduce a native/Rust import requirement to
+this independent control path merely for fingerprinting. Native metadata is
+not_loaded/not_exercised unless it was actually imported; optional identity cannot
+claim source-engine throughput or checkout/build correspondence.
+
+Official [Python subprocess documentation](https://docs.python.org/3.12/library/subprocess.html)
+provides timeouts and process-session primitives; process creation itself and host
+loss are not a hard real-time guarantee. [SQLAlchemy events](https://docs.sqlalchemy.org/en/20/core/events.html)
+provide client execution hooks, not rows visited inside SQL functions. [Docker
+context inspection](https://docs.docker.com/reference/cli/docker/context/inspect/)
+provides the endpoint metadata needed for local preflight. These built-ins are
+Layer 1 reuse; a new profiling framework or daemon is unnecessary. Existing P2
+TODOs own optimization and hosted qualification; no deferred item blocks collecting
+an honest current local baseline.
+
+Prior project learning applied: control/database functions remain authoritative;
+a caller's expected outcome is not authority. We never manufacture verified rows,
+change grants or replace runtime checks to make a benchmark pass. Proposed risks
+below are plan/interface findings, not observed runtime regressions. Suppressed
+findings: none promoted from speculative future code; implementation is absent.
+
+## Standards
+
+Only this workstream's planning files are changed now. Future code uses a fresh
+Codex branch/worktree, no production/shared support/test edits, overlap guard
+before commit and push, file-based messages, uv and affected testmon runs under
+five minutes. Public outputs use counts/invented fixture metadata only. Tests fail
+for absent PG16 prerequisites rather than skip; full CI remains required at PR time.
+No source/provider call, hosted store, AWS resource or merge is part of this ticket.
+
+## Spec
+
+The operator chose a Bookkeeping P2 measurement harness. This implements the
+baseline part of broad P2 task T5 and leaves runtime audit reuse, admission,
+per-unit checks, limits, generated ordinals and sampling unchanged. The deliverable
+ends at correct reports and proof of the harness; it neither claims a speedup nor
+claims real source/domain qualification. CEO/DX amendments are inputs to this final
+review, not later phases that can silently invalidate it.
+
+## GoF
+
+`gof-refactor-reviewer` is available and its evidence/default-leave-it method was
+applied. Engine history includes completion checking, configured capture and fan-in
+changes; the PG16 helper has a simpler isolated history. This shows real evolving
+protocol responsibilities, but no present cost that justifies moving runtime logic
+or adding a Strategy/Observer hierarchy for a standalone measurement script.
+Use ordinary functions, an explicit owned-resource record and a context manager;
+new indirection would increase review/merge cost without solving this task.
+
+## 1. Architecture review
+
+```text
+benchmark_bookkeeping_control.py  [new]
+  parse/validate -> local preflight -> case catalog + report state
+       |                                     |
+       v                                     v
+bookkeeping_benchmark_support.py [new]    fresh trial process/session
+  endpoint validation / budget /          -> existing root CLI OR Bookkeeping API
+  owned container record                  -> unchanged Rules / Bookkeeping / Journal
+  bounded start / stop                    -> local immutable artifact.copy evidence
+       |                                     |
+       +--> isolated PostgreSQL 16 <---------+
+       |
+       +--> safe recovery marker; exact-ID cleanup; no global resource discovery/deletion
+new unit tests / new PG16 integration tests -> verify public harness behavior
+```
+
+**E1 [P1, confidence 9/10]: receipt dependencies must be actual inputs.**
+`engine.py` `_receipt` calls `_resolve_item` recursively and verifies the immutable
+receipt, while `worklist` only creates that path for a version-2 `input.from` or
+composed input. A chain declared only in `step.requires` does not establish the
+same receipt-validation cost. Freeze a version-2 receipt chain and place the
+selected pending target before unrelated pending work, so `tasks(limit=1)` actually
+selects it. Record logical step-gate dependencies separately from receipt closure.
+This completes the selected case rather than adding a new feed or matching policy.
+
+**E2 [P1, confidence 9/10]: the parent owns all cancellation and cleanup.**
+The current helper's `_docker` has no timeout and exposes no immutable container
+identity; reusing it unchanged cannot prove bounded acquisition/teardown. Use the
+new small lifecycle file, fixed local Docker endpoint and a nonce label registered
+before create, verified ID after create, bounded exact-name reconciliation after
+lost acknowledgement, and bounded per-call/DB connect/statement timeouts. SIGTERM
+and Ctrl-C unwind through the same resource owner; a hung daemon returns explicit
+cleanup_unconfirmed. Do not promise automatic recovery after SIGKILL or host loss.
+
+Budget is a supervised software deadline, not a guarantee against kernel/process
+creation stalls. Every operation child uses a new session and argument-list launch
+without shell interpretation; on deadline terminate its owned process group, allow
+its grace interval, kill/reap if needed, then stop only the registered container.
+Fixture/build/operation effects occur in the owned child/server/filesystem only.
+Native package probing cannot import unrelated source/MDM modules into the root
+Bookkeeping CLI, which already intentionally avoids those domains.
+
+## 2. Code quality review
+
+**E3 [P1, confidence 9/10]: choose a counter seam whose coverage is honest.**
+`engine._rows` materializes a list, but tasks also calls `conn.scalars(...).all()`;
+`after_cursor_execute` is too early to know how many SELECT rows the consumer read.
+Count client SQL executions per owned store engine via SQLAlchemy hooks, and
+count materialized rows at the known `_rows` return seam only. Name this metric
+`bookkeeping_rows_materialized_via_rows_helper`, with explicit excluded scalar/status
+paths; never use cursor.rowcount or consume/reissue a result just to count it.
+
+`Artifacts.json -> verified -> read` is a nested chain. Count read calls and
+successful returned bytes once at `Artifacts.read`, and expose JSON/verified call
+counts as distinct nonadditive diagnostics if useful. Streamed reads have separate
+coverage and are unsupported/null unless instrumented independently. All wrappers
+restore original objects in finally, preserve values/exceptions and live only in
+a diagnostic child; no instrumented elapsed observation enters plain timings.
+
+Keep safe error enums and report construction explicit rather than serializing
+SQLAlchemy exception objects, engine URLs or CLI return documents. Child raw output
+is private fixture data and is never copied to the public report; successful CLI
+JSON is parsed/checked privately and reduced to outcomes/counts. Output collision
+handling and atomic persistence cannot replace an unrelated existing report.
+
+## 3. Test review — full path and user-flow mapping
+
+All new harness paths are currently unimplemented and untested. Existing acceptance
+tests exercise runtime precedents, not the new script; we do not report them as
+passing new-harness coverage. Each path below has a required test, with unit tests
+for deterministic pure/lifecycle logic and actual PG16 tests when mocks would hide
+role, migration, protocol or resource behavior. No existing runtime regression is
+introduced by this planning-only diff; implementation must re-audit actual branches.
+
+```text
+NEW MAIN SCRIPT                                     DEVELOPER FLOW
+  parse -> help (U01)                               find tool -> help without DB/native (U01)
+        -> invalid combinations/size (U02)            bad input -> actionable exit 2 (U02)
+  preflight -> missing deps/image (U03)              setup blocked -> remedy, no mutation (U03)
+            -> remote endpoint (U04)                 remote context -> refusal (U04/P01)
+            -> local endpoint (P01)                 ready local env -> owned server (P01)
+  owner register -> create -> lost ack (U05/P02)     interrupted setup -> exact recovery (U05/P02)
+  migrations/roles -> denied owner writes (P03)      run safely beside another agent (P02/P03)
+  fixture -> flat/select (P04)
+          -> receipt chain (P05)
+          -> sealed generated (P06)
+          -> backlog/lost ack (P07)
+          -> zero/refusal (P08)
+  trial -> API operations (P09)                     explicit case -> correct state/observations (P04–P09)
+        -> actual CLI (P10)                         smoke -> fresh-process evidence (P10)
+        -> fresh state/repeats (U06/P11)             repeat -> equal preconditions, no empty retries (P11)
+        -> counters isolated (U07/P12)               read report -> costs named accurately (U07/P12)
+        -> deadline or child failure (U08/P13)       slow/hung run -> incomplete, not_run retained (P13)
+  report -> schema/privacy/eligibility (U09)         consume JSON -> no raw data/secrets (U09/P14)
+         -> complete/incomplete samples (U10)        inspect omissions -> explicit null/reason (U10)
+         -> collision/write failure (U11)           rerun -> original file preserved (U11)
+  cleanup -> normal/error/Ctrl-C/SIGTERM (P15)       cancel -> child reaped, owned server gone (P15)
+          -> daemon failure/unknown (U12)            recover -> nonzero + safe marker (U12)
+NEW LIFECYCLE HELPER: endpoint/budget/create/ID/recovery/stop paths above U04/U05/U08/U12/P01/P02/P15.
+```
+
+Coverage now: 0/27 test groups implemented or run; 27/27 groups have a specified
+proof requirement. U01–U12 are 12 unit groups, P01–P15 are 15 PG16/process groups.
+A group may parameterize multiple catalog operations/branches and is not a promised
+test count. Target quality is behavior + edges + failure, not existence-only checks.
+PG16 denial, migrations, receipt chains, duplicate reconciliation and CLI/process
+cleanup are mandatory integration/E2E paths. No LLM runtime/prompt changes exist,
+so no model eval suite is required for the deliverable.
+
+See [TEST-PLAN.md](TEST-PLAN.md) for assertions and bounded commands. One operation
+case proves only that named synthetic profile/process path; no Company/Person/source
+claim is made. New branches discovered during implementation must be added to its
+checklist/tests instead of assuming this planning diagram is an exhaustive code audit.
+
+## 4. Performance review
+
+**E4 [P2, confidence 9/10]: fixture setup and runtime cost have coupled dimensions.**
+Version-1 manifests fan units across steps, so a chain would accidentally multiply N;
+use version 2 with explicitly counted per-step units. Vary D while holding N/K fixed,
+disclose W/receipt bytes that must change, and keep N/W fixed for backlog B cases.
+Do not pool the generated-parent case with flat work or a retry with empty delivery.
+Larger complete-run setup uses real transitions and may exhaust its budget; that is
+an incomplete experiment, not a reason to bypass protocol or add production caps.
+
+Record raw uninstrumented durations, fixed case order, repeat count and cache policy.
+No cache flush, new runtime cache, SQL index or altered scan policy is authorized.
+The parent keeps only safe report samples/counts; fixture payloads stay small and
+local, so report memory scales with requested observations rather than stored work
+rows. PostgreSQL function internals, server rows visited, network-only time, source
+engine throughput and destination compute remain explicitly unattributed.
+
+## Engineering NOT in scope and existing reuse
+
+Reuse existing Bookkeeping/Rules/Journal and migration/profile-grant APIs, the
+artifact.copy worker, approval/protocol helpers where applicable, PG16 constants
+and address conventions, Python subprocess/context-manager primitives and SQLAlchemy
+events. Do not import the existing acceptance fixture or edit shared support.
+No new runtime migration, database enforcement movement, limit change, cache,
+provider qualification, cloud rollout, CI file, generic framework or packaged
+benchmark release. Root README/source-specific skill changes remain outside scope.
+
+## Engineering failure modes
+
+| Boundary | Realistic failure | Planned handling | Required test | Silent design gap? |
+|---|---|---|---|---|
+| Request | Invalid axis combination | Exit 2 before provision | U02 | No |
+| Local endpoint | Remote context or changed env | Reject/pin validated Unix endpoint | U04/P01 | No |
+| Acquire | Docker creates then client loses ack | Exact name + nonce reconciliation | U05/P02 | No |
+| Authority | Owner role accidentally used | Reject fixture; denial checks | P03 | No |
+| Dependencies | requires-only chain misses receipts | Version-2 from chain and verified postconditions | P05 | No |
+| Generated | Expansion metadata N differs | Assert actual sealed accounting | P06 | No |
+| Delivery | Retry is empty or different envelope | Committed Journal event, pending exact ack | P07 | No |
+| Metrics | Cursor consumed/double-counted bytes | Read-preserving scoped seams; coverage names | U07/P12 | No |
+| CLI | Code 3 incorrectly means success | Interpret declared state outcome | P10 | No |
+| Repeats | Leases/empty backlog change later samples | Recreate independent pre-state | U06/P11 | No |
+| Deadline | Child/DB/Docker hangs | Bounded process/query calls and cleanup reserve | U08/P13 | No |
+| Output | Crash truncates report or leaks raw values | Atomic owned writes and allowlist | U09/U11/P14 | No |
+| Cancel | Parent exits leaving resources | Catchable signal path, reap owned processes | P15 | No |
+| Host loss | SIGKILL/daemon unavailable | Marker/unconfirmed; no automatic-clean claim | U12 | No |
+
+Zero unmapped/silent critical gaps in the design. All behavior remains unproved.
+
+## Worktree parallelization and execution
+
+Sequential implementation, no parallelization opportunity for this small shared
+script/support contract. Order: C1 lifecycle -> C2 evidence schema -> D1 interface
+-> E5 fixtures/measurement -> E6 proof/report review. Tests are written alongside
+each unit, with final real PG16 verification last; do not defer all correctness
+work until the end. Recheck Claude PRs/worktrees at pickup; if a new file has become
+owned by another runtime, stop for the ownership decision before editing it.
+
+## Implementation Tasks (engineering)
+
+- [ ] **E5 (P2, human: 1 day / coding agent: 2h)** — protocol measurement — Implement the frozen synthetic cases, exact receipt closure, fresh-state trials and truthful metrics in the new main script; verify every catalog family with the new PG16 tests.
+- [ ] **E6 (P1, human: 1 day / coding agent: 2h)** — proof — Prove roles, CLI routing, metric preservation, privacy, deadline/cancellation and owned cleanup using only the new test files; run bounded affected tests and inspect a safe smoke report.
+- [ ] **Learning → skill** — name a demonstrated skill correction, or none; no speculative skill edit.
+
+Architecture/lifecycle E1/E2 refine C1 and E5; counter E3 refines C2/E5; performance
+E4 refines E5/E6. No redundant task is added for the same finding.
+
+## Engineering completion summary
+
+| Required field | Result |
+|---|---|
+| Scope challenge | Complete measurement scope accepted; four new code/test files, no new service |
+| Architecture | 2 interface/ownership findings resolved in contract |
+| Code quality | 1 instrumentation coverage finding resolved |
+| Test review | Full code/user-flow diagram; 27 unimplemented groups mapped, 0 silently deferred |
+| Performance | 1 fixture coupling finding resolved; no runtime optimization |
+| NOT in scope / reuse | Written above |
+| TODOs | 0 new items; existing broad P2 owns runtime/hosted follow-up |
+| Failure modes | 14 paths; 0 unmapped silent design gaps; actual tests pending |
+| Outside voices | Actual Claude unavailable; actual Codex result appended after reconciliation |
+| Parallelization | One sequential lane; preserve independent Claude worktrees |
+| Lake score | 4/4 in-scope engineering corrections choose complete evidence |
+| Retrospective | Intake/CEO/DX checkpoint commits only; no reverted runtime implementation |
+
+## CLAUDE SUBAGENT (Eng — independent engineering)
+
+Actual read-only Claude attempt exited 1 after 10 seconds: configured Fable 5.1
+requires usage credits. No findings or consensus can be attributed to Claude.
+
+## CODEX SAYS (Eng — architecture, tests and failure modes)
+
+Actual independent Codex review exited 0 in 264 seconds. Six findings: receipt-chain
+selection semantics; partial SQL/row counters; database-wide reset/connection policy;
+backlog versus Journal cardinality; insufficient cross-duty denial proof; missing
+SQL/CLI/delivery failure classifications. Findings 1–4 blocked the draft engineering
+gate. All six have concrete resolutions in the authoritative engineering amendments
+to CASE-MATRIX and TEST-PLAN; a focused independent recheck follows before the gate.
+Native imports are not required for this control path. Runtime/benchmark behavior
+is still unmeasured. The primary findings E1–E4 were recorded independently above.
+
+## Engineering final recheck and consensus
+
+Independent Codex focused recheck: PASS, exit 0 after 54 seconds. All six findings
+resolved; no remaining planning blocker in the amended experiment/test contract.
+The result explicitly distinguishes future proof from planning defects. Claude's
+credit failure remains unavailable; no cross-model consensus is claimed.
+
+| Dimension | Claude | Codex final | Consensus |
+|---|---|---|---|
+| Architecture sound? | N/A | PASS: clean three-store reset and explicit connections | N/A |
+| Test coverage planned? | N/A | PASS: 27 proof groups, six findings mapped | N/A |
+| Performance risks addressed? | N/A | PASS: partial counters and coupled dimensions explicit | N/A |
+| Security/authority covered? | N/A | PASS: actual cross-duty denial required | N/A |
+| Error paths specified? | N/A | PASS: SQL expiry, Journal outage, CLI semantics | N/A |
+| Deployment/rollback bounded? | N/A | PASS planning only: owned local resources and cleanup limits | N/A |
+
+0/6 dual-model confirmations. Engineering code/test behavior is unproved until
+implementation; a successful warm smoke remains a required acceptance gate.
+
+## Engineering decisions appended
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| D18 | Eng | Use actual version-2 receipt chain, select intended target, disclose coupled dimensions | Mechanical | P1/P5 | requires alone measures a different path | Dependency labels without verified input links |
+| D19 | Eng | Explicit partial row subtotal and base-read bytes; unverified predictions kept separate | Mechanical | P5 | Avoid missing scalars/double counting or invented measured proof | Aggregate rows/round trips inferred from hooks |
+| D20 | Eng | Clone all three clean stores per observation; cold lazy production engines | Mechanical | P1/P5 | Fresh UUID alone leaves global indexes/intents/pools contaminated | Reusing databases with prior trial state |
+| D21 | Eng | Fix Journal J=8 and label backlog operation duplicate reconciliation | Mechanical | P1 | Isolate cardinality while preserving actual protocol | Empty-to-populated Journal confounded with B |
+| D22 | Eng | Prove both cross-duty denials and mandatory separate verifier | Mechanical | P1 | Distinct logins alone do not prove separation | Direct-write denial as complete authority proof |
+| D23 | Eng | Test expired SQL authority, real Journal outage, CLI contents and successful warm smoke | Mechanical | P1 | Correct timeout/zero CLI exit alone is not acceptance | Refusal/empty/failed output accepted as success |
+| D24 | Eng | Do not import native/source modules for control fingerprinting | Mechanical | P3/P5 | Root bookkeeping intentionally isolates domains | Irrelevant native dependency in measured control |
+| D25 | Eng | Rebase onto current main checklist-only update and preserve provenance | Mechanical | P6 | Own branch refreshed, reviewed code unchanged | Stale branch state or touching Claude's checkout |
+
+Total: 25 decisions, 23 mechanical recommendations and 2 taste choices; 0 user
+challenges. Changes to settled runtime scope were not proposed. Each taste choice
+retains the recommendation until the final approval gate.
+
+## Cross-phase themes
+
+- Trustworthy evidence rather than inferred speed: CEO identified attribution and
+  changing trial states; DX identified hidden launcher setup; Eng identified counter
+  coverage, database-wide reset and coupled Journal state. High-confidence repeated
+  independent signal, resolved through explicit boundaries/metadata and real proof.
+- Bounded local ownership: CEO found unbounded helper lifecycle; DX found remote
+  Docker context risk; Eng specified exact owned identity/reset/cleanup and failure
+  evidence. The resulting harness cannot silently select a shared/hosted endpoint.
+- Claims follow proof: every phase distinguishes plan quality, code identity,
+  synthetic acceptance, source qualification and hosted performance. No new runtime
+  or provider behavior has been executed here.
+
+## Deferred work and task aggregation
+
+Zero new global TODOs: the approved broader P2 plan already owns command-local audit
+reuse, admitted scope, per-unit validation and hosted/source qualification. No new
+service or generic comparator is justified. See [IMPLEMENTATION-TASKS.md](IMPLEMENTATION-TASKS.md)
+for the five exact-deduplicated tasks, phase provenance and sequential order. The
+current slice supplies baseline evidence to those existing P2 decisions.
+
+## Final approval choices
+
+Recommendation 1: four new code/test files, including a small owned lifecycle
+helper. Alternative: three files with lifecycle inline in the main script; same
+scope/proofs, larger orchestration module. Recommendation 2: record complete
+baseline eligibility metadata now and defer cross-revision speedup calculations.
+Alternative: add a comparator now, increasing scope and acceptance cases; requires
+an amended engineering review before implementation.
+
+Planning estimates: about 3–4 human days or 7–10 active coding-agent hours, plus
+CI/qualification elapsed time. Estimates are provisional; default smoke completion,
+resource cleanup and native/environment compatibility remain unmeasured. Approval
+would approve this plan, not merge, deployment, source activation or production
+optimization. User response is pending and the planning ticket remains incomplete
+only at its final operator-approval part.
+
+## Pre-gate verification
+
+| Required output | Verified artifact/status |
+|---|---|
+| Restore point | External original plan contents verified exactly; pointer retained at top |
+| CEO | Step 0A–0F, all ten sections, alternatives, reuse/delta, rescue/failure registries and six diagrams; spec recheck PASS |
+| CEO voices | Actual Claude credit failure; Codex six concerns resolved; consensus table N/A |
+| Design | No UI assets/flows; explicit skip reason |
+| DX | All eight passes, persona/empathy/benchmark/magical moment, nine stages, confusion report, scorecard/checklist and exact CLI contract |
+| DX voices | Actual Claude credit failure; Codex five findings resolved; consensus N/A |
+| Engineering last | Scope, architecture, quality, full test mapping, performance, Standards/Spec/GoF; independent focused recheck PASS |
+| Engineering voices | Actual Claude credit failure; Codex six findings and final PASS; consensus N/A |
+| Tests | TEST-PLAN.md maps U01–U12/P01–P15; proposed/unexecuted; external engineering test-plan copy updated |
+| Tasks | Latest per-phase JSONL scoped to branch/recent commits; five deduplicated tasks/four future code-test files |
+| Cross-phase themes/audit | Three themes, D01–D25 unique; two taste choices, zero user challenges |
+| TODOs/ownership | No duplicate TODO; only five new planning artifacts; live overlap guard required before final commit |
+| Approval | Pending; no approval logs, implementation, PR, merge or deployment claimed |
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|---|---|---|---|---|---|
+| CEO Review | /autoplan → /plan-ceo-review | Scope and strategy | 1 + spec recheck | Plan review complete; approval pending | 6 Codex concerns resolved; spec 9/9/9/9/8 |
+| Codex Review | /autoplan independent voices | Independent phase challenges | 4 CLI runs | Completed, exit 0 | CEO 6; DX 5; Eng 6 + focused PASS |
+| Eng Review | /autoplan → /plan-eng-review | Final architecture and proof contract | 1 + focused recheck | PASS, planning only | 6 independent findings resolved; 27 future proof groups |
+| Design Review | Conditional | No frontend scope | 0 | Skipped, no UI scope | Explicit no-UI assessment |
+| DX Review | /autoplan → /plan-devex-review | Developer first use | 1 | Plan review complete; approval pending | 5 Codex findings resolved; plan 8.4/10; warm TTHW unmeasured |
+| Claude voices | /autoplan independent Claude | Cross-model challenge | 3 actual CLI attempts | Unavailable | Configured model requires usage credits; 0 consensus confirmations |
+
+**CODEX:** Final focused engineering recheck passed after receipt closure, metric
+coverage, complete reset, Journal cardinality, duty denial and negative controls
+were specified. No benchmark/behavior proof was run.
+
+**VERDICT:** CEO + DX + ENG plan reviews complete; operator approval pending.
+Implementation/PG16 qualification, full CI, source activation and deployment remain
+separate work. Four future code/test files; no production changes in this branch.
+
+**UNRESOLVED DECISIONS:**
+- Approve four-file layout with a dedicated lifecycle helper, or choose the three-file inline alternative.
+- Approve baseline-only eligibility metadata and deferred cross-revision calculator, or request an expanded plan/re-review.
+- Operator final approval is pending; planning ticket remains incomplete at that part.

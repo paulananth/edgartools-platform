@@ -31,7 +31,7 @@ A run UUID or temporary path alone must not make equivalent fixture specs differ
 | dependency-closure | N=12; K=1,D_nodes=1,3 (chain), W=D_nodes | Verified prerequisites built first; claim target with valid receipts | Dependency validation baseline for P2 C; W changes with D and is disclosed |
 | renew-report-admit | N=4,12; K=1,D=0 | Separate leased / running-candidate-ready / reported-and-verified-report-ready trials | Distinct timings for `renew`, `report`, `verifications`, `admit`; worker/verifier execution outside timer |
 | generated-read | N=5,9; one sealed parent + 4,8 children | Parent verified through existing protocol; children pending | Reconstruct generated accounting; no runtime cap or ordinal change |
-| delivery-backlog | N=12,W=8; B=1,4,8; deliver limit=1 | Build 8 verified intents, pre-deliver 8-B outside timer | Backlog effect with N/W fixed; per-run intents only, P2 A |
+| delivery-backlog | N=12,W=8,J=8; B=1,4,8; limit=1 | Pre-append all 8 envelopes, acknowledge 8-B outside timer | Duplicate-reconciliation backlog baseline, N/W/Journal size fixed; P2 A |
 | delivery-lost-ack | N=4,W=1,B=1 | Commit exact journal envelope, leave Bookkeeping ack pending; then deliver | Real duplicate reconciliation, not retry on an empty queue |
 | check-finalize | N=4,12; W=N; B=0 | All work verified and journal drained; separate `check` and method `finalize` trials | Full-run completion baseline, P2 B/C; setup reported separately |
 | fresh-cli | N=4; K=1 or W=N | New interpreter through root `cli.main`: claim, renew, report, admit, checks, finalize | Real CLI behavior + startup cost; `finalize` includes delivery, never equate to method-only finalize |
@@ -117,7 +117,7 @@ cross-revision comparison, but do not implement cross-revision speedup calculati
 here. This baseline-only choice is surfaced as a final taste decision.
 
 Done means the named catalog can produce correct, honest observations; the default
-smoke runs or explicitly fails/incompletes; roles/cancellation/privacy are proven;
+smoke completes on a supported warm environment within budget; roles/cancellation/privacy are proven;
 and reports document eligibility and measurement limits. It does not mean a full
 larger matrix completed, that control became faster, or that the broad P2 is shipped.
 
@@ -128,7 +128,7 @@ The catalog's shorthand K means K_requested; K_obtained is asserted separately.
 D always expands to D_nodes and D_edges, never a single ambiguous report field.
 Family operations: flat-read=`tasks`,`frozen-diagnostic`; selected-width=`tasks`;
 dependency-closure=`tasks`; renew-report-admit=`renew`,`report`,`verifications`,`admit`;
-generated-read=`tasks`,`frozen-diagnostic`; delivery-backlog=`deliver`;
+generated-read=`tasks`,`frozen-diagnostic`; delivery-backlog=`deliver-backlog-reconcile`;
 delivery-lost-ack=`deliver-reconcile`; check-finalize=`check`,`finalize-method`;
 fresh-cli=`cli-claim`,`cli-renew`,`cli-report`,`cli-admit`,`cli-checks`,`cli-finalize`.
 Default smoke includes all method operations in its listed families plus the three
@@ -220,3 +220,116 @@ limits eligibility metadata and claims, without fabricating a source match.
 Unit fixtures/help contain compact invented version-1 complete and incomplete
 report examples, with nullable unsupported diagnostics and all outcome enums.
 No external report ingestion or format converter is introduced.
+
+## Engineering amendments — authoritative experiment semantics
+
+### Receipt closure and target selection
+
+Dependency fixtures use a version-2 manifest: one unit in each prerequisite step,
+with `input: {from: {step: previous_step, key: previous_key}}` after the first unit;
+the selected target names the last prerequisite through the same `from` mechanism.
+Every prerequisite is completed and admitted by the existing protocol. Order steps
+as chain -> selected target -> unrelated independent work, with unique output/lease
+resources, so tasks(limit=1) selects the intended target rather than an earlier
+unrelated pending unit. Assert the actual selected identity privately.
+
+D_nodes/D_edges describe the transitive receipt graph of input.from/compose, not
+just the step.requires gate. Record configured step count and gate requirements
+separately. U=N-|selected union receipt closure|; chain variants hold N=12,K=1,
+but W, U, step count and receipt bytes necessarily vary and are disclosed. This is
+a coupled dependency-closure baseline; do not attribute elapsed differences solely
+to D. An ancestor-artifact corruption control must refuse the selected operation,
+proving that the intended receipt path is actually consulted.
+
+### Database-wide reset and connection policy
+
+Create/migrate the three canonical empty store databases once, install restricted
+roles/profile grants, close all connections, and keep these empty schemas as clean
+templates. Before EVERY timing/diagnostic/control observation, clone ALL three
+stores into invocation-owned fresh database names, then prepare only that cell's
+valid pre-state. Runtime accepts explicit owned clone addresses; canonical-name
+checks belong to the existing migration APIs and are satisfied when creating the
+templates. Do not rerun those migrations against alternate clone names or change
+migration checks. All three cloned stores must have no runs/intents/events/leases
+from previous cells. Roles remain fixed and their membership is checked once and
+fingerprinted. Dispose/drop only owned trial engines/databases outside timing.
+
+Actual CREATE DATABASE cloning uses a local owner, properly quoted synthetic names
+and bounded statement/connect/lock timeouts. Close owner/setup connections before
+the operation. A preceding trial deliberately leaving pending work must not change
+the next cell's initial inventory. Database/global index population is part of
+eligibility metadata. Server/OS caches are shared and declared warm/uncontrolled;
+cloning does not establish cold caches or statistical comparability.
+
+Measured API engines use existing production get_engine factories (pool_pre_ping=true),
+constructed fresh after preparation without connecting. First physical connection,
+dialect initialization and pool checkout within the operation are INCLUDED in API
+elapsed time. CLI elapsed naturally includes its corresponding startup/connection
+work. Diagnostic counterparts use the same factory/state policy. Setup/assertion
+queries are outside listeners/timers. Record this exact cold-engine policy; do not
+mix it with preconnected/warm-pool observations. Raw DBAPI pings/driver initialization
+outside SQLAlchemy execution hooks are NOT counted as application SQL executions.
+
+### Journal population and delivery semantics
+
+For delivery-backlog, hold N=12,W=8 AND Journal event cardinality J=8. After creating
+eight valid intents, append/verify all eight exact envelopes to Journal without
+acknowledging Bookkeeping, then acknowledge 8-B through actual delivery outside the
+timer. Measured limit=1 delivery is duplicate reconciliation for every B=1,4,8;
+label operation `deliver-backlog-reconcile`, never fresh-insert delivery. Pre-state
+checks establish exact B/J/W and one post-state acknowledgement. Preparation/cache
+history still differs and is disclosed. Constant client SQL counts do not prove
+that database backlog has zero cost. Fresh insertion and lost-ack reconciliation
+are distinct fixture/outcome labels and never pooled.
+
+### Metric accounting and calibration
+
+Required diagnostic metrics: application SQL executions per store engine; `_frozen`
+call count; `bookkeeping_rows_materialized_via_rows_helper`; base Artifacts.read
+calls and successfully returned bytes. The rows-helper metric is a partial subtotal,
+not an aggregate of all consumed SQL rows. Selection via scalars().all(), scalar
+function results and JSON payload elements are separately named coverage categories;
+if not instrumented, they are null/unsupported and `total_consumed_sql_rows` is null.
+SQL execution counts are not server-internal statement counts or round-trip counts.
+
+For a simple one-step N<=1000 flat first-claim fixture, code inspection predicts
+3 frozen calls, 9 explicit application SQL executions and 3N+4 rows through _rows,
+plus N selected keys and one scalar result outside that subtotal. These are
+UNVERIFIED predictions for the inspected revision, not measured results or permanent
+CI performance assertions. Compare them with actual diagnostics after implementation,
+explain discrepancies, and preserve current physical evidence. Journal.append itself
+verifies, and deliver verifies again: inspect/measure all three Journal application
+SQL executions per event; never assume two. Small calibration fixtures execute known
+explicit SELECT/scalar/list paths to prove the counters without permanently encoding
+an inefficient runtime shape into the correctness suite.
+
+Count byte length once at Artifacts.read; json/verified call counters are nonadditive.
+Never consume/reissue a query to count rows or replace runtime return values. Scoped
+wrappers/listeners restore on every exit and apply only to diagnostic children.
+Native source-contract is not imported merely to fingerprint it: the root Bookkeeping
+CLI intentionally avoids other domains. Record not_loaded/not_exercised if absent;
+source/build correspondence remains unknown unless independently proven.
+
+### Authority, negative controls and acceptance
+
+Verify session_user, restricted-role attributes and exact profile membership. Worker
+must not inherit verifier duty; verifier must not inherit worker duty. Against these
+real roles, verifier claim/report and worker verification/admission must refuse and
+leave work unchanged. Explicitly attach a separate verifier before using protocol
+helpers; reject helper fallback to the worker instance.
+
+Add focused failure classification tests: real expired SQL authority (valid two-second
+lease with bounded wait); actual owned Journal connection refusal with retained intent
+and later successful retry; empty CLI claim, false CLI checks, malformed child output
+and unexpected child exit. For Journal outage use only the owned trial database's
+ALLOW_CONNECTIONS/owned-session control, then restore it before retry; no shared store
+or mocked Journal substitutes for that PostgreSQL failure-path proof. Malformed output
+can use a unit child fixture; actual CLI success/refusal semantics use real PG16.
+Parse CLI JSON privately and assert operation-specific contents, not just exit code.
+
+A completed warm default smoke within its budget is REQUIRED acceptance evidence.
+A correct incomplete/timeout report proves failure handling only. If default smoke
+cannot complete on the supported warm environment, acceptance remains incomplete
+and the operator receives the observed evidence before any preset change. Cancellation
+proof covers provisioning, active operation AND cleanup; SIGKILL/host loss remains an
+explicit recovery limitation. These corrections do not change production behavior.

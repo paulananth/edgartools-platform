@@ -12,7 +12,8 @@ by this planning ticket. This narrows PR #977's already approved P2 plan.
 - [x] Load review skills and complete CLI reviewer preflight — CEO/DX/Eng methodologies loaded, Claude 2.1.301 and Codex 0.162.1 available; Codex auth/model probes passed; 2026-10-15 21:10 ET.
 - [x] Complete CEO review, independent voices, alternatives and decision registries — Codex six concerns resolved, actual Claude credit failure recorded, spec recheck PASS, case contract and registries saved; 2026-10-15 21:17 ET.
 - [x] Record the no-UI assessment and complete DX review with independent voices — eight passes and required outputs saved; five Codex findings resolved in contract, actual Claude credit failure recorded; 2026-10-15 21:24 ET.
-- [ ] Complete engineering review last, independent voices and test-path mapping.
-- [ ] Write test-plan and implementation-task artifacts; validate links, scope and overlap.
-- [ ] Present the final approval gate and record the operator's decision.
-- [ ] Learning → skill: assess durable findings; record none if no correction is warranted.
+- [x] Complete engineering review last, independent voices and test-path mapping — actual Codex focused recheck PASS; six engineering findings resolved; 27 future proof groups, no behavior tests run; 2026-10-16 08:51 ET.
+- [x] Write test-plan and implementation-task artifacts; validate links, scope and overlap — five planning artifacts, 25 unique decisions, 27 proof groups, five aggregated tasks, all relative links and whitespace valid; live overlap guard passed; 2026-10-16 08:51 ET.
+- [x] Refresh live main/Claude PRs and rebase the saved planning branch — scoped Git diff confirms reviewed runtime/support/dependencies unchanged; rebased onto 3064a4e4 without conflict; 2026-10-16 08:52 ET.
+- [ ] Present the final approval gate and record the operator's decision — gate prepared; operator response pending.
+- [x] Learning → skill: none — this planning review applies existing proof/ownership rules; no demonstrated skill defect or new verified runtime behavior warrants a skill edit; 2026-10-16 08:51 ET.
