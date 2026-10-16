@@ -62,7 +62,8 @@ facts = {"filings": len(rows), "filings_without_series": sum(r["series_id"] is N
          "filings_without_registrant": sum(r["cik"] is None for r in rows),
          "filings_lei_blank": sum(r["lei"] is None for r in rows)}
 series = combine(OUT / "reduce", files.load(FOLDER / "reduce.yaml"), {"filings": filings})
-combined = combine(OUT / "combine", files.load(FOLDER / "combine.yaml"), {"series": series, "filings": filings})
+pairs = combine(OUT / "lei-pairs", files.load(FOLDER / "lei-pairs.yaml"), {"series": series})
+combined = combine(OUT / "combine", files.load(FOLDER / "combine.yaml"), {"series": series, "pairs": pairs, "filings": filings})
 fund = tables(combined)["fund"]
 # A direct calculation of each series' latest filing, to compare.
 direct = {}
@@ -73,6 +74,16 @@ names = {}
 for r in rows:
     if r["series_id"]:
         names.setdefault(r["series_id"], set()).add(r["name"])
+# A direct count of the one-to-one rule, to compare.
+by_lei, by_series = {}, {}
+for r in rows:
+    by_lei.setdefault(r["lei_key"], set()).add(r["series_id"])
+    by_series.setdefault(r["series_id"], set()).add(r["lei_key"])
+once = {s: next(iter(l)) for s, l in by_series.items() if len(l) == 1 and len(by_lei[next(iter(l))]) == 1 and next(iter(l))}
+facts.update(lei_one_to_one_direct=len(once), lei_joined=sum(1 for r in fund if r.get("lei")),
+             lei_matches_direct=sum(once.get(r["series_id"]) == r.get("lei") for r in fund),
+             leis_on_several_series=sum(len(v) > 1 for k, v in by_lei.items() if k),
+             series_with_several_leis=sum(len(v) > 1 for v in by_series.values()))
 facts.update(funds=len(fund), funds_several_filings=sum(r["filings"] > 1 for r in fund),
              latest_matches_direct=sum(direct[r["series_id"]]["accession"] == r["latest"]["accession"] for r in fund),
              name_changes=sum(len(v) > 1 for v in names.values()))

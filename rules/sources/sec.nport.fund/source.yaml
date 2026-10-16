@@ -14,7 +14,8 @@
 # FUND_REPORTED_INFO.tsv once, one row per filing; reduce.yaml lists each
 # series (a filing naming no series, 729 in 2026q2, is not read: its
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
-# (by date, then accession); mdm.prepare reads table `fund`.
+# (by date, then accession) and its LEI when one to one (lei-pairs.yaml);
+# mdm.prepare reads table `fund`.
 # Left out: the report's financial figures (FUND_REPORTED_INFO's other
 # columns), detail of a report, not of the Fund.
 source: sec.nport.fund
@@ -61,6 +62,15 @@ read:
             transforms:
             - {case: upper}
             null_if: ["", "N/A", "00000000000000000000"]
+        # The same LEI as a key for counting (reduce.yaml): none is empty text,
+        # since a reduction refuses a null key.
+        lei_key:
+          text:
+            path: SERIES_LEI
+            default: ""
+            transforms:
+            - {case: upper}
+            - {regex_replace: {pattern: '^(N/A|0{20})$', with: ''}}
   stream:
     framing: delimited
     delimited: {format: tsv, encoding: utf-8}
@@ -118,6 +128,7 @@ mdm:
                       fields: {}
           input_fields:
           - series_id
+          - lei
           - latest
         version: sec-nport-fund-v1
         retain_deferred: true
@@ -130,13 +141,19 @@ mdm:
         # them, or create it (operator, 2026-10-14). The registrant's CIK is
         # lookup only until IS_SUBFUND_OF can be mapped (operator,
         # 2026-10-16: "Funds now, link later").
+        # The LEI joins only when it is the one LEI its series files and no
+        # other series files it in the quarter (combine.yaml, `lei`): 15 LEIs
+        # are filed for two series and 1 series files two LEIs (2026q2). Every
+        # filed LEI stays as a lookup-only cross-reference.
         identifiers:
           sec_series_id: series_id
-          lei: latest.lei
+          lei: lei
         identifier_formats:
           sec_series_id: sec_series_id
           lei: lei
         cross_references:
           nport_registrant_cik: latest.cik
+          nport_series_lei: latest.lei
         cross_reference_formats:
           nport_registrant_cik: sec_cik
+          nport_series_lei: lei

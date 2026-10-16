@@ -133,6 +133,7 @@ def test_a_declared_stand_in_is_refused_as_kept():
 PINNED = {
     ("cusip", 1): "622c3994cb2c47f427e464085ec8e06b281e6eec9ea0d62f0195ea7af307e826",
     ("isin", 1): "563fbaf4640901d001ff271df72a262eed1cf14cc96e0d8905f8bf63a52e2be1",
+    ("sec_series_id", 1): "a6d53f1d27f62d67ac1d446d9322b827b8935dd37bc90a95ce4dcdc53fe46c41",
 }
 
 
@@ -151,3 +152,11 @@ def test_a_type_states_its_family_length_and_checksum_reason():
     cusip, isin = identifier_types.TYPES["cusip"], identifier_types.TYPES["isin"]
     assert (cusip.family, cusip.length, cusip.checksum_reason) == ("luhn over letter values", 9, "invalid_cusip_checksum")
     assert isin.length == 12 and isin.family is not None
+
+
+def test_the_sec_series_id_is_s_and_nine_digits():
+    # Invented values; the shape is N-PORT's (ticket 79, part 3).
+    series = identifier_types.load()["sec_series_id"]
+    assert series.refusal(" s000012345 ") == ("S000012345", None)
+    assert series.refusal("S12345")[1] == "invalid_sec_series_id"
+    assert series.refusal("C000012345")[1] == "invalid_sec_series_id"
