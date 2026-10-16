@@ -30,7 +30,7 @@ silently.
 from __future__ import annotations
 
 from .codes import code_like, determines, name_like
-from .identifiers import check_digits, identifier_shaped, stand_in_sql
+from .identifiers import check_digits, identifier_shaped, real_value_sql, stand_in_sql
 from .inputs import sql_name
 from .quality import item
 
@@ -50,7 +50,7 @@ def _near_constant(c: dict) -> bool:
 
 def _real(x: str) -> str:
     """Rows whose identifier holds a value, not a stand-in for none."""
-    return f"{x} IS NOT NULL AND NOT {stand_in_sql(f'CAST({x} AS VARCHAR)')}"
+    return real_value_sql(x)
 
 
 def repeated_values(con, part: str, column: str) -> int:

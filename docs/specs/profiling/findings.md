@@ -84,8 +84,9 @@ approval:                       # §9
        proposal: cross_reference|record_key|none, why: <words>,
        pairs: [{with: <col>, part: <part, when B is reached through a link>,
                 via: [{from: <B-part col>, to: <col>}], a_values: <n>, b_values: <n>,
-                pairs: <n>, a_with_one_b: <n>, a_with_several_b: <n>, a_without_b: <n>,
-                b_with_several_a: <n>, one_to_one: <n>, one_holds_the_other: <n>}]}
+                distinct_pairs: <n>, a_with_one_b: <n>, a_with_several_b: <n>, a_without_b: <n>,
+                b_with_several_a: <n>, one_to_one: <n>, one_holds_the_other: <n>,
+                scan: full|sampled}]}
                                 # a master part only: how this identifier pairs with each other
                                 # identifier on its rows, and on a part linking to them (one link)
   columns:
@@ -133,13 +134,15 @@ pattern, so a look-alike shows why it failed) and
 `sensitivity_signals`; on an identifier, `local_counter` and `shape_test` (which
 test made it identifier-shaped: one length, one shape, or one pattern under one
 prefix, with its share) and, on a master part, `pairs`: counted over distinct
-pairs of values (stand-ins left out; no value written), how many of its values
+pairs of values (blanks and stand-ins left out; no value written; `scan: sampled`
+when either part was read as a sample), how many of its values
 come with one value of the other identifier, with several, or with none; how
 many of the other's values come with several of its own (a matching rule on the
 other would merge those); how many pairs are one to one both ways; and how many
 hold one value inside the other. An entity found inside a part is measured on
-the rows of the part it came from, and the other identifier may sit on a part
-linking to those rows (one link). On a record key,
+the rows of the part it came from, leaving out the other entities found there,
+and the other identifier may sit on a part linking to those rows (one link, a
+nested list's rows too). Each pair is measured once. On a record key,
 `alternatives` (other unique keys) and, for a sampled part, `evidence.full_pass`.
 A column's `role` may also be `link` (it points at another part's key).
 `persistence`, `delivery` and `refresh` stay null and `unknown` until

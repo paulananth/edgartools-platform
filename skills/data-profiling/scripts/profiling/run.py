@@ -185,7 +185,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
             f["derived_evidence"] = entities[f["part"]]["evidence"]
             f["quality"] += embedded.disagreements(entities[f["part"]])
     _inherit(findings_parts, parts)
-    _identifier_pairs(con, findings_parts, profiles, found_links)
+    _identifier_pairs(con, findings_parts, profiles, found_links + child, parts)
     by_name = {f["part"]: f for f in findings_parts}
     not_levels: list[dict] = []
     hierarchies = _hierarchies(con, by_name, profiles, found_links, not_levels)
@@ -344,14 +344,16 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
 def _pairing_columns(profiles, part: str, leave_out=()) -> list[str]:
     """A part's identifier-shaped columns that are not a local counter."""
     return [c["name"] for c in profiles.get(part, []) if not c["structure"] and c["name"] not in leave_out
-            and identifiers.identifier_shaped(c) and not (profile.is_integer(c) and identifiers.dense_sequence(c))]
+            and identifiers.identifier_shaped(c) and not identifiers.local_counter(c)]
 
 
-def _identifier_pairs(con, found: list[dict], profiles, links: list[dict]) -> None:
+def _identifier_pairs(con, found: list[dict], profiles, links: list[dict], parts) -> None:
     """For each master part, how each of its identifiers pairs with every other identifier on its rows,
-    and with each identifier of a part linking to those rows (one link). An entity found inside a part
-    (embedded.py) is measured on the rows of the part it came from. Recorded under the identifier as
-    `pairs` (keys.pairing), counts only."""
+    and with each identifier of a part linking to those rows (one link, a nested list's rows too). An
+    entity found inside a part (embedded.py) is measured on the rows of the part it came from, leaving
+    out the other entities found there. Each pair is measured once; `scan` says whether a sample was
+    read. Recorded under the identifier as `pairs` (keys.pairing), counts only."""
+    measured = set()
     for f in found:
         if f["class"] != "master":
             continue
@@ -361,15 +363,21 @@ def _identifier_pairs(con, found: list[dict], profiles, links: list[dict]) -> No
         if not own:
             continue
         names = [i["column"] for i in own]
-        beside = _pairing_columns(profiles, base, leave_out=names)
+        others = {c for g in found if g is not f and g.get("derived_from") == base for c in g["record_key"]["columns"]}
+        beside = [(base, None, c) for c in _pairing_columns(profiles, base, leave_out=set(names) | others)]
         linked = [(l["from"]["part"], list(zip(l["from"]["columns"], l["to"]["columns"])), column)
                   for l in links if l["to"]["part"] == base and l["from"]["part"] != base
-                  and not l["from"]["part"].startswith(f"{base}.")
+                  and parts[l["from"]["part"]].derived_from is None
                   for column in _pairing_columns(profiles, l["from"]["part"], leave_out=l["from"]["columns"])]
         for n, entry in enumerate(own):
-            entry["pairs"] = (
-                [keys.pairing(con, base, entry["column"], base, other) for other in names[n + 1:] + beside]
-                + [keys.pairing(con, base, entry["column"], part, column, on) for part, on, column in linked])
+            pairs = []
+            for part, on, column in [(base, None, c) for c in names[n + 1:]] + beside + linked:
+                if (base, entry["column"], part, column) in measured:
+                    continue
+                measured.add((base, entry["column"], part, column))
+                scan = "sampled" if "sampled" in (parts[base].scan, parts[part].scan) else "full"
+                pairs.append({**keys.pairing(con, base, entry["column"], part, column, on), "scan": scan})
+            entry["pairs"] = pairs
 
 
 def _tags(con, p: str, columns: list[dict]) -> dict[str, dict]:
@@ -400,7 +408,7 @@ def _own(link: dict, found_links: list[dict], profiles) -> bool:
     elsewhere = {x["to"]["part"] for x in found_links if x["from"]["part"] == source
                  and not x["to"]["part"].startswith(f"{source}.")} - {source, link["to"]["part"]}
     pointed_at = any(x["to"]["part"] == source and x["from"]["part"] != source for x in found_links)
-    counter = any(not c["structure"] and profile.is_integer(c) and identifiers.dense_sequence(c) for c in profiles[source])
+    counter = any(not c["structure"] and identifiers.local_counter(c) for c in profiles[source])
     return not elsewhere and not pointed_at and counter
 
 
@@ -438,7 +446,7 @@ def _identifier(con, p, c, record_key) -> dict | None:
     values = [r[0] for r in con.execute(f"SELECT DISTINCT CAST({inputs.sql_name(c['name'])} AS VARCHAR) FROM "
                                         f"{inputs.sql_name(p)} WHERE {inputs.sql_name(c['name'])} IS NOT NULL").fetchall()]
     checked = identifiers.check_digits(values)
-    dense = profile.is_integer(c) and identifiers.dense_sequence(c)
+    dense = identifiers.local_counter(c)
     is_key = c["name"] in record_key["columns"]
     if is_key:
         proposal, why = "record_key", "the part's record key"
