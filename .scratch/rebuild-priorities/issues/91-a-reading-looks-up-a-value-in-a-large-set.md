@@ -2,7 +2,7 @@
 
 Priority: 91, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine). Status: in progress (branch `claude/lookup-values`).
+Type: task (engine). Status: done (2026-10-16 08:21 ET): #993 merged.
 
 ## Why
 
@@ -31,5 +31,5 @@ No configuration can join them on this machine:
 - [x] Scale, on invented data of N-PORT's size, not the provider's data (the run-once rule: N-PORT itself is read once, in the Security test run): 5,347,869 streamed rows, a 4,330,000-pair set, every key found; 329.1 s, peak resident 1.5 GB (2026-10-15 11:28 ET)
 - [x] READING.md: "A key's value from a pair set", the new ceilings, `value_column` (2026-10-15 11:30 ET)
 - [x] Three-axis review (Standards, Spec, GoF). Fixed: `in_lookup` on a pair set refused at load; `LookupSet::len`; one branch in `indexed_sets`; derived ceilings aliased to the worker's input ceilings and the aggregate held equal to the engine's by a test; Python bound tests; the error text names `pairs` and quoting `"null"`; the ticket's What changes rewritten. Left: membership ceilings raised with pair ceilings (the "no caps" ruling); bounds are counted at four boundaries (receipt, derived build, engine intake, engine check), which guard different things (2026-10-15 11:30 ET)
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #993 merged 2026-10-15 11:52 ET
 - [x] Learning → skill: data-platform READING.md, "A key's value from a pair set (a join in one streamed pass)": join a large table to another by key with a pair set, never a materialized combine (2026-10-15 11:30 ET)
