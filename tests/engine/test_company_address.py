@@ -52,6 +52,16 @@ def test_raw_address_reads_as_the_company_address(address):
     assert configured(SourceEngine(CONTRACT), payload) == retained(payload)
 
 
+# Ticket 18, finding 5: SEC writes a foreign country in `stateOrCountry`
+# ("P7", the Netherlands); it is the country, not a region. X1 is the United
+# States with no state.
+@pytest.mark.parametrize('code, region, country', [
+    ('P7', None, 'NL'), ('CA', 'CA', 'US'), ('A6', 'A6', 'CA'), ('X1', None, 'US')])
+def test_a_foreign_country_code_is_the_country_and_no_region(code, region, country):
+    found = configured(SourceEngine(CONTRACT), {'addresses': {'business': {'stateOrCountry': code}}})
+    assert (found['region'], found['country']) == (region, country)
+
+
 def test_every_frozen_sec_place_code_and_variants_read_as_their_iso_place():
     engine = SourceEngine(CONTRACT)
     for code in place_codes.table():

@@ -7,23 +7,41 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.control_contract import digest
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import source_read
-from scripts.qualification.audit_filing_semantics import compare
 
 CONTRACT = Path(__file__).parent / 'fixtures/filing-complete.yaml'
 CONTEXT = {'cik': 320193, 'sync_run_id': 'qualification', 'raw_object_id': 'captured',
            'load_mode': 'default', 'recent_limit': None}
 
 
-def test_all_450_finite_anchor_field_limit_cases_match_retained_acceptance_and_rows():
+# Every anchor and form shape, with each recent limit: the rows (accession and
+# form; every other column is its default) or a refusal, as the old filing
+# loader decided them (`fixtures/filing-selection-matrix.json`, written once).
+MATRIX = json.loads((Path(__file__).parent / 'fixtures/filing-selection-matrix.json').read_text())
+DEFAULTS = {**dict.fromkeys(['filing_date', 'report_date', 'acceptance_datetime', 'act', 'file_number',
+                             'film_number', 'items', 'size', 'primary_document', 'primary_doc_desc']),
+            'cik': 320193, 'sync_run_id': 'qualification', 'raw_object_id': 'captured', 'load_mode': 'default',
+            'is_xbrl': False, 'is_inline_xbrl': False}
+
+
+def test_all_450_finite_anchor_field_limit_cases():
     engine = SourceEngine(files.load(CONTRACT))
     anchors = [[], ['a'], ['a', 'b'], 'ab', {}, {'x': 'a'}, None, True, 1]
     fields = [[], ['4'], [True], [{'x': 1}], None, True, 1, {}, {'x': 1}, 'é🦀']
-    for anchor, field, limit in product(anchors, fields, [None, -1, 0, 1, 2]):
-        case = compare(engine, {'filings': {'recent': {'accessionNumber': anchor, 'form': field}}}, limit)
-        assert case['same_acceptance_and_rows'], case
+    cases = list(product(anchors, fields, [None, -1, 0, 1, 2]))
+    assert len(MATRIX) == len(cases) == 450
+    for (anchor, field, limit), case in zip(cases, MATRIX, strict=True):
+        payload = {'filings': {'recent': {'accessionNumber': anchor, 'form': field}}}
+        assert (case['input'], case['recent_limit']) == (payload, limit)
+        if case.get('refused'):
+            with pytest.raises(SourceRejected):
+                engine.read(json.dumps(payload).encode(), context={**CONTEXT, 'recent_limit': limit})
+            continue
+        rows = engine.read(json.dumps(payload).encode(), context={**CONTEXT, 'recent_limit': limit}).tables['filings']
+        assert digest(rows) == digest([{**DEFAULTS, **row} for row in case['rows']]), case
 
 
 def test_zero_selection_does_not_hide_full_anchor_record_limit_or_count_mismatch():

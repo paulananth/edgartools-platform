@@ -5,7 +5,8 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
-from tests.support.retired_company_preparation import _census_evidence
+from edgar_warehouse.mdm.clean import cascade
+from edgar_warehouse.mdm.clean.name_census import entry as census_entry
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_combination_contract import captures,read,blueprint
@@ -14,6 +15,16 @@ from tests.engine.test_source_combine import envelope
 ROOT=files.ROOT/'sources/sec.submissions.company'
 ZERO='0'*64
 ORIGIN='bronze/sec/cik=1/main/document.json'  # the main document's bronze object
+
+
+def census_evidence(census, row, census_hash):
+    """What the census says of one SEC record: its name's entry and, when the
+    census ran the cascade (ticket 21), the answer for its CIK, as one value."""
+    found = census_entry(census, row['entity_name'], census_digest=census_hash)
+    if 'cascade' not in census:
+        return found
+    answer = cascade.entry(census, f"{int(row['cik']):010d}", census_digest=census_hash)
+    return found if answer is None else {**(found or {}), 'cascade': answer}
 
 
 def bind(value,sha):
@@ -74,7 +85,7 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
     refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
     census=fixture_census(case)
     refs['census'],raw=census_read(store,tmp_path,census)
-    expected['name_census']=_census_evidence(census,expected,raw['sha256'])
+    expected['name_census']=census_evidence(census,expected,raw['sha256'])
     expected['_origin']={'bronze':{'object':ORIGIN,'sha256':expected['raw_object_id'],'locator':'$'}}
     task=envelope(store,tmp_path/'composed',combination(raw['sha256']),refs)
     result=source_combine.execute(task,store)
@@ -129,7 +140,7 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
         else: rules['combine']['tables']['company']['joins']['cascade_evidence']['path']=['wrong_cascade']
         result=source_combine.execute(envelope(store,tmp_path/'fault',rules,refs),store)
         actual=store.json(result)['artifacts'][0]['tables']['company'][0]
-        expected=_census_evidence(fixture_census(),actual,raw['sha256'])
+        expected=census_evidence(fixture_census(),actual,raw['sha256'])
         assert actual['name_census'] != expected
 
 

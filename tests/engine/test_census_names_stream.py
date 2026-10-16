@@ -1,4 +1,4 @@
-"""Full-stream configured names against the independent retired extraction oracle."""
+"""Full-stream configured names: the census rows each GLEIF record makes, written independently of the engine."""
 from collections import defaultdict
 import io
 import json
@@ -10,9 +10,16 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers import source_stream
 from tests.mdm.test_clean_name_census import gleif
-from tests.support import retired_name_census as oracle
+from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
 
 RULE = Path(__file__).resolve().parents[2] / 'rules/sources/gleif/census-names-stream.yaml'
+legal_form_key = NORMALIZERS['normalize_text@legal-form-kept-v1']
+
+
+def text(node):
+    """A GLEIF value's text (`$` of an element, or the value), stripped; blank or not text is none."""
+    value = node.get('$') if isinstance(node, dict) else node
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 @pytest.fixture(autouse=True)
@@ -34,22 +41,22 @@ def project(records, wanted):
 def expected(row, wanted):
     entity = row.get('Entity') or {}
     tables = {'a_legal': [], 'b_other': [], 'c_transliterated': []}
-    if oracle._text(entity.get('EntityCategory')) == 'BRANCH':
+    if text(entity.get('EntityCategory')) == 'BRANCH':
         return tables
-    lei = oracle._text(row.get('LEI'))
+    lei = text(row.get('LEI'))
     if not lei:
         return tables
-    key = oracle.legal_form_key(oracle._text(entity.get('LegalName')))
+    key = legal_form_key(text(entity.get('LegalName')))
     if key in wanted:
-        last = oracle._text((row.get('Registration') or {}).get('LastUpdateDate'))
+        last = text((row.get('Registration') or {}).get('LastUpdateDate'))
         tables['a_legal'].append({'key': key, 'lei': lei, 'updated': last})
     for container, item, table in [('OtherEntityNames','OtherEntityName','b_other'),
                                   ('TransliteratedOtherEntityNames','TransliteratedOtherEntityName','c_transliterated')]:
         names = (entity.get(container) or {}).get(item) or []
         for name in names if isinstance(names, list) else [names]:
-            text = oracle._text(name)
-            key = oracle.legal_form_key(text)
-            if text and key in wanted:
+            name_text = text(name)
+            key = legal_form_key(name_text)
+            if name_text and key in wanted:
                 tables[table].append({'key': key, 'lei': lei})
     return tables
 
@@ -57,7 +64,7 @@ def expected(row, wanted):
 @pytest.mark.parametrize('value', [None, '', ' ', False, 0, 7, [], {}, {'$': None},
                                    {'$': False}, {'$': 7}, {'$':'Électricité Company'},
                                    '\u001cApple Incorporated\u001f'])
-def test_typed_names_and_identity_match_oracle(value):
+def test_typed_names_and_identity(value):
     wanted = {'APPLE INC', 'ELECTRICITE CO'}
     records = []
     for field in ['LEI', 'LegalName', 'EntityCategory', 'LastUpdateDate']:

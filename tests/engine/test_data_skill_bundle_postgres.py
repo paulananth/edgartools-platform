@@ -1098,15 +1098,11 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
             {"source": "sec.submissions.person", "row": json.loads(line)}
             for line in FIXTURE.with_name("person_raw.jsonl").read_text().splitlines() if line.strip()
         ]
-        from tests.support.retired_company_address import business_address
         from edgar_warehouse.mdm.clean.adapters import normalize
         for record in sec_records:
-            if record["source"]!="sec.submissions.company":continue
-            row=record["row"]
-            landed={"cik":row["cik"],"address_type":"business","last_sync_run_id":"installed-addresses",
-                    "street1":"  Source Street  ","street2":None,"city":"City","zip_code":"12345",
-                    "state_or_country":" de ","country_code":None}
-            row["business_address"]=business_address(landed)
+            if record["source"]=="sec.submissions.company":  # a Delaware business address, as SEC writes it
+                record["row"]["business_address"]={"street":"  Source Street  ","street2":None,"city":"City",
+                                                   "region":" de ","postal_code":"12345","country":"US"}
         readings=[]
         for record in sec_records:
             row=record["row"];code=f"{record['source']}.v1"

@@ -13,7 +13,6 @@ from edgar_warehouse.mdm.clean.sec_company import (
     SOURCE_CODE,
 )
 
-from tests.support.retired_company_address import business_address
 from tests.mdm.test_clean_activation import proof
 from tests.support.name_census_inputs import gleif_archive, gleif_reading  # noqa: F401
 
@@ -48,22 +47,6 @@ def source_row(cik, **changes):
         "last_sync_run_id": "capture-1",
         "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
         "raw_object_id": f"raw-{cik}",
-        **changes,
-    }
-
-
-def address_row(cik, **changes):
-    return {
-        "cik": cik,
-        "address_type": "business",
-        "street1": "1 Main Street",
-        "street2": None,
-        "city": "Cupertino",
-        "state_or_country": "CA",
-        "zip_code": "95014",
-        "country": "CA",
-        "last_sync_run_id": "capture-1",
-        "last_synced_at": datetime(2026, 1, 1, tzinfo=UTC),
         **changes,
     }
 
@@ -263,19 +246,3 @@ def test_the_record_carries_its_matching_evidence_in_provenance():
         "value": {"postcode": "95014", "country": "US"},
     }
 
-
-
-
-def test_a_foreign_business_address_has_a_country_and_no_region():
-    """Ticket 18, finding 5: SEC writes a country in `stateOrCountry` ("P7",
-    the Netherlands); it is the country, not a region."""
-    foreign = business_address(address_row(937966, state_or_country="P7", city="Veldhoven",
-                                           zip_code="5504 DR", country=None))
-    assert foreign["region"] is None and foreign["country"] == "NL"
-    domestic = business_address(address_row(320193))
-    assert domestic["region"] == "CA" and domestic["country"] == "US"
-    ontario = business_address(address_row(1, state_or_country="A6", country=None))
-    assert ontario["region"] == "A6" and ontario["country"] == "CA"
-    # X1: the United States with no state.
-    unstated = business_address(address_row(2, state_or_country="X1", country=None))
-    assert unstated["region"] is None and unstated["country"] == "US"
