@@ -1,0 +1,1125 @@
+{
+ "batches": [
+  {
+   "tag": "13f",
+   "batch": 1,
+   "records": 1000,
+   "store_before": 0,
+   "seconds": 1.5
+  },
+  {
+   "tag": "13f",
+   "batch": 2,
+   "records": 1000,
+   "store_before": 1000,
+   "seconds": 1.72
+  },
+  {
+   "tag": "13f",
+   "batch": 3,
+   "records": 1000,
+   "store_before": 2000,
+   "seconds": 1.82
+  },
+  {
+   "tag": "13f",
+   "batch": 4,
+   "records": 1000,
+   "store_before": 3000,
+   "seconds": 2.03
+  },
+  {
+   "tag": "13f",
+   "batch": 5,
+   "records": 1000,
+   "store_before": 4000,
+   "seconds": 2.23
+  },
+  {
+   "tag": "13f",
+   "batch": 6,
+   "records": 1000,
+   "store_before": 5000,
+   "seconds": 2.4
+  },
+  {
+   "tag": "13f",
+   "batch": 7,
+   "records": 1000,
+   "store_before": 6000,
+   "seconds": 2.53
+  },
+  {
+   "tag": "13f",
+   "batch": 8,
+   "records": 1000,
+   "store_before": 7000,
+   "seconds": 2.79
+  },
+  {
+   "tag": "13f",
+   "batch": 9,
+   "records": 1000,
+   "store_before": 8000,
+   "seconds": 2.89
+  },
+  {
+   "tag": "13f",
+   "batch": 10,
+   "records": 1000,
+   "store_before": 9000,
+   "seconds": 3.02
+  },
+  {
+   "tag": "13f",
+   "batch": 11,
+   "records": 1000,
+   "store_before": 10000,
+   "seconds": 3.16
+  },
+  {
+   "tag": "13f",
+   "batch": 12,
+   "records": 1000,
+   "store_before": 11000,
+   "seconds": 3.3
+  },
+  {
+   "tag": "13f",
+   "batch": 13,
+   "records": 1000,
+   "store_before": 12000,
+   "seconds": 3.39
+  },
+  {
+   "tag": "13f",
+   "batch": 14,
+   "records": 1000,
+   "store_before": 13000,
+   "seconds": 3.52
+  },
+  {
+   "tag": "13f",
+   "batch": 15,
+   "records": 1000,
+   "store_before": 14000,
+   "seconds": 3.66
+  },
+  {
+   "tag": "13f",
+   "batch": 16,
+   "records": 1000,
+   "store_before": 15000,
+   "seconds": 3.82
+  },
+  {
+   "tag": "13f",
+   "batch": 17,
+   "records": 1000,
+   "store_before": 16000,
+   "seconds": 3.98
+  },
+  {
+   "tag": "13f",
+   "batch": 18,
+   "records": 1000,
+   "store_before": 17000,
+   "seconds": 4.09
+  },
+  {
+   "tag": "13f",
+   "batch": 19,
+   "records": 1000,
+   "store_before": 18000,
+   "seconds": 4.35
+  },
+  {
+   "tag": "13f",
+   "batch": 20,
+   "records": 1000,
+   "store_before": 19000,
+   "seconds": 4.46
+  },
+  {
+   "tag": "13f",
+   "batch": 21,
+   "records": 311,
+   "store_before": 20000,
+   "seconds": 1.46
+  },
+  {
+   "tag": "nport",
+   "batch": 22,
+   "records": 1000,
+   "store_before": 20311,
+   "seconds": 6.16
+  },
+  {
+   "tag": "nport",
+   "batch": 23,
+   "records": 1000,
+   "store_before": 21311,
+   "seconds": 6.62
+  },
+  {
+   "tag": "nport",
+   "batch": 24,
+   "records": 1000,
+   "store_before": 22311,
+   "seconds": 2.29
+  },
+  {
+   "tag": "nport",
+   "batch": 25,
+   "records": 1000,
+   "store_before": 23311,
+   "seconds": 2.41
+  },
+  {
+   "tag": "nport",
+   "batch": 26,
+   "records": 1000,
+   "store_before": 24311,
+   "seconds": 3.04
+  },
+  {
+   "tag": "nport",
+   "batch": 27,
+   "records": 1000,
+   "store_before": 25311,
+   "seconds": 3.56
+  },
+  {
+   "tag": "nport",
+   "batch": 28,
+   "records": 1000,
+   "store_before": 26311,
+   "seconds": 3.92
+  },
+  {
+   "tag": "nport",
+   "batch": 29,
+   "records": 1000,
+   "store_before": 27311,
+   "seconds": 4.0
+  },
+  {
+   "tag": "nport",
+   "batch": 30,
+   "records": 1000,
+   "store_before": 28311,
+   "seconds": 4.13
+  },
+  {
+   "tag": "nport",
+   "batch": 31,
+   "records": 1000,
+   "store_before": 29311,
+   "seconds": 4.79
+  },
+  {
+   "tag": "nport",
+   "batch": 32,
+   "records": 1000,
+   "store_before": 30311,
+   "seconds": 4.74
+  },
+  {
+   "tag": "nport",
+   "batch": 33,
+   "records": 1000,
+   "store_before": 31311,
+   "seconds": 5.08
+  },
+  {
+   "tag": "nport",
+   "batch": 34,
+   "records": 1000,
+   "store_before": 32311,
+   "seconds": 5.73
+  },
+  {
+   "tag": "nport",
+   "batch": 35,
+   "records": 1000,
+   "store_before": 33311,
+   "seconds": 5.81
+  },
+  {
+   "tag": "nport",
+   "batch": 36,
+   "records": 1000,
+   "store_before": 34311,
+   "seconds": 6.37
+  },
+  {
+   "tag": "nport",
+   "batch": 37,
+   "records": 1000,
+   "store_before": 35311,
+   "seconds": 6.4
+  },
+  {
+   "tag": "nport",
+   "batch": 38,
+   "records": 1000,
+   "store_before": 36311,
+   "seconds": 6.78
+  },
+  {
+   "tag": "nport",
+   "batch": 39,
+   "records": 1000,
+   "store_before": 37311,
+   "seconds": 3.7
+  },
+  {
+   "tag": "nport",
+   "batch": 40,
+   "records": 1000,
+   "store_before": 38311,
+   "seconds": 2.47
+  },
+  {
+   "tag": "nport",
+   "batch": 41,
+   "records": 1000,
+   "store_before": 39311,
+   "seconds": 3.25
+  },
+  {
+   "tag": "nport",
+   "batch": 42,
+   "records": 1000,
+   "store_before": 40311,
+   "seconds": 3.0
+  },
+  {
+   "tag": "nport",
+   "batch": 43,
+   "records": 1000,
+   "store_before": 41311,
+   "seconds": 3.26
+  },
+  {
+   "tag": "nport",
+   "batch": 44,
+   "records": 1000,
+   "store_before": 42311,
+   "seconds": 3.73
+  },
+  {
+   "tag": "nport",
+   "batch": 45,
+   "records": 1000,
+   "store_before": 43311,
+   "seconds": 4.67
+  },
+  {
+   "tag": "nport",
+   "batch": 46,
+   "records": 1000,
+   "store_before": 44311,
+   "seconds": 4.55
+  },
+  {
+   "tag": "nport",
+   "batch": 47,
+   "records": 1000,
+   "store_before": 45311,
+   "seconds": 4.65
+  },
+  {
+   "tag": "nport",
+   "batch": 48,
+   "records": 1000,
+   "store_before": 46311,
+   "seconds": 4.92
+  },
+  {
+   "tag": "nport",
+   "batch": 49,
+   "records": 1000,
+   "store_before": 47311,
+   "seconds": 5.31
+  },
+  {
+   "tag": "nport",
+   "batch": 50,
+   "records": 1000,
+   "store_before": 48311,
+   "seconds": 5.53
+  },
+  {
+   "tag": "nport",
+   "batch": 51,
+   "records": 1000,
+   "store_before": 49311,
+   "seconds": 6.09
+  },
+  {
+   "tag": "nport",
+   "batch": 52,
+   "records": 1000,
+   "store_before": 50311,
+   "seconds": 3.98
+  },
+  {
+   "tag": "nport",
+   "batch": 53,
+   "records": 1000,
+   "store_before": 51311,
+   "seconds": 2.48
+  },
+  {
+   "tag": "nport",
+   "batch": 54,
+   "records": 1000,
+   "store_before": 52311,
+   "seconds": 3.09
+  },
+  {
+   "tag": "nport",
+   "batch": 55,
+   "records": 1000,
+   "store_before": 53311,
+   "seconds": 2.9
+  },
+  {
+   "tag": "nport",
+   "batch": 56,
+   "records": 1000,
+   "store_before": 54311,
+   "seconds": 3.27
+  },
+  {
+   "tag": "nport",
+   "batch": 57,
+   "records": 1000,
+   "store_before": 55311,
+   "seconds": 3.5
+  },
+  {
+   "tag": "nport",
+   "batch": 58,
+   "records": 1000,
+   "store_before": 56311,
+   "seconds": 3.89
+  },
+  {
+   "tag": "nport",
+   "batch": 59,
+   "records": 1000,
+   "store_before": 57311,
+   "seconds": 4.34
+  },
+  {
+   "tag": "nport",
+   "batch": 60,
+   "records": 1000,
+   "store_before": 58311,
+   "seconds": 4.93
+  },
+  {
+   "tag": "nport",
+   "batch": 61,
+   "records": 1000,
+   "store_before": 59311,
+   "seconds": 5.08
+  }
+ ],
+ "profiles": [
+  {
+   "tag": "nport",
+   "batch": 31,
+   "records": 1000,
+   "store_before": 29311,
+   "seconds": 4.79,
+   "pending_entries": null,
+   "sql_seconds": 4.33,
+   "top_cumulative": [
+    [
+     4.789,
+     "merge.py:118:apply"
+    ],
+    [
+     4.339,
+     "elements.py:518:_execute_on_connection"
+    ],
+    [
+     4.339,
+     "base.py:1591:_execute_clauseelement"
+    ],
+    [
+     4.337,
+     "base.py:1791:_execute_context"
+    ],
+    [
+     4.336,
+     "base.py:1850:_exec_single_context"
+    ],
+    [
+     4.331,
+     "default.py:951:do_execute"
+    ],
+    [
+     4.331,
+     "~:0:<method 'execute' of 'psycopg2.extensions.cursor' objects>"
+    ],
+    [
+     2.983,
+     "merge.py:280:_execute"
+    ],
+    [
+     2.928,
+     "store.py:38:rows"
+    ],
+    [
+     2.914,
+     "base.py:1375:execute"
+    ],
+    [
+     2.637,
+     "binding.py:87:holders"
+    ],
+    [
+     1.803,
+     "merge.py:145:propose"
+    ],
+    [
+     1.79,
+     "binding.py:220:propose"
+    ],
+    [
+     1.426,
+     "base.py:1285:scalar"
+    ],
+    [
+     1.426,
+     "elements.py:533:_execute_on_scalar"
+    ],
+    [
+     1.312,
+     "store.py:489:commit"
+    ],
+    [
+     0.956,
+     "merge.py:213:_check_rule_proposals"
+    ],
+    [
+     0.953,
+     "binding.py:393:proposal_is_stale"
+    ],
+    [
+     0.192,
+     "assessment.py:21:record_in"
+    ],
+    [
+     0.157,
+     "__init__.py:183:dumps"
+    ],
+    [
+     0.147,
+     "store.py:24:canonical"
+    ],
+    [
+     0.146,
+     "scope.py:154:identities"
+    ],
+    [
+     0.146,
+     "encoder.py:183:encode"
+    ],
+    [
+     0.131,
+     "encoder.py:205:iterencode"
+    ],
+    [
+     0.096,
+     "scope.py:215:links"
+    ]
+   ],
+   "top_sql": [
+    [
+     2.613,
+     3,
+     "SELECT s.reading->?->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS json"
+    ],
+    [
+     1.278,
+     1,
+     "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.143,
+     1,
+     "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.101,
+     2,
+     "SELECT body FROM mdm.decision WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(%(keys)s AS text[])) id)"
+    ],
+    [
+     0.063,
+     1,
+     "SELECT body FROM mdm.source_reading WHERE assertion_id IN ( SELECT id FROM mdm.readings_naming(CAST(%(keys)s AS text[]))"
+    ],
+    [
+     0.05,
+     1,
+     "SELECT c.* FROM unnest(CAST(%(starts)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT object_type, object_id, body FROM "
+    ],
+    [
+     0.015,
+     1,
+     "SELECT r.body FROM unnest(CAST(%(subjects)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT body FROM mdm.source_reading "
+    ],
+    [
+     0.014,
+     1,
+     "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NO"
+    ],
+    [
+     0.013,
+     3,
+     "SELECT e.object_id, e.body FROM unnest(CAST(%(ids)s AS text[])) k(id) CROSS JOIN LATERAL ( SELECT object_id, body FROM m"
+    ],
+    [
+     0.008,
+     1,
+     "SELECT q.decision_id, q.body->>? AS subject FROM mdm.decision q WHERE q.body->>? = ANY(%(subjects)s) AND q.operation = ?"
+    ],
+    [
+     0.007,
+     1,
+     "SELECT body FROM mdm.decision WHERE operation = ? AND body->>? = ANY(%(subjects)s)"
+    ],
+    [
+     0.006,
+     2,
+     "SELECT s.subject FROM unnest(CAST(%(ids)s AS uuid[])) k(id) CROSS JOIN LATERAL ( SELECT subject FROM mdm.stage_record WH"
+    ]
+   ]
+  },
+  {
+   "tag": "nport",
+   "batch": 41,
+   "records": 1000,
+   "store_before": 39311,
+   "seconds": 3.25,
+   "pending_entries": null,
+   "sql_seconds": 2.8,
+   "top_cumulative": [
+    [
+     3.246,
+     "merge.py:118:apply"
+    ],
+    [
+     2.805,
+     "elements.py:518:_execute_on_connection"
+    ],
+    [
+     2.805,
+     "base.py:1591:_execute_clauseelement"
+    ],
+    [
+     2.803,
+     "base.py:1791:_execute_context"
+    ],
+    [
+     2.802,
+     "base.py:1850:_exec_single_context"
+    ],
+    [
+     2.799,
+     "default.py:951:do_execute"
+    ],
+    [
+     2.799,
+     "~:0:<method 'execute' of 'psycopg2.extensions.cursor' objects>"
+    ],
+    [
+     2.661,
+     "merge.py:280:_execute"
+    ],
+    [
+     1.441,
+     "store.py:38:rows"
+    ],
+    [
+     1.435,
+     "base.py:1375:execute"
+    ],
+    [
+     1.372,
+     "base.py:1285:scalar"
+    ],
+    [
+     1.372,
+     "elements.py:533:_execute_on_scalar"
+    ],
+    [
+     1.262,
+     "store.py:489:commit"
+    ],
+    [
+     0.76,
+     "binding.py:87:holders"
+    ],
+    [
+     0.582,
+     "merge.py:145:propose"
+    ],
+    [
+     0.569,
+     "binding.py:220:propose"
+    ],
+    [
+     0.519,
+     "scope.py:154:identities"
+    ],
+    [
+     0.298,
+     "merge.py:213:_check_rule_proposals"
+    ],
+    [
+     0.296,
+     "binding.py:393:proposal_is_stale"
+    ],
+    [
+     0.194,
+     "assessment.py:21:record_in"
+    ],
+    [
+     0.154,
+     "__init__.py:183:dumps"
+    ],
+    [
+     0.144,
+     "encoder.py:183:encode"
+    ],
+    [
+     0.143,
+     "store.py:24:canonical"
+    ],
+    [
+     0.131,
+     "encoder.py:205:iterencode"
+    ],
+    [
+     0.113,
+     "scope.py:215:links"
+    ]
+   ],
+   "top_sql": [
+    [
+     1.222,
+     1,
+     "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.742,
+     3,
+     "SELECT s.reading->?->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS json"
+    ],
+    [
+     0.478,
+     2,
+     "SELECT body FROM mdm.decision WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(%(keys)s AS text[])) id)"
+    ],
+    [
+     0.145,
+     1,
+     "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.081,
+     1,
+     "SELECT body FROM mdm.source_reading WHERE assertion_id IN ( SELECT id FROM mdm.readings_naming(CAST(%(keys)s AS text[]))"
+    ],
+    [
+     0.047,
+     1,
+     "SELECT c.* FROM unnest(CAST(%(starts)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT object_type, object_id, body FROM "
+    ],
+    [
+     0.014,
+     1,
+     "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NO"
+    ],
+    [
+     0.014,
+     1,
+     "SELECT r.body FROM unnest(CAST(%(subjects)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT body FROM mdm.source_reading "
+    ],
+    [
+     0.013,
+     3,
+     "SELECT e.object_id, e.body FROM unnest(CAST(%(ids)s AS text[])) k(id) CROSS JOIN LATERAL ( SELECT object_id, body FROM m"
+    ],
+    [
+     0.009,
+     1,
+     "SELECT q.decision_id, q.body->>? AS subject FROM mdm.decision q WHERE q.body->>? = ANY(%(subjects)s) AND q.operation = ?"
+    ],
+    [
+     0.009,
+     1,
+     "SELECT body FROM mdm.decision WHERE operation = ? AND body->>? = ANY(%(subjects)s)"
+    ],
+    [
+     0.007,
+     1,
+     "SELECT c.body FROM unnest(CAST(%(ids)s AS text[])) k(id) CROSS JOIN LATERAL ( SELECT body FROM mdm.current_record WHERE "
+    ]
+   ]
+  },
+  {
+   "tag": "nport",
+   "batch": 51,
+   "records": 1000,
+   "store_before": 49311,
+   "seconds": 6.09,
+   "pending_entries": null,
+   "sql_seconds": 5.63,
+   "top_cumulative": [
+    [
+     6.087,
+     "merge.py:118:apply"
+    ],
+    [
+     5.638,
+     "elements.py:518:_execute_on_connection"
+    ],
+    [
+     5.638,
+     "base.py:1591:_execute_clauseelement"
+    ],
+    [
+     5.636,
+     "base.py:1791:_execute_context"
+    ],
+    [
+     5.635,
+     "base.py:1850:_exec_single_context"
+    ],
+    [
+     5.632,
+     "default.py:951:do_execute"
+    ],
+    [
+     5.631,
+     "~:0:<method 'execute' of 'psycopg2.extensions.cursor' objects>"
+    ],
+    [
+     4.237,
+     "store.py:38:rows"
+    ],
+    [
+     4.23,
+     "base.py:1375:execute"
+    ],
+    [
+     3.823,
+     "binding.py:87:holders"
+    ],
+    [
+     3.475,
+     "merge.py:280:_execute"
+    ],
+    [
+     2.61,
+     "merge.py:145:propose"
+    ],
+    [
+     2.595,
+     "binding.py:220:propose"
+    ],
+    [
+     1.409,
+     "base.py:1285:scalar"
+    ],
+    [
+     1.409,
+     "elements.py:533:_execute_on_scalar"
+    ],
+    [
+     1.339,
+     "merge.py:213:_check_rule_proposals"
+    ],
+    [
+     1.337,
+     "binding.py:393:proposal_is_stale"
+    ],
+    [
+     1.297,
+     "store.py:489:commit"
+    ],
+    [
+     0.202,
+     "scope.py:154:identities"
+    ],
+    [
+     0.191,
+     "assessment.py:21:record_in"
+    ],
+    [
+     0.165,
+     "scope.py:215:links"
+    ],
+    [
+     0.151,
+     "__init__.py:183:dumps"
+    ],
+    [
+     0.142,
+     "encoder.py:183:encode"
+    ],
+    [
+     0.14,
+     "store.py:24:canonical"
+    ],
+    [
+     0.128,
+     "encoder.py:205:iterencode"
+    ]
+   ],
+   "top_sql": [
+    [
+     3.804,
+     3,
+     "SELECT s.reading->?->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS json"
+    ],
+    [
+     1.263,
+     1,
+     "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.154,
+     2,
+     "SELECT body FROM mdm.decision WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(%(keys)s AS text[])) id)"
+    ],
+    [
+     0.142,
+     1,
+     "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.133,
+     1,
+     "SELECT body FROM mdm.source_reading WHERE assertion_id IN ( SELECT id FROM mdm.readings_naming(CAST(%(keys)s AS text[]))"
+    ],
+    [
+     0.042,
+     1,
+     "SELECT c.* FROM unnest(CAST(%(starts)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT object_type, object_id, body FROM "
+    ],
+    [
+     0.021,
+     1,
+     "SELECT r.body FROM unnest(CAST(%(subjects)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT body FROM mdm.source_reading "
+    ],
+    [
+     0.015,
+     3,
+     "SELECT e.object_id, e.body FROM unnest(CAST(%(ids)s AS text[])) k(id) CROSS JOIN LATERAL ( SELECT object_id, body FROM m"
+    ],
+    [
+     0.015,
+     1,
+     "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NO"
+    ],
+    [
+     0.011,
+     1,
+     "SELECT q.decision_id, q.body->>? AS subject FROM mdm.decision q WHERE q.body->>? = ANY(%(subjects)s) AND q.operation = ?"
+    ],
+    [
+     0.01,
+     1,
+     "SELECT body FROM mdm.decision WHERE operation = ? AND body->>? = ANY(%(subjects)s)"
+    ],
+    [
+     0.006,
+     2,
+     "SELECT s.subject FROM unnest(CAST(%(ids)s AS uuid[])) k(id) CROSS JOIN LATERAL ( SELECT subject FROM mdm.stage_record WH"
+    ]
+   ]
+  },
+  {
+   "tag": "nport",
+   "batch": 61,
+   "records": 1000,
+   "store_before": 59311,
+   "seconds": 5.08,
+   "pending_entries": null,
+   "sql_seconds": 4.65,
+   "top_cumulative": [
+    [
+     5.078,
+     "merge.py:118:apply"
+    ],
+    [
+     4.657,
+     "elements.py:518:_execute_on_connection"
+    ],
+    [
+     4.657,
+     "base.py:1591:_execute_clauseelement"
+    ],
+    [
+     4.654,
+     "base.py:1791:_execute_context"
+    ],
+    [
+     4.653,
+     "base.py:1850:_exec_single_context"
+    ],
+    [
+     4.65,
+     "default.py:951:do_execute"
+    ],
+    [
+     4.65,
+     "~:0:<method 'execute' of 'psycopg2.extensions.cursor' objects>"
+    ],
+    [
+     3.276,
+     "store.py:38:rows"
+    ],
+    [
+     3.271,
+     "base.py:1375:execute"
+    ],
+    [
+     3.06,
+     "merge.py:280:_execute"
+    ],
+    [
+     2.908,
+     "binding.py:87:holders"
+    ],
+    [
+     2.015,
+     "merge.py:145:propose"
+    ],
+    [
+     1.997,
+     "binding.py:220:propose"
+    ],
+    [
+     1.387,
+     "base.py:1285:scalar"
+    ],
+    [
+     1.387,
+     "elements.py:533:_execute_on_scalar"
+    ],
+    [
+     1.277,
+     "store.py:489:commit"
+    ],
+    [
+     1.026,
+     "merge.py:213:_check_rule_proposals"
+    ],
+    [
+     1.023,
+     "binding.py:393:proposal_is_stale"
+    ],
+    [
+     0.187,
+     "assessment.py:21:record_in"
+    ],
+    [
+     0.166,
+     "scope.py:215:links"
+    ],
+    [
+     0.147,
+     "__init__.py:183:dumps"
+    ],
+    [
+     0.146,
+     "scope.py:154:identities"
+    ],
+    [
+     0.138,
+     "encoder.py:183:encode"
+    ],
+    [
+     0.136,
+     "store.py:24:canonical"
+    ],
+    [
+     0.125,
+     "encoder.py:205:iterencode"
+    ]
+   ],
+   "top_sql": [
+    [
+     2.891,
+     3,
+     "SELECT s.reading->?->>%(namespace)s AS value, s.entity_id::text AS entity_id, i.kind FROM unnest(CAST(%(wanted)s AS json"
+    ],
+    [
+     1.244,
+     1,
+     "SELECT mdm.save_batch(%(request)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.139,
+     1,
+     "SELECT mdm.record_match_proposal(%(body)s,CAST(%(run)s AS uuid))"
+    ],
+    [
+     0.134,
+     1,
+     "SELECT body FROM mdm.source_reading WHERE assertion_id IN ( SELECT id FROM mdm.readings_naming(CAST(%(keys)s AS text[]))"
+    ],
+    [
+     0.105,
+     2,
+     "SELECT body FROM mdm.decision WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(%(keys)s AS text[])) id)"
+    ],
+    [
+     0.042,
+     1,
+     "SELECT c.* FROM unnest(CAST(%(starts)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT object_type, object_id, body FROM "
+    ],
+    [
+     0.015,
+     1,
+     "SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record WHERE subject = ANY(%(subjects)s) AND entity_id IS NO"
+    ],
+    [
+     0.015,
+     1,
+     "SELECT q.decision_id, q.body->>? AS subject FROM mdm.decision q WHERE q.body->>? = ANY(%(subjects)s) AND q.operation = ?"
+    ],
+    [
+     0.015,
+     1,
+     "SELECT body FROM mdm.decision WHERE operation = ? AND body->>? = ANY(%(subjects)s)"
+    ],
+    [
+     0.014,
+     3,
+     "SELECT e.object_id, e.body FROM unnest(CAST(%(ids)s AS text[])) k(id) CROSS JOIN LATERAL ( SELECT object_id, body FROM m"
+    ],
+    [
+     0.014,
+     1,
+     "SELECT r.body FROM unnest(CAST(%(subjects)s AS text[])) k(key) CROSS JOIN LATERAL ( SELECT body FROM mdm.source_reading "
+    ],
+    [
+     0.007,
+     2,
+     "SELECT s.subject FROM unnest(CAST(%(ids)s AS uuid[])) k(id) CROSS JOIN LATERAL ( SELECT subject FROM mdm.stage_record WH"
+    ]
+   ]
+  }
+ ]
+}
