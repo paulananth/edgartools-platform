@@ -45,6 +45,7 @@ SAMPLE_RECORDS = 100_000
 ROW = "_row"  # the row number a flattened record gets in its part
 PARENT = "_parent_row"  # a child row's parent row number
 POSITION = "_position"  # a child row's place in its list
+KEYED_MIN = 8  # smaller objects remain ordinary records: shape alone cannot prove a dictionary
 TABULAR = {"csv", "parquet"}
 
 
@@ -113,6 +114,25 @@ def _columnar(value: dict) -> bool:
             and all(not isinstance(_scalar(item), (dict, list)) for v in lists for item in v))
 
 
+def _keyed(value: dict) -> bool:
+    """Many entries with the same nonempty record shape suggest keys are data.
+
+    Compare immediate field names and value kinds, not nested keys (which can
+    themselves be data). Small or mixed-shape objects retain their columns.
+    This is inferred reading structure, never proof of an entity or a key.
+    """
+    if len(value) < KEYED_MIN or not all(isinstance(v, dict) and v for v in value.values()):
+        return False
+
+    def shape(record: dict) -> tuple:
+        return tuple(sorted((key, type(item).__name__)
+                            for key, item in record.items()))
+
+    shapes = iter(value.values())
+    first = shape(next(shapes))
+    return all(shape(record) == first for record in shapes)
+
+
 class Flattener:
     """Turns records into flat rows per part; lists become child parts.
 
@@ -123,6 +143,8 @@ class Flattener:
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}
         self.out: dict[str, list[dict]] = {}
+        self.keyed_depth = 0
+        self.numeric_kinds: dict[tuple[str, str], set[str]] = {}
 
     def add(self, record: dict, part: str, parent: tuple[int, int] | None = None) -> dict:
         row = self.counts.get(part, 0)
@@ -130,7 +152,22 @@ class Flattener:
         flat: dict = {ROW: row}
         if parent is not None:
             flat[PARENT], flat[POSITION] = parent
-        self._columns(record, part, row, "", flat)
+        if _keyed(record):
+            self._entries(record, f"{part}._entries", row)
+        else:
+            self._columns(record, part, row, "", flat)
+        if self.keyed_depth:
+            # Entries from different keys/documents can now share a column.
+            # Refuse a new lossy DOUBLE inference before any table is loaded.
+            for column, value in flat.items():
+                kind = "float" if type(value) is float else (
+                    "large_integer" if type(value) is int and abs(value) > 2**53 else None)
+                if kind:
+                    kinds = self.numeric_kinds.setdefault((part, column), set())
+                    kinds.add(kind)
+                    if len(kinds) == 2:
+                        raise ValueError("keyed-object column mixes large integers and fractional numbers; "
+                                         "an explicit exact-number reading is required")
         self.out.setdefault(part, []).append(flat)
         return flat
 
@@ -138,7 +175,9 @@ class Flattener:
         for key, value in record.items():
             name = f"{prefix}{key}"
             value = _scalar(value)
-            if isinstance(value, dict) and _columnar(value):
+            if isinstance(value, dict) and _keyed(value):
+                self._entries(value, f"{part}.{name}", row)
+            elif isinstance(value, dict) and _columnar(value):
                 columns = list(value)
                 for i in range(len(value[columns[0]])):
                     self.add({c: value[c][i] for c in columns}, f"{part}.{name}", (row, i))
@@ -150,6 +189,15 @@ class Flattener:
                     self.add(item if isinstance(item, dict) else {"value": item}, f"{part}.{name}", (row, i))
             else:
                 flat[name] = value
+
+    def _entries(self, value: dict, part: str, row: int) -> None:
+        self.keyed_depth += 1
+        try:
+            for position, (key, item) in enumerate(value.items()):
+                # Wrapping also protects source fields named _key or _row.
+                self.add({"_key": key, "_value": item}, part, (row, position))
+        finally:
+            self.keyed_depth -= 1
 
     def take(self) -> dict[str, list[dict]]:
         out, self.out = self.out, {}
