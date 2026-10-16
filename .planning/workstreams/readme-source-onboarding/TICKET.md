@@ -11,7 +11,7 @@ provider requests, rule changes, activation or deployment.
 - [x] Update the source inventory and Fund Structure explanation from committed definitions — all 9 source files linked; N-PORT subjects and captured OpenFIGI enrichment distinguished; Fund Structure model checked against CONTEXT and merge rules; 2026-10-16 10:53 ET.
 - [x] Add an accessible new-source walkthrough, rule-file guide and invented example — 8-step workflow, rule question/file table, priority fragment, quality outcomes and change controls reviewed against current skills/code; 2026-10-16 10:53 ET.
 - [x] Verify links, source inventory, example syntax and command interfaces; review Standards, Spec and GoF applicability — 82 links/anchors, 9 sources/13 contracts, balanced fences, strict YAML and 9 Bash + 3 inline CLI interfaces passed; no handlers/provider calls; 2026-10-16 10:53 ET.
-- [ ] Commit the documentation by named paths after the live overlap guard passes.
+- [x] Commit the documentation by named paths after the live overlap guard passes — README/ticket committed in b446ef6b; live guard passed for both paths and staged whitespace check passed; 2026-10-16 10:53 ET.
 - [x] Learning → skill: none — existing onboarding/refinement guidance summarized; no new runtime behavior or demonstrated skill defect; 2026-10-16 10:53 ET.
 
 ## Review
@@ -41,3 +41,5 @@ keys and is explicitly a fragment, not a complete deployable contract.
 Validation is documentation-specific. No application tests were added or run:
 no executable or actual rules changed. CLI examples were parsed without invoking
 handlers; a successful parse is not processing or onboarding qualification.
+
+Completion: DONE. Requested branch and README update complete. Documentation validation passed; no application/runtime qualification claimed.
