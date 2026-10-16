@@ -181,6 +181,29 @@ def fold_sightings(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
     return periods, contradictions
 
 
+def _earlier_sighting(periods: list[dict], period: dict) -> bool:
+    """Fold an observed `period` into the same observed period of `periods`
+    (equal but for its start), keeping the earlier start; False if none."""
+    rest = {k: v for k, v in period.items() if k != "valid_from"}
+    same = next((p for p in periods if p.get("valid_from_basis") == "observed"
+                 and {k: v for k, v in p.items() if k != "valid_from"} == rest), None)
+    if same is None:
+        return False
+    if instant(period["valid_from"]) < instant(same["valid_from"]):
+        same["valid_from"] = period["valid_from"]
+    return True
+
+
+def keep_first_observed(edge: dict, stored: dict | None) -> dict:
+    """A link rebuilt from a record's newest revision keeps the earlier observed
+    start its stored body holds (ticket 101): MDM reads only the newest
+    revision, so a start first seen in an earlier one is otherwise lost."""
+    for period in (stored or {}).get("periods", []):
+        if period.get("valid_from_basis") == "observed":
+            _earlier_sighting(edge["periods"], period)
+    return edge
+
+
 def project(
     claims: dict, state, entities: dict, as_of: str, types: dict | None = None
 ) -> tuple[list[dict], list[dict]]:
@@ -306,13 +329,8 @@ def project(
             elif period.get("valid_from_basis") == "observed":
                 # A start first seen is the earliest sighting, not one period
                 # per publication that repeats the link.
-                rest = {k: v for k, v in period.items() if k != "valid_from"}
-                same = next((p for p in value["periods"] if p.get("valid_from_basis") == "observed"
-                             and {k: v for k, v in p.items() if k != "valid_from"} == rest), None)
-                if same is None:
+                if not _earlier_sighting(value["periods"], period):
                     value["periods"].append(period)
-                elif instant(period["valid_from"]) < instant(same["valid_from"]):
-                    same["valid_from"] = period["valid_from"]
             elif period not in value["periods"]:
                 value["periods"].append(period)
             # Absence never closes a link (design 2): readers compare when it

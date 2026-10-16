@@ -51,7 +51,11 @@ def test_a_readings_list_without_a_publication_keeps_one_per_artifact(tmp_path):
 @pytest.mark.parametrize("edit", [{"publication_key": "p"}, {"revision": "1"}, {"publication_key": "p", "revision": "-1"},
                                   {"publication_key": "p", "revision": 1}, {"publication_key": "p", "revision": "01"},
                                   {"publication_key": "", "revision": "1"},
-                                  {"publication_key": "p", "revision": "1", "effective_column": "at"}])
+                                  {"publication_key": "p", "revision": "1", "effective_column": "at"},
+                                  {"effective_at": "2026-06-30T00:00:00+00:00"},
+                                  {"publication_key": "p", "revision": "1", "effective_at": "2026-06-30"},
+                                  {"publication_key": "p", "revision": "1", "effective_at": "2026-10-05T00:00:00+00:00"},
+                                  {"publication_key": "p", "revision": "1", "effective_at": 20260630}])
 def test_a_publication_needs_its_key_and_revision_and_states_one_time(tmp_path, edit):
     with pytest.raises(ValueError):
         prepare(Artifacts(), tmp_path, {**KEYS, **edit})
@@ -65,3 +69,16 @@ def test_a_readings_list_is_bounded(tmp_path, listed):
             "keys": KEYS}
     with pytest.raises(ValueError):
         mdm_prepare.execute(task, store)
+
+
+def test_a_publication_states_its_time_with_its_key_and_revision(tmp_path):
+    # Ticket 101: a quarter is a later revision and keeps its own time, so a
+    # link first seen in it starts then.
+    stated = {**KEYS, "publication_key": "nport:2026q2", "revision": "20262",
+              "effective_at": "2026-06-30T00:00:00+00:00"}
+    (batch,) = prepare(Artifacts(), tmp_path, stated)["batches"]
+    assert batch["input"]["publication"] == {"publication_key": "nport:2026q2", "revision": 20262,
+                                             "effective_at": "2026-06-30T00:00:00+00:00"}
+    (tmp_path / "without").mkdir()
+    (batch,) = prepare(Artifacts(), tmp_path / "without", {**KEYS, "publication_key": "p", "revision": "1"})["batches"]
+    assert batch["input"]["publication"]["effective_at"] is None

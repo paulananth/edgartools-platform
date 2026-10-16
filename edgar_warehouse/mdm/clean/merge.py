@@ -560,6 +560,8 @@ class MergeStage:
                 (p["object_type"], p["object_id"]): p["body"]
                 for p in scoping.stored_links_and_reviews(conn, scope)
             }
+            edges = [relationships.keep_first_observed(e, old.get(("relationship", e["relationship_id"])))
+                     for e in edges]
             scope.links = {e["relationship_id"] for e in edges} | {
                 k for t, k in old if t == "relationship"
             }
