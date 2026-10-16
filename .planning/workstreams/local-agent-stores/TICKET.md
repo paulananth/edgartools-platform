@@ -20,7 +20,8 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 - [x] Implement the approved local environment module, reusing existing stores and migrations (one script, real six-store startup, file locks, ordinary dump/restore; 2026-10-16 19:06 ET).
 - [x] Verify independent environments, restricted roles, persistence, repeat provisioning and backup/restore (11 affected tests passed with testmon in 44.49 seconds; three invented Companies, RDM row, lookup-linked silver row and exact integer beyond binary64; 2026-10-16 19:06 ET).
 - [x] Update README and local testing guide with diagrams and recovery instructions (new link, balanced fences and implemented command names verified; 2026-10-16 19:06 ET).
-- [ ] Review Standards, Spec and GoF, publish a PR and verify CI before landing.
+- [x] Review Standards, Spec and GoF (independent Standards clean; Spec and GoF final rechecks clean after two fixes; 2026-10-16 19:12 ET).
+- [ ] Publish the implementation PR and verify CI before landing.
 
 ## Decisions
 
@@ -54,6 +55,6 @@ The persistent environment currently provides all six migrated stores. The quali
 - [x] Recover interrupted backup login fencing on startup from a private atomic record (forced NOLOGIN + restart recovery verified; 2026-10-16 19:10 ET).
 - [x] Recheck affected behavior after the fixes (11 tests passed with testmon in 48.76 seconds; 2026-10-16 19:10 ET).
 
-Standards review found no issues. Independent Spec and GoF reviews identified the two fixes above; their final rechecks are pending.
+Standards review found no issues. Independent Spec and GoF rechecks passed after both fixes at dbcea8a9; reviews were read-only, and the 11-test behavior run was executed separately (2026-10-16 19:12 ET).
 
 - [x] Learning → skill: data-platform/LOCAL-TESTING.md defines automatic work with independent copies and ordinary backups (separate PR #1021 merged after all six checks passed; 2026-10-16 19:06 ET).
