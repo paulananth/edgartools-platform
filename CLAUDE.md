@@ -333,19 +333,9 @@ only re-fetch when an operator passes an explicit `--force` repair flag.
 
 ## Schema conventions
 
-**Use BIGINT (DuckDB default `INTEGER`/`BIGINT` sizing), never SMALLINT, for
-any integer column derived from counting real-world SEC/IAPD records** —
-sequence/index columns (e.g. `owner_index`, `txn_index`, `fund_index`,
-`office_index`, `event_index`) and any other count-derived value. SMALLINT's
-32,767 ceiling is not a theoretical concern: `sec_adv_private_fund.fund_index`
-(a per-filing sequence number) hit 22,277 for one real adviser's March-2026
-ADV filing — a single large fund-administration platform reporting
-thousands of Series-LLC funds under one CRD — 68% of the SMALLINT ceiling
-from a single real-world record, on data that is additive/immutable once
-captured (see "SEC data idempotency" below), so a future overflow can't be
-patched by reprocessing old rows differently. SMALLINT/TINYINT remain fine
-for genuinely bounded small values with a real domain ceiling (e.g.
-`source_quarter` 1-4, `source_year`), not for anything counting rows.
+Follow the [integer-width rule in AGENTS.md](AGENTS.md#how-to-work-in-this-repo-every-runtime).
+It applies to every integer field, including bounded years and quarters;
+the former exception for narrow types is retired.
 
 ## Debugging discipline: 5-whys
 
