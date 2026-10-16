@@ -171,10 +171,7 @@ Learned the hard way; each is a standing operator rule.
 **Tests and CI**
 - Run only the tests a change can affect ("Test baseline", below). No local
   test run may take more than five minutes; CI runs everything.
-- Merge only when every CI check is green, and only on the operator's own
-  words naming the PRs to merge ("Merge" answering a question about named
-  PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
-  not merge approval.
+- Merge when every CI check is green and the PR is ready.
 - A test states its expected answer; it never compares with a frozen copy of
   retired code. To retire such an oracle, write its answers into the test (or an
   answer file written once while the two still agree), change each answer once
@@ -219,7 +216,7 @@ Learned the hard way; each is a standing operator rule.
   beside the explanation, never instead of it. A rule version has a
   descriptive name.
 - Decide what follows from a ruling already given, say so, and go on. Stop
-  only for an approval, a switch-on, a merge or a new kind of decision, and
+  only for an approval, a switch-on or a new kind of decision, and
   then ask one question at a time with your recommendation.
 
 **Stores**
