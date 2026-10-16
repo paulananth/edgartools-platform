@@ -2,7 +2,7 @@
 
 Priority: 63, tier 4, housekeeping. Map: [Rebuild priorities](../map.md). Moved from `.scratch/agent-guides/issues/01-consolidate-claude-and-agents-md.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Status: open, not started.
+Status: inventory written; waits for the operator's review of it.
 Raised 2026-10-02 by the operator's choice "Split it out (Recommended)". Codex's draft PR #780 rewrote both guides. That rewrite is now taken out of the mastering qualification work and becomes this ticket.
 
 ## What Codex proposed
@@ -29,7 +29,7 @@ Codex's version is at commit `744cba55` on branch `codex/mastering-rebuild-20261
 
 ## Checklist
 
-- [ ] List every rule in today's CLAUDE.md and AGENTS.md. For each, mark it as kept, moved to an on-demand doc (linked), or dropped, with the reason
+- [x] List every rule in today's CLAUDE.md and AGENTS.md. For each, mark it as kept, moved to an on-demand doc (linked), or dropped, with the reason: `research/63-guide-inventory.md`, section by section with the rules each holds; AGENTS.md as the one shared source imported by CLAUDE.md, reference to `docs/agents/` pages, a four-item drop list; found that the shared "How to work" section has drifted (five rules only in AGENTS.md reach no Claude session) (2026-10-16 19:58 ET)
 - [ ] Make AGENTS.md load for Claude (`@AGENTS.md` import in CLAUDE.md), and check it in a fresh session
 - [ ] Operator review of the dropped list before any rule is removed
 - [ ] PR, CI green, merge on the operator's word
