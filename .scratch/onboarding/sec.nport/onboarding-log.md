@@ -159,3 +159,12 @@ Capture (operator: "Yes, run it (Recommended)"; key kept outside the repository,
 ## Standing approval of rules (2026-10-15 18:56 ET)
 
 - Operator: **"Approved the rules always"**. Read as: each rules approval for this onboarding (Rules versions, quality checks and their `on_fail`, merge-rule declarations) is recorded with these words and its test evidence, without a question. Still needs a passing test first. Not covered: switch-on, merges, provider requests; each keeps its own word.
+
+## Part 1: OpenFIGI through the configuration (2026-10-15 18:49-19:56 ET, tested locally)
+
+Configuration (configuration only; engine tickets 93-95 merged): `figi-requests.yaml` and `figi-answers.yaml` (readings of the kept capture, no new request), `figi-found.yaml`, `figi-pairs.yaml`, `figi-agree.yaml` (a reading over figi-pairs' pieces), `figi-offers.yaml`, `figi-attach.yaml`; `combine.yaml` now takes a CUSIP's ISIN from `attached`. Scripts `security_figi_read.py`, `security_figi_attach_run.py`; result `security-figi-run.json` (counts only).
+
+- Readings, 16 groups of at most 512 files, 59 min (18:49-19:48): 7,714 files, 771,219 answers, each tied to the identifier it was asked for; 0 differences from a direct position match; 733,538 with FIGIs (353,491 CUSIPs + 380,047 ISINs, as counted directly at 13:45). Slow part: each answer file rebuilds its pair set from all 512 request files of its group (about 4 min a group); a refresh sends only new identifiers, so it stays small.
+- Stages after the reduction, run once on the 12:01 run's reduction, 7 min 41 s, peak 2.33 GB: 350,875 pairs FIGI agrees on; **350,873 CUSIP Securities carry an ISIN** (the direct count: 350,873); 1 ISIN offered to two CUSIPs (neither carries it); 0 CUSIPs offered two ISINs.
+- `sec.nport.security.v1`: **383,612 accepted** (was 383,595): the 17 set aside for a FIGI filed as their ISIN now pass, since FIGI does not agree with that pair and no ISIN attaches. Set aside: 1,769 `invalid_cusip_checksum`, 1 `invalid_cusip`. `sec.nport.security_isin.v1`: 35,309 accepted.
+- Not configured: the count's third case (an ISIN-only holding FIGI ties to one CUSIP): all 5,394 are already one-to-one pairs of that CUSIP, so it changes nothing in this quarter; it is what the direct count's "1 CUSIP offered two ISINs" came from. Logged for a later quarter.

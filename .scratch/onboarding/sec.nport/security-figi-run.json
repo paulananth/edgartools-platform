@@ -1,0 +1,54 @@
+{
+ "readings": {
+  "groups": 16,
+  "files": 7714,
+  "rows": 771219,
+  "with_figis": 733538,
+  "id_null": 0,
+  "mismatch": 0,
+  "seconds": 3537.5
+ },
+ "stages_seconds": {
+  "figi-found x2": 28,
+  "figi-pairs": 44,
+  "figi-agree (16 pieces)": 12,
+  "figi-offers + figi-attach": 30,
+  "combine": 97,
+  "prepare + contract by CUSIP": 213,
+  "prepare + contract by ISIN": 35
+ },
+ "peak_gb": 2.33,
+ "facts": {
+  "agreed_pairs": 350875,
+  "attached": 350873,
+  "cusips_offered_several_isins": 0,
+  "isins_offered_several_cusips": 1
+ },
+ "contracts": {
+  "sec.nport.security.v1": {
+   "outcome": {
+    "invalid_cusip_checksum": 1769,
+    "accepted": 383612,
+    "invalid_cusip": 1
+   },
+   "filled": {
+    "issuer_lei": 383612,
+    "name_of_issuer": 383612,
+    "title_of_class": 383612,
+    "id:cusip": 383612,
+    "id:isin": 350873
+   }
+  },
+  "sec.nport.security_isin.v1": {
+   "outcome": {
+    "accepted": 35309
+   },
+   "filled": {
+    "issuer_lei": 35309,
+    "name_of_issuer": 35309,
+    "title_of_class": 35309,
+    "id:isin": 35309
+   }
+  }
+ }
+}
