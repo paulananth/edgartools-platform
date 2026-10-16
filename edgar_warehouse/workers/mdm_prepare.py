@@ -20,6 +20,11 @@ step); its keys say what to take from it, so nothing feed-specific runs:
   the reading's context: when the file was published). Each of the artifact's
   publications states it, so MDM dates the records, and a link without a
   stated start starts then. Without it a publication states no time;
+- optional `publication_key` and `revision` (text digits), together: the
+  caller's one publication for every row of the unit, in place of one per
+  artifact; with them, optional `effective_at` states that publication's time
+  (an instant with a timezone, not after `as_of`), so a later period is a
+  later revision that keeps its own time;
 - `dataset`: the MDM source code whose registered contract reads them;
 - `policy`: the Mastering Policy digest the batches pin;
 - `consumer`: the MDM consumer the batches advance, from checkpoint 0, so a
@@ -136,6 +141,8 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
 def _published(keys: dict) -> dict | None:
     """Optional `publication_key` and `revision`: the caller's one publication for every row of the unit."""
     if "publication_key" not in keys and "revision" not in keys:
+        if "effective_at" in keys:
+            raise ValueError("mdm.prepare effective_at states the time of the caller's publication_key and revision")
         return None
     revision = keys.get("revision")  # unit keys are text: the revision is written in decimal digits
     if (not isinstance(keys.get("publication_key"), str) or not keys["publication_key"]
@@ -144,7 +151,8 @@ def _published(keys: dict) -> dict | None:
         raise ValueError("mdm.prepare publication_key and revision come together: text and a nonnegative integer")
     if "effective_column" in keys:
         raise ValueError("mdm.prepare states one publication's time; effective_column states one per artifact")
-    return {"publication_key": keys["publication_key"], "revision": int(revision), "effective_at": None}
+    stated = _instant(keys["effective_at"], "effective_at", keys["as_of"]) if "effective_at" in keys else None
+    return {"publication_key": keys["publication_key"], "revision": int(revision), "effective_at": stated}
 
 
 def _batch(keys: dict, name: str, batch_id: str, chunk: list[dict], publication: dict) -> tuple[bytes, dict]:
@@ -244,15 +252,19 @@ def _effective_at(rows: list[dict], column: str, as_of: str) -> str:
     """
     if len({json.dumps(row.get(column)) for row in rows}) != 1:
         raise ValueError(f"mdm.prepare {column} must hold one effective time per artifact")
-    value = rows[0].get(column)
+    return _instant(rows[0].get(column), column, as_of)
+
+
+def _instant(value, name: str, as_of: str) -> str:
+    """An effective time as written: an instant with its timezone, not after `as_of`."""
     try:
         moment = datetime.fromisoformat(value) if isinstance(value, str) else None
     except ValueError:
         moment = None
     if moment is None or moment.tzinfo is None:
-        raise ValueError(f"mdm.prepare {column} must be an instant with a timezone")
+        raise ValueError(f"mdm.prepare {name} must be an instant with a timezone")
     if moment > datetime.fromisoformat(as_of):
-        raise ValueError(f"mdm.prepare {column} is after the manifest's as_of")
+        raise ValueError(f"mdm.prepare {name} is after the manifest's as_of")
     return value
 
 
