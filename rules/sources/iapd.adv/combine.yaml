@@ -1,0 +1,22 @@
+# Each adviser filing with the custodians its Schedule D 5.K(3) names (ticket
+# 75): the custody rows' distinct `custodian_id`s, collected by filing and
+# joined onto the filing as `custodians` (an empty list when it names none).
+# The filings contract links the filing's adviser to each one (CUSTODIAN),
+# from the record of that custodian in the same monthly file. Inputs: the
+# filings source extract (`filings`, adviser-filings-csv.yaml) and the custody
+# source extract (`custody`, custody-csv.yaml) of one monthly file; mdm.prepare
+# reads table `filings`. Measured over 13 months: at most 15 custodians on a
+# filing. Pin canonical JSON of this file as the source.combine contract.
+execution: {profile: source.combine}
+combine:
+  max_rows: 1000000
+  groups:
+    filing_custodians: {source: custody, table: custody, key: filing_id, value: custodian_id, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    filings:
+      source: filings
+      table: filings
+      checks: {}
+      where: {}
+      joins:
+        custodians: {group: filing_custodians, key: filing_id, on_missing: empty, replace: false}
