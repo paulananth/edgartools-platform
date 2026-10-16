@@ -2,7 +2,7 @@
 
 Priority: 82, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md).
 
-Type: task (build, engine). Status: open. Blocks: 79 (Onboard funds and securities with the skills).
+Type: task (build, engine). Status: done, merged (#978, 2026-10-14). Blocks: 79 (Onboard funds and securities with the skills).
 
 ## Why
 

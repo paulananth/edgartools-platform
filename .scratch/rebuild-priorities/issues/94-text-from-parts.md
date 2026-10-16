@@ -2,7 +2,7 @@
 
 Priority: 94, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine). Status: in progress (branch `claude/text-from-parts`). Unblocks: 79 part 1 (the N-PORT Security's ISIN with OpenFIGI).
+Type: task (engine). Status: done, merged (2026-10-15). Unblocks: 79 part 1 (the N-PORT Security's ISIN with OpenFIGI).
 
 ## Why
 

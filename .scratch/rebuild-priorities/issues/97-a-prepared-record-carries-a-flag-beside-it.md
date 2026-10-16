@@ -2,7 +2,7 @@
 
 Priority: 97, tier 1, blocks ticket 22's resolution. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine code, small). Status: coded, in review (branch `claude/prepare-record-extras`). Blocked by: none. Blocks: 22 (ISSUED_BY by issuer LEI).
+Type: task (engine code, small). Status: merged (#1013, 2026-10-16 13:43 ET); Ticket 22's Proving Run 2 is its last proof. Blocked by: none. Blocks: 22 (ISSUED_BY by issuer LEI).
 
 ## Why
 
@@ -48,5 +48,5 @@ so a record without the flag reads exactly as today.
   - With GLEIF an LEI source, a Company bound to a GLEIF record through the name rules now holds that LEI. The ADV custodian LEI rule (ticket 76, not switched on) then joins such a Company instead of creating one, and an LEI held by two Companies goes to review (`ambiguous_identifier`). Ticket 76's proof predates this and is re-run before its switch-on.
   - `check_binding_rule` admits any record test (classification family) in a binding rule, not only `evidence_present@1`; each reads the record alone.
 - [ ] Ticket 22's Proving Run 2 through the real Level 1 reading and `mdm.prepare` with `record_extras`, with the cm27 SEC Companies loaded too (see ticket 22)
-- [ ] Review, PR, CI green, merge on the operator's word
+- [x] Review (Standards, Spec, GoF), PR #1013, CI green (6 checks), merged on the operator's words "merge one by one" 2026-10-16 13:43 ET
 - [x] Learning → skill: data-onboarding REFERENCE "Merge rules" (record tests narrow a matching rule; a creating rule names an issuing source) and data-platform SKILL (`record_extras`) 2026-10-16 13:13 ET

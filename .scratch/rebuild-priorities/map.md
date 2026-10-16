@@ -58,6 +58,15 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [CLAUDE.md names deleted code](issues/85-claude-md-names-deleted-code.md): CLAUDE.md and AGENTS.md name only paths that exist, held by a test (#1006)
 - [Profiling measures how identifiers pair](issues/90-profiling-measures-how-identifiers-pair.md): `pairs` in the findings says whether a second identifier joins one to one (#1008)
 - [The identifier index keeps no pending list](issues/96-identifier-index-without-pending-list.md): migration 021; a Merge Stage batch 4.4 s to 2.5 s (#1007)
+- [An init mode: the mapping document first, then the rules](issues/15-rules-skill-11-init-mode-mapping-document-and-catalog.md): the init mode, Mapping Documents and catalog publishing (#743)
+- [Identifier types are configuration](issues/81-identifier-types-are-configuration.md): identifier types are configuration files, not code (#975)
+- [A reduction reads several source extracts](issues/82-a-reduction-reads-several-readings.md): a reduction reads several readings (#978)
+- [No output caps: large outputs are written in pieces](issues/83-no-output-caps.md): no output caps; large outputs are written in pieces (#981)
+- [Profiling names the data quality rules, the RDM code sets and every silver field, and the catalog shows them](issues/87-profiling-names-quality-rdm-silver-in-the-catalog.md): profiling names quality, RDM and silver in the catalog (#987)
+- [Simplify the tests, make them fast, delete old ones](issues/88-simplify-and-speed-up-the-tests.md): old and retired-code oracles deleted; every test states its own answer (#988); fixture sharing moved to 98
+- [The engine tells whether two lists share a value](issues/93-two-lists-overlap.md): `overlap`: two lists share a value (#995)
+- [The engine builds one text from parts](issues/94-text-from-parts.md): `concat`: text from parts
+- [The engine takes a field of each object in a list](issues/95-a-field-of-each-object-as-a-list.md): `pluck`: a field of each object as a list
 
 ## Not yet specified
 
