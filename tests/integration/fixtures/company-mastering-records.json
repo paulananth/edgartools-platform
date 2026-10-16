@@ -1,0 +1,32 @@
+{
+ "as_of": "2026-09-29T15:00:00Z",
+ "policy_digest": "7802a3f383596915dab8efa13e14e7f3c86ce06e22502911c4e1e3f3cecedbd1",
+ "scope": {
+  "mode": "bounded_sample",
+  "selected_records": 3,
+  "whole_source_complete": false,
+  "capture_run_id": "capture-1",
+  "ticker_run_id": "catalog-1",
+  "receipts_sha256": "adc355204387726735ef6cbf31ce46e05921bfafa1b9badec24251ac5843fccf",
+  "ciks": [
+   320193,
+   789019,
+   42
+  ],
+  "bronze_named": 3
+ },
+ "publication_key": "capture-1:sec_submissions:a3ef9d4c341c8daae6f8c4ea2c247b8036191acc0a354785764a7168b35374e2:catalog-1:bd661561990e4624ac9c3925720ff9b4f3e091420616af2517bb0d9d2c501b30:name_census:CENSUS",
+ "batches": [
+  {
+   "record_count": 3,
+   "publication": {
+    "effective_at": null,
+    "revision": 0
+   },
+   "source_code": "sec.submissions.company.v1",
+   "expected_checkpoint": 0,
+   "checkpoint": 1,
+   "records_jsonl": "{\"_origin\":{\"bronze\":{\"locator\":\"$\",\"object\":\"warehouse/bronze/submissions/sec/cik=320193/main/2026/09/29/CIK0000320193.json\",\"sha256\":\"08c67cf6c2e34b60348d0c00e8fefef703546acdd89d9007eb649182ce88bbc2\"}},\"business_address\":{\"city\":\"CUPERTINO\",\"country\":\"US\",\"postal_code\":\"10019\",\"region\":\"CA\",\"street\":\"ONE APPLE PARK WAY\",\"street2\":null},\"category\":\"Large accelerated filer\",\"cik\":320193,\"description\":\"\",\"ein\":\"123456789\",\"entity_name\":\"Apple Inc.\",\"entity_type\":\"operating\",\"fiscal_year_end\":\"0930\",\"forms\":[\"10-K\",\"10-Q\"],\"last_sync_run_id\":\"capture-1\",\"last_synced_at\":\"2026-09-30T02:20:28+00:00\",\"load_mode\":\"default\",\"name_census\":{\"census\":\"CENSUS\",\"cik_count\":1,\"ciks\":[\"0000320193\"],\"key\":\"APPLE INC\",\"lei_count\":1,\"leis\":[[\"HWUPKR0MPOU8FGXBT394\",\"2026-09-01T00:00:00Z\"]],\"other_name_holders\":0,\"version\":\"sec-gleif-name-census-v1\"},\"raw_object_id\":\"08c67cf6c2e34b60348d0c00e8fefef703546acdd89d9007eb649182ce88bbc2\",\"sic\":\"7372\",\"sic_description\":\"Services\",\"state_of_incorporation\":\"DE\",\"state_of_incorporation_desc\":\"DE\",\"sync_run_id\":\"capture-1\",\"tickers\":[\"AAPL\",\"APLE\"]}\n{\"_origin\":{\"bronze\":{\"locator\":\"$\",\"object\":\"warehouse/bronze/submissions/sec/cik=789019/main/2026/09/29/CIK0000789019.json\",\"sha256\":\"3c05be95c98a43dbde349de71bde64f1de278a2732db86c8ae66d2485fa5b892\"}},\"business_address\":{\"city\":\"REDMOND\",\"country\":\"US\",\"postal_code\":\"98052\",\"region\":\"WA\",\"street\":\"ONE MICROSOFT WAY\",\"street2\":null},\"category\":\"Large accelerated filer\",\"cik\":789019,\"description\":\"\",\"ein\":\"123456789\",\"entity_name\":\"MICROSOFT CORP\",\"entity_type\":\"operating\",\"fiscal_year_end\":\"0930\",\"forms\":[\"10-K\"],\"last_sync_run_id\":\"capture-1\",\"last_synced_at\":\"2026-09-30T02:20:28+00:00\",\"load_mode\":\"default\",\"name_census\":{\"census\":\"CENSUS\",\"cik_count\":1,\"ciks\":[\"0000789019\"],\"key\":\"MICROSOFT CORP\",\"lei_count\":0,\"leis\":[],\"other_name_holders\":0,\"version\":\"sec-gleif-name-census-v1\"},\"raw_object_id\":\"3c05be95c98a43dbde349de71bde64f1de278a2732db86c8ae66d2485fa5b892\",\"sic\":\"7372\",\"sic_description\":\"Services\",\"state_of_incorporation\":\"DE\",\"state_of_incorporation_desc\":\"DE\",\"sync_run_id\":\"capture-1\",\"tickers\":[\"MSFT\"]}\n{\"_origin\":{\"bronze\":{\"locator\":\"$\",\"object\":\"warehouse/bronze/submissions/sec/cik=42/main/2026/09/29/CIK0000000042.json\",\"sha256\":\"d114cafcd762462bbb11ffbe663558a63c9884e720d465217cc3d95b23864637\"}},\"business_address\":{\"city\":\"LONDON\",\"country\":\"GB\",\"postal_code\":\"EC2\",\"region\":null,\"street\":\"1 KING ST\",\"street2\":null},\"category\":\"Large accelerated filer\",\"cik\":42,\"description\":\"\",\"ein\":\"123456789\",\"entity_name\":\"ACME HOLDINGS PLC\",\"entity_type\":\"operating\",\"fiscal_year_end\":\"0930\",\"forms\":[\"10-K\"],\"last_sync_run_id\":\"capture-1\",\"last_synced_at\":\"2026-09-30T02:20:28+00:00\",\"load_mode\":\"default\",\"name_census\":{\"census\":\"CENSUS\",\"cik_count\":1,\"ciks\":[\"0000000042\"],\"key\":\"ACME HLDGS PLC\",\"lei_count\":0,\"leis\":[],\"other_name_holders\":0,\"version\":\"sec-gleif-name-census-v1\"},\"raw_object_id\":\"d114cafcd762462bbb11ffbe663558a63c9884e720d465217cc3d95b23864637\",\"sic\":\"7372\",\"sic_description\":\"Services\",\"state_of_incorporation\":\"DE\",\"state_of_incorporation_desc\":\"DE\",\"sync_run_id\":\"capture-1\",\"tickers\":[]}\n"
+  }
+ ]
+}

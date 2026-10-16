@@ -8,7 +8,7 @@ import struct
 import pytest
 
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
-from scripts.qualification.audit_json_sequence import ordered
+from tests.support.exact import ordered
 
 
 def engine():
