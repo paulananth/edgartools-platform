@@ -96,6 +96,11 @@ all source facts, including facts outside an approved mastering cohort.
                     arguments.update(max_records=expected_count, context=context,
                                      ordinal_context=ordinal, on_reading=consume)
                     if header_engine is None:
+                        # Attestation checks the archive and its records, never a value a
+                        # lookup set adds beside them (ticket 97): each declared set is empty.
+                        declared = contract["read"].get("lookup_sets") or {}
+                        if declared:
+                            arguments["lookups"] = {name: [] for name in declared}
                         scan = engine.stream_json_array(source, wrapper=spec["wrapper"],
                             min_integer=spec["min_integer"], record_encoding=spec["record_encoding"],
                             **arguments)

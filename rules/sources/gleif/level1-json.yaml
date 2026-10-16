@@ -10,9 +10,11 @@ read:
     publication_count: {type: integer}
   references:
     approved_scope: {}  # LEI: {selected: true}; never infer scope from this file.
-    # LEI: {issuer: true} for the LEIs an N-PORT holding names as its issuer
-    # (ticket 22); empty, no record is flagged.
-    nport_issuers: {}
+  # The LEIs an N-PORT holding names as its issuer (ticket 22), supplied with the
+  # input as a lookup receipt (tens of thousands: too many for a reference in
+  # the contract, which is read within 1 MiB); an empty set flags no record.
+  lookup_sets:
+    nport_issuers: {max_values: 10000000, max_bytes: 268435456, max_value_bytes: 64}
   tables:
     level1:
       each: '.'
@@ -26,11 +28,10 @@ read:
         record: {value: {path: '.'}}
         # Carried into the record by mdm.prepare's record_extras (ticket 97).
         nport_issuer:
-          lookup:
-            reference: nport_issuers
-            column: issuer
-            key: {text: {path: LEI.$}}
-            on_missing: 'null'
+          choose:
+            condition: {member: {lookup: nport_issuers, key: {text: {path: LEI.$}}}}
+            then: {const: {value: true}}
+            else: {value: {path: NO_SUCH_FIELD}}
         source_index: {context: {name: source_index}}
   stream:
     wrapper: records
