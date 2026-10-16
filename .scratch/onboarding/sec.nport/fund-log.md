@@ -17,3 +17,17 @@ IS_SUBFUND_OF (`rules/merge/relationships.yaml`) needs the `fund` profile at bot
 - Series end: **no local capture states when a series began.** N-PORT gives the filing and report dates only, which move each quarter.
 
 Built so far, independent of the date: `rules/identifiers/sec_series_id.yaml`; `rules/merge/kinds/fund_structure.yaml` (`nport-fund-series`, `nport-fund-lei`, declared, not switched on; Identifier Contracts for `sec_series_id` and `lei`). The policy loads and passes `check_policy`. The source extract waits for the ruling and for #1001 (its filing-date reading).
+
+## Ruling: the link (2026-10-16 06:33 ET)
+
+- Operator, asked how part 3 handles IS_SUBFUND_OF with no stated series start: **"Funds now, link later (Recommended)"**. The Funds are mastered by series id and LEI now; each keeps its registrant's CIK as a lookup-only cross-reference (`nport_registrant_cik`); IS_SUBFUND_OF is added once a source states when a series began.
+
+## The test run (2026-10-16 06:33 ET, tested locally)
+
+`fund_test_run.py`, report `fund-test-run.json` (counts only), 17 s, reusing part 2's verified readings of filing dates and registrants (nothing read twice). The first attempt stopped at the reduction: a filing naming no series has a null key, which a reduction refuses; fixed with the table's `select` (a blank series id is not read).
+- 13,687 filings with a series; every one dated and tied to its registrant. **12,944 Funds**; 676 with several filings; the latest filing matches a direct calculation for 12,944 of 12,944; 9 series changed name in the quarter.
+- `sec.nport.fund.v1`: **12,937 accepted**; 7 set aside `invalid_lei_checksum` (as many as the series LEIs GLEIF does not hold). Series id 12,937, LEI 12,924, registrant CIK 12,937. **15 LEIs on two Funds.**
+
+## The Proving Run: stopped (2026-10-16 06:33 ET)
+
+`fund_proving_run.py` (the two Fund rules switched on in the run's copy of the policy only; container removed). The first pass stopped at a batch: **"Identity decision has unresolved authoritative identifier or kind conflict"**. Cause: the 15 LEIs filed for two series. The second series finds no Fund by its series id, the LEI rule joins it to the first series' Fund, and that Fund then holds two series ids, which the Merge Stage refuses for the whole batch. Not yet decided how to treat a shared LEI (as part 1 did for an ISIN shared by two CUSIPs: join by LEI only when one series in the quarter states it). Stopped here on the operator's word ("after this stop and wait").

@@ -1,0 +1,19 @@
+# One row per fund series (table `fund`) with its latest filing whole
+# (`latest`: name, LEI and registrant CIK of one filing), latest by filing
+# date, then accession number (ticket 79, part 3). Inputs: reduce.yaml's
+# output (`series`) and source.yaml's reading (`filings`). Pin canonical JSON
+# of this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    latest_filing: {source: filings, table: filing, key: series_id, value: ., mode: last, order_by: [filed, accession], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    fund:
+      source: series
+      table: series
+      checks: {}
+      where: {}
+      joins:
+        latest: {group: latest_filing, key: series_id, on_missing: error, replace: false}
