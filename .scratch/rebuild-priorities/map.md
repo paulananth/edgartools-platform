@@ -70,6 +70,9 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 
 - [Point ISSUED_BY at a mastered Company](issues/22-security-mastering-02-issued-by-a-mastered-company.md): by issuer LEI; the issuer rule joins or waits, never creates; 0 duplicates, 41,360 links would resolve (#1022)
 - [An N-PORT link starts at its quarter's data set](issues/100-an-nport-link-starts-at-its-quarter.md): the quarter dates each publication; the link starts there, observed (#1022)
+- [A second N-PORT quarter is a new revision](issues/101-a-second-nport-quarter-is-a-new-revision.md): a quarter is a later revision with its own time; a link keeps its first observed start (#1023, #1026)
+- [ISIN-only Securities link to their issuer](issues/102-isin-only-securities-link-to-their-issuer.md): by the one issuer LEI an ISIN's holdings state; 25,173 links, equal to a direct count (#1025)
+- [Integration tests share their containers and fixtures](issues/98-integration-tests-share-containers-and-fixtures.md): one PostgreSQL 16 per session for the MDM store's tests; CI integration 310 s to 217 s (#1027)
 
 ## Not yet specified
 
