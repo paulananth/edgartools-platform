@@ -254,22 +254,29 @@ problem entirely.
 
 ## Quick Navigation
 
+The rebuild replaced the old pipeline (its orchestrator, parsers, DuckDB silver,
+graph writers and Step Function builders are deleted; check with
+`python3 scripts/dev/stale_paths.py`). The skills hold the how-to; this table
+only points.
+
 | Need | Location |
 |------|----------|
-| ETL runtime (form parsing, S3 writes) | `edgar_warehouse/application/warehouse_orchestrator.py` (`edgar_warehouse/runtime.py` is a pure re-export shim onto `edgar_warehouse/application/command_router.py`, which is real but thin: its own `run_command`/`run_seed_universe_command` route through `LEGACY_COMMAND_REGISTRY`/`execute_standard_command`, ultimately calling `warehouse_orchestrator._execute_warehouse` -- confirmed live 2026-09-02 while tracing `bootstrap`'s full call chain for its retirement, correcting this table's prior "both are compatibility shims re-exporting from here" claim) |
-| Silver write path (landing-only writers, in-run lookup) | `edgar_warehouse/silver_landing_store.py` (`SilverLandingStore`; the local DuckDB engine, `silver_store.py`/`silver_protection.py`/the `silver.py` shim, was deleted by silver-merge-engine-migration Ticket 17, 2026-09-15 — there is no local silver store any more). Schema snapshot: `edgar_warehouse/silver_schema.py`, held equal to `infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql` by `tests/unit/test_silver_schema_snapshot.py` |
-| Source-layer dimensional export (feeds `EDGARTOOLS_SOURCE`, not `EDGARTOOLS_GOLD` — see single-path-per-layer map Ticket 01, which is why this module was renamed off its old "gold_models.py" name) | `edgar_warehouse/serving/source_dimensional_export.py` (its `edgar_warehouse/gold.py` compatibility shim was deleted in PR #550, 2026-09-06 — zero importers repo-wide; the module's own DuckDB-materialized builders were retired the same commit since every dbt gold model now `ref()`s dbt silver directly) |
-| Ownership / Form 3-4-5 parser | `edgar_warehouse/parsers/ownership.py` |
-| ADV parser (investment advisers) | `edgar_warehouse/parsers/adv.py` |
+| Source engine (reading and combining files; Rust behind a Python facade) | `crates/source-contract/`, `edgar_warehouse/rules/source_engine.py`; skill `data-platform` (READING.md, COMBINING.md) |
+| Rules: source extracts, Dataset Contracts, quality, merge rules, identifier types | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py` |
+| Workers and Bookkeeping (each step a worker with its verifier) | `edgar_warehouse/workers/`, `edgar_warehouse/bookkeeping/`; skill `bookkeeping` |
+| MDM store and the Merge Stage | `edgar_warehouse/mdm/clean/` (`merge.py`, `binding.py`, `store.py`), migrations in `edgar_warehouse/mdm/migrations/`; skill `mdm-engineering` |
+| RDM (reference data) | `edgar_warehouse/rdm/` |
+| Silver writer (a PostgreSQL 16 `silver` schema through one sink) | `edgar_warehouse/silver_writer/` |
+| Agent context (`edgar-warehouse context`) | `edgar_warehouse/context.py` |
 | CLI entry point | `edgar_warehouse/cli.py` |
-| Batch scripts per form type | `scripts/batch/` |
-| dbt gold models (23 dynamic tables — the actual gold layer) | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
+| Onboard a new feed or domain / refine live rules | `skills/data-onboarding/SKILL.md` (+ `REFERENCE.md`, `APPROVE.md`) and `skills/refining-rules/SKILL.md`; logs under `.scratch/onboarding/<source>/` |
+| Silver schema snapshot (Snowflake landing) | `edgar_warehouse/silver_schema.py`, held equal to `infra/snowflake/sql/bootstrap/11_silver_landing_schema.sql` by `tests/unit/test_silver_schema_snapshot.py` |
+| dbt gold models | `infra/snowflake/dbt/edgartools_gold/models/gold/` |
 | Snowflake bootstrap SQL | `infra/snowflake/sql/bootstrap/` |
-| MDM graph tables (Snowflake `NEO4J_GRAPH_MIGRATION`, still read by the live dashboard; their writers and the graph review dashboard were retired, platform validation 2a/2b, 2026-09-30) | `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`, `infra/scripts/install-neo4j-graph-app.sh` |
-| MDM rules (source mappings, merge rules) | `rules/` (YAML people edit, reviewed in PRs), read by `edgar_warehouse/rules/files.py`; map `.scratch/rules-skill/` |
-| Onboard a new feed or domain / refine live rules (the `data-onboarding` and `refining-rules` skills) | `skills/data-onboarding/SKILL.md` (+ shared `REFERENCE.md`, `APPROVE.md`) and `skills/refining-rules/SKILL.md`; link each with its `link.sh`; trials and their evidence in `.scratch/platform-validation/trials/` (and the earlier `.scratch/rules-skill/trials/`) |
+| MDM graph tables (Snowflake `NEO4J_GRAPH_MIGRATION`, still read by the live dashboard; their writers were retired, platform validation 2a/2b, 2026-09-30) | `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`, `infra/scripts/install-neo4j-graph-app.sh` |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
+| Batch scripts per form type (edgartools smoke tests) | `scripts/batch/` |
 | AWS Terraform (prod) | `infra/terraform/accounts/prod/` |
 | Snowflake Terraform (prod) | `infra/terraform/snowflake/accounts/prod/` |
 | Docker / ECR publish scripts | `infra/scripts/` |
@@ -277,73 +284,26 @@ problem entirely.
 ## Architecture
 
 ```
-SEC EDGAR API
+captured provider files (bronze; SEC, GLEIF, Form ADV, N-PORT, OpenFIGI, ...)
       |
       v
-edgar-warehouse CLI  (edgar_warehouse/cli.py -> edgar_warehouse/application/warehouse_orchestrator.py)
+source engine: source extracts and combines   (rules/sources/<source>/*.yaml)
       |
       v
-S3 Parquet (bronze)
-      |
-      v
-Snowflake EDGARTOOLS_SOURCE  <-- native S3 pull via bootstrap SQL
-      |                          (+ a Python-populated dimensional export from
-      |                           edgar_warehouse/serving/source_dimensional_export.py, merged
-      |                           in here too -- see Quick Navigation above)
-      v
-Snowflake EDGARTOOLS_SILVER  <-- landing zone + dbt-native collapse
-      |                          (the only silver store: every writer records
-      |                           to the landing zone via
-      |                           edgar_warehouse/silver_landing_store.py and
-      |                           the dbt silver models collapse it; the local
-      |                           DuckDB engine was deleted 2026-09-15,
-      |                           silver-merge-engine-migration Ticket 17)
-      |
-      +-------------------------------------------------+
-      |                                                  |
-      v                                                  v
-dbt (infra/snowflake/dbt/edgartools_gold/)      MDM Postgres (Snowflake-hosted, NOT AWS
-      |                                          RDS -- see "MDM database" note below)
-      v                                          entity resolution: edgar_warehouse/mdm/
-EDGARTOOLS_GOLD  (23 dynamic tables)              ("mdm mastering", 6 entity types)
-      |                                                  |
-      v                                       +----------+-----------+
-Streamlit dashboard                            |                      |
-(infra/snowflake/streamlit/                    v                      v
- OR examples/dashboard/)              Snowflake                Snowflake
-                                       NEO4J_GRAPH_MIGRATION    MDM mirror schema
-                                       schema -- Neo4j Graph    ("mdm publish",
-                                       Analytics Native App,    edgar_warehouse/
-                                       NOT an external Neo4j    mdm/export.py)
-                                       ("mdm publish-relationships" /
-                                       "mdm reconcile" --
-                                       see "Graph storage"
-                                       note below)
-                                             |
-                                             v
-                                       Operator MDM/graph review
-                                       dashboard
-                                       (retired 2026-09-30)
+Dataset Contracts -> MDM (PostgreSQL; the Merge Stage, merge rules in rules/merge/)
+      |                     |
+      v                     v
+silver writer          edgar-warehouse context (read-only views for agents)
+(transaction parts)
 ```
 
-MDM's own silver reader is **always** Snowflake `EDGARTOOLS_SILVER` via
-`SnowflakeSilverReader` (`edgar_warehouse/mdm/cli.py`'s `_silver_reader()`
-docstring is explicit: "Always EDGARTOOLS_SILVER via SnowflakeSilverReader")
-— cut over live-verified 2026-09-06 (duckdb-retirement-cutover Ticket 05).
-The DuckDB-vs-Snowflake parity commands (`mdm verify-silver-parity`,
-`mdm verify-resolver-input-parity`) and their DuckDB reader path were
-deleted by silver-merge-engine-migration Ticket 08; DuckDB's
-`ShardedSilverReader` and the one-time `backfill-silver-landing-historical`
-command were deleted by that map's Ticket 15 (2026-09-15), and the DuckDB
-engine itself (`silver_store.py`, `silver_protection.py`, the `duckdb`
-dependency) by Ticket 17 the same day — no production module imports DuckDB,
-and once the images are rebuilt from that change neither image installs it (it survives in `uv.lock` only as `splink`'s
-transitive dependency under the `mdm` extra, which no image installs). MDM
-resolves entities independently of the gold/dbt path — the two branches
-above run in parallel, not in sequence. See "Graph storage" and "MDM
-database" notes further below for what each Snowflake-hosted piece
-actually is, since both names ("Neo4j", "Postgres mirror") suggest
-external services that don't exist here.
+Every step runs as a Bookkeeping worker with its verifier. MDM's store is
+PostgreSQL 16, to be hosted on Snowflake Postgres or Databricks Lakebase.
+Snowflake stays the target platform for silver and gold (operator,
+2026-10-14: "Snowflake is still the target platform"): the Snowflake layers
+below, the dbt gold models and their rules in this file are live. The old
+pipeline that fed them (the warehouse orchestrator, its parsers, the old MDM
+chain and the AWS Step Function builders) is deleted from this repository.
 
 ## ECS cost-sizing conclusions (Ticket 28, resolved 2026-08-30)
 
@@ -403,9 +363,9 @@ Canonical analysis and immutable evidence:
 
 | Layer | Location | Description |
 |-------|----------|-------------|
-| **Bronze** | S3 (`s3://<bucket>/`) | Raw Parquet files written by `edgar-warehouse`. One file per filing/entity, partitioned by form type and date. Never mutated. |
-| **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL), plus a Python-built dimensional export (`edgar_warehouse/serving/source_dimensional_export.py`) merged in via `LOAD_EXPORTS_FOR_RUN`. Read-only raw layer. |
-| **Silver** | Snowflake `EDGARTOOLS_SILVER` (landing zone `EDGARTOOLS_SILVER_LANDING` + dbt collapse). Writers: `edgar_warehouse/silver_landing_store.py`. | Cleaned, typed, deduplicated records. The local DuckDB store that used to be canonical is gone (silver-merge-engine-migration, finished with Ticket 17 on 2026-09-15). |
+| **Bronze** | S3 (`s3://<bucket>/`) and local captures | Provider files as captured, one receipt per file. Never mutated. |
+| **Source** | Snowflake `EDGARTOOLS_SOURCE` | External stage + tables auto-refreshed from S3 via Snowflake native S3 pull (bootstrap SQL). Read-only raw layer. |
+| **Silver** | Snowflake `EDGARTOOLS_SILVER` (landing zone `EDGARTOOLS_SILVER_LANDING` + dbt collapse); the rebuild's writer is `edgar_warehouse/silver_writer/` (PostgreSQL 16 today; a Snowflake sink is its own ticket) | Cleaned, typed, deduplicated records. The old landing writer and the local DuckDB store are deleted. |
 | **Gold** | `EDGARTOOLS_GOLD` (23 dbt dynamic tables) | Business-ready tables, e.g. `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`, plus 13 more added since this table was first written (`accounting_flags`, `adv_fund_count_reconciliation`, `consensus_estimates`, `earnings_calendar`, `earnings_releases`, `executive_records`, `financial_derived`, `financial_factors`, `financial_facts`, `guidance_facts`, `institutional_holdings`, `mdm_company`, `transcript_events`) — see `infra/snowflake/dbt/edgartools_gold/models/gold/` for the current, authoritative list rather than trusting this count to stay accurate. Refreshed on a Snowflake-managed schedule. |
 
 ## edgartools Dependency
@@ -556,14 +516,6 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
 Deploy status below is as last recorded on each item's own date — re-check against the running image
 before trusting it.
 
-- **Two graph-generation activation paths are out of sync.** `mdm publish-relationships` →
-  `mdm reconcile --generation-id` → `mdm graph-activate` flips Snowflake's `GRAPH_ACTIVE_POINTER` with no
-  Postgres record; the `edgartools-prod-generation-build` Step Function tracks every step in
-  `mdm_graph_generation`/`mdm_graph_partition`. Both write the same Snowflake tables. Snowflake's pointer
-  correctly shows `db802e24-...`, but Postgres still shows `9bc1d71d-...` as `activated` with no row for
-  the live generation — so the next Step Function run would plan off a stale baseline, and anything
-  reading Postgres for "what's active" reports the wrong one. Fix by re-running
-  `edgartools-prod-generation-build` or backfilling the Postgres row.
 - **The `EDGARTOOLS_DECISION` schema does not exist**, leaving 5 Terraform-managed grants unapplied.
   `infra/snowflake/sql/decision_contract/01_subject_feature_screen.sql`'s "MDM active-company universe"
   join is an explicit placeholder that self-joins `COMPANY`, and
@@ -571,356 +523,33 @@ before trusting it.
   `EDGARTOOLS_GOLD.SEC_AUDITOR_REPORT_EVIDENCE`, which exists only in `EDGARTOOLS_SOURCE`. The real
   blocker behind both: no Snowflake-side source has been chosen for "MDM active company universe" (MDM's
   authority is Postgres; the closest reflection is `NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES`).
-- **Orphaned bootstrap SQL:** `infra/snowflake/sql/bootstrap/16_silver_landing_deployer_read.sql` and
-  `17_mdm_export_deployer_read.sql` are committed, real fixes referenced by neither `install.sh` nor
-  `deploy-snowflake-stack.sh`.
 - **The original `EDGARTOOLS_DASHBOARD` Streamlit app is still ACCOUNTADMIN-owned** — the same gap already
   fixed for `MDM_GRAPH_DASHBOARD`, with the same drop/recreate-as-target-role recipe.
 - **Release-readiness Ticket 74, items 1-2:** repairing the two known stale accessions, and a proactive
   scan for other pre-2026-07-31 stale bronze objects.
-- **Ticket 101:** automated `sec_filing_text` capture is unimplemented (0 rows in prod). Its iXBRL
-  hidden-content extraction fix (`_strip_hidden_ixbrl_content`,
-  `edgar_warehouse/filing_text_projection.py`) is in source but was undeployed when written.
-- **Migration 022** (`edgar_warehouse/mdm/migrations/022_relationship_derivation_checkpoint_cursor.sql`,
-  the resumable relationship-derivation cursor) had never been run against real Postgres when written —
-  confirm it applied before relying on `INSTITUTIONAL_HOLDS`/`MANAGES_FUND` making forward progress past a
-  capped run. Related open fog on the
-  [mdm-relationship-versioning-gap map](.scratch/mdm-relationship-versioning-gap/map.md):
-  `reconciliation_pass` still restarts its own scan from the beginning on every call.
-- **Written as "not yet deployed":** the `mdm_change_log` write-side diff (which otherwise regenerates
-  `mdm publish`'s backlog unboundedly) and the oversized-SEC-document recurring-run fix. Confirm both are
-  in the running image.
 
-## Phased Pipeline (use this for all bootstraps ≥10 companies)
+## Snowflake-side facts from the old pipeline (still live)
 
-`load_history` is the canonical way to load companies at scale. Its live
-`edgartools-prod-load-history` definition (re-verified via
-`describe-state-machine`, not copied from an older architecture doc) runs:
+The old AWS pipeline (`load_history`, `daily_incremental`, `targeted_resync`,
+`gold_refresh`, `one_click_data_refresh` and their ECS commands) is deleted
+from this repository: its Step Function builders and commands are gone, so
+anything of it still deployed in AWS is a leftover, never something to run.
+What it left in Snowflake is live:
 
-```
-Stage 0 — Company identity seeding (single steps, no windowing)
-  SeedUniverse → MdmSeedUniverse
-  • Seeds the CIK universe and MDM's own tracking state. Company entity
-    *resolution* (IS_INSIDER, MANAGES_FUND, etc.) happens later, in Stage 2
-    (Mastering, renamed from MdmRun by mdm-stage-renaming ticket 01) -- there
-    is no separate identity-resolution state here; an
-    earlier load_history shape had one (stage0-stage1-consolidation map),
-    removed when Stage0CompanyIdentity/ReduceIdentityRefresh were deleted.
-
-Stage 1 — Bronze + Silver bootstrap (windowed, MaxConcurrency=1)
-  IngestBronzeAndSilver/WindowedBootstrap
-  • Each window: bootstrap-next --silver-only over a CIK slice → S3 bronze, parse → Snowflake silver landing zone
-  • MaxConcurrency=1 by design (concurrent writers promoting the same shared
-    silver object raced and lost writes) -- windows run one at
-    a time, not in parallel, regardless of BOOTSTRAP_BATCH_CONCURRENCY (see
-    "Key invariants" below -- that env var does not control this Map)
-  • Within each window, artifact fetching (ownership/ADV/13F documents) uses
-    bounded intra-task concurrency (ThreadPoolExecutor, WAREHOUSE_ARTIFACT_FETCH_CONCURRENCY,
-    default 5) -- this is real parallelism, just not CIK-batch-level parallelism
-
-Stage 1B — Fundamentals (windowed, MaxConcurrency=1 each, run after Stage 1)
-  FetchEntityFacts → FetchPerFilingFundamentals → FetchThirteenFHoldings
-  • XBRL company facts, 8-K/DEF 14A per-filing data, and 13F holdings respectively
-
-Stage 1C — ADV bulk + Firm Roster (lenient, run after Stage 1B, not in earlier
-versions of this doc -- confirmed live via describe-state-machine 2026-09-10)
-  FetchAdvBulk → IngestAdvBulkSources → FetchFirmRoster → IngestFirmRosterSources
-  • fetch-adv-bulk + ingest-relationship-sources (adv-fetch-pipeline-wiring spec),
-    then fetch-firm-roster + ingest-relationship-sources (adv-firm-roster-crosscheck
-    spec, ticket 02) -- so MDM sees fresh ADV silver and the Firm Roster completeness
-    cross-check stays current in this same execution
-  • All 4 states have a Catch, same leniency as Stage 1B (AD-13) -- a failure here
-    doesn't abort the run, it just proceeds without fresh ADV/roster data
-
-Stage 2 — MDM entity resolution (nested Step Functions execution, not inline states)
-  RunMdmChain invokes the separate `edgartools-prod-mdm` state machine
-  (startExecution.sync:2), which runs: Mastering → BackpropagateIdsToSilver →
-  "Infer Relationships" → Publish → "Publish Relationships" → Reconcile
-  (Reconcile has a non-fatal Catch, ReconcileFailedNonFatal -- a reconcile
-  failure doesn't abort the outer `load_history` run)
-  • Runs after Stage 1/1B/1C complete so entity resolution sees the full silver dataset
-  • Derives IS_INSIDER, MANAGES_FUND etc. and syncs to the graph (Snowflake, not external Neo4j)
-  • BackpropagateIdsToSilver (between Mastering and Infer Relationships) writes
-    resolved mdm_entity_ids back to silver so relationship derivation can join
-    against them -- not previously documented in this section
-
-Stage 3 — Gold refresh (single ECS task, live state name `FactPublishtoGold`)
-  gold-refresh
-  • Writes Snowflake export manifests for source-layer serving exports (not the gold layer)
-  • EDGARTOOLS_GOLD is 23 Snowflake dynamic tables (see Data Layer Definitions
-    above for the current authoritative list -- this line previously said 21,
-    stale against that same table). Live prod 2026-08-29: every
-    table had TARGET_LAG=DOWNSTREAM but DYNAMIC_TABLE_REFRESH_HISTORY showed
-    REFRESH_TRIGGER=MANUAL only (REFRESH_AFTER_LOAD after a run manifest).
-    DOWNSTREAM does not refresh gold leaves. gold_model_config() now uses
-    target_lag='6 hours' (same as silver). SNOWFLAKE_RUN_MANIFEST_TASK still
-    runs LOAD_EXPORTS_FOR_RUN then REFRESH_AFTER_LOAD as an extra explicit
-    trigger. The Ticket 39 completion barrier fail-closes on a stale
-    data_timestamp regardless of either clock.
-```
-
-(Elsewhere in this repo, `daily_incremental`'s own Company Identity
-capture stage -- a different, sibling state named `CaptureCompanyIdentityBatches`
-(renamed from `ResolveCompanyIdentityBounded` for a business-readable name)
-in `write_warehouse_mdm_gold_definition` -- is unrelated to `load_history`'s
-Stage 0 above; it runs *before* bronze/silver capture in that pipeline,
-not as a seeding step. `bootstrap` shared this same state until
-state-machine-consolidation ticket 06 retired the workflow entirely.)
-
-**`edgartools-prod-bootstrap-batched` (formerly a separate, standalone state
-machine running CIK batches with real parallelism via a `BatchBootstrap`
-Map, `MaxConcurrency=3`) was deleted (state-machine-consolidation wayfinder
-map, ticket 03)** — it was never part of `load_history`'s call graph, had
-**zero executions ever** in prod, and was architecturally superseded by
-`load_history`'s sequential-windowed design, which was built specifically
-to fix a `silver.duckdb` consistency race inherent to
-`bootstrap_batched`'s concurrent-writer/`cik_batches.jsonl` architecture.
-
-`edgartools-prod-silver-mdm-gold` (the standalone re-process-already-loaded-
-bronze machine, `BatchSilver` Map at `MaxConcurrency=3` via
-`BOOTSTRAP_BATCH_CONCURRENCY`) was retired outright (state-machine-
-consolidation wayfinder map, ticket 09, 2026-09-05: zero executions ever) —
-both code and the live AWS object are gone; see the "Key invariants" section
-below for the full retirement note. The genuinely-parallel batch pipelines
-remaining in prod are `one_click_data_refresh`'s own two `bootstrap-batch`
-Maps (hardcoded `MaxConcurrency` of 20 and 2, not env-controlled) — see that
-machine's own entry further below. Both reprocess already-loaded bronze (no
-new SEC submissions fetched) and are unrelated to `load_history`'s own
-bootstrap Stage.
-
-`edgartools-prod-full-reconcile` (SEC-drift detection against live SEC
-submissions truth) was likewise decommissioned end-to-end on 2026-09-04 on the
-same evidence -- zero executions ever, no EventBridge schedule. The state
-machine, the `edgar-warehouse full-reconcile` CLI command,
-`application/commands/full_reconcile.py`,
-`application/workflows/silver_reconcile_pipeline.py`, `edgar_warehouse/reconcile.py`
-and the Postgres `SecReconcileFinding` model are all gone; `BOOKKEEPING_TABLES`
-is now 10 tables, not 11. The shared `stage_*_loader` functions in
-`edgar_warehouse/loaders.py` were NOT part of it and are untouched.
-
-**Graph storage (read this before assuming "Neo4j" means an external service):**
-As of the `neo4j-snowflake` workstream (v1.3, completed 2026-06-12), graph data lives
-*inside* Snowflake — the Neo4j Graph Analytics Native App, installed in the same Snowflake
-account as gold. There is no separate Neo4j database, no `NEO4J_URI`/`NEO4J_PASSWORD`
-secret, and no external Bolt connection. `mdm publish-relationships` materializes
-`MDM_GRAPH_NODES`/`MDM_GRAPH_EDGES` (plus per-label/per-type compatibility views) into a
-Snowflake schema (e.g. `EDGARTOOLS_DEV.NEO4J_GRAPH_MIGRATION`); `mdm reconcile` runs a
-strict SQL parity check plus Native App checks (compute pool, `GRAPH_INFO`, `BFS`, `WCC`)
-against that same Snowflake target. One credential (the same `MDM_SNOWFLAKE_*`/
-`DBT_SNOWFLAKE_*`/Snowflake CLI connection used everywhere else), one platform. Native App
-grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
-
-**Publishing is generation-scoped, not a direct overwrite** (`edgar_warehouse/mdm/
-snowflake_graph.py`): `mdm publish-relationships` always materializes into a
-**new** `GRAPH_GENERATION` row, `STATUS` defaulting to `'building'`
-(`GENERATION_STATUSES = ("building", "verified", "activated", "retired",
-"failed")`) — pass `--generation-id` to target a specific one, otherwise a
-fresh UUID is minted; publishing alone never makes it live. `mdm reconcile
---generation-id <id>` verifies that specific generation and, on pass,
-promotes it `'building' → 'verified'` (the only status `graph-activate`
-accepts); on fail, demotes it to `'failed'`. `mdm graph-activate
---generation-id <id>` is the final step: atomically flips
-`GRAPH_ACTIVE_POINTER` to the target generation, retires whichever
-generation was previously `'activated'`, and promotes the target to
-`'activated'` — all inside one `BEGIN`/`COMMIT` so a crash mid-flip can't
-leave the pointer referencing a generation whose own status wasn't updated
-to match. `mdm reconcile` with no `--generation-id` instead verifies
-whatever generation the pointer currently targets.
-
-**The write/sync path splits across two modules, not one** (investigated
-2026-08-19, not previously written down here): `edgar_warehouse/mdm/graph.py`
-prepares the Postgres-side mirror (writes `mdm_relationship_instance` rows —
-its own docstring is explicit that "the Neo4j bolt driver and AuraDB are no
-longer used"), then hands off to `edgar_warehouse/mdm/snowflake_graph.py`'s
-`SnowflakeGraphSyncExecutor` (sync) and `SnowflakeGraphVerifier` (verify),
-which generate and run the actual Snowflake SQL. Single path, not a
-duplicate — `graph.py` never talks to Snowflake directly, `snowflake_graph.py`
-never talks to Postgres directly.
-
-**There are two separate read paths, not one, and they read different
-stores on purpose:** `edgar_warehouse/mdm/api/routers/graph.py` (neighborhood/
-traversal endpoints) reads live from the **Postgres mirror**
-(`mdm_relationship_instance`) for speed — its own docstring: "Graph analytics
-run via the Snowflake-hosted Neo4j Graph Analytics native app" (BFS/WCC etc.),
-but simple lookups don't pay a Snowflake round trip. `edgar_warehouse/mdm/
-graph_readonly.py` reads **Snowflake** graph metrics (parity/comparison,
-Native App health) for the local MDM dashboard. Don't assume one is stale
-duplication of the other — they're deliberately different stores for
-different latency needs.
-
-**A third, orthogonal piece governs *when* sync-graph work happens:**
-`edgar_warehouse/mdm/publication.py` is a transactional MDM→graph publication
-queue (07-03, RSYNC-01/03) — relationship-changing workflows call
-`request_publication` atomically with their own MDM commit; a lease-based
-coordinator claims and advances requests through `mdm_committed →
-graph_pending → graph_building → graph_verified → graph_active`, with a
-5-minute-warning/15-minute-hard-alert staleness SLO. This is queue mechanics
-only — no Snowflake/Neo4j orchestration logic lives in this module, per its
-own docstring.
-
-**The generation-scoped operator review contract** (GH-251):
-`edgar_warehouse/mdm/graph_review_publish.py` persists `mdm reconcile`'s
-payload into a bounded, read-only `MDM_GRAPH_REVIEW` schema that a managed
-dashboard (retired with its example, 2026-09-30) could query through a plain
-Snowpark session — no MDM Postgres DSN, no direct Neo4j credential needed by
-that dashboard.
-
-**Dead file, removed (2026-08-19):** `edgar_warehouse/serving/targets/
-neo4j.py` was a 1-line, unimported placeholder ("Neo4j serving target
-placeholder for future Gold publishing support") left over from a "publish
-gold data out to an external Neo4j" concept that was superseded by the
-current architecture (graph lives inside Snowflake; there is no external
-Neo4j to publish to). Confirmed unreferenced anywhere in the codebase before
-deletion. Noted here in case a future `git blame` on this line goes looking
-for it.
-
-Full migration history:
-`.planning/workstreams/neo4j-snowflake/`.
-
-**MDM database (read this before assuming a separate AWS RDS instance):**
-MDM's operational Postgres database was cut over from AWS RDS (private VPC) to Snowflake's
-native Postgres service — provisioned and managed inside the same Snowflake account as
-gold and the graph (`infra/scripts/bootstrap-prod-mdm.sh` provisions a "Snowflake Postgres
-instance," e.g. `EDGARTOOLS_PROD_MDM`; connects via `snowflake_admin`). No AWS RDS module,
-no VPC subnet group, no RDS security group remain for MDM — confirmed via repo-wide search,
-zero `rds_mdm`/`mdm_database` Terraform files exist anymore (only `mdm_secret_moves.tf` in
-the AWS accounts, handling the Secrets Manager migration). One platform (Snowflake) hosts
-gold, the graph, and now MDM's operational store — eliminating the separate AWS RDS
-network/credential surface. Note: this is still a distinct Postgres-wire-protocol DSN
-(`MDM_DATABASE_URL`, port 5432) from the Snowflake SQL connection used for dbt/gold/graph
-(`DBT_SNOWFLAKE_*`/`MDM_SNOWFLAKE_*`, HTTPS) — "one platform" means one Snowflake account
-and governance boundary, not literally one shared connection string for both protocols.
-
-**When to use what:**
-
-| Scenario | Command / State Machine |
-|----------|------------------------|
-| Load 10+ companies (recommended) | `load_history` Step Function |
-| Single company debug/resync | `targeted_resync` Step Function |
-| Rebuild gold from existing silver | `gold_refresh` Step Function |
-| Daily incremental (ongoing) | `daily_incremental` Step Function |
-
-(`bootstrap` -- recent-N-filings-per-active-company, formerly listed here as
-"Recent filings only (fast)" -- was retired by state-machine-consolidation
-ticket 06: zero EventBridge schedule, exactly one execution ever, and it
-shared `daily_incremental`'s exact Step Functions shape via the same
-`write_warehouse_mdm_gold_definition` builder, differing only in company
-selection logic -- recency-capped per company vs. `daily_incremental`'s
-SEC-daily-index-driven discovery. `daily_incremental` is the sole remaining
-Warehouse Pipeline Machine and structurally supersedes it for ongoing use;
-`bootstrap-full`/`bootstrap-next` remain for full-history loads.)
-
-**Running `load_history` via Step Functions:**
-
-```bash
-aws stepfunctions start-execution \
-  --region us-east-1 \
-  --state-machine-arn arn:aws:states:us-east-1:690839588395:stateMachine:edgartools-prod-load-history \
-  --name "load-history-$(date +%s)" \
-  --input '{}'
-# NOTE: the dev ARN this example previously used (edgartools-dev-load-history)
-# no longer exists -- AWS-side dev was decommissioned (see the account map at
-# the top of this file); confirmed live 2026-09-10 via list-state-machines,
-# zero edgartools-dev-* state machines remain. prod is the only live target.
-# Monitor: aws stepfunctions describe-execution --execution-arn <arn> --query status
-# No verified timing figure for the current windowed/sequential shape as of this writing --
-# do not rely on a "~15 min for 100 companies" style estimate carried over from an older,
-# genuinely-parallel bootstrap-batch ×N architecture (see the Stage 1 diagram above).
-```
-
-**Do NOT run `bootstrap-next` locally for large batches.** This is no longer primarily a
-throughput argument -- `load_history`'s own Stage 1 also processes CIK windows one at a
-time (MaxConcurrency=1), so raw per-CIK throughput between the two isn't dramatically
-different. Use `load_history` anyway because it provides what a bare local
-`bootstrap-next` call doesn't: per-window resumability and retry (`MaxAttempts: 3` with
-backoff on `WindowedBootstrap`), correct Stage 0/1/1B/1C/2/3 sequencing (identity before
-ownership/ADV, MDM after silver is complete, gold last), and the cross-command
-`sec_fetch_active` lease that prevents it from racing a concurrently-running
-`daily_incremental`/`bootstrap`/etc. Reserve `bootstrap-next` for single-company ad-hoc
-loads with explicit `--cik-list`. (Historical note: this guidance originally also cited
-"cannot reach MDM Postgres, private VPC" — that no longer applies. MDM Postgres moved off
-AWS RDS onto Snowflake's native Postgres service; see "MDM database" note below. Local
-reachability to the current Snowflake-hosted instance has not been re-verified.)
-
-**Key invariants (do not break):**
-
-`silver_mdm_gold` (the standalone re-process-already-loaded-bronze machine
-this section used to document, `BatchSilver` Map at `MaxConcurrency=3` via
-`BOOTSTRAP_BATCH_CONCURRENCY`) was retired outright (state-machine-
-consolidation wayfinder map, ticket 09, 2026-09-05: zero executions ever) —
-deleted, not modified. `BOOTSTRAP_BATCH_CONCURRENCY` had exactly one real
-consumer (that machine's `BatchSilver` Map); the other two `bootstrap-batch`
-callers inside `write_one_click_data_refresh_definition` received the env
-var but never read it (their `MaxConcurrency` was always hardcoded — 20 for
-the "first-load recovery" Map, 2 for the Ticket 20 strict candidate-manifest
-Map, since deleted with release mode by silver-merge-engine-migration Ticket 11).
-With its one real consumer gone, the env var/CLI flag were removed
-entirely from `deploy-aws-application.sh`, not left as dead plumbing.
-
-Neither `one_click_data_refresh`'s `bootstrap-batch` Map(s) nor
-`load_history` (which runs `bootstrap-next`, a different command, per
-window at `MaxConcurrency=1`) were ever controlled by this env var — their
-`MaxConcurrency` values are unaffected by its removal. The old standalone
-`edgartools-prod-bootstrap-batched` machine (also ran `bootstrap-batch`) was
-separately deleted earlier (zero executions ever; superseded by
-`load_history`'s sequential-windowed design — see the "Phased Pipeline"
-note above and state-machine-consolidation wayfinder map ticket 03).
-
-- `bootstrap-batch` must NOT be in `SOURCE_EXPORT_COMMANDS` (renamed from `GOLD_AFFECTING_COMMANDS`, single-path-per-layer map — the commands it gates build a source-layer export, not gold) — enforced in `warehouse_orchestrator.py:85`
-- `gold-refresh` must be in `SOURCE_EXPORT_COMMANDS` — it is the sole gold builder in the phased pipeline
-- `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD` — verify with
-  `snow sql --connection edgartools-dev -q "SHOW TASKS LIKE 'SNOWFLAKE_RUN_MANIFEST_TASK'"`
-- `one_click_data_refresh`'s `bootstrap-batch` Map must keep passing `--artifact-policy skip`
-  where documented above — without it the pipeline makes thousands of SEC API calls (fetching
-  ownership XMLs) even though the purpose of that path is to reprocess already-loaded bronze
-  with zero SEC calls. 5-why root cause: the artifact pipeline is a separate SEC fetch pass;
-  "no SEC calls" must be encoded as a flag, not assumed from the pipeline name.
-- **Do not manually kick off `one_click_data_refresh`'s default path
-  (`{"batch_size": 100}`) while `daily_incremental` is
-  running.** Confirmed live 2026-09-06: a manual run
-  (`one-click-data-refresh-verify-1788697757`, 08:29-10:41 ET) overlapped
-  almost exactly with that day's scheduled `daily_incremental` run
-  (`edgartools-prod-daily-incremental-refresh`, `cron(0 12 ? * MON-SAT *)` =
-  8am ET, ran 08:00-10:44 ET) and failed with
-  `States.ExceedToleratedFailureThreshold` — both failed Map items crashed
-  with `s3fs.utils.FileExpired` on the canonical `silver.duckdb` object,
-  meaning some writer replaced it mid-download of another reader's hydrate
-  step. This mitigation is **partial, not a full fix**: a 7-day CloudWatch
-  log sweep found the same `FileExpired` signature recurring across ~38
-  distinct ECS tasks within that one run alone, a rate at least as
-  consistent with `one_click_data_refresh`'s own 20 concurrent
-  `bootstrap-batch` workers racing each other's hydrate/publish cycles as
-  with `daily_incremental`'s overlap — the two weren't distinguished by this
-  investigation. Avoiding the overlap removes one contributing writer but
-  may not eliminate the race. See
-  `.scratch/state-machine-consolidation/issues/11-decide-bronze-seed-silver-gold-default-path-fate.md` (deleted 2026-10-13, ticket 25; in git history)
-  and `.scratch/state-machine-consolidation/issues/14-fix-monolith-silver-hydrate-fileexpired-race.md`
-  for the full evidence and open follow-up.
-
-Key import pattern (do not change without checking the edgartools changelog):
-
-```python
-# edgar_warehouse/parsers/ownership.py
-from edgar.display.formatting import reverse_name
-from edgar.entity.constants import _classify_is_individual
-```
-
-The ownership parser no longer calls `Ownership.from_xml` (Person Consumer
-Contract ticket 19, 2026-09-21): that path ran `Entity(int(cik)).data` for
-every reporting owner at parse time -- one live SEC submissions request per
-owner, outside every artifact-fetch policy -- only to decide whether to
-reverse the owner's name. The parser now reads the `ownershipDocument` XML
-directly and classifies from the owner's bronze `submissions.json` through
-a caller-supplied `submissions_lookup`; the two imports above are what keep
-`owner_name` byte-identical to the edgartools output (verified over 5,356
-bronze artifacts, `.scratch/person-consumer-contract/research/19-equivalence.json`).
-
-Other edgartools surfaces used:
-- `edgar.filing` — filing metadata and document fetching in `runtime.py`
-- `edgar.entity` — company/entity resolution
-- `edgar.xbrl` — financial statement parsing in batch scripts
-
-When the `edgartools` version is bumped, run the batch scripts in `scripts/batch/` to smoke-test parsing.
+- **Gold refresh.** `EDGARTOOLS_GOLD`'s dynamic tables use `target_lag = '6 hours'`
+  (`gold_model_config()`); `TARGET_LAG = DOWNSTREAM` never refreshes a gold
+  leaf. `SNOWFLAKE_RUN_MANIFEST_TASK` must be STARTED in `EDGARTOOLS_GOLD`: it
+  runs `LOAD_EXPORTS_FOR_RUN`, then `REFRESH_AFTER_LOAD`, as an explicit trigger.
+- **Graph storage is inside Snowflake**, not an external Neo4j: the Neo4j
+  Graph Analytics Native App in the same account, tables in
+  `NEO4J_GRAPH_MIGRATION`, the live generation named by
+  `GRAPH_ACTIVE_POINTER`. There is no `NEO4J_URI` and no Bolt connection.
+  Grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
+- **MDM's hosted store is Snowflake Postgres**, not AWS RDS
+  (`infra/scripts/bootstrap-prod-mdm.sh` provisions the instance; it connects
+  as `snowflake_admin`). It is a PostgreSQL-protocol address
+  (`MDM_DATABASE_URL`, port 5432), separate from the Snowflake SQL connection
+  used for dbt and gold: one account and governance boundary, two protocols.
 
 ## Development Commands
 
@@ -948,21 +577,17 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 > the daemon is misconfigured.
 
 ```bash
-# Required env vars before any warehouse command
-export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"   # SEC User-Agent; must contain email
-export WAREHOUSE_RUNTIME_MODE="bronze_capture"
-export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
-export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse/warehouse"
-export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
-export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"  # local Colima postgres
+# SEC User-Agent for a provider capture (provider_capture); must contain an email
+export EDGAR_IDENTITY="EdgarTools Platform <email>"
 export AWS_DEFAULT_REGION=us-east-1  # infra is us-east-1, not the default us-east-2
+# (deploy-snowflake-stack.sh still reads WAREHOUSE_*_ROOT and SERVING_EXPORT_ROOT for its stage)
 
 # Install project deps (uses uv.lock)
 uv sync --extra s3 --extra snowflake
 
-# Warehouse CLI
+# CLI: start with doctor (the data-platform skill, Setup)
 edgar-warehouse --help
-edgar-warehouse bootstrap --tracking-status-filter active
+edgar-warehouse doctor
 
 # dbt (from dbt project root)
 cd infra/snowflake/dbt/edgartools_gold
@@ -1269,12 +894,13 @@ docker push $ECR:warehouse-dev
 
 ## Key Large Files (Read in Chunks)
 
-These files exceed 30 KB. When modifying them, read section by section rather than all at once:
+Read these section by section rather than whole:
 
-| File | Size | Contents |
-|------|------|----------|
-| `edgar_warehouse/application/warehouse_orchestrator.py` | ~290 KB | Core ETL loop, form dispatch, S3 writes, landing-export flush. `edgar_warehouse/runtime.py` is a pure re-export shim; `edgar_warehouse/application/command_router.py` is a real (if thin) routing facade that ultimately delegates here (see Quick Navigation above for the exact chain) — this table previously pointed at both as pure shims with stale sizes copied from an earlier version of this file. |
-| `edgar_warehouse/serving/source_dimensional_export.py` | ~63 KB | Builds a source-layer dimensional export consumed by dbt — not the gold layer itself (see Quick Navigation above and `.scratch/single-path-per-layer/issues/01-enumerate-layer-transitions.md`; renamed off "gold_models.py" for exactly this reason). |
+| File | Contents |
+|------|----------|
+| `edgar_warehouse/mdm/clean/merge.py` | The Merge Stage: a batch's closure, binding, survivorship and the save |
+| `skills/data-platform/READING.md` | The source-extract language, every expression and limit |
+| `skills/data-onboarding/SKILL.md` | Onboarding a feed or a domain, step by step |
 
 ## Setup
 

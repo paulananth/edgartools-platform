@@ -2,7 +2,7 @@
 
 Priority: 85, tier 2. Map: [Rebuild priorities](../map.md).
 
-Type: task (documentation). Status: open. Blocked by: 78 (Skills hold every learning: its sweep routed the hard-won rules first).
+Type: task (documentation). Status: in review (branch `claude/claude-md-deleted-code`). Blocked by: 78 (Skills hold every learning: its sweep routed the hard-won rules first).
 
 ## Why
 
@@ -26,8 +26,8 @@ Sections to check whole: Quick Navigation, Architecture, Phased Pipeline (and it
 
 ## Checklist
 
-- [ ] List every path, command and state machine `CLAUDE.md` names, and check each against main (a script, so it can run again)
-- [ ] Remove or reword each stale line, by the rule above
-- [ ] The same check on `AGENTS.md`
+- [x] List every path, command and state machine `CLAUDE.md` names, and check each against main (a script, so it can run again): `scripts/dev/stale_paths.py` (paths; git-ignored ones aside), held by `tests/unit/test_guides_name_existing_paths.py`; 37 missing paths in `CLAUDE.md`, 14 in `AGENTS.md`. Commands and state machines checked by search: `edgar-warehouse bootstrap` and the Step Function builders (`write_warehouse_mdm_gold_definition`, `load_history` and the rest) are gone; `mdm migrate`, `doctor`, `SNOWFLAKE_RUN_MANIFEST_TASK`, `LOAD_EXPORTS_FOR_RUN`, `REFRESH_AFTER_LOAD`, `GRAPH_ACTIVE_POINTER`, `gold_model_config`, `bootstrap-prod-mdm.sh` and the four Dockerfiles exist 2026-10-16 08:29 ET
+- [x] Remove or reword each stale line, by the rule above: Quick Navigation and Architecture rewritten as pointers to the rebuild; the data layers reworded; the Phased Pipeline section (330 lines on deleted Step Functions, commands and the parser import pattern) replaced by its three Snowflake facts that are still live (gold refresh, graph inside Snowflake, MDM on Snowflake Postgres); four Known open items about deleted code dropped, and the orphaned-bootstrap-SQL item dropped as resolved (`install.sh` now runs 16 and 17); the Development Commands' deleted `bootstrap` example replaced by `doctor`; Key Large Files now lists files that exist. CLAUDE.md 1,385 to 1,011 lines 2026-10-16 08:29 ET
+- [x] The same check on `AGENTS.md`: High-Value Files rows for the deleted runtime, settings, silver, gold and parsers replaced by the rebuild's; large-file list and the parser notes reworded 2026-10-16 08:29 ET
 - [ ] PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] Learning → skill: none; the rule (a guide names only what exists) is now a test, `tests/unit/test_guides_name_existing_paths.py` 2026-10-16 08:29 ET

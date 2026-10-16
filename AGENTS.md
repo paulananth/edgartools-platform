@@ -204,16 +204,14 @@ Learned the hard way; each is a standing operator rule.
 | Need | Location |
 | --- | --- |
 | CLI entry point | `edgar_warehouse/cli.py` |
-| Runtime command shim | `edgar_warehouse/runtime.py` |
-| Command registry and workflows | `edgar_warehouse/application/` |
-| Runtime settings | `edgar_warehouse/infrastructure/warehouse_settings.py` |
-| Object storage adapter | `edgar_warehouse/infrastructure/object_storage.py` |
-| Bronze path catalog | `edgar_warehouse/infrastructure/dataset_path_catalog.py` |
-| Packaged path templates | `edgar_warehouse/config/warehouse_paths.properties` |
-| Silver transforms | `edgar_warehouse/silver.py` |
-| Gold export/aggregation | `edgar_warehouse/gold.py` |
-| Ownership parser | `edgar_warehouse/parsers/ownership.py` |
-| ADV parser | `edgar_warehouse/parsers/adv.py` |
+| Source engine (reading and combining files; Rust behind a Python facade) | `crates/source-contract/`, `edgar_warehouse/rules/source_engine.py` |
+| Rules: source extracts, Dataset Contracts, quality, merge rules, identifier types | `rules/`, read by `edgar_warehouse/rules/files.py` |
+| Workers and Bookkeeping | `edgar_warehouse/workers/`, `edgar_warehouse/bookkeeping/` |
+| MDM store and the Merge Stage | `edgar_warehouse/mdm/clean/`, migrations in `edgar_warehouse/mdm/migrations/` |
+| RDM | `edgar_warehouse/rdm/` |
+| Silver writer | `edgar_warehouse/silver_writer/` |
+| Agent context command | `edgar_warehouse/context.py` |
+| Journal evidence and recovery | `edgar_warehouse/application/` |
 | AWS account Terraform | `infra/terraform/accounts/{dev,prod}/` |
 | AWS access Terraform | `infra/terraform/access/aws/accounts/{dev,prod}/` |
 | AWS Terraform modules | `infra/terraform/modules/` |
@@ -224,7 +222,7 @@ Learned the hard way; each is a standing operator rule.
 | AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh` |
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 
-Large files should be read in chunks before editing: `edgar_warehouse/runtime.py`, `edgar_warehouse/silver.py`, and `edgar_warehouse/gold.py`.
+Large files should be read in chunks before editing: `edgar_warehouse/mdm/clean/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.
 
 ## Tooling Rules
 
@@ -279,9 +277,8 @@ Notes:
 
 ## Data And Parser Notes
 
-- Raw SEC download and bronze persistence are implemented by this repo, not by `edgartools`.
-- Forms 3, 4, and 5 are parsed locally in `edgar_warehouse/parsers/ownership.py` (direct `ownershipDocument` XML; zero SEC requests -- reporting owners are classified from bronze `submissions.json`). `edgartools` enters only for `reverse_name` and `_classify_is_individual`, which keep `owner_name` identical to its former `Ownership.from_xml` output.
-- ADV parsing is local in `edgar_warehouse/parsers/adv.py`.
+- Raw provider download (capture) and bronze persistence are implemented by this repo, not by `edgartools`: a capture is a Bookkeeping worker (`edgar_warehouse/workers/provider_capture.py`).
+- Every feed is read by the source engine from its rules (`rules/sources/<source>/`), with zero provider requests at read time; the old per-form parsers are deleted. The data skills (`skills/data-platform/`, `skills/data-onboarding/`) hold the how-to.
 - SEC filing artifacts are additive and immutable after capture.
 - Loaders should skip already loaded SEC files by default. Use explicit `--force` only for operator repair.
 - When bumping `edgartools`, run the relevant scripts in `scripts/batch/` to smoke-test parser surfaces.
