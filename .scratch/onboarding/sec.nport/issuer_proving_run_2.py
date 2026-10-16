@@ -46,7 +46,7 @@ from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
-from edgar_warehouse.mdm.clean.evidence import deferred_record
+from edgar_warehouse.mdm.clean.evidence import subject_key, deferred_record
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, canonical, register_policy
 from edgar_warehouse.rules import files
@@ -217,8 +217,12 @@ def test_proving_run(database):
         policy = register_policy(conn, copy.deepcopy(body))
     stage = MergeStage(Store(database.application))
     nport = Path(os.environ["PREPARED_NPORT"]).expanduser()
+    # COMPANIES_ONLY (operator, 2026-10-16: no more full runs than needed):
+    # only the SEC and GLEIF records go in; the links that would resolve are
+    # counted from the prepared Securities against the bound GLEIF records.
+    companies_only = os.environ.get("COMPANIES_ONLY") == "1"
     feeds = ((SEC, lambda: sec_rows(cm27)), (GLEIF, lambda: prepared_rows(gleif_folder)),
-             (NPORT, lambda: prepared_rows(nport)))
+             *(() if companies_only else ((NPORT, lambda: prepared_rows(nport)),)))
     timings, read_counts, flagged = [], Counter(), Counter()
     sec_leis: dict[str, set[str]] = defaultdict(set)
 
@@ -271,14 +275,30 @@ def test_proving_run(database):
     second = snapshot()
 
     issued = first[0]["relationships"]
+    would_resolve = Counter()
+    if companies_only:
+        with database.application.connect() as conn:
+            bound = {subject_key(GLEIF, key) for (key,) in conn.execute(text(
+                "SELECT record_key FROM mdm.stage_record WHERE source_code = :g AND entity_id IS NOT NULL"),
+                {"g": GLEIF}).all()}
+        for row, pub in prepared_rows(nport):
+            kind, record = read(row, NPORT, contracts[NPORT], body, pub)
+            if kind != "assertions":
+                continue
+            links = [l for l in record.get("relationships") or [] if l.get("type") == "ISSUED_BY"]
+            for link in links:
+                would_resolve["resolves" if link["target_subject"] in bound else "waits"] += 1
+            if links and not link.get("valid_from") and not pub.get("effective_at"):
+                would_resolve["no start"] += 1
     report = {
-        "run": "ISSUED_BY by issuer LEI, Proving Run 2 (issuer rule, real Level 1 reading and record_extras)",
+        "run": os.environ.get("RUN_NAME", "ISSUED_BY by issuer LEI, Proving Run 2 (issuer rule, real Level 1 reading and record_extras)"),
         "policy_digest": policy,
         "gleif_records_read": gleif_records, "issuer_leis_listed": issuers,
         "read": dict(read_counts), "gleif_flag_on_assertions": dict(flagged),
         "after_first_pass": first[0], "after_second_pass": second[0],
         "companies_by_feeds": first[2], "issuers_and_sec_filers": first[3],
         "issued_by_resolved": {k: v for k, v in issued.items() if k.startswith("ISSUED_BY")},
+        "issued_by_would_resolve": dict(would_resolve),
         "second_pass_changed_nothing": first == second,
         "lei_on_two_entities": sum(1 for c in first[1].values() if c > 1),
         "seconds": {"gleif_prepare": prepare_seconds, "first_pass": first_seconds, "second_pass": second_seconds},

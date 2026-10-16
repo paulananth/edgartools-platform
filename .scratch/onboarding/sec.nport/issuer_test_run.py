@@ -5,7 +5,7 @@ issuer-reduce.yaml -> combine.yaml (with part 1's kept reduction and OpenFIGI
 attachment) -> mdm.prepare -> the Dataset Contract. A direct count from the
 same file checks which CUSIPs get a link.
 Usage: issuer_test_run.py ZIP TNPORT FIGI_ATTACH OUT"""
-import csv, hashlib, io, json, re, resource, sys, time, zipfile
+import csv, hashlib, io, json, os, re, resource, sys, time, zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -55,7 +55,8 @@ stage("combine")
 root = OUT / "mdm-security"
 work = {"input": combined, "output": (root / "manifest.json").as_uri(), "checks": ["mdm.prepared"],
         "keys": {"table": "security", "dataset": CODE, "policy": "0" * 64, "consumer": "trial",
-                 "batch_id": "nport-security-issuer-trial", "as_of": "2026-10-16T00:00:00+00:00"}}
+                 "batch_id": "nport-security-issuer-trial", "as_of": "2026-10-16T00:00:00+00:00",
+                 **({"effective_column": "period"} if os.environ.get("PERIOD") else {})}}
 prepared = mdm_prepare.execute(work, store)
 assert mdm_prepare.verify({**work, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
 contract = files.source(NAME)["mdm"][CODE]["contract"]
