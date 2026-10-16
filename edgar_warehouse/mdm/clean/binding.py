@@ -30,7 +30,8 @@ from sqlalchemy import text
 from . import correction
 from .activation import activated, binding_namespaces, declared_namespaces
 from .evidence import decision, instant
-from .primitives import call, normalizer, primitive_family
+from .classification import holds
+from .primitives import normalizer, primitive_family
 from .store import rows
 
 
@@ -209,13 +210,10 @@ def _issuers(policy: dict, namespace: str) -> list[str]:
 
 
 def _record_tests_hold(rule: dict, record: dict) -> bool:
-    """A binding rule's record tests (ticket 97), read on the record alone."""
-    for test in rule["when"]:
-        if primitive_family(test["primitive"]) == "classification":
-            held = bool(call(test["primitive"], test.get("args") or {}, record, {}))
-            if held == bool(test.get("negate")):
-                return False
-    return True
+    """A binding rule's record tests (ticket 97), read on the record alone: no
+    pinned document is in hand here, so a test that reads one sees none."""
+    return all(holds(test, record, {}) for test in rule["when"]
+               if primitive_family(test["primitive"]) == "classification")
 
 
 def _normal(policy: dict, namespace: str, value: str) -> str:

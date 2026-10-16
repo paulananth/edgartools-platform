@@ -100,8 +100,8 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
     record_column = _optional_text(keys, "record_column")
     effective_column = _optional_text(keys, "effective_column")
     distinct_on = _columns(keys, "distinct_on")
-    extras = _columns(keys, "record_extras")
-    if extras is not None and record_column is None:
+    extras = _columns(keys, "record_extras") or []
+    if extras and record_column is None:
         raise ValueError("mdm.prepare record_extras needs record_column")
     rows = artifact["tables"].get(keys["table"])
     if rows is None:
@@ -118,7 +118,7 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
     if distinct_on is not None:
         rows = _first_of_each(rows, distinct_on)
     if record_column is not None:
-        rows = [_with_extras(row, record_column, extras or []) for row in rows]
+        rows = [_with_extras(row, record_column, extras) for row in rows]
     source = artifact["input"]["sha256"]
     if "context" in artifact:
         reference(artifact["context"])

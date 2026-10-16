@@ -129,7 +129,7 @@ def fired(rule: dict, record: dict, doc: dict) -> tuple[str, str]:
     check_rule(rule)
     for step in rule["steps"]:
         if step.get("otherwise") or all(
-            _holds(test, record, doc) for test in step["when"]
+            holds(test, record, doc) for test in step["when"]
         ):
             return step["verdict"], str(step["step"])
     raise AssertionError("check_rule guarantees a catch-all step")
@@ -151,6 +151,7 @@ def classify(rule: dict, record: dict, doc: dict) -> str:
     return fired(rule, record, doc)[0]
 
 
-def _holds(test: dict, record: dict, doc: dict) -> bool:
+def holds(test: dict, record: dict, doc: dict) -> bool:
+    """One record test, `negate` applied (shared with binding rules' record tests, ticket 97)."""
     result = bool(call(test["primitive"], test.get("args") or {}, record, doc))
     return not result if test.get("negate") else result
