@@ -23,3 +23,15 @@ Checked against the captures on this machine, no request: the SEC filer capture 
 - Rules tests 124 pass; the 43 MDM tests that load the merge rules pass.
 
 Next: the one Proving Run (after part 1's ends, one database at a time); then the approval under the operator's standing words, "Approved the rules always".
+
+## The one Proving Run (2026-10-15 22:38-22:39 ET, tested locally)
+
+`registrant_proving_run.py`, report `registrant-proving-run.json` (sha256 e217bf4d...da61, counts only); disposable PostgreSQL 16, container removed. `nport-registrant-cik` switched on only in the run's copy of the policy, stamped "proving-run". The cm27 SEC Companies (6,726) holding a registrant CIK went in first: 20 of them.
+- First pass 34 s, 6 batches: **1,947 Companies, one per registrant CIK**; 1,947 bind decisions; **0 CIKs on two Companies**.
+- **Second pass (5 s) changed nothing.**
+- The 20 SEC records holding a registrant CIK were set aside by SEC's own Company classification (`classification_deferred`, as the CIK research foretold: investment filers reach no step but "set aside"), each an open review. So no registrant met an existing Company here: each created its own, and joining an existing SEC Company by CIK was not exercised in this run. The same rule shape (identifier match, cardinality, create when none) joined 10,278 Securities across 13F and N-PORT in part 1's Proving Run. If an SEC record for one of these CIKs is later classified a Company, it joins the N-PORT Company through `company-cik`.
+
+## Approval (2026-10-15 22:44 ET)
+
+- Operator's standing words, **"Approved the rules always"** (2026-10-15 18:56 ET), on the test run above and this Proving Run: approved the Dataset Contract `sec.nport.registrant.v1` and its source extracts; the matching rule `nport-registrant-cik` (version 2026-10-15.1, declared); `sec.nport.registrant.v1` added last to the CIK Identifier Contract's sources and to the Company's `defaults.sources`. No quality file: profiling found no defect for a check.
+- Not covered by those words: **switching on** `nport-registrant-cik` (and the CIK contract's verification with this source), and the merge of PR #1001. Each waits for the operator.
