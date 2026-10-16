@@ -1,4 +1,5 @@
-# How many issuer LEIs each CUSIP is filed with (ticket 22). One source extract:
+# How many issuer LEIs each CUSIP is filed with (ticket 22), and each ISIN of a
+# holding with no usable CUSIP (ticket 102). One source extract:
 # issuers.yaml's reading, `issuers`. Pin canonical JSON of this file as the
 # source.combine contract.
 execution:
@@ -16,6 +17,15 @@ reduce:
       source: issuers
       table: security_issuer
       keys: [cusip]
+      mode: members
+      member: issuer_lei
+      count: issuers
+      sample: issuer_sample
+      sample_limit: 1
+    isin_issuers:
+      source: issuers
+      table: isin_issuer
+      keys: [isin]
       mode: members
       member: issuer_lei
       count: issuers
