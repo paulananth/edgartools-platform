@@ -36,6 +36,10 @@ question at a time, with your recommendation.
 
 ## 0. Setup
 
+For persistent local agent environments, baseline promotion or recovery, read
+[Local testing](LOCAL-TESTING.md). It defines automatic promotion after verified
+checks; its implementation status is stated there.
+
 1. **Install.** The engine is Rust: `cargo` must be on the path (install it
    from rustup.rs if `cargo --version` fails). Pick the git ref to install
    (a commit on `main`), then:
