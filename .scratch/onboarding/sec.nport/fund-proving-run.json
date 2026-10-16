@@ -1,0 +1,56 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 12937
+  },
+  "identities": {
+   "fund_structure": 12937
+  },
+  "open_reviews": {
+   "invalid_lei_checksum": 7
+  },
+  "stage_records": {
+   "sec.nport.fund.v1": 12937
+  },
+  "waiting": {
+   "invalid_lei_checksum": 7
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 12937
+  },
+  "identities": {
+   "fund_structure": 12937
+  },
+  "open_reviews": {
+   "invalid_lei_checksum": 7
+  },
+  "stage_records": {
+   "sec.nport.fund.v1": 12937
+  },
+  "waiting": {
+   "invalid_lei_checksum": 7
+  }
+ },
+ "batches": 28,
+ "funds_by_feeds": {
+  "sec.nport.fund.v1": 12937
+ },
+ "lei_on_two_funds": 0,
+ "leis_held": 12867,
+ "policy_digest": "c0e1e0b25627d23a45a6d2e57d580f7fe1ae810d6803475fdd0f1c75a0bec33a",
+ "read": {
+  "assertions": 12937,
+  "deferred: invalid_lei_checksum": 7
+ },
+ "run": "N-PORT Fund, Proving Run of sec.nport.fund.v1",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 48.1,
+  "second_pass": 9.4
+ },
+ "series_id_on_two_funds": 0,
+ "series_ids_held": 12937,
+ "slowest_batch_seconds": 5.1
+}

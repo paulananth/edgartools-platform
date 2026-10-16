@@ -1,0 +1,33 @@
+{
+ "facts": {
+  "filings": 13687,
+  "filings_without_series": 0,
+  "filings_without_date": 0,
+  "filings_without_registrant": 0,
+  "filings_lei_blank": 13,
+  "lei_one_to_one_direct": 12874,
+  "lei_joined": 12874,
+  "lei_matches_direct": 12944,
+  "leis_on_several_series": 15,
+  "series_with_several_leis": 1,
+  "funds": 12944,
+  "funds_several_filings": 676,
+  "latest_matches_direct": 12944,
+  "name_changes": 9
+ },
+ "contract": {
+  "outcome": {
+   "accepted": 12937,
+   "invalid_lei_checksum": 7
+  },
+  "filled": {
+   "name": 12937,
+   "id:sec_series_id": 12937,
+   "id:lei": 12867,
+   "xref:nport_registrant_cik": 12937,
+   "xref:nport_series_lei": 12924
+  },
+  "lei_on_two_funds": 0
+ },
+ "seconds": 10.3
+}

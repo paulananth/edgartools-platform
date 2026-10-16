@@ -35,6 +35,12 @@ def stand_in_sql(text: str) -> str:
             f"OR regexp_full_match(trim({text}), '9{{3,}}'))")
 
 
+def real_value_sql(e: str) -> str:
+    """Rows of a column that hold a value: not null, not blank, not a stand-in for none."""
+    text = f"CAST({e} AS VARCHAR)"
+    return f"{e} IS NOT NULL AND trim({text}) <> '' AND NOT {stand_in_sql(text)}"
+
+
 def mod97_10(value: str) -> bool:
     """ISO 7064 mod 97-10: letters read as 10-35; the number mod 97 is 1."""
     if len(value) < 3 or not value.isalnum() or not value.isascii():
@@ -196,3 +202,9 @@ def dense_sequence(profile: dict) -> bool:
     except (KeyError, TypeError, ValueError):
         return False
     return profile["unique"] == 1.0 and high - low + 1 <= profile["distinct"] * 1.05
+
+
+def local_counter(profile: dict) -> bool:
+    """An integer column filling its range: a local counter, never an issued identifier."""
+    from .profile import is_integer
+    return is_integer(profile) and dense_sequence(profile)

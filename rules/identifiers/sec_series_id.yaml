@@ -1,0 +1,14 @@
+# SEC series id: the id SEC issues each fund series of a registered
+# investment company ("S" and nine digits, no check digit). Ticket 79, part 3,
+# from the N-PORT findings (FUND_REPORTED_INFO.SERIES_ID, 2026q2: 12,944
+# distinct, every one this shape; 729 filings name none).
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: sec_series_id
+version: 1
+description: "The letter S and nine digits, issued by SEC to each fund series. Upper-cased."
+case: upper
+parts:
+  - length: 1
+    characters: ["S"]
+  - length: 9
+    characters: [digits]

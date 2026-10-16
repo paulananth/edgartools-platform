@@ -1,0 +1,159 @@
+# SEC Form N-PORT fund series, read for the Fund master (ticket 79, part 3),
+# from the approved N-PORT findings (profiling/sec.nport-2026q2-final,
+# approved 2026-10-15 06:29 ET; part FUND_REPORTED_INFO.SERIES_LEI: 12,944
+# series over 14,416 filings). Rulings it rests on (operator):
+# - "Series id and LEI join (Recommended)" (2026-10-14): the Fund is kind
+#   fund_structure, joined by its SEC series id and its LEI.
+# - "Funds now, link later (Recommended)" (2026-10-16): IS_SUBFUND_OF waits
+#   until a source states when a series began (a profile needs a fixed start
+#   date and none is stated); the registrant's CIK stays on each Fund, lookup
+#   only.
+# The run, in order: sec.nport.registrant's readings give two pair sets,
+# `filed` (filing to its date, submissions.yaml) and `registrant` (filing to
+# its registrant's CIK, its `filing` table); this reading streams
+# FUND_REPORTED_INFO.tsv once, one row per filing; reduce.yaml lists each
+# series (a filing naming no series, 729 in 2026q2, is not read: its
+# registrant is the fund); combine.yaml keeps each series' latest filing whole
+# (by date, then accession) and its LEI when one to one (lei-pairs.yaml);
+# mdm.prepare reads table `fund`.
+# Left out: the report's financial figures (FUND_REPORTED_INFO's other
+# columns), detail of a report, not of the Fund.
+source: sec.nport.fund
+bronze:
+  family: sec.nport-datasets
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1
+  lookup_sets:
+    filed:
+      max_values: 1000000
+      max_bytes: 67108864
+      max_value_bytes: 64
+      pairs: true
+    registrant:
+      max_values: 1000000
+      max_bytes: 67108864
+      max_value_bytes: 64
+      pairs: true
+  tables:
+    filing:
+      each: .
+      # A filing naming no series (729 in 2026q2, every one blank) is the
+      # registrant's own fund: no Fund record.
+      select: {test: {path: SERIES_ID, kind: truthy}}
+      columns:
+        series_id: {text: {path: SERIES_ID, default: "", transforms: [{case: upper}], null_if: ["", "N/A"]}}
+        accession: {text: {path: ACCESSION_NUMBER}}
+        filed:
+          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        cik:
+          member_value: {lookup: registrant, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        name: {text: {path: SERIES_NAME, default: "", null_if: [""]}}
+        lei:
+          text:
+            path: SERIES_LEI
+            default: ""
+            transforms:
+            - {case: upper}
+            null_if: ["", "N/A", "00000000000000000000"]
+        # The same LEI as a key for counting (reduce.yaml): none is empty text,
+        # since a reduction refuses a null key.
+        lei_key:
+          text:
+            path: SERIES_LEI
+            default: ""
+            transforms:
+            - {case: upper}
+            - {regex_replace: {pattern: '^(N/A|0{20})$', with: ''}}
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: FUND_REPORTED_INFO.tsv
+    # Profiling, 2026q2: 14,416 rows.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000
+mdm:
+  sec.nport.fund.v1:
+    contract:
+      provider: SEC
+      family: sec.nport-datasets
+      schema_version: sec-nport-fund-v1
+      record_key: the fund series' SEC series id; one record per series over the quarter, from its latest filing
+      publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
+      effective_time: unknown; the filing date of the latest filing is kept, not the series' own time
+      semantics: patch
+      completeness: the fund series of one quarter's N-PORT filings; no retirement by absence
+      nonblocking_deferred_reasons:
+      - missing_record_identity
+      adapter:
+        reading:
+          source: sec.nport.fund
+          read:
+            format: json
+            limits:
+              max_bytes: 33554432
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name: {value: {path: latest.name, type: text, null_if_blank: true}}
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - series_id
+          - lei
+          - latest
+        version: sec-nport-fund-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: fund_structure
+        record_key:
+        - series_id
+        record_key_format: sec_series_id
+        # The series id and the series LEI each join the one Fund holding
+        # them, or create it (operator, 2026-10-14). The registrant's CIK is
+        # lookup only until IS_SUBFUND_OF can be mapped (operator,
+        # 2026-10-16: "Funds now, link later").
+        # The LEI joins only when it is the one LEI its series files and no
+        # other series files it in the quarter (combine.yaml, `lei`): 15 LEIs
+        # are filed for two series and 1 series files two LEIs (2026q2). Every
+        # filed LEI stays as a lookup-only cross-reference.
+        identifiers:
+          sec_series_id: series_id
+          lei: lei
+        identifier_formats:
+          sec_series_id: sec_series_id
+          lei: lei
+        cross_references:
+          nport_registrant_cik: latest.cik
+          nport_series_lei: latest.lei
+        cross_reference_formats:
+          nport_registrant_cik: sec_cik
+          nport_series_lei: lei

@@ -22,7 +22,8 @@ def test_every_committed_mapping_document_equals_its_rules():
 def test_only_sources_that_feed_mdm_have_one():
     assert {name for name, _, _ in mapdoc.documents().values()} == {
         "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person", "iapd.adv",
-        "sec.ownership", "sec.thirteenf.information_table", "sec.nport.security", "sec.nport.registrant", "security"}
+        "sec.ownership", "sec.thirteenf.information_table", "sec.nport.security", "sec.nport.registrant", "security",
+        "sec.nport.fund", "fund_structure"}
 
 
 @pytest.fixture
@@ -139,6 +140,27 @@ def test_the_sheets_say_what_the_rules_say():
     assert ["ends", "relationship_end_missing", "Sets the record aside when the link names no end"] in owner
     assert ["interval", "invalid_relationship_interval",
             "Sets the record aside when the link has no start, or ends before it starts"] in owner
+
+
+def test_a_condition_names_its_own_kind_and_reads_a_ceiling_of_none():
+    # Ticket 16, item 10: the identifier words named "Company" for every kind,
+    # and a ceiling with no floor (max_count: 0) read "at least  of the list".
+    found = {name: sheets for name, sheets, _ in mapdoc.documents().values()}
+    security = " ".join(row[5] for row in found["security"]["Matching rules"][1:])
+    assert "Security holds" in security and "Company" not in security
+    steps = " ".join(row[6] for row in found["company"]["Classification"][1:])
+    assert "forms holds none of the list bdc_election" in steps
+    assert "at least  " not in steps and "at least 1 of the list" in steps
+    passes = " ".join(row[5] for row in found["company"]["Matching rules"][1:])
+    assert "Refused flags: none" in passes and "Refused flags: ;" not in passes
+
+
+@pytest.mark.parametrize("bounds, words", [
+    ({"min_count": 1}, "at least 1"), ({"min_count": 1, "max_count": 3}, "at least 1 and at most 3"),
+    ({"min_count": 1, "max_count": 1}, "exactly 1"), ({"max_count": 2}, "at most 2"),
+    ({"min_count": 0, "max_count": 2}, "at most 2"), ({"max_count": 0}, "none")])
+def test_a_count_reads_as_its_bounds(bounds, words):
+    assert mapdoc._count(bounds) == words
 
 
 def test_every_link_rule_has_plain_words():

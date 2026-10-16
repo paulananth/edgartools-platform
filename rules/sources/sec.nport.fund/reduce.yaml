@@ -1,0 +1,53 @@
+# Each fund series of the quarter's N-PORT rows, with how many filings name it,
+# and the counts that say whether a series and its LEI are one to one (ticket
+# 79, part 3). A series filing no LEI counts under empty text. One source extract: source.yaml's reading, `filings`.
+# A filing naming no series is not read (source.yaml's `select`). Pin canonical JSON
+# of this file as the source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  # Profiling, 2026q2: 14,416 filings, 12,944 series.
+  max_rows: 1000000
+  max_input_bytes: 1073741824
+  max_state_bytes: 268435456
+  max_keys: 1000000
+  max_members: 1000000
+  max_output_rows: 1000000
+  max_output_bytes: 268435456
+  groups:
+    series:
+      source: filings
+      table: filing
+      keys: [series_id]
+      mode: count
+      count: filings
+      sample: null
+      sample_limit: 0
+    series_lei:
+      source: filings
+      table: filing
+      keys: [series_id, lei_key]
+      mode: count
+      count: filings
+      sample: null
+      sample_limit: 0
+    # How many series file each LEI (2026q2: 15 LEIs are filed for two).
+    lei_series:
+      source: filings
+      table: filing
+      keys: [lei_key]
+      mode: members
+      member: series_id
+      count: series
+      sample: series_sample
+      sample_limit: 1
+    # How many LEIs each series files (2026q2: 1 series files two).
+    series_leis:
+      source: filings
+      table: filing
+      keys: [series_id]
+      mode: members
+      member: lei_key
+      count: leis
+      sample: lei_sample
+      sample_limit: 1

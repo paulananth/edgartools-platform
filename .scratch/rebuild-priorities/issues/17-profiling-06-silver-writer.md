@@ -2,6 +2,8 @@
 
 Priority: 17, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/profiling/issues/06-silver-writer.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
+Status: done (2026-10-16 08:21 ET): #879 merged; the re-check against the final design changed nothing.
+
 Type: task. Phase: B. Blocked by: 01a, Codex retirement merged (overruled by the operator, below). Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
 
 Scope: plan decision 36. Silver for the trials and the proof is a `silver` schema
@@ -13,7 +15,7 @@ Estimate: 3–5 days (plan).
 ## Checklist
 
 - [ ] ~~Wait for Codex's old-parser retirement gate before starting (operator, 2026-10-08 18:20 ET: "Wait for Codex", asked whether to start 06 ahead of it)~~ overruled by the operator, 2026-10-08 21:15 ET: "start ticket 06 now"
-- [ ] Re-check 06 against Codex's final design when the retirement gate closes (plan, phase B): still open; the gate waits for Issue 20 L7 (`adapters.py`) and L8 (capture), 2026-10-11
+- [x] Re-check 06 against Codex's final design when the retirement gate closes (plan, phase B): L1-L8 merged (ticket 03); the writer imports nothing of the source extracts (L7) or capture (L8), and finds MDM ids through `mdm.stage_record` and `mdm.current_entity`, both kept by tickets 74 and 77: nothing to change 2026-10-16 08:21 ET
 - [x] GoF consult: copy the migration loop (ticket 02's verdict holds: the four loops changed only for their own roles and grants, the shared lines never); the sink interface is required by plan decision 36, kept to one small protocol 2026-10-08 21:20 ET
 - [x] Spec §6 gap: a link names its master's Dataset Contract (`source_code`), so a source key resolves to one MDM id; links point to master parts only (Trial B's profiling linked to reference and transaction parts, and twice from one column); profiling's `_silver` now emits master links with empty `kind`/`source_code` for onboarding to fill; `findings.md` §6 updated; a change to the approved spec, reported to the operator 2026-10-08 21:38 ET
 - [x] Store: checksummed `silver` schema migrations on PG16 (`edgar_warehouse/silver_writer/`, `001_silver.sql`), owner and restricted runtime separated, a `silver.table_spec` registry with comments on everything (PG16 test) 2026-10-08 21:38 ET
