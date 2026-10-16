@@ -168,3 +168,22 @@ Configuration (configuration only; engine tickets 93-95 merged): `figi-requests.
 - Stages after the reduction, run once on the 12:01 run's reduction, 7 min 41 s, peak 2.33 GB: 350,875 pairs FIGI agrees on; **350,873 CUSIP Securities carry an ISIN** (the direct count: 350,873); 1 ISIN offered to two CUSIPs (neither carries it); 0 CUSIPs offered two ISINs.
 - `sec.nport.security.v1`: **383,612 accepted** (was 383,595): the 17 set aside for a FIGI filed as their ISIN now pass, since FIGI does not agree with that pair and no ISIN attaches. Set aside: 1,769 `invalid_cusip_checksum`, 1 `invalid_cusip`. `sec.nport.security_isin.v1`: 35,309 accepted.
 - Not configured: the count's third case (an ISIN-only holding FIGI ties to one CUSIP): all 5,394 are already one-to-one pairs of that CUSIP, so it changes nothing in this quarter; it is what the direct count's "1 CUSIP offered two ISINs" came from. Logged for a later quarter.
+
+## Part 1: the one Proving Run (2026-10-15 19:57-22:38 ET, tested locally)
+
+`proving_run.py`, report `proving-run.json` (sha256 0832f611...78ae, counts only); disposable PostgreSQL 16, container removed. 13F first (already switched on), then N-PORT by CUSIP, then by ISIN; the three N-PORT matching rules switched on only in the run's copy of the policy, stamped "proving-run", with a stand-in verification of the ISIN Identifier Contract. First pass **2 h 17 min** (8,193 s), second pass 23 min, 906 batches, slowest 72 s (ticket 96: the identifier index's pending list is part of the slowdown).
+- **423,562 Securities**; 439,232 bind decisions, one per record: 20,311 13F, 383,612 N-PORT by CUSIP, 35,309 N-PORT by ISIN.
+- Which feeds each Security holds: N-PORT CUSIP only 367,994; 13F only 10,033; **13F and N-PORT by CUSIP 10,278** (52 of them also by ISIN); **N-PORT CUSIP and ISIN 5,340** (5,392 in all: an ISIN-only holding joined its CUSIP's Security through the ISIN OpenFIGI attached); ISIN only 29,917.
+- **0 CUSIPs and 0 ISINs on two Securities** (393,645 CUSIPs, 380,790 ISINs held).
+- **The second pass changed nothing.**
+- Set aside, each an open review: 11,372 `invalid_cusip_checksum` (9,603 13F + 1,769 N-PORT), 29 `invalid_cusip` (28 + 1). Every Security carries issuer name and class title; 418,921 an issuer LEI.
+- (The report's `read` counts each record twice, once per apply loop, as in 13F's; the stage counts are the measure.)
+
+## Part 1: quality (2026-10-15 22:44 ET)
+
+`rules/sources/sec.nport.security/quality.yaml` (`sec-nport-security-quality-v1`): an issuer name filed as a stand-in (NONE, NULL, UNKNOWN, TBD, NOT APPLICABLE, NOT AVAILABLE) is withheld, on both N-PORT contracts. Written after the Proving Run; every prepared record read again through the contracts with it (236 s): 383,612 and 35,309 accepted, 1,769 and 1 set aside, none withheld: the same outcome as the Proving Run's.
+
+## Part 1: approval (2026-10-15 22:44 ET)
+
+- Operator's standing words, **"Approved the rules always"** (2026-10-15 18:56 ET), on the test runs and this Proving Run: approved the Dataset Contracts `sec.nport.security.v1` and `sec.nport.security_isin.v1` with their source extracts and the OpenFIGI configuration (the ISIN a CUSIP carries is the one OpenFIGI agrees on, operator: "Use FIGI to add pairs too"); the matching rules `nport-security-cusip`, `nport-security-isin` and `nport-isin-security-isin` (declared); N-PORT's two codes added after 13F to the Security's `defaults.sources` and the CUSIP contract's sources; the quality check above with `on_fail: withhold`.
+- Not covered by those words: **switching on** the three rules with the ISIN Identifier Contract's verification (this report's sha256), and the merge of PR #999. Each waits for the operator.

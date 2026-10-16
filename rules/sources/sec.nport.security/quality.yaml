@@ -1,0 +1,25 @@
+# Data quality for N-PORT Securities (ticket 79, part 1). The CUSIP and ISIN
+# check digits are the identifier types' (rules/identifiers/): a failing one
+# is set aside where the record is read, so no check repeats it here.
+# Approved under the operator's standing words "Approved the rules always"
+# (2026-10-15), on the data-quality measure of the test run: 0 of 383,595
+# CUSIP and 0 of 35,309 ISIN Securities fail it.
+version: sec-nport-security-quality-v1
+quality:
+  sec.nport.security.v1:
+    checks:
+    # An issuer name filed as a stand-in never names the Security: it waits.
+    - id: placeholder_name_of_issuer
+      test: placeholder@1
+      value: fields.name_of_issuer
+      on_fail: withhold
+      args:
+        values: [NONE, "NULL", UNKNOWN, TBD, NOTAPPLICABLE, NOTAVAILABLE]
+  sec.nport.security_isin.v1:
+    checks:
+    - id: placeholder_name_of_issuer
+      test: placeholder@1
+      value: fields.name_of_issuer
+      on_fail: withhold
+      args:
+        values: [NONE, "NULL", UNKNOWN, TBD, NOTAPPLICABLE, NOTAVAILABLE]
