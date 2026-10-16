@@ -28,8 +28,26 @@ so it can be restored. This is local testing, not a production deployment.
   outside Docker volumes. Reports contain counts, never source values,
   credentials or database addresses.
 
-The skill states the rules; the local environment script must enforce them.
-Its implementation is pending the local-agent-stores ticket. Do not invent
-commands or claim a successful setup from this document alone. This policy
-adds no provider access or production deployment and never supplies invented
-operator approval words for another workflow.
+## Run from your worktree
+
+Use a repository checkout containing `infra/scripts/local-test-stores.py`.
+Run `uv run --extra mdm python infra/scripts/local-test-stores.py --help`
+to check that the implementation is present. From your own worktree:
+
+```bash
+uv run --extra mdm python infra/scripts/local-test-stores.py up agent-test
+uv run --extra mdm python infra/scripts/local-test-stores.py status agent-test
+uv run --extra mdm python infra/scripts/local-test-stores.py backup agent-test --baseline
+```
+
+`up` creates empty migrated stores. Load the assigned data through qualified
+readers and workers before treating the backup as a source-data baseline.
+`backup --baseline` checks a restore before selecting it for future copies.
+From another worktree, `copy <new-name>` uses that baseline; `stop <name>`
+preserves the environment. Source the reported private environment file in
+your terminal; keep its contents out of reports.
+
+Read `docs/local-agent-testing.md` in that checkout for recovery and backup
+details. Verify startup and the task's data checks before claiming readiness.
+This policy adds no provider access or production deployment and never
+supplies invented operator approval words for another workflow.
