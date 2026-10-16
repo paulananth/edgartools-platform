@@ -19,8 +19,6 @@ from edgar_warehouse.mdm.clean.store import (
 from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_clean_activation import RULE, entry, policy, proof
 
-postgres = core.postgres
-database = core.database
 
 
 def test_a_rule_version_cannot_be_reused_for_different_steps(database):

@@ -20,8 +20,6 @@ from tests.integration.test_clean_mdm_postgres import (
     source,
 )
 
-postgres = core.postgres
-database = core.database
 
 LATER = "2026-03-01T00:00:00+00:00"
 

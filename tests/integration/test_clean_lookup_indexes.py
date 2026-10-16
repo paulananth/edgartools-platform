@@ -25,8 +25,6 @@ from tests.integration.test_clean_mdm_postgres import (
     source,
 )
 
-postgres = core.postgres
-database = core.database
 
 TABLES = ("source_reading", "decision", "master_entity", "current_record", "company", "company_alias")
 INDEXES = ("source_reading_link_subjects", "source_reading_subject", "master_entity_pkey", "decision_retired_source",

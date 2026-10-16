@@ -16,8 +16,6 @@ from edgar_warehouse.rules import source_engine
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_outbox_names_batch import Destination, journal_policy
 
-postgres = core.postgres
-database = core.database
 
 
 def test_exact_sql_jsonb_bytes_and_hashes_on_numeric_unicode_and_nested_inputs(database):

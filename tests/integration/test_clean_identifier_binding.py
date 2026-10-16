@@ -29,8 +29,6 @@ from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_clean_activation import CIK_CONTRACT, CIK_RULE
 
-postgres = core.postgres
-database = core.database
 
 APPLE_CIK = "0000320193"
 APPLE_LEI = "HWUPKR0MPOU8FGXBT394"

@@ -19,8 +19,6 @@ from edgar_warehouse.workers import mdm_publish
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_outbox_names_batch import Destination, journal_policy
 
-postgres = core.postgres
-database = core.database
 
 
 def review(n, reason="needs evidence"):

@@ -29,8 +29,6 @@ from edgar_warehouse.mdm.clean.classification import CLASSIFICATION_VERDICTS
 from edgar_warehouse.mdm.clean.evidence import KINDS
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
 
 SHAPES = ("stage", "stage_field", "master", "master_field")
 

@@ -11,8 +11,6 @@ from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, canonical
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
 MIGRATIONS = Path(__file__).parents[2] / "edgar_warehouse" / "mdm" / "migrations"
 
 

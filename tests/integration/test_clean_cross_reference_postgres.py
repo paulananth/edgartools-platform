@@ -21,8 +21,6 @@ from tests.integration.test_clean_identifier_binding import (
     matching_policy,
 )
 
-postgres = core.postgres
-database = core.database
 
 TAX_ID = "12-3456789"
 

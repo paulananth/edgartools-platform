@@ -25,8 +25,6 @@ from edgar_warehouse.mdm.clean.store import rows
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_identifier_binding import CIK_ISSUED, LEI_CONTRACT
 
-postgres = core.postgres
-database = core.database
 
 SEC = "fixture.primary"
 GLEIF = "fixture.secondary"

@@ -28,8 +28,6 @@ from tests.mdm.test_clean_activation import (
     proof,
 )
 
-postgres = core.postgres
-database = core.database
 
 # The Stage registers the fixture datasets: fixture.primary stands for SEC
 # (it issues CIKs), fixture.secondary for GLEIF (it issues LEIs).

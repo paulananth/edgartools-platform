@@ -20,8 +20,6 @@ from tests.integration.test_clean_mdm_postgres import (
     source,
 )
 
-postgres = core.postgres
-database = core.database
 
 
 def parent(target, start=AT, end=None):

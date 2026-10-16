@@ -18,8 +18,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_clean_cik_rule as cik
 from tests.integration.test_clean_cik_rule import GLEIF, companies, load, operations
 
-postgres = core.postgres
-database = core.database
 
 ISSUER, OTHER = "9999000000EXAMPLE113", "9999000000EXAMPLE210"  # invented; check digits hold
 RULE, CUSTODIAN = "gleif-issuer-lei", "iapd-adv-custodian-lei"

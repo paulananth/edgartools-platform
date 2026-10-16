@@ -23,8 +23,6 @@ from edgar_warehouse.mdm.clean.store import Conflict
 from edgar_warehouse.mdm.clean.survivorship import current_claims
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
 
 # Every reading is in force: the Stage keeps the winner whatever its effective
 # time, and refusing a future one waits for slice 4.

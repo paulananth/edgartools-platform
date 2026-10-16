@@ -68,7 +68,6 @@ def _servers(url):
     core._templates.pop(admin.url.port, None)
 
 
-database = core.database
 
 
 @contextlib.contextmanager

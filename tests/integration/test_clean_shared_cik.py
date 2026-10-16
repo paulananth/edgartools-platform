@@ -18,8 +18,6 @@ from tests.support.rules_authority import register_dataset
 from tests.integration import test_clean_identifier_binding as binding
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
 
 CIK = binding.APPLE_CIK
 PERSON_CIK = {**binding.CIK_RULE, "rule_id": "person-cik", "source": "fixture.person",

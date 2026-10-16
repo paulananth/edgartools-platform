@@ -18,7 +18,6 @@ from edgar_warehouse.mdm.clean.store import (
     migrate,
     register_policy,
 )
-from tests.support import pg16
 from tests.support.rules_authority import register_dataset
 
 
@@ -30,32 +29,9 @@ class Database:
     registry: str
 
 
-@pytest.fixture(scope="module")
-def postgres():
-    # Docker in CI; PG16_SERVER=pgserver runs on a local PostgreSQL 16 (tests/support/pg16.py).
-    with pg16.server() as server:
-        admin = create_engine(server.url())
-        app = None
-        try:
-            with admin.begin() as conn:
-                conn.execute(
-                    text(
-                        "CREATE ROLE clean_application LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE"
-                    )
-                )
-            app = create_engine(server.url(user="clean_application"))
-            yield admin, app
-        finally:
-            if app is not None:
-                app.dispose()
-            admin.dispose()
-            # The next module's server may be given the same port.
-            _templates.pop(admin.url.port, None)
-
-
-# Each module's first test migrates a template database once (checking a
+# The session's first test migrates a template database once (checking a
 # second migration installs nothing); every test then gets its own copy of
-# it, which Postgres makes in well under a second. Migrating per test cost
+# it, which Postgres makes in well under a second (fixtures in conftest.py). Migrating per test cost
 # about 3.4 seconds each (company mastering ticket 23).
 TEMPLATE = "clean_template"
 _templates: dict[int, tuple[str, str]] = {}
@@ -76,25 +52,6 @@ def _template(admin, app) -> tuple[str, str]:
             app_t.dispose()
         _templates[port] = (built.policy, built.registry)
     return _templates[port]
-
-
-@pytest.fixture
-def database(postgres):
-    admin, app = postgres
-    policy, registry = _template(admin, app)
-    name = f"clean_{uuid4().hex[:12]}"
-    server = admin.execution_options(isolation_level="AUTOCOMMIT")
-    with server.connect() as conn:
-        conn.execute(text(f"CREATE DATABASE {name} TEMPLATE {TEMPLATE}"))
-    admin_db = create_engine(admin.url.set(database=name))
-    app_db = create_engine(app.url.set(database=name))
-    try:
-        yield Database(admin_db, app_db, policy, registry)
-    finally:
-        admin_db.dispose()
-        app_db.dispose()
-        with server.connect() as conn:
-            conn.execute(text(f"DROP DATABASE {name} WITH (FORCE)"))
 
 
 def initialize_database(admin, app):

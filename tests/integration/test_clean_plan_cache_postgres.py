@@ -29,7 +29,6 @@ from sqlalchemy import text
 from edgar_warehouse.mdm.clean import merge
 
 from edgar_warehouse.mdm.clean.store import migrate
-from tests.integration.test_clean_mdm_postgres import database, postgres  # noqa: F401
 
 SETTING = "plan_cache_mode=force_custom_plan"
 
