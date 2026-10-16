@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,6 @@ from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 # filing loader did (`date.fromisoformat(value[:10])`; a number is read as its
 # text first); anything else is no date.
 def calendar(value):
-    from datetime import date
     if not value or not isinstance(value, str):
         return None
     try:

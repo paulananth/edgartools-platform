@@ -23,20 +23,20 @@ FILING_FIELDS = ('form', 'filing_date', 'report_date', 'acceptance_datetime', 'a
                  'items', 'size', 'primary_document', 'primary_doc_desc')
 
 
-def run(context=CONTEXT):
+def run_facts(context=CONTEXT):
     return {'cik': context['cik'], 'sync_run_id': context['sync_run_id'],
             'raw_object_id': context['raw_object_id'], 'load_mode': context['load_mode']}
 
 
 def company_row(context=CONTEXT, **filed):
     """The Company row: each SEC field as filed (any JSON value), else none, with the capture's run facts."""
-    return {**run(context), **dict.fromkeys(COMPANY_FIELDS), 'last_sync_run_id': context['sync_run_id'],
+    return {**run_facts(context), **dict.fromkeys(COMPANY_FIELDS), 'last_sync_run_id': context['sync_run_id'],
             'last_synced_at': context['last_synced_at'], **filed}
 
 
 def filing_row(accession, context=CONTEXT, **filed):
     """A filing row: each field as filed, else none; a flag that is not one is false."""
-    return {'accession_number': accession, **run(context), **dict.fromkeys(FILING_FIELDS),
+    return {'accession_number': accession, **run_facts(context), **dict.fromkeys(FILING_FIELDS),
             'is_xbrl': False, 'is_inline_xbrl': False, **filed}
 
 

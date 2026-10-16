@@ -41,7 +41,6 @@ def test_all_18_columns_and_the_recent_limit(limit, expected):
     reading = SourceEngine(files.load(CONTRACT)).read(json.dumps(PAYLOAD).encode(), context=values)
     assert reading.tables['filings'] == expected
     assert not reading.deferred
-    assert len(ONE) == 18
 
 
 @pytest.mark.parametrize(('field', 'value'), [('cik', True), ('cik', 1.0), ('cik', 2**63), ('cik', -(2**63)-1), ('cik', '320193'), ('load_mode', None), ('load_mode', []), ('recent_limit', False), ('recent_limit', '1'), ('sync_run_id', 'é' * 2049)])
