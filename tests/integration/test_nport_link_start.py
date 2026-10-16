@@ -82,7 +82,7 @@ def prepared_records(root: Path, period: str, revision: int | None = None) -> li
     zipped = capture(root)
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
     holdings = read(store, root / "holdings", "source.yaml", raw, period, lookups={"isin": []})
-    issuers = read(store, root / "issuers", "issuers.yaml", raw, None)
+    issuers = read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": []})
     securities = combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [

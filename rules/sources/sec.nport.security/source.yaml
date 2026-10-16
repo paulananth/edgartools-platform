@@ -400,6 +400,7 @@ mdm:
           - name
           - title
           - lei
+          - issuer
         version: sec-nport-security-isin-v1
         retain_deferred: true
         source_record_provenance: true
@@ -411,3 +412,14 @@ mdm:
           isin: isin
         identifier_formats:
           isin: isin
+        # As the CUSIP contract's (ticket 102): the link names GLEIF's record of
+        # the one LEI the ISIN's holdings state, waits until that record is
+        # mastered, and starts at the quarter's period that dates each
+        # publication.
+        relationships:
+        - type: ISSUED_BY
+          each: issuer
+          target_key: [item.issuer_lei]
+          target_source: gleif.level1.v1
+          valid_from: item.valid_from
+          scope: SEC N-PORT issuer

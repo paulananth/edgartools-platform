@@ -1,11 +1,11 @@
 # One row per usable CUSIP (table `security`) and one per ISIN of a holding
 # with no usable CUSIP (table `security_isin`), each joined with its filed
-# name, title and issuer LEI, and a CUSIP with the one ISIN FIGI agrees on
-# (ticket 79, part 1; ticket 80), and the issuer's LEI when the CUSIP is filed
-# with exactly one (ticket 22). Inputs: the reduction's output (`securities`),
-# figi-attach.yaml's output (`attached`) and issuer-reduce.yaml's output
-# (`issuers`). Pin canonical
-# JSON of this file as the source.combine contract.
+# name, title and issuer LEI; a CUSIP also with the one ISIN FIGI agrees on
+# (ticket 79, part 1; ticket 80); and each, CUSIP (ticket 22) or ISIN (ticket
+# 102), with its issuer's LEI when it is filed with exactly one. Inputs: the
+# reduction's output (`securities`), figi-attach.yaml's output (`attached`)
+# and issuer-reduce.yaml's output (`issuers`). Pin canonical JSON of this file
+# as the source.combine contract.
 execution:
   profile: source.combine
 combine:
@@ -25,6 +25,8 @@ combine:
     isin_name: {source: securities, table: isin_names, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_title: {source: securities, table: isin_titles, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_lei: {source: securities, table: isin_leis, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    # As `cusip_issuer`, for an ISIN-only Security (ticket 102).
+    isin_issuer: {source: issuers, table: isin_issuers, key: isin, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
   tables:
     security:
       source: securities
@@ -46,3 +48,4 @@ combine:
         name: {group: isin_name, key: isin, on_missing: skip, replace: false}
         title: {group: isin_title, key: isin, on_missing: skip, replace: false}
         lei: {group: isin_lei, key: isin, on_missing: skip, replace: false}
+        issuer: {group: isin_issuer, key: isin, on_missing: skip, replace: false}

@@ -1,13 +1,18 @@
-# Each holding's CUSIP and its issuer's LEI, read once from
-# FUND_REPORTED_HOLDING.tsv for ISSUED_BY (rebuild-priorities ticket 22;
-# operator, 2026-10-16: "By issuer LEI (Recommended)"). A holding with no
-# usable CUSIP, or whose issuer LEI is not 20 letters and digits ending in two
-# digits (blank, "N/A", all zeros), is not read. issuer-reduce.yaml counts the
-# LEIs of each CUSIP; combine.yaml keeps the one LEI of a CUSIP that has one.
+# Each holding's issuer LEI, read once from FUND_REPORTED_HOLDING.tsv for
+# ISSUED_BY (rebuild-priorities ticket 22; operator, 2026-10-16: "By issuer LEI
+# (Recommended)"): by CUSIP (table `security_issuer`), and by ISIN for a
+# holding with no usable CUSIP (table `isin_issuer`, ticket 102), its ISIN
+# taken as source.yaml takes it, from the `isin` pair set. A holding whose
+# issuer LEI is not 20 letters and digits ending in two digits (blank, "N/A",
+# all zeros), or with no CUSIP or ISIN to hang it on, is not read.
+# issuer-reduce.yaml counts the LEIs of each CUSIP and each ISIN; combine.yaml
+# keeps the one LEI of a key that has one.
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:
   format: json
   limits: {max_bytes: 1048576, max_records: 1}
+  lookup_sets:
+    isin: {max_values: 10000000, max_bytes: 268435456, max_value_bytes: 64, pairs: true}
   tables:
     security_issuer:
       each: .
@@ -44,6 +49,49 @@ read:
             path: ISSUER_CUSIP
             default: ""
             transforms: [{case: upper}]
+        issuer_lei:
+          text:
+            path: ISSUER_LEI
+            default: ""
+            transforms: [{case: upper}]
+    isin_issuer:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms: [{case: upper}]
+                  null_if: ["", "000000000", "999999999"]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then:
+            choose:
+              condition:
+                equal:
+                  left: {member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: ISSUER_LEI
+                          default: ""
+                          transforms:
+                          - {case: upper}
+                          - {regex_replace: {pattern: '^.*[^A-Z0-9].*$|^.{0,19}$|^.{21,}$|^.{18}[A-Z].$|^.{19}[A-Z]$|^0{20}$', with: ''}}
+                          null_if: [""]
+                      right: {value: {path: NO_SUCH_COLUMN}}
+                  then: {value: {path: NO_SUCH_COLUMN}}
+                  else: {test: {path: HOLDING_ID, kind: present}}
+          else: {value: {path: NO_SUCH_COLUMN}}
+      columns:
+        isin: {member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
         issuer_lei:
           text:
             path: ISSUER_LEI
