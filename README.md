@@ -7,8 +7,10 @@ and processing decisions can be explained.
 
 The platform combines **master data management (MDM)**, **reference data
 management (RDM)**, source-shaped **silver tables**, and a **Data Catalog**.
-SEC EDGAR and GLEIF are current sources; the engine and workflows are configured
-through versioned rules. AWS S3 and Snowflake are the analytics deployment target.
+Source definitions cover SEC EDGAR, IAPD Form ADV and GLEIF, with captured
+OpenFIGI answers supporting security-identifier enrichment. The engine and
+workflows are configured through versioned rules. AWS S3 and Snowflake are
+the analytics deployment target.
 
 ## For executives: what this delivers
 
@@ -29,9 +31,42 @@ The configured workers' AWS launch configuration and automated silver pipeline
 landing remain integration work. Existing Snowflake/dbt/dashboard assets do
 not establish that a new source is deployed end to end.
 
-**Reading paths:** [Architecture](#architecture) · [Skills](#how-the-skills-work)
+**Reading paths:** [Sources](#sources-in-the-repository) · [Architecture](#architecture) · [Skills](#how-the-skills-work)
+· [Onboard a source](#onboard-a-brand-new-data-source) · [Rules guide](#rules-an-easy-guide)
 · [Mastering](#how-mastering-works) · [Data Catalog](#how-the-data-catalog-is-built)
 · [Getting started](#getting-started) · [Technical references](#repository-guide)
+
+## Sources in the repository
+
+There are **nine source definitions and 13 Dataset Contracts**. A source folder
+describes a feed; a Dataset Contract describes one record type mapped from it.
+One provider or captured delivery can therefore support several contracts.
+
+| Source definition | What its rules describe |
+| --- | --- |
+| [SEC Company submissions](rules/sources/sec.submissions.company/source.yaml) | Company evidence and identity from SEC submissions documents. |
+| [SEC Person submissions](rules/sources/sec.submissions.person/source.yaml) | Person evidence from the same submissions family, under separate classification and mapping rules. |
+| [GLEIF](rules/sources/gleif/source.yaml) | Legal-entity evidence, accounting-parent relationships and reporting exceptions. |
+| [IAPD Form ADV](rules/sources/iapd.adv/source.yaml) | Adviser filings and custodians mapped to Company identities; custody amounts remain separate facts. |
+| [SEC ownership, Forms 3/4/5](rules/sources/sec.ownership/source.yaml) | Reporting-owner identities and dated links to issuers. Transaction-table and pipeline work have separate qualification requirements. |
+| [SEC 13F information tables](rules/sources/sec.thirteenf.information_table/source.yaml) | Security evidence keyed by CUSIP, keeping the filed issuer name and security title. |
+| [SEC N-PORT registrants](rules/sources/sec.nport.registrant/source.yaml) | Filing registrants mapped to Company by CIK, retaining the latest filing's name and address together. |
+| [SEC N-PORT securities](rules/sources/sec.nport.security/source.yaml) | Security evidence through separate CUSIP and ISIN-only Dataset Contracts. |
+| [SEC N-PORT fund series](rules/sources/sec.nport.fund/source.yaml) | Fund Structure evidence by SEC series ID and eligible LEI, keeping the registrant CIK as a lookup reference. |
+
+N-PORT's registrant, fund series and held security describe different subjects.
+They do not become one identity because they appear in the same filing. The
+current Fund rules leave the subfund relationship for later evidence of its
+start date; they do not infer it from the registrant CIK alone.
+
+[OpenFIGI agreement rules](rules/sources/sec.nport.security/figi-agree.yaml)
+use captured mapping answers to support CUSIP/ISIN agreement for N-PORT
+securities. These are enrichment inputs, not a tenth standalone source definition.
+
+**These are committed definitions, not a list of live services.** Each feed
+needs its own captured-file tests, applicable proving run, operator approval,
+activation and verified execution. A source file, catalog entry or successful
+test does not by itself establish a live deployment.
 
 ## Architecture
 
@@ -139,6 +174,151 @@ become executable only through a reviewed, tested and approved Rules version.
 If configuration cannot express a required operation, a separately reviewed
 Python custom step can be added and qualified.
 
+## Onboard a brand new data source
+
+The goal is to turn a captured delivery into **understood records, reviewed
+rules and a verified result**. Start with
+[data-platform](skills/data-platform/SKILL.md), then follow
+[data-onboarding](skills/data-onboarding/SKILL.md) for the detailed procedure.
+Use [refining-rules](skills/refining-rules/SKILL.md) when the feed already has
+a contract and you are changing it. A second master kind from the same files
+gets its own onboarding and source folder.
+
+1. **Prepare the working environment and source evidence.** Follow the
+   [setup guide](skills/data-platform/SKILL.md#0-setup), choose the captured
+   files and retain their receipts and hashes. Research what the repository
+   already knows about the provider, identifiers and delivery format. Get
+   permission before making a new provider request, including for documentation.
+   Run `edgar-warehouse doctor`; credentials stay in the environment.
+2. **Profile the whole delivery and agree what its parts mean.** Identify
+   record boundaries, keys, links, dates, sensitive fields and quality defects.
+   Reuse approved findings for unchanged inputs. The operator approves the
+   findings before mapping decisions proceed. Plan the parts in dependency
+   order: master data first, then required reference data, then transaction
+   tables and separate relationships in silver. Metadata parts go to Bookkeeping.
+3. **Name the feed and define its contracts.** Create
+   `rules/sources/<source>/source.yaml`. Declare how to read the capture and
+   how each record type maps to a master kind: record key, identity identifiers,
+   lookup-only references, fields, relationships and source time. State whether
+   the delivery is full or incremental; absence from a later file does not by
+   itself retire an identity or close a relationship.
+4. **Define quality and mastering decisions.** Add the measured checks and
+   fixes in `quality.yaml`. Reuse the destination kind's matching and field
+   priorities; adding the feed to them is a merge-policy change requiring review.
+   A new kind also needs its own supported model and merge rules. Declare the
+   worker steps and verify that every required profile exists. If configuration
+   cannot express an operation, record the gap for separate engineering work.
+5. **Make the rules readable to stewards.** Generate the source's Mapping
+   Document, and the kind's workbook when its rules changed. Reconcile steward
+   feedback with the YAML and regenerate the workbook. Preview the Data Catalog
+   from the files. From a checkout, after writing the new contract, the commands
+   below use an invented source name that you replace with your real folder name:
+
+   ```bash
+   edgar-warehouse rules mapdoc write --root rules --only example.register
+   edgar-warehouse rules mapdoc check --root rules
+   edgar-warehouse rules catalog plan --root rules
+   ```
+
+   For an installed bundle, use the writable folder set in `EDGAR_RULES_ROOT`
+   instead of `rules`. These commands generate or inspect metadata; they do not
+   approve or activate processing. Add the approved profiling summary as
+   `profile.yaml` when publishing the part's silver and reference-data metadata.
+6. **Test the actual processing path.** Start with a small receipt-verified
+   captured sample, then run the qualification the part needs. Check values,
+   rejected records, identity decisions, source priority, relationships and
+   repeat-run behavior. Matching changes need their proving evidence. The
+   installed read → prepare → merge path needs real PostgreSQL 16 proof with
+   separate worker and verifier roles; a mapping-only check cannot replace it.
+   Reuse the first run's evidence unless inputs, rules or engine changed.
+7. **Save, approve and activate as separate steps.** Save descriptively named
+   Rules versions, record their test evidence, and inspect `rules pending`.
+   Explain the changes and results before asking for the operator's approval;
+   record their exact words. Activation needs its own authorization. Activating
+   a source also requires receipts from a real acquisition run of that source.
+   Follow the [approval guide](skills/data-onboarding/APPROVE.md); merging a PR
+   or generating a workbook does not authorize these steps.
+8. **Run, verify and expose the result.** Use the declared
+   [Bookkeeping workflow](skills/bookkeeping/RUN.md). Workers do the work;
+   independent verifiers reread the destinations. Check that all units are
+   verified and the run is finalized. Register and land silver explicitly where
+   needed. After the metadata PR is merged, publish the reviewed catalog plan
+   to the configured catalog server; publication is a separate action.
+
+Keep findings, decisions and evidence in
+`.scratch/onboarding/<source>/onboarding-log.md`. Public documentation contains
+counts and invented examples; actual records and credentials stay private.
+The detailed [contract reference](skills/data-onboarding/REFERENCE.md) is the
+authority for syntax and protected identity fields.
+
+## Rules: an easy guide
+
+**Rules are the agreed instructions for interpreting and mastering data.**
+They answer different questions; one rule should not silently answer another.
+
+| Question | Where the answer lives | In plain words |
+| --- | --- | --- |
+| How do we read this file? | The source's `read:` block or accompanying reading YAML | Locate records and extract typed fields from the captured format. |
+| What does a row mean? | Dataset Contracts under `mdm:` in `source.yaml` | Name its kind, record key, identifiers, fields, links and time. |
+| Is a value usable? | `quality.yaml` | Apply declared fixes, check the result and report what was set aside or withheld. |
+| Do records describe the same subject? | `rules/merge/kinds/<kind>.yaml` | Approved matching rules use identity evidence; lookup references alone do not join records. |
+| Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible claims after identity has been resolved. |
+| Is an identifier well formed, and may it decide identity? | `rules/identifiers/` and the kind's Identifier Contracts | Format validation and identity authority are separate requirements. |
+| What do codes and links mean? | `rules/reference/`, pinned reference versions and `rules/merge/relationships.yaml` | Give values and relationship types a shared, explicit meaning. |
+| What runs, and when is it complete? | The source's `bookkeeping` section or `rules/pipelines/<pipeline>/pipeline.yaml` | Declare worker steps, dependencies, checks and completion requirements. |
+
+### Example: choose a field winner without changing identity
+
+This is an **illustrative fragment**, with invented source codes, from a Company
+merge policy. It is not a complete contract or an approval to use those sources.
+
+```yaml
+defaults:
+  sources:
+    - example.register.company.v1
+    - example.partner.company.v1
+fields:
+  address:
+    sources:
+      - example.partner.company.v1
+      - example.register.company.v1
+```
+
+After approved matching establishes the identity, the register is preferred
+for eligible fields in general; the partner is preferred for the address.
+The lower-ranked source can supply an eligible value when the preferred one
+has none. Freshness, authorized clearing and other policy conditions still
+apply. This priority list does not make two records the same Company.
+
+Quality rules also have distinct outcomes: **`flag`** records a failed check;
+**`withhold`** keeps the value but excludes it from matching; **`exception`**
+sets the record aside for review instead of merging it. Fixes run before checks
+and retain the original value in their evidence. Batch continuation follows the
+contract's declared reasons; a rejected record must remain visible in the report.
+
+### Change rules safely
+
+- **Keep identity stable.** Changing a record key, publication key or set of
+  identity identifiers requires a new source code. An ordinary mapping or
+  quality change needs a new tested version; adding a lookup reference does
+  not itself change identity.
+- **Measure the effect.** Show which fields, matches, deferrals and winners
+  change on pinned captures. A source-order change can alter existing winners;
+  a matching-rule change can alter which records share an identity.
+- **Keep the written views equal.** Regenerate affected Mapping Documents
+  when their rules or generator change. `rules mapdoc check` compares all
+  committed workbooks with current rules. The catalog is another published view
+  of those files, not a separate place to edit processing behavior.
+- **Review before use.** Test the exact version, obtain operator approval,
+  and activate only when instructed. Follow
+  [refining-rules](skills/refining-rules/SKILL.md) for changes to an existing feed.
+
+For a concrete example, read the
+[Company source contract](rules/sources/sec.submissions.company/source.yaml),
+its [quality rules](rules/sources/sec.submissions.company/quality.yaml) and
+the [Company merge policy](rules/merge/kinds/company.yaml) together. The
+[contract reference](skills/data-onboarding/REFERENCE.md) explains the full language.
+
 ## How mastering works
 
 **Mastering turns different source descriptions into one stable identity with
@@ -202,15 +382,16 @@ recoverable, rather than a distributed transaction across all stores.
 
 ### The model today
 
-The repository has configured rules for **Company, Person and Security**.
-Company and Person have existing mastering paths; the Security rules now include
-the approved CUSIP-based 13F qualification. Each source still needs its own
-verified run and activation record. Adviser, Audit Firm and Fund are profiles
-on the appropriate identity, not duplicate identities.
+The repository has configured merge rules for **Company, Person, Security and
+Fund Structure**. N-PORT adds Company registrants, Security contracts and Fund
+Structure series alongside the existing submissions, GLEIF, ADV, ownership and
+13F definitions. Adviser and Audit Firm are profiles on Company; a Fund profile
+can attach to Company or Fund Structure, according to the subject's model.
+Each source still needs its own verified run and activation record.
 
-Fund Structure, Branch, Government Entity, International Organization and
-Market/Venue are supported domain boundaries; their presence in the model
-does not mean every domain has an active source. A subsidiary and its adviser
+Branch, Government Entity, International Organization and Market/Venue are
+other supported domain boundaries; their presence in the model does not mean
+every domain has an active source. A subsidiary and its adviser
 remain separate Companies. A rename of the same identity retains its stable
 master ID and historical names. Consolidation retains aliases and decisions;
 replay needs the accepted identity registry and decision history as well as
@@ -301,7 +482,7 @@ declared unit to be verified and the run finalized.
 | Area | Implementation and remaining boundary |
 | --- | --- |
 | **Configured source reading** | Rust behind the Python `SourceEngine` facade. XML, JSON, JSON Lines, CSV and Parquet, supported archive/envelope forms, and declared streaming paths; see [READING](skills/data-platform/READING.md). Unsupported formats need a qualified Python custom step. |
-| **Current source definitions** | SEC Company/Person submissions, GLEIF, ownership forms, IAPD ADV and 13F information-table definitions are in [rules/sources](rules/sources). Definitions and qualification differ by feed; their presence is not activation evidence. |
+| **Current source definitions** | The [source inventory](#sources-in-the-repository) includes submissions, GLEIF, ADV, ownership, 13F and N-PORT registrant/Security/Fund Structure definitions. Qualification differs by feed; a definition is not activation evidence. |
 | **Live capture** | `provider.capture` has offline HTTPS JSON qualification. Company still selects `artifact.copy`; live acquisition and continuation integration are separate work. See [configured capture](docs/configured-capture.md). |
 | **Silver landing** | Explicit local PostgreSQL registration, landing and MDM-ID refresh commands exist. Automated landing through a declared pipeline still requires a verified worker. |
 | **AWS execution** | Passive infrastructure, access control and image publishing assets exist. The retired ECS/Step Functions workload is not the configured workers' launch configuration. |
