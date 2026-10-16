@@ -1,0 +1,63 @@
+# N-PORT's identifier rows (IDENTIFIERS.tsv, one or more per holding): read
+# once, streamed, to build the pair set that gives each holding its ISIN
+# (ticket 91: a derived lookup set with `value_column`; source.yaml reads it
+# with `member_value`). Only an ISIN-shaped value enters the set (two letters,
+# nine letters or digits, a digit; rules/identifiers/isin.yaml), so a holding
+# with one ISIN and one other identifier row keeps its ISIN. The check digit is
+# the Dataset Contract's: a shaped value failing it (about 110 FIGIs filed as
+# ISINs, profiling) sets its record aside, counted.
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 1}
+  tables:
+    isin:
+      each: .
+      # An ISIN-shaped value is present: selection is boolean or null.
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: IDENTIFIER_ISIN
+                  default: ""
+                  transforms:
+                  - {case: upper}
+                  # Not ISIN-shaped (another character, another length, a digit in
+                  # the country, a letter last): blank, so it never enters the set.
+                  - {regex_replace: {pattern: '^(.*[^A-Z0-9].*|.{0,11}|.{13,}|.?[0-9].*|.*[A-Z])$', with: ''}}
+                  null_if: [""]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        holding: {text: {path: HOLDING_ID}}
+        isin:
+          text:
+            path: IDENTIFIER_ISIN
+            default: ""
+            transforms:
+            - {case: upper}
+            # Not ISIN-shaped (another character, another length, a digit in
+            # the country, a letter last): blank, so it never enters the set.
+            - {regex_replace: {pattern: '^(.*[^A-Z0-9].*|.{0,11}|.{13,}|.?[0-9].*|.*[A-Z])$', with: ''}}
+            null_if: [""]
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: IDENTIFIERS.tsv
+    # Measured (profiling, 2026q2): the quarter's ZIP is 440,699,889 bytes;
+    # IDENTIFIERS.tsv 254,625,669 bytes and 6,749,116 rows.
+    max_input_bytes: 1000000000
+    max_bytes: 1000000000
+    max_record: 1048576
+    max_records: 20000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 100000
+    max_spool_bytes: 8589934592
+    max_output_rows: 20000000

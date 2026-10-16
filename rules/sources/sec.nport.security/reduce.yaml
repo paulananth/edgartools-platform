@@ -1,0 +1,117 @@
+# The N-PORT Securities of one quarter (ticket 79, part 1): every usable CUSIP
+# and every ISIN of a holding with none, each with its filed words, and every
+# CUSIP and ISIN pair filed on one holding, counted both ways so the ISIN is
+# attached only when the pair is one to one (combine-pairs.yaml,
+# combine.yaml). One source extract: the holdings reading (source.yaml).
+# Filed words keep each key's lexically first spelling (sample_limit 1), as
+# for 13F. Pin canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  # Profiling, 2026q2: 5,347,869 holdings; 385,381 distinct CUSIPs; 397,025
+  # distinct ISINs; issuer names 904,712 and titles 1,312,402 distinct
+  # spellings over the whole table. Rows count every table the reading writes.
+  max_rows: 40000000
+  max_input_bytes: 17179869184
+  max_state_bytes: 4294967296
+  max_keys: 10000000
+  max_members: 10000000
+  max_output_rows: 10000000
+  max_output_bytes: 4294967296
+  groups:
+    cusips:
+      source: holdings
+      table: security_cusip
+      keys: [cusip]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
+    cusip_names:
+      source: holdings
+      table: security_cusip
+      keys: [cusip]
+      mode: members
+      member: issuer_name
+      count: names
+      sample: name_sample
+      sample_limit: 1
+    cusip_titles:
+      source: holdings
+      table: security_cusip
+      keys: [cusip]
+      mode: members
+      member: issuer_title
+      count: titles
+      sample: title_sample
+      sample_limit: 1
+    cusip_leis:
+      source: holdings
+      table: security_cusip
+      keys: [cusip]
+      mode: members
+      member: issuer_lei
+      count: leis
+      sample: lei_sample
+      sample_limit: 1
+    pairs:
+      source: holdings
+      table: cusip_isin
+      keys: [cusip, isin]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
+    cusip_isins:
+      source: holdings
+      table: cusip_isin
+      keys: [cusip]
+      mode: members
+      member: isin
+      count: isins
+      sample: isin_sample
+      sample_limit: 1
+    isin_cusips:
+      source: holdings
+      table: cusip_isin
+      keys: [isin]
+      mode: members
+      member: cusip
+      count: cusips
+      sample: cusip_sample
+      sample_limit: 1
+    isins:
+      source: holdings
+      table: security_isin
+      keys: [isin]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
+    isin_names:
+      source: holdings
+      table: security_isin
+      keys: [isin]
+      mode: members
+      member: issuer_name
+      count: names
+      sample: name_sample
+      sample_limit: 1
+    isin_titles:
+      source: holdings
+      table: security_isin
+      keys: [isin]
+      mode: members
+      member: issuer_title
+      count: titles
+      sample: title_sample
+      sample_limit: 1
+    isin_leis:
+      source: holdings
+      table: security_isin
+      keys: [isin]
+      mode: members
+      member: issuer_lei
+      count: leis
+      sample: lei_sample
+      sample_limit: 1

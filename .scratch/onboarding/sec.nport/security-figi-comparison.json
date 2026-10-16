@@ -1,0 +1,29 @@
+{
+ "found_with_no_figi": {
+  "id_cusip": 0,
+  "id_isin": 0
+ },
+ "cusip_answers": {
+  "No identifier found.": 30121,
+  "found": 353491
+ },
+ "isin_answers": {
+  "found": 380047,
+  "No identifier found.": 7560
+ },
+ "one_to_one_pairs": {
+  "not both found": 7710,
+  "same security": 346535,
+  "different securities": 128
+ },
+ "isins_with_several_cusips": {
+  "none agrees": 12880,
+  "exactly one CUSIP agrees": 4338,
+  "several agree": 1
+ },
+ "isin_only_securities": {
+  "no N-PORT CUSIP shares its FIGI": 27438,
+  "ISIN not found": 2476,
+  "shares a FIGI with an N-PORT CUSIP": 5395
+ }
+}

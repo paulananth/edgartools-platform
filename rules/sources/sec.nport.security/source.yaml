@@ -1,0 +1,387 @@
+# SEC Form N-PORT holdings, read for the Security master (ticket 79, part 1),
+# from the approved N-PORT findings (profiling/sec.nport-2026q2-final,
+# approved 2026-10-15 06:29 ET). Rulings it rests on (operator):
+# - "CUSIP and ISIN join" (2026-10-14): one CUSIP is one Security; an ISIN
+#   joins too; ticker, FIGI and SEDOL are lookup only.
+# - "Two contracts (Recommended)" (2026-10-15): sec.nport.security.v1, one
+#   record per CUSIP, carrying its ISIN when the pair is one to one;
+#   sec.nport.security_isin.v1, one record per ISIN of a holding with no
+#   usable CUSIP.
+# - "Registrant yes, issuer later" (2026-10-14): the issuer's name, title and
+#   LEI stay on the Security as filed (the LEI a filed word, not an
+#   identifier: 179,389 holdings carry one failing its check digit).
+# - "A" (13F, 2026-10-14): the filed words kept are each key's lexically first
+#   spelling, as for 13F (ticket 84 may replace it).
+# The run, in order: identifiers.yaml (IDENTIFIERS.tsv, streamed) gives the
+# pair set `isin` (holding to ISIN, ticket 91); this reading streams
+# FUND_REPORTED_HOLDING.tsv once and gives each holding its ISIN with
+# `member_value` (none when the holding has none or several); reduce.yaml
+# groups by CUSIP, by ISIN and by pair; combine-pairs.yaml counts each pair's
+# CUSIPs and ISINs; combine.yaml joins the filed words and the one-to-one ISIN
+# onto each CUSIP, and the filed words onto each ISIN; mdm.prepare reads table
+# `security` for the first contract and `security_isin` for the second.
+# A usable CUSIP is filed and not a stand-in (000000000, 999999999:
+# rules/identifiers/cusip.yaml); one failing its check digit stays a CUSIP
+# record and is set aside by the Dataset Contract, counted.
+source: sec.nport.security
+bronze:
+  family: sec.nport-datasets
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1
+  lookup_sets:
+    isin:
+      max_values: 10000000
+      max_bytes: 268435456
+      max_value_bytes: 64
+      pairs: true
+  tables:
+    security_cusip:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms:
+                  - case: upper
+                  null_if:
+                  - ""
+                  - "000000000"
+                  - "999999999"
+              right:
+                value:
+                  path: NO_SUCH_COLUMN
+          then:
+            value:
+              path: NO_SUCH_COLUMN
+          else:
+            test:
+              path: HOLDING_ID
+              kind: present
+      columns:
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ""
+            transforms:
+            - case: upper
+            null_if:
+            - ""
+            - "000000000"
+            - "999999999"
+        issuer_name:
+          text:
+            path: ISSUER_NAME
+            default: ""
+        issuer_title:
+          text:
+            path: ISSUER_TITLE
+            default: ""
+        issuer_lei:
+          text:
+            path: ISSUER_LEI
+            default: ""
+    cusip_isin:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms:
+                  - case: upper
+                  null_if:
+                  - ""
+                  - "000000000"
+                  - "999999999"
+              right:
+                value:
+                  path: NO_SUCH_COLUMN
+          then:
+            value:
+              path: NO_SUCH_COLUMN
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    member_value:
+                      lookup: isin
+                      key:
+                        text:
+                          path: HOLDING_ID
+                      on_many: "null"
+                  right:
+                    value:
+                      path: NO_SUCH_COLUMN
+              then:
+                value:
+                  path: NO_SUCH_COLUMN
+              else:
+                test:
+                  path: HOLDING_ID
+                  kind: present
+      columns:
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ""
+            transforms:
+            - case: upper
+            null_if:
+            - ""
+            - "000000000"
+            - "999999999"
+        isin:
+          member_value:
+            lookup: isin
+            key:
+              text:
+                path: HOLDING_ID
+            on_many: "null"
+    security_isin:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms:
+                  - case: upper
+                  null_if:
+                  - ""
+                  - "000000000"
+                  - "999999999"
+              right:
+                value:
+                  path: NO_SUCH_COLUMN
+          then:
+            choose:
+              condition:
+                equal:
+                  left:
+                    member_value:
+                      lookup: isin
+                      key:
+                        text:
+                          path: HOLDING_ID
+                      on_many: "null"
+                  right:
+                    value:
+                      path: NO_SUCH_COLUMN
+              then:
+                value:
+                  path: NO_SUCH_COLUMN
+              else:
+                test:
+                  path: HOLDING_ID
+                  kind: present
+          else:
+            value:
+              path: NO_SUCH_COLUMN
+      columns:
+        isin:
+          member_value:
+            lookup: isin
+            key:
+              text:
+                path: HOLDING_ID
+            on_many: "null"
+        issuer_name:
+          text:
+            path: ISSUER_NAME
+            default: ""
+        issuer_title:
+          text:
+            path: ISSUER_TITLE
+            default: ""
+        issuer_lei:
+          text:
+            path: ISSUER_LEI
+            default: ""
+  stream:
+    framing: delimited
+    delimited:
+      format: tsv
+      encoding: utf-8
+    container: zip
+    member: FUND_REPORTED_HOLDING.tsv
+    max_input_bytes: 1000000000
+    max_bytes: 2000000000
+    max_record: 1048576
+    max_records: 20000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 100000
+    max_spool_bytes: 17179869184
+    max_output_rows: 40000000
+mdm:
+  sec.nport.security.v1:
+    contract:
+      provider: SEC
+      family: sec.nport-datasets
+      schema_version: sec-nport-security-v1
+      record_key: the CUSIP, upper-cased; one record per CUSIP over the quarter
+      publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
+      effective_time: unknown; the holdings carry the report period, not the Security's own
+        time
+      semantics: patch
+      completeness: the Securities one quarter's holdings name; no retirement by absence
+      nonblocking_deferred_reasons:
+      - invalid_cusip
+      - invalid_cusip_checksum
+      - invalid_isin
+      - invalid_isin_checksum
+      - missing_record_identity
+      adapter:
+        reading:
+          source: sec.nport.security
+          read:
+            format: json
+            limits:
+              max_bytes: 33554432
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name_of_issuer:
+                          join:
+                            path: name.name_sample
+                            item_path: issuer_name
+                            separator: ""
+                            max_items: 1
+                        title_of_class:
+                          join:
+                            path: title.title_sample
+                            item_path: issuer_title
+                            separator: ""
+                            max_items: 1
+                        issuer_lei:
+                          join:
+                            path: lei.lei_sample
+                            item_path: issuer_lei
+                            separator: ""
+                            max_items: 1
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - cusip
+          - name
+          - title
+          - lei
+          - isin
+        version: sec-nport-security-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: security
+        record_key:
+        - cusip
+        record_key_format: cusip
+        identifiers:
+          cusip: cusip
+          isin: isin
+        identifier_formats:
+          cusip: cusip
+          isin: isin
+  sec.nport.security_isin.v1:
+    contract:
+      provider: SEC
+      family: sec.nport-datasets
+      schema_version: sec-nport-security-isin-v1
+      record_key: the ISIN, upper-cased; one record per ISIN of a holding with no usable CUSIP
+      publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
+      effective_time: unknown; the holdings carry the report period, not the Security's own
+        time
+      semantics: patch
+      completeness: the Securities one quarter's holdings name; no retirement by absence
+      nonblocking_deferred_reasons:
+      - invalid_isin
+      - invalid_isin_checksum
+      - missing_record_identity
+      adapter:
+        reading:
+          source: sec.nport.security
+          read:
+            format: json
+            limits:
+              max_bytes: 33554432
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name_of_issuer:
+                          join:
+                            path: name.name_sample
+                            item_path: issuer_name
+                            separator: ""
+                            max_items: 1
+                        title_of_class:
+                          join:
+                            path: title.title_sample
+                            item_path: issuer_title
+                            separator: ""
+                            max_items: 1
+                        issuer_lei:
+                          join:
+                            path: lei.lei_sample
+                            item_path: issuer_lei
+                            separator: ""
+                            max_items: 1
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - isin
+          - name
+          - title
+          - lei
+        version: sec-nport-security-isin-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: security
+        record_key:
+        - isin
+        record_key_format: isin
+        identifiers:
+          isin: isin
+        identifier_formats:
+          isin: isin

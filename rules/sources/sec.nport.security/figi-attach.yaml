@@ -1,0 +1,22 @@
+# Each pair FIGI agrees on (figi-agree.yaml's reading, `agreed`), with how
+# many ISINs its CUSIP is offered and how many CUSIPs its ISIN is offered to
+# (figi-offers.yaml's output, `offers`); combine.yaml attaches the ISIN only
+# when both are 1, so a CUSIP offered two ISINs, or an ISIN offered to two
+# CUSIPs, attaches none (ticket 80). Pin canonical JSON of this file as the
+# source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 10000000
+  groups:
+    cusip_offers: {source: offers, table: offers_of_cusip, key: cusip, value: offers, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    isin_offers: {source: offers, table: offers_of_isin, key: isin, value: offers, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    attached:
+      source: agreed
+      table: agreed
+      checks: {}
+      where: {}
+      joins:
+        cusip_offers: {group: cusip_offers, key: cusip, on_missing: error, replace: false}
+        isin_offers: {group: isin_offers, key: isin, on_missing: error, replace: false}

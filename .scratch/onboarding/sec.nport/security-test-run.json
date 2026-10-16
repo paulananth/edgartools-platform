@@ -1,0 +1,39 @@
+{
+ "facts": {
+  "holdings_with_usable_cusip": 4716318,
+  "holdings_isin_only": 417552,
+  "cusips_with_several_isins": 520,
+  "isins_with_several_cusips": 17219,
+  "pairs": 414777,
+  "pairs_one_to_one": 354373,
+  "pairs_isin_embeds_cusip": 353329
+ },
+ "contracts": {
+  "sec.nport.security.v1": {
+   "outcome": {
+    "invalid_cusip_checksum": 1769,
+    "accepted": 383595,
+    "invalid_isin_checksum": 17,
+    "invalid_cusip": 1
+   },
+   "filled": {
+    "issuer_lei": 383595,
+    "name_of_issuer": 383595,
+    "title_of_class": 383595,
+    "id:cusip": 383595,
+    "id:isin": 354274
+   }
+  },
+  "sec.nport.security_isin.v1": {
+   "outcome": {
+    "accepted": 35309
+   },
+   "filled": {
+    "issuer_lei": 35309,
+    "name_of_issuer": 35309,
+    "title_of_class": 35309,
+    "id:isin": 35309
+   }
+  }
+ }
+}

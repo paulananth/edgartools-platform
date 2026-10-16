@@ -9,8 +9,12 @@
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
 version: security-2026-10-14.1
 defaults:
+  # The first listed wins each field. N-PORT is listed after 13F until the
+  # operator rules which source's filed words a Security keeps (ticket 84).
   sources:
   - sec.thirteenf.information_table.security.v1
+  - sec.nport.security.v1
+  - sec.nport.security_isin.v1
   allow_unknown_effective: true
 rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its
@@ -31,11 +35,63 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cusip
+- rule_id: nport-security-cusip
+  version: 2026-10-15.1
+  family: binding
+  source: sec.nport.security.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cusip
+# An N-PORT CUSIP record also joins by its ISIN, carried only when OpenFIGI
+# agrees the CUSIP and ISIN are one security and neither is offered twice
+# (operator, 2026-10-15: "Use FIGI to add pairs too";
+# rules/sources/sec.nport.security/figi-agree.yaml, combine.yaml). Its CUSIP
+# and ISIN pointing at two Securities defers to review, never binds.
+- rule_id: nport-security-isin
+  version: 2026-10-15.1
+  family: binding
+  source: sec.nport.security.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: isin
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: isin
+# A Security filed with no usable CUSIP joins by its ISIN, or is created.
+- rule_id: nport-isin-security-isin
+  version: 2026-10-15.1
+  family: binding
+  source: sec.nport.security_isin.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: isin
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: isin
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
     sources:
     - sec.thirteenf.information_table.security.v1
+    - sec.nport.security.v1
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@cusip-v1
@@ -54,6 +110,26 @@ identifiers:
         999 local 13F information tables: 20,311 Securities by their CUSIP, 0 CUSIPs on two
         Securities, 9,631 records set aside (9,603 check digit fails, 28 not CUSIP-shaped),
         a second pass changed nothing"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  isin:
+    authority: ISIN (ISO 6166), issued by each country's numbering agency
+    sources:
+    - sec.nport.security.v1
+    - sec.nport.security_isin.v1
+    # rules/identifiers/isin.yaml (ticket 81): 12 characters, the check digit
+    # verified, upper-cased.
+    normalizer: normalize_identifier@isin-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    # verification: filled when the operator approves the ISIN Identifier
+    # Contract on its Proving Run (not yet run).
     tolerance:
       unit: items
       warm_up_decisions: 10000

@@ -1,0 +1,84 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 439232
+  },
+  "fields_filled": {
+   "issuer_lei": 418921,
+   "name_of_issuer": 439232,
+   "title_of_class": 439232
+  },
+  "identities": {
+   "security": 423562
+  },
+  "open_reviews": {
+   "invalid_cusip": 29,
+   "invalid_cusip_checksum": 11372
+  },
+  "stage_records": {
+   "sec.nport.security.v1": 383612,
+   "sec.nport.security_isin.v1": 35309,
+   "sec.thirteenf.information_table.security.v1": 20311
+  },
+  "waiting": {
+   "invalid_cusip": 29,
+   "invalid_cusip_checksum": 11372
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 439232
+  },
+  "fields_filled": {
+   "issuer_lei": 418921,
+   "name_of_issuer": 439232,
+   "title_of_class": 439232
+  },
+  "identities": {
+   "security": 423562
+  },
+  "open_reviews": {
+   "invalid_cusip": 29,
+   "invalid_cusip_checksum": 11372
+  },
+  "stage_records": {
+   "sec.nport.security.v1": 383612,
+   "sec.nport.security_isin.v1": 35309,
+   "sec.thirteenf.information_table.security.v1": 20311
+  },
+  "waiting": {
+   "invalid_cusip": 29,
+   "invalid_cusip_checksum": 11372
+  }
+ },
+ "batches": 906,
+ "cusip_on_two_securities": 0,
+ "cusips_held": 393645,
+ "isin_on_two_securities": 0,
+ "isins_held": 380790,
+ "policy_digest": "93f3e26d56cca4315a049cb040af65c637683e8cf45a7558ebc62d44dfd0dcef",
+ "read": {
+  "sec.nport.security.v1 assertions": 767224,
+  "sec.nport.security.v1 deferred: invalid_cusip": 2,
+  "sec.nport.security.v1 deferred: invalid_cusip_checksum": 3538,
+  "sec.nport.security_isin.v1 assertions": 70618,
+  "sec.thirteenf.information_table.security.v1 assertions": 40622,
+  "sec.thirteenf.information_table.security.v1 deferred: invalid_cusip": 56,
+  "sec.thirteenf.information_table.security.v1 deferred: invalid_cusip_checksum": 19206
+ },
+ "run": "N-PORT Security with OpenFIGI, Proving Run of sec.nport.security.v1 and sec.nport.security_isin.v1",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 8192.9,
+  "second_pass": 1393.5
+ },
+ "securities_by_feeds": {
+  "sec.nport.security.v1": 367994,
+  "sec.nport.security.v1 + sec.nport.security_isin.v1": 5340,
+  "sec.nport.security.v1 + sec.nport.security_isin.v1 + sec.thirteenf.information_table.security.v1": 52,
+  "sec.nport.security.v1 + sec.thirteenf.information_table.security.v1": 10226,
+  "sec.nport.security_isin.v1": 29917,
+  "sec.thirteenf.information_table.security.v1": 10033
+ },
+ "slowest_batch_seconds": 72.1
+}

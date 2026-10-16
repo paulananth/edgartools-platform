@@ -1,0 +1,17 @@
+# How many ISINs FIGI offers each CUSIP, and how many CUSIPs each ISIN is
+# offered to (ticket 80), counted over figi-agree.yaml's reading (`agreed`).
+# figi-attach.yaml attaches a pair only when both are 1. Pin canonical JSON of
+# this file as the source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  max_rows: 10000000
+  max_input_bytes: 4294967296
+  max_state_bytes: 1073741824
+  max_keys: 1000000
+  max_members: 1000000
+  max_output_rows: 1000000
+  max_output_bytes: 1073741824
+  groups:
+    offers_of_cusip: {source: agreed, table: agreed, keys: [cusip], mode: count, count: offers, sample: null, sample_limit: 0}
+    offers_of_isin: {source: agreed, table: agreed, keys: [isin], mode: count, count: offers, sample: null, sample_limit: 0}
