@@ -627,6 +627,25 @@ def test_issuer_links_reproject_through_merge_and_reverse(database):
     assert len(active) == 1 and active[0]["target_id"] == j["entity_id"]
 
 
+def test_a_link_keeps_its_first_observed_start_across_revisions(database):
+    """Ticket 101: a link with no stated start starts when first seen; a later
+    revision restating it moves only when it was last seen."""
+    b = source("b")
+    first = source("instrument", kind="security",
+                   relationships=[{"type": "ISSUED_BY", "target_subject": b["subject"]}])
+    later = assertion(source_code=first["source_code"], record_key="instrument", publication_key="p2",
+                      revision=2, effective_at="2026-04-01T00:00:00+00:00", kind="security",
+                      fields={"name": "Acme"},
+                      relationships=[{"type": "ISSUED_BY", "target_subject": b["subject"]}])
+    j, db = identity_and_binding(b)
+    k, dk = identity_and_binding(first)
+    apply(database, 1, assertions=[b, first], identities=[j, k], decisions=[db, dk])
+    apply(database, 2, assertions=[later])
+    (link,) = documents(database, "relationship").values()
+    assert [(p["valid_from"], p["valid_from_basis"]) for p in link["periods"]] == [(AT, "observed")]
+    assert link["last_seen"] == "2026-04-01T00:00:00+00:00"
+
+
 def test_hierarchy_cycles_invalid_intervals_and_parent_conflicts(database):
     a = source("a")
     b = source("b")
