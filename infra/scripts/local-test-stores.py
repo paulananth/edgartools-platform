@@ -37,9 +37,12 @@ LABEL = "org.edgartools.local-tests.owner"
 
 def private_write(path: Path, value: str) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with open(path, "w", opener=lambda p, flags: os.open(p, flags, 0o600)) as out:
+    temporary = path.with_name(path.name + "." + uuid4().hex)
+    with open(temporary, "w", opener=lambda p, flags: os.open(p, flags, 0o600)) as out:
         out.write(value)
-    path.chmod(0o600)
+        out.flush()
+        os.fsync(out.fileno())
+    temporary.replace(path)
 
 
 def file_hash(path: Path) -> str:
@@ -153,6 +156,7 @@ class LocalStores:
                 time.sleep(.2)
             finally:
                 engine.dispose()
+        self.recover_backup(name)
         self.provision(name, migrate=not empty)
         env_lines = []
         for database, (variable, _) in STORES.items():
@@ -230,14 +234,33 @@ class LocalStores:
                 engine.dispose()
         return result
 
+    def recover_backup(self, name: str):
+        marker = self.folder(name) / "backup-paused.json"
+        if not marker.exists():
+            return
+        previous = json.loads(marker.read_text())
+        if set(previous) != {d + "_runtime" for d in STORES} or any(type(v) is not bool for v in previous.values()):
+            raise ValueError("Backup recovery record is invalid; retained for diagnosis")
+        engine = self.engine(name)
+        try:
+            with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                for role, login in previous.items():
+                    conn.exec_driver_sql(f'ALTER ROLE "{role}" {"LOGIN" if login else "NOLOGIN"}')
+            marker.unlink()
+        finally:
+            engine.dispose()
+
     def backup(self, name: str):
         identity = self.identity(name)
         container, _ = self.owned(name, identity)
+        self.recover_backup(name)
         admin = self.engine(name)
         target = self.root / "backups" / (name + "-" + uuid4().hex)
         target.mkdir(mode=0o700, parents=True)
         try:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                previous = {d + "_runtime": bool(conn.scalar(text("SELECT rolcanlogin FROM pg_roles WHERE rolname=:r"), {"r": d + "_runtime"})) for d in STORES}
+                private_write(self.folder(name) / "backup-paused.json", json.dumps(previous))
                 for database in STORES:
                     conn.exec_driver_sql(f'ALTER ROLE "{database}_runtime" NOLOGIN')
                 if conn.scalar(text("SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()")):
@@ -247,15 +270,13 @@ class LocalStores:
             for database in STORES:
                 path = target / (database + ".dump")
                 with open(path, "wb", opener=lambda p, flags: os.open(p, flags, 0o600)) as out:
-                    self.docker("exec", container, "pg_dump", "-U", "postgres", "-Fc", "--no-owner", "--no-acl", "-d", database, stdout=out)
+                    self.docker("exec", container, "pg_dump", "-U", "postgres", "-Fc", "--no-owner", "-d", database, stdout=out)
                 files[path.name] = file_hash(path)
             private_write(target / "manifest.json", json.dumps({"files": files, "contents": contents}, sort_keys=True))
             return target
         finally:
-            with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                for database in STORES:
-                    conn.exec_driver_sql(f'ALTER ROLE "{database}_runtime" LOGIN')
             admin.dispose()
+            self.recover_backup(name)
 
     def restore(self, name: str, snapshot: Path):
         manifest = json.loads((snapshot / "manifest.json").read_text())
@@ -274,7 +295,7 @@ class LocalStores:
         container, _ = self.owned(name, identity)
         for database in STORES:
             with (snapshot / (database + ".dump")).open("rb") as data:
-                found = subprocess.run(["docker", "exec", "-i", container, "pg_restore", "-U", "postgres", "--exit-on-error", "--no-owner", "--no-acl", "--role", database + "_owner", "-d", database], stdin=data, capture_output=True, timeout=180)
+                found = subprocess.run(["docker", "exec", "-i", container, "pg_restore", "-U", "postgres", "--exit-on-error", "--no-owner", "--role", database + "_owner", "-d", database], stdin=data, capture_output=True, timeout=180)
                 if found.returncode:
                     raise RuntimeError("Restore failed; retained the incomplete environment for diagnosis")
         self.provision(name)

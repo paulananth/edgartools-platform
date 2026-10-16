@@ -21,7 +21,6 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 - [x] Verify independent environments, restricted roles, persistence, repeat provisioning and backup/restore (11 affected tests passed with testmon in 44.49 seconds; three invented Companies, RDM row, lookup-linked silver row and exact integer beyond binary64; 2026-10-16 19:06 ET).
 - [x] Update README and local testing guide with diagrams and recovery instructions (new link, balanced fences and implemented command names verified; 2026-10-16 19:06 ET).
 - [ ] Review Standards, Spec and GoF, publish a PR and verify CI before landing.
-- [x] Learning → skill: data-platform/LOCAL-TESTING.md defines automatic work with independent copies and ordinary backups (separate PR #1021 merged after all six checks passed; 2026-10-16 19:06 ET).
 
 ## Decisions
 
@@ -48,3 +47,13 @@ Interview complete for the assigned local infrastructure. Record new facts and r
 ## Implementation limits
 
 The persistent environment currently provides all six migrated stores. The qualification test uses invented records only. Captured Company financial facts are not silently loaded through an unqualified reader; reader and financial-table work remain in the existing Company financials tickets. A baseline created from an empty store is an empty starting copy, not proof of that business pipeline.
+
+## Final review fixes
+
+- [x] Preserve PostgreSQL ACLs so restored silver runtime connections can read and land registered tables (restored-runtime SELECT, INSERT and DELETE verified; 2026-10-16 19:10 ET).
+- [x] Recover interrupted backup login fencing on startup from a private atomic record (forced NOLOGIN + restart recovery verified; 2026-10-16 19:10 ET).
+- [x] Recheck affected behavior after the fixes (11 tests passed with testmon in 48.76 seconds; 2026-10-16 19:10 ET).
+
+Standards review found no issues. Independent Spec and GoF reviews identified the two fixes above; their final rechecks are pending.
+
+- [x] Learning → skill: data-platform/LOCAL-TESTING.md defines automatic work with independent copies and ordinary backups (separate PR #1021 merged after all six checks passed; 2026-10-16 19:06 ET).

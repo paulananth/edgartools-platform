@@ -59,6 +59,10 @@ registry, accepted decisions and silver links travel with the database contents.
 If a check fails, the prior baseline remains selected. Successful promotion is
 automatic and serialized with a file lock; it needs no approval prompt.
 
+If a backup is interrupted, `up` restores the prior login states before checking
+the migrations. Database grants travel with the backup, so restored runtime
+connections can use registered silver tables as well as read their metadata.
+
 The restore-check environment is stopped after the check. Its volume is retained,
 along with the backup, so this command does not destroy persistent data.
 

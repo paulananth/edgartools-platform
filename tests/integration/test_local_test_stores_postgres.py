@@ -103,6 +103,26 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             first.stop(one)
             first.start(one)
         assert first.contents(one) == expected
+        # Simulate a process dying after it fenced logins but before finally ran.
+        local.private_write(first.folder(one) / "backup-paused.json",
+                            json.dumps({d + "_runtime": True for d in local.STORES}))
+        admin = first.engine(one)
+        try:
+            with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                for d in local.STORES:
+                    conn.exec_driver_sql(f'ALTER ROLE "{d}_runtime" NOLOGIN')
+        finally:
+            admin.dispose()
+        with first.locked(one):
+            first.stop(one)
+            first.start(one)
+        assert not (first.folder(one) / "backup-paused.json").exists()
+        runtime = first.engine(one, "silver", "silver_runtime")
+        try:
+            with runtime.connect() as conn:
+                assert conn.scalar(text("SELECT count(*) FROM silver.visit")) == 1
+        finally:
+            runtime.dispose()
         # Active writers block a baseline copy; the login is restored after refusal.
         active = first.engine(one, "rdm", "rdm_runtime")
         try:
@@ -116,6 +136,20 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         assert Path((root / 'baseline').read_text().strip()) == snapshot
         with second.locked(restored):
             second.restore(restored, snapshot)
+        assert second.contents(restored) == expected
+        # Restored contents alone do not prove the runtime can use the tables.
+        runtime = second.engine(restored, "silver", "silver_runtime")
+        mdm_reader = second.engine(restored, "mdm", "mdm_runtime")
+        try:
+            with runtime.connect() as conn:
+                assert conn.execute(text("SELECT visit_id,member_id_mdm_id FROM silver.visit")).one() == (2**53 + 1, ids['b'])
+            result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 2, "member_id": "b", "amount": "2.50", "visited_on": None, "tags": None}], MdmIds(mdm_reader))
+            assert result["inserted"] == 1 and result["mdm_keys_found"] == 1
+            with runtime.begin() as conn:
+                conn.execute(text("DELETE FROM silver.visit WHERE visit_id=:i"), {"i": 2**53 + 2})
+        finally:
+            runtime.dispose()
+            mdm_reader.dispose()
         assert second.contents(restored) == expected
         with pytest.raises(ValueError, match="existing data is never overwritten"):
             second.restore(restored, snapshot)
