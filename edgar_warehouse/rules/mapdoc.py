@@ -315,13 +315,15 @@ def _compare(parts: list | None) -> str:
 
 def _count(args: dict) -> str:
     """A condition's bounds in words: a floor, a ceiling, or both; a ceiling of
-    0 is none."""
-    low, high = args.get("min_count"), args.get("max_count")
+    0 is none, and a floor of 0 is no floor."""
+    low, high = args.get("min_count") or 0, args.get("max_count")
     if high is None:
         return f"at least {low}"
     if high == 0:
         return "none"
-    return f"at most {high}" if low is None else f"at least {low} and at most {high}"
+    if low == high:
+        return f"exactly {high}"
+    return f"at least {low} and at most {high}" if low else f"at most {high}"
 
 
 def _conditions(items: list[dict], kind: str) -> str:
@@ -333,7 +335,9 @@ def _conditions(items: list[dict], kind: str) -> str:
             found = {**found, "count": _count(found)}
         if found.get("exclude_list"):  # words of the list that do not count
             found = {**found, "token_list": f"{found['token_list']} (not counting {found['exclude_list']})"}
-        return {**found, "compare": _compare(found.get("compare"))} if w.get("primitive") == "cascade_pass@1" else found
+        if w.get("primitive") != "cascade_pass@1":
+            return found
+        return {**found, "compare": _compare(found.get("compare")), "refused_flags": found.get("refused_flags") or "none"}
 
     def condition(w: dict) -> str:
         text = words(CONDITION_WORDS, w.get("primitive"), args(w))

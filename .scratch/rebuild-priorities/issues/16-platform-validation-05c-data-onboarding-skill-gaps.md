@@ -44,8 +44,11 @@ given.
   - "Company" is hard-coded in the matching rule text: each kind now names
     itself ("Exactly one Security holds that CUSIP"), and a ceiling with no
     floor (`max_count: 0`) reads "holds none of the list";
-  - the arguments are shown raw (fixed in #770; every condition the rules use
-    has words, `test_every_condition_the_rules_use_has_plain_words`)
+  - the arguments are shown raw: every condition the rules use has words
+    (#770, `test_every_condition_the_rules_use_has_plain_words`), and an empty
+    refused-flags list now reads "none". Values still show as the rules file
+    holds them (a field's name, `True`, a category as SEC files it); that is
+    the record's own text, kept on purpose
 - [ ] 11. Catalog lineage is missing for a second kind read from another
   source's feed
 - [ ] 12. The input manifest includes a non-feed file (the ticker catalog):

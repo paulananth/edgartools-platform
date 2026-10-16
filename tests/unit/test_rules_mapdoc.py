@@ -150,6 +150,16 @@ def test_a_condition_names_its_own_kind_and_reads_a_ceiling_of_none():
     steps = " ".join(row[6] for row in found["company"]["Classification"][1:])
     assert "forms holds none of the list bdc_election" in steps
     assert "at least  " not in steps and "at least 1 of the list" in steps
+    passes = " ".join(row[5] for row in found["company"]["Matching rules"][1:])
+    assert "Refused flags: none" in passes and "Refused flags: ;" not in passes
+
+
+@pytest.mark.parametrize("bounds, words", [
+    ({"min_count": 1}, "at least 1"), ({"min_count": 1, "max_count": 3}, "at least 1 and at most 3"),
+    ({"min_count": 1, "max_count": 1}, "exactly 1"), ({"max_count": 2}, "at most 2"),
+    ({"min_count": 0, "max_count": 2}, "at most 2"), ({"max_count": 0}, "none")])
+def test_a_count_reads_as_its_bounds(bounds, words):
+    assert mapdoc._count(bounds) == words
 
 
 def test_every_link_rule_has_plain_words():
