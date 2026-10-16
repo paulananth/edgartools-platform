@@ -546,6 +546,11 @@ contract's `nonblocking_deferred_reasons`.
      `defaults.sources` fails its whole batch. Check `defaults.sources` (a
      kind with its own check in code, run it; see Examples). Adding a source to an
      existing kind is a merge-rule change: log it for the operator.
+   - **A merge-rule change moves pinned digests.** Other tests pin a kind's
+     policy digest, so run the whole MDM test folder (see Examples), not
+     only the tests that load the rules. A kind whose digests are pinned
+     layer by layer gets the change as one new layer: peeled, the policy
+     is the one before.
    - **A new kind:** records are blocked with `classification_not_activated`
      until its classification rule is switched on. That is expected: the
      order below switches it on first. To see what it would do, add the
@@ -708,6 +713,10 @@ These name today's sources only as examples; nothing above depends on them.
   `allow_unknown_effective`.
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.
+- **Pinned digests:** `tests/mdm/` (757 tests, under a minute) holds them;
+  Company's are layers in `tests/mdm/policy_layers.py` (`LAYERS`, newest
+  first). N-PORT's registrant (2026-10-15) ran only the 43 tests that load
+  the rules, and CI failed on four pinned digests.
 - **Proving runs:** ticket 05's `.scratch/company-mastering/research/05_proving_run.py`
   (`candidate()` stamps the copied policy); ticket 27's
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
