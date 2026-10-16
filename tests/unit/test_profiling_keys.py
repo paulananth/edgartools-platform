@@ -106,3 +106,93 @@ def test_zero_padded_text_matches_numbers(tmp_path):
     con.execute("CREATE TABLE f AS SELECT (i % 199) + 1 AS ref FROM range(500) r(i)")
     assert keys.inclusion(con, "f", "ref", "p", "ref", {})["sigma"] == 0.0
     assert keys.inclusion(con, "f", "ref", "p", "ref", {}, as_number=True)["sigma"] == 1.0
+
+
+def _instruments(con):
+    """Invented: 30 instruments, each with a code and a longer id holding it; one longer id written for
+    two codes (a conflict), one code with two longer ids, one stand-in; identifier rows keyed by row."""
+    con.execute("CREATE TABLE inst (row_id INTEGER, code VARCHAR, long_id VARCHAR)")
+    rows = [(n, f"C{n:05d}", f"XX{n:05d}9") for n in range(1, 31)]
+    rows += [(31, "C00031", "XX000019"), (32, "C00001", "XX000329"), (33, "C00033", "N/A")]
+    con.executemany("INSERT INTO inst VALUES (?, ?, ?)", rows)
+    con.execute("CREATE TABLE inst_ids (row_id INTEGER, other_id VARCHAR)")
+    con.executemany("INSERT INTO inst_ids VALUES (?, ?)", [(n, f"OT{n:06d}") for n in range(1, 21)])
+
+
+def test_two_identifiers_pairing_within_a_part():
+    con = duckdb.connect()
+    _instruments(con)
+    found = keys.pairing(con, "inst", "code", "inst", "long_id")
+    assert found == {"with": "long_id", "a_values": 32, "b_values": 31, "distinct_pairs": 32,
+                     "a_with_one_b": 30, "a_with_several_b": 1, "a_without_b": 1,
+                     "b_with_several_a": 1, "one_to_one": 29, "one_holds_the_other": 0}
+
+
+def test_two_identifiers_pairing_across_a_link():
+    con = duckdb.connect()
+    _instruments(con)
+    found = keys.pairing(con, "inst", "code", "inst_ids", "other_id", on=[("row_id", "row_id")])
+    assert found["part"] == "inst_ids" and found["via"] == [{"from": "row_id", "to": "row_id"}]
+    assert (found["distinct_pairs"], found["a_with_one_b"], found["a_without_b"], found["b_with_several_a"]) == (20, 20, 12, 0)
+
+
+def test_one_identifier_holding_the_other_is_counted():
+    con = duckdb.connect()
+    con.execute("CREATE TABLE s (a VARCHAR, b VARCHAR)")
+    con.executemany("INSERT INTO s VALUES (?, ?)", [("123456789", "US1234567890"), ("987654321", "GB0000000001")])
+    assert keys.pairing(con, "s", "a", "s", "b")["one_holds_the_other"] == 1
+
+
+def _parts(**scans):
+    from types import SimpleNamespace
+    return {name: SimpleNamespace(scan=scan[0], derived_from=scan[1]) for name, scan in scans.items()}
+
+
+def test_a_master_parts_identifiers_carry_their_pairs():
+    from profiling import run
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE inst AS SELECT n AS row_id, 'C' || lpad(CAST(n AS VARCHAR), 5, '0') AS code, "
+                "'XX' || lpad(CAST(n AS VARCHAR), 5, '0') || '9' AS long_id FROM range(1, 41) t(n)")
+    con.execute("CREATE TABLE inst_ids AS SELECT n AS row_id, 'OT' || lpad(CAST(n AS VARCHAR), 6, '0') AS other_id "
+                "FROM range(1, 31) t(n)")
+    profiles = {name: profile.columns(con, name) for name in ("inst", "inst_ids")}
+    found = [{"part": "inst", "class": "master", "derived_from": None, "record_key": {"columns": ["row_id"]},
+              "identifiers": [{"column": "code", "local_counter": False}]},
+             {"part": "inst_ids", "class": "transaction", "derived_from": None, "record_key": {"columns": ["row_id"]},
+              "identifiers": [{"column": "other_id", "local_counter": False}]}]
+    links = [{"from": {"part": "inst_ids", "columns": ["row_id"]}, "to": {"part": "inst", "columns": ["row_id"]}}]
+    run._identifier_pairs(con, found, profiles, links, _parts(inst=("full", None), inst_ids=("sampled", None)))
+    pairs = found[0]["identifiers"][0]["pairs"]
+    assert [(p["with"], p.get("part"), p["one_to_one"], p["scan"]) for p in pairs] == [
+        ("long_id", None, 40, "full"), ("other_id", "inst_ids", 30, "sampled")]
+    assert "pairs" not in found[1]["identifiers"][0]  # only a master part is measured
+
+
+def test_an_entity_inside_a_part_is_measured_on_that_parts_rows_without_the_other_entities():
+    from profiling import run
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE hold AS SELECT n AS hold_id, 'C' || lpad(CAST(n % 25 AS VARCHAR), 5, '0') AS code, "
+                "'LE' || lpad(CAST(n % 7 AS VARCHAR), 6, '0') AS issuer_id, "
+                "'XX' || lpad(CAST(n % 25 AS VARCHAR), 5, '0') || '9' AS long_id FROM range(1, 201) t(n)")
+    con.execute('CREATE TABLE "hold.code" AS SELECT DISTINCT code FROM hold')
+    con.execute('CREATE TABLE "hold.issuer_id" AS SELECT DISTINCT issuer_id FROM hold')
+    profiles = {name: profile.columns(con, name) for name in ("hold", "hold.code", "hold.issuer_id")}
+    entity = {"part": "hold.code", "class": "master", "derived_from": "hold", "record_key": {"columns": ["code"]},
+              "identifiers": [{"column": "code", "local_counter": False}]}
+    issuer = {"part": "hold.issuer_id", "class": "master", "derived_from": "hold",
+              "record_key": {"columns": ["issuer_id"]}, "identifiers": []}
+    run._identifier_pairs(con, [entity, issuer], profiles, [],
+                          _parts(hold=("full", None), **{"hold.code": ("full", "hold"), "hold.issuer_id": ("full", "hold")}))
+    assert [(p["with"], p["one_to_one"]) for p in entity["identifiers"][0]["pairs"]] == [("long_id", 25)]
+
+
+def test_a_link_from_text_to_a_number_and_blank_values_are_no_pair():
+    con = duckdb.connect()
+    con.execute("CREATE TABLE a (id BIGINT, code VARCHAR)")
+    con.executemany("INSERT INTO a VALUES (?, ?)", [(n, f"C{n:04d}") for n in range(1, 6)])
+    con.execute("CREATE TABLE b (a_id VARCHAR, other VARCHAR)")
+    con.executemany("INSERT INTO b VALUES (?, ?)", [("0001", "O1"), ("2", "O2"), ("X1", "O3"), ("3", "  ")])
+    found = keys.pairing(con, "a", "code", "b", "other", on=[("a_id", "id")])
+    assert (found["distinct_pairs"], found["a_without_b"], found["one_holds_the_other"]) == (2, 3, 0)

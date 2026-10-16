@@ -15,7 +15,7 @@ from __future__ import annotations
 import itertools
 from difflib import SequenceMatcher
 
-from .identifiers import dense_sequence, identifier_shaped
+from .identifiers import dense_sequence, identifier_shaped, real_value_sql
 from .inputs import PARENT, POSITION, ROW, Part, sql_name, full_values
 from .profile import FLOATS, is_integer, is_temporal, is_text
 from .sensitivity import words
@@ -286,3 +286,43 @@ def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], inc
             "rule": "a durable id given when a record first appears and kept in a key map, so it never changes; "
                     f"the operator chooses which columns identify a record (candidates: {', '.join(usable) or 'none'})",
             "alternatives": []}
+
+
+def _as_text(e: str) -> str:
+    """A key value as text, digits compared as numbers (`0001750` and 1750 are one), as `inclusion` does."""
+    text = f"trim(CAST({e} AS VARCHAR))"
+    return f"coalesce(CAST(TRY_CAST({text} AS HUGEINT) AS VARCHAR), {text})"
+
+
+def pairing(con, a_part: str, a: str, b_part: str, b: str, on: list[tuple[str, str]] | None = None) -> dict:
+    """How two identifiers of one entity pair, counted over distinct (A, B) pairs, blanks and stand-ins
+    left out: A's values with one B, with several, with none; B's values with several A (a matching
+    rule on B would merge those A); pairs one to one both ways; and pairs where one value holds the
+    other.
+
+    `on`: B sits in another part that links to A's part by these (B-part column, A-part column)
+    pairs, so a row of B's part pairs with the A-part row it links to. Counts only, never values."""
+    a_col = f"a_rows.{sql_name(a)}"
+    b_col = f"{'b_rows' if on else 'a_rows'}.{sql_name(b)}"
+    source = f"{sql_name(a_part)} a_rows" if not on else (
+        f"{sql_name(b_part)} b_rows JOIN {sql_name(a_part)} a_rows ON "
+        + " AND ".join(f"{_as_text(f'b_rows.{sql_name(f)}')} = {_as_text(f'a_rows.{sql_name(t)}')}" for f, t in on))
+    sql = f"""
+        WITH pairs AS (SELECT DISTINCT trim(CAST({a_col} AS VARCHAR)) a, trim(CAST({b_col} AS VARCHAR)) b
+                       FROM {source} WHERE {real_value_sql(a_col)} AND {real_value_sql(b_col)}),
+             a_all AS (SELECT DISTINCT trim(CAST({sql_name(a)} AS VARCHAR)) a FROM {sql_name(a_part)}
+                       WHERE {real_value_sql(sql_name(a))}),
+             per_a AS (SELECT a, count(*) n FROM pairs GROUP BY a),
+             per_b AS (SELECT b, count(*) n FROM pairs GROUP BY b)
+        SELECT (SELECT count(*) FROM a_all), (SELECT count(*) FROM per_b), (SELECT count(*) FROM pairs),
+               (SELECT count(*) FROM per_a WHERE n = 1), (SELECT count(*) FROM per_a WHERE n > 1),
+               (SELECT count(*) FROM a_all WHERE NOT EXISTS (SELECT 1 FROM per_a WHERE per_a.a = a_all.a)),
+               (SELECT count(*) FROM per_b WHERE n > 1),
+               (SELECT count(*) FROM pairs JOIN per_a USING (a) JOIN per_b USING (b) WHERE per_a.n = 1 AND per_b.n = 1),
+               (SELECT count(*) FROM pairs WHERE strpos(b, a) > 0 OR strpos(a, b) > 0)"""
+    (a_values, b_values, distinct_pairs, a_one, a_several, a_none, b_several, one_to_one,
+     contained) = con.execute(sql).fetchone()
+    return {"with": b, **({"part": b_part, "via": [{"from": f, "to": t} for f, t in on]} if on else {}),
+            "a_values": a_values, "b_values": b_values, "distinct_pairs": distinct_pairs,
+            "a_with_one_b": a_one, "a_with_several_b": a_several, "a_without_b": a_none,
+            "b_with_several_a": b_several, "one_to_one": one_to_one, "one_holds_the_other": contained}
