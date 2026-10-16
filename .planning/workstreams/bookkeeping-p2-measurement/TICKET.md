@@ -18,7 +18,7 @@ by this planning ticket. This narrows PR #977's already approved P2 plan.
 - [x] Present the final approval gate and record the operator's decision — operator replied “approved”; accepted four new code/test files, dedicated lifecycle helper and baseline-only metadata with speedup calculations deferred; 2026-10-16 08:54 ET.
 - [x] Learning → skill: none — this planning review applies existing proof/ownership rules; no demonstrated skill defect or new verified runtime behavior warrants a skill edit; 2026-10-16 08:51 ET.
 
-Completion: planning APPROVED. CI repair follow-up in progress; its checklist below remains incomplete.
+Completion: DONE_WITH_CONCERNS. Planning approved; CI repair verified on a49e4f4f, all six checks passed in run 38916114512. Claude plan review limitation remains below.
 Review limitation: Claude voices were unavailable because the configured model
 required usage credits; independent Codex reviews and final engineering PASS remain
 the recorded evidence. Harness implementation and harness behavior tests have not started.
@@ -34,7 +34,7 @@ regeneration may update a derived workbook, with no rule/runtime changes.
 - [x] Confirm no active runtime overlaps the repair, then regenerate only the affected Mapping Document — candidate-path inspection and live overlap guard passed; `rules mapdoc write --only fund_structure` updated only F2/F3 of Matching rules; 2026-10-16 10:28 ET.
 - [x] Run bounded affected testmon tests and compare generated cells/notes against the prior workbook — fresh dedicated testmon data, 24 tests passed in 17.09s; all other cells and Notes equal; 2026-10-16 10:28 ET.
 - [x] Review Standards, Spec and GoF — existing generator and regression test retained, no rule/runtime change or pattern refactor; named workbook/ticket diff checked; 2026-10-16 10:28 ET.
-- [ ] Commit by named paths, push and verify all PR checks.
+- [x] Commit by named paths, push and verify all PR checks — repair a49e4f4f pushed; all six checks SUCCESS in [CI run 38916114512](https://github.com/paulananth/edgartools-platform/actions/runs/38916114512), including unit/architecture, MDM, real PostgreSQL integration, Rust engine, shell lint and aggregate gate; 2026-10-16 10:34 ET.
 - [x] Learning → skill: none — existing Mapping Document regeneration and equality-test guidance applies; no new skill defect or runtime behavior change; 2026-10-16 10:28 ET.
 
 ### Standards
