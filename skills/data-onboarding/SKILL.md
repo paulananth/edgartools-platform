@@ -591,6 +591,10 @@ contract's `nonblocking_deferred_reasons`.
    ```
    Run it with Docker (on macOS, Colima), and bound it:
    `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock timeout -s KILL 600 uv run --no-sync pytest -q -s <file>`.
+   Where Docker does not start, the same fixtures run on a local
+   PostgreSQL 16 that is deleted afterwards:
+   `PG16_SERVER=pgserver uv run --no-sync --with pgserver pytest -q -s <file>`
+   (`tests/support/pg16.py`). Write in the log which one ran.
    - **Expect:** under a minute to start the database. A few hundred
      records should finish in under 5 minutes; several thousand take tens
      of minutes. Say the estimate before a long run.
