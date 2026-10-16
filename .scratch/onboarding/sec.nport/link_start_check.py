@@ -40,11 +40,11 @@ database = core.database
 
 NAME, CODE, GLEIF, ADV = "sec.nport.security", "sec.nport.security.v1", "gleif.level1.v1", "iapd.adv.custodians.v1"
 FOLDER = files.ROOT / "sources" / NAME
-LEI = "5493001KJTIIGC8Y1R12"  # invented, check digits valid
+LEI = "9999000000EXAMPLE016"  # invented, check digits valid
 COLUMNS = ["HOLDING_ID", "ISSUER_NAME", "ISSUER_LEI", "ISSUER_TITLE", "ISSUER_CUSIP"]
-HOLDINGS = [["1", "Example Corp", LEI, "Common", "037833100"],
-            ["2", "Example Corp", LEI, "Common", "037833100"],
-            ["3", "Other Inc", "", "Common", "594918104"]]
+HOLDINGS = [["1", "Example Corp", LEI, "Common", "ZZ0000013"],
+            ["2", "Example Corp", LEI, "Common", "ZZ0000013"],
+            ["3", "Other Inc", "", "Common", "ZZ0000021"]]
 Q2 = "2026-06-30T00:00:00+00:00"
 
 
