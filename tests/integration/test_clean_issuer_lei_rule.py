@@ -21,7 +21,7 @@ from tests.integration.test_clean_cik_rule import GLEIF, companies, load, operat
 postgres = core.postgres
 database = core.database
 
-ISSUER, OTHER = "5493001KJTIIGC8Y1R12", "HWUPKR0MPOU8FGXBT394"
+ISSUER, OTHER = "9999000000EXAMPLE113", "9999000000EXAMPLE210"  # invented; check digits hold
 RULE, CUSTODIAN = "gleif-issuer-lei", "iapd-adv-custodian-lei"
 ADV = "iapd.adv.custodians.v1"
 
