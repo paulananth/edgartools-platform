@@ -125,6 +125,26 @@ must not share an uncoordinated edit surface.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by another runtime unless explicitly instructed.
 
+## Shared local data (operator, 2026-10-16)
+
+- Use one permanent local PostgreSQL 16 server shared by all agents. It holds
+  the MDM, RDM, silver, Rules, Bookkeeping and Change Journal databases.
+  All agents look up the same Company identities in the shared MDM.
+- Separate Git worktrees isolate code edits; routine lookups and development
+  use the existing shared server, without creating a server per agent.
+  Use its private runtime connection file outside Git; never print its values.
+- Master data changes go through the Merge Stage. Other writes use each
+  store's normal application code and restricted roles. Coordinate changes
+  to shared schemas, rules and records so agents do not overwrite each other.
+- Use a separate test environment only when a test could disrupt shared data,
+  such as deleting records, testing recovery or applying experimental migrations.
+- Coordinate shared-server maintenance with its current users. Keep lifecycle
+  commands with the creating worktree; client access from other worktrees is
+  allowed. Never stop, restore or replace shared data while others use it.
+- This shared-server default supersedes the per-agent-copy default in local
+  testing guides and skills. Their backup and copy procedures remain available
+  for isolated tests. Local testing does not qualify a Snowflake deployment.
+
 ## Path ownership (operator, 2026-10-16)
 
 Nothing is owned by Codex (operator, 2026-10-16: "nothing is owned by codex";
