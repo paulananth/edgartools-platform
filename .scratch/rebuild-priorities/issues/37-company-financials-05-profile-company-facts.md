@@ -15,6 +15,7 @@ Input ready: the long form (`company-facts/cohort-long/`: facts, concepts, entit
 - [x] Verify local input availability and check for reusable findings — 2026-10-16 14:03 ET; local inventory: three long-form files, 33,114,407 bytes, no existing findings under the capture root.
 - [x] Profile all three related parts together once, retaining complete findings privately under the local proving folder — 2026-10-16 14:06 ET; full scan completed successfully in 49.83 seconds (48.5 seconds profiler time), no sampling, approval remains draft.
 - [x] Report classes, keys, measured links, time roles, repeated filing values and concept coverage; distinguish evidence from proposed interpretation — 2026-10-16 14:24 ET; original full findings plus a 5.48-second targeted qualification on their pinned derivative. Per-concept counts reconcile to all 5,134,979 rows; key and coverage results below. Actual MDM lookup remains untested, not silently inferred from internal links.
+- [x] Authenticate original capture receipts and check integer representability independently of analytical policy — 2026-10-16 14:30 ET; all 368 captured files match raw checksums and byte counts, raw counts reconcile to the derivative, and one changed integer is traced privately to its source observation. Full receipt/count check took 22.31 seconds; no provider requests.
 - [ ] Resolve unknowns and obtain the operator's explicit findings approval before catalog publication or onboarding.
 - [x] Review the counts-only ticket evidence under Standards, Spec and GoF; run overlap checks before commit and push — 2026-10-16 14:16 ET; progress review below, counts reconciled to private findings, whitespace and both guard passes clean, checkpoint 8377111a pushed. The incomplete reporting/approval items stay open.
 - [x] Learning → skill: none — 2026-10-16 14:16 ET; existing profile-once, unknowns and approval rules apply. Original-JSON reading changes are isolated in ticket 41 / PR #1016, not silently applied to these draft findings.
@@ -69,6 +70,14 @@ Completed 2026-10-16 14:24 ET. A local, read-only DuckDB qualification took 5.48
 The candidate key's uniqueness is observed in this delivery only. Persistence across deliveries, absent values, conflict handling, source ordinals and the silver grain still need their own decisions/tests. These counts include every captured form and period: they do not select annual line items, choose latest/first values, align fiscal years or prove MDM links.
 
 No local MDM connection is configured in the current environment, and no master snapshot exists under the permitted Company facts capture. Consequently the 100% CIK link above proves the captured Company list only. Existing MDM Company lookup coverage is explicitly unknown and needs the local lookup proof, not a production query or a guessed master id.
+
+### Original capture authentication and precision boundary
+
+The local capture ledger has 500 cohort entries: 368 captured responses and 132 no-facts responses, with no other status. Every captured file's decompressed SHA-256 and byte length match its ledger entry: 772,842,970 raw bytes and 50,936,828 compressed bytes. Of the 368 documents, 329 contain facts and 39 contain none. All 329 fact-bearing document CIKs match their filenames. Raw observation counts reconcile exactly to the derivative's 5,134,979 rows.
+
+The original JSON contains 4,811,345 integer tokens and 323,634 decimal/exponent tokens. One integer changes under DOUBLE conversion; it exceeds both signed and unsigned 64-bit integer ranges. Its value, file, checksum and observation position remain private in `precision-case.json`. The capture receipt evidence is `raw-capture-authentication.json`; the exact executed scripts are retained beside the private findings. This authenticates the inputs and identifies a numeric boundary; it does not qualify a production reader or approve any numeric coercion.
+
+Tickets 40, 44 and 45 must use the original captured evidence for the reading decision, answer key and exact-number qualification. The known exceptional integer needs an explicit tested handling path; the existing long-form value cannot stand in for its original number. The documented 64-bit guarantee in data-platform `READING.md` is not proof for this out-of-range case. Any required engine change remains its own ticket and PR, after the reading decision; none is inferred here.
 
 ## Progress review
 
