@@ -18,8 +18,40 @@ by this planning ticket. This narrows PR #977's already approved P2 plan.
 - [x] Present the final approval gate and record the operator's decision — operator replied “approved”; accepted four new code/test files, dedicated lifecycle helper and baseline-only metadata with speedup calculations deferred; 2026-10-16 08:54 ET.
 - [x] Learning → skill: none — this planning review applies existing proof/ownership rules; no demonstrated skill defect or new verified runtime behavior warrants a skill edit; 2026-10-16 08:51 ET.
 
-Completion: DONE_WITH_CONCERNS. Planning approved; all checklist parts complete.
+Completion: planning APPROVED. CI repair follow-up in progress; its checklist below remains incomplete.
 Review limitation: Claude voices were unavailable because the configured model
 required usage credits; independent Codex reviews and final engineering PASS remain
-the recorded evidence. Implementation and behavior tests have not started.
+the recorded evidence. Harness implementation and harness behavior tests have not started.
 No durable learnings this session.
+
+## PR #1011 CI repair
+
+The operator requested CI failures fixed after publication. Keep the approved
+measurement plan unchanged. Investigate the committed Mapping Document mismatch;
+regeneration may update a derived workbook, with no rule/runtime changes.
+
+- [x] Reproduce the CI failure with the affected test and identify the stale generated content — exact two-cell mismatch reproduced locally; workbook from #1003 predates generator wording in #1009; 2026-10-16 10:28 ET.
+- [x] Confirm no active runtime overlaps the repair, then regenerate only the affected Mapping Document — candidate-path inspection and live overlap guard passed; `rules mapdoc write --only fund_structure` updated only F2/F3 of Matching rules; 2026-10-16 10:28 ET.
+- [x] Run bounded affected testmon tests and compare generated cells/notes against the prior workbook — fresh dedicated testmon data, 24 tests passed in 17.09s; all other cells and Notes equal; 2026-10-16 10:28 ET.
+- [x] Review Standards, Spec and GoF — existing generator and regression test retained, no rule/runtime change or pattern refactor; named workbook/ticket diff checked; 2026-10-16 10:28 ET.
+- [ ] Commit by named paths, push and verify all PR checks.
+- [x] Learning → skill: none — existing Mapping Document regeneration and equality-test guidance applies; no new skill defect or runtime behavior change; 2026-10-16 10:28 ET.
+
+### Standards
+
+The operator authorized the CI repair. Only the generated Fund Mapping Document
+and this checklist changed; overlap guard passed. No source rules, tests or
+runtime code were weakened or modified.
+
+### Spec
+
+The workbook now agrees with the current generator in both matching-rule cells.
+The original whole-catalog equality regression fails before regeneration and
+passes afterward; all 24 tests in its module passed. The Bookkeeping plan and
+its four future implementation files remain unchanged/unimplemented.
+
+### GoF
+
+The available gof-refactor-reviewer method was applied to mapdoc generator code
+and the #1003/#1009 history before and after the repair. This is stale generated
+content at an existing tested seam; leave the implementation unchanged.
