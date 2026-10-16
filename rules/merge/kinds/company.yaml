@@ -606,20 +606,19 @@ rules:
     args:
       namespace: bd_number
 # A GLEIF record an N-PORT holding names as its issuer joins the one Company
-# that holds its LEI, or creates it (operator, 2026-10-16: "Issuers only, by
-# LEI (Recommended)"; ticket 22). The record test keeps it to issuers: the rest
-# of GLEIF still joins only through the SEC-GLEIF name rules. Identifier rules
-# run before the name rules, so an issuer that is also an SEC filer can become
-# two Companies, one by CIK and one by LEI, until they are merged (the ruling
-# took that risk; ticket 22's Proving Run counts them). Declared, not switched on.
+# that holds its LEI, and otherwise waits for the SEC-GLEIF name rules; it
+# never creates a Company (operator, 2026-10-16: "Wait, config only
+# (Recommended)"; ticket 22). Creating one made 3,240 issuers that are SEC
+# filers a second Company in Proving Run 2, since identifier rules run before
+# the name rules. The record test keeps it to issuers. Declared, not switched on.
 - rule_id: gleif-issuer-lei
-  version: 2026-10-16.1
+  version: 2026-10-16.2
   family: binding
   source: gleif.level1.v1
   applies_to_verdict: company
   emits:
   - bind
-  on_no_match: mint
+  on_no_match: wait
   when:
   - primitive: evidence_present@1
     args:

@@ -2,7 +2,7 @@
 
 Priority: 99, tier 1, blocks ticket 22's resolution. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine code, small). Status: open; coding waits for the operator's word (configuration-only rule). Blocked by: none. Blocks: 22 (ISSUED_BY by issuer LEI).
+Type: task (engine code, small). Status: closed, replaced by configuration (operator, 2026-10-16: "why are you codeing merge.py all must be configured", then "Wait, config only (Recommended)"): `gleif-issuer-lei` joins the one Company holding the LEI and otherwise waits for the name rules; it creates no Company. The engine is unchanged. Blocked by: none. Blocks: 22 (ISSUED_BY by issuer LEI).
 
 ## Why
 
@@ -18,9 +18,9 @@ A binding rule may state that its creation waits for the name rules (for example
 
 ## Checklist
 
-- [ ] Operator's word to code it
-- [ ] GoF consult; the rule option, its policy check and tests (joins first; a creation waits; a name-bound record creates nothing; other rules unchanged)
-- [ ] `gleif-issuer-lei` uses it; pinned digests by layer
+- [ ] ~~Operator's word to code it~~ not coded: the operator ruled configuration only 2026-10-16 14:39 ET
+- [ ] ~~GoF consult; the rule option, its policy check and tests (joins first; a creation waits; a name-bound record creates nothing; other rules unchanged)~~ replaced by `on_no_match: wait` (ticket 22)
+- [ ] ~~`gleif-issuer-lei` uses it; pinned digests by layer~~ replaced by `on_no_match: wait` (ticket 22)
 - [ ] Ticket 22's Proving Run 3: duplicates against today's 3,240
 - [ ] Review, PR, CI green, merge on the operator's word
 - [ ] Learning → skill
