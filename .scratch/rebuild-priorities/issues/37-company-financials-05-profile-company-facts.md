@@ -14,7 +14,7 @@ Input ready: the long form (`company-facts/cohort-long/`: facts, concepts, entit
 
 - [x] Verify local input availability and check for reusable findings — 2026-10-16 14:03 ET; local inventory: three long-form files, 33,114,407 bytes, no existing findings under the capture root.
 - [x] Profile all three related parts together once, retaining complete findings privately under the local proving folder — 2026-10-16 14:06 ET; full scan completed successfully in 49.83 seconds (48.5 seconds profiler time), no sampling, approval remains draft.
-- [ ] Report classes, keys, measured links, time roles, repeated filing values and concept coverage; distinguish evidence from proposed interpretation.
+- [x] Report classes, keys, measured links, time roles, repeated filing values and concept coverage; distinguish evidence from proposed interpretation — 2026-10-16 14:24 ET; original full findings plus a 5.48-second targeted qualification on their pinned derivative. Per-concept counts reconcile to all 5,134,979 rows; key and coverage results below. Actual MDM lookup remains untested, not silently inferred from internal links.
 - [ ] Resolve unknowns and obtain the operator's explicit findings approval before catalog publication or onboarding.
 - [x] Review the counts-only ticket evidence under Standards, Spec and GoF; run overlap checks before commit and push — 2026-10-16 14:16 ET; progress review below, counts reconciled to private findings, whitespace and both guard passes clean, checkpoint 8377111a pushed. The incomplete reporting/approval items stay open.
 - [x] Learning → skill: none — 2026-10-16 14:16 ET; existing profile-once, unknowns and approval rules apply. Original-JSON reading changes are isolated in ticket 41 / PR #1016, not silently applied to these draft findings.
@@ -41,7 +41,34 @@ The heuristic calls the Company list reference data and concept definitions mast
 
 The suggested `unit > concept` hierarchy is only a measured dependency in this capture, not an approved business hierarchy. Units must remain part of fact identity and comparability. The long-form conversion stores `val` as DOUBLE; production number precision must be proved from the original captured JSON by reader ticket 45, not inferred from this profiling derivative.
 
-The generic findings do not measure complete per-concept Company/year coverage or choose a fact key beyond three columns. Those gaps are recorded explicitly for the mapping/reader qualification in tickets 38 and 45; no second profile or silent classification override has been performed. Findings approval and catalog publication remain pending.
+The generic findings did not measure complete per-concept Company/year coverage or test a fact key beyond three columns. A targeted qualification below closes those measurement gaps without repeating the profiler or changing its draft findings. Choosing the production grain, interpreting classes, proving original numeric precision and approving the findings remain open. Findings approval and catalog publication remain pending.
+
+### Targeted qualification of the pinned derivative
+
+Completed 2026-10-16 14:24 ET. A local, read-only DuckDB qualification took 5.48 seconds. The fact file's checksum matched the original findings before the query and again when sealing the evidence. The original profiler findings remain unchanged. Private artifacts beside them:
+
+- `concept-coverage.json`: every taxonomy/concept's row count, Company count, unit count, observed period-end years, Company/end-year combinations, distinct period ends and instant/duration counts.
+- `qualification-summary.json`: counts below and explicit limits.
+- `qualify-profile37.py`: exact executed qualification code.
+- `qualification-evidence.json`: input, script and artifact checksums; actual ET completion stamp; no approval granted.
+
+| Measurement | Result | Meaning |
+|---|---:|---|
+| Concept definitions measured | 8,495 | Their row counts sum to every one of the 5,134,979 observations |
+| Companies per concept | 1–319 | No one reported concept covers all 329 Companies |
+| Concepts seen in one Company | 2,248 | Standard line items need measured mapping coverage, not a universal-concept assumption |
+| Concepts spanning multiple observed end-date years | 7,965 | Calendar-year coverage of captured observations; not a claim of comparable annual periods |
+| Missing or unparseable period ends | 0 | All observed end-date years can be counted; business-period interpretation remains ticket 35 |
+| Company/concept/unit/start/end groups | 2,727,545 | Taxonomy is included in concept identity |
+| Groups occurring in multiple filings | 1,438,975 | Filing versions must be distinguished before analytical selection |
+| Repeated-filing groups with differing derivative values | 139,978 | Not all are verified restatements; this count uses the existing DOUBLE derivative |
+| Rows in repeated-filing groups | 3,846,409 | Repetition across filings is expected evidence, not an instruction to discard rows |
+| Duplicate eight-column candidate keys | 0 | CIK, taxonomy, concept, unit, start, end, accession and filed date identify every observed row in this snapshot |
+| Exact duplicate rows | 0 | No fully identical row was found across the derivative's thirteen columns |
+
+The candidate key's uniqueness is observed in this delivery only. Persistence across deliveries, absent values, conflict handling, source ordinals and the silver grain still need their own decisions/tests. These counts include every captured form and period: they do not select annual line items, choose latest/first values, align fiscal years or prove MDM links.
+
+No local MDM connection is configured in the current environment, and no master snapshot exists under the permitted Company facts capture. Consequently the 100% CIK link above proves the captured Company list only. Existing MDM Company lookup coverage is explicitly unknown and needs the local lookup proof, not a production query or a guessed master id.
 
 ## Progress review
 
