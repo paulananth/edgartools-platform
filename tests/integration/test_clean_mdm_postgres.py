@@ -29,17 +29,22 @@ class Database:
     registry: str
 
 
-# The session's first test migrates a template database once (checking a
-# second migration installs nothing); every test then gets its own copy of
-# it, which Postgres makes in well under a second (fixtures in conftest.py). Migrating per test cost
-# about 3.4 seconds each (company mastering ticket 23).
+# A server's first test migrates a template database once (checking a second
+# migration installs nothing); every test then gets its own copy of it, which
+# Postgres makes in well under a second (the fixtures are in conftest.py).
+# Migrating per test cost about 3.4 seconds each (company mastering ticket 23).
 TEMPLATE = "clean_template"
-_templates: dict[int, tuple[str, str]] = {}
+_templates: dict[str, tuple[str, str]] = {}
+
+
+def server_key(admin) -> str:
+    """One server: its host, port and socket (a local socket server has no port)."""
+    return admin.url.set(database="", password=None).render_as_string()
 
 
 def _template(admin, app) -> tuple[str, str]:
-    port = admin.url.port
-    if port not in _templates:
+    server = server_key(admin)
+    if server not in _templates:
         with admin.execution_options(isolation_level="AUTOCOMMIT").connect() as conn:
             conn.execute(text(f"CREATE DATABASE {TEMPLATE}"))
         admin_t = create_engine(admin.url.set(database=TEMPLATE))
@@ -50,8 +55,8 @@ def _template(admin, app) -> tuple[str, str]:
             # A template is copied only while nobody is connected to it.
             admin_t.dispose()
             app_t.dispose()
-        _templates[port] = (built.policy, built.registry)
-    return _templates[port]
+        _templates[server] = (built.policy, built.registry)
+    return _templates[server]
 
 
 def initialize_database(admin, app):

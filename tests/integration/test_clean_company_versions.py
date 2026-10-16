@@ -14,7 +14,6 @@ from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 
 
-
 def versions(db):
     with db.application.connect() as conn:
         return conn.execute(

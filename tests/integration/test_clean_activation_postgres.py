@@ -20,7 +20,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_clean_activation import RULE, entry, policy, proof
 
 
-
 def test_a_rule_version_cannot_be_reused_for_different_steps(database):
     """§10 check 9, against what the store already holds."""
     with database.admin.begin() as conn:

@@ -21,7 +21,6 @@ from edgar_warehouse.mdm.clean.consumer import ContractReader
 from tests.integration import test_clean_mdm_postgres as core
 
 
-
 def companies_in_projection(db) -> dict[str, dict]:
     with db.application.connect() as conn:
         return dict(

@@ -14,7 +14,6 @@ from edgar_warehouse.mdm.clean.store import Store
 from tests.integration import test_clean_mdm_postgres as core
 
 
-
 def merge(db, batch, consumer, **kw):
     return MergeStage(Store(db.application)).apply(
         batch_id=batch, run_id=str(uuid4()), policy_digest=db.policy, consumer=consumer,

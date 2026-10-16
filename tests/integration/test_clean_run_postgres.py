@@ -20,7 +20,6 @@ from edgar_warehouse.mdm.clean.store import Conflict, Store
 from tests.integration import test_clean_mdm_postgres as core
 
 
-
 def load(database, run_id, batch, checkpoint):
     return MergeStage(Store(database.application)).apply(
         batch_id=batch,

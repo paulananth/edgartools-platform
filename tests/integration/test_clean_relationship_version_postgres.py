@@ -14,7 +14,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_entity_context_postgres import DIRECT, ask, company, rows
 
 
-
 def moved_parent(database):
     """c's parent is b in generation 1; c's revision 2 names a instead."""
     ids = entity_context.load_group(database)

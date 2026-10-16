@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 
-from tests.integration.test_clean_mdm_postgres import TEMPLATE, Database, _template, _templates
+from tests.integration.test_clean_mdm_postgres import TEMPLATE, Database, _template, _templates, server_key
 from tests.support import pg16
 
 
@@ -36,7 +36,7 @@ def postgres():
                 app.dispose()
             admin.dispose()
             # A later server (a module's own) may be given the same port.
-            _templates.pop(admin.url.port, None)
+            _templates.pop(server_key(admin), None)
 
 
 @pytest.fixture

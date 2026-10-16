@@ -20,7 +20,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_outbox_names_batch import Destination, journal_policy
 
 
-
 def review(n, reason="needs evidence"):
     return {"object_type": "review", "object_id": f"review-{n}", "body": {"reason": reason}}
 

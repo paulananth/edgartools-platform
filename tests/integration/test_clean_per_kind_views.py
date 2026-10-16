@@ -390,8 +390,6 @@ def test_the_master_field_view_carries_the_kind_version_beside_the_digest(databa
     assert re.fullmatch(r"[0-9a-f]{64}", field.policy_digest)
 
 
-
-
 def test_stage_waiting_shows_every_waiting_record_with_its_probable_kind(database):
     """A record no kind accepted waits in the Stage with the kind it probably
     is, whether or not a classification step named one; an accepted record

@@ -17,7 +17,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_outbox_names_batch import Destination, journal_policy
 
 
-
 def test_exact_sql_jsonb_bytes_and_hashes_on_numeric_unicode_and_nested_inputs(database):
     rng = random.Random(922016)
     bodies = ['-0', '-0.000', '0e100', '0e-100', '1e131071', '1e-16383',

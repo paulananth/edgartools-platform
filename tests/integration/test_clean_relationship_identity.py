@@ -11,7 +11,6 @@ validation 06a; operator, 2026-10-01).
 
 from __future__ import annotations
 
-from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_mdm_postgres import (
     AT,
     apply,

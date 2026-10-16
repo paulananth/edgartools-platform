@@ -11,7 +11,6 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean.store import migrate
-from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_mdm_postgres import apply, documents, identity_and_binding, source
 
 

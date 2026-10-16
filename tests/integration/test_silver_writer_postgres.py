@@ -65,9 +65,7 @@ def _servers(url):
     yield admin, app
     app.dispose()
     admin.dispose()
-    core._templates.pop(admin.url.port, None)
-
-
+    core._templates.pop(core.server_key(admin), None)
 
 
 @contextlib.contextmanager
