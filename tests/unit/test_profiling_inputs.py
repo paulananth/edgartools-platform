@@ -82,6 +82,99 @@ def test_large_json_is_streamed_record_by_record(con, tmp_path, monkeypatch):
     assert con.execute("SELECT count(*), count(DISTINCT k) FROM big").fetchone() == (5000, 5000)
 
 
+def test_keyed_records_become_rows_with_keys_and_nested_fact_links(con, tmp_path):
+    # Invented concepts: nested data keys must not become part/column names.
+    data = {f"Metric{i}": {"label": f"Label {i}", "units": {"ABC": [
+        {"period": "2024-12-31", "amount": i}, {"period": "2025-12-31", "amount": i + 1}]}}
+        for i in range(8)}
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps([{"company_id": "invented-1", "facts": {"taxonomy": data}},
+                                {"company_id": "invented-2", "facts": {"taxonomy": data}}]))
+    parts = {p.name: p for p in inputs.register(con, "source", str(path), tmp_path / "work")}
+    assert set(parts) == {"source", "source.facts.taxonomy", "source.facts.taxonomy._value.units.ABC"}
+    assert parts["source.facts.taxonomy"].parent == "source"
+    assert parts["source.facts.taxonomy._value.units.ABC"].parent == "source.facts.taxonomy"
+    actual = con.execute('SELECT _parent_row, _position, _key, "_value.label" '
+                         'FROM "source.facts.taxonomy" ORDER BY _row').fetchall()
+    assert actual == [(parent, i, f"Metric{i}", f"Label {i}") for parent in range(2) for i in range(8)]
+    assert con.execute('SELECT count(*), count(DISTINCT _parent_row) '
+                       'FROM "source.facts.taxonomy._value.units.ABC"').fetchone() == (32, 16)
+    assert not any("Metric" in c[0] for c in con.execute('DESCRIBE "source.facts.taxonomy"').fetchall())
+
+
+def test_top_level_keyed_records_preserve_reserved_fields(con, tmp_path):
+    path = tmp_path / "keyed.json"
+    path.write_text(json.dumps({f"item-{i}": {"_key": "original", "_row": 90 + i} for i in range(8)}))
+    parts = {p.name: p for p in inputs.register(con, "source", str(path), tmp_path / "work")}
+    assert set(parts) == {"source", "source._entries"}
+    assert parts["source._entries"].parent == "source"
+    assert con.execute('SELECT _row, _parent_row, _key, "_value._key", "_value._row" '
+                       'FROM "source._entries" ORDER BY _row').fetchall() == [
+        (i, 0, f"item-{i}", "original", 90 + i) for i in range(8)]
+
+
+@pytest.mark.parametrize("kind", ["small", "different_fields", "different_types", "empty", "scalar"])
+def test_ordinary_or_ambiguous_objects_keep_their_columns(con, tmp_path, kind):
+    count = 7 if kind == "small" else 8
+    values = {f"field{i}": {"label": "invented"} for i in range(count)}
+    if kind == "different_fields":
+        values["field0"] = {"other": "invented"}
+    elif kind == "different_types":
+        values["field0"] = {"label": 1}
+    elif kind == "empty":
+        values = {key: {} for key in values}
+    elif kind == "scalar":
+        values["field0"] = "invented"
+    path = tmp_path / "ordinary.json"
+    path.write_text(json.dumps({"properties": values}))
+    assert [p.name for p in inputs.register(con, "source", str(path), tmp_path / "work")] == ["source"]
+
+
+@pytest.mark.parametrize("fmt", ["jsonl", "streamed_json"])
+def test_keyed_objects_in_other_record_streams(con, tmp_path, monkeypatch, fmt):
+    records = [{"values": {f"item-{i}": {"amount": i} for i in range(8)}} for _ in range(2)]
+    path = tmp_path / ("input.jsonl" if fmt == "jsonl" else "input.json")
+    if fmt == "jsonl":
+        path.write_text("\n".join(json.dumps(record) for record in records))
+    else:
+        monkeypatch.setattr(inputs, "WHOLE", 10)
+        path.write_text(json.dumps(records))
+    inputs.register(con, "source", str(path), tmp_path / "work")
+    assert con.execute('SELECT count(*), count(DISTINCT _parent_row) FROM "source.values"').fetchone() == (16, 2)
+
+
+def test_mixed_numeric_shapes_keep_large_integer_exact(con, tmp_path):
+    values = {f"item{i}": {"amount": 0.5} for i in range(8)}
+    values["item0"]["amount"] = 9007199254740993
+    path = tmp_path / "numbers.json"
+    path.write_text(json.dumps({"values": values}))
+    inputs.register(con, "source", str(path), tmp_path / "work")
+    assert con.execute('SELECT "values.item0.amount", typeof("values.item0.amount") FROM source').fetchone() == (
+        9007199254740993, "BIGINT")
+
+
+@pytest.mark.parametrize("reverse,nested", [(False, False), (True, False), (False, True), (True, True)])
+def test_combining_keyed_documents_refuses_lossy_numeric_column(con, tmp_path, reverse, nested):
+    def record(number):
+        value = {"observations": [{"amount": number}]} if nested else {"amount": number}
+        return {"values": {f"item{i}": value for i in range(8)}}
+
+    data = [record(9007199254740993), record(0.5)]
+    path = tmp_path / "numbers.json"
+    path.write_text(json.dumps(data[::-1] if reverse else data))
+    with pytest.raises(ValueError, match="explicit exact-number reading"):
+        inputs.register(con, "source", str(path), tmp_path / "work")
+    assert not con.execute("SHOW TABLES").fetchall()  # no rounded table is published
+
+
+def test_homogeneous_large_integer_entries_are_exact(con, tmp_path):
+    path = tmp_path / "numbers.json"
+    path.write_text(json.dumps({"values": {f"item{i}": {"amount": 9007199254740993 + i} for i in range(8)}}))
+    inputs.register(con, "source", str(path), tmp_path / "work")
+    assert con.execute('SELECT "_value.amount" FROM "source.values" ORDER BY _position').fetchall() == [
+        (9007199254740993 + i,) for i in range(8)]
+
+
 def test_folder_of_json_files_is_one_part(con, tmp_path):
     (tmp_path / "d").mkdir()
     for i in range(3):

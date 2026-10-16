@@ -147,6 +147,21 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   files gives each member as its own file; a readme or metadata file beside
   the tables is listed under `dataset.not_read`), a SQLite or DuckDB file, or a
   read-only database whose address is in an environment variable.
+- **Objects keyed by data:** an object with at least eight nonempty record
+  values sharing the same immediate fields and value kinds is inferred to be
+  a dictionary of records. It becomes a child part: `_key` keeps each key,
+  `_value.<field>` keeps its fields, and the parent row and position keep its
+  provenance. A dictionary at the document root uses an `_entries` child.
+  Smaller, empty or mixed-shape objects keep their dotted columns. This is a
+  reading inference, not a proved business key or class: check the resulting
+  parts in the findings before approval. Reuse existing approved findings;
+  this reader change calls for a new profile only of affected, unapproved
+  inputs, not another scan of unrelated sources.
+  Integer and fractional fields have different shapes. If combining keyed
+  records (including their nested lists or other documents) would mix an
+  integer above the exact DOUBLE range with fractional numbers in one column,
+  the run refuses before loading tables. Use an explicitly exact-number
+  reading for that input; never accept a rounded profiling derivative.
 - **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
   Latin-1); its input's `encoding` says so, marked inferred, with the first byte
   that is not UTF-8, and `declare` gives the reading contract's `read.encoding`
