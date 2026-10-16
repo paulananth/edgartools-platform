@@ -1,0 +1,110 @@
+{
+ "after_first_pass": {
+  "bound": {
+   "gleif.level1.v1": 24412,
+   "sec.nport.security.v1": 383612,
+   "sec.submissions.company.v1": 6414
+  },
+  "decisions": {
+   "bind": 414438
+  },
+  "identities": {
+   "company": 30538,
+   "security": 383612
+  },
+  "open_reviews": {
+   "binding_required": 179,
+   "classification_deferred": 312,
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unknown_relationship_start": 177856,
+   "unsupported_identity_kind": 4299
+  },
+  "relationships": {
+   "SUCCESSOR_ENTITY company -> company": 123
+  },
+  "stage_records": {
+   "gleif.level1.v1": 24591,
+   "sec.nport.security.v1": 383612,
+   "sec.submissions.company.v1": 6414
+  },
+  "waiting": {
+   "classification_deferred": 312,
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unsupported_identity_kind": 4299
+  }
+ },
+ "after_second_pass": {
+  "bound": {
+   "gleif.level1.v1": 24412,
+   "sec.nport.security.v1": 383612,
+   "sec.submissions.company.v1": 6414
+  },
+  "decisions": {
+   "bind": 414438
+  },
+  "identities": {
+   "company": 30538,
+   "security": 383612
+  },
+  "open_reviews": {
+   "binding_required": 179,
+   "classification_deferred": 312,
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unknown_relationship_start": 177856,
+   "unsupported_identity_kind": 4299
+  },
+  "relationships": {
+   "SUCCESSOR_ENTITY company -> company": 123
+  },
+  "stage_records": {
+   "gleif.level1.v1": 24591,
+   "sec.nport.security.v1": 383612,
+   "sec.submissions.company.v1": 6414
+  },
+  "waiting": {
+   "classification_deferred": 312,
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unsupported_identity_kind": 4299
+  }
+ },
+ "batches": 848,
+ "companies_by_feeds": {
+  "gleif.level1.v1": 24124,
+  "gleif.level1.v1 + sec.submissions.company.v1": 288,
+  "sec.submissions.company.v1": 6126
+ },
+ "gleif_flag_on_assertions": {
+  "None": 467,
+  "true": 24124
+ },
+ "gleif_records_read": 28890,
+ "issued_by_resolved": {},
+ "issuer_leis_listed": 28397,
+ "issuers_and_sec_filers": {
+  "issuer, no SEC filer names its LEI": 20884,
+  "issuer, on another Company than its SEC filer (duplicate)": 3240
+ },
+ "lei_on_two_entities": 0,
+ "policy_digest": "05aa16d1dae5ad134cc7d2f09fffc3f8923cd935b9ad1d4913d9c1e87f605e2f",
+ "read": {
+  "gleif.level1.v1 assertions": 24591,
+  "gleif.level1.v1 deferred: unsupported_identity_kind": 4299,
+  "sec.nport.security.v1 assertions": 383612,
+  "sec.nport.security.v1 deferred: invalid_cusip": 1,
+  "sec.nport.security.v1 deferred: invalid_cusip_checksum": 1769,
+  "sec.submissions.company.v1 assertions": 6414,
+  "sec.submissions.company.v1 deferred: classification_deferred": 312
+ },
+ "run": "ISSUED_BY by issuer LEI, Proving Run 2 (issuer rule, real Level 1 reading and record_extras)",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 2060.2,
+  "gleif_prepare": 29.9,
+  "second_pass": 685.5
+ },
+ "slowest_batch_seconds": 15.8
+}
