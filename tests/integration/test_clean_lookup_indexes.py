@@ -170,3 +170,20 @@ def test_migration_012_on_a_populated_store_keeps_every_row(database):
         for name in ("source_reading_link_subjects", "current_record_review_affected_subjects"):
             assert "fastupdate=off" in conn.scalar(text(
                 "SELECT reloptions FROM pg_class WHERE oid = to_regclass(:n)"), {"n": f"mdm.{name}"})
+
+
+def test_migration_021_on_a_populated_store_turns_off_the_identifier_index_pending_list(database):
+    """Migration 021 on a populated store: the identifier index that binding
+    probes one value at a time keeps no pending list, nothing waits in it, and
+    every row is kept (rebuild-priorities ticket 96)."""
+    populate(database)
+    tables = ("stage_record", "source_reading", "decision", "master_entity", "current_record")
+    sql = (Path(store.__file__).parents[1] / "migrations" / "021_identifier_index_no_pending_list.sql").read_text()
+    with database.admin.begin() as conn:
+        conn.execute(text("ALTER INDEX mdm.stage_record_identifiers RESET (fastupdate)"))
+        counts = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in tables}
+        conn.execute(text(sql))
+    with database.admin.connect() as conn:
+        assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in tables} == counts
+        assert "fastupdate=off" in conn.scalar(text(
+            "SELECT reloptions FROM pg_class WHERE oid = to_regclass('mdm.stage_record_identifiers')"))

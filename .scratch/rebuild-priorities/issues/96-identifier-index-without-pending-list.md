@@ -2,7 +2,7 @@
 
 Priority: 96, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (MDM store migration). Status: written, waiting for the operator's word to code it. Found by: the N-PORT Security Proving Run (ticket 79, part 1), 2026-10-15 21:26 ET.
+Type: task (MDM store migration). Status: coded, in review (branch `claude/identifier-index-pending`). Found by: the N-PORT Security Proving Run (ticket 79, part 1), 2026-10-15 21:26 ET.
 
 ## Why
 
@@ -17,10 +17,10 @@ Measured on the Proving Run's disposable database (about 330,000 Stage records):
 
 ## Checklist
 
-- [ ] The operator's word to code it
-- [ ] GoF consult before code
-- [ ] The migration; a test that the index has `fastupdate=off`; the MDM migration tests pass
-- [ ] Measured: one probe on a store of the Proving Run's size, before and after
-- [ ] The rest of the slowdown: where the remaining batch time goes, measured (a follow-up ticket if it is not this)
+- [x] The operator's word to code it: "Goal set: fix all issues and wayfinder tickets" (2026-10-16) 2026-10-16 08:28 ET
+- [x] GoF consult before code: leave it (the migration list is append-only by design; 012's populated-store test is the model); noted: the index's comment still named only `context`, so 021 rewrites it 2026-10-16 08:28 ET
+- [x] The migration; a test that the index has `fastupdate=off`; the MDM migration tests pass: `021_identifier_index_no_pending_list.sql`; `test_migration_021_on_a_populated_store_turns_off_the_identifier_index_pending_list`; lookup-index tests 4 pass, the tests that read the migrations 42 pass (local PostgreSQL 16, pgserver) 2026-10-16 08:28 ET
+- [x] Measured, as a whole batch rather than one probe (`research/96_measure_merge.py`, `96-measure-pending-on.json`, `96-measure-pending-off.json`): 13F's 20,311 Securities, then 40 N-PORT batches of 1,000 (store 20,311 to 59,311), once with the pending list on and once off. Mean batch 4.36 s on, 2.51 s off; the last five 3.5-5.1 s on and rising, 2.5-3.6 s off; the identifier probes of a profiled batch 2.9 s on, 0.19 s off. A store of the Proving Run's size (330,000) was not rebuilt (2 h); the trend is the measure 2026-10-16 08:28 ET
+- [x] The rest of the slowdown: with the list off, `mdm.save_batch` takes 1.5 of a 2.7 s batch, matching (`propose`) 0.25 s, the closure reads 0.25 s; save_batch grew from 1.2 to 1.5 s over the 40 batches. Whether it stays flat at millions of records is not measured: the first thing ticket 79's HOLDS part checks 2026-10-16 08:28 ET
 - [ ] Three-axis review; PR, CI green; merge on the operator's word
 - [ ] Learning → skill: mdm-engineering, GIN indexes probed one key at a time keep no pending list
