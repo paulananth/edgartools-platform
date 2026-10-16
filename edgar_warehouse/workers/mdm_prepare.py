@@ -5,6 +5,11 @@ step); its keys say what to take from it, so nothing feed-specific runs:
 
 - `table`: the reading's table whose rows become MDM records;
 - optional `record_column`: an object-valued column holding the complete source record;
+- optional `record_extras`: with `record_column`, 1 to 8 other columns of the
+  row copied into the record under their own names (a column read beside the
+  record, such as a flag from a lookup set); a record that already holds one
+  of those names is refused. A column that is absent or null gives the record
+  nothing, so a record without it reads exactly as before;
 - optional `distinct_on`: 1 to 8 columns of the table row (not of the
   `record_column` object); of the artifact's rows with equal
   values in them (a missing column reads as null) only the first, in file
@@ -82,7 +87,8 @@ def _artifacts(envelope: dict, artifacts):
     for ref in refs:
         used = 0
         for artifact, used in source_readings.iter_artifacts(
-                ref, artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows):
+                ref, artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows,
+                allow_lookup_receipts=True):
             rows += sum(len(t) for t in artifact["tables"].values() if isinstance(t, list))
             if rows > INPUT_ROWS:
                 raise ValueError("mdm.prepare readings exceed their row budget")
@@ -94,7 +100,10 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
     """One artifact's records, checked: its source digest, its rows and its publication facts."""
     record_column = _optional_text(keys, "record_column")
     effective_column = _optional_text(keys, "effective_column")
-    distinct_on = _distinct_columns(keys)
+    distinct_on = _columns(keys, "distinct_on")
+    extras = _columns(keys, "record_extras") or []
+    if extras and record_column is None:
+        raise ValueError("mdm.prepare record_extras needs record_column")
     rows = artifact["tables"].get(keys["table"])
     if rows is None:
         raise ValueError(f"The reading has no table {keys['table']}")
@@ -110,13 +119,17 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
     if distinct_on is not None:
         rows = _first_of_each(rows, distinct_on)
     if record_column is not None:
-        rows = [row[record_column] for row in rows]
+        rows = [_with_extras(row, record_column, extras) for row in rows]
     source = artifact["input"]["sha256"]
     if "context" in artifact:
         reference(artifact["context"])
         # One captured document may be read under distinct approved caller
         # facts. Keep their records, batches and publications independent.
         source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
+    if "lookups" in artifact:
+        reference(artifact["lookups"])
+        # Rows read against another lookup set are another publication.
+        source = hashlib.sha256(f"{source}:lookups:{artifact['lookups']['sha256']}".encode()).hexdigest()
     return source, rows, publication
 
 
@@ -189,16 +202,25 @@ def _optional_text(keys: dict, name: str) -> str | None:
     return value
 
 
-def _distinct_columns(keys: dict) -> list[str] | None:
-    """`distinct_on`: 1 to 8 distinct columns of the table row (as many as
-    source.combine's `order_by` takes)."""
-    columns = keys.get("distinct_on")
-    if "distinct_on" in keys and (
+def _columns(keys: dict, name: str) -> list[str] | None:
+    """`distinct_on` or `record_extras`: 1 to 8 distinct columns of the table
+    row (as many as source.combine's `order_by` takes)."""
+    columns = keys.get(name)
+    if name in keys and (
         not isinstance(columns, list) or not 1 <= len(columns) <= 8
         or any(not isinstance(c, str) or not c for c in columns) or len(set(columns)) != len(columns)
     ):
-        raise ValueError("mdm.prepare distinct_on names 1 to 8 distinct nonempty columns")
+        raise ValueError(f"mdm.prepare {name} names 1 to 8 distinct nonempty columns")
     return columns
+
+
+def _with_extras(row: dict, record_column: str, extras: list[str]) -> dict:
+    """The row's record, with each extra column the row holds a value in added under its own name."""
+    record = row[record_column]
+    added = {name: row[name] for name in extras if row.get(name) is not None}
+    if clash := sorted(set(added) & set(record)):
+        raise ValueError(f"mdm.prepare record_extras would replace the record's own {clash}")
+    return {**record, **added} if added else record
 
 
 def _first_of_each(rows: list[dict], columns: list[str]) -> list[dict]:

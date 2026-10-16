@@ -30,7 +30,8 @@ from sqlalchemy import text
 from . import correction
 from .activation import activated, binding_namespaces, declared_namespaces
 from .evidence import decision, instant
-from .primitives import normalizer
+from .classification import holds
+from .primitives import normalizer, primitive_family
 from .store import rows
 
 
@@ -208,6 +209,13 @@ def _issuers(policy: dict, namespace: str) -> list[str]:
     return sorted({s for contract, _ in _contracts(policy, namespace) for s in contract["sources"]})
 
 
+def _record_tests_hold(rule: dict, record: dict) -> bool:
+    """A binding rule's record tests (ticket 97), read on the record alone: no
+    pinned document is in hand here, so a test that reads one sees none."""
+    return all(holds(test, record, {}) for test in rule["when"]
+               if primitive_family(test["primitive"]) == "classification")
+
+
 def _normal(policy: dict, namespace: str, value: str) -> str:
     declared = _contracts(policy, namespace)
     if not declared:
@@ -253,7 +261,7 @@ def propose(
         for kind, rule in rules:
             if rule["applies_to_verdict"] != record["kind"] or rule.get(
                 "source"
-            ) not in (None, record["source_code"]):
+            ) not in (None, record["source_code"]) or not _record_tests_hold(rule, record):
                 continue
             (namespace,) = binding_namespaces(rule)
             raw = (record.get("identifiers") or {}).get(namespace)

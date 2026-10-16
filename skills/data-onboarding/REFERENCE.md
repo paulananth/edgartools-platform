@@ -242,7 +242,12 @@ A relationship record becomes a link only once a matching rule joins its
 record to the kind's records. A matching rule on an identifier names one
 namespace, and only one that has an Identifier Contract in a kind file
 (`identifiers`); a new joining identifier is its contract and its rule, with
-no code (operator, 2026-10-09: "Read the list from the rules").
+no code (operator, 2026-10-09: "Read the list from the rules"). Its `when`
+may add record tests (`evidence_present@1`, `field_in_set@1` and the other
+classification tests) that narrow which of the source's records it applies to,
+read on the record alone: for example a matching value a reading sets only on
+some records (`provenance.matching.<name>`). A rule that creates records
+(`on_no_match: mint`) must name a source its Identifier Contract lists.
 
 Not expressible yet, so log them: a publication-level contract (a reader's
 list of approved identifiers, or the files that make one release), a kind

@@ -987,14 +987,18 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
             (json.dumps(row,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\\n").encode()).hexdigest()
         contract = store.put_bytes((folder / "contract.yaml").as_uri(),json.dumps(rules).encode())
         context = store.put(folder.as_uri(),{"version":1,"input":raw,"values":{"publication_count":1}})
-        manifest = store.put(folder.as_uri(),{"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
+        declared = rules["read"].get("lookup_sets", {})
+        entry = {"input":raw,"context":context}
+        if declared:
+            entry["lookups"] = store.put(folder.as_uri(),{"version":1,"input":raw,"sets":{name:[] for name in declared}})
+        manifest = store.put(folder.as_uri(),{"version":3 if declared else 2,"contract":contract,"artifacts":[entry]})
         task = {"input":manifest,"output":(folder / "reading.json").as_uri(),"checks":["source.output"]}
         receipt = source_read.execute(task,store)
         assert source_read.execute(task,store) == receipt
         assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
         artifact = store.json(receipt)["artifacts"][0]
         rows = [row for part in artifact["partitions"] for row in store.json(part["receipt"])["tables"][member.replace("-","_")]]
-        assert artifact["record_count"] == 1 and rows == [{"record":row,"source_index":1}]
+        assert artifact["record_count"] == 1 and rows == [{"record":row,"source_index":1,**({"nport_issuer":None} if declared else {})}]
 print("six installed GLEIF member contracts passed")
 ''', cwd=root)
     assert result.returncode == 0, result.stderr

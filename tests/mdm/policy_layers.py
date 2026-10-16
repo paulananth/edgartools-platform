@@ -73,6 +73,19 @@ def without_nport_registrant(policy: dict) -> dict:
     return body
 
 
+def without_issuer_lei(policy: dict) -> dict:
+    """Rebuild priorities tickets 22 and 97 (operator, 2026-10-16: "Issuers
+    only, by LEI (Recommended)"): GLEIF's own record as an LEI source, and the
+    issuer LEI matching rule (declared, not switched on). Peeled, the policy is
+    the one before."""
+    body = _copy(policy)
+    company = body["kinds"]["company"]
+    lei = company["identifiers"]["lei"]
+    lei["sources"] = [s for s in lei["sources"] if s != "gleif.level1.v1"]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "gleif-issuer-lei"]
+    return body
+
+
 def without_parent_history(policy: dict) -> dict:
     """Profiling ticket 04b, part B (operator, 2026-10-07: "It should also
     consider corporate actions"): the calculated ultimate parent keeps its
@@ -174,6 +187,7 @@ def without_place_codes(policy: dict) -> dict:
 # layer after it still on.
 LAYERS = [
     # Not yet approved: the operator approves its digest with the proof.
+    (without_issuer_lei, "6eb62cffdf39d78a0ce46a89175872bb436dba0a34aa9acedd05738899c06b8d"),
     (without_nport_registrant, "c69bd4a452fc3b5e9a7b722b876d04f7b7a33891fddf6509a57c968c8ef481b0"),
     (without_form_adv, "af0fa7cce9845419238d7ed23aa5fb7c1c8ccd576f2137e2b4ef3c732369a7cc"),
     (without_parent_history, "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605"),
