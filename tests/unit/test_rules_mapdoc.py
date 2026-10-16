@@ -22,7 +22,8 @@ def test_every_committed_mapping_document_equals_its_rules():
 def test_only_sources_that_feed_mdm_have_one():
     assert {name for name, _, _ in mapdoc.documents().values()} == {
         "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person", "iapd.adv",
-        "sec.ownership", "sec.thirteenf.information_table", "sec.nport.security", "sec.nport.registrant", "security"}
+        "sec.ownership", "sec.thirteenf.information_table", "sec.nport.security", "sec.nport.registrant", "security",
+        "sec.nport.fund", "fund_structure"}
 
 
 @pytest.fixture

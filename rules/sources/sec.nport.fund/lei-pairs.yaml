@@ -1,0 +1,21 @@
+# Each series and LEI filed together, with how many series file that LEI
+# (`lei_series`) and how many LEIs that series files (`series_leis`), so
+# combine.yaml keeps an LEI only when both are 1 (ticket 79, part 3). Input:
+# reduce.yaml's output (`series`). Pin canonical JSON of this file as the
+# source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    lei_series: {source: series, table: lei_series, key: lei_key, value: series, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    series_leis: {source: series, table: series_leis, key: series_id, value: leis, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    pairs:
+      source: series
+      table: series_lei
+      checks: {}
+      where: {}
+      joins:
+        lei_series: {group: lei_series, key: lei_key, on_missing: error, replace: false}
+        series_leis: {group: series_leis, key: series_id, on_missing: error, replace: false}
