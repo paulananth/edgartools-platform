@@ -591,10 +591,30 @@ contract's `nonblocking_deferred_reasons`.
    ```
    Run it with Docker (on macOS, Colima), and bound it:
    `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock timeout -s KILL 600 uv run --no-sync pytest -q -s <file>`.
+   `timeout` is GNU's; macOS has none, so there give the run a watcher with
+   a deadline instead.
    Where Docker does not start, the same fixtures run on a local
    PostgreSQL 16 that is deleted afterwards:
    `PG16_SERVER=pgserver uv run --no-sync --with pgserver pytest -q -s <file>`
    (`tests/support/pg16.py`). Write in the log which one ran.
+   - **Load every source that can bind the same entities.** A rule that
+     creates entities is proved with every other source whose records can
+     match the same entities (by an identifier or by name) loaded too;
+     without them a duplicate cannot appear, and the run proves nothing
+     about duplicates.
+   - **Measure a known risk before the ruling.** When a ruling carries a
+     risk (duplicate entities, links that cannot resolve), count it from
+     the captured files first and give the operator the count, not only
+     the sentence.
+   - **Count the links MDM accepts, not the links a contract writes.** A
+     test run shows each record's links; only the Merge Stage shows they
+     resolve. Apply a few invented records through the whole chain and the
+     Merge Stage first: a link with no stated start, from a publication
+     that states no effective time, goes to review.
+   - **Configuration first.** Before proposing an engine change, find what
+     the rules files already allow (a rule's `on_no_match`, a reading's
+     `context`, a reduction's keys or `last`) and put that option to the
+     operator, with what it cannot do.
    - **Expect:** under a minute to start the database. A few hundred
      records should finish in under 5 minutes; several thousand take tens
      of minutes. Say the estimate before a long run.
