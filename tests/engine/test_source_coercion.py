@@ -9,6 +9,7 @@ import pytest
 
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
+from tests.support.sec_rows import filing_row
 
 CONTRACT = Path(__file__).parent / 'fixtures/filing-complete.yaml'
 CONTEXT = {'cik': 320193, 'sync_run_id': 'qualification', 'raw_object_id': 'captured',
@@ -16,11 +17,7 @@ CONTEXT = {'cik': 320193, 'sync_run_id': 'qualification', 'raw_object_id': 'capt
 
 
 def filing(accession, form):
-    return {'accession_number': accession, 'cik': 320193, 'form': form, 'filing_date': None, 'report_date': None,
-            'acceptance_datetime': None, 'act': None, 'file_number': None, 'film_number': None, 'items': None,
-            'size': None, 'is_xbrl': False, 'is_inline_xbrl': False, 'primary_document': None,
-            'primary_doc_desc': None, 'sync_run_id': 'qualification', 'raw_object_id': 'captured',
-            'load_mode': 'default'}
+    return filing_row(accession, CONTEXT, form=form)
 
 
 # A value that is not text reads as Python's `str` of it, nested containers too.

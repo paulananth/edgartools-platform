@@ -25,8 +25,8 @@ path. Its `body.publication_contract` pins:
 | `replacement_scope` | Exact scope label shared by this family's publications |
 | `revision_versions` | Pinned contract, parser, schema and configuration versions of acquisition revisions |
 
-The [versioned fixture](../../../tests/fixtures/clean_mdm/publication_v1/dataset.json)
-is a complete example. Golden Copy requires Level 1, relationships and reporting
+GLEIF's Dataset Contracts (`rules/sources/gleif/source.yaml`) are complete
+examples. Golden Copy requires Level 1, relationships and reporting
 exceptions together. Mapping publications require their own contract and recovery
 plan. Several record-level dataset adapters may later consume the same aggregate.
 

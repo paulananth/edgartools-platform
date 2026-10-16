@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from edgar_warehouse.control_contract import digest
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
@@ -93,10 +94,11 @@ def test_complete_filing_content_worker_and_verifier_without_source_loader(tmp_p
     candidate = source_read.execute(envelope, store)
     assert source_read.verify({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
     empty = dict.fromkeys(files.load(fixture)['read']['tables']['filings']['columns'])
-    assert store.json(candidate)['artifacts'][0]['tables']['filings'] == [
+    # Exactly, types too: `==` would take a flag read as 1 for True.
+    assert digest(store.json(candidate)['artifacts'][0]['tables']['filings']) == digest([
         {**empty, 'accession_number': 'a', 'filing_date': '2024-02-29', 'size': 9007199254740993,
          'is_xbrl': False, 'is_inline_xbrl': False},
-        {**empty, 'accession_number': 'b', 'is_xbrl': True, 'is_inline_xbrl': False}]
+        {**empty, 'accession_number': 'b', 'is_xbrl': True, 'is_inline_xbrl': False}])
 
 
 @pytest.mark.parametrize('raw', ['-0', '1e2', '-9223372036854775809', '0.9999999999999999', '1.9999999999999998'])

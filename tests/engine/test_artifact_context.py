@@ -12,6 +12,7 @@ from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import mdm_prepare, source_read
+from tests.support.sec_rows import filing_row
 
 CONTRACT = Path(__file__).parent / 'fixtures/filing-complete.yaml'
 PAYLOAD = {'cik': 7, 'filings': {'recent': {
@@ -25,13 +26,10 @@ VALUES = {'cik': 320193, 'sync_run_id': 'capture', 'raw_object_id': 'raw-id', 'l
 # The 18 columns of each filing, as the old filing loader wrote them: the
 # caller's CIK and run facts (not the document's), dates on the calendar, a
 # size that is not an integer dropped, and a flag that is not one false.
-EMPTY = dict.fromkeys(['acceptance_datetime', 'act', 'file_number', 'film_number', 'items', 'primary_doc_desc'])
-RUN = {'cik': 320193, 'sync_run_id': 'capture', 'raw_object_id': 'raw-id', 'load_mode': 'default'}
-ONE = {**EMPTY, **RUN, 'accession_number': 'one', 'form': '10-K', 'filing_date': '2024-02-29',
-       'report_date': '2023-12-31', 'size': 9007199254740993, 'is_xbrl': False, 'is_inline_xbrl': False,
-       'primary_document': ' a.htm '}
-TWO = {**EMPTY, **RUN, 'accession_number': 'two', 'form': '8-K', 'filing_date': None, 'report_date': None,
-       'size': None, 'is_xbrl': True, 'is_inline_xbrl': True, 'primary_document': 'b.htm'}
+ONE = filing_row('one', VALUES, form='10-K', filing_date='2024-02-29', report_date='2023-12-31',
+                 size=9007199254740993, primary_document=' a.htm ')
+TWO = filing_row('two', VALUES, form='8-K', is_xbrl=True, is_inline_xbrl=True,
+                 primary_document='b.htm')
 
 
 @pytest.mark.parametrize('limit, expected', [(None, [ONE, TWO]), (-10, []), (-1, []), (0, []), (1, [ONE]),
@@ -147,3 +145,23 @@ def test_context_decoder_is_part_of_the_pinned_worker_runtime(tmp_path, monkeypa
     before = runtime(source_read)
     decoder.write_bytes(decoder.read_bytes().replace(b'raise ValueError("duplicate JSON key")', b'pass'))
     assert runtime(source_read) != before
+
+
+def test_an_artifact_that_selects_no_rows_prepares_no_batch(tmp_path):
+    # A zero recent limit reads the document and selects none of its filings;
+    # preparation then makes one batch, from the artifact that selected rows.
+    store, envelope = task(tmp_path)
+    manifest = store.json(envelope['input'])
+    unselected = copy.deepcopy(manifest['artifacts'][0])
+    unselected['context'] = store.put(tmp_path.as_uri(), {'version': 1, 'input': unselected['input'],
+                                                           'values': {**VALUES, 'recent_limit': 0}})
+    manifest['artifacts'].append(unselected)
+    envelope['input'] = store.put(tmp_path.as_uri(), manifest)
+    reading = source_read.execute(envelope, store)
+    assert [len(a['tables']['filings']) for a in store.json(reading)['artifacts']] == [2, 0]
+    prepare = {'input': reading, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'checks': ['mdm.prepared'], 'keys': {
+        'table': 'filings', 'dataset': 'qualification.filings', 'policy': '0' * 64, 'consumer': 'test/filings',
+        'batch_id': 'trial', 'as_of': '2026-10-03T00:00:00Z'}}
+    receipt = mdm_prepare.execute(prepare, store)
+    assert mdm_prepare.verify({**prepare, 'candidate': receipt}, store) == ({'mdm.prepared': True}, [])
+    assert [b['input']['record_count'] for b in store.json(receipt)['batches']] == [2]

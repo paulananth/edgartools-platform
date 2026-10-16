@@ -15,22 +15,16 @@ from edgar_warehouse.control_contract import digest
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import source_read
+from tests.support.sec_rows import company_row, filing_row
 
 CONTEXT = {
     "cik": 320193, "sync_run_id": "qualification", "raw_object_id": "0" * 64,
     "load_mode": "default", "recent_limit": None, "last_synced_at": "2026-10-05T00:00:00Z",
 }
 MATRIX = json.loads((Path(__file__).parent / "fixtures/company-main-matrix.json").read_text())
-RUN = {key: CONTEXT[key] for key in ("cik", "sync_run_id", "raw_object_id", "load_mode")}
 DEFAULTS = {
-    "company": {**RUN, **dict.fromkeys(["entity_name", "entity_type", "sic", "sic_description",
-                                        "state_of_incorporation", "state_of_incorporation_desc",
-                                        "fiscal_year_end", "ein", "description", "category"]),
-                "last_sync_run_id": "qualification", "last_synced_at": CONTEXT["last_synced_at"]},
-    "filings": {**RUN, **dict.fromkeys(["accession_number", "form", "filing_date", "report_date",
-                                        "acceptance_datetime", "act", "file_number", "film_number", "items",
-                                        "size", "primary_document", "primary_doc_desc"]),
-                "is_xbrl": False, "is_inline_xbrl": False},
+    "company": company_row(CONTEXT),
+    "filings": filing_row(None, CONTEXT),
     "addresses": {"cik": 320193, "last_sync_run_id": "qualification", "business_address": None},
 }
 

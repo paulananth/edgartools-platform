@@ -528,7 +528,7 @@ dataset:
 The `contract` is MDM's own Dataset Contract. Its `adapter` block is
 read by MDM's `normalize`
 (`edgar_warehouse/mdm/clean/adapters.py:49-158`), one silver row to one
-assertion. The prototype carried Codex's `publication_v1/dataset.json` into
+assertion. The prototype carried the then fixture `publication_v1/dataset.json` (deleted, ticket 88) into
 a contract verbatim (JSON is YAML 1.2), and `normalize` mapped it as
 expected.
 

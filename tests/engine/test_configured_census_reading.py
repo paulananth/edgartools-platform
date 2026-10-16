@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.mdm.clean import name_census
-from edgar_warehouse.rules.source_engine import SourceRejected
+from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules import files
 from tests.mdm.test_clean_name_census import (
     APPLE, COMPLETE_READING, WAYFAIR, archive, configured, gleif, metadata, TestTheCascade as CascadeFixture,
@@ -27,10 +27,13 @@ def no_custom_steps(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def expected(request):
-    """This case's censuses, in the order its `compare` calls ask for them."""
-    global EXPECTED
-    EXPECTED = iter(CASES.get(request.node.name, []))
+def recorded_answers(request):
+    """This case's censuses, in the order its `compare` calls ask for them; every
+    answer recorded for the case must be used."""
+    global ANSWERS
+    ANSWERS = list(CASES.get(request.node.name, []))
+    yield
+    assert not ANSWERS, f"{len(ANSWERS)} recorded census answer(s) unused by {request.node.name}"
 
 
 def compare(filers, records, *, cascade=None, recipe=None):
@@ -42,7 +45,8 @@ def compare(filers, records, *, cascade=None, recipe=None):
     assert actual['gleif'] == {**{k: v for k, v in metadata(len(records)).items() if k in actual['gleif']},
                                'archive_sha256': hashlib.sha256(raw).hexdigest()}
     found = {'entries': actual['entries'], **({'cascade': actual['cascade']} if 'cascade' in actual else {})}
-    assert found == next(EXPECTED)
+    assert ANSWERS, "no census answer recorded for this case"
+    assert found == ANSWERS.pop(0)
     return actual
 
 
@@ -153,6 +157,9 @@ def test_empty_registration_and_entity_containers_keep_historical_output(value):
 def test_cascade_skips_other_names_before_mapping_when_category_is_not_general(category):
     row = gleif('LEI', 'Apple Inc.', category=category)
     row['Entity']['OtherEntityNames'] = {'OtherEntityName':['x'] * 100001}
+    recipe = files.load(files.ROOT / 'sources/gleif/census-cascade-record.yaml')
+    mapped = SourceEngine(recipe).read(json.dumps(row).encode()).tables['mapped']
+    assert [r['observation'] for r in mapped] == [None]  # no cascade entity, the other names never mapped
     if category == 'BRANCH':  # never a legal entity: its other names are not read at all
         compare([APPLE], [row])
 
@@ -195,3 +202,7 @@ def test_matched_registration_refusal_precedes_other_name_shape_or_count_refusal
     row['Entity']['OtherEntityNames'] = other
     with pytest.raises(SourceRejected, match='value_type'):
         configured([APPLE], [row])
+
+
+def test_every_recorded_census_answer_names_a_test_here():
+    assert {name.split('[')[0] for name in CASES} <= {name for name in globals() if name.startswith('test_')}

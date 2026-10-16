@@ -9,6 +9,7 @@ from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_address import retained as retained_address
 from tests.engine.test_source_combine import envelope, group, join, plan, table
+from tests.support import sec_rows
 from tests.support.exact import require_tables
 
 
@@ -17,27 +18,12 @@ CONTEXT = {'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64,
            'load_mode': 'default', 'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'}
 
 
-COMPANY_FIELDS = ('entity_name', 'entity_type', 'sic', 'sic_description', 'state_of_incorporation',
-                  'state_of_incorporation_desc', 'fiscal_year_end', 'ein', 'description', 'category')
-FILING_FIELDS = ('form', 'filing_date', 'report_date', 'acceptance_datetime', 'act', 'file_number', 'film_number',
-                 'items', 'size', 'primary_document', 'primary_doc_desc')
-
-
-def run_facts(context=CONTEXT):
-    return {'cik': context['cik'], 'sync_run_id': context['sync_run_id'],
-            'raw_object_id': context['raw_object_id'], 'load_mode': context['load_mode']}
-
-
 def company_row(context=CONTEXT, **filed):
-    """The Company row: each SEC field as filed (any JSON value), else none, with the capture's run facts."""
-    return {**run_facts(context), **dict.fromkeys(COMPANY_FIELDS), 'last_sync_run_id': context['sync_run_id'],
-            'last_synced_at': context['last_synced_at'], **filed}
+    return sec_rows.company_row(context, **filed)
 
 
 def filing_row(accession, context=CONTEXT, **filed):
-    """A filing row: each field as filed, else none; a flag that is not one is false."""
-    return {'accession_number': accession, **run_facts(context), **dict.fromkeys(FILING_FIELDS),
-            'is_xbrl': False, 'is_inline_xbrl': False, **filed}
+    return sec_rows.filing_row(accession, context, **filed)
 
 
 @pytest.mark.parametrize('payload, company, filings', [
