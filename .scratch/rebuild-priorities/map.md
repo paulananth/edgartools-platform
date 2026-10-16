@@ -54,6 +54,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [CSV and TSV are read the same](issues/86-tsv-reads-as-csv.md): one reader for both (#986, #989)
 - [A reading looks up a value in a large set](issues/91-a-reading-looks-up-a-value-in-a-large-set.md): pair sets read by `member_value` (#993)
 - [Capture posts a request with a key](issues/92-capture-posts-a-request-with-a-key.md): the OpenFIGI mapping capture (#994)
+- [Skills hold every learning](issues/78-skills-hold-every-learning.md): `mdm-engineering`, data rules in the data skills, how to work in this repo in `AGENTS.md` and `CLAUDE.md` (#972, #985)
 
 ## Not yet specified
 
