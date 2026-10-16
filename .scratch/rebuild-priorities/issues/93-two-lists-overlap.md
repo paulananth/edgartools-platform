@@ -35,5 +35,5 @@ The reading, reduction and combine group, count, join and choose. They cannot te
 - [x] `overlap` in Rust beside `equal` (PRIMITIVES, children, validate, eval); `tests/overlap.rs`: shared, none, empty, null, missing, non-text refused, a nested `context` read, arguments refused; all 31 crate test binaries pass (2026-10-15 14:15 ET)
 - [x] READING.md: `overlap`, after the assertions section (2026-10-15 14:18 ET)
 - [x] Three-axis review (Standards, Spec, GoF): GoF leave it; fixed the doc's place, one refusal for any non-text list (a null item included, tested), and the ticket now says a reading over the combined rows applies `overlap`. Rust: 31 crate test binaries pass; Python: 336 engine, stream, lookup and architecture tests pass (2026-10-15 14:18 ET)
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR #995, CI green (6 checks), merged 2026-10-15 17:49 ET
 - [x] Learning → skill: data-platform READING.md, `overlap` (compare two sets in a reading; combine and reduction never evaluate expressions) (2026-10-15 14:18 ET)
