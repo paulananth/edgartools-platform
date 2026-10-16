@@ -1,0 +1,50 @@
+{
+ "level1 json": {
+  "adapter_version": "gleif-native-record-v1",
+  "canonical_source_hash": "b4205b6afbcffd869dc6f620b5da42e6d5d3211b7ff871c4482b694e0335e9a0",
+  "compressed_bytes": 209,
+  "domain_content_hash": "2766ffe495bd51f58db2c3ec991b4d10413dc2c65ef2685e154e8b37883fa789",
+  "expanded_bytes": 188,
+  "record_count": 3
+ },
+ "level1 xml": {
+  "adapter_version": "gleif-native-record-v1",
+  "canonical_source_hash": "b4205b6afbcffd869dc6f620b5da42e6d5d3211b7ff871c4482b694e0335e9a0",
+  "compressed_bytes": 386,
+  "domain_content_hash": "2766ffe495bd51f58db2c3ec991b4d10413dc2c65ef2685e154e8b37883fa789",
+  "expanded_bytes": 622,
+  "record_count": 3
+ },
+ "relationships json": {
+  "adapter_version": "gleif-native-record-v1",
+  "canonical_source_hash": "2b4c7b6288513719add07ec254540c879ec2555d3cee168e3bafb8e3343a84ea",
+  "compressed_bytes": 250,
+  "domain_content_hash": "5fc834c0b43b5f593da8ae593588d45373fd8a30b11346e2830c391787a158b5",
+  "expanded_bytes": 451,
+  "record_count": 3
+ },
+ "relationships xml": {
+  "adapter_version": "gleif-native-record-v1",
+  "canonical_source_hash": "2b4c7b6288513719add07ec254540c879ec2555d3cee168e3bafb8e3343a84ea",
+  "compressed_bytes": 428,
+  "domain_content_hash": "5fc834c0b43b5f593da8ae593588d45373fd8a30b11346e2830c391787a158b5",
+  "expanded_bytes": 1040,
+  "record_count": 3
+ },
+ "reporting-exceptions json": {
+  "adapter_version": "gleif-native-record-v1",
+  "canonical_source_hash": "b4205b6afbcffd869dc6f620b5da42e6d5d3211b7ff871c4482b694e0335e9a0",
+  "compressed_bytes": 212,
+  "domain_content_hash": "6fbca3a35eb92ab6e7efe6acd30647685f44a409374c916530b4a4dc1ba9399e",
+  "expanded_bytes": 191,
+  "record_count": 3
+ },
+ "reporting-exceptions xml": {
+  "adapter_version": "gleif-native-record-v1",
+  "canonical_source_hash": "b4205b6afbcffd869dc6f620b5da42e6d5d3211b7ff871c4482b694e0335e9a0",
+  "compressed_bytes": 405,
+  "domain_content_hash": "6fbca3a35eb92ab6e7efe6acd30647685f44a409374c916530b4a4dc1ba9399e",
+  "expanded_bytes": 662,
+  "record_count": 3
+ }
+}

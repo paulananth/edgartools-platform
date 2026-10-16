@@ -1,8 +1,9 @@
-"""Independent old-runtime parity and generic attestation refusal contracts."""
+"""GLEIF attestation reports and generic attestation refusal contracts."""
 import copy
 import hashlib
 import io
 import json
+from pathlib import Path
 import struct
 import zipfile
 
@@ -12,26 +13,26 @@ from edgar_warehouse.mdm.clean.gleif_publication import attest_publication
 from edgar_warehouse.mdm.clean.gleif_publication import FORMATS
 from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers.source_attestation import attest_zip
-from tests.engine.test_gleif_reading_contracts import MEMBERS, DATE, configured, archive, records
+from tests.engine.test_gleif_reading_contracts import MEMBERS, configured, archive, records
 from tests.support.gleif_archives import archive_bytes, metadata
-from tests.support.retired_gleif_attestation import inspect_archive as historical_inspector
+
+# Each member and format's report, written once from the retired GLEIF runtime while the two agreed.
+REPORTS = json.loads((Path(__file__).parent / 'fixtures/gleif-attestation-reports.json').read_text())
 
 
 @pytest.mark.parametrize("member", MEMBERS)
 @pytest.mark.parametrize("format_name", ["json", "xml"])
-def test_all_member_reports_and_callbacks_match_historical_runtime(member, format_name):
+def test_all_member_reports_and_callbacks(member, format_name):
     rules = configured(member, format_name)
     raw = archive(rules, member, format_name)
     member_name = member.replace("-", "_")
     arguments = dict(member=member_name, expected_sha256=hashlib.sha256(raw).hexdigest(),
         metadata=metadata(3, format=format_name + ".zip", cdf_version=FORMATS[member_name][0]))
-    old_rows, new_rows = [], []
-    expected = historical_inspector(io.BytesIO(raw), **arguments,
-                                    on_record=lambda row, index: old_rows.append((row, index)))
-    actual = attest_publication(io.BytesIO(raw), **arguments,
-                               on_record=lambda row, index: new_rows.append((row, index)))
-    assert actual == expected
-    assert new_rows == old_rows == list(zip(records(member), range(3)))
+    rows = []
+    actual = attest_publication(io.BytesIO(raw), **arguments, on_record=lambda row, index: rows.append((row, index)))
+    # The archive's own hash is its bytes' (the test zips with today's time); the rest are fixed.
+    assert actual == {**REPORTS[f"{member} {format_name}"], "raw_evidence_hash": hashlib.sha256(raw).hexdigest()}
+    assert rows == list(zip(records(member), range(3)))
 
 
 def generic_contract():

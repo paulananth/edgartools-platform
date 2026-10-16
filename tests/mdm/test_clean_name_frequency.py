@@ -3,7 +3,6 @@ population from the receipt-bound raw capture."""
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 

@@ -44,6 +44,37 @@ WHEELS = {
 DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
 
 
+def _text(node):
+    value = node.get("$") if isinstance(node, dict) else node
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def cascade_entity(row, cascade_spec, wanted):
+    """One Level 1 record as the cascade reads it (ticket 21): through the GLEIF
+    contract and its quality rule, with its legal and other names; None when it
+    is not GENERAL or the contract sets it aside."""
+    from edgar_warehouse.mdm.clean import cascade
+    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, mapped_values
+    from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
+    entity = row.get("Entity") or {}
+    lei = _text(row.get("LEI"))
+    if not lei or _text(entity.get("EntityCategory")) != "GENERAL":
+        return None
+    try:
+        fields, matching, quality = mapped_values(row, cascade_spec["gleif_contract"])
+    except UnsupportedRecord:
+        return None
+    names = [_text(entity.get("LegalName"))]
+    for container, item in (("OtherEntityNames", "OtherEntityName"),
+                            ("TransliteratedOtherEntityNames", "TransliteratedOtherEntityName")):
+        found = (entity.get(container) or {}).get(item) or []
+        names += [text for name in (found if isinstance(found, list) else [found]) if (text := _text(name))]
+    key = NORMALIZERS["normalize_text@legal-form-kept-v1"]
+    return cascade.entity_of(cascade.record(lei, fields, matching, quality, {"lei": lei}),
+                             frozenset(key(n) for n in names) & wanted,
+                             eligible=cascade.eligible(fields, cascade_spec["spec"]))
+
+
 @pytest.mark.parametrize("case", ["ordinary", "agent", "placeholder", "headquarters_agent",
     "cross_line_agent", "postcode", "unicode", "noncandidate", "ineligible", "missing_name",
     "bad_field", "bad_lines", "branch"])
@@ -52,7 +83,6 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     import copy
     from edgar_warehouse.mdm.clean import cascade, sec_company, quality
     from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
-    from tests.support.retired_name_census import cascade_entity
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
 
@@ -1110,9 +1140,8 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                 publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
                              "revision":1,"artifact_sha256":digest(row),
                              "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
-        from io import BytesIO
-        from tests.mdm.test_clean_name_census import archive, metadata
-        from tests.support import retired_name_census
+        from tests.mdm.test_clean_name_census import archive, configured, metadata
+        from edgar_warehouse.mdm.clean import name_census
         census_archive = archive(rows)
         census_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
                          for r in sec_records if r['source'] == 'sec.submissions.company']
@@ -1120,7 +1149,9 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                             "sec_population": {"capture_run_id": "installed-census", "filers": len(census_filers)},
                             "gleif_metadata": metadata(len(rows)),
                             "gleif_sha256": hashlib.sha256(census_archive).hexdigest()}
-        historical_census = retired_name_census.build(gleif_archive=BytesIO(census_archive), **census_arguments)
+        # The checkout's census over the same inputs; the installed bundle must write the same.
+        checkout_census = configured(census_filers, rows, population=census_arguments["sec_population"],
+                                     archive_sha256=census_arguments["gleif_sha256"])
         done = _run(python, "-c", r'''
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -1208,7 +1239,7 @@ census=name_census.census(sec_population=census_arguments["sec_population"],
     gleif={"archive_sha256":census_arguments["gleif_sha256"],"content_date":meta["content_date"],
            "file_content":meta["file_content"],"record_count":meta["record_count"]},
     held=held,wanted=wanted,readings=tables)
-expected=body["historical_census"]
+expected=body["checkout_census"]
 assert census==expected
 census_assertions=[]
 for record in body["sec_records"]:
@@ -1216,7 +1247,7 @@ for record in body["sec_records"]:
     row=copy.deepcopy(record["row"])
     row["name_census"]=name_census.entry(census,row["entity_name"],census_digest=digest(census))
     old_row=copy.deepcopy(row)
-    old_row["name_census"]=body["historical_entries"][str(row["cik"])]
+    old_row["name_census"]=body["checkout_entries"][str(row["cik"])]
     kwargs={"source_code":"sec.submissions.company.v1","contract":files.mdm_contract("sec.submissions.company","sec.submissions.company.v1"),
             "policy":files.policy(),"publication":{"publication_key":f"installed-census/{row['cik']}","revision":2,
             "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
@@ -1269,9 +1300,9 @@ engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
                          "census_arguments": census_arguments,
-                         "historical_census": historical_census,
+                         "checkout_census": checkout_census,
                          "census_archive": base64.b64encode(census_archive).decode(),
-                         "historical_entries": {str(r['row']['cik']): retired_name_census.entry(historical_census,r['row']['entity_name'],census_digest=digest(historical_census))
+                         "checkout_entries": {str(r['row']['cik']): name_census.entry(checkout_census,r['row']['entity_name'],census_digest=digest(checkout_census))
                                                 for r in sec_records if r['source']=='sec.submissions.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
