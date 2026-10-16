@@ -22,3 +22,4 @@ The old pipeline's ECS task definitions and Step Functions were retired with its
 - [ ] `rules run --target mdm` end to end (from ticket 02)
 - [ ] The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)
 - [ ] The run report's row-count change from the last run (from ticket 10, part 2): compare each Bookkeeping run of a target with the last complete run of the same pipeline and target; the per-run counts are each MDM run's `checks` in `mdm.run.report`; a Bookkeeping run of a target spans one MDM run per unit, so it sums its units' checks first
+- [ ] GLEIF Level 1's records step passes `record_extras: [nport_issuer]` to `mdm.prepare` and fills the reading's `nport_issuers` reference from the N-PORT issuer reduction (tickets 22 and 97; noted 2026-10-16 13:16 ET)

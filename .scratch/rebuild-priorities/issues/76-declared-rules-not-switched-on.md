@@ -14,3 +14,4 @@ These rules are in `rules/merge/kinds/company.yaml`, but they are not in the Mas
 - [ ] ~~GLEIF cascade `sec-gleif-cascade-p1` to `p7`~~ already tracked by ticket 09 ("Cascade name-and-address passes: label and switch on"), found 2026-10-14 12:50 ET; this ticket keeps the Form ADV rules
 - [ ] Form ADV `iapd-adv-crd`, `iapd-adv-custodian-lei` and `iapd-adv-custodian-bd` (2026-10-09.1): the same
 - [ ] Each answer recorded here with the operator's words and the ET time
+- [ ] Re-run the ADV rules' proof before switch-on: since ticket 97 GLEIF is an LEI source, so a custodian LEI already held by a GLEIF-bound Company joins it instead of creating one, and an LEI on two Companies goes to review (noted 2026-10-16 13:16 ET)
