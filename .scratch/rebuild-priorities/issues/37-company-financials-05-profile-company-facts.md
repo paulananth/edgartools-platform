@@ -16,8 +16,8 @@ Input ready: the long form (`company-facts/cohort-long/`: facts, concepts, entit
 - [x] Profile all three related parts together once, retaining complete findings privately under the local proving folder — 2026-10-16 14:06 ET; full scan completed successfully in 49.83 seconds (48.5 seconds profiler time), no sampling, approval remains draft.
 - [ ] Report classes, keys, measured links, time roles, repeated filing values and concept coverage; distinguish evidence from proposed interpretation.
 - [ ] Resolve unknowns and obtain the operator's explicit findings approval before catalog publication or onboarding.
-- [ ] Review the counts-only ticket evidence under Standards, Spec and GoF; run overlap checks before commit and push.
-- [ ] Learning → skill: name any durable lesson, or none.
+- [x] Review the counts-only ticket evidence under Standards, Spec and GoF; run overlap checks before commit and push — 2026-10-16 14:16 ET; progress review below, counts reconciled to private findings, whitespace and both guard passes clean, checkpoint 8377111a pushed. The incomplete reporting/approval items stay open.
+- [x] Learning → skill: none — 2026-10-16 14:16 ET; existing profile-once, unknowns and approval rules apply. Original-JSON reading changes are isolated in ticket 41 / PR #1016, not silently applied to these draft findings.
 
 ## Execution boundary
 
