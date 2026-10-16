@@ -50,6 +50,10 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [Check a step without redoing it](issues/72-check-a-step-without-redoing-it.md): a check confirms inputs, contract and output shape, and redoes the first unit and a 5% sample (#958)
 - [The Merge Stage has no limit](issues/74-merge-stage-has-no-limit.md): no size refusal anywhere; how the input is cut stays (#960)
 - [The Merge Stage merges record by record](issues/77-merge-one-record-at-a-time.md): a batch reads only the masters it touches and their links; proposal and batch in one transaction; the outbox reads a batch once (#963)
+- [06 Silver writer](issues/17-profiling-06-silver-writer.md): a PG16 `silver` schema through one sink (#879); unchanged by the final source-extract and capture design
+- [CSV and TSV are read the same](issues/86-tsv-reads-as-csv.md): one reader for both (#986, #989)
+- [A reading looks up a value in a large set](issues/91-a-reading-looks-up-a-value-in-a-large-set.md): pair sets read by `member_value` (#993)
+- [Capture posts a request with a key](issues/92-capture-posts-a-request-with-a-key.md): the OpenFIGI mapping capture (#994)
 
 ## Not yet specified
 

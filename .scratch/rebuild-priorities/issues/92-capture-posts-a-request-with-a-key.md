@@ -2,7 +2,7 @@
 
 Priority: 92, tier 2. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine). Status: in progress (branch `claude/openfigi-capture`). Unblocks: 80 (Onboard OpenFIGI with the skills).
+Type: task (engine). Status: done (2026-10-16 08:21 ET): #994 merged. Unblocks: 80 (Onboard OpenFIGI with the skills).
 
 ## Why
 
@@ -26,5 +26,5 @@ The configured capture (`edgar_warehouse/workers/provider_capture.py` over `prov
 - [x] `docs/configured-capture.md`, "A POST with a key" (the capture's own page; READING.md has no capture section) (2026-10-15 12:41 ET)
 - [x] Three-axis review (Standards, Spec, GoF). Fixed: the key's header may not be one the capture sets itself (`User-Agent`, `Content-Type` and the rest); an array answer is for a POST feed only; a failed request's error keeps only its type, so the key never rides out in a traceback; the key read and the request's method, body and headers in one function (`_sending`); a test finds the key in no written file and no Journal or control row; stale "GET" wording; the rate set at 4 a second (25 every 6 s is 4.17). 69 unit and 42 integration tests pass (2026-10-15 12:41 ET)
 - [x] One small real request to OpenFIGI (operator: "Code 92 and test", then "Reuse the OPENFIGI_API_KEY": the key kept in a private file outside the repository, mode 600, loaded only for the command): one POST of 100 N-PORT CUSIPs through `provider_transport.fetch`, status 200, a JSON array of 100 answers, receipt (sha256, bytes) beside it on this machine; findings on ticket 80 (2026-10-15 13:02 ET)
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merge on the operator's word: #994 merged 2026-10-15 13:11 ET
 - [x] Learning → skill: `docs/configured-capture.md` (how a POST feed with a key is declared and kept safe); the data-onboarding skill's capture rows belong to Bookkeeping, unchanged (2026-10-15 12:41 ET)
