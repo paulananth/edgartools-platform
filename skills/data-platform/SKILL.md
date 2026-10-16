@@ -134,6 +134,10 @@ step:
   they advance (its own, from checkpoint 0), a `batch_id` prefix and the
   `as_of` instant. Optional `record_column` selects an object-valued column
   containing the complete source record; omitted, the table row is the record.
+  With it, optional `record_extras` names 1 to 8 other columns of the row to
+  copy into the record under their own names (a flag read beside the record,
+  such as a lookup reference's); absent or null adds nothing, so records
+  without it are unchanged, and a name the record already holds is refused.
   Optional `distinct_on` names 1 to 8 columns of the table row: of a file's rows with equal
   values in them, only the first in file order becomes a record, so an entity
   named in many rows of one file (a counterparty listed by every filer) is one

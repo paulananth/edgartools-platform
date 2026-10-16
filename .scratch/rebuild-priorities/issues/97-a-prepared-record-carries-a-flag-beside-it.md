@@ -2,7 +2,7 @@
 
 Priority: 97, tier 1, blocks ticket 22's resolution. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine code, small). Status: open; coding waits for the operator's word (configuration-only rule). Blocked by: none. Blocks: 22 (ISSUED_BY by issuer LEI).
+Type: task (engine code, small). Status: coded, in review (branch `claude/prepare-record-extras`). Blocked by: none. Blocks: 22 (ISSUED_BY by issuer LEI).
 
 ## Why
 
@@ -38,10 +38,10 @@ so a record without the flag reads exactly as today.
 
 ## Checklist
 
-- [ ] Operator's word to code it
-- [ ] GoF consult; `mdm.prepare` `record_extras` with its verifier, tests (present, absent, name clash)
-- [ ] `level1-json.yaml`: lookup set `nport_issuers` and column `nport_issuer` (`member_value`); GLEIF Level 1 contract maps `matching.nport_issuer`; whole `tests/mdm` for pinned digests
-- [ ] Rule `gleif-issuer-lei` in `rules/merge/kinds/company.yaml`, after the SEC–GLEIF name and cascade rules: `evidence_present@1` on `matching.nport_issuer`, then join the one Company holding the LEI, else create
+- [x] Operator's word to code it: "Yes, code ticket 97 (Recommended)" 2026-10-16 13:13 ET
+- [x] GoF consult (add as planned; one column-list parser shared with `distinct_on`); `mdm.prepare` `record_extras`: absent or null adds nothing, a clash is refused, without `record_column` refused; 4 unit tests, the verifier rebuilds and compares 2026-10-16 13:13 ET
+- [x] `level1-json.yaml`: a reference `nport_issuers` (empty by default, like `approved_scope`; a lookup set would need every caller to supply one) and column `nport_issuer`; the Level 1 contract's matching is its old object as `base` plus `nport_issuer` with `omit_nulls`, so a record without the flag reads exactly as before (assertion ids unchanged, `test_gleif_configured_fields.py`); contract digest layer `WITH_ISSUER_FLAG` and policy layer `without_issuer_lei`, each peeling back to the digest pinned before; `tests/mdm` and affected tests: 952 passed, installed GLEIF mapping test passed 2026-10-16 13:13 ET
+- [x] Rule `gleif-issuer-lei` (declared, not switched on): `evidence_present@1` on `provenance.matching.nport_issuer`, then join the one Company holding the LEI, else create; GLEIF added to the LEI contract's sources (it issues LEIs; a creating rule must name an issuing source). Binding rules may now carry record tests (`activation.check_binding_rule`, `binding._record_tests_hold`). Identifier rules run before the name rules in every batch (`merge.py`), so an issuer that is also an SEC filer can become two Companies (the ruling took this risk). On PG16: a flagged record creates its Company, another waits, a second flagged record joins; with the record test removed the test fails 2026-10-16 13:13 ET
 - [ ] Ticket 22's Proving Run 2, with the cm27 SEC Companies loaded too (see ticket 22)
 - [ ] Review, PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] Learning → skill: data-onboarding REFERENCE "Merge rules" (record tests narrow a matching rule; a creating rule names an issuing source) and data-platform SKILL (`record_extras`) 2026-10-16 13:13 ET
