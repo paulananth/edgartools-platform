@@ -174,3 +174,40 @@ def test_distinct_on_names_one_to_eight_distinct_columns(tmp_path, value):
     store, envelope = _prepare(tmp_path, [{"id": 1}], distinct_on=value)
     with pytest.raises(ValueError, match="distinct_on"):
         mdm_prepare.execute(envelope, store)
+
+
+def _records(tmp_path, store, envelope):
+    result = mdm_prepare.execute(envelope, store)
+    assert mdm_prepare.verify({**envelope, "candidate": result}, store) == ({"mdm.prepared": True}, [])
+    batch = store.json(result)["batches"][0]
+    return [json.loads(line) for line in (tmp_path / "prepared" / batch["input"]["path"]).read_text().splitlines()]
+
+
+def test_record_extras_add_a_column_read_beside_the_record(tmp_path):
+    # Ticket 97: a flag read beside a whole source record reaches its Dataset Contract.
+    rows = [{"record": {"id": "a"}, "flag": True}, {"record": {"id": "b"}, "flag": None}, {"record": {"id": "c"}}]
+    store, envelope = _prepare(tmp_path, rows, record_column="record", record_extras=["flag"])
+    # Absent or null, the record is exactly as without the key.
+    assert _records(tmp_path, store, envelope) == [{"id": "a", "flag": True}, {"id": "b"}, {"id": "c"}]
+
+
+def test_without_record_extras_the_record_is_as_before(tmp_path):
+    rows = [{"record": {"id": "a"}, "flag": True}]
+    store, envelope = _prepare(tmp_path, rows, record_column="record")
+    assert _records(tmp_path, store, envelope) == [{"id": "a"}]
+
+
+def test_record_extras_never_replace_the_records_own_value(tmp_path):
+    store, envelope = _prepare(tmp_path, [{"record": {"id": "a", "flag": 1}, "flag": True}],
+                               record_column="record", record_extras=["flag"])
+    with pytest.raises(ValueError, match="would replace the record's own"):
+        mdm_prepare.execute(envelope, store)
+
+
+@pytest.mark.parametrize("keys", [{"record_extras": ["flag"]},
+                                  {"record_column": "record", "record_extras": "flag"},
+                                  {"record_column": "record", "record_extras": ["flag", "flag"]}])
+def test_record_extras_are_named_columns_of_a_record_column(tmp_path, keys):
+    store, envelope = _prepare(tmp_path, [{"record": {"id": "a"}, "flag": True}], **keys)
+    with pytest.raises(ValueError, match="record_extras"):
+        mdm_prepare.execute(envelope, store)

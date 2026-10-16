@@ -605,6 +605,31 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: bd_number
+# A GLEIF record an N-PORT holding names as its issuer joins the one Company
+# that holds its LEI, or creates it (operator, 2026-10-16: "Issuers only, by
+# LEI (Recommended)"; ticket 22). The record test keeps it to issuers: the rest
+# of GLEIF still joins only through the SEC-GLEIF name rules. Identifier rules
+# run before the name rules, so an issuer that is also an SEC filer can become
+# two Companies, one by CIK and one by LEI, until they are merged (the ruling
+# took that risk; ticket 22's Proving Run counts them). Declared, not switched on.
+- rule_id: gleif-issuer-lei
+  version: 2026-10-16.1
+  family: binding
+  source: gleif.level1.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.nport_issuer
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
 normalizers:
   conformed: normalize_text@edgar-conformed-v1
 lists:
@@ -785,8 +810,10 @@ identifiers:
       max_per_10k: 5
   lei:
     authority: GLEIF (ISO 17442)
+    # GLEIF's own record issues an LEI (ticket 22, the issuer rule).
     sources:
     - iapd.adv.custodians.v1
+    - gleif.level1.v1
     normalizer: normalize_identifier@lei-v1
     claim:
       forward: 1

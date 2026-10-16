@@ -375,7 +375,8 @@ COMPATIBILITY = frozenset({"kind_equal@1"})
 
 def binding_namespaces(rule: dict) -> list[str]:
     return sorted(
-        {(test.get("args") or {}).get("namespace") for test in rule.get("when") or []}
+        {(test.get("args") or {}).get("namespace") for test in rule.get("when") or []
+         if primitive_family(test.get("primitive")) == "binding"}
     )
 
 
@@ -385,6 +386,9 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
     `on_no_match` is data on the rule: `mint` creates a new Company (the SEC
     universe is the base, Q1); `wait` leaves the record in the Stage (operator,
     2026-09-24: an unlinked GLEIF record waits). Fuzzy binding is ticket 08.
+    Record tests (the classification family) may narrow the records a rule
+    applies to (ticket 97: a GLEIF record an N-PORT holding names as issuer);
+    they read the record alone, never master state.
     """
     rule_id = rule.get("rule_id")
     if rule.get("applies_to_verdict") != kind:
@@ -403,10 +407,10 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
     if not tests:
         raise Conflict(f"Binding rule {rule_id} has no when")
     for test in tests:
-        if primitive_family(test.get("primitive")) != "binding":
+        if primitive_family(test.get("primitive")) not in ("binding", "classification"):
             raise Conflict(
                 f"Binding rule {rule_id} calls {test.get('primitive')}, which is "
-                "not a binding test"
+                "neither a binding test nor a record test"
             )
     namespaces = binding_namespaces(rule)
     declared = declared_namespaces(kinds)

@@ -10,6 +10,9 @@ read:
     publication_count: {type: integer}
   references:
     approved_scope: {}  # LEI: {selected: true}; never infer scope from this file.
+    # LEI: {issuer: true} for the LEIs an N-PORT holding names as its issuer
+    # (ticket 22); empty, no record is flagged.
+    nport_issuers: {}
   tables:
     level1:
       each: '.'
@@ -21,6 +24,13 @@ read:
           on_missing: 'null'
       columns:
         record: {value: {path: '.'}}
+        # Carried into the record by mdm.prepare's record_extras (ticket 97).
+        nport_issuer:
+          lookup:
+            reference: nport_issuers
+            column: issuer
+            key: {text: {path: LEI.$}}
+            on_missing: 'null'
         source_index: {context: {name: source_index}}
   stream:
     wrapper: records

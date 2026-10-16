@@ -406,9 +406,15 @@ class TestAnIdentifierRule:
             ({"on_no_match": "guess"}, "on_no_match"),
             ({"emits": ["bind", "consolidate"]}, "exactly bind"),
             ({"applies_to_verdict": "person"}, "sits in kind company"),
+            # Record tests may narrow a binding rule (ticket 97), never stand for its identifier.
             (
                 {"when": [{"primitive": "token_match@1", "args": {}}]},
-                "not a binding test",
+                "exactly one namespace",
+            ),
+            (
+                {"when": [{"primitive": "identifier_match@1", "args": {"namespace": "cik"}},
+                          {"primitive": "postal_agrees@1", "args": {}}]},
+                "neither a binding test nor a record test",
             ),
             (
                 {

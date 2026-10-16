@@ -193,6 +193,20 @@ WITH_CONFIGURED_READING = {
 # an object's `gleif:Deletion` and anything else as the flag itself. Approved by the
 # operator, 2026-10-10 18:06 ET: "approved" (evidence: no Golden Copy record has a
 # non-object `Extension`, so every member's whole-file comparison holds).
+# Tickets 22 and 97 (operator, 2026-10-16: "Issuers only, by LEI"): Level 1's
+# matching value `nport_issuer`, the flag the issuer LEI rule tests. Not yet approved.
+WITH_ISSUER_FLAG = {"level1": "ea91f9ba79e3b0fe433b772c9b1be156c92f83da9f08a9bdbc6219fe21ceb8bb"}
+
+
+def _without_issuer_flag(contract: dict) -> dict:
+    if "reading" not in contract["adapter"]:
+        return contract
+    adapter = copy.deepcopy(contract["adapter"])
+    columns = adapter["reading"]["read"]["tables"]["mapped"]["columns"]
+    columns["matching"] = columns["matching"]["object"]["base"]
+    return {**contract, "adapter": adapter}
+
+
 WITH_EXTENSION_CHECK = {
     "level1": "67fe1aaaa0aee2bafb1d1e234cfd147b9acd8058ad27deed9e3bb4c3572b1eac",
     "relationships": "b9b1fd11129ea8ffb258989f076775377c94071d001be6a2e6c8d3621c294b1a",
@@ -286,7 +300,11 @@ def _without_invalid_lei(contract: dict) -> dict:
 
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
-    contract = _with_retired_lists(gleif_publication.dataset_contract(member), f"gleif.{member}.v1")
+    contract = gleif_publication.dataset_contract(member)
+    if member in WITH_ISSUER_FLAG:
+        assert digest(contract) == WITH_ISSUER_FLAG[member]
+        contract = _without_issuer_flag(contract)
+    contract = _with_retired_lists(contract, f"gleif.{member}.v1")
     if member in WITH_EXTENSION_CHECK:
         assert digest(contract) == WITH_EXTENSION_CHECK[member]
         contract = _without_extension_check(contract)
