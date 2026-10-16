@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import source_read
@@ -13,12 +12,15 @@ from edgar_warehouse.workers import source_read
 CONTRACT = Path(__file__).parent / "fixtures" / "parallel-filings.yaml"
 
 
-@pytest.mark.parametrize("forms", [["10-K", "8-K"], [" ", ""], [None], [], ["6-K", "20-F", "40-F"]])
-def test_declared_projection_matches_the_old_loader_for_short_empty_and_extra_arrays(forms):
+# Each accession number makes one row; a form past the end, or blank, is none;
+# forms beyond the accession numbers are dropped.
+@pytest.mark.parametrize("forms, expected", [
+    (["10-K", "8-K"], ["10-K", "8-K"]), ([" ", ""], [" ", None]), ([None], [None, None]), ([], [None, None]),
+    (["6-K", "20-F", "40-F"], ["6-K", "20-F"])])
+def test_declared_projection_for_short_empty_and_extra_arrays(forms, expected):
     payload = {"cik": "320193", "filings": {"recent": {"accessionNumber": ["a", "b"], "form": forms}}}
-    old = stage_recent_filing_loader(payload, 320193, "fixture", "captured", "default")
-    expected = [{key: row[key] for key in ("accession_number", "form")} for row in old]
-    assert SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode()).tables["filings"] == expected
+    assert SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode()).tables["filings"] == [
+        {"accession_number": a, "form": f} for a, f in zip("ab", expected)]
 
 
 def test_worker_and_verifier_read_the_declared_arrays_without_a_source_loader(tmp_path):

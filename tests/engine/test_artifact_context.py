@@ -9,10 +9,10 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import Blocked
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import mdm_prepare, source_read
+from tests.support.sec_rows import filing_row
 
 CONTRACT = Path(__file__).parent / 'fixtures/filing-complete.yaml'
 PAYLOAD = {'cik': 7, 'filings': {'recent': {
@@ -23,17 +23,22 @@ PAYLOAD = {'cik': 7, 'filings': {'recent': {
 VALUES = {'cik': 320193, 'sync_run_id': 'capture', 'raw_object_id': 'raw-id', 'load_mode': 'default', 'recent_limit': None}
 
 
-@pytest.mark.parametrize('limit', [None, -10, -1, 0, 1, 2, 3, 9223372036854775807])
-def test_all_18_columns_match_retained_loader_and_bounds(limit):
+# The 18 columns of each filing, as the old filing loader wrote them: the
+# caller's CIK and run facts (not the document's), dates on the calendar, a
+# size that is not an integer dropped, and a flag that is not one false.
+ONE = filing_row('one', VALUES, form='10-K', filing_date='2024-02-29', report_date='2023-12-31',
+                 size=9007199254740993, primary_document=' a.htm ')
+TWO = filing_row('two', VALUES, form='8-K', is_xbrl=True, is_inline_xbrl=True,
+                 primary_document='b.htm')
+
+
+@pytest.mark.parametrize('limit, expected', [(None, [ONE, TWO]), (-10, []), (-1, []), (0, []), (1, [ONE]),
+                                             (2, [ONE, TWO]), (3, [ONE, TWO]), (9223372036854775807, [ONE, TWO])])
+def test_all_18_columns_and_the_recent_limit(limit, expected):
     values = {**VALUES, 'recent_limit': limit}
-    expected = stage_recent_filing_loader(PAYLOAD, values['cik'], values['sync_run_id'], values['raw_object_id'], values['load_mode'], limit)
-    expected = [{key: value.isoformat() if hasattr(value, 'isoformat') else value for key, value in row.items()} for row in expected]
     reading = SourceEngine(files.load(CONTRACT)).read(json.dumps(PAYLOAD).encode(), context=values)
     assert reading.tables['filings'] == expected
     assert not reading.deferred
-    if expected:
-        assert len(expected[0]) == 18
-        assert expected[0]['cik'] != PAYLOAD['cik']
 
 
 @pytest.mark.parametrize(('field', 'value'), [('cik', True), ('cik', 1.0), ('cik', 2**63), ('cik', -(2**63)-1), ('cik', '320193'), ('load_mode', None), ('load_mode', []), ('recent_limit', False), ('recent_limit', '1'), ('sync_run_id', 'é' * 2049)])
@@ -140,3 +145,23 @@ def test_context_decoder_is_part_of_the_pinned_worker_runtime(tmp_path, monkeypa
     before = runtime(source_read)
     decoder.write_bytes(decoder.read_bytes().replace(b'raise ValueError("duplicate JSON key")', b'pass'))
     assert runtime(source_read) != before
+
+
+def test_an_artifact_that_selects_no_rows_prepares_no_batch(tmp_path):
+    # A zero recent limit reads the document and selects none of its filings;
+    # preparation then makes one batch, from the artifact that selected rows.
+    store, envelope = task(tmp_path)
+    manifest = store.json(envelope['input'])
+    unselected = copy.deepcopy(manifest['artifacts'][0])
+    unselected['context'] = store.put(tmp_path.as_uri(), {'version': 1, 'input': unselected['input'],
+                                                           'values': {**VALUES, 'recent_limit': 0}})
+    manifest['artifacts'].append(unselected)
+    envelope['input'] = store.put(tmp_path.as_uri(), manifest)
+    reading = source_read.execute(envelope, store)
+    assert [len(a['tables']['filings']) for a in store.json(reading)['artifacts']] == [2, 0]
+    prepare = {'input': reading, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'checks': ['mdm.prepared'], 'keys': {
+        'table': 'filings', 'dataset': 'qualification.filings', 'policy': '0' * 64, 'consumer': 'test/filings',
+        'batch_id': 'trial', 'as_of': '2026-10-03T00:00:00Z'}}
+    receipt = mdm_prepare.execute(prepare, store)
+    assert mdm_prepare.verify({**prepare, 'candidate': receipt}, store) == ({'mdm.prepared': True}, [])
+    assert [b['input']['record_count'] for b in store.json(receipt)['batches']] == [2]

@@ -132,6 +132,10 @@ Learned the hard way; each is a standing operator rule.
   words naming the PRs to merge ("Merge" answering a question about named
   PRs counts for those PRs). Approval of a rule, a ruling on a design or a goal is
   not merge approval.
+- A test states its expected answer; it never compares with a frozen copy of
+  retired code. To retire such an oracle, write its answers into the test (or an
+  answer file written once while the two still agree), change each answer once
+  to see the test fail, and compute any value that follows the clock (ticket 88).
 - A conclusion reached by reading code is not proof of behaviour: test each
   case the claim covers (one test per kind, per source), since the untested
   case is where a gap hides.

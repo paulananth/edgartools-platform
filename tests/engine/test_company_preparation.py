@@ -1,16 +1,16 @@
-"""Company main reading composition; retained functions are parity oracles."""
+"""Company main reading composition: the Company, its filings and its address, as the old loaders read them."""
 import json
 
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_company_loader, stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_address import retained as retained_address
 from tests.engine.test_source_combine import envelope, group, join, plan, table
-from scripts.qualification.qualify_company_main import require_tables
+from tests.support import sec_rows
+from tests.support.exact import require_tables
 
 
 CONTRACT = files.source('sec.submissions.company')
@@ -18,25 +18,30 @@ CONTEXT = {'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64,
            'load_mode': 'default', 'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'}
 
 
-def expected(payload, context):
-    company = stage_company_loader(payload, context['cik'], context['sync_run_id'], context['raw_object_id'], context['load_mode'])[0]
-    company.update(last_sync_run_id=context['sync_run_id'], last_synced_at=context['last_synced_at'])
-    filings = stage_recent_filing_loader(payload, context['cik'], context['sync_run_id'], context['raw_object_id'], context['load_mode'], context['recent_limit'])
-    return company, filings
+def company_row(context=CONTEXT, **filed):
+    return sec_rows.company_row(context, **filed)
 
 
-@pytest.mark.parametrize('payload', [
-    {}, {'name': 'é🦀', 'entityType': 'other', 'sic': 0, 'category': False},
-    {'name': None, 'description': '', 'ein': '000000000', 'stateOfIncorporation': 'X0'},
-    {'name': ['retain', 1], 'sicDescription': {'raw': True}, 'fiscalYearEnd': 1231},
-    {'addresses': {'business': {'street1': ' raw ', 'stateOrCountry': ' de ', 'zipCode': '00123'}}},
-    {'filings': {'recent': {'accessionNumber': ['a', 'b', 'c'], 'form': ['10-K', '8-K', '10-K']}}},
-    {'filings': None}, {'filings': {'recent': []}},
+def filing_row(accession, context=CONTEXT, **filed):
+    return sec_rows.filing_row(accession, context, **filed)
+
+
+@pytest.mark.parametrize('payload, company, filings', [
+    ({}, {}, []),
+    ({'name': 'é🦀', 'entityType': 'other', 'sic': 0, 'category': False},
+     {'entity_name': 'é🦀', 'entity_type': 'other', 'sic': 0, 'category': False}, []),
+    ({'name': None, 'description': '', 'ein': '000000000', 'stateOfIncorporation': 'X0'},
+     {'description': '', 'ein': '000000000', 'state_of_incorporation': 'X0'}, []),
+    ({'name': ['retain', 1], 'sicDescription': {'raw': True}, 'fiscalYearEnd': 1231},
+     {'entity_name': ['retain', 1], 'sic_description': {'raw': True}, 'fiscal_year_end': 1231}, []),
+    ({'addresses': {'business': {'street1': ' raw ', 'stateOrCountry': ' de ', 'zipCode': '00123'}}}, {}, []),
+    ({'filings': {'recent': {'accessionNumber': ['a', 'b', 'c'], 'form': ['10-K', '8-K', '10-K']}}}, {},
+     [filing_row('a', form='10-K'), filing_row('b', form='8-K'), filing_row('c', form='10-K')]),
+    ({'filings': None}, {}, []), ({'filings': {'recent': []}}, {}, []),
 ])
-def test_main_reading_preserves_company_filings_and_address(payload):
+def test_main_reading_preserves_company_filings_and_address(payload, company, filings):
     result = SourceEngine(CONTRACT).read(json.dumps(payload).encode(), context=CONTEXT)
-    company, filings = expected(payload, CONTEXT)
-    require_tables(result.tables['company'], [company])
+    require_tables(result.tables['company'], [company_row(**company)])
     require_tables(result.tables['filings'], filings)
     actual = result.tables['addresses']
     assert (actual[-1]['business_address'] if actual else None) == retained_address(payload)
@@ -72,8 +77,8 @@ def test_receipt_bound_main_read_combine_prepare_and_repeat(tmp_path):
     combined = source_combine.execute(combined_work, store)
     assert source_combine.verify({**combined_work, 'candidate': combined}, store) == ({'source.combined': True}, [])
     assert source_combine.execute(combined_work, store) == combined
-    company, _ = expected(payload, context)
-    company.update(forms=['10-K', '8-K'], business_address=retained_address(payload))
+    company = company_row(context, entity_name='Example', forms=['10-K', '8-K'],
+                          business_address=retained_address(payload))
     assert store.json(combined)['artifacts'][0]['tables']['company'] == [company]
     keys = {'table': 'company', 'dataset': 'sec.submissions.company.v1', 'policy': '0' * 64,
             'consumer': 'trial', 'batch_id': 'main', 'as_of': CONTEXT['last_synced_at']}

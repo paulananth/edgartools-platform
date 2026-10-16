@@ -21,7 +21,11 @@ from pathlib import Path
 
 import ijson
 
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_company_loader
+# Each SEC Company column, from its submissions field, as filed.
+COLUMNS = {"entity_name": "name", "entity_type": "entityType", "sic": "sic", "sic_description": "sicDescription",
+           "state_of_incorporation": "stateOfIncorporation",
+           "state_of_incorporation_desc": "stateOfIncorporationDescription", "fiscal_year_end": "fiscalYearEnd",
+           "ein": "ein", "description": "description", "category": "category"}
 
 BRONZE = {
     "0000320193": "cik=320193/main/2026/07/02/CIK0000320193.json",
@@ -42,10 +46,10 @@ def main(bronze_dir: str, golden_copy: str) -> None:
         raw = (Path(bronze_dir) / key.rsplit("/", 1)[1]).read_bytes()
         sha = hashlib.sha256(raw).hexdigest()
         sources[PREFIX + key] = sha
-        row = stage_company_loader(
-            json.loads(raw), int(cik), "bronze-fixture", sha, "fixture"
-        )[0]
-        sec.append({**row, "last_sync_run_id": "bronze-fixture"})
+        payload = json.loads(raw)
+        sec.append({"cik": int(cik), **{column: payload.get(field) for column, field in COLUMNS.items()},
+                    "sync_run_id": "bronze-fixture", "raw_object_id": sha, "load_mode": "fixture",
+                    "last_sync_run_id": "bronze-fixture"})
     gleif = []
     with zipfile.ZipFile(golden_copy) as z, z.open(z.namelist()[0]) as f:
         for record in ijson.items(f, "records.item", use_float=True):

@@ -1,22 +1,70 @@
-"""Bounded native frame reading; the old GLEIF reader is an independent oracle."""
+"""Bounded native frame reading: each record exactly as Python's `json` reads it, or a refusal."""
 import io
 import json
 import math
+import random
+import struct
 
 import pytest
 
-from edgar_warehouse.control_contract import digest
-from scripts.qualification.legacy_gleif_json_oracle import _BoundedReader, _json_records
+from edgar_warehouse.control_contract import canonical, digest
 from edgar_warehouse.rules.source_engine import SourceRejected, stream_json_array
-from scripts.qualification.audit_json_sequence import audit, audit_record_bounds, ordered
+from tests.support.exact import ordered
 
 LIMITS = {"max_bytes": 1024**2, "max_record": 4096, "max_records": 100, "max_depth": 64}
 
 
-def test_finite_typed_numeric_and_frame_audit_matches_historical_reader():
-    result = audit()
-    assert result["cases"] == 2066
-    assert result["difference_count"] == 0, result["differences"]
+# The bodies the reader refuses: no wrapper object or list, a record that is not
+# an object, a repeated key, other or repeated top-level members, trailing or
+# missing data, and integers outside the signed 64-bit range (its minimum here
+# is -(2**63 - 1)) or numbers past a double.
+REFUSED = [b'{}', b'[]', b'{"wrong":[]}', b'{"records":{}}', b'{"records":[null]}',
+           b'{"records":[[]]}', b'{"records":[{"a":1,"a":2}]}',
+           b'{"records":[{"x":{"a":1,"a":2}}]}', b'{"records":[],"extra":0}',
+           b'{"records":[],"records":[]}', b'{"records":[]} null', b'{"records":[{}]',
+           b'{"records":[{"n":-9223372036854775808}]}',
+           b'{"records":[{"n":9223372036854775808}]}',
+           b'{"records":[{"n":18446744073709551616}]}',
+           b'{"records":[{"n":1e400}]}']
+
+
+def cases():
+    yield "records", b'{"records":[{"z":1,"a":2,"nested":{"y":3,"b":4}}]}'
+    values = [None, False, True, 0, 1, -(2**63 - 1), 2**63 - 1, 1.25, -0.0,
+              "", "é🦀", [], {}, [1, {"n": True}], {"null": None}]
+    for wrapper in ("records", "relations", "exceptions"):
+        for value in values:
+            yield wrapper, json.dumps({wrapper: [{"value": value}]}, ensure_ascii=False).encode()
+        yield wrapper, json.dumps({wrapper: [{"x": 1}, {"x": 2}]}).encode()
+        yield wrapper, json.dumps({wrapper: []}).encode()
+    for data in REFUSED:
+        yield "records", data
+    rng = random.Random(1105)
+    for _ in range(2000):
+        value = struct.unpack(">d", rng.getrandbits(64).to_bytes(8, "big"))[0]
+        if math.isfinite(value):
+            yield "records", json.dumps({"records": [{"value": value}]}).encode()
+
+
+def read(body, wrapper, **changes):
+    rows = []
+    receipt = stream_json_array(io.BytesIO(body), wrapper=wrapper, on_record=lambda row, n: rows.append(row),
+                                **{"max_bytes": 1024**2, "max_record": 65536, "max_records": 100,
+                                   "min_integer": -(2**63 - 1), **changes})
+    assert receipt == {"record_count": len(rows), "expanded_bytes": len(body)}
+    return rows
+
+
+def test_finite_typed_numeric_and_frame_cases():
+    total = 0
+    for wrapper, body in cases():
+        total += 1
+        if body in REFUSED:
+            with pytest.raises(SourceRejected):
+                read(body, wrapper)
+        else:
+            assert digest(ordered(read(body, wrapper))) == digest(ordered(json.loads(body)[wrapper])), body
+    assert total == 2066
 
 
 def test_exact_comparator_detects_a_deliberate_float_rounding_fault():
@@ -28,10 +76,22 @@ def test_exact_comparator_detects_a_deliberate_float_rounding_fault():
     assert digest([row for _, row in parsed]) != digest(rows)
 
 
-def test_python_encoded_size_boundaries_match_historical_record_policy():
-    report = audit_record_bounds()
-    assert report["cases"] == 6141
-    assert report["difference_count"] == 0, report["differences"]
+def test_python_encoded_size_boundaries():
+    """A record is accepted exactly when its Python-encoded size is within the limit."""
+    total = 0
+    for wrapper, body in cases():
+        if body in REFUSED or not (rows := json.loads(body)[wrapper]):
+            continue
+        size = max(len(canonical(row).encode()) for row in rows)
+        for limit in (size - 1, size, size + 1):
+            total += 1
+            if limit < size:
+                with pytest.raises(SourceRejected):
+                    read(body, wrapper, max_record=limit, record_encoding="python")
+            else:
+                found = read(body, wrapper, max_record=limit, record_encoding="python")
+                assert digest(ordered(found)) == digest(ordered(rows)), body
+    assert total == 6141
 
 
 def test_encoded_size_policy_is_explicit_and_rejects_unknown_policy():
@@ -68,28 +128,22 @@ def test_streaming_preserves_exact_types_order_and_eof_receipt():
     assert result == {"record_count": 2, "expanded_bytes": len(body)}
     assert [n for n, _ in found] == [0, 1]
     assert digest([row for _, row in found]) == digest(rows)
-    old = list(_json_records(_BoundedReader(io.BytesIO(body), LIMITS["max_bytes"], LIMITS["max_record"]), "records"))
-    assert digest(old) == digest(rows)
 
 
-def test_explicit_integer_minimum_matches_the_historical_decoder_boundary():
+def test_explicit_integer_minimum():
     body = b'{"records":[{"n":-9223372036854775808}]}'
     assert native(body)[1][0][1]["n"] == -(2**63)
     with pytest.raises(SourceRejected):
         native(body, min_integer=-(2**63 - 1))
-    with pytest.raises(Exception):
-        list(_json_records(_BoundedReader(io.BytesIO(body), LIMITS["max_bytes"], LIMITS["max_record"]), "records"))
 
 
 @pytest.mark.parametrize("body", [b'{}', b'[]', b'{"other":[]}', b'{"records":{}}',
     b'{"records":[null]}', b'{"records":[[]]}', b'{"records":[{"a":1,"a":2}]}',
     b'{"records":[{"n":9223372036854775808}]}', b'{"records":[{"n":18446744073709551616}]}',
     b'{"records":[{"n":1e400}]}', b'{"records":[]} null', b'{"records":[{}]'])
-def test_native_and_historical_frame_refusals(body):
+def test_native_frame_refusals(body):
     with pytest.raises(SourceRejected):
         native(body)
-    with pytest.raises(Exception):
-        list(_json_records(_BoundedReader(io.BytesIO(body), LIMITS["max_bytes"], LIMITS["max_record"]), "records"))
 
 
 def test_oversized_record_is_refused_before_emission_or_full_read():
@@ -100,11 +154,10 @@ def test_oversized_record_is_refused_before_emission_or_full_read():
     assert not emitted and stream.tell() < len(stream.getbuffer())
 
 
-def test_whitespace_headroom_matches_historical_bounded_reader():
+def test_whitespace_headroom_within_a_record():
     body = b'{"records":[{' + b' ' * 1000 + b'}]}'
     result, rows = native(body, max_record=2)
-    old = list(_json_records(_BoundedReader(io.BytesIO(body), LIMITS["max_bytes"], 2), "records"))
-    assert [row for _, row in rows] == old == [{}]
+    assert [row for _, row in rows] == [{}]
     assert result["expanded_bytes"] == len(body)
     large = b'{"records":[{' + b' ' * 200000 + b'}]}'
     with pytest.raises(SourceRejected):

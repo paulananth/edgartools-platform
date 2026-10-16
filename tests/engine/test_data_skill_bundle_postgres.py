@@ -44,6 +44,37 @@ WHEELS = {
 DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
 
 
+def _text(node):
+    value = node.get("$") if isinstance(node, dict) else node
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def cascade_entity(row, cascade_spec, wanted):
+    """One Level 1 record as the cascade reads it (ticket 21): through the GLEIF
+    contract and its quality rule, with its legal and other names; None when it
+    is not GENERAL or the contract sets it aside."""
+    from edgar_warehouse.mdm.clean import cascade
+    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, mapped_values
+    from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
+    entity = row.get("Entity") or {}
+    lei = _text(row.get("LEI"))
+    if not lei or _text(entity.get("EntityCategory")) != "GENERAL":
+        return None
+    try:
+        fields, matching, quality = mapped_values(row, cascade_spec["gleif_contract"])
+    except UnsupportedRecord:
+        return None
+    names = [_text(entity.get("LegalName"))]
+    for container, item in (("OtherEntityNames", "OtherEntityName"),
+                            ("TransliteratedOtherEntityNames", "TransliteratedOtherEntityName")):
+        found = (entity.get(container) or {}).get(item) or []
+        names += [text for name in (found if isinstance(found, list) else [found]) if (text := _text(name))]
+    key = NORMALIZERS["normalize_text@legal-form-kept-v1"]
+    return cascade.entity_of(cascade.record(lei, fields, matching, quality, {"lei": lei}),
+                             frozenset(key(n) for n in names) & wanted,
+                             eligible=cascade.eligible(fields, cascade_spec["spec"]))
+
+
 @pytest.mark.parametrize("case", ["ordinary", "agent", "placeholder", "headquarters_agent",
     "cross_line_agent", "postcode", "unicode", "noncandidate", "ineligible", "missing_name",
     "bad_field", "bad_lines", "branch"])
@@ -52,7 +83,6 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     import copy
     from edgar_warehouse.mdm.clean import cascade, sec_company, quality
     from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
-    from tests.support.retired_name_census import cascade_entity
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
 
@@ -540,7 +570,11 @@ read:
 """
 
 
-@pytest.mark.parametrize("trial_mode", ["configured", "parquet-records", "custom-step", "parallel-records", "integer-records", "artifact-context", "source-coercion", "selected-sequences", "reference-lookup", "raw-person", "object-records", "combined-records", "choice-records", "streamed-records", "xml-streamed-records", "xml-streamed-recovery"])
+# Each variant is one worker path through the installed bundle. A reading feature that a
+# worker-level test already covers in-process is not repeated here (ticket 88): parallel
+# records, integers, artifact context, selected sequences, object records (raw-person runs
+# the same path) and XML streaming (the recovery variant streams XML too).
+@pytest.mark.parametrize("trial_mode", ["configured", "parquet-records", "custom-step", "source-coercion", "reference-lookup", "raw-person", "combined-records", "choice-records", "streamed-records", "xml-streamed-recovery"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker and a separate verifier from
@@ -555,7 +589,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     custom_trial = trial_mode == "custom-step"
     combined_trial = trial_mode == "combined-records"
     recovery_trial = trial_mode == "xml-streamed-recovery"
-    xml_trial = trial_mode in ("xml-streamed-records", "xml-streamed-recovery")
+    xml_trial = recovery_trial
     streamed_trial = trial_mode == "streamed-records" or xml_trial
     profiles = ("source.read", *(("source.combine",) if combined_trial else ()), "mdm.prepare", "mdm.merge")
     python, root = installed
@@ -576,7 +610,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             "version": "v1", "kind": "company", "record_key": ["cik"], "identifiers": {"cik": "cik"},
             "reading": mapped_reading({"name": "name"})}))
 
-    if trial_mode in ("raw-person", "object-records"):
+    if trial_mode == "raw-person":
         with mdm_admin.begin() as conn:
             policy = register_policy(conn, files.policy())
             register_dataset(conn, "sec.submissions.person.v1", "1",
@@ -663,17 +697,12 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                                                        "rank": {"integer": {"path": "rank"}}}}}}}
         contract_bytes = json.dumps(spec).encode()
         filer_bytes = json.dumps({"companies": [json.loads(line) for line in FILERS.splitlines()], "aliases": []}).encode()
-    if trial_mode in ("raw-person", "object-records"):
+    if trial_mode == "raw-person":
         spec = files.source("sec.submissions.person")
         spec["execution"]["max_artifacts"] = 2
         contract_bytes = json.dumps(spec).encode()
         raw_persons = [json.loads(line) for line in (ROOT / "tests/fixtures/clean_mdm/four_companies_v1/person_raw.jsonl").read_text().splitlines()]
         filer_bytes = json.dumps(raw_persons[0]).encode()
-        if trial_mode == "object-records":
-            fields = {name: {"value": {"path": name}} for name in raw_persons[0]}
-            assert all(set(row) == set(fields) for row in raw_persons)
-            spec["read"]["tables"]["submissions"]["columns"]["record"] = {"object": {"fields": fields}}
-            contract_bytes = json.dumps(spec).encode()
     if custom_trial:
         contract_bytes += b"""        release_sequence:
           custom:
@@ -694,13 +723,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         contract_bytes = json.dumps(spec).encode()
         filer_bytes = b"".join(json.dumps({**json.loads(line), "state": state}).encode() + b"\n"
                                for line, state in zip(FILERS.splitlines(), [" de ", "wa"], strict=True))
-    if trial_mode == "integer-records":
-        contract_bytes = contract_bytes.replace(b"cik: { text: { path: cik } }", b"cik: { integer: { path: cik } }")
-        contract_bytes += b"""        is_xbrl: { integer: { path: is_xbrl, as: boolean, default: false, on_invalid: default } }
-"""
-        filer_bytes = b"".join(json.dumps({**json.loads(line), "is_xbrl": flag}).encode() + b"\n"
-                               for line, flag in zip(FILERS.splitlines(), [0.9, True], strict=True))
-    if trial_mode in {"parallel-records", "source-coercion"}:
+    if trial_mode == "source-coercion":
         contract_bytes = b"""source: fixture.filers
 execution: { profile: source.read, workers: 1, max_artifacts: 1 }
 read:
@@ -730,68 +753,13 @@ read:
             payload = json.loads(filer_bytes)
             payload.update(flag=[True, False], evidence=[{'z': 1, 'a': []}, [None, True]], character='é🦀')
             filer_bytes = json.dumps(payload).encode()
-    if trial_mode == "artifact-context":
-        contract_bytes = b"""source: fixture.filers
-execution: { profile: source.read, workers: 2, max_artifacts: 2 }
-read:
-  format: json
-  context:
-    cik: {type: integer}
-    name: {type: text}
-  limits: { max_bytes: 1048576, max_records: 1000 }
-  tables:
-    filers:
-      each: .
-      columns:
-        cik: {context: {name: cik}}
-        name: {context: {name: name}}
-"""
-        filer_bytes = b'{"cik":0,"name":"document facts remain separate"}'
-    if trial_mode == "selected-sequences":
-        contract_bytes = b"""source: fixture.filers
-execution: {profile: source.read, workers: 2, max_artifacts: 2}
-read:
-  format: json
-  context:
-    first_n: {type: integer}
-  record_count: {path: count, table: filers}
-  limits: {max_bytes: 1048576, max_records: 1000}
-  tables:
-    filers:
-      take: {context: {name: first_n}}
-      each:
-        parallel:
-          path: .
-          anchor: cik
-          fields: {cik: cik, name: name}
-          lengths: anchor
-          objects: indexed
-          validation: selected
-      columns:
-        cik: {integer: {path: cik}}
-        name: {text: {path: name}}
-"""
-        filer_bytes = b'{"count":2,"cik":[320193,789019],"name":["Apple Inc.","Microsoft Corp"]}'
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_bytes)
     filers = store.put_bytes((tmp_path / "filers.jsonl").as_uri(), filer_bytes)
     read_manifest = {"version": 1, "contract": contract, "artifacts": [filers]}
     if recovery_trial:
         bound = store.put(tmp_path.as_uri(), {"version": 1, "input": filers, "values": {"publication_count": 2}})
         read_manifest = {"version": 2, "contract": contract, "artifacts": [{"input": filers, "context": bound}]}
-    if trial_mode == "artifact-context":
-        entries = []
-        for values in ({"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}):
-            bound = store.put(tmp_path.as_uri(), {"version": 1, "input": filers, "values": values})
-            entries.append({"input": filers, "context": bound})
-        read_manifest = {"version": 2, "contract": contract, "artifacts": entries}
-    if trial_mode == "selected-sequences":
-        unselected = store.put_bytes((tmp_path / "unselected.json").as_uri(), b'{"count":1,"cik":{"0":"invalid indexed value"},"name":null}')
-        entries = []
-        for input_ref, first_n in [(filers, 2), (unselected, 0)]:
-            bound = store.put(tmp_path.as_uri(), {"version": 1, "input": input_ref, "values": {"first_n": first_n}})
-            entries.append({"input": input_ref, "context": bound})
-        read_manifest = {"version": 2, "contract": contract, "artifacts": entries}
-    if trial_mode in ("raw-person", "object-records"):
+    if trial_mode == "raw-person":
         second = store.put_bytes((tmp_path / "person2.json").as_uri(), json.dumps(raw_persons[1]).encode())
         read_manifest["artifacts"] = [filers, second]
     if combined_trial:
@@ -804,9 +772,9 @@ read:
     keys = {"batch_id": "filers", "consumer": "fixture/filers"}
     unit_body = {"version": 2, "steps": {
         "read": [{"keys": keys, "input": read_input, "output": (out / "reading.json").as_uri(), "cursor": {}}],
-        "prepare": [{"keys": {**keys, "table": "submissions" if trial_mode in ("raw-person", "object-records") else "filers",
-                              "dataset": "sec.submissions.person.v1" if trial_mode in ("raw-person", "object-records") else "fixture.filers",
-                              **({"record_column": "record"} if trial_mode in ("raw-person", "object-records") else {}), "policy": policy,
+        "prepare": [{"keys": {**keys, "table": "submissions" if trial_mode == "raw-person" else "filers",
+                              "dataset": "sec.submissions.person.v1" if trial_mode == "raw-person" else "fixture.filers",
+                              **({"record_column": "record"} if trial_mode == "raw-person" else {}), "policy": policy,
                               "as_of": core.AS_OF},
                      "input": {"from": {"step": "read", "key": "filers"}},
                      "output": (out / "mdm" / "manifest.json").as_uri(), "cursor": {}}],
@@ -926,23 +894,7 @@ read:
         reading = json.loads((out / "reading.json").read_bytes())
         assert [row["release_sequence"] for row in reading["artifacts"][0]["tables"]["filers"]] == [
             epoch_microseconds("2026-10-03T08:30:00.123456-04:00")] * 2
-    if trial_mode == "integer-records":
-        reading = json.loads((out / "reading.json").read_bytes())
-        rows = reading["artifacts"][0]["tables"]["filers"]
-        assert [row["cik"] for row in rows] == [320193, 789019]
-        assert all(type(row["cik"]) is int for row in rows)
-        assert [row["is_xbrl"] for row in rows] == [False, True]
-        assert all(type(row["is_xbrl"]) is bool for row in rows)
-    if trial_mode == "artifact-context":
-        reading = json.loads((out / "reading.json").read_bytes())
-        rows = [artifact["tables"]["filers"][0] for artifact in reading["artifacts"]]
-        assert rows == [{"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}]
-        assert reading["artifacts"][0]["input"] == reading["artifacts"][1]["input"]
-        assert reading["artifacts"][0]["context"] != reading["artifacts"][1]["context"]
-        prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
-        assert len({b["input"]["path"] for b in prepared["batches"]}) == 2
-        assert len({b["batch_id"] for b in prepared["batches"]}) == 2
-    if trial_mode in ("raw-person", "object-records"):
+    if trial_mode == "raw-person":
         reading = json.loads((out / "reading.json").read_bytes())
         assert [artifact["tables"]["submissions"][0]["record"] for artifact in reading["artifacts"]] == raw_persons
         prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
@@ -957,22 +909,13 @@ read:
         assert [row["flag"] for row in rows] == ['True', 'False']
         assert [row["evidence"] for row in rows] == ["{'z': 1, 'a': []}", '[None, True]']
         assert [row["character"] for row in rows] == ['é', '🦀']
-    if trial_mode == "selected-sequences":
-        reading = json.loads((out / "reading.json").read_bytes())
-        assert reading["artifacts"][0]["tables"]["filers"] == [
-            {"cik": 320193, "name": "Apple Inc."}, {"cik": 789019, "name": "Microsoft Corp"}]
-        assert reading["artifacts"][1]["input"] == unselected
-        assert reading["artifacts"][1]["tables"]["filers"] == []
-        prepared = json.loads((out / "mdm" / "manifest.json").read_bytes())
-        assert len(prepared["batches"]) == 1
-        assert prepared["batches"][0]["input"]["record_count"] == 2
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": len(profiles)} and state["run"]["state"] == "complete"
     with mdm_admin.connect() as conn:
         names = conn.execute(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_record "
                                   "WHERE object_type='stage_record' OR object_type='entity'")).scalars().all()
         records = conn.scalar(text("SELECT count(*) FROM mdm.stage_record"))
-        if trial_mode in ("raw-person", "object-records"):
+        if trial_mode == "raw-person":
             assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='person'")) == 2
             assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='company'")) == 0
 
@@ -1185,15 +1128,11 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
             {"source": "sec.submissions.person", "row": json.loads(line)}
             for line in FIXTURE.with_name("person_raw.jsonl").read_text().splitlines() if line.strip()
         ]
-        from tests.support.retired_company_address import business_address
         from edgar_warehouse.mdm.clean.adapters import normalize
         for record in sec_records:
-            if record["source"]!="sec.submissions.company":continue
-            row=record["row"]
-            landed={"cik":row["cik"],"address_type":"business","last_sync_run_id":"installed-addresses",
-                    "street1":"  Source Street  ","street2":None,"city":"City","zip_code":"12345",
-                    "state_or_country":" de ","country_code":None}
-            row["business_address"]=business_address(landed)
+            if record["source"]=="sec.submissions.company":  # a Delaware business address, as SEC writes it
+                record["row"]["business_address"]={"street":"  Source Street  ","street2":None,"city":"City",
+                                                   "region":" de ","postal_code":"12345","country":"US"}
         readings=[]
         for record in sec_records:
             row=record["row"];code=f"{record['source']}.v1"
@@ -1201,9 +1140,8 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                 publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
                              "revision":1,"artifact_sha256":digest(row),
                              "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
-        from io import BytesIO
-        from tests.mdm.test_clean_name_census import archive, metadata
-        from tests.support import retired_name_census
+        from tests.mdm.test_clean_name_census import archive, configured, metadata
+        from edgar_warehouse.mdm.clean import name_census
         census_archive = archive(rows)
         census_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
                          for r in sec_records if r['source'] == 'sec.submissions.company']
@@ -1211,7 +1149,9 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                             "sec_population": {"capture_run_id": "installed-census", "filers": len(census_filers)},
                             "gleif_metadata": metadata(len(rows)),
                             "gleif_sha256": hashlib.sha256(census_archive).hexdigest()}
-        historical_census = retired_name_census.build(gleif_archive=BytesIO(census_archive), **census_arguments)
+        # The checkout's census over the same inputs; the installed bundle must write the same.
+        checkout_census = configured(census_filers, rows, population=census_arguments["sec_population"],
+                                     archive_sha256=census_arguments["gleif_sha256"])
         done = _run(python, "-c", r'''
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -1299,7 +1239,7 @@ census=name_census.census(sec_population=census_arguments["sec_population"],
     gleif={"archive_sha256":census_arguments["gleif_sha256"],"content_date":meta["content_date"],
            "file_content":meta["file_content"],"record_count":meta["record_count"]},
     held=held,wanted=wanted,readings=tables)
-expected=body["historical_census"]
+expected=body["checkout_census"]
 assert census==expected
 census_assertions=[]
 for record in body["sec_records"]:
@@ -1307,7 +1247,7 @@ for record in body["sec_records"]:
     row=copy.deepcopy(record["row"])
     row["name_census"]=name_census.entry(census,row["entity_name"],census_digest=digest(census))
     old_row=copy.deepcopy(row)
-    old_row["name_census"]=body["historical_entries"][str(row["cik"])]
+    old_row["name_census"]=body["checkout_entries"][str(row["cik"])]
     kwargs={"source_code":"sec.submissions.company.v1","contract":files.mdm_contract("sec.submissions.company","sec.submissions.company.v1"),
             "policy":files.policy(),"publication":{"publication_key":f"installed-census/{row['cik']}","revision":2,
             "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
@@ -1360,9 +1300,9 @@ engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
                          "census_arguments": census_arguments,
-                         "historical_census": historical_census,
+                         "checkout_census": checkout_census,
                          "census_archive": base64.b64encode(census_archive).decode(),
-                         "historical_entries": {str(r['row']['cik']): retired_name_census.entry(historical_census,r['row']['entity_name'],census_digest=digest(historical_census))
+                         "checkout_entries": {str(r['row']['cik']): name_census.entry(checkout_census,r['row']['entity_name'],census_digest=digest(checkout_census))
                                                 for r in sec_records if r['source']=='sec.submissions.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr

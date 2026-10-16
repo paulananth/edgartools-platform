@@ -1,4 +1,4 @@
-"""Compare declared semantics with the retained reader, including actual failures."""
+"""Declared text coercion and invalid shapes, as the old filing loader read them."""
 import json
 import math
 import random
@@ -7,44 +7,46 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
+from tests.support.sec_rows import filing_row
 
 CONTRACT = Path(__file__).parent / 'fixtures/filing-complete.yaml'
 CONTEXT = {'cik': 320193, 'sync_run_id': 'qualification', 'raw_object_id': 'captured',
            'load_mode': 'default', 'recent_limit': None}
 
 
-def retained(payload):
-    rows = stage_recent_filing_loader(payload, 320193, 'qualification', 'captured', 'default')
-    return [{key: value.isoformat() if hasattr(value, 'isoformat') else value
-             for key, value in row.items()} for row in rows]
+def filing(accession, form):
+    return filing_row(accession, CONTEXT, form=form)
 
 
-@pytest.mark.parametrize('value', [True, False, 1.0, {'x': 1}, [1, 2], {}, [],
-    {'z': [None, True, "a'b", 'a"b', 'a\'"b'], 'a': -0.0},
-    {'$': 'text', '@language': 'en', 'item': [1]}, '\x00\x0b\u2028\ue000🦀'])
-def test_configured_text_matches_retained_scalar_and_nested_container_coercion(value):
+# A value that is not text reads as Python's `str` of it, nested containers too.
+@pytest.mark.parametrize('value, text', [(True, 'True'), (False, 'False'), (1.0, '1.0'), ({'x': 1}, "{'x': 1}"),
+    ([1, 2], '[1, 2]'), ({}, '{}'), ([], '[]'),
+    ({'z': [None, True, "a'b", 'a"b', 'a\'"b'], 'a': -0.0}, "{'z': [None, True, \"a'b\", 'a\"b', 'a\\'\"b'], 'a': -0.0}"),
+    ({'$': 'text', '@language': 'en', 'item': [1]}, "{'$': 'text', '@language': 'en', 'item': [1]}"),
+    ('\x00\x0b\u2028\ue000🦀', '\x00\x0b\u2028\ue000🦀')])
+def test_configured_text_coerces_scalars_and_nested_containers(value, text):
     payload = {'filings': {'recent': {'accessionNumber': ['a'], 'form': [value]}}}
-    assert SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode(), context=CONTEXT).tables['filings'] == retained(payload)
+    assert SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode(), context=CONTEXT).tables['filings'] == [
+        filing('a', text)]
 
 
-@pytest.mark.parametrize('payload', [
-    {'filings': None}, {'filings': []}, {'filings': True},
-    {'filings': {'recent': None}}, {'filings': {'recent': []}},
-    {'filings': {'recent': {'accessionNumber': ['a', 'b', 'c'], 'form': 'é🦀'}}},
-    {'filings': {'recent': {'accessionNumber': 'ab', 'form': '45'}}},
+# No filings object reads no rows; a text where a list belongs is read one character per row.
+@pytest.mark.parametrize('payload, expected', [
+    ({'filings': None}, []), ({'filings': []}, []), ({'filings': True}, []),
+    ({'filings': {'recent': None}}, []), ({'filings': {'recent': []}}, []),
+    ({'filings': {'recent': {'accessionNumber': ['a', 'b', 'c'], 'form': 'é🦀'}}},
+     [filing('a', 'é'), filing('b', '🦀'), filing('c', None)]),
+    ({'filings': {'recent': {'accessionNumber': 'ab', 'form': '45'}}}, [filing('a', '4'), filing('b', '5')]),
 ])
-def test_declared_invalid_object_and_unicode_character_policies_match_retained_reader(payload):
-    assert SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode(), context=CONTEXT).tables['filings'] == retained(payload)
+def test_declared_invalid_object_and_unicode_character_policies(payload, expected):
+    assert SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode(), context=CONTEXT).tables['filings'] == expected
 
 
 @pytest.mark.parametrize('value', [None, True, 1, 1.0, {'x': 'y'}])
 def test_invalid_non_sequence_anchor_remains_an_artifact_failure(value):
     payload = {'filings': {'recent': {'accessionNumber': value}}}
-    with pytest.raises((TypeError, KeyError)):
-        retained(payload)
     with pytest.raises(SourceRejected, match='parallel_index' if isinstance(value, dict) else 'parallel_shape'):
         SourceEngine(files.load(CONTRACT)).read(json.dumps(payload).encode(), context=CONTEXT)
 

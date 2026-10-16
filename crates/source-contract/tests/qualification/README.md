@@ -26,12 +26,10 @@ The scripts use the existing local captures below and write evidence under
    bytes receive authenticated immutable receipts for this qualification.
    **Historical address pins are not claimed:** the older Name Frequency
    document did not contain them.
-4. `whole_source_frequency.py` uses the exact pinned GLEIF JSON archive named
-   by `.planning/workstreams/company-census-evidence/gleif-runtime/level1-json-runtime-parity.json`.
-   It validates the archive hash, publisher count, original expanded bytes,
-   every projected row, global address occurrence counts, scoped last-occurrence
-   state, complete Name Frequency entries and all seven cascade passes. It also
-   compares entries to the previous complete pinned Name Frequency output.
+4. *Deleted with the retired census builder it compared against (ticket 88).*
+   `whole_source_frequency.py` compared the whole pinned GLEIF JSON archive's
+   Name Frequency and its seven cascade passes with that builder; the tests now
+   hold the census each case makes (`tests/engine/fixtures/configured-census-cases.json`).
 
 Use `uv run python crates/source-contract/tests/qualification/<script>.py`.
 For measured samples, set `CENSUS_BOUNDED=1` on the SEC script and

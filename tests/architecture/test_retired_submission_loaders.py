@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-RETIRED = ("edgar_warehouse.loaders", "edgar_warehouse.silver_landing_store")
+RETIRED = ("edgar_warehouse.loaders", "edgar_warehouse.silver_landing_store", "edgar_warehouse.serving.silver_landing_export")
 
 
 def imports(node, package):

@@ -3,9 +3,11 @@
 Bookkeeping runs Company preparation as steps: the registered workers read the
 main documents, their census keys, the catalog and the narrowed census,
 combine them and prepare one publication. What reaches MDM (the records files
-and their publication) equals the frozen in-process preparation's bundle. The
-merge step needs a registered MDM; the installed proof covers it.
+and their publication) equals the bundle the in-process preparation wrote before
+the target replaced it (`fixtures/company-mastering-records.json`, written once).
+The merge step needs a registered MDM; the installed proof covers it.
 """
+import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -18,14 +20,15 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from edgar_warehouse.mdm.clean import limits
+from edgar_warehouse.mdm.clean.store import canonical
 from tests.mdm.test_clean_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, census_capture, documents
 from tests.support.memory_journal import MemoryJournal
 from tests.support.bookkeeping_protocol import drive
-from tests.support.retired_company_bundle import prepare_company_bundle
 from tests.support.sec_capture import CATALOG, document, key
 
 WORKERS = {"source.read": source_read, "source.combine": source_combine, "mdm.prepare": mdm_prepare}
 CIKS = (320193, 789019, 42)
+EXPECTED = json.loads((Path(__file__).parent / "fixtures/company-mastering-records.json").read_text())
 
 
 def run_without_merge(databases, tmp_path, book, report):
@@ -63,23 +66,23 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
 
     prepared = json.loads((tmp_path / "bundle/records/manifest.json").read_bytes())
-    oracle_report = prepare_company_bundle(output=str(tmp_path / "oracle"), **args)
-    oracle = json.loads((tmp_path / "oracle/manifest.json").read_bytes())
-
-    def landed(manifest, root):
-        """What MDM reads: each batch's records bytes, count and publication (ids aside)."""
-        return [((root / b["input"]["path"]).read_bytes(), b["input"]["record_count"],
-                 {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
-                 b["input"]["source_code"], b["expected_checkpoint"], b["checkpoint"]) for b in manifest["batches"]]
-
-    assert landed(prepared, tmp_path / "bundle/records") == landed(oracle, tmp_path / "oracle")
-    assert (prepared["as_of"], prepared["policy_digest"]) == (oracle["as_of"], oracle["policy_digest"])
+    root = tmp_path / "bundle/records"
+    # What MDM reads: each batch's records bytes, count and publication (ids aside).
+    # The census's digest (`CENSUS` in the answers) is the canonical census's; its GLEIF zip
+    # carries today's time, so the digest is computed here.
+    census_hash = hashlib.sha256(canonical(json.loads(census.read_bytes())).encode()).hexdigest()
+    expected = json.loads(json.dumps(EXPECTED).replace("CENSUS", census_hash))
+    got = [{"records_jsonl": (root / b["input"]["path"]).read_text(), "record_count": b["input"]["record_count"],
+             "publication": {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
+             "source_code": b["input"]["source_code"], "expected_checkpoint": b["expected_checkpoint"],
+             "checkpoint": b["checkpoint"]} for b in prepared["batches"]]
+    assert got == expected["batches"]
+    assert (prepared["as_of"], prepared["policy_digest"]) == (EXPECTED["as_of"], EXPECTED["policy_digest"])
     # Ticket 22: the publication is its documents (key and receipt), as for any source, not
-    # the list file's bytes the oracle hashed; the rest of the key is the oracle's.
-    ours, theirs = (report["publication"]["publication_key"].split(":"),
-                    oracle["batches"][0]["input"]["publication"]["publication_key"].split(":"))
+    # the list file's bytes the old preparation hashed; the rest of the key is the same.
+    ours, theirs = report["publication"]["publication_key"].split(":"), expected["publication_key"].split(":")
     assert ours[:2] + ours[3:] == theirs[:2] + theirs[3:] and ours[2] != theirs[2]
-    assert {k: v for k, v in report["scope"].items() if k in oracle_report["scope"]} == oracle_report["scope"]
+    assert {k: v for k, v in report["scope"].items() if k in EXPECTED["scope"]} == EXPECTED["scope"]
     assert (report["scope"]["listed"], report["scope"]["forced"]) == (len(CIKS), False)
     assert [b["consumer"] for b in prepared["batches"]] == [report["publication"]["consumer"]]
 

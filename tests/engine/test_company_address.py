@@ -1,12 +1,11 @@
-"""Configured raw business addresses; retained functions are comparison oracles."""
+"""Configured raw business addresses, read into the Company's address."""
 import json
 from pathlib import Path
 
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_address_loader
-from tests.support.retired_company_address import business_address
+from edgar_warehouse.mdm.clean.names import edgar_jurisdiction
 from edgar_warehouse.rules import files
 from tests.support import place_codes
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
@@ -16,9 +15,22 @@ CONTRACT = files.load(Path(__file__).parent / 'fixtures/company-address.yaml')
 
 
 def retained(payload):
-    rows = stage_address_loader(payload, 1, 'trial', '0' * 64, 'default')
-    found = [business_address(row) for row in rows if row['address_type'] == 'business']
-    return found[-1] if found else None
+    """The business address as the Company carries it: its EDGAR place code
+    (or, for a foreign address, its country code) read as an ISO place; a
+    region only for a state or province, since SEC writes a foreign country in
+    the same field ("P7"); a blank part is none."""
+    address = (payload.get('addresses') or {}).get('business')
+    if not isinstance(address, dict):
+        return None
+    place = edgar_jurisdiction(address.get('stateOrCountry') or address.get('countryCode'))
+    return {
+        'street': address.get('street1') or None,
+        'street2': address.get('street2') or None,
+        'city': address.get('city') or None,
+        'region': (address.get('stateOrCountry') or None) if place and '-' in place else None,
+        'postal_code': address.get('zipCode') or None,
+        'country': place.split('-')[0] if place else None,
+    }
 
 
 def configured(engine, payload):
@@ -35,12 +47,22 @@ def configured(engine, payload):
     {'stateOrCountry': 'E9', 'street1': '', 'street2': None, 'city': '0'},
     {'street1': 0, 'street2': False, 'city': [], 'zipCode': {}},
 ])
-def test_raw_address_matches_retained_derivation(address):
+def test_raw_address_reads_as_the_company_address(address):
     payload = {'addresses': {'business': address, 'mailing': {'stateOrCountry': 'CA'}}}
     assert configured(SourceEngine(CONTRACT), payload) == retained(payload)
 
 
-def test_every_frozen_sec_place_code_and_variants_match_retained_mapping():
+# Ticket 18, finding 5: SEC writes a foreign country in `stateOrCountry`
+# ("P7", the Netherlands); it is the country, not a region. X1 is the United
+# States with no state.
+@pytest.mark.parametrize('code, region, country', [
+    ('P7', None, 'NL'), ('CA', 'CA', 'US'), ('A6', 'A6', 'CA'), ('X1', None, 'US')])
+def test_a_foreign_country_code_is_the_country_and_no_region(code, region, country):
+    found = configured(SourceEngine(CONTRACT), {'addresses': {'business': {'stateOrCountry': code}}})
+    assert (found['region'], found['country']) == (region, country)
+
+
+def test_every_frozen_sec_place_code_and_variants_read_as_their_iso_place():
     engine = SourceEngine(CONTRACT)
     for code in place_codes.table():
         for field in ('stateOrCountry', 'countryCode'):

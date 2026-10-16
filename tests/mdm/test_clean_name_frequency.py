@@ -1,10 +1,8 @@
-"""Name Frequency from configured readings writes the census the retired builder wrote
-(`tests/support/retired_name_census.py`, the independent oracle), counting the SEC
+"""Name Frequency from configured readings writes the Name Census, counting the SEC
 population from the receipt-bound raw capture."""
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
@@ -43,20 +41,28 @@ def census_of(tmp_path, capture, **changes):
                                 **{"output": str(tmp_path / "x.json"), **changes})
 
 
-def test_it_writes_the_census_the_retired_builder_writes(tmp_path, capture):
-    import io
-
-    from tests.support import retired_name_census
-
+def test_it_writes_the_census(tmp_path, capture):
     folder, population, archive, metadata, wanted = capture
     configured = tmp_path / "configured.json"
     report = census_of(tmp_path, capture, output=str(configured))
     census = json.loads(configured.read_text())
     sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()  # noqa: E731
     sec = {"receipts_sha256": sha(folder / "receipts.jsonl"), "population_sha256": sha(population), "filers": 3}
-    expected = retired_name_census.build(
-        filers=FILERS, sec_population=sec, gleif_archive=io.BytesIO(archive.read_bytes()),
-        gleif_metadata=json.loads(metadata.read_text()), gleif_sha256=sha(archive))
+    # Each name, legal form kept: the SEC filers whose current or former name
+    # it is, the GLEIF legal entities (branches left out) whose legal name it
+    # is, at their latest update, and how many carry it as another name.
+    expected = {
+        "version": "sec-gleif-name-census-v1",
+        "normalizers": {"sec": "normalize_text@sec-legal-form-kept-v1", "gleif": "normalize_text@legal-form-kept-v1"},
+        "sec": sec,
+        "gleif": {"archive_sha256": sha(archive), "content_date": "2026-09-11T16:00:00+00:00",
+                  "file_content": "GLEIF_FULL_PUBLISHED", "record_count": 4},
+        "entries": {
+            "APPLE INC": {"ciks": ["0000320193", "0000789019"], "cik_count": 2,
+                          "leis": [["HWUPKR0MPOU8FGXBT394", "2026-09-02T00:00:00Z"]], "lei_count": 1,
+                          "other_name_holders": 1},
+            "OLD NAME INC": {"ciks": ["0000000001", "0000320193"], "cik_count": 2, "leis": [], "lei_count": 0,
+                             "other_name_holders": 1}}}
     assert configured.read_bytes() == (canonical(expected) + "\n").encode()
     assert census["entries"]["APPLE INC"]["cik_count"] == 2  # two filers hold the name
     assert census["entries"]["APPLE INC"]["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-02T00:00:00Z"]]

@@ -1,7 +1,7 @@
 """Shipped Company blueprint: raw configured main/pages/catalogs to prepared rows.
 
-Retained parsing is an independent test oracle only. These cases do not claim
-census/provenance policy, source activation, full population or installed mastering.
+These cases do not claim census/provenance policy, source activation, full
+population or installed mastering.
 """
 import json
 
@@ -11,11 +11,9 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_address import retained as retained_address
-from tests.engine.test_company_preparation import expected, CONTEXT
-from tests.support.ticker_catalog_oracle import parse_rows
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_pagination_filing_loader
+from tests.engine.test_company_preparation import company_row, CONTEXT
 from tests.engine.test_source_combine import envelope
-from scripts.qualification.qualify_company_main import require_tables
+from tests.support.exact import require_tables
 
 ROOT = files.ROOT / 'sources/sec.submissions.company'
 
@@ -79,14 +77,11 @@ def test_shipped_blueprint_combines_all_raw_readings_then_prepares_exact_rows(tm
     result = source_combine.execute(work, store)
     assert source_combine.verify({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
     assert source_combine.execute(work, store) == result
-    company, recent = expected(payload, context)
-    historical = [row for page in pages for row in stage_pagination_filing_loader({'filings': page},
-        **{key: context[key] for key in ('cik', 'sync_run_id', 'raw_object_id', 'load_mode')})] if with_pages else []
-    forms = sorted({r['form'] for r in [*recent, *historical] if r['form']})
-    pairs = [(rank, row['ticker']) for data in catalogs.values()
-        for rank, row in enumerate(parse_rows(data), 1) if row['cik'] == 1 and row['ticker']]
-    company.update(forms=forms, tickers=list(dict.fromkeys(ticker for _, ticker in sorted(pairs))),
-        business_address=retained_address(payload))
+    # Forms of the recent filings and the pages, sorted, blanks dropped; the
+    # tickers of CIK 1 by their rank in each catalog, each once.
+    forms = ['10-K', '20-F', '6-K', 'S-8', 'S-8 POS'] if with_pages else ['10-K', 'S-8 POS']
+    company = company_row(context, entity_name='Example', forms=forms, tickers=['A', 'B', 'C'],
+                          business_address=retained_address(payload))
     actual = store.json(result)['artifacts'][0]['tables']['company']
     require_tables(actual, [company])
     assert actual[0]['tickers'] == ['A', 'B', 'C']

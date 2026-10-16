@@ -184,13 +184,13 @@ class TestTheCascade:
 
 
 def test_a_record_carries_its_ciks_cascade_answer_inside_its_census_entry():
-    from tests.support.retired_company_preparation import _census_evidence
+    from tests.engine.test_company_census_configuration import census_evidence
 
     found = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
     row = {"cik": 320193, "entity_name": "APPLE INC"}
-    assert "cascade" not in _census_evidence(found, row, "d")  # no passes: as before
+    assert "cascade" not in census_evidence(found, row, "d")  # no passes: as before
     found["cascade"] = {"version": "sec-gleif-cascade-v1", "assignments": {"0000320193": {"lei": "L", "pass": "P1"}}}
-    carried = _census_evidence(found, row, "d")
+    carried = census_evidence(found, row, "d")
     assert carried["key"] == "APPLE INC"
     assert carried["cascade"] == {"census": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
-    assert "cascade" not in _census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")
+    assert "cascade" not in census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")

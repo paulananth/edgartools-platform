@@ -1,18 +1,24 @@
-"""Census construction from the configured complete reading, compared with its retired
-extraction/counting path (`tests/support/retired_name_census.py`)."""
+"""Census construction from the configured complete reading.
+
+Each case's census entries (and cascade answer) are in
+`fixtures/configured-census-cases.json`, written once from the retired census
+builder while the two still agreed; the header fields are checked from what the
+test itself builds."""
 from copy import deepcopy
 import hashlib
-import io
+import json
+from pathlib import Path
 
 import pytest
 
 from edgar_warehouse.mdm.clean import name_census
-from edgar_warehouse.rules.source_engine import SourceRejected
+from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules import files
 from tests.mdm.test_clean_name_census import (
     APPLE, COMPLETE_READING, WAYFAIR, archive, configured, gleif, metadata, TestTheCascade as CascadeFixture,
 )
-from tests.support import retired_name_census as retained
+
+CASES = json.loads((Path(__file__).parent / 'fixtures/configured-census-cases.json').read_text())
 
 
 @pytest.fixture(autouse=True)
@@ -20,15 +26,27 @@ def no_custom_steps(monkeypatch):
     monkeypatch.setattr('edgar_warehouse.rules.source_engine.STEPS', {})
 
 
+@pytest.fixture(autouse=True)
+def recorded_answers(request):
+    """This case's censuses, in the order its `compare` calls ask for them; every
+    answer recorded for the case must be used."""
+    global ANSWERS
+    ANSWERS = list(CASES.get(request.node.name, []))
+    yield
+    assert not ANSWERS, f"{len(ANSWERS)} recorded census answer(s) unused by {request.node.name}"
+
+
 def compare(filers, records, *, cascade=None, recipe=None):
     raw = archive(records)
     population = {'capture_run_id':'fixed', 'filers':len(filers)}
     actual = configured(filers, records, cascade=cascade, recipe=recipe, population=population,
                         archive_sha256=hashlib.sha256(raw).hexdigest())
-    expected = retained.build(gleif_archive=io.BytesIO(raw), filers=filers, sec_population=population,
-                              gleif_metadata=metadata(len(records)), gleif_sha256=hashlib.sha256(raw).hexdigest(),
-                              cascade=cascade)
-    assert actual == expected
+    assert actual['sec'] == population
+    assert actual['gleif'] == {**{k: v for k, v in metadata(len(records)).items() if k in actual['gleif']},
+                               'archive_sha256': hashlib.sha256(raw).hexdigest()}
+    found = {'entries': actual['entries'], **({'cascade': actual['cascade']} if 'cascade' in actual else {})}
+    assert ANSWERS, "no census answer recorded for this case"
+    assert found == ANSWERS.pop(0)
     return actual
 
 
@@ -139,14 +157,11 @@ def test_empty_registration_and_entity_containers_keep_historical_output(value):
 def test_cascade_skips_other_names_before_mapping_when_category_is_not_general(category):
     row = gleif('LEI', 'Apple Inc.', category=category)
     row['Entity']['OtherEntityNames'] = {'OtherEntityName':['x'] * 100001}
-    assert retained.cascade_entity(row, {}, {'APPLE INC'}) is None
+    recipe = files.load(files.ROOT / 'sources/gleif/census-cascade-record.yaml')
+    mapped = SourceEngine(recipe).read(json.dumps(row).encode()).tables['mapped']
+    assert [r['observation'] for r in mapped] == [None]  # no cascade entity, the other names never mapped
     if category == 'BRANCH':  # never a legal entity: its other names are not read at all
         compare([APPLE], [row])
-
-
-def test_cascade_missing_lei_does_not_read_truthy_non_object_entity():
-    row = {'LEI':None, 'Entity':[{'EntityCategory':'GENERAL'}]}
-    assert retained.cascade_entity(row, {}, {'APPLE INC'}) is None
 
 
 @pytest.mark.parametrize('container', ['Entity', 'Registration', 'OtherEntityNames', 'TransliteratedOtherEntityNames'])
@@ -156,11 +171,6 @@ def test_truthy_non_object_containers_still_refuse_eligible_records(container):
         row[container] = [{'invalid':'shape'}]
     else:
         row['Entity'][container] = [{'invalid':'shape'}]
-    raw = archive([row])
-    kwargs = dict(filers=[APPLE], sec_population={'filers':1}, gleif_metadata=metadata(1),
-                  gleif_sha256=hashlib.sha256(raw).hexdigest())
-    with pytest.raises(AttributeError):
-        retained.build(gleif_archive=io.BytesIO(raw), **kwargs)
     with pytest.raises(SourceRejected):
         configured([APPLE], [row])
 
@@ -190,10 +200,9 @@ def test_matched_registration_refusal_precedes_other_name_shape_or_count_refusal
     row = gleif('LEI', 'Apple Inc.')
     row['Registration'] = 'malformed'
     row['Entity']['OtherEntityNames'] = other
-    raw = archive([row])
-    kwargs = dict(filers=[APPLE], sec_population={'filers':1}, gleif_metadata=metadata(1),
-                  gleif_sha256=hashlib.sha256(raw).hexdigest())
-    with pytest.raises(AttributeError, match="'str' object has no attribute 'get'"):
-        retained.build(gleif_archive=io.BytesIO(raw), **kwargs)
     with pytest.raises(SourceRejected, match='value_type'):
         configured([APPLE], [row])
+
+
+def test_every_recorded_census_answer_names_a_test_here():
+    assert {name.split('[')[0] for name in CASES} <= {name for name in globals() if name.startswith('test_')}

@@ -1,52 +1,52 @@
-"""Raw continuation pages read with generic rules; wrappers exist only in oracle."""
+"""Raw continuation pages read with generic rules, as the old pagination loader read them."""
 import json
-from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_pagination_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
-from scripts.qualification.qualify_company_main import require_tables
+from tests.support.exact import require_tables
+from tests.engine.test_company_preparation import filing_row
 from tests.engine.test_source_combine import envelope, group, join, plan, table
 
 CONTRACT = files.load(Path('rules/sources/sec.submissions.company/pagination.yaml'))
 CONTEXT = {'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}
 
 
-def retained(page):
-    rows = stage_pagination_filing_loader({'filings': page}, **CONTEXT)
-    return json.loads(json.dumps(rows, default=lambda x: x.isoformat() if isinstance(x, (date, datetime)) else x))
-
-
 def configured(page):
     return SourceEngine(CONTRACT).read(json.dumps(page).encode(), context=CONTEXT).tables['filings']
 
 
-@pytest.mark.parametrize('page', [
-    {}, {'accessionNumber': []}, {'accessionNumber': ['a']},
-    {'accessionNumber': ['a', 'b'], 'form': ['10-K'], 'size': ['1,234', 'bad'], 'isXBRL': [1, 0]},
-    {'accessionNumber': ['a', 'b'], 'filingDate': ['20261001ignored', '2026-09-30T23:00:00Z'],
-     'reportDate': ['bad', '2026-09-29'], 'isInlineXBRL': [-1, False]},
-    {'accessionNumber': 'ab', 'form': 'XY'},
-    {'accessionNumber': ['a', 'b'], 'primaryDocument': [{'raw': True}, ['x', 1]], 'size': [True, 12.9]},
-    {'accessionNumber': ['a', 'a'], 'form': ['8-K', '10-K']},
+def row(accession, **filed):
+    return filing_row(accession, CONTEXT, **filed)
+
+
+@pytest.mark.parametrize('page, rows', [
+    ({}, []), ({'accessionNumber': []}, []), ({'accessionNumber': ['a']}, [row('a')]),
+    ({'accessionNumber': ['a', 'b'], 'form': ['10-K'], 'size': ['1,234', 'bad'], 'isXBRL': [1, 0]},
+     [row('a', form='10-K', is_xbrl=True), row('b')]),
+    ({'accessionNumber': ['a', 'b'], 'filingDate': ['20261001ignored', '2026-09-30T23:00:00Z'],
+      'reportDate': ['bad', '2026-09-29'], 'isInlineXBRL': [-1, False]},
+     [row('a', filing_date='2026-10-01', is_inline_xbrl=True),
+      row('b', filing_date='2026-09-30', report_date='2026-09-29')]),
+    ({'accessionNumber': 'ab', 'form': 'XY'}, [row('a', form='X'), row('b', form='Y')]),
+    ({'accessionNumber': ['a', 'b'], 'primaryDocument': [{'raw': True}, ['x', 1]], 'size': [True, 12.9]},
+     [row('a', size=1, primary_document="{'raw': True}"), row('b', size=12, primary_document="['x', 1]")]),
+    ({'accessionNumber': ['a', 'a'], 'form': ['8-K', '10-K']}, [row('a', form='8-K'), row('a', form='10-K')]),
 ])
-def test_raw_page_exact_typed_rows_match_retained_wrapper(page):
-    require_tables(configured(page), retained(page))
+def test_raw_page_exact_typed_rows(page, rows):
+    require_tables(configured(page), rows)
 
 
 @pytest.mark.parametrize('field,value', [
     ('accessionNumber', None), ('accessionNumber', 3), ('accessionNumber', {'0': 'a'}),
     ('form', 3), ('form', None), ('size', 3), ('size', None),
 ])
-def test_malformed_selected_arrays_have_same_refusal_decision(field, value):
+def test_malformed_selected_arrays_refuse(field, value):
     page = {'accessionNumber': ['a'], field: value}
-    with pytest.raises((TypeError, KeyError)):
-        retained(page)
     with pytest.raises(SourceRejected):
         configured(page)
 

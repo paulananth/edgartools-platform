@@ -74,3 +74,35 @@ def test_snapshot_mappings_are_read_only():
     for mapping in (silver_schema.COLUMNS, silver_schema.REQUIRED):
         with pytest.raises(TypeError):
             mapping["sec_company"] = ()  # type: ignore[index]
+
+
+def test_every_dbt_silver_model_selects_its_landing_columns():
+    """Each silver model names every column its landing table has, so a new
+    landing column (as `country_code` was, company mastering ticket 14) cannot
+    land and then be dropped by its silver model. A model that selects `*`
+    passes everything through and is not checked."""
+    models = REPO_ROOT / "infra" / "snowflake" / "dbt" / "edgartools_gold" / "models" / "silver"
+    checked = 0
+    for path in sorted(models.glob("*.sql")):
+        text = re.sub(r"--[^\n]*", "", path.read_text())
+        source = re.search(r"source\('edgartools_silver_landing',\s*'(\w+)'\)", text)
+        assert source, path.name
+        if re.search(r"select\s+\*", text, re.IGNORECASE):
+            continue
+        columns = silver_schema.COLUMNS[source.group(1).lower()]
+        missing = [c for c in columns if not re.search(rf"\b{c}\b", text)]
+        assert missing == [], f"{path.name} does not select {missing}"
+        checked += 1
+    assert checked >= 30
+    assert "country_code" in silver_schema.COLUMNS["sec_company_address"]
+
+
+def test_a_live_table_gains_the_column_before_dbt_reads_it():
+    bootstrap = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
+    alter = (bootstrap / "21_silver_landing_company_country_code.sql").read_text()
+    assert "ALTER TABLE sec_company_address ADD COLUMN IF NOT EXISTS country_code TEXT;" in alter
+    install = (REPO_ROOT / "infra" / "scripts" / "install.sh").read_text()
+    run = "-f infra/snowflake/sql/bootstrap/"
+    assert install.index(f"{run}21_silver_landing_company_country_code.sql") > (
+        install.index(f"{run}20_silver_landing_ownership_evidence.sql"))
+    assert install.index(f"{run}21_silver_landing_company_country_code.sql") < install.index("dbt run --target")
