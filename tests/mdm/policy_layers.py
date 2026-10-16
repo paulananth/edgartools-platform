@@ -56,6 +56,23 @@ def without_form_adv(policy: dict) -> dict:
     return body
 
 
+NPORT_REGISTRANT = "sec.nport.registrant.v1"
+
+
+def without_nport_registrant(policy: dict) -> dict:
+    """Rebuild priorities ticket 79, part 2 (operator, 2026-10-15: "agreed"):
+    the N-PORT registrant as a Company source, last in `defaults.sources` and
+    in the CIK contract's sources, with its matching rule (declared, not
+    switched on). Peeled, the policy is the one before."""
+    body = _copy(policy)
+    company = body["kinds"]["company"]
+    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s != NPORT_REGISTRANT]
+    cik = company["identifiers"]["cik"]
+    cik["sources"] = [s for s in cik["sources"] if s != NPORT_REGISTRANT]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "nport-registrant-cik"]
+    return body
+
+
 def without_parent_history(policy: dict) -> dict:
     """Profiling ticket 04b, part B (operator, 2026-10-07: "It should also
     consider corporate actions"): the calculated ultimate parent keeps its
@@ -157,6 +174,7 @@ def without_place_codes(policy: dict) -> dict:
 # layer after it still on.
 LAYERS = [
     # Not yet approved: the operator approves its digest with the proof.
+    (without_nport_registrant, "c69bd4a452fc3b5e9a7b722b876d04f7b7a33891fddf6509a57c968c8ef481b0"),
     (without_form_adv, "af0fa7cce9845419238d7ed23aa5fb7c1c8ccd576f2137e2b4ef3c732369a7cc"),
     (without_parent_history, "c608d93a9e72f965624ff467321f8aecab4e6cd13074cd1fbda7d6fc82001605"),
     (without_real_names, "bf682fa4e2ba378ded491a6d6aa46b2a417682f1de4d5d20adb1490177efb2f6"),

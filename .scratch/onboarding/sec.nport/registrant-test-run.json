@@ -1,0 +1,28 @@
+{
+ "facts": {
+  "filings": 14416,
+  "filing_dates_sortable": 14416,
+  "filing_dates_not": 0,
+  "filings_without_date": 0,
+  "filings_lei_blank": 12,
+  "filings_street2_blank": 8604,
+  "registrants": 1947,
+  "registrants_several_filings": 847,
+  "names_differ_across_filings": null
+ },
+ "contract": {
+  "outcome": {
+   "accepted": 1947
+  },
+  "filled": {
+   "address.op": 1947,
+   "address.value": 1947,
+   "name.op": 1947,
+   "name.value": 1947,
+   "id:cik": 1947,
+   "xref:nport_lei": 1943,
+   "xref:sec_file_number": 1947
+  }
+ },
+ "seconds": 23.1
+}

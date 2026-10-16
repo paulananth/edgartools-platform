@@ -1,0 +1,19 @@
+# One row per registrant CIK (table `registrant`) with its latest filing whole
+# (`latest`: name, file number, LEI and address of one filing), latest by
+# filing date, then accession number (ticket 79, part 2). Inputs: reduce.yaml's
+# output (`ciks`) and source.yaml's reading (`filings`). Pin canonical JSON of
+# this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    latest_filing: {source: filings, table: filing, key: cik, value: ., mode: last, order_by: [filed, accession], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    registrant:
+      source: ciks
+      table: ciks
+      checks: {}
+      where: {}
+      joins:
+        latest: {group: latest_filing, key: cik, on_missing: error, replace: false}

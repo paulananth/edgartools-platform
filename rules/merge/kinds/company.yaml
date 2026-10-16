@@ -18,6 +18,10 @@ defaults:
   # name (one record per file), last, so SEC and GLEIF win every field they fill.
   - iapd.adv.filings.v1
   - iapd.adv.custodians.v1
+  # N-PORT registrants (ticket 79, part 2), last: every field another source
+  # fills wins over N-PORT's (a merge-rule change, approved with its Proving
+  # Run under the operator's standing words, 2026-10-15).
+  - sec.nport.registrant.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -226,6 +230,26 @@ rules:
   version: "2026-09-24"
   family: binding
   source: sec.submissions.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cik
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cik
+# An N-PORT registrant joins the one Company that holds its CIK, or creates it
+# (operator, 2026-10-15: "agreed"): SEC's own Company record sets nearly every
+# registrant aside (typed "investment" or "other" with no category), so none
+# would otherwise exist. Declared, not switched on: it activates on the CIK
+# Identifier Contract with this source added, on its Proving Run.
+- rule_id: nport-registrant-cik
+  version: 2026-10-15.1
+  family: binding
+  source: sec.nport.registrant.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -723,6 +747,7 @@ identifiers:
     authority: SEC/EDGAR
     sources:
     - sec.submissions.company.v1
+    - sec.nport.registrant.v1
     normalizer: normalize_identifier@sec-cik-v1
     claim:
       forward: 1

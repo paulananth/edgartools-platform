@@ -1,0 +1,55 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 1947
+  },
+  "identities": {
+   "company": 1947
+  },
+  "open_reviews": {
+   "classification_deferred": 20
+  },
+  "stage_records": {
+   "sec.nport.registrant.v1": 1947
+  },
+  "waiting": {
+   "classification_deferred": 20
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 1947
+  },
+  "identities": {
+   "company": 1947
+  },
+  "open_reviews": {
+   "classification_deferred": 20
+  },
+  "stage_records": {
+   "sec.nport.registrant.v1": 1947
+  },
+  "waiting": {
+   "classification_deferred": 20
+  }
+ },
+ "batches": 6,
+ "cik_on_two_companies": 0,
+ "ciks_held": 1947,
+ "companies_by_feeds": {
+  "sec.nport.registrant.v1": 1947
+ },
+ "policy_digest": "8f3495540bbe1aef3f6ec893d369c63f449e21f5d9d2c6edfde010bcc933a543",
+ "read": {
+  "sec.nport.registrant.v1 assertions": 1947,
+  "sec.submissions.company.v1 deferred: classification_deferred": 20
+ },
+ "registrant_ciks": 1947,
+ "run": "N-PORT registrant as a Company, Proving Run of sec.nport.registrant.v1",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 34.2,
+  "second_pass": 4.7
+ },
+ "slowest_batch_seconds": 18.6
+}
