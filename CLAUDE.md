@@ -298,66 +298,23 @@ silver writer          edgar-warehouse context (read-only views for agents)
 ```
 
 Every step runs as a Bookkeeping worker with its verifier. MDM's store is
-PostgreSQL 16, to be hosted on Snowflake Postgres or Databricks Lakebase.
+PostgreSQL 16; the hosted target is Snowflake Postgres or Databricks Lakebase, and today's provisioned
+instance is Snowflake Postgres (below).
 Snowflake stays the target platform for silver and gold (operator,
 2026-10-14: "Snowflake is still the target platform"): the Snowflake layers
 below, the dbt gold models and their rules in this file are live. The old
 pipeline that fed them (the warehouse orchestrator, its parsers, the old MDM
 chain and the AWS Step Function builders) is deleted from this repository.
 
-## ECS cost-sizing conclusions (Ticket 28, resolved 2026-08-30)
+## ECS cost sizing (old pipeline)
 
-Treat ECS sizing as validated-output economics, not a utilization-only
-exercise. Low memory, an exit code of zero, or a Step Functions `SUCCEEDED`
-status does not prove that a cheaper profile produced the same complete,
-recoverable, idempotent result.
-
-Ticket 28 ran three current-image `mdm.residual_security` candidates on
-`mdm-medium:203` and a current-image control on `mdm-large:137`. The candidate
-runs each passed their execution-local correctness and identity-parity checks,
-with worst memory p95 ranging from 9.34% to 9.84%. That apparent headroom did
-**not** justify promotion:
-
-- Every sequential rerun added the same 65 active `IS_INSIDER` and 1,349
-  active `HOLDS` relationships. Cross-run idempotency therefore failed.
-- The candidate runs progressively filled the shared 100,000-row
-  `COMPANY_HOLDS` target, while the later control found it full and inserted
-  zero rows. Candidate and control did not process the same record funnel, so
-  their end-to-end duration and cost were not comparable.
-- On the independently equal-work `MdmSecurities` stage, candidate p95 was
-  3,307.583 seconds versus 2,825.220 seconds on large: 17.07% slower.
-- Mean candidate cost looked 10.92% lower, but median and p95 improvements were
-  only 2.86% and 1.78%; none can approve a downgrade after the idempotency and
-  funnel failures. Recovery parity also remained unproven because no
-  qualifying run failed or retried.
-
-The fail-closed decision is to keep `mdm-large` as the residual-security
-operational profile. Do not change production references, retire the large
-definition, start a sizing bake window, or infer that `mdm-small` is safe from
-this cohort. A future reconsideration needs isolated or restorable input plus
-the Ticket 30 run-bound relationship ledger so the candidate and control see
-the same input envelope.
-
-Separately, the current-image unbounded `sync-graph` canary on `mdm-large`
-passed its execution-local gates: 226,197 nodes, 621,201 edges, 32.190 seconds
-of command time, and about $0.00285 of estimated on-demand compute. That result
-accepts the unbounded large-profile sync route; it does not approve the
-residual-security downgrade.
-
-Required promotion gates remain: repeated current-image candidates, a matched
-control, exact correctness/completeness/identity parity, recovery and cross-run
-idempotency, candidate p95 no more than 5% slower, and at least 10% lower cost
-per successful validated output. Candidate and control must not execute in
-parallel against the same mutable MDM state. The separate
-`.scratch/ecs-parallel-runs/` map permits residual-pipeline parallelism only in
-two bounded dependency-safe waves, with a disposable success/failure canary
-before implementation or production rollout.
-
-Canonical analysis and immutable evidence:
-
-- `.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`
-- `.scratch/ecs-cost-sizing/evidence/ticket28/`
-- `.scratch/ecs-parallel-runs/map.md`
+The ECS sizing study (Ticket 28, 2026-08-30) measured MDM commands of the old
+pipeline, since deleted; its method stays valid for a future worker runtime:
+judge a cheaper profile on validated output (correctness, completeness,
+idempotency across reruns, a matched control on the same input), never on
+memory use or an exit code. Evidence:
+`.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`,
+`.scratch/ecs-cost-sizing/evidence/ticket28/`.
 
 ## Data Layer Definitions
 
@@ -371,6 +328,7 @@ Canonical analysis and immutable evidence:
 ## edgartools Dependency
 
 The platform depends on the `edgartools` PyPI package (`edgartools>=5.29.0`). It is **not** a local path dependency — install from PyPI.
+When the `edgartools` version is bumped, run the batch scripts in `scripts/batch/` to smoke-test it.
 
 ## SEC data idempotency
 
@@ -476,9 +434,8 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   process's — `America/New_York` via `pytz` (`zoneinfo` needs a tz database these images don't install).
 - A one-time backfill CLI's `--dry-run` needs a `--limit` from the start: proving the logic on real data
   needs tens of rows; only estimating full-run cost needs the whole table.
-- Before hand-orchestrating a multi-step prod workflow with raw `aws ecs run-task`, check
-  `aws stepfunctions list-state-machines` — a purpose-built, already-proven machine for the task can exist
-  without being referenced in this file.
+- Before running a multi-step workflow step by step by hand, look for the one already built (a
+  Bookkeeping run, a committed script). The old AWS Step Functions are leftovers, never that workflow.
 - Provisioning that isn't Terraform or a committed script does not survive an account rebuild, however
   carefully a runbook describes it. And when one stage turns out to have been an uncommitted manual step,
   assume every later stage in the same family is too.
@@ -605,12 +562,12 @@ cd infra/terraform/snowflake/accounts/prod
 terraform plan
 terraform apply
 
-# AWS-only Snowflake native-pull deploy (dev)
+# Snowflake native-pull deploy (prod; dev is decommissioned, above)
 # Requires a SnowCLI connection (configured in ~/.snowflake/config.toml) and keeps
-# Snowflake secrets out of repo files.
+# Snowflake secrets out of repo files. A prod change needs the operator's word.
 bash infra/scripts/deploy-snowflake-stack.sh \
-  --env-name dev \
-  --snow-connection snowconn \
+  --env-name prod \
+  --snow-connection edgartools-prod \
   --run-validation \
   --run-dbt
 
@@ -663,17 +620,9 @@ uv run --with dbt-snowflake dbt run --select <model_name> --full-refresh
 This issues `CREATE OR REPLACE DYNAMIC TABLE ... initialize = ON_CREATE`,
 which triggers an immediate INITIAL refresh.
 
-**Known gap blocking `--full-refresh` (dev, as of 2026-06-13):** the
-`EDGARTOOLS_DEV_DEPLOYER` role lacks a direct `SELECT` grant on
-`EDGARTOOLS_SOURCE` tables. Ad-hoc queries succeed (via the
-`ACCOUNTADMIN`/`ORGADMIN` secondary roles), but Snowflake's dynamic-table
-INITIAL refresh checks the table owner role's *direct* grants only —
-`CREATE OR REPLACE DYNAMIC TABLE` makes `EDGARTOOLS_DEV_DEPLOYER` the new
-owner, so the refresh fails with "not authorized ... (Note: the primary role
-is the owner role of the dynamic table)". This affects **any**
-`EDGARTOOLS_GOLD` dynamic table's `--full-refresh`, not just one model. See
-`TODOS.md` ("EDGARTOOLS_DEV_DEPLOYER lacks direct SELECT on
-EDGARTOOLS_SOURCE") for the fix and status.
+A `--full-refresh` makes the deploying role the dynamic table's owner, and the
+INITIAL refresh checks that role's *direct* grants only (secondary roles do not
+count): give it direct `SELECT` on every table the model reads first.
 
 Required env vars for `dbt run`/`dbt compile` against Snowflake (none have
 defaults except role/database/warehouse, which fall back to the dev target's

@@ -1,10 +1,11 @@
 """List the repository paths a guide names that do not exist (ticket 85).
 
-Reads each file given (default: CLAUDE.md and AGENTS.md), takes every
-backticked or plain token that looks like a repository path (it has a slash
-and starts with a top-level folder of this repository, or is a top-level
-file), and prints the ones missing (git-ignored paths aside), with their line numbers. Exit 1 when any
-is missing. Run from the repository root:
+Reads each file given (default: CLAUDE.md and AGENTS.md), takes every token
+that looks like a repository path (it has a slash and starts with a top-level
+folder of this repository; a bare top-level file name is not checked), and
+prints the ones missing, with their line numbers. Skipped: a git-ignored path
+(a local backup folder) and a placeholder (`<source>`, `*`, `{dev,prod}`).
+Exit 1 when any is missing. Run from the repository root:
 
     python scripts/dev/stale_paths.py [FILE ...]
 """
