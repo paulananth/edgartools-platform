@@ -68,7 +68,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [The engine builds one text from parts](issues/94-text-from-parts.md): `concat`: text from parts
 - [The engine takes a field of each object in a list](issues/95-a-field-of-each-object-as-a-list.md): `pluck`: a field of each object as a list
 
-- [ISSUED_BY by a mastered Company](issues/22-security-mastering-02-issued-by-a-mastered-company.md): by issuer LEI; the issuer rule joins or waits, never creates; 0 duplicates, 41,360 links would resolve (#1022)
+- [Point ISSUED_BY at a mastered Company](issues/22-security-mastering-02-issued-by-a-mastered-company.md): by issuer LEI; the issuer rule joins or waits, never creates; 0 duplicates, 41,360 links would resolve (#1022)
 - [An N-PORT link starts at its quarter's data set](issues/100-an-nport-link-starts-at-its-quarter.md): the quarter dates each publication; the link starts there, observed (#1022)
 
 ## Not yet specified
