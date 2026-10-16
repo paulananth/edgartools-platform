@@ -73,11 +73,11 @@ ON_FAIL_WORDS = {
 CONDITION_WORDS = {
     "field_in_set@1": "{field} is one of: {values}",
     "fields_all_empty@1": "{fields} is empty",
-    "token_match@1": "{field} holds at least {min_count} word(s) of the list {token_list}",
-    "token_match@2": "{field} holds at least {min_count} word(s) of the list {token_list}",
+    "token_match@1": "{field} holds {count} of the words of the list {token_list}",
+    "token_match@2": "{field} holds {count} of the words of the list {token_list}",
     "name_shape@1": "{field} is shaped like a person's name: {min_tokens} to {max_tokens} words, "
                     "no digits or forbidden characters (suffixes from {suffix_list} allowed)",
-    "values_overlap@1": "{field} holds at least {min_count} of the list {values}",
+    "values_overlap@1": "{field} holds {count} of the list {values}",
     "evidence_present@1": "The record has {document}",
     "name_census_match@1": "The names are equal, legal form kept, and exactly one SEC filer and one GLEIF "
                            "entity carry that name",
@@ -91,8 +91,8 @@ CONDITION_WORDS = {
     "jurisdiction_agrees@1": "SEC's {sec_field} names the same place as GLEIF's {gleif_field}",
     "jurisdictions_do_not_conflict@1": "SEC's {sec_field} and GLEIF's {gleif_field} do not name different places",
     "postal_agrees@1": "SEC's business postcode equals GLEIF's headquarters postcode, in the same country",
-    "identifier_match@1": "The record's {namespace} is the one a Company holds",
-    "identifier_cardinality@1": "Exactly one Company holds that {namespace}, or none",
+    "identifier_match@1": "The record's {namespace} is the one a {holder} holds",
+    "identifier_cardinality@1": "Exactly one {holder} holds that {namespace}, or none",
 }
 
 
@@ -313,13 +313,24 @@ def _compare(parts: list | None) -> str:
     return "the country" + "".join(f", {p}" for p in parts)
 
 
-def _conditions(items: list[dict]) -> str:
+def _count(args: dict) -> str:
+    """A condition's bounds in words: a floor, a ceiling, or both; a ceiling of
+    0 is none."""
+    low, high = args.get("min_count"), args.get("max_count")
+    if high is None:
+        return f"at least {low}"
+    if high == 0:
+        return "none"
+    return f"at most {high}" if low is None else f"at least {low} and at most {high}"
+
+
+def _conditions(items: list[dict], kind: str) -> str:
     def args(w: dict) -> dict:
-        found = w.get("args") or {}
+        found = {**(w.get("args") or {}), "holder": kind.replace("_", " ").capitalize()}
         if "namespace" in found:  # an identifier, as the business writes it: CIK, LEI
             found = {**found, "namespace": str(found["namespace"]).upper()}
-        if (found.get("max_count") or 0) >= 1:  # a ceiling as well as a floor
-            found = {**found, "min_count": f"{found.get('min_count', 0)} and at most {found['max_count']}"}
+        if "min_count" in found or "max_count" in found:
+            found = {**found, "count": _count(found)}
         if found.get("exclude_list"):  # words of the list that do not count
             found = {**found, "token_list": f"{found['token_list']} (not counting {found['exclude_list']})"}
         return {**found, "compare": _compare(found.get("compare"))} if w.get("primitive") == "cascade_pass@1" else found
@@ -347,7 +358,7 @@ def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict
         at = f"merge/kinds/{kind}.yaml rules[{i}]"
         if rule.get("family") == "classification":
             for j, step in enumerate(rule.get("steps") or []):
-                when = "Otherwise" if step.get("otherwise") else _conditions(step.get("when") or [])
+                when = "Otherwise" if step.get("otherwise") else _conditions(step.get("when") or [], kind)
                 classification.append([_text(rule.get("rule_id")), _text(rule.get("version")),
                                        _text(rule.get("source")), _text(step.get("step")),
                                        _text(step.get("verdict")), _text(step.get("probable_kind")), when,
@@ -356,7 +367,7 @@ def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict
             order += 1
             matching.append([str(order), _text(rule.get("rule_id")), _text(rule.get("version")),
                              _text(rule.get("source")), _text(rule.get("holder_source")),
-                             _conditions(rule.get("when") or []), _text(rule.get("on_no_match")), at])
+                             _conditions(rule.get("when") or [], kind), _text(rule.get("on_no_match")), at])
     about = [["What", "Value"], ["How to change this", HOW_TO_CHANGE], ["Kind", kind],
              ["Rules version", _text(rules.get("version"))], ["Proof bar", _text(rules.get("bars"))]]
     return {"Kind": about, "Preferred sources": preferred, "Who wins each field": per_field,

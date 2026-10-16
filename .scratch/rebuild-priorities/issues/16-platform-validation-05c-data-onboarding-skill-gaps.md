@@ -38,10 +38,14 @@ given.
   and a ceiling of 1 or more shown (2026-10-01 18:34 ET). Still open: Company's
   `max_count: 0` reads "at least  of the list", and the identifier words say
   "Company" for every kind.
-- [ ] 10. Mapping Document bugs for a second kind:
-  - a negated step is shown without "not";
-  - "Company" is hard-coded in the matching rule text;
-  - the arguments are shown raw
+- [x] 10. Mapping Document bugs for a second kind (verified by
+  `tests/unit/test_rules_mapdoc.py`, 18 passed, 2026-10-16 09:07 ET):
+  - a negated step is shown without "not" (fixed in #770);
+  - "Company" is hard-coded in the matching rule text: each kind now names
+    itself ("Exactly one Security holds that CUSIP"), and a ceiling with no
+    floor (`max_count: 0`) reads "holds none of the list";
+  - the arguments are shown raw (fixed in #770; every condition the rules use
+    has words, `test_every_condition_the_rules_use_has_plain_words`)
 - [ ] 11. Catalog lineage is missing for a second kind read from another
   source's feed
 - [ ] 12. The input manifest includes a non-feed file (the ticker catalog):
