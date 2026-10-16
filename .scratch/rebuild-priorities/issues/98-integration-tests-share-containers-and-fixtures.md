@@ -14,4 +14,4 @@ The slowest integration test files each start their own PostgreSQL 16 and build 
 - [x] Share the container and fixtures where tests do not depend on an empty store; keep isolation where they do: the MDM store's `postgres` and `database` fixtures move to `tests/integration/conftest.py`, the server once per session; each test still gets its own database copied from the template. The bookkeeping `databases` fixture stays per module: its tests share one set of stores and may count what earlier tests left. Locally the 35 modules: 285 passed in 68.7 s (was 175.8 s); modules with their own server pass beside it (2026-10-16 19:08 ET)
 - [ ] Job times before and after in the PR; nothing else changes
 - [ ] PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] Learning → skill: data-onboarding, proving run: import `database, postgres` from `tests.integration.conftest` (the old `core.postgres` aliases are gone; checked from a file outside `tests/`), and check `docker info` instead of Colima's socket (2026-10-16 19:12 ET)

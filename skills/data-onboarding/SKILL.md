@@ -585,12 +585,13 @@ contract's `nonblocking_deferred_reasons`.
    Write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:
    ```python
-   from tests.integration import test_clean_mdm_postgres as core
-   postgres = core.postgres    # starts a postgres:16 container, removes it after
-   database = core.database    # a migrated MDM database for one test
+   from tests.integration import test_clean_mdm_postgres as core  # its helpers
+   # `postgres` starts one postgres:16 container for the session and removes it
+   # after; `database` is a migrated MDM database of its own for each test.
+   from tests.integration.conftest import database, postgres  # noqa: F401
    ```
-   Run it with Docker (on macOS, Colima), and bound it:
-   `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock timeout -s KILL 600 uv run --no-sync pytest -q -s <file>`.
+   Run it with Docker (check `docker info` answers first), and bound it:
+   `timeout -s KILL 600 uv run --no-sync pytest -q -s <file>`.
    `timeout` is GNU's; macOS has none, so there give the run a watcher with
    a deadline instead.
    Where Docker does not start, the same fixtures run on a local
