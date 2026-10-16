@@ -158,6 +158,12 @@ step:
   the source extract, add the column `{context: {name: <field>}}`, and give each
   file its own context receipt ([READING.md](READING.md), "Artifact context
   and first-N rows").
+  Optional `publication_key` and `revision` (text digits), together, make
+  the unit's rows one publication of the caller's instead of one per file.
+  With them, optional `effective_at` states that publication's time (an
+  instant with a timezone, no later than `as_of`), so a later period is a
+  later revision of the same records that keeps its own time; a link first
+  seen in it starts then. They exclude `effective_column`.
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
   manifest. Its verifier rebuilds them and reports `mdm.prepared`.
 - `mdm.merge`: one MDM input manifest (contract version 2) through the
