@@ -43,4 +43,4 @@ Operator, 2026-10-15: "simplify and review all the tests and make them performan
   - [x] Unused: four fixture files no test reads (`company-object.yaml`, `company-raw.yaml`, `native_company_v1.json`, `publication_v1/`); no always-skipped test (the one strict expected failure documents a known engine gap, ticket 15) 2026-10-16 10:13 ET
 - [x] Simplify: the exact JSON comparisons (`require_tables`, `ordered`) into `tests/support/exact.py`, out of the deleted scripts; the converted tests are parametrized by case and answer 2026-10-16 10:13 ET
 - [ ] Three-axis review; PR, CI green (job times before and after in the PR), merge on the operator's word
-- [ ] Learning → skill: the test rules into `AGENTS.md` "Tests and CI" and mdm-engineering "Choose the cheapest proof"
+- [x] Learning → skill: `CLAUDE.md` and `AGENTS.md` "Tests and CI" gain: a test states its expected answer, never a frozen copy of retired code; to retire an oracle, write its answers in once while they agree, change each once to see the test fail, compute values that follow the clock. mdm-engineering "Choose the cheapest proof" unchanged: nothing here is an MDM store proof 2026-10-16 10:14 ET
