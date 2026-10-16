@@ -1,0 +1,41 @@
+{
+ "months": 13,
+ "records": {
+  "custodians_accepted": 6717,
+  "custodians_invalid_lei_checksum": 76,
+  "filings_accepted": 46640,
+  "links_to_a_custodian_record_set_aside": 94
+ },
+ "links_stated": 50073,
+ "links_by_custodian_id_kind": {
+  "bd": 37094,
+  "lei": 5186,
+  "name": 7793
+ },
+ "links_per_filing": {
+  "0": 15196,
+  "1": 19054,
+  "2": 8320,
+  "3": 2745,
+  "4": 908,
+  "5": 254,
+  "6": 37,
+  "7": 84,
+  "8": 4,
+  "9": 19,
+  "10": 6,
+  "11": 3,
+  "12": 1,
+  "13": 3,
+  "14": 5,
+  "15": 1
+ },
+ "adviser_custodian_pairs": 18571,
+ "pairs_by_custodian_id_kind": {
+  "bd": 13316,
+  "lei": 2065,
+  "name": 3190
+ },
+ "pairs_named_in_more_than_one_month": 11860,
+ "seconds": 34
+}

@@ -32,7 +32,7 @@
 #
 # Before this file the same table was held in code; a policy registered without
 # this section still uses it (relationships.TYPES_V0), so the two must agree.
-version: relationship-types-v3
+version: relationship-types-v4
 types:
   # Consolidation (GLEIF's relationship file names; IFRS 10 / ASC 810).
   IS_DIRECTLY_CONSOLIDATED_BY:
@@ -76,6 +76,14 @@ types:
   ISSUED_BY:
     from: [security]
     to: [company, fund_structure, government, international_organization]
+  # Custody (Form ADV Schedule D 5.K(3)). The name, operator 2026-10-09
+  # 10:38 ET: "CUSTODIAN (Recommended)". Left out at 14:56 ET, when the Merge
+  # Stage refused a connected group over 10,000 records (one custodian is named
+  # in 17,333 custody rows); back after ticket 74 removed that limit (ticket 75,
+  # operator 2026-10-14: "Yes, a new ticket (Recommended)").
+  CUSTODIAN:
+    from: [company]
+    to: [company]
   # Funds (Form ADV and N-CEN; GLEIF's relationship file names).
   INVESTMENT_ADVISER_TO:
     from: [company, person]

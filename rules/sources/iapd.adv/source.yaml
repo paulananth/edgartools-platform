@@ -8,7 +8,8 @@
 # record per filing (an adviser's filings join by CRD), dated by its monthly
 # file (mdm.prepare effective_column, PR #884); one record per file and
 # custodian (a custodian's records join by LEI or BD number; mdm.prepare
-# distinct_on). Custody rows and their amounts are silver facts.
+# distinct_on). Each filing links its adviser to its custodians (CUSTODIAN,
+# ticket 75; combine.yaml). Custody rows and their amounts are silver facts.
 # The readings are beside this file: adviser-filings-csv.yaml and
 # custody-csv.yaml. Each file's month end comes in as context (`published`).
 # The acquisition and bookkeeping sections belong to the Bookkeeping skill.
@@ -82,6 +83,20 @@ mdm:
         cross_references:
           sec_file_number: sec_file_number
           adv_lei: lei
+        # The adviser's custodians (ticket 75; combine.yaml joins the filing's
+        # `custodians`): each names the custodians contract's record of it in
+        # the same monthly file, so the link waits until that record is
+        # mastered (a custodian named only by name waits for a name rule). The
+        # filing states no date of its own: MDM starts the link at the first
+        # monthly file that names it and moves its `last_seen` with each later
+        # one, which answers "did the adviser change its custodian".
+        relationships:
+        - type: CUSTODIAN
+          each: custodians
+          target_key: [published, item]
+          target_source: iapd.adv.custodians.v1
+          valid_from: item.valid_from
+          scope: IAPD Form ADV custodian
   iapd.adv.custodians.v1:
     contract:
       provider: SEC Investment Adviser Public Disclosure (IAPD)

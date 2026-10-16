@@ -51,6 +51,9 @@ relationships:
     The entity holds the security, as filed: a 13F manager's holding carries its investment discretion
     and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
   ISSUED_BY: The security is issued by this entity.
+  CUSTODIAN: >-
+    The custodian holds 10% or more of the adviser's separately managed account assets, as the
+    adviser's Form ADV names it (Schedule D 5.K(3)); a custodian under 10% is not named.
   INVESTMENT_ADVISER_TO: >-
     The adviser is the fund's investment adviser, with discretion: discretionary (the adviser decides)
     or non-discretionary (the client decides).

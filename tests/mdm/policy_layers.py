@@ -73,6 +73,16 @@ def without_nport_registrant(policy: dict) -> dict:
     return body
 
 
+def without_custodian(policy: dict) -> dict:
+    """Rebuild priorities ticket 75 (operator, 2026-10-14: "Yes, a new ticket
+    (Recommended)"): the CUSTODIAN relationship type, an adviser to the
+    custodians its Form ADV names. Peeled, the policy is the one before."""
+    body = _copy(policy)
+    body["relationships"]["types"].pop("CUSTODIAN")
+    body["relationships"]["version"] = "relationship-types-v3"
+    return body
+
+
 def without_issuer_lei(policy: dict) -> dict:
     """Rebuild priorities tickets 22 and 97 (operator, 2026-10-16: "Issuers
     only, by LEI (Recommended)"): GLEIF's own record as an LEI source, and the
@@ -187,6 +197,7 @@ def without_place_codes(policy: dict) -> dict:
 # layer after it still on.
 LAYERS = [
     # Not yet approved: the operator approves its digest with the proof.
+    (without_custodian, "bd71d9ad021660644ae3a14185c3ceea4923fd175cf94b23a1e3c187bce09f3c"),
     (without_issuer_lei, "7dc2e9f1cf68ae76fbf151b617997f2f8478be3092931d5e943ddb9cb3b4c5e5"),
     (without_nport_registrant, "c69bd4a452fc3b5e9a7b722b876d04f7b7a33891fddf6509a57c968c8ef481b0"),
     (without_form_adv, "af0fa7cce9845419238d7ed23aa5fb7c1c8ccd576f2137e2b4ef3c732369a7cc"),
