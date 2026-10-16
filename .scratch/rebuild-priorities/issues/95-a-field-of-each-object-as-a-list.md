@@ -20,6 +20,6 @@ Each OpenFIGI answer holds a list of listings (objects), each with its own FIGI 
 - [x] `pluck` in Rust; tests (fields in order, missing and null skipped, a null list, other types refused, bounds, a nested expression read): `tests/pluck.rs`; all 31 crate test binaries pass (2026-10-15 17:10 ET)
 - [x] READING.md: `pluck` documented with the OpenFIGI answer example (2026-10-15 18:27 ET)
 - [x] Three-axis review (Standards, Spec, GoF): no blocking findings; fixed: a test now reaches the 100,000-value limit, a repeated field name is refused at load, and READING.md no longer names `overlap` before ticket 93 merges; GoF: leave it. Crate tests 190 pass (2026-10-15 18:27 ET)
-- [ ] PR, CI green
-- [ ] Merge on the operator's word
-- [ ] Learning → skill: data-platform READING.md gains `pluck` (this PR); nothing else learned
+- [x] PR #997, rebased after #996, CI green (6 checks, 18:54 ET)
+- [x] Merged 2026-10-15 18:54 ET on the operator's words "Merge one by one"
+- [x] Learning → skill: data-platform READING.md gains `pluck` (this PR); nothing else learned

@@ -20,6 +20,6 @@ OpenFIGI's mapping answer is a list in the order of its request and names no ide
 - [x] `concat` in Rust; tests (text and integers, a null part, other types refused, bounds, a nested expression read): `tests/concat.rs`; all 31 crate test binaries pass (2026-10-15 17:10 ET)
 - [x] READING.md: `concat` documented with the OpenFIGI request key example (2026-10-15 18:27 ET)
 - [x] Three-axis review (Standards, Spec, GoF): no blocking findings; fixed: the size is checked before appending (the `join.rs` shape), tests added for a large integer and an undeclared context inside `concat`; GoF: leave it. Crate tests 192 pass (2026-10-15 18:27 ET)
-- [ ] PR, CI green
-- [ ] Merge on the operator's word
-- [ ] Learning → skill: data-platform READING.md gains `concat` (this PR); nothing else learned
+- [x] PR #996, CI green (6 checks, 18:37 ET)
+- [x] Merged 2026-10-15 18:46 ET on the operator's words "Merge one by one"
+- [x] Learning → skill: data-platform READING.md gains `concat` (this PR); nothing else learned
