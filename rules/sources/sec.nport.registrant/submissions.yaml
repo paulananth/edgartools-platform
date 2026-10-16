@@ -1,0 +1,46 @@
+# N-PORT's submission rows (SUBMISSION.tsv, one per filing): read once,
+# streamed, to give each filing its filing date as sortable text (YYYY MM DD),
+# a pair set (ticket 91) that source.yaml reads with `member_value`, so each
+# registrant's latest filing can be chosen (combine.yaml). N-PORT writes the
+# date as day, month name and year ("15-MAY-2026", profiling: 60 distinct, all
+# that shape); its three parts are cut out and joined here, not parsed
+# (`regex_replace` replaces literally: no capture groups).
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 1}
+  tables:
+    filed:
+      each: .
+      columns:
+        accession: {text: {path: ACCESSION_NUMBER}}
+        # Year, month number and day, each cut from the filed text, joined.
+        filed:
+          concat:
+          - text: {path: FILING_DATE, transforms: [{regex_replace: {pattern: '^.*-', with: ''}}]}
+          - const: {value: " "}
+          - text:
+              path: FILING_DATE
+              transforms:
+              - {case: upper}
+              - {regex_replace: {pattern: '^[0-9]*-|-[0-9]*$', with: ''}}
+              - tokens: {JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12"}
+          - const: {value: " "}
+          - text: {path: FILING_DATE, transforms: [{regex_replace: {pattern: '-.*$', with: ''}}]}
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: SUBMISSION.tsv
+    # Profiling, 2026q2: 14,416 rows.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000

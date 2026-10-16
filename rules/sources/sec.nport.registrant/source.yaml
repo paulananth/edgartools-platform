@@ -1,0 +1,147 @@
+# SEC Form N-PORT registrants, read for the Company master (ticket 79, part 2),
+# from the approved N-PORT findings (profiling/sec.nport-2026q2-final,
+# approved 2026-10-15 06:29 ET; part REGISTRANT.CIK, master by CIK: 1,947
+# registrants over 14,416 filings). Rulings it rests on (operator):
+# - "Registrant yes, issuer later (Recommended)" (2026-10-14): the registrant
+#   joins the Company master by CIK; each Fund links to it (part 3).
+# - "agreed" (2026-10-15), to: when a registrant's CIK is not yet a Company,
+#   the N-PORT registrant creates it. Evidence: all 1,947 CIKs are SEC filers,
+#   but SEC's own Company record sets about 1,945 aside (1,251 typed
+#   "investment", 688 "other" with no category), so none would exist.
+# The run, in order: submissions.yaml gives the pair set `filed` (filing to
+# its date); this reading streams REGISTRANT.tsv once, one row per filing,
+# with its date; reduce.yaml lists each CIK; combine.yaml keeps each CIK's
+# latest filing whole (by date, then accession), so a name and an address
+# never mix two filings; mdm.prepare reads table `registrant`.
+# Left out: the phone number (personal, profiling). An LEI of all zeros is a
+# stand-in for none (4 registrants, profiling) and is blank here.
+source: sec.nport.registrant
+bronze:
+  family: sec.nport-datasets
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1
+  lookup_sets:
+    filed:
+      max_values: 1000000
+      max_bytes: 67108864
+      max_value_bytes: 64
+      pairs: true
+  tables:
+    filing:
+      each: .
+      columns:
+        cik: {text: {path: CIK}}
+        accession: {text: {path: ACCESSION_NUMBER}}
+        filed:
+          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        name: {text: {path: REGISTRANT_NAME, default: "", null_if: [""]}}
+        file_number: {text: {path: FILE_NUM, default: "", null_if: [""]}}
+        lei:
+          text:
+            path: LEI
+            default: ""
+            transforms:
+            - {case: upper}
+            null_if: ["", "00000000000000000000"]
+        street: {text: {path: ADDRESS1, default: "", null_if: [""]}}
+        # "NULL" written as the second address line (79 filings, profiling).
+        street2: {text: {path: ADDRESS2, default: "", null_if: ["", "NULL"]}}
+        city: {text: {path: CITY, default: "", null_if: [""]}}
+        region: {text: {path: STATE, default: "", null_if: [""]}}
+        postcode: {text: {path: ZIP, default: "", null_if: [""]}}
+        country: {text: {path: COUNTRY, default: "", null_if: [""]}}
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: REGISTRANT.tsv
+    # Profiling, 2026q2: 14,416 rows.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000
+mdm:
+  sec.nport.registrant.v1:
+    contract:
+      provider: SEC
+      family: sec.nport-datasets
+      schema_version: sec-nport-registrant-v1
+      record_key: the registrant's CIK; one record per CIK over the quarter, from its latest filing
+      publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
+      effective_time: unknown; the filing date of the latest filing is kept, not the registrant's own time
+      semantics: patch
+      completeness: the registrants of one quarter's N-PORT filings; no retirement by absence
+      nonblocking_deferred_reasons:
+      - missing_record_identity
+      adapter:
+        reading:
+          source: sec.nport.registrant
+          read:
+            format: json
+            limits:
+              max_bytes: 33554432
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name: {value: {path: latest.name, type: text, null_if_blank: true}}
+                        address:
+                          object:
+                            fields:
+                              street: {value: {path: latest.street, type: text, trim: true, null_if_blank: true}}
+                              street2: {value: {path: latest.street2, type: text, trim: true, null_if_blank: true}}
+                              city: {value: {path: latest.city, type: text, trim: true, null_if_blank: true}}
+                              region: {value: {path: latest.region, type: text, trim: true, null_if_blank: true}}
+                              postcode: {value: {path: latest.postcode, type: text, trim: true, null_if_blank: true}}
+                              country: {value: {path: latest.country, type: text, trim: true, null_if_blank: true}}
+                            omit_nulls: true
+                            null_if_empty: true
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - cik
+          - latest
+        version: sec-nport-registrant-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: company
+        record_key:
+        - cik
+        record_key_format: sec_cik
+        # CIK joins the one Company holding it, or creates it (operator,
+        # 2026-10-15: "agreed"). The SEC file number (811-) and the LEI the
+        # registrant states are lookup only, never joining (profiling proposed
+        # both as cross-references; the operator ruled the SEC LEI lookup only,
+        # 2026-09-26).
+        identifiers:
+          cik: cik
+        identifier_formats:
+          cik: sec_cik
+        cross_references:
+          sec_file_number: latest.file_number
+          nport_lei: latest.lei

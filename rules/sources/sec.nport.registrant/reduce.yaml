@@ -1,0 +1,23 @@
+# Each CIK of the quarter's N-PORT registrant rows, with how many filings name
+# it (ticket 79, part 2). One source extract: source.yaml's reading,
+# `filings`. Pin canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  # Profiling, 2026q2: 14,416 filings, 1,947 CIKs.
+  max_rows: 1000000
+  max_input_bytes: 1073741824
+  max_state_bytes: 268435456
+  max_keys: 1000000
+  max_members: 1000000
+  max_output_rows: 1000000
+  max_output_bytes: 268435456
+  groups:
+    ciks:
+      source: filings
+      table: filing
+      keys: [cik]
+      mode: count
+      count: filings
+      sample: null
+      sample_limit: 0
