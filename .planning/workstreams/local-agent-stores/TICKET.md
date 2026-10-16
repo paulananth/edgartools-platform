@@ -1,6 +1,6 @@
 # Persistent local stores for agent testing
 
-Status: architecture review and operator interview; implementation has not started.
+Status: implementation authorized; keep the local environment simple and agent-driven.
 
 ## Scope
 
@@ -15,13 +15,13 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 - [x] Select Company-first baseline scope with approved local captures and invented edge-case fixtures (operator reply “A”, interpreted as the first/recommended choice in the preceding question; 2026-10-16 16:06 ET).
 - [x] Select automatic baseline promotion after verification, without per-baseline operator approval (operator reply “B, why do i need to approve, can we add rules to the skills because everything is agent driven”; 2026-10-16 16:14 ET).
 - [x] Publish the requested skill policy separately (draft PR #1021, seven gates and setup pointer; documentation checks passed, CI running; 2026-10-16 16:14 ET).
-- [ ] Settle baseline content, refresh, isolation, runtime, lifecycle and recovery decisions with the operator, one question at a time; record exact decisions.
-- [ ] Confirm shared understanding and record the approved implementation and documentation scope.
-- [ ] Implement the approved local environment module, reusing existing stores and migrations.
-- [ ] Verify independent environments, restricted roles, persistence, repeat provisioning and backup/restore with affected local tests under five minutes per invocation.
-- [ ] Update the project entry documentation and an executable local testing guide with diagrams and recovery instructions.
+- [x] Settle local execution policy: Company-first, automatic verified baseline updates, independent agent copies, existing Docker runtime and ordinary PostgreSQL backup/restore (operator asks no intermediate approvals and KISS; 2026-10-16 16:26 ET).
+- [x] Confirm implementation and documentation scope: one local lifecycle script, existing migrations, real isolation/persistence/restore proof, README and operator/agent guide; no new promotion framework (operator “as long as you are not overrighting each other ... kiss do not over engineer”; 2026-10-16 16:26 ET).
+- [x] Implement the approved local environment module, reusing existing stores and migrations (one script, real six-store startup, file locks, ordinary dump/restore; 2026-10-16 19:06 ET).
+- [x] Verify independent environments, restricted roles, persistence, repeat provisioning and backup/restore (11 affected tests passed with testmon in 44.49 seconds; three invented Companies, RDM row, lookup-linked silver row and exact integer beyond binary64; 2026-10-16 19:06 ET).
+- [x] Update README and local testing guide with diagrams and recovery instructions (new link, balanced fences and implemented command names verified; 2026-10-16 19:06 ET).
 - [ ] Review Standards, Spec and GoF, publish a PR and verify CI before landing.
-- [ ] Learning → skill: pending; record any reusable operational lesson in its applicable skill on a separate branch/PR, or write none.
+- [x] Learning → skill: data-platform/LOCAL-TESTING.md defines automatic work with independent copies and ordinary backups (separate PR #1021 merged after all six checks passed; 2026-10-16 19:06 ET).
 
 ## Decisions
 
@@ -29,8 +29,8 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 - Permanent means test/proving state can survive between sessions; it does not approve a production deployment on this machine.
 - Baseline scope (2026-10-16 16:06 ET): operator replied “A” to the Company-first versus all-captured-sources question. Record Company first, combining approved local captures with invented edge-case fixtures (the earlier baseline A). The environment supports all six stores from the start; broader source qualification follows. This does not approve pending Company financials profiling findings, new matching rules or source activation.
 - Baseline promotion (2026-10-16 16:14 ET): operator selected B and requested agent-driven skill rules. Candidate qualification, six-store verification, restored-baseline proof, evidence binding, atomic promotion and pinned existing environments are defined in draft skill-policy PR #1021. The lifecycle implementation remains pending.
-- Broader autonomy for source findings, mappings and matching/merge-rule approval is an unresolved scope question; this ruling is not silently extended to those decisions.
-- Further implementation choices remain open until the interview resolves them.
+- Autonomy: operator permits no intermediate approvals provided agents do not overwrite one another. Proceed within this assigned local task; stop for an actual overlap or an unclear scope change. Do not invent operator approval records or expand to production/provider work.
+- Use the configured Docker runtime (currently OrbStack), independent named volumes, private environment files and PostgreSQL dump/restore. Reuse migrations; no framework, new database engine or dashboard. The GoF consult keeps the existing engines and disposable fixture unchanged.
 
 ## Architecture evidence
 
@@ -43,4 +43,8 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 
 ## Interview frontier
 
-Ask one question per turn. Company-first baseline content is selected. Automatic baseline promotion is selected. Next settle whether agent-driven autonomy also covers source/rule approvals, then runtime, ownership of resets and backups, qualification and documentation scope. No detailed interface or new CLI command is proposed before the scope is settled.
+Interview complete for the assigned local infrastructure. Record new facts and resolve routine engineering choices without further approval prompts. An actual overlap or missing necessary information is a reason to ask; no production or provider scope expansion is included.
+
+## Implementation limits
+
+The persistent environment currently provides all six migrated stores. The qualification test uses invented records only. Captured Company financial facts are not silently loaded through an unqualified reader; reader and financial-table work remain in the existing Company financials tickets. A baseline created from an empty store is an empty starting copy, not proof of that business pipeline.

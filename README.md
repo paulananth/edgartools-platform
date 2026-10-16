@@ -453,6 +453,12 @@ See the [catalog implementation](edgar_warehouse/rules/catalog.py),
 
 ## Getting started
 
+For persistent local MDM, RDM and silver testing before Snowflake, use
+[Independent agent test environments](docs/local-agent-testing.md). Each agent
+gets its own PostgreSQL 16 copy with all six stores, private connections and
+ordinary backup/restore. Updating the starting baseline leaves existing copies
+unchanged.
+
 Start with the [data-platform setup guide](skills/data-platform/SKILL.md#0-setup)
 for the packaged `edgartools-data` CLI, Rust engine, skills and pinned rules.
 Python 3.12+, Rust tooling and the appropriate PostgreSQL 16 stores are needed.
