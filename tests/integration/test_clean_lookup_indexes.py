@@ -173,17 +173,29 @@ def test_migration_012_on_a_populated_store_keeps_every_row(database):
 
 
 def test_migration_021_on_a_populated_store_turns_off_the_identifier_index_pending_list(database):
-    """Migration 021 on a populated store: the identifier index that binding
-    probes one value at a time keeps no pending list, nothing waits in it, and
-    every row is kept (rebuild-priorities ticket 96)."""
+    """Migration 021 on a store populated while the identifier indexes kept
+    their pending list: both keep none afterwards, the entries that waited are
+    merged, and every row is kept (rebuild-priorities ticket 96)."""
+    indexes = ("stage_record_identifiers", "stage_record_cross_references")
+    with database.admin.begin() as conn:
+        for name in indexes:
+            conn.execute(text(f"ALTER INDEX mdm.{name} RESET (fastupdate)"))
     populate(database)
     tables = ("stage_record", "source_reading", "decision", "master_entity", "current_record")
     sql = (Path(store.__file__).parents[1] / "migrations" / "021_identifier_index_no_pending_list.sql").read_text()
     with database.admin.begin() as conn:
-        conn.execute(text("ALTER INDEX mdm.stage_record_identifiers RESET (fastupdate)"))
         counts = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in tables}
         conn.execute(text(sql))
     with database.admin.connect() as conn:
         assert {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in tables} == counts
-        assert "fastupdate=off" in conn.scalar(text(
-            "SELECT reloptions FROM pg_class WHERE oid = to_regclass('mdm.stage_record_identifiers')"))
+        for name in indexes:
+            assert "fastupdate=off" in conn.scalar(text(
+                "SELECT reloptions FROM pg_class WHERE oid = to_regclass(:n)"), {"n": f"mdm.{name}"})
+    # The pending list's size needs pgstattuple (in the PostgreSQL image CI uses;
+    # not in every local server).
+    with database.admin.begin() as conn:
+        if conn.scalar(text("SELECT count(*) FROM pg_available_extensions WHERE name = 'pgstattuple'")):
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgstattuple"))
+            for name in indexes:
+                assert conn.scalar(text("SELECT pending_tuples FROM pgstatginindex(to_regclass(:n))"),
+                                   {"n": f"mdm.{name}"}) == 0

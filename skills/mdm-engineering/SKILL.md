@@ -76,7 +76,9 @@ network of links makes every batch cost the whole network.
   `IN (subquery)`.** Both read the whole table.
 - **Probe a GIN index one key at a time** (`@> ARRAY[k.key]`, `? k.key`),
   never with the whole list (`&&`, `?|`). Keep `fastupdate = off` on such an
-  index, or every search reads its growing pending list.
+  index, or every search reads its growing pending list. When code starts
+  probing an existing GIN index this way, check that index's `fastupdate`
+  too: binding started probing the identifier index with its list still on.
 - **A PL/pgSQL function that looks rows up against a key list held in a
   variable carries `SET plan_cache_mode = force_custom_plan`.** After five
   calls PL/pgSQL may reuse a generic plan, which cannot hash the list, so
