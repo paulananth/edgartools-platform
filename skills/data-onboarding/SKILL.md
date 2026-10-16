@@ -145,6 +145,12 @@ Every step says what differs for each target.
   variable is not set. Ask the operator to set it outside the chat. Never
   paste it.
 
+  No Rules Database is live yet (operator, 2026-10-06: "There is no login").
+  Until one is, do not ask for these variables: record each approval on the
+  ticket with the operator's exact words and the ET time, and note that the
+  database record waits. The walk then needs only Docker (or a local
+  PostgreSQL 16) for **test**.
+
 ## The log
 
 Keep `.scratch/onboarding/<source>/onboarding-log.md` on your branch. The
@@ -404,6 +410,11 @@ missing, go on and log it.
     from a later file, or a source that falls silent, closes nothing.
   - Order and compare by the date the event happened, never the date it was
     reported: a late report is not a conflict.
+  - A name can state a relationship ("A Series of <trust>", "<name> dba
+    <name>", "Trustee", "ET AL"). Count each such wording in the files and
+    bring it to the operator as a proposed link, in the same onboarding as
+    the entities (relationships come with MDM). Until ruled, the name stays
+    as written; never cut it into two entities by hand.
 - **Evidence not captured:** when a rule needs evidence the capture does not
   hold yet, the record waits (set aside, with the reason) and the capture is
   a task. Never decide from the row alone.
@@ -550,7 +561,10 @@ contract's `nonblocking_deferred_reasons`.
      policy digest, so run the whole MDM test folder (see Examples), not
      only the tests that load the rules. A kind whose digests are pinned
      layer by layer gets the change as one new layer: peeled, the policy
-     is the one before.
+     is the one before. A new kind's own rules leave another kind's pins
+     alone (a kind's pins cover its own part of the policy); a change to the shared
+     part (relationship types, reference pins) moves them, and moves the
+     integration answer file's whole-policy digest too.
    - **A new kind:** records are blocked with `classification_not_activated`
      until its classification rule is switched on. That is expected: the
      order below switches it on first. To see what it would do, add the
@@ -670,9 +684,16 @@ contract's `nonblocking_deferred_reasons`.
      (z = 1.96) needs 381; 0.95 at 0.95 (z = 1.645) needs 52.
    - **Record it** in `rules/merge/pending-proofs.yaml` under the rule's id,
      in the shape of the entries there: `method`, `one_sided_confidence`,
-     `n`, `correct`, `lower_bound`, `adversarial` (`n`, `violations`),
-     `cohort` (the sha256 of each input and script), `approved_by: null`,
-     `approved_at: null` and a one-line `reason`.
+     `n`, `correct`, `lower_bound`, `adversarial` (`fixture_sha256`,
+     `violations`), `cohort` (`files`: the sha256 of each input and
+     script; `by_step`: a sample of its own per step of a rule with
+     several), `approved_by: null`, `approved_at: null` and a one-line
+     `reason`. Switch-on recomputes the bound from `n` and `correct`:
+     write it cut to six places, never rounded up (the stated bound may
+     not exceed the recomputed one, and must be within 0.00001 of it).
+     The adversarial fixture holds pairs the rule must never join (a hard
+     veto says they differ); `violations` counts those it joined, and
+     must be 0.
 2. The operator switches on the classification rule, then the identifier
    matching rule (APPROVE.md, "Switch one declared matching rule on").
 3. Save, prove, approve and activate the merge rules (`--merge platform`).

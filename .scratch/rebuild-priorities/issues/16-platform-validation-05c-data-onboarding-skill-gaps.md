@@ -21,7 +21,7 @@ given.
 - [ ] 3. Digest and input manifest need code: `rules save` prints the digest;
   a command writes the input manifest. Rules-skill ticket 15 (`rules test`)
   would write both, with items 2 and 12
-- [ ] 4. The proof entry's shape is incomplete in the skill. Say:
+- [x] 4. The proof entry's shape is incomplete in the skill (written: `adversarial` is `fixture_sha256` and `violations`, which must be 0; `cohort` holds `files` and a `by_step` sample per step; the bound is cut to six places since switch-on refuses one above the recomputed bound or more than 0.00001 under it; checked against `activation._check_sample` and `_check_proof`; branch `claude/onboarding-gaps`, 2026-10-16 19:46 ET). Say:
   - the lower bound is cut to six places, never rounded (a rounded bound was
     refused);
   - what the adversarial set counts as a violation
@@ -31,8 +31,8 @@ given.
   round-trip as a command
 - [ ] 7. Profile needs code: `rules profile` (rules-skill ticket 06)
 - [ ] 8. Quality counts need code: part of `rules check`
-- [ ] 9. Adding a kind broke pinned tests: fixed by #769 (05a). Add a line to
-  the skill that a new kind leaves Company's pins alone
+- [x] 9. Adding a kind broke pinned tests: fixed by #769 (05a). Add a line to
+  the skill that a new kind leaves Company's pins alone (written in kind-neutral words, as the genericity lint requires; a change to the shared part moves them and the answer file's digest, as ticket 75 found; checked against `tests/mdm/policy_layers.company_part`, 2026-10-16 19:46 ET)
 - [x] 10 (part). Fixed in #770: plain words for `token_match@1` and
   `name_shape@1`, "NOT (...)" for a negated condition, excluded words named,
   and a ceiling of 1 or more shown (2026-10-01 18:34 ET). Still open: Company's
@@ -53,14 +53,14 @@ given.
   source's feed
 - [ ] 12. The input manifest includes a non-feed file (the ticker catalog):
   say whether `batch_hash` covers only the feed's own files
-- [ ] 13. Say up front which variables the whole walk needs. The Rules
-  Database can be a local throwaway (operator, 2026-10-01: "no login needed")
-- [ ] 14. APPROVE.md does not say how an identifier rule is approved. The
+- [x] 13. Say up front which variables the whole walk needs. The Rules
+  Database can be a local throwaway (operator, 2026-10-01: "no login needed") (written under the variables table: none is live, so approvals go on the ticket and the walk needs only Docker or a local PostgreSQL 16 for test; operator 2026-10-06: "There is no login", 2026-10-16 19:46 ET)
+- [ ] 14. (skill part done: APPROVE.md "Switch on an identifier matching rule" gives the hand steps, `verification` and the `automatic_rules` entry, as the switched-on identifier rules hold them, 2026-10-16 19:46 ET; the command is still open) APPROVE.md does not say how an identifier rule is approved. The
   approval goes on its Identifier Contract's `verification`, plus its
   `automatic_rules` entry, by hand; `rules approve --rule` records measured
   proofs only. Make it a command
 - [ ] 15. Switch-on needs a Clean MDM database. Say which one, and what to do
   while the operator's local store holds the retired `mdm_v2` schema
-- [ ] 16. Relationships come with MDM (operator, 2026-10-01). The skill must
+- [x] 16. Relationships come with MDM (operator, 2026-10-01) (plan-parts already onboards `together` relationships with their master; added under map's Relationships: count each wording that states a relationship and bring it to the operator as a proposed link in the same onboarding, the name kept as written until ruled, 2026-10-16 19:46 ET). The skill must
   plan person–role–entity links in the same onboarding, including names that
   state a relationship ("a series of", "Trustee UAD", "dba", "ET AL")
