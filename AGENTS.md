@@ -63,30 +63,21 @@ Claude and Codex may work on this repository independently, but they must not sh
   *different* runtime (or is a shared branch like `main`/`codex/main-sync`
   that another runtime is actively using), create/check out your own branch
   (in your own worktree) before making any commits.
-- Treat the current Codex work as protected unless the user explicitly hands it off.
+- Another runtime's open PR or worktree is not edited directly; build on it once it merges.
 - Use separate GSD workstream directories under `.planning/workstreams/<name>/`; do not edit another runtime's active workstream files.
 - Before editing, run `git status --short` and `git log -1` and inspect `.planning/active-workstream` when present.
 - Avoid overlapping source files, Terraform roots, generated application JSON, and planning artifacts across runtimes unless the user assigns the same task to both.
 - If overlap is unavoidable, stop and ask for an ownership decision instead of merging assumptions.
 - Do not overwrite, revert, stage, or commit changes created by the other runtime unless explicitly instructed.
 
-## Path ownership: data profiling program (operator, 2026-10-04)
+## Path ownership (operator, 2026-10-16)
 
-The data profiling program (map `.scratch/profiling/map.md`) and Codex's
-configured-reading work (old-parser retirement) run at the same time. Each
-runtime edits only its own paths below. A shared path is edited only after
-`scripts/dev/overlap_guard.sh` passes, which shows no open PR or worktree of
-another runtime touches it. If it fails, stop and ask the operator.
-
-| Owner | Paths |
-|---|---|
-| Claude | `skills/data-profiling/**`, `skills/data-quality/**`, `docs/specs/rdm/**`, `docs/specs/agent-context/**`, `.scratch/profiling/**`, new MDM migrations for the cross-reference table and the context views, the `context` command module, `scripts/dev/overlap_guard.sh` |
-| Codex | `crates/source-contract/**`, `rules/sources/**`, `edgar_warehouse/workers/source_*.py`, `skills/data-platform/READING.md`, `skills/data-platform/COMBINING.md`, `tests/engine/test_data_skill_bundle_postgres.py` |
-| Shared (guard first) | `skills/data-onboarding/**`, `skills/refining-rules/**`, `skills/data-platform/SKILL.md`, `CONTEXT.md`, `edgar_warehouse/cli.py`, `AGENTS.md`, `CLAUDE.md` |
-
-Run the guard before every commit and push:
+Nothing is owned by Codex (operator, 2026-10-16: "nothing is owned by codex";
+it replaces the 2026-10-04 table that split paths between Claude and Codex).
+Any runtime edits any path. Run the guard before every commit and push:
 `bash scripts/dev/overlap_guard.sh` (exit 0 = no overlap; exit 1 lists each
-overlapping file and the PR or worktree that holds it).
+file an open PR or worktree of another runtime also touches). On an overlap,
+build on that work once it merges, or rebase onto it; never edit beside it.
 
 ## Task checklists (MUST, every ticket, every runtime)
 
