@@ -20,9 +20,6 @@ from sqlalchemy import text
 from edgar_warehouse.mdm.clean.consumer import ContractReader
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
-
 
 def companies_in_projection(db) -> dict[str, dict]:
     with db.application.connect() as conn:

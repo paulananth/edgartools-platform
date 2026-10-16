@@ -29,8 +29,6 @@ from edgar_warehouse.mdm.clean.classification import CLASSIFICATION_VERDICTS
 from edgar_warehouse.mdm.clean.evidence import KINDS
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
 
 SHAPES = ("stage", "stage_field", "master", "master_field")
 
@@ -390,8 +388,6 @@ def test_the_master_field_view_carries_the_kind_version_beside_the_digest(databa
     # it is the only thing naming the authored document.
     assert field.policy_digest != versioned
     assert re.fullmatch(r"[0-9a-f]{64}", field.policy_digest)
-
-
 
 
 def test_stage_waiting_shows_every_waiting_record_with_its_probable_kind(database):

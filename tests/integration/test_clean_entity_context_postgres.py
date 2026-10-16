@@ -22,8 +22,6 @@ from edgar_warehouse.mdm.clean.store import Store
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_clean_person_links_postgres as person_links
 
-postgres = core.postgres
-database = core.database
 
 DIRECT = "IS_DIRECTLY_CONSOLIDATED_BY"
 

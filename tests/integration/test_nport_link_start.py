@@ -29,8 +29,6 @@ from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_clean_mdm_postgres as core
 from tests.support.rules_authority import register_dataset
 
-postgres = core.postgres
-database = core.database
 
 NAME, CODE, GLEIF, ADV = "sec.nport.security", "sec.nport.security.v1", "gleif.level1.v1", "iapd.adv.custodians.v1"
 FOLDER = files.ROOT / "sources" / NAME

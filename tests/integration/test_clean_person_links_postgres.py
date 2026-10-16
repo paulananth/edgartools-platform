@@ -11,11 +11,8 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean.store import migrate
-from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_mdm_postgres import apply, documents, identity_and_binding, source
 
-postgres = core.postgres
-database = core.database
 
 D1, D2, D3 = (f"2024-0{m}-15T00:00:00+00:00" for m in (1, 3, 6))
 

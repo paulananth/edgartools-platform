@@ -34,8 +34,6 @@ from tests.integration.test_clean_name_matching import (
     sec,
 )
 
-postgres = core.postgres
-database = core.database
 AT = "2026-09-19T00:00:00+00:00"  # after the fixture loads (core.AS_OF)
 
 

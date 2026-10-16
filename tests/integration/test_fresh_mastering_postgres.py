@@ -23,9 +23,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.support.fresh_mastering import AS_OF, cohort, gleif_cohort
 from tests.support.rules_authority import register_dataset
 
-postgres = core.postgres
-database = core.database
-
 
 def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
     policy, contracts, readings = cohort()

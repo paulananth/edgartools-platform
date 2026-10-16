@@ -27,8 +27,6 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as cusip
 from tests.support.rules_authority import register_dataset
 
-postgres = core.postgres
-database = core.database
 
 CODE = "sec.nport.security_isin.v1"
 LEI, OTHER = cusip.LEI, "9999000000EXAMPLE024"  # invented; OTHER is LEI-shaped only

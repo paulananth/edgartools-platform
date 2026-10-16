@@ -11,7 +11,6 @@ import pytest
 from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean.store import Conflict, migrate
-from tests.integration.test_clean_mdm_postgres import database, postgres  # noqa: F401
 
 
 def _uncommented(conn) -> list[str]:

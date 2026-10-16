@@ -10,7 +10,6 @@ records alone.
 
 from __future__ import annotations
 
-from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_mdm_postgres import (
     AT,
     apply,
@@ -19,9 +18,6 @@ from tests.integration.test_clean_mdm_postgres import (
     identity_and_binding,
     source,
 )
-
-postgres = core.postgres
-database = core.database
 
 
 def parent(target, start=AT, end=None):

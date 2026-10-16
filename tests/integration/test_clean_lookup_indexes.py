@@ -16,7 +16,6 @@ from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean import store
 from edgar_warehouse.mdm.clean.scope import link_ends
-from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_mdm_postgres import (
     AT,
     apply,
@@ -25,8 +24,6 @@ from tests.integration.test_clean_mdm_postgres import (
     source,
 )
 
-postgres = core.postgres
-database = core.database
 
 TABLES = ("source_reading", "decision", "master_entity", "current_record", "company", "company_alias")
 INDEXES = ("source_reading_link_subjects", "source_reading_subject", "master_entity_pkey", "decision_retired_source",
@@ -97,7 +94,7 @@ def _counts(database):
 def test_a_save_reads_no_table_in_full(database):
     owner, *_ = populate(database)
     # A role setting, not a session one: `apply` opens its own connections.
-    # Each module has its own PostgreSQL container, so nothing else shares it.
+    # Tests run one at a time, and the `finally` below resets it.
     with database.admin.begin() as conn:
         conn.execute(text("ANALYZE"))
         conn.execute(text("ALTER ROLE clean_application SET enable_seqscan = off"))

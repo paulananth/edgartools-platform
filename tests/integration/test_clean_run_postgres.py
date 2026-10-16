@@ -19,9 +19,6 @@ from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Conflict, Store
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
-
 
 def load(database, run_id, batch, checkpoint):
     return MergeStage(Store(database.application)).apply(

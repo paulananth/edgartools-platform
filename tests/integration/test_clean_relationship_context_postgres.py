@@ -15,8 +15,6 @@ from sqlalchemy import text
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_clean_person_links_postgres as person_links
 
-postgres = core.postgres
-database = core.database
 
 DIRECT, ULTIMATE = "IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"
 

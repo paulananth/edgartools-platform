@@ -13,9 +13,6 @@ from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 
-postgres = core.postgres
-database = core.database
-
 
 def versions(db):
     with db.application.connect() as conn:

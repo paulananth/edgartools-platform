@@ -22,8 +22,6 @@ from edgar_warehouse.mdm.clean.store import Store, register_policy
 from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm import policy_layers
 
-postgres = core.postgres
-database = core.database
 
 SEC = "sec.submissions.company.v1"
 GLEIF = "gleif.level1.v1"

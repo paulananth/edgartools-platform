@@ -13,9 +13,6 @@ from tests.integration import test_clean_entity_context_postgres as entity_conte
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_entity_context_postgres import DIRECT, ask, company, rows
 
-postgres = core.postgres
-database = core.database
-
 
 def moved_parent(database):
     """c's parent is b in generation 1; c's revision 2 names a instead."""
