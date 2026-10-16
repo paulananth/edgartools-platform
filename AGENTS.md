@@ -176,6 +176,13 @@ Learned the hard way; each is a standing operator rule.
   is written by its own code (SQLAlchemy), not dbt.
 
 **Code and infrastructure**
+- **Integer widths (operator, 2026-10-16):** use database `BIGINT` and
+  64-bit `long`/`i64` for integer fields and counters, including years,
+  quarters and positions. Never choose 32-bit `INT`/`INTEGER` or narrower
+  integer types. Python's built-in integer has arbitrary precision: keep
+  that source precision. Check representability before publication; preserve
+  and flag an out-of-range original for explicit handling instead of wrapping,
+  truncating, or converting it through floating point.
 - A "same calendar day" check names its timezone, the business process's:
   `America/New_York` (through `pytz`; `zoneinfo` needs a tz database the
   images do not install).
