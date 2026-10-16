@@ -87,7 +87,8 @@ def _artifacts(envelope: dict, artifacts):
     for ref in refs:
         used = 0
         for artifact, used in source_readings.iter_artifacts(
-                ref, artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows):
+                ref, artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows,
+                allow_lookup_receipts=True):
             rows += sum(len(t) for t in artifact["tables"].values() if isinstance(t, list))
             if rows > INPUT_ROWS:
                 raise ValueError("mdm.prepare readings exceed their row budget")
@@ -125,6 +126,10 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
         # One captured document may be read under distinct approved caller
         # facts. Keep their records, batches and publications independent.
         source = hashlib.sha256(f"{source}:{artifact['context']['sha256']}".encode()).hexdigest()
+    if "lookups" in artifact:
+        reference(artifact["lookups"])
+        # Rows read against another lookup set are another publication.
+        source = hashlib.sha256(f"{source}:lookups:{artifact['lookups']['sha256']}".encode()).hexdigest()
     return source, rows, publication
 
 

@@ -42,10 +42,11 @@ def test_staging_refuses_input_paths_that_escape_or_replace_the_manifest(tmp_pat
     assert (staging / "manifest.json").read_bytes() == store.verified(ref)
 
 
-def _prepare(tmp_path, rows, **keys):
+def _prepare(tmp_path, rows, lookups=None, **keys):
     store = Artifacts()
+    evidence = {"lookups": store.put(tmp_path.as_uri(), lookups)} if lookups is not None else {}
     reading = store.put(tmp_path.as_uri(), {"version": 1, "artifacts": [
-        {"input": {"sha256": hashlib.sha256(b"captured").hexdigest()}, "tables": {"rows": rows}}
+        {"input": {"sha256": hashlib.sha256(b"captured").hexdigest()}, "tables": {"rows": rows}, **evidence}
     ]})
     envelope = {"input": reading, "output": (tmp_path / "prepared" / "manifest.json").as_uri(),
                 "checks": ["mdm.prepared"], "keys": {
@@ -211,3 +212,16 @@ def test_record_extras_are_named_columns_of_a_record_column(tmp_path, keys):
     store, envelope = _prepare(tmp_path, [{"record": {"id": "a"}, "flag": True}], **keys)
     with pytest.raises(ValueError, match="record_extras"):
         mdm_prepare.execute(envelope, store)
+
+
+def test_rows_read_against_a_lookup_set_are_their_own_publication(tmp_path):
+    # Ticket 97: the issuer flag comes from a lookup set, so the set is part of the records' identity.
+    keys = {}
+    for name, lookups in (("none", None), ("one", {"sets": ["a"]}), ("other", {"sets": ["b"]})):
+        (tmp_path / name).mkdir()
+        store, envelope = _prepare(tmp_path / name, [{"id": "a"}], lookups=lookups)
+        candidate = mdm_prepare.execute(envelope, store)
+        assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+        keys[name] = store.json(candidate)["batches"][0]["input"]["publication"]["publication_key"]
+    assert keys["none"] == "fixture.rows:" + hashlib.sha256(b"captured").hexdigest()
+    assert len(set(keys.values())) == 3
