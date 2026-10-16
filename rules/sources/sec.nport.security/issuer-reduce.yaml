@@ -1,0 +1,23 @@
+# How many issuer LEIs each CUSIP is filed with (ticket 22). One source extract:
+# issuers.yaml's reading, `issuers`. Pin canonical JSON of this file as the
+# source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  max_rows: 10000000
+  max_input_bytes: 4294967296
+  max_state_bytes: 1073741824
+  max_keys: 1000000
+  max_members: 2000000
+  max_output_rows: 1000000
+  max_output_bytes: 268435456
+  groups:
+    cusip_issuers:
+      source: issuers
+      table: security_issuer
+      keys: [cusip]
+      mode: members
+      member: issuer_lei
+      count: issuers
+      sample: issuer_sample
+      sample_limit: 1

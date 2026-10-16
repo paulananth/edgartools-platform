@@ -1,0 +1,75 @@
+{
+ "after_first_pass": {
+  "decisions": {
+   "bind": 383612
+  },
+  "identities": {
+   "security": 383612
+  },
+  "open_reviews": {
+   "binding_required": 24124,
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unsupported_identity_kind": 4273
+  },
+  "relationships": {},
+  "stage_records": {
+   "gleif.level1.v1": 24124,
+   "sec.nport.security.v1": 383612
+  },
+  "waiting": {
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unsupported_identity_kind": 4273
+  }
+ },
+ "after_second_pass": {
+  "decisions": {
+   "bind": 383612
+  },
+  "identities": {
+   "security": 383612
+  },
+  "open_reviews": {
+   "binding_required": 24124,
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unsupported_identity_kind": 4273
+  },
+  "relationships": {},
+  "stage_records": {
+   "gleif.level1.v1": 24124,
+   "sec.nport.security.v1": 383612
+  },
+  "waiting": {
+   "invalid_cusip": 1,
+   "invalid_cusip_checksum": 1769,
+   "unsupported_identity_kind": 4273
+  }
+ },
+ "batches": 832,
+ "gleif_kinds_read": {
+  "company": 24124
+ },
+ "issued_by": {
+  "issuers": 0,
+  "links_per_security": {},
+  "securities_per_issuer": {}
+ },
+ "lei_on_two_entities": 0,
+ "policy_digest": "c6bd64a7ecda2d46810e3f0647b25e37fd3f81e60457088854fdd280fde04d18",
+ "read": {
+  "gleif.level1.v1 assertions": 24124,
+  "gleif.level1.v1 deferred: unsupported_identity_kind": 4273,
+  "sec.nport.security.v1 assertions": 383612,
+  "sec.nport.security.v1 deferred: invalid_cusip": 1,
+  "sec.nport.security.v1 deferred: invalid_cusip_checksum": 1769
+ },
+ "run": "ISSUED_BY by issuer LEI, Proving Run of sec.nport.security.v1 with gleif.level1.v1",
+ "second_pass_changed_nothing": true,
+ "seconds": {
+  "first_pass": 1676.4,
+  "second_pass": 689.1
+ },
+ "slowest_batch_seconds": 7.4
+}

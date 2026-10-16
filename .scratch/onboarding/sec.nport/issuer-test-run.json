@@ -1,0 +1,26 @@
+{
+ "contract": {
+  "invalid_cusip_checksum": 1769,
+  "accepted": 383612,
+  "invalid_cusip": 1
+ },
+ "securities_with_issued_by": 216560,
+ "links_per_security": {
+  "1": 216560
+ },
+ "direct": {
+  "cusips_with_an_issuer_lei": 220797,
+  "cusips_with_one": 217405,
+  "cusips_with_several": 3392
+ },
+ "linked_and_direct_agree": 216560,
+ "linked_not_direct": 0,
+ "direct_not_linked_among_accepted": null,
+ "seconds": {
+  "issuers reading": 153,
+  "issuer-reduce": 19,
+  "combine": 108,
+  "prepare + contract": 152,
+  "direct count": 33
+ }
+}

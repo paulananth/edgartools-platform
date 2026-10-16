@@ -1,0 +1,67 @@
+# Each holding's CUSIP and its issuer's LEI, read once from
+# FUND_REPORTED_HOLDING.tsv for ISSUED_BY (rebuild-priorities ticket 22;
+# operator, 2026-10-16: "By issuer LEI (Recommended)"). A holding with no
+# usable CUSIP, or whose issuer LEI is not 20 letters and digits ending in two
+# digits (blank, "N/A", all zeros), is not read. issuer-reduce.yaml counts the
+# LEIs of each CUSIP; combine.yaml keeps the one LEI of a CUSIP that has one.
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 1}
+  tables:
+    security_issuer:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms: [{case: upper}]
+                  null_if: ["", "000000000", "999999999"]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    text:
+                      path: ISSUER_LEI
+                      default: ""
+                      transforms:
+                      - {case: upper}
+                      - {regex_replace: {pattern: '^.*[^A-Z0-9].*$|^.{0,19}$|^.{21,}$|^.{18}[A-Z].$|^.{19}[A-Z]$|^0{20}$', with: ''}}
+                      null_if: [""]
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ""
+            transforms: [{case: upper}]
+        issuer_lei:
+          text:
+            path: ISSUER_LEI
+            default: ""
+            transforms: [{case: upper}]
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: FUND_REPORTED_HOLDING.tsv
+    max_input_bytes: 1000000000
+    max_bytes: 2000000000
+    max_record: 1048576
+    max_records: 20000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 100000
+    max_spool_bytes: 17179869184
+    max_output_rows: 40000000
