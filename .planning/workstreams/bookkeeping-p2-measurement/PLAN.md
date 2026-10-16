@@ -1,7 +1,7 @@
 <!-- /autoplan restore point: /Users/aneenaananth/.gstack/projects/paulananth-edgartools-platform/codex-bookkeeping-p2-measurement-autoplan-autoplan-restore-20261015-210600.md -->
 # Bookkeeping P2 measurement harness
 
-Status: CEO review completed; DX/engineering pending; not approved or implemented.
+Status: CEO and DX completed; engineering pending; not approved or implemented.
 Baseline: `origin/main` at `8ed547ab`, 2026-10-15 ET.
 
 ## Problem and decision this enables
@@ -28,7 +28,7 @@ Use synthetic data only, no provider calls, no cloud service, no shared database
 ## Proposed deliverable
 
 A standalone repository benchmark script, not a new warehouse command or service:
-`uv run python scripts/benchmarks/benchmark_bookkeeping_control.py`.
+`uv run --no-sync --offline python scripts/benchmarks/benchmark_bookkeeping_control.py`.
 It runs unchanged Bookkeeping/Rules/Journal code against disposable PostgreSQL 16,
 separate restricted runtime and verifier roles, temporary immutable artifacts and
 invented records. Reuse `tests/support/pg16.py`, migrations and public methods;
@@ -380,3 +380,310 @@ CEO spec recheck: PASS; plan scores 9/9/9/9/8 (completeness/consistency/clarity/
 ## Technical references
 
 Use integer monotonic elapsed observations; see [Python perf_counter_ns](https://docs.python.org/3.12/library/time.html#time.perf_counter_ns). Keep process/environment and samples explicit; [pyperf benchmarking guidance](https://pyperf.readthedocs.io/en/latest/run_benchmark.html) informs the design but introduces no new dependency. [PostgreSQL 16 pgbench](https://www.postgresql.org/docs/16/pgbench.html) supplies SQL workload benchmarking; it cannot measure the Python control path by itself. This is a design inference, not a measured comparison.
+
+# Phase 2 — UI scope assessment
+
+Skipped: no UI scope. The plan contains no frontend components, views, screens,
+layout or browser behavior. CLI help and JSON output are developer-facing scope,
+so Phase 2.5 runs fully. No design score or design-model consensus is invented.
+
+# Phase 2.5 — Developer experience review (DX POLISH)
+
+## Step 0 — Product, persona and first-use assessment
+
+**Persona:** an experienced platform engineer, or a coding agent acting for that
+engineer, in an existing checkout. They know Bookkeeping's business role but should
+not need to read private engine methods to run a baseline. Their job is to collect
+trustworthy evidence without contacting data sources or disrupting Claude's work.
+They have local Python/uv and may or may not have a ready Colima/Docker environment;
+Rust/native dependencies can make a cold install materially slower than a warm run.
+
+Initial intake DX completeness was 5/10: a script name and desired outputs were
+present, but exact first-run cases, setup remedies and outcome codes were missing.
+No first-use time has been measured. Target warm-environment time to a useful smoke
+report is under five minutes including experiment startup/cleanup; a cold dependency
+or Docker installation is separate and has no unverified time promise.
+
+## Developer empathy narrative
+
+I have a performance question, an active checkout, and another agent working next
+to me. I want one command that produces evidence without asking me to copy any
+production credentials. I will first run help and expect it to tell me which local
+services and packages I need. If Docker is asleep, I want a direct explanation and
+a command I can use to start the existing local environment, before any setup
+changes happen. I do not want a benchmark that hangs while pulling an image.
+
+Once the smoke starts, I need to see which small cases it requested and when it
+will stop. A report with one sample is useful for checking the wiring; it is not
+enough to tell my colleague that a change is faster. If half the cases time out,
+I need that fact beside the numbers. I also want to know whether the numbers came
+from the same Python code and native extension I just checked out. When I finish,
+I expect my temporary database to be gone and the other agent's resources intact.
+Later, when P2 changes the control path, these fixture definitions and recorded
+identities should still explain what a valid paired comparison would require.
+
+## Competitive DX benchmark and evidence
+
+The relevant alternatives are measurement tools and the existing acceptance test,
+not commercial onboarding products. Research used official documentation because
+a browser session was not available for this review; no data-provider site was
+requested. No competitor latency or TTHW was physically measured.
+
+| Alternative | Documented strength | Gap for this operator | Planned harness position |
+|---|---|---|---|
+| Existing PG16 acceptance tests | Real migrations, roles and protocol assertions | No stable benchmark report/finite experiment contract; active Claude file ownership | Reuse store/support APIs, keep new tests/files |
+| [pgbench 16](https://www.postgresql.org/docs/16/pgbench.html) | SQL scripts and transaction/client measurements | Does not execute Python frozen-work validation by itself | Same clarity of workload, with unchanged Python protocol |
+| [pyperf](https://pyperf.readthedocs.io/en/latest/run_benchmark.html) | Process metadata, multiple runs and explicit benchmark hygiene | Does not supply the three-store protocol fixture; automatic calibration can exceed this budget | Borrow separation/provenance, no new dependency |
+| [Python timing](https://docs.python.org/3.12/library/time.html#time.perf_counter_ns) | Built-in integer elapsed counter | No fixture, lifecycle or reporting conventions | Small standard-library timer inside explicit experiment boundaries |
+
+## Magical moment specification
+
+A single smoke invocation leaves a safe report saying which operations succeeded,
+which counters were observed, what N/K/D/B meant and whether cleanup completed.
+It can reveal repeated whole-run validation without asserting a speedup. The delivery
+vehicle is the existing repository plus one script, not an installed service or a
+new warehouse command. `--help` works before PostgreSQL/native imports and explains
+the default cases, bounds, report fields, safe failure codes and limitations.
+
+Proposed copy/paste path after implementation (these commands are not run proof):
+
+```bash
+uv sync --extra mdm-runtime --group dev
+# macOS, if the existing Colima environment is stopped:
+colima start
+# Explicit prerequisite, outside the benchmark's five-minute budget:
+docker pull postgres:16-alpine
+uv run --no-sync --offline python scripts/benchmarks/benchmark_bookkeeping_control.py --help
+uv run --no-sync --offline python scripts/benchmarks/benchmark_bookkeeping_control.py --preset smoke --output /tmp/bookkeeping-smoke.json
+uv run --no-sync --offline python scripts/benchmarks/benchmark_bookkeeping_control.py --case flat-read --sizes 4,12,100 --repeat 3 --output /tmp/bookkeeping-flat.json
+```
+
+No DSN, provider identity or cloud credential is needed. The script docstring/help
+holds the tutorial, operation reference and measurement-limit explanation so no
+shared README or existing docs file needs an edit. A missing native prerequisite
+has a setup remedy; it cannot be treated as a successful skipped benchmark.
+
+## Nine-stage developer journey
+
+| Stage | Goal | Friction found | Resolution / acceptance |
+|---|---|---|---|
+| Discover | Know the entry point | New script not in root README | Exact script path in ticket/tasks; self-contained --help |
+| Evaluate | Understand claims | Baseline confused with speedup | First paragraph says synthetic measurement only |
+| Install | Prepare Python/native/Docker | Cold install unpredictable | Explicit prerequisite commands, no hidden pulls |
+| Hello world | Obtain first useful report | Matrix initially unbounded | Fixed smoke catalog, 240s default and honest incomplete status |
+| Configure | Select a small experiment | Ambiguous N/K/D and modes | Case-scoped --sizes; requested/actual dimensions; --repeat |
+| Integrate | Consume JSON | Unknown schema/outcomes | Versioned allowlisted object and documented exit codes |
+| Debug | Find cause/fix safely | Raw stderr risks secrets | Stable code + problem/cause/remedy/help section |
+| Upgrade | Compare evidence over time | New code forbidden by old fingerprint rule | Metadata distinguishes experiment/runtime identity; no calculator yet |
+| Operate | Repeat/stop/clean | Shared resources or hangs | Owned IDs, deadline and explicit cleanup confirmation |
+
+## First-time developer confusion report
+
+Roleplay is design inspection, not a claim of running the unimplemented harness.
+At the first command I would ask whether I need a database address: answered no,
+only a server this invocation owns. At the first failed run I would ask whether
+exit 3 means performance failure: the exit map below separates expected protocol
+outcomes from incomplete or failed harness execution. At the first report I would
+ask why a missing count is zero: missing counters must be null with coverage reason.
+At the first scaling attempt I would ask whether N means unrelated work: the frozen
+case contract defines total N and independent U and reports both actual values.
+
+## Pass 1 — Getting started
+
+The golden path is prerequisite check, help, then a fixed smoke command. Help must
+avoid importing heavy runtime/native/database modules so it remains useful when
+setup is incomplete. Native compilation, cold package fetches and image downloads
+are disclosed setup time; there is no evidence yet for an end-to-end cold target.
+Plan score 8/10; a 10 requires timing the warm first-use path on the supported local
+environment and proving each prerequisite failure leads to a workable remedy.
+
+## Pass 2 — API/CLI/SDK design
+
+Use the existing Python invocation and conventional flags: --preset, --case,
+--sizes, --repeat, --deadline-seconds, --output. `--preset smoke` and `--case` are
+mutually exclusive; absence selects smoke. Per-family numeric ranges are validated
+before resource creation. Default repeat is one for smoke and three for explicit
+case runs. There is no --database-url, --baseline, hosted mode or legacy wrapper.
+Human summary goes to stderr; versioned JSON goes to the output file, or stdout
+only when `--output -` is explicit. Never mix progress with JSON.
+Plan score 9/10; a 10 requires actual help/invalid-flag tests and tested commands.
+
+## Pass 3 — Error messages and debugging
+
+Every emitted error contains a stable safe code, what failed, likely cause, next
+action, and a `--help` section reference. Example invented message: `PG16_IMAGE_MISSING:
+Local PostgreSQL image is unavailable. Run docker pull postgres:16-alpine, then
+repeat the smoke command. See --help: prerequisites.` It contains no raw exception.
+
+Proposed exit contract: 0 = all requested cells satisfy their declared outcome and
+cleanup is confirmed; 2 = invalid request or missing prerequisites before experiment;
+1 = setup/correctness/report failure; 3 = incomplete/deadline/cleanup-unconfirmed.
+Ctrl-C exits 130 and SIGTERM 143 after bounded cleanup, with incomplete report where
+possible. An expected blocked control can pass only when it was explicitly declared
+in the case catalog; runtime CLI code 3 is interpreted as that CLI's state outcome,
+never blindly propagated as harness success. Plan score 9/10; proof pending.
+
+## Pass 4 — Documentation and learning
+
+The source docstring is the small tool's tutorial/reference/explanation, accessible
+through --help. It includes complete synthetic examples, case dimensions, expected
+codes, cleanup recovery, sample-count cautions and measured-versus-unmeasured costs.
+JSON schema fields are documented beside their creation; no private engine name is
+required to use the tool. Findings are attached to the existing P2 plan instead of
+creating a second user-facing guide tree. Plan score 8/10; a 10 requires a fresh
+reader to follow the examples and inspect an actual safe report without assistance.
+
+## Pass 5 — Upgrade and migration
+
+Report schema version is explicit from the first implementation. Old report objects
+are never loaded or executed by this slice; the future comparison contract can
+reject incompatible versions explicitly. Existing CLI/runtime names and production
+configuration remain unchanged, so there is no application migration or codemod.
+Document any report-format change before claiming new and old observations are
+eligible. Plan score 9/10; a 10 requires the first real compatibility fixture pair.
+
+## Pass 6 — Developer environment and tooling
+
+Use uv and the repository's mdm-runtime/dev dependencies. On macOS the existing
+Colima/Docker route is supported; the fixed PG16 image must be preloaded. Native
+import identity is recorded by relative module label plus content hash, not by
+printing an absolute home path. Source/build correspondence is independently proven
+or explicitly unknown; import success never proves checkout freshness.
+Ambient database variables are removed from children; only owned endpoints and
+selected roles are supplied privately. No new CI configuration, dependency or
+backend is added. Plan score 8/10; environment compatibility and cleanup remain
+untested until implementation.
+
+## Pass 7 — Community and ecosystem
+
+This is a repository engineering tool for maintainers, with GitHub PR review and
+the existing ticket as its contribution/support path. No new SDK language, public
+service, forum or usage-tracking channel is needed. The tool's help points to the
+case contract and the P2 workstream for bug reports. New support machinery would
+be unrelated scope. Plan score 8/10; a 10 requires useful feedback from first users.
+
+## Pass 8 — DX measurement
+
+Record phase durations and requested/completed/failed/not-run case counts locally.
+A future manual first-use check times the warm smoke path and records setup blockers
+without adding telemetry. Feedback loop, cognitive load and interruption recovery
+are assessed via copy/paste success, error remedies and useful partial reports;
+no survey or analytics service is necessary for this tool. Plan score 8/10; a 10
+requires observed first-use and a cancellation recovery attempt by a fresh reader.
+
+## DX scorecard (plan quality, behavior untested)
+
+| Dimension | Score | Prior intake | Trend / evidence needed for 10 |
+|---|---|---|---|
+| Getting started | 8 | 5 | Better specification; warm path still needs timing |
+| API/CLI/SDK | 9 | 5 | Exact flags/cases; executable help tests pending |
+| Errors | 9 | 4 | Exit/remedy map; failure injection pending |
+| Documentation | 8 | 5 | Complete help content planned; copy/paste proof pending |
+| Upgrade | 9 | 4 | Schema/identity separated; actual fixture pair pending |
+| Environment | 8 | 5 | Owned PG16/native provenance; supported-host proof pending |
+| Community | 8 | 7 | Existing contribution path reused; no new forum needed |
+| DX measurement | 8 | 5 | Durations/completeness specified; no observed first-use yet |
+
+Overall plan score 8.4/10 (67/8); prior 5.0/10. TTHW unmeasured → warm target <5min;
+cold setup unknown, explicitly outside that target. Competitive rank: target
+Competitive, not demonstrated. Magical moment designed via one local command.
+Product: repository CLI tool. Mode: DX POLISH. Six principle coverage areas are
+specified: simple start, learn by doing, explicit uncertainty, bounded defaults
+with case/repeat/deadline overrides, contextual examples, and a meaningful report.
+
+## DX implementation checklist (all future evidence)
+
+- [ ] Warm first useful smoke report under five minutes, including cleanup.
+- [ ] Existing dependency installation is one uv command; Docker/image setup documented separately.
+- [ ] First run produces meaningful observations or explicit actionable failure/incomplete status.
+- [ ] Magical moment: safe, interpretable report from one benchmark command.
+- [ ] Every error has problem, cause, remedy and help reference.
+- [ ] CLI names/defaults/mutual exclusions pass help and invalid-input tests.
+- [ ] Copy/paste synthetic examples run, including scaling and cancellation.
+- [ ] Report schema/eligibility limits and future format-upgrade policy documented.
+- [ ] CI execution requires only existing dependencies/PG16 facilities; no new workflow.
+- [ ] Changelog/review evidence follows existing repository release process.
+- [ ] Learning → skill: name the changed line, or none, after verification.
+
+TypeScript/SDK types, free-tier billing, deprecation codemods, interactive docs search
+and a new community channel are inapplicable: no SDK/service/public website or
+breaking application API is introduced. Existing text search and GitHub remain the
+support paths; no unimplemented item is checked as behavior proof.
+
+## NOT in scope / reuse / TODOs
+
+No root README edits, new website, telemetry, service, SDK, CI timing gate or new
+community infrastructure. Reuse uv, Colima/Docker, existing PG16 migration/support
+APIs and GitHub review. Existing P2 work owns future runtime qualification; zero
+new TODOs are added. The optional skill-tooling appendix is inapplicable because
+this deliverable is a Python engineering script, not a new skill or MCP service.
+
+## Implementation Tasks (DX)
+
+- [ ] **D1 (P1, human: 3h / coding agent: 45min)** — CLI/docs — Implement import-light help, exact flags/defaults, safe outcomes and copy/paste guidance in the main script; verify in the new unit tests and the fresh-process PG16 smoke.
+
+Every other DX finding refines CEO C1/C2 or D1; no padding task is added.
+
+## CLAUDE SUBAGENT (DX — independent review)
+
+Actual read-only Claude CLI attempt exited 1 after 12.4 seconds: the configured
+Fable 5.1 model requires usage credits. No independent Claude findings exist.
+
+## CODEX SAYS (DX — developer experience challenge)
+
+Actual independent Codex review exited 0 after 133 seconds. Five findings:
+three blockers (plain uv launcher may sync before the deadline; CLI/output contract
+was incomplete; owned Docker does not imply local Docker), one required provenance
+refinement, and one optional versioned example improvement. All five are accepted
+within the same files. The frozen case contract now specifies offline no-sync warm
+commands, exact flags/axes/collision and recovery paths, validated local endpoint,
+source/build uncertainty and invented complete/incomplete examples. No extra service,
+report importer or provider request was added. This is design resolution, not proof.
+
+## DX DUAL VOICES — CONSENSUS TABLE
+
+| Dimension | Claude | Codex | Consensus |
+|---|---|---|---|
+| Getting started <5min? | N/A | Warm launcher corrected; target unmeasured | N/A |
+| CLI names/defaults? | N/A | Exact table needed, now specified | N/A |
+| Actionable errors? | N/A | Safe outcomes accepted, remedies require implementation proof | N/A |
+| Docs complete? | N/A | Examples/output rules added | N/A |
+| Upgrade safe? | N/A | Metadata-only boundary accepted | N/A |
+| Environment friction? | N/A | Docker locality/build provenance corrected | N/A |
+
+0/6 dual-model confirmations; Codex-only independent voice. No new taste choice
+or user challenge beyond the two CEO choices. DX overall remains plan-quality
+8.4/10; implementation evidence and warm TTHW are unmeasured.
+
+## DX roleplay timestamps (simulated, not elapsed execution)
+
+T+0:00: README “Getting started” names the platform, but this new standalone tool
+isn't installed yet; the proposed exact script path/help must bridge discovery.
+T+0:30: pyproject's local source-contract dependency implies native setup; the
+explicit uv sync/prerequisite remedy prevents treating an import failure as a skip.
+T+1:00: existing pg16 helper uses Docker; the new preflight must reject remote
+contexts and distinguish missing image from a DB failure.
+T+2:00: proposed smoke/report path explains incomplete cases and privacy; no actual
+smoke has run. T+3:00: the operator can interpret the proposed fields; actual use
+and the under-five-minute target remain acceptance work.
+
+## DX decisions appended
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| D11 | DX | Standard-library-only help and no-sync offline warm execution | Mechanical | P5 | Prevent hidden setup before the experiment timer | Plain uv run as bounded warm path |
+| D12 | DX | One fixed flag/axis/output contract and unique durable recovery root | Mechanical | P1/P5 | A developer must know exactly what is requested and where partial output lives | Undecided output defaults/overwrite |
+| D13 | DX | Validate and pin the effective local Docker endpoint | Mechanical | P1 | Container ownership alone does not establish locality | Inheriting a remote Docker context |
+| D14 | DX | Record native identity and independent/unknown build correspondence | Mechanical | P5 | Hash/import cannot prove native source freshness | Claiming source match from successful import |
+| D15 | DX | Add invented complete/incomplete report examples in existing new files | Mechanical | P2 | Makes schema comprehensible with no new framework | Additional report importer/website |
+| D16 | DX | Preserve existing CLI names; no warehouse command or SDK | Mechanical | P4 | Standalone repository harness fits operator workflow | New public command surface |
+| D17 | DX | Reuse GitHub support; no telemetry/community service | Mechanical | P3/P4 | Maintainer tool does not justify separate infrastructure | Analytics/new forum |
+
+## DX completion summary
+
+Eight passes, persona, empathy, benchmark, magical moment, nine-stage journey,
+confusion report, exact CLI/errors, scorecard and implementation checklist are
+written. Independent Codex found five issues and their plan resolutions are above;
+Claude unavailable is explicit. No UI/design score. New TODOs: 0. Future task D1
+covers the DX work; existing C1/C2 receive the locality/provenance/report refinements.
+All DX changes are specified before engineering starts.
