@@ -1,53 +1,35 @@
-# Agent-driven local test environments
+# Local testing: independent copies
 
-Use this policy for persistent local testing and Proving Runs across MDM,
-RDM, silver, Rules, Bookkeeping and Change Journal on PostgreSQL 16.
+A baseline is a known starting copy of test data. Each agent gets its own
+writable copy. Refresh the starting copy after checks pass; retain a backup
+so it can be restored. This is local testing, not a production deployment.
 
-**Status:** the policy is agreed; the environment lifecycle automation is
-pending the local-agent-stores implementation. This file adds no executable
-command. Until the implementation exists, report that gap rather than claim
-an environment or verification is complete.
+## Agent rules
 
-## Automatic baseline promotion
+- Work automatically within the assigned task. The operator authorized no
+  intermediate approval prompts for this local testing work on 2026-10-16.
+  Ask only when agents would overlap or the requested scope is unclear.
+- Use a dedicated worktree and PostgreSQL 16 container/volume per active
+  agent environment. Check ownership before changing a resource. Another
+  agent's files, database and volume are never an automatic cleanup target.
+- Keep the six stores together for a test copy: MDM, RDM, silver, Rules,
+  Bookkeeping and Change Journal. Reuse their existing migrations and
+  restricted runtime roles. Use the Docker runtime already configured.
+- Create and check a candidate baseline using the task's pinned captures
+  and invented fixtures. Preserve exact source numbers under the project's
+  BIGINT/64-bit rule. A failed check leaves the existing baseline in place.
+- Use ordinary PostgreSQL backup/restore. Copy only while workers are idle;
+  verify the restored copy, including MDM IDs and source links. Keep the
+  identity registry and accepted decisions with the data.
+- Make the verified baseline available to new environments automatically.
+  Existing environments retain their own data and selected starting copy.
+  Serialize baseline updates so two agents cannot replace it concurrently.
+- Stopping an environment preserves its data. Keep recoverable backups
+  outside Docker volumes. Reports contain counts, never source values,
+  credentials or database addresses.
 
-The operator selected automatic promotion on 2026-10-16: agents build and
-verify a candidate, then make it the default for future environments when
-every gate below passes. Do not ask for another approval of that local test
-baseline. A baseline is a versioned test starting point, not approval of a
-Source Contract, matching rule or production activation.
-
-1. **Pin the candidate.** Give it an immutable identity and record the code
-   revision, PostgreSQL image, migration checksums, rule versions, input
-   receipts and fixture hashes. The initial program is Company first, using
-   approved local captures plus invented edge-case fixtures. Existing source
-   and rule approvals retain their recorded meaning.
-2. **Verify all six stores.** A verifier checks real migrations and restricted
-   roles, expected contents, provenance, required links and idempotent replay.
-   Source numbers stay exact, following the project's BIGINT/64-bit rule;
-   unresolved representability blocks promotion rather than rounding a value.
-3. **Prove recovery.** Quiesce workers and capture a consistent baseline across
-   the six stores and its artifacts. Restore into a separate owned environment
-   and compare business contents and lineage. Retain the MDM identity registry
-   and accepted decisions: source-only reconstruction does not prove identical
-   published IDs. Verify recovery without inherited live leases or unintended
-   worker execution.
-4. **Bind the evidence.** Verification refers to the exact immutable candidate;
-   the builder's success message is not read-back proof. Changed inputs, code,
-   migrations or rules require qualification of the resulting candidate.
-5. **Promote atomically.** Move the default-baseline reference only if its
-   predecessor still matches the one the candidate was qualified against. A
-   superseded candidate must be requalified; it cannot overwrite a newer
-   default. Record the candidate, predecessor and verification evidence.
-6. **Keep environments pinned.** Promotion affects new environments. Existing
-   agent environments retain their selected baseline and working state; a
-   promotion never resets or migrates them implicitly.
-7. **Retain recovery evidence.** Keep the prior baseline and verified backups.
-   A failed or incomplete check leaves the default unchanged and records the
-   reason. If a promoted baseline later fails qualification, restore the default
-   reference to a previously verified baseline and retain the failed version
-   for diagnosis; existing environments remain pinned.
-
-These gates belong in executable environment code and behavior tests. The
-skill tells agents what to do; prose and agent judgment alone do not enforce
-promotion. Publish counts and invented examples only; keep capture contents,
-credentials and connection addresses out of public artifacts and chat.
+The skill states the rules; the local environment script must enforce them.
+Its implementation is pending the local-agent-stores ticket. Do not invent
+commands or claim a successful setup from this document alone. This policy
+adds no provider access or production deployment and never supplies invented
+operator approval words for another workflow.

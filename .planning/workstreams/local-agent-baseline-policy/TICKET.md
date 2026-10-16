@@ -25,3 +25,7 @@ Automatic promotion of verified local test baselines replaces the proposed per-b
 ### GoF
 
 Documentation only; no production code or pattern refactor.
+
+## Simplicity ruling
+
+The operator permits automatic work within the assigned local task provided agents do not overwrite one another, and asks for KISS. Use ordinary PostgreSQL copies/backups with ownership and isolation checks, not a separate promotion framework. Keep source-specific scope in the task ticket so the skill stays generic. CI caught that initial scope leak in test_profiling_genericity; the documentation is corrected, not the test.
