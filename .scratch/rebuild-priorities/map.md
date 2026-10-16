@@ -55,6 +55,9 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [A reading looks up a value in a large set](issues/91-a-reading-looks-up-a-value-in-a-large-set.md): pair sets read by `member_value` (#993)
 - [Capture posts a request with a key](issues/92-capture-posts-a-request-with-a-key.md): the OpenFIGI mapping capture (#994)
 - [Skills hold every learning](issues/78-skills-hold-every-learning.md): `mdm-engineering`, data rules in the data skills, how to work in this repo in `AGENTS.md` and `CLAUDE.md` (#972, #985)
+- [CLAUDE.md names deleted code](issues/85-claude-md-names-deleted-code.md): CLAUDE.md and AGENTS.md name only paths that exist, held by a test (#1006)
+- [Profiling measures how identifiers pair](issues/90-profiling-measures-how-identifiers-pair.md): `pairs` in the findings says whether a second identifier joins one to one (#1008)
+- [The identifier index keeps no pending list](issues/96-identifier-index-without-pending-list.md): migration 021; a Merge Stage batch 4.4 s to 2.5 s (#1007)
 
 ## Not yet specified
 
