@@ -5,9 +5,8 @@ The real chain on invented holdings: the holdings and issuer source extracts
 issuer-reduce.yaml, combine.yaml, mdm.prepare dated by `period`
 (`effective_column`), the Dataset Contract, then the Merge Stage on a
 disposable PostgreSQL 16: the ISSUED_BY link resolves and starts, as
-observed, at the quarter. Invented values only. (A second quarter is refused
-today: each quarter's records are revision 1 of the same subjects; ticket
-101.)
+observed, at the quarter; a later quarter, a later revision, keeps that start
+(ticket 101). Invented values only.
 """
 
 from __future__ import annotations
@@ -40,7 +39,7 @@ COLUMNS = ["HOLDING_ID", "ISSUER_NAME", "ISSUER_LEI", "ISSUER_TITLE", "ISSUER_CU
 HOLDINGS = [["1", "Example Corp", LEI, "Common", "ZZ0000013"],
             ["2", "Example Corp", LEI, "Common", "ZZ0000013"],
             ["3", "Other Inc", "", "Common", "ZZ0000021"]]
-Q2 = "2026-06-30T00:00:00+00:00"
+Q2, Q3 = "2026-06-30T00:00:00+00:00", "2026-09-30T00:00:00+00:00"
 
 
 def capture(root: Path) -> Path:
@@ -77,7 +76,7 @@ def combine(store, root, contract_file, readings):
     return out
 
 
-def prepared_records(root: Path, period: str) -> list[dict]:
+def prepared_records(root: Path, period: str, revision: int | None = None) -> list[dict]:
     """The quarter's Security assertions, through the real chain."""
     store = Artifacts()
     zipped = capture(root)
@@ -93,7 +92,11 @@ def prepared_records(root: Path, period: str) -> list[dict]:
     task = {"input": combined, "output": (root / "mdm/manifest.json").as_uri(), "checks": ["mdm.prepared"],
             "keys": {"table": "security", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
                      "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",
-                     "effective_column": "period"}}
+                     # One quarter dates its publication by its column; quarters that
+                     # follow one another are revisions stating their own time (ticket 101).
+                     **({"effective_column": "period"} if revision is None else
+                        {"publication_key": f"nport:{period[:10]}", "revision": str(revision),
+                         "effective_at": period})}}
     prepared = mdm_prepare.execute(task, store)
     assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
     contract = files.source(NAME)["mdm"][CODE]["contract"]
@@ -129,12 +132,9 @@ def apply(stage, policy, batch, assertions, checkpoint):
                 assertions=assertions)
 
 
-def test_an_issued_by_link_starts_at_its_quarter(database, tmp_path):
-    """Without the quarter dating each publication, the link has no start and
-    goes to review (`unknown_relationship_start`), as in ticket 22's Proving Run 2."""
-    q2 = prepared_records(tmp_path / "q2", Q2)
-    linked = [r for r in q2 if any(l["type"] == "ISSUED_BY" for l in r.get("relationships") or [])]
-    assert len(q2) == 2 and len(linked) == 1
+def mastered_issuer(database):
+    """The policy registered, and the issuer's Company: an ADV custodian gives it
+    the LEI, and the issuer's GLEIF record joins it."""
     for code in (ADV, GLEIF):
         core.register_reading(database, code, core.contract_body())
     with database.admin.begin() as conn:
@@ -146,6 +146,23 @@ def test_an_issued_by_link_starts_at_its_quarter(database, tmp_path):
     apply(stage, policy, "gleif", [core.source(key=LEI, source_code=GLEIF, fields={"name": "Example Corp"},
                                                identifiers={"lei": LEI},
                                                provenance={"matching": {"nport_issuer": True}})], 2)
+    return stage, policy
+
+
+def issued_by(database):
+    with database.application.connect() as conn:
+        return conn.execute(text(
+            "SELECT body->'periods', body->>'last_seen' FROM mdm.current_record WHERE object_type='relationship' "
+            "AND body->>'type'='ISSUED_BY'")).all()
+
+
+def test_an_issued_by_link_starts_at_its_quarter(database, tmp_path):
+    """Without the quarter dating each publication, the link has no start and
+    goes to review (`unknown_relationship_start`), as in ticket 22's Proving Run 2."""
+    q2 = prepared_records(tmp_path / "q2", Q2)
+    linked = [r for r in q2 if any(l["type"] == "ISSUED_BY" for l in r.get("relationships") or [])]
+    assert len(q2) == 2 and len(linked) == 1
+    stage, policy = mastered_issuer(database)
     apply(stage, policy, "q2", q2, 3)
     with database.application.connect() as conn:
         periods = [json.loads(p) if isinstance(p, str) else p for (p,) in conn.execute(text(
@@ -156,3 +173,14 @@ def test_an_issued_by_link_starts_at_its_quarter(database, tmp_path):
     assert "unknown_relationship_start" not in reviews
     (only,) = periods
     assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(Q2, "observed")]
+
+
+def test_a_later_quarter_keeps_the_first_start(database, tmp_path):
+    q2 = prepared_records(tmp_path / "q2", Q2, revision=20262)
+    q3 = prepared_records(tmp_path / "q3", Q3, revision=20263)
+    stage, policy = mastered_issuer(database)
+    apply(stage, policy, "q2", q2, 3)
+    apply(stage, policy, "q3", q3, 4)
+    ((periods, last_seen),) = issued_by(database)
+    assert [(p["valid_from"], p["valid_from_basis"]) for p in periods] == [(Q2, "observed")]
+    assert last_seen == Q3
