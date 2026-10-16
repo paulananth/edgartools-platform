@@ -1,6 +1,6 @@
 # Persistent local stores for agent testing
 
-Status: implementation authorized; keep the local environment simple and agent-driven.
+Status: infrastructure implemented and merged in PR #1028; captured Company financial loading remains separate work.
 
 ## Scope
 
@@ -21,14 +21,14 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 - [x] Verify independent environments, restricted roles, persistence, repeat provisioning and backup/restore (11 affected tests passed with testmon in 44.49 seconds; three invented Companies, RDM row, lookup-linked silver row and exact integer beyond binary64; 2026-10-16 19:06 ET).
 - [x] Update README and local testing guide with diagrams and recovery instructions (new link, balanced fences and implemented command names verified; 2026-10-16 19:06 ET).
 - [x] Review Standards, Spec and GoF (independent Standards clean; Spec and GoF final rechecks clean after two fixes; 2026-10-16 19:12 ET).
-- [ ] Publish the implementation PR and verify CI before landing.
+- [x] Publish the implementation PR and verify CI before landing (PR #1028, all six checks passed at 1fd931a4, squash merge d71b64a3 verified; 2026-10-16 19:23 ET).
 
 ## Decisions
 
 - PostgreSQL 16 remains the local target. PlanetScale Metal was researched as a later hosted option; no hosted provisioning or PostgreSQL major-version upgrade was approved.
 - Permanent means test/proving state can survive between sessions; it does not approve a production deployment on this machine.
 - Baseline scope (2026-10-16 16:06 ET): operator replied “A” to the Company-first versus all-captured-sources question. Record Company first, combining approved local captures with invented edge-case fixtures (the earlier baseline A). The environment supports all six stores from the start; broader source qualification follows. This does not approve pending Company financials profiling findings, new matching rules or source activation.
-- Baseline promotion (2026-10-16 16:14 ET): operator selected B and requested agent-driven skill rules. Candidate qualification, six-store verification, restored-baseline proof, evidence binding, atomic promotion and pinned existing environments are defined in draft skill-policy PR #1021. The lifecycle implementation remains pending.
+- Baseline promotion (2026-10-16 16:14 ET): operator selected B and requested agent-driven skill rules. Candidate qualification, six-store verification, restored-baseline proof, evidence binding, atomic promotion and pinned existing environments are defined in draft skill-policy PR #1021. The later implementation is merged in PR #1028.
 - Autonomy: operator permits no intermediate approvals provided agents do not overwrite one another. Proceed within this assigned local task; stop for an actual overlap or an unclear scope change. Do not invent operator approval records or expand to production/provider work.
 - Use the configured Docker runtime (currently OrbStack), independent named volumes, private environment files and PostgreSQL dump/restore. Reuse migrations; no framework, new database engine or dashboard. The GoF consult keeps the existing engines and disposable fixture unchanged.
 
@@ -39,7 +39,7 @@ Requested method: improve-codebase-architecture, with documentation updates and 
 - A silver acceptance fixture with a persistent administrator override force-drops a shared MDM template. Keep destructive acceptance targets apart from persistent proving and the approved baseline.
 - Recommendation: one local environment lifecycle module covering identity, six-store provisioning and test ownership, reusing the store migrations and existing disposable PostgreSQL adapter. Do not add a GoF class hierarchy.
 - ADR 0013 requires retained identity registry/history for exact-ID replay. Source-only reconstruction is not an exact-ID backup. ADR 0016 preserves independent MDM and silver mappings.
-- This evidence is code/history inspection, not behavioral proof. No runtime tests, containers, stores or source data were touched.
+- This initial architecture evidence came from code/history inspection before implementation; the later behavioral proof and empty local environment are recorded above.
 
 ## Interview frontier
 
@@ -48,6 +48,8 @@ Interview complete for the assigned local infrastructure. Record new facts and r
 ## Implementation limits
 
 The persistent environment currently provides all six migrated stores. The qualification test uses invented records only. Captured Company financial facts are not silently loaded through an unqualified reader; reader and financial-table work remain in the existing Company financials tickets. A baseline created from an empty store is an empty starting copy, not proof of that business pipeline.
+
+A backup made with the final script was restored and promoted successfully for the persistent six-store environment; it contains no captured business data (2026-10-16 19:23 ET).
 
 ## Final review fixes
 
