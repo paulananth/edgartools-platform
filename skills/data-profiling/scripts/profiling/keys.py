@@ -286,3 +286,40 @@ def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], inc
             "rule": "a durable id given when a record first appears and kept in a key map, so it never changes; "
                     f"the operator chooses which columns identify a record (candidates: {', '.join(usable) or 'none'})",
             "alternatives": []}
+
+
+def pairing(con, a_part: str, a: str, b_part: str, b: str, on: list[tuple[str, str]] | None = None) -> dict:
+    """How two identifiers of one entity pair, counted over distinct (A, B) pairs, stand-ins left out:
+    A's values with one B, with several, with none; B's values with several A (a matching rule on B
+    would merge those A); pairs one to one both ways; and pairs where one value holds the other.
+
+    `on`: B sits in another part that links to A's part by these (B-part column, A-part column)
+    pairs, so a row of B's part pairs with the A-part row it links to. Counts only, never values."""
+    from .identifiers import stand_in_sql
+
+    def real(e):
+        return f"{e} IS NOT NULL AND NOT {stand_in_sql(f'CAST({e} AS VARCHAR)')}"
+
+    x = f"x.{sql_name(a)}"
+    y = f"{'y' if on else 'x'}.{sql_name(b)}"
+    source = f"{sql_name(a_part)} x" if not on else (
+        f"{sql_name(b_part)} y JOIN {sql_name(a_part)} x ON "
+        + " AND ".join(f"y.{sql_name(f)} = x.{sql_name(t)}" for f, t in on))
+    sql = f"""
+        WITH t AS (SELECT DISTINCT trim(CAST({x} AS VARCHAR)) a, trim(CAST({y} AS VARCHAR)) b
+                   FROM {source} WHERE {real(x)} AND {real(y)}),
+             av AS (SELECT DISTINCT trim(CAST({sql_name(a)} AS VARCHAR)) a FROM {sql_name(a_part)}
+                    WHERE {real(sql_name(a))}),
+             na AS (SELECT a, count(*) n FROM t GROUP BY a),
+             nb AS (SELECT b, count(*) n FROM t GROUP BY b)
+        SELECT (SELECT count(*) FROM av), (SELECT count(*) FROM nb), (SELECT count(*) FROM t),
+               (SELECT count(*) FROM na WHERE n = 1), (SELECT count(*) FROM na WHERE n > 1),
+               (SELECT count(*) FROM av WHERE a NOT IN (SELECT a FROM na)),
+               (SELECT count(*) FROM nb WHERE n > 1),
+               (SELECT count(*) FROM t JOIN na USING (a) JOIN nb USING (b) WHERE na.n = 1 AND nb.n = 1),
+               (SELECT count(*) FROM t WHERE strpos(b, a) > 0 OR strpos(a, b) > 0)"""
+    (a_values, b_values, pairs, a_one, a_several, a_none, b_several, one_to_one, contained) = con.execute(sql).fetchone()
+    return {"with": b, **({"part": b_part, "via": [{"from": f, "to": t} for f, t in on]} if on else {}),
+            "a_values": a_values, "b_values": b_values, "pairs": pairs,
+            "a_with_one_b": a_one, "a_with_several_b": a_several, "a_without_b": a_none,
+            "b_with_several_a": b_several, "one_to_one": one_to_one, "one_holds_the_other": contained}

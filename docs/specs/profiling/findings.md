@@ -81,7 +81,13 @@ approval:                       # §9
     - {column: <col>, shape: <pattern>, check_digit: <family|null>,
        pass_rate: <0..1>, chance_rate: <0..1>, defective: <bool>,  # under 0.99: failures go to quality
        fill: <0..1>, unique: <0..1>,
-       proposal: cross_reference|record_key|none, why: <words>}
+       proposal: cross_reference|record_key|none, why: <words>,
+       pairs: [{with: <col>, part: <part, when B is reached through a link>,
+                via: [{from: <B-part col>, to: <col>}], a_values: <n>, b_values: <n>,
+                pairs: <n>, a_with_one_b: <n>, a_with_several_b: <n>, a_without_b: <n>,
+                b_with_several_a: <n>, one_to_one: <n>, one_holds_the_other: <n>}]}
+                                # a master part only: how this identifier pairs with each other
+                                # identifier on its rows, and on a part linking to them (one link)
   columns:
     - {name: <col>, type: <detected>, fill: <0..1>, distinct: <n>,
        unique: <0..1>, top: [<masked samples>], role: <key|identifier|name|code|measure|date|text|flag|other>,
@@ -126,7 +132,14 @@ under a prefix are; both shares are written only for a column with such a
 pattern, so a look-alike shows why it failed) and
 `sensitivity_signals`; on an identifier, `local_counter` and `shape_test` (which
 test made it identifier-shaped: one length, one shape, or one pattern under one
-prefix, with its share); on a record key,
+prefix, with its share) and, on a master part, `pairs`: counted over distinct
+pairs of values (stand-ins left out; no value written), how many of its values
+come with one value of the other identifier, with several, or with none; how
+many of the other's values come with several of its own (a matching rule on the
+other would merge those); how many pairs are one to one both ways; and how many
+hold one value inside the other. An entity found inside a part is measured on
+the rows of the part it came from, and the other identifier may sit on a part
+linking to those rows (one link). On a record key,
 `alternatives` (other unique keys) and, for a sampled part, `evidence.full_pass`.
 A column's `role` may also be `link` (it points at another part's key).
 `persistence`, `delivery` and `refresh` stay null and `unknown` until

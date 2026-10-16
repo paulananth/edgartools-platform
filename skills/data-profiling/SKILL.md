@@ -295,6 +295,11 @@ that matter most:
   "Identifier types"). `cross_reference` means "propose for the MDM cross-reference
   table": lookup only, never used to join (a Dataset Contract's
   `cross_references`, in data-onboarding [REFERENCE.md](../data-onboarding/REFERENCE.md)).
+  On a master part, each identifier's `pairs` says how it pairs with every
+  other identifier on its rows or on a part linking to them: one to one,
+  several either way, none, or one holding the other. A second joining
+  identifier's matching rule is decided from these counts, so the data is
+  never scanned again for them.
 - **relationships:** `onboard: together` is mastered with its master (a link
   part between masters, or an attribute list); `separate` comes after.
 - **hierarchies:** `reference` hierarchies group codes in one code set (RDM);

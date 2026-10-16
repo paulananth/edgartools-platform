@@ -2,7 +2,7 @@
 
 Priority: 90, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (data-profiling skill). Status: open, waiting for the operator's word to code it.
+Type: task (data-profiling skill). Status: coded, in review (branch `claude/profiling-identifier-pairs`).
 
 ## Why
 
@@ -23,9 +23,9 @@ Found while onboarding the Security from N-PORT (ticket 79). CUSIP sits on the h
 
 ## Checklist
 
-- [ ] The operator's word to code it
-- [ ] GoF consult: the profiler's identifier module
-- [ ] `pairs` measured within a part and across one link; tests on a small invented data set
-- [ ] `docs/specs/profiling/findings.md` and the data-profiling skill's "Reading the findings"
+- [x] The operator's word to code it: "Goal set: fix all issues and wayfinder tickets" (2026-10-16) 2026-10-16 08:37 ET
+- [x] GoF consult: the profiler's identifier module: leave both; `_part` grows by a field with every finding, so the pairs are their own pass after classification (`run._identifier_pairs`), and the SQL sits in `keys.py` with the other column-pair queries, not in `identifiers.py`, which holds no SQL 2026-10-16 08:37 ET
+- [x] `pairs` measured within a part and across one link; tests on a small invented data set: `keys.pairing` (within a part, across a link, one value holding the other) and the pass on a master part, 4 tests; an entity found inside a part is measured on its source part's rows; profiling tests 256 pass 2026-10-16 08:37 ET
+- [x] `docs/specs/profiling/findings.md` and the data-profiling skill's "Reading the findings" 2026-10-16 08:37 ET
 - [ ] Three-axis review; PR, CI green, merge on the operator's word
 - [ ] Learning → skill

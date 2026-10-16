@@ -185,6 +185,7 @@ def profile_inputs(sources: dict[str, str], name: str, limit: int = inputs.DEFAU
             f["derived_evidence"] = entities[f["part"]]["evidence"]
             f["quality"] += embedded.disagreements(entities[f["part"]])
     _inherit(findings_parts, parts)
+    _identifier_pairs(con, findings_parts, profiles, found_links)
     by_name = {f["part"]: f for f in findings_parts}
     not_levels: list[dict] = []
     hierarchies = _hierarchies(con, by_name, profiles, found_links, not_levels)
@@ -338,6 +339,37 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             links=out, identifiers=[i for i in identifier_findings if i], code_lists=code_list))
         + quality.no_natural_key(record_key),
     }
+
+
+def _pairing_columns(profiles, part: str, leave_out=()) -> list[str]:
+    """A part's identifier-shaped columns that are not a local counter."""
+    return [c["name"] for c in profiles.get(part, []) if not c["structure"] and c["name"] not in leave_out
+            and identifiers.identifier_shaped(c) and not (profile.is_integer(c) and identifiers.dense_sequence(c))]
+
+
+def _identifier_pairs(con, found: list[dict], profiles, links: list[dict]) -> None:
+    """For each master part, how each of its identifiers pairs with every other identifier on its rows,
+    and with each identifier of a part linking to those rows (one link). An entity found inside a part
+    (embedded.py) is measured on the rows of the part it came from. Recorded under the identifier as
+    `pairs` (keys.pairing), counts only."""
+    for f in found:
+        if f["class"] != "master":
+            continue
+        base = f["derived_from"] or f["part"]
+        own = [i for i in f["identifiers"] if not i.get("local_counter")
+               and any(c["name"] == i["column"] for c in profiles.get(base, []))]
+        if not own:
+            continue
+        names = [i["column"] for i in own]
+        beside = _pairing_columns(profiles, base, leave_out=names)
+        linked = [(l["from"]["part"], list(zip(l["from"]["columns"], l["to"]["columns"])), column)
+                  for l in links if l["to"]["part"] == base and l["from"]["part"] != base
+                  and not l["from"]["part"].startswith(f"{base}.")
+                  for column in _pairing_columns(profiles, l["from"]["part"], leave_out=l["from"]["columns"])]
+        for n, entry in enumerate(own):
+            entry["pairs"] = (
+                [keys.pairing(con, base, entry["column"], base, other) for other in names[n + 1:] + beside]
+                + [keys.pairing(con, base, entry["column"], part, column, on) for part, on, column in linked])
 
 
 def _tags(con, p: str, columns: list[dict]) -> dict[str, dict]:
