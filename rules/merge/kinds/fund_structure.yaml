@@ -1,0 +1,77 @@
+# Fund Structure merge rules (a new kind, ticket 79, part 3). Source: SEC Form
+# N-PORT, one record per fund series over a quarter's data set
+# (rules/sources/sec.nport.fund). Ruling it rests on (operator, 2026-10-14,
+# N-PORT findings q17): "Series id and LEI join (Recommended)": the Fund is
+# kind fund_structure with the fund profile, joined by its SEC series id and
+# its LEI. Declared, not switched on.
+version: fund_structure-2026-10-15.1
+defaults:
+  sources:
+  - sec.nport.fund.v1
+  allow_unknown_effective: true
+rules:
+# The SEC series id: a record joins the one Fund that holds it, or creates it.
+- rule_id: nport-fund-series
+  version: 2026-10-15.1
+  family: binding
+  source: sec.nport.fund.v1
+  applies_to_verdict: fund_structure
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: sec_series_id
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: sec_series_id
+# The series' LEI joins too. A record whose series id and LEI point at two
+# Funds goes to review.
+- rule_id: nport-fund-lei
+  version: 2026-10-15.1
+  family: binding
+  source: sec.nport.fund.v1
+  applies_to_verdict: fund_structure
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
+identifiers:
+  sec_series_id:
+    authority: SEC/EDGAR
+    sources:
+    - sec.nport.fund.v1
+    # rules/identifiers/sec_series_id.yaml: S and nine digits, upper-cased.
+    normalizer: normalize_identifier@sec_series_id-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  lei:
+    authority: GLEIF (ISO 17442)
+    sources:
+    - sec.nport.fund.v1
+    normalizer: normalize_identifier@lei-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
