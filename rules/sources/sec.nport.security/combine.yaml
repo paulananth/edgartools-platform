@@ -1,8 +1,10 @@
 # One row per usable CUSIP (table `security`) and one per ISIN of a holding
 # with no usable CUSIP (table `security_isin`), each joined with its filed
 # name, title and issuer LEI, and a CUSIP with the one ISIN FIGI agrees on
-# (ticket 79, part 1; ticket 80). Inputs: the reduction's output
-# (`securities`) and figi-attach.yaml's output (`attached`). Pin canonical
+# (ticket 79, part 1; ticket 80), and the issuer's LEI when the CUSIP is filed
+# with exactly one (ticket 22). Inputs: the reduction's output (`securities`),
+# figi-attach.yaml's output (`attached`) and issuer-reduce.yaml's output
+# (`issuers`). Pin canonical
 # JSON of this file as the source.combine contract.
 execution:
   profile: source.combine
@@ -16,6 +18,10 @@ combine:
     # is offered to one CUSIP (operator, 2026-10-15: "Use FIGI to add pairs
     # too"); each CUSIP then has at most one such pair, so `one` never chooses.
     cusip_isin: {source: attached, table: attached, key: cusip, value: isin, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {cusip_offers: 1, isin_offers: 1}}
+    # The issuer's LEI only when every holding of the CUSIP that states one
+    # states the same (operator, 2026-10-16: "By issuer LEI (Recommended)");
+    # `one` never chooses.
+    cusip_issuer: {source: issuers, table: cusip_issuers, key: cusip, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
     isin_name: {source: securities, table: isin_names, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_title: {source: securities, table: isin_titles, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_lei: {source: securities, table: isin_leis, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
@@ -30,6 +36,7 @@ combine:
         title: {group: cusip_title, key: cusip, on_missing: skip, replace: false}
         lei: {group: cusip_lei, key: cusip, on_missing: skip, replace: false}
         isin: {group: cusip_isin, key: cusip, on_missing: skip, replace: false}
+        issuer: {group: cusip_issuer, key: cusip, on_missing: skip, replace: false}
     security_isin:
       source: securities
       table: isins

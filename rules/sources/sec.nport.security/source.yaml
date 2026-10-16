@@ -299,6 +299,7 @@ mdm:
           - title
           - lei
           - isin
+          - issuer
         version: sec-nport-security-v1
         retain_deferred: true
         source_record_provenance: true
@@ -312,6 +313,20 @@ mdm:
         identifier_formats:
           cusip: cusip
           isin: isin
+        # The Security is issued by the entity that holds its issuer's LEI
+        # (ticket 22; operator, 2026-10-16: "By issuer LEI (Recommended)"): the
+        # link names GLEIF's record of that LEI, and waits until that record is
+        # mastered. A CUSIP filed with no LEI, or with two, has no link.
+        relationships:
+        - type: ISSUED_BY
+          each: issuer
+          target_key: [item.issuer_lei]
+          target_source: gleif.level1.v1
+          # The holdings state no date of their own: no start, so MDM starts
+          # the link when it first sees it (as GLEIF's successor link without
+          # its event).
+          valid_from: item.valid_from
+          scope: SEC N-PORT issuer
   sec.nport.security_isin.v1:
     contract:
       provider: SEC

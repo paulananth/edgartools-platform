@@ -2,12 +2,20 @@
 
 Priority: 22, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/security-mastering/issues/02-issued-by-a-mastered-company.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-**What to build:** When a 13F issuer name is an alias of a Company that already exists, the Security is issued by that Company. `GOOGLE INC` and `ALPHABET INC` are one issuer. A name that matches no Company leaves the Security in place and writes no `ISSUED_BY`. The filing does not mint a Company.
+**What to build (rewritten for the rebuild, 2026-10-16 08:51 ET):** a Security is issued by the entity that holds its issuer's LEI. Operator, 2026-10-16, asked how a Security finds its issuer: **"By issuer LEI (Recommended)"**: no name matching; a Security whose issuer states no LEI gets no ISSUED_BY yet. The old plan (match a 13F issuer name to a Company's aliases) is replaced.
 
-**Blocked by:** security-mastering 01: Publish one Security per 13F CUSIP.
+Measured (N-PORT 2026q2, counts only): 3,394,415 of 5,347,869 holding rows state an LEI-shaped issuer LEI; 28,424 distinct issuers; the local GLEIF Golden Copy (2026-09-11) holds 28,397 of them: 24,124 GENERAL (a Company in GLEIF's contract), 3,639 FUND, 580 RESIDENT_GOVERNMENT_ENTITY, 38 BRANCH, 10 INTERNATIONAL_ORGANIZATION, 6 SOLE_PROPRIETOR.
 
-**Status:** ready-for-agent
+**Status:** in progress (Claude, branch `claude/issued-by-lei`).
 
-- [ ] Class A and Class C are both `ISSUED_BY` the one Alphabet Company when either filed name is given.
-- [ ] An unmatched issuer name produces the Security and no `ISSUED_BY`.
-- [ ] No new Company is created from a 13F issuer string.
+- [x] The ruling: by issuer LEI 2026-10-16 08:51 ET
+- [x] Configuration only: `issuers.yaml` (holdings' CUSIP and issuer LEI, read once, an LEI-shaped value only), `issuer-reduce.yaml` (LEIs per CUSIP), `combine.yaml` (the LEI of a CUSIP filed with exactly one, part 1's one-to-one rule), and an `ISSUED_BY` link in `sec.nport.security.v1` to GLEIF's record of that LEI (`target_source: gleif.level1.v1`); the link waits until that record is mastered; the link has no start of its own (the holdings state none), so MDM starts it when first seen (test run below) 2026-10-16 09:17 ET
+- [x] Test run: Securities with a link, against a direct count from the same file (`.scratch/onboarding/sec.nport/issuer-test-run.json`, `issuer_gap.py`): 216,560 Securities with exactly one ISSUED_BY, every one a CUSIP whose holdings name exactly one issuer LEI, none linked otherwise; 3,392 CUSIPs naming several LEIs get none; the other 845 with one LEI are all set aside for a failing CUSIP check digit; contract outcome as part 1 (383,612 accepted, 1,769 invalid_cusip_checksum, 1 invalid_cusip); 7.8 min 2026-10-16 09:17 ET
+- [ ] Proving Run: the issuers' GLEIF records (Companies) and the N-PORT Securities; ISSUED_BY resolved to a Company for the GENERAL issuers; the rest wait; second pass changes nothing
+- [ ] ~~Class A and Class C both `ISSUED_BY` the one Alphabet Company when either filed name is given~~ replaced by the ruling: both classes carry the issuer's one LEI, so both link to its Company (checked in the Proving Run: Securities per issuer)
+- [x] An issuer with no LEI: the Security and no `ISSUED_BY` (test run: 383,612 accepted, 216,560 linked; the rest carry no link) 2026-10-16 09:17 ET
+- [ ] No new Company is created from an issuer string or LEI (the link only names GLEIF's record; Proving Run: Companies equal GLEIF's GENERAL issuers)
+- [ ] ISIN-only Securities (35,309): the same link, after the CUSIP Securities
+- [ ] Issuers GLEIF holds as FUND (3,639) or government (580): their kinds are not mastered from GLEIF yet, so those links wait; logged
+- [ ] Metadata, approval under the standing words, PR, CI green, merge on the operator's word
+- [ ] Learning → skill
