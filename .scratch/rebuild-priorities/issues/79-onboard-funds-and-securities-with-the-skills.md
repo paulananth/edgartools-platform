@@ -31,6 +31,7 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [ ] ~~which filed name and title a Security keeps~~ deferred to ticket 84: filers disagree on 13% of holding rows
 - [x] N-PORT findings answered from the rulings (`.scratch/onboarding/sec.nport/findings-answers.md`) and approved: operator, 2026-10-15 06:27 ET, "merge 985 when green agreed for the rest"; each answer in its question, `approval.status: approved` 2026-10-15 06:29 ET
 - [ ] Funds hold securities: `HOLDS` from a fund to a Security
+- [ ] The N-PORT Security run wiring (Bookkeeping) passes the quarter's `period` in the holdings reading's context and `effective_column: period` to `mdm.prepare` (ticket 100); no platform command builds the N-PORT run yet
   - [x] Measured (2026q2): 5,347,869 holding rows make 3,251,006 distinct Fund-to-Security links by CUSIP from 12,387 Funds; 830,315 rows come from registrants with no series (the link starts at the Company) 2026-10-16 08:21 ET
   - [ ] The Merge Stage made fast enough to apply them: ticket 96 merged (#1007, 2026-10-16 09:12 ET; a batch 4.4 s to 2.5 s); the rest is `mdm.save_batch` (1.3-1.5 s a batch), measured there
 - [ ] Every gap in a skill found on the way: fixed in the skill, on its own branch

@@ -331,9 +331,11 @@ mdm:
           each: issuer
           target_key: [item.issuer_lei]
           target_source: gleif.level1.v1
-          # The holdings state no date of their own: no start, so MDM starts
-          # the link when it first sees it, the quarter's period that dates
-          # each publication (ticket 100).
+          # The holdings state no date of their own, so `item.valid_from` is
+          # always empty: MDM starts the link when it first sees it, the
+          # quarter's period that dates each publication (ticket 100; the run
+          # passes `period` in the context and `effective_column: period` to
+          # mdm.prepare).
           valid_from: item.valid_from
           scope: SEC N-PORT issuer
   sec.nport.security_isin.v1:

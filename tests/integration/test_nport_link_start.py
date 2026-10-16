@@ -1,4 +1,4 @@
-"""Ticket 100: an N-PORT link starts at its quarter's data set (three holdings).
+"""Real PG16: an N-PORT link starts at its quarter's data set (ticket 100).
 
 The real chain on invented holdings: the holdings and issuer source extracts
 (the run supplies `period` in each reading's context), reduce.yaml,
@@ -6,10 +6,8 @@ issuer-reduce.yaml, combine.yaml, mdm.prepare dated by `period`
 (`effective_column`), the Dataset Contract, then the Merge Stage on a
 disposable PostgreSQL 16: the ISSUED_BY link resolves and starts, as
 observed, at the quarter. Invented values only. (A second quarter is refused
-today: each quarter's records are revision 1 of the same subjects; logged on
-ticket 100.)
-
-    PG16_SERVER=pgserver python -m pytest -q -p no:randomly .scratch/onboarding/sec.nport/link_start_check.py
+today: each quarter's records are revision 1 of the same subjects; ticket
+101.)
 """
 
 from __future__ import annotations
@@ -17,12 +15,9 @@ from __future__ import annotations
 import copy
 import io
 import json
-import sys
 import zipfile
 from pathlib import Path
 from uuid import uuid4
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from sqlalchemy import text
 
@@ -135,6 +130,8 @@ def apply(stage, policy, batch, assertions, checkpoint):
 
 
 def test_an_issued_by_link_starts_at_its_quarter(database, tmp_path):
+    """Without the quarter dating each publication, the link has no start and
+    goes to review (`unknown_relationship_start`), as in ticket 22's Proving Run 2."""
     q2 = prepared_records(tmp_path / "q2", Q2)
     linked = [r for r in q2 if any(l["type"] == "ISSUED_BY" for l in r.get("relationships") or [])]
     assert len(q2) == 2 and len(linked) == 1
@@ -156,7 +153,6 @@ def test_an_issued_by_link_starts_at_its_quarter(database, tmp_path):
             "AND body->>'type'='ISSUED_BY'")).all()]
         reviews = conn.execute(text("SELECT body->>'reason' FROM mdm.current_record WHERE object_type='review' "
                                     "AND body->'open'='true'::jsonb")).scalars().all()
-    print(json.dumps({"periods": periods, "open_reviews": reviews}, indent=1))
     assert "unknown_relationship_start" not in reviews
     (only,) = periods
     assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(Q2, "observed")]

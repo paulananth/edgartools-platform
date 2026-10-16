@@ -21,6 +21,6 @@ A binding rule may state that its creation waits for the name rules (for example
 - [ ] ~~Operator's word to code it~~ not coded: the operator ruled configuration only 2026-10-16 14:39 ET
 - [ ] ~~GoF consult; the rule option, its policy check and tests (joins first; a creation waits; a name-bound record creates nothing; other rules unchanged)~~ replaced by `on_no_match: wait` (ticket 22)
 - [ ] ~~`gleif-issuer-lei` uses it; pinned digests by layer~~ replaced by `on_no_match: wait` (ticket 22)
-- [ ] Ticket 22's Proving Run 3: duplicates against today's 3,240
-- [ ] Review, PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [ ] ~~Ticket 22's Proving Run 3: duplicates against today's 3,240~~ moved to ticket 22: its Companies-only proof counts 0 duplicates under the configured rule
+- [ ] ~~Review, PR, CI green, merge on the operator's word~~ moved to ticket 22's PR (the configured rule)
+- [x] Learning → skill: data-onboarding "Configuration first" (#1018) 2026-10-16 17:53 ET
