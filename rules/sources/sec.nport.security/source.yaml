@@ -41,6 +41,11 @@ read:
       max_bytes: 268435456
       max_value_bytes: 64
       pairs: true
+  # The quarter's data set period (an instant with its zone), supplied by the
+  # run: it dates each publication, so a link starts, as observed, at the
+  # first quarter that names it (ticket 100).
+  context:
+    period: {type: text}
   tables:
     security_cusip:
       each: .
@@ -91,6 +96,8 @@ read:
           text:
             path: ISSUER_LEI
             default: ""
+        period:
+          context: {name: period}
     cusip_isin:
       each: .
       select:
@@ -215,6 +222,8 @@ read:
           text:
             path: ISSUER_LEI
             default: ""
+        period:
+          context: {name: period}
   stream:
     framing: delimited
     delimited:
@@ -241,8 +250,8 @@ mdm:
       schema_version: sec-nport-security-v1
       record_key: the CUSIP, upper-cased; one record per CUSIP over the quarter
       publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
-      effective_time: unknown; the holdings carry the report period, not the Security's own
-        time
+      effective_time: the quarter's data set period the run supplies (`period`); a link
+        starts, as observed, at the first quarter that names it
       semantics: patch
       completeness: the Securities one quarter's holdings name; no retirement by absence
       nonblocking_deferred_reasons:
@@ -323,8 +332,8 @@ mdm:
           target_key: [item.issuer_lei]
           target_source: gleif.level1.v1
           # The holdings state no date of their own: no start, so MDM starts
-          # the link when it first sees it (as GLEIF's successor link without
-          # its event).
+          # the link when it first sees it, the quarter's period that dates
+          # each publication (ticket 100).
           valid_from: item.valid_from
           scope: SEC N-PORT issuer
   sec.nport.security_isin.v1:
@@ -334,8 +343,8 @@ mdm:
       schema_version: sec-nport-security-isin-v1
       record_key: the ISIN, upper-cased; one record per ISIN of a holding with no usable CUSIP
       publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
-      effective_time: unknown; the holdings carry the report period, not the Security's own
-        time
+      effective_time: the quarter's data set period the run supplies (`period`); a link
+        starts, as observed, at the first quarter that names it
       semantics: patch
       completeness: the Securities one quarter's holdings name; no retirement by absence
       nonblocking_deferred_reasons:

@@ -22,7 +22,7 @@ reduce:
     cusips:
       source: holdings
       table: security_cusip
-      keys: [cusip]
+      keys: [cusip, period]
       mode: count
       count: holdings
       sample: null
@@ -83,7 +83,7 @@ reduce:
     isins:
       source: holdings
       table: security_isin
-      keys: [isin]
+      keys: [isin, period]
       mode: count
       count: holdings
       sample: null
