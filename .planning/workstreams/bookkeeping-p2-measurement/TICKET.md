@@ -15,5 +15,11 @@ by this planning ticket. This narrows PR #977's already approved P2 plan.
 - [x] Complete engineering review last, independent voices and test-path mapping — actual Codex focused recheck PASS; six engineering findings resolved; 27 future proof groups, no behavior tests run; 2026-10-16 08:51 ET.
 - [x] Write test-plan and implementation-task artifacts; validate links, scope and overlap — five planning artifacts, 25 unique decisions, 27 proof groups, five aggregated tasks, all relative links and whitespace valid; live overlap guard passed; 2026-10-16 08:51 ET.
 - [x] Refresh live main/Claude PRs and rebase the saved planning branch — scoped Git diff confirms reviewed runtime/support/dependencies unchanged; rebased onto 3064a4e4 without conflict; 2026-10-16 08:52 ET.
-- [ ] Present the final approval gate and record the operator's decision — gate prepared; operator response pending.
+- [x] Present the final approval gate and record the operator's decision — operator replied “approved”; accepted four new code/test files, dedicated lifecycle helper and baseline-only metadata with speedup calculations deferred; 2026-10-16 08:54 ET.
 - [x] Learning → skill: none — this planning review applies existing proof/ownership rules; no demonstrated skill defect or new verified runtime behavior warrants a skill edit; 2026-10-16 08:51 ET.
+
+Completion: DONE_WITH_CONCERNS. Planning approved; all checklist parts complete.
+Review limitation: Claude voices were unavailable because the configured model
+required usage credits; independent Codex reviews and final engineering PASS remain
+the recorded evidence. Implementation and behavior tests have not started.
+No durable learnings this session.
