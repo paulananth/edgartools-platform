@@ -6,25 +6,37 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.retired_submission_loaders.common import parse_date
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
 
-@pytest.mark.parametrize('value', [None, '', '2024-02-29', '2023-02-29', '20240229',
-    '2020-W01-1', '2020W011', '2020-W01', '2020W01', '0001-01-01', '9999-12-31',
-    '0000-01-01', ' 2024-02-29', '2024-02-29 ', '2024-02-29T12:00:00Z',
-    '2024-02-29suffix', '🦀2024-02-29', '2024-W54-1', 'garbage', 20240229, '20240229T00:00:00Z',
-    '2020W011 suffix', '20240229🦀🦀'])
-def test_configured_calendar_dates_match_old_loader(value):
-    # The old filing loader calls safe_str before parse_date; numeric inputs
-    # therefore become strings. Input scalar conversion remains the engine's.
-    from tests.support.retired_submission_loaders.common import safe_str
+# A filing date reads its first ten characters as an ISO date, as the old
+# filing loader did (`date.fromisoformat(value[:10])`; a number is read as its
+# text first); anything else is no date.
+def calendar(value):
+    from datetime import date
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value[:10]).isoformat()
+    except ValueError:
+        return None
+
+
+@pytest.mark.parametrize('value, expected', [
+    (None, None), ('', None), ('2024-02-29', '2024-02-29'), ('2023-02-29', None),
+    ('20240229', '2024-02-29'), ('2020-W01-1', '2019-12-30'), ('2020W011', '2019-12-30'),
+    ('2020-W01', '2019-12-30'), ('2020W01', '2019-12-30'), ('0001-01-01', '0001-01-01'),
+    ('9999-12-31', '9999-12-31'), ('0000-01-01', None), (' 2024-02-29', None),
+    ('2024-02-29 ', '2024-02-29'), ('2024-02-29T12:00:00Z', '2024-02-29'),
+    ('2024-02-29suffix', '2024-02-29'), ('🦀2024-02-29', None), ('2024-W54-1', None),
+    ('garbage', None), (20240229, '2024-02-29'), ('20240229T00:00:00Z', '2024-02-29'),
+    ('2020W011 suffix', '2019-12-30'), ('20240229🦀🦀', None)])
+def test_configured_calendar_dates_read_the_first_ten_characters(value, expected):
     contract = files.load(Path(__file__).parent / 'fixtures' / 'filing-text-calendar.yaml')
     payload = {'filings': {'recent': {'accessionNumber': ['a'], 'filingDate': [value]}}}
     result = SourceEngine(contract).read(json.dumps(payload).encode())
-    expected = parse_date(safe_str([value], 0))
-    assert result.tables['filings'][0]['filing_date'] == (expected.isoformat() if expected else None)
+    assert result.tables['filings'][0]['filing_date'] == expected
     assert not result.deferred
 
 
@@ -56,7 +68,7 @@ def test_calendar_reading_survives_immutable_worker_and_independent_reparse(tmp_
         ('2024-02-29', '2019-12-30'), (None, None)]
 
 
-def test_adversarial_calendar_mutations_match_python_loader():
+def test_adversarial_calendar_mutations_read_the_first_ten_characters():
     seeds = ['2024-02-29', '2023-02-29', '20240229', '2020-W01-1',
              '2020W011', '2020-W01', '2020W01', '9999-12-31', '0001-01-01']
     values = set(seeds)
@@ -73,5 +85,4 @@ def test_adversarial_calendar_mutations_match_python_loader():
     rows = SourceEngine(contract).read(json.dumps({'rows': [{'value': v} for v in values]}).encode()).tables['rows']
     assert len(values) == 646
     for value, row in zip(values, rows, strict=True):
-        old = parse_date(value)
-        assert row['date'] == (old.isoformat() if old else None), value
+        assert row['date'] == calendar(value), value

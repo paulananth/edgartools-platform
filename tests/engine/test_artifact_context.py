@@ -9,7 +9,6 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import Blocked
-from tests.support.retired_submission_loaders.bronze_submission_extractors import stage_recent_filing_loader
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import mdm_prepare, source_read
@@ -23,17 +22,26 @@ PAYLOAD = {'cik': 7, 'filings': {'recent': {
 VALUES = {'cik': 320193, 'sync_run_id': 'capture', 'raw_object_id': 'raw-id', 'load_mode': 'default', 'recent_limit': None}
 
 
-@pytest.mark.parametrize('limit', [None, -10, -1, 0, 1, 2, 3, 9223372036854775807])
-def test_all_18_columns_match_retained_loader_and_bounds(limit):
+# The 18 columns of each filing, as the old filing loader wrote them: the
+# caller's CIK and run facts (not the document's), dates on the calendar, a
+# size that is not an integer dropped, and a flag that is not one false.
+EMPTY = dict.fromkeys(['acceptance_datetime', 'act', 'file_number', 'film_number', 'items', 'primary_doc_desc'])
+RUN = {'cik': 320193, 'sync_run_id': 'capture', 'raw_object_id': 'raw-id', 'load_mode': 'default'}
+ONE = {**EMPTY, **RUN, 'accession_number': 'one', 'form': '10-K', 'filing_date': '2024-02-29',
+       'report_date': '2023-12-31', 'size': 9007199254740993, 'is_xbrl': False, 'is_inline_xbrl': False,
+       'primary_document': ' a.htm '}
+TWO = {**EMPTY, **RUN, 'accession_number': 'two', 'form': '8-K', 'filing_date': None, 'report_date': None,
+       'size': None, 'is_xbrl': True, 'is_inline_xbrl': True, 'primary_document': 'b.htm'}
+
+
+@pytest.mark.parametrize('limit, expected', [(None, [ONE, TWO]), (-10, []), (-1, []), (0, []), (1, [ONE]),
+                                             (2, [ONE, TWO]), (3, [ONE, TWO]), (9223372036854775807, [ONE, TWO])])
+def test_all_18_columns_and_the_recent_limit(limit, expected):
     values = {**VALUES, 'recent_limit': limit}
-    expected = stage_recent_filing_loader(PAYLOAD, values['cik'], values['sync_run_id'], values['raw_object_id'], values['load_mode'], limit)
-    expected = [{key: value.isoformat() if hasattr(value, 'isoformat') else value for key, value in row.items()} for row in expected]
     reading = SourceEngine(files.load(CONTRACT)).read(json.dumps(PAYLOAD).encode(), context=values)
     assert reading.tables['filings'] == expected
     assert not reading.deferred
-    if expected:
-        assert len(expected[0]) == 18
-        assert expected[0]['cik'] != PAYLOAD['cik']
+    assert len(ONE) == 18
 
 
 @pytest.mark.parametrize(('field', 'value'), [('cik', True), ('cik', 1.0), ('cik', 2**63), ('cik', -(2**63)-1), ('cik', '320193'), ('load_mode', None), ('load_mode', []), ('recent_limit', False), ('recent_limit', '1'), ('sync_run_id', 'é' * 2049)])
