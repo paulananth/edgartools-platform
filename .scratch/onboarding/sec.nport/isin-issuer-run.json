@@ -1,0 +1,27 @@
+{
+ "contract": {
+  "accepted": 35309
+ },
+ "batches_by_effective_at": {
+  "2026-06-30T00:00:00+00:00": 36
+ },
+ "securities_with_issued_by": 25173,
+ "links_per_security": {
+  "1": 25173
+ },
+ "direct": {
+  "isins_with_an_issuer_lei": 25274,
+  "isins_with_one": 25173,
+  "isins_with_several": 101
+ },
+ "linked_and_direct_agree": 25173,
+ "linked_not_direct": 0,
+ "direct_not_linked": 0,
+ "seconds": {
+  "issuers reading": 199,
+  "issuer-reduce": 22,
+  "combine": 106,
+  "prepare + contract": 29,
+  "direct count": 59
+ }
+}
