@@ -15,7 +15,8 @@ The data-profiling skill reads a JSON object's keys as columns, so a document ke
 - [x] Implement the generic keyed-object reader without a source-specific special case — 2026-10-16 14:12 ET; expected rows, keys and parent links verified with invented root, nested, JSONL and streamed JSON fixtures.
 - [x] Run affected input/profiling tests with testmon, each run bounded to five minutes — 2026-10-16 14:12 ET; initial inputs: 52 passed in 34.94 s; broader area before precision follow-up: 131 passed / 135 deselected in 49.12 s; final affected inputs/run/genericity: 58 passed / 110 deselected in 3.48 s.
 - [x] Review Standards, Spec and GoF; verify no unrelated shape regression and no private data in the public diff — 2026-10-16 14:12 ET; independent three-axis rechecks clean after claimed-state/checklist and precision fixes. Spec independently reproduced both-order, cross-document and nested refusals with no loaded tables.
-- [ ] Commit and push on this ticket's fresh branch after overlap checks; open its separate PR.
+- [x] Commit and push on this ticket's fresh branch after overlap checks; open its separate PR — 2026-10-16 14:13 ET; commit fa946a86 pushed after both guard passes, PR [#1016](https://github.com/paulananth/edgartools-platform/pull/1016) is open with four scoped files.
+- [ ] Land PR #1016 only after CI is green and the operator names it for merging; then record resolution in the shared map after its overlap guard passes.
 - [x] Learning → skill — 2026-10-16 14:12 ET; data-profiling SKILL.md, Objects keyed by data: inference threshold, key/value provenance, conservative exclusions, exact-number refusal, and approved-findings reuse. This ticket is the dedicated profiling skill-fix branch/PR.
 
 ## Review follow-up
