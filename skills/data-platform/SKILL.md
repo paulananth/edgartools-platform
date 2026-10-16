@@ -7,8 +7,9 @@ description: The whole data skill, installed as one package. Use it to set up a 
 
 One installed package, `edgartools-data`, holds everything this skill runs:
 the rules creator, the configured engine, the workers, Bookkeeping, the
-Change Journal, MDM, and these skills. No checkout of the repository is
-needed, except to write a custom parsing step (Mode 6).
+Change Journal, MDM, and these skills. Feed work uses the installed package.
+Persistent local testing and custom parsing steps (Mode 6) use a repository
+checkout.
 
 ## Hard stops
 
@@ -38,7 +39,7 @@ question at a time, with your recommendation.
 
 For persistent local agent environments, baseline promotion or recovery, read
 [Local testing](LOCAL-TESTING.md). It defines automatic promotion after verified
-checks; its implementation status is stated there.
+checks and points to the repository lifecycle script.
 
 1. **Install.** The engine is Rust: `cargo` must be on the path (install it
    from rustup.rs if `cargo --version` fails). Pick the git ref to install
