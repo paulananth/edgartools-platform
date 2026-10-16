@@ -3,9 +3,7 @@
 Priority: 15, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/rules-skill/issues/11-init-mode-mapping-document-and-catalog.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: build
-Status: open
-Blocked by: company mastering ticket 22 (data quality), which adds the
-critical data elements and the quality file this document describes.
+Status: done, merged (#743).
 
 ## Outcome
 

@@ -2,7 +2,7 @@
 
 Priority: 93, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine). Status: in progress (branch `claude/list-overlap`). Unblocks: 79 part 1 (the N-PORT Security's ISIN, decided with OpenFIGI) and 80 (OpenFIGI).
+Type: task (engine). Status: done, merged (#995, 2026-10-15). Unblocks: 79 part 1 (the N-PORT Security's ISIN, decided with OpenFIGI) and 80 (OpenFIGI).
 
 ## Why
 

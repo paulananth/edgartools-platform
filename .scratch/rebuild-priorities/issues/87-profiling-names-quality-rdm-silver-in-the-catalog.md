@@ -2,7 +2,7 @@
 
 Priority: 87, tier 1, in flight (raised by the operator, 2026-10-15). Map: [Rebuild priorities](../map.md).
 
-Type: task (skills and the catalog). Status: claimed (Claude, 2026-10-15 ET, branch `claude/profile-to-catalog`). Blocked by: none.
+Type: task (skills and the catalog). Status: done, merged (#987, 2026-10-15). Blocked by: none.
 
 ## Why
 
