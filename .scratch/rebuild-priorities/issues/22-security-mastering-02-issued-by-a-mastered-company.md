@@ -6,7 +6,7 @@ Priority: 22, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 Measured (N-PORT 2026q2, counts only): 3,394,415 of 5,347,869 holding rows state an LEI-shaped issuer LEI; 28,424 distinct issuers; the local GLEIF Golden Copy (2026-09-11) holds 28,397 of them: 24,124 GENERAL (a Company in GLEIF's contract), 3,639 FUND, 580 RESIDENT_GOVERNMENT_ENTITY, 38 BRANCH, 10 INTERNATIONAL_ORGANIZATION, 6 SOLE_PROPRIETOR.
 
-**Status:** in progress (Claude, branch `claude/issued-by-lei`).
+**Status:** done, merged (#1022, 2026-10-16 18:27 ET); ISIN-only links in ticket 102.
 
 - [x] The ruling: by issuer LEI 2026-10-16 08:51 ET
 - [x] Configuration only: `issuers.yaml` (holdings' CUSIP and issuer LEI, read once, an LEI-shaped value only), `issuer-reduce.yaml` (LEIs per CUSIP), `combine.yaml` (the LEI of a CUSIP filed with exactly one, part 1's one-to-one rule), and an `ISSUED_BY` link in `sec.nport.security.v1` to GLEIF's record of that LEI (`target_source: gleif.level1.v1`); the link waits until that record is mastered; the link has no start of its own (the holdings state none), so MDM starts it when first seen (test run below) 2026-10-16 09:17 ET
@@ -26,5 +26,5 @@ Measured (N-PORT 2026q2, counts only): 3,394,415 of 5,347,869 holding rows state
 - [x] Issuers GLEIF holds as FUND (3,639) or government (580): their kinds are not mastered from GLEIF yet, so those links wait; logged Logged: their GLEIF records are set aside `unsupported_identity_kind` (4,299 in Proving Run 2), so those links wait 2026-10-16 15:20 ET
 - [x] Metadata: the Company and N-PORT Security Mapping Documents regenerated with the rules (`tests/unit/test_rules_mapdoc.py` passes) 2026-10-16 15:21 ET
 - [x] Approval under the operator's standing words ("Approved the rules always", 2026-10-15), on test evidence: the matching rule "Issuer joins, never creates" (`gleif-issuer-lei` 2026-10-16.2, declared, not switched on) and the N-PORT Security configuration (the issuer chain, the ISSUED_BY link, the quarter's period). Evidence: the test run (216,560 linked, all agreeing with a direct count), Proving Run 2, the Companies-only proof (0 duplicates, 41,360 links resolve), the three-holding check. Switch-on and merge wait for the operator's words. 2026-10-16 15:21 ET
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR #1022, CI green (6 checks), merged by the operator 2026-10-16 18:27 ET
 - [x] Learning → skill data-onboarding (#1018, merged): load every source that can bind the same entities, count a known risk before the ruling, count the links MDM accepts, configuration first 2026-10-16 15:20 ET
