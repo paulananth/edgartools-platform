@@ -1,6 +1,6 @@
 """One profiling run: inputs → findings.yaml + REPORT.md.
 
-Every claim carries its evidence; anything without evidence is "unknown".
+Every claim carries its evidence. A class the tests do not pick is silver.
 Samples of personal and free-text columns are masked to their shape.
 """
 
@@ -73,8 +73,7 @@ def _classes_found(findings) -> str:
     """What each part is, grouped by class."""
     by_class: dict[str, list[str]] = {}
     for f in sorted(findings, key=lambda f: -f["rows"]):
-        by_class.setdefault(f["class"], []).append(f"{f['part']} ({f['confidence']})" if f["class"] != "unknown"
-                                                   else f["part"])
+        by_class.setdefault(f["class"], []).append(f"{f['part']} ({f['confidence']})")
     return "; ".join(f"{cls}: {_listed(names)}" for cls, names in sorted(by_class.items()))
 
 
@@ -260,7 +259,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             "pattern": sensitivity.mask(c["pattern"]) if c["pattern"] else None, "pattern_share": c["pattern_share"],
             # Measured only for a separated pattern: why it was, or was not, one under one prefix.
             **{k: c[k] for k in ("prefix_share", "pattern_temporal_share") if k in c},
-            "top": top, "role": role, "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
+            "top": top, "role": role, "silver_field": silver.keep(c, role, record_key["columns"]),
+            **{k: c[k] for k in ("zero_rows", "negative_rows", "decimal_places") if k in c},
+            "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
             "masked": hidden,
             # A personal or free-text column's values are never written out, so it has no distribution.
             "distribution": None if hidden else profile.distribution(
@@ -303,7 +304,7 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
     if not facts["in_degree"]:
         facts["rows_pointing"] = facts["rows"] - 1  # nothing points at it: "smaller than" cannot pass
     decided = classify.classify(facts)
-    if decided["class"] not in {"transaction", "unknown"}:
+    if decided["class"] not in {"transaction", "silver"}:
         times["event_time"] = None  # an event time belongs to events
     kind = next((k for k in kinds if k.lower() == p.rsplit(".", 1)[-1].lower()), None)
     return {
@@ -464,13 +465,13 @@ def _identifier(con, p, c, record_key) -> dict | None:
 
 
 def _inherit(found: list[dict], parts) -> None:
-    """A list inside a record that its own tests do not class (no key of its own, or "unknown")
+    """A list inside a record that its own tests do not class (no key of its own, or silver)
     is an attribute list of its parent: same class."""
     by_name = {f["part"]: f for f in found}
     for f in sorted(found, key=lambda x: x["part"].count(".")):
         parent = f["parent_part"]
-        if parent and (not f["record_key"]["found"] or f["class"] == "unknown") \
-                and by_name[parent]["class"] != "unknown":
+        if parent and (not f["record_key"]["found"] or f["class"] == "silver") \
+                and by_name[parent]["class"] != "silver":
             f["class"] = by_name[parent]["class"]
             f["confidence"] = by_name[parent]["confidence"]
             f["tests"] = [{"class": f["class"], "test": "a list inside its parent's records, with no key of its own",
@@ -606,8 +607,4 @@ def _questions(parts: list[dict]) -> list[dict]:
             asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],
                           "question": f"{f['part']} has no unique column: use the designed key?",
                           "recommendation": f["record_key"]["rule"], "answer": None})
-        if f["class"] == "unknown":
-            asked.append({"id": f"q{len(asked) + 1}", "about": f["part"],
-                          "question": f"Which class is {f['part']}? Its tests did not decide.",
-                          "recommendation": "keep it raw (bronze only) until decided", "answer": None})
     return asked

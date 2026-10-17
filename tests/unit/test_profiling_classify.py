@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "data-profiling" / "scripts"))
-from profiling import classify  # noqa: E402
+from profiling import classify, silver  # noqa: E402
 
 BASE = {"rows": 3000, "key": ["k"], "key_found": True, "in_degree": 2, "out_degree": 3, "self_ends": False,
         "key_links": 0, "key_other": 1, "name_like": 0, "labels": 0, "attributes": 0,
@@ -25,11 +25,28 @@ def test_link_part_needs_a_key_of_links():
     assert classify.classify({**link, "key_links": 1})["class"] != "relationship"
 
 
-def test_a_tie_is_unknown_and_every_test_is_reported():
+def test_a_tie_is_silver_and_every_test_is_reported():
     nothing = {k: (0 if isinstance(v, (int, float)) else v) for k, v in BASE.items()}
     nothing.update({"key_found": False, "event_time": None, "key": []})
     decided = classify.classify(nothing)
-    assert decided["class"] == "unknown" and decided["confidence"] == 0.0 and decided["tests"]
+    assert decided["class"] == "silver" and decided["confidence"] == 0.0 and decided["tests"]
+    assert classify.store("silver")["store"] == "silver"
+
+
+def test_commentary_is_a_silver_field_only_when_material():
+    number = {"name": "amount", "type": "DOUBLE", "fill": 1, "distinct": 3, "tokens": 0, "top": [], "non_null": 3}
+    assert silver.keep(number, "measure", [])
+    assert not silver.keep({**number, "fill": 0}, "measure", [])
+    rare = {"name": "note", "type": "VARCHAR", "fill": 0.2, "distinct": 4, "tokens": 12,
+            "top": [{"value": "a", "rows": 1}], "non_null": 2}
+    assert not silver.keep(rare, "text", [])
+    material = {"name": "remark", "type": "VARCHAR", "fill": 0.8, "distinct": 10, "tokens": 8,
+                "top": [{"value": "a", "rows": 2}], "non_null": 8}
+    assert silver.keep(material, "text", [])
+    boilerplate = {**material, "distinct": 2, "top": [{"value": "same", "rows": 8}]}
+    assert not silver.keep(boilerplate, "text", [])
+    assert silver.keep({"name": "entity", "type": "VARCHAR", "fill": 1, "distinct": 3, "tokens": 2,
+                        "top": [], "non_null": 3}, "name", [])
 
 
 def test_store_is_advice_only():

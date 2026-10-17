@@ -11,7 +11,7 @@ same in prose for the operator. Both are generic: any data set, any domain.
 
 - Every claim carries its **evidence**: the counts, the percentage, the test
   that produced it, and whether it came from a full scan or a sample.
-- A claim without evidence is `unknown`, never a guess.
+- A claim without evidence is left out. A class the tests do not pick is `silver`, never a guess at another class.
 - Samples of fields tagged `personal` or `sensitive_personal` are masked to
   their shape (`Aaaa Aaaaa`, `999-99-9999`).
 - A column's tag comes from its `sensitivity_signals`: words in its name,
@@ -65,7 +65,7 @@ approval:                       # §9
   parent_part: <name|null>      # for a child table made from a nested list
   derived_from: <name|null>     # for an entity found inside another part (§3.2)
   rows: <n>
-  class: master|reference|relationship|transaction|metadata|unknown
+  class: master|reference|relationship|transaction|metadata|silver
   confidence: <0..1>            # share of the class's tests that passed
   tests: [{test: <name>, value: <measured>, passed: true|false}]
   kind: <existing MDM kind|null>
@@ -295,10 +295,10 @@ approved code list as `codes_new`.
 
 ## 6. The silver table spec
 
-For every part, every column a field (operator, 2026-10-15: "all silver
-fields"; plan decision 13 first named only the parts MDM does not own). Load
-mode by class: transaction `append`, reference `snapshot`, master,
-relationship and metadata `upsert`, unknown `append`. A master part with a
+For every part, the silver fields are the numbers, the identifiers, and
+commentary text only when it is material (data-profiling, "Silver fields",
+operator 2026-10-17). Load mode by class: transaction and silver `append`,
+reference `snapshot`, master, relationship and metadata `upsert`. A master part with a
 one-column key also links to itself (`to_part` its own name, `mdm_id_column`
 `mdm_id`), so each row carries its own MDM id. The writer (plan row 6) reads
 this spec; the spec does not depend on the store.

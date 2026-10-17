@@ -4,7 +4,9 @@ Each class is a list of named tests over one part's facts. Confidence is the
 share of its tests that pass; every test is reported with its value. A test
 marked required defines its class: a part that fails it cannot be in that class
 (a reference list points at nothing but its coarser level; a link part's key is made of links).
-A tie, or no class passing most of its tests, is "unknown": never a guess.
+A tie, or no class passing most of its tests, is "silver": the part still
+keeps its numbers and identifiers. Never a guess at master, reference,
+relationship, transaction or metadata.
 """
 
 from __future__ import annotations
@@ -76,9 +78,9 @@ def classify(facts: dict) -> dict:
         scored[name] = (0.0 if required_failed else share, results)
     best = max(scored.values(), key=lambda s: s[0])[0]
     leaders = [name for name, (share, _) in scored.items() if share == best]
-    chosen = leaders[0] if len(leaders) == 1 and best > 0.5 else "unknown"
-    tests = scored[chosen][1] if chosen != "unknown" else [t for name in leaders for t in scored[name][1]]
-    return {"class": chosen, "confidence": round(best, 3) if chosen != "unknown" else 0.0, "tests": tests,
+    chosen = leaders[0] if len(leaders) == 1 and best > 0.5 else "silver"
+    tests = scored[chosen][1] if chosen != "silver" else [t for name in leaders for t in scored[name][1]]
+    return {"class": chosen, "confidence": round(best, 3) if chosen != "silver" else 0.0, "tests": tests,
             "runner_up": sorted(((round(s, 3), n) for n, (s, _) in scored.items() if n != chosen), reverse=True)[:1]}
 
 
@@ -88,7 +90,7 @@ STORE = {
     "relationship": ("mdm_relationships", "links between masters: MDM relationships, traversed with recursive SQL"),
     "transaction": ("silver", "append-heavy events and measures read by wide scans: silver"),
     "metadata": ("bookkeeping", "describes deliveries, not the business: Bookkeeping or the catalog"),
-    "unknown": ("bronze_only", "not classified with evidence: keep it raw until the operator decides"),
+    "silver": ("silver", "class tests did not pick one class: numbers and identifiers stay for silver"),
 }
 
 
