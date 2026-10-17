@@ -10,7 +10,9 @@ mdm.prepare and the CUSIP and ISIN Dataset Contracts), then the Merge Stage besi
 - a bond's only listing gives its FIGI and its ticker, spaces kept;
 - an identifier OpenFIGI did not find is set aside (`not_found_by_openfigi`);
 - a record joins the Security that holds its CUSIP, and one no Security holds
-  waits: OpenFIGI never creates a Security.
+  waits: OpenFIGI never creates a Security;
+- every listing lands in silver (`silver-listing.yaml`) with the MDM id of
+  the Security its identifier joined, or none while it waits.
 The CUSIP rule is on in the repo's policy; the ISIN rules are switched on
 here only, in a copy of it.
 Invented values only.
@@ -30,9 +32,14 @@ from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
+from edgar_warehouse.silver_writer import database as silver
+from edgar_warehouse.silver_writer.cli import spec_file
+from edgar_warehouse.silver_writer.sink import PostgresSink
+from edgar_warehouse.silver_writer.writer import MdmIds, land
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as nport
+from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.support.rules_authority import register_dataset
 
 FOLDER = files.ROOT / "sources" / "openfigi"
@@ -109,8 +116,9 @@ def combine(store: Artifacts, root: Path, contract_file: str, readings: dict) ->
     return out
 
 
-def prepared_records(root: Path, word: str = "cusip") -> tuple[list[dict], dict[str, str]]:
-    """One kind's records (`cusip` or `isin`), and each refused identifier with its reason."""
+def prepared_records(root: Path, word: str = "cusip", listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
+    """One kind's records (`cusip` or `isin`), and each refused identifier with its reason;
+    `listings`, when given, also gets every listing row of the source extract."""
     store = Artifacts()
     capture_root = root / "capture"
     kind, _, code = KINDS[word]
@@ -137,6 +145,11 @@ def prepared_records(root: Path, word: str = "cusip") -> tuple[list[dict], dict[
         readings[f"answers_{number}"] = run(store, where / "answers", answers_body, [{
             "input": ref(answer), "lookups": lookups,
             "context": context(where / "an", answer, {"batch": batch, "id_type": word})}], 3)
+    if listings is not None:
+        for reading in readings.values():
+            for artifact in store.json(reading)["artifacts"]:
+                for part in artifact["partitions"]:
+                    listings += store.json(part["receipt"])["tables"]["listings"]
     counts = combine(store, root / "reduce", "reduce.yaml", readings)
     combined = combine(store, root / "combine", "combine.yaml", {"counts": counts})
     piece_root = root / "record"
@@ -244,3 +257,49 @@ def test_an_isin_record_carries_its_levels_and_joins_the_security_holding_it(dat
     nport.apply(stage, policy, "openfigi", records, 2)
     assert bound(database, ISIN_CODE, ISIN) == bound(database, NPORT_ISIN, ISIN) is not None
     assert len({k for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}) == 1
+
+
+def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(database, tmp_path):
+    rows: list[dict] = []
+    records, _ = prepared_records(tmp_path / "cusip", listings=rows)
+    isin_records, _ = prepared_records(tmp_path / "isin", "isin", listings=rows)
+    core.register_reading(database, THIRTEENF, core.contract_body())
+    core.register_reading(database, NPORT_ISIN, core.contract_body())
+    with database.admin.begin() as conn:
+        for code in (CODE, ISIN_CODE):
+            register_dataset(conn, code, database.registry, files.mdm_contract("openfigi", code))
+        policy = register_policy(conn, policy_body())
+    stage = MergeStage(Store(database.application))
+    # The Securities' own records are keyed apart from the identifier, so only
+    # OpenFIGI's Dataset Contract finds a listing's Security by its identifier.
+    nport.apply(stage, policy, "13f", [core.source(key="13F-ROW-1", source_code=THIRTEENF, kind="security",
+                                                   fields={"name_of_issuer": "EXAMPLE CORP"},
+                                                   identifiers={"cusip": EQUITY})], 1)
+    nport.apply(stage, policy, "nport", [core.source(key="NPORT-ROW-1", source_code=NPORT_ISIN, kind="security",
+                                                     fields={"name_of_issuer": "EXAMPLE CORP"},
+                                                     identifiers={"isin": ISIN})], 2)
+    nport.apply(stage, policy, "openfigi", records + isin_records, 3)
+    rows = [{k: v for k, v in row.items() if k != "figi_ticker"} for row in rows]
+    with silver_database(database.admin) as (owner, runtime):
+        silver.migrate(owner, runtime_role=RUNTIME)
+        spec = spec_file(FOLDER / "silver-listing.yaml", None)
+        assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
+        sink, ids = PostgresSink(runtime), MdmIds(database.application)
+        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == 11
+        again = land(sink, spec["table"], copy.deepcopy(rows), ids)  # the same delivery changes nothing
+        assert (again["inserted"], again["changed"]) == (0, 0)
+        with runtime.connect() as conn:
+            landed = {(r["id"], r["figi"]): r for r in conn.execute(text(
+                "SELECT * FROM silver.openfigi_listing")).mappings()}
+    # The answers' 9 CUSIP and 2 ISIN listings, each once; unfound identifiers give none.
+    assert len(landed) == len(rows) == 11
+    equity, isin = bound(database, CODE, EQUITY), bound(database, ISIN_CODE, ISIN)
+    assert equity == bound(database, THIRTEENF, "13F-ROW-1") is not None
+    assert isin == bound(database, NPORT_ISIN, "NPORT-ROW-1") is not None
+    assert {k[1]: (r["security_mdm_id_by_cusip"], r["security_mdm_id_by_isin"])
+            for k, r in landed.items() if k[0] in (EQUITY, ISIN)} == {
+        **{f: (equity, None) for f in ("BBGZZ0000US1", "BBGZZ0000UN1", "BBGZZ0000GR1", "BBGZZ0000GY1")},
+        **{f: (None, isin) for f in ("BBGZZ0000US5", "BBGZZ0000LN5")}}
+    assert landed[(EQUITY, "BBGZZ0000GR1")]["ticker"] == "EXB"
+    # UNHELD waits in MDM, so its listing keeps an empty MDM id.
+    assert landed[(UNHELD, "BBGZZ000BND2")]["security_mdm_id_by_cusip"] is None
