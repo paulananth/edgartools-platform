@@ -1,6 +1,6 @@
 # Source sequencing configuration check
 
-Status: implemented and locally verified. Scope: offline configuration checking, not source activation
+Status: implemented and CI verified (run `39033731830`). Scope: offline configuration checking, not source activation
 or a replacement executor. Base: `06a98a189`.
 
 Operator: implement source sequencing configuration checks; each source can be
@@ -18,7 +18,7 @@ permission to bypass required inputs or change frozen versions.
 - [x] Run affected tests under five minutes and review Standards, Spec and GoF — 96 passed in 3.46s; diagnostic fix then 29 passed / 68 unchanged deselected in 0.60s; three independent reviews completed, Standards P2 fixed and rechecked; 2026-10-17 08:29 ET.
 - [x] Commit on the dedicated branch after the overlap guard passes — `84a26332`, correct branch and no overlap verified; 2026-10-17 08:29 ET.
 - [x] Fix CI packaging failure: include the sequencing module in the data wheel, verify a fresh installation and rerun affected tests — actual wheel omission reproduced, installed-bundle suite 80 passed in 283.36s, three review axes passed; 2026-10-17 08:43 ET.
-- [ ] Recheck the updated PR's complete CI result.
+- [x] Recheck the updated PR's complete CI result — run `39033731830` passed all six checks on `d0ea84b1`, including installed-bundle engine tests and PostgreSQL integration; 2026-10-17 08:50 ET.
 - [x] Learning → skill: none — existing data-platform Source readiness rules already require independent progress, valid required inputs and separate qualification evidence. New command syntax and its offline limit belong in `docs/specs/source-sequencing.md`; no skill defect found; 2026-10-17 08:29 ET.
 
 ## GoF consult
