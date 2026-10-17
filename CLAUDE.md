@@ -141,6 +141,11 @@ recovery, use [data-operations](skills/data-operations/SKILL.md).
   MDM, RDM, Rules, Bookkeeping and Change Journal by default; retain existing
   silver without initializing or migrating it.
   All agents look up the same Company identities in the shared MDM.
+  The server runs on the Docker context already configured on the machine
+  (operator, 2026-10-17). Start, inspect, back up and copy it with
+  `infra/scripts/local-test-stores.py`. The procedure is
+  [Initialize shared local PostgreSQL](docs/local-agent-testing.md).
+  Source its private `worker.env` before work and `verifier.env` before verification.
 - Separate Git worktrees isolate code edits; routine lookups and development
   use the existing shared server, without creating a server per agent.
   Use its private runtime connection file outside Git; never print its values.
@@ -307,6 +312,7 @@ only points.
 | AWS Terraform (prod) | `infra/terraform/accounts/prod/` |
 | Snowflake Terraform (prod) | `infra/terraform/snowflake/accounts/prod/` |
 | Docker / ECR publish scripts | `infra/scripts/` |
+| Shared local PostgreSQL (MDM, RDM, Rules, Bookkeeping, Change Journal) | `docs/local-agent-testing.md`, `infra/scripts/local-test-stores.py` |
 
 ## Architecture
 
@@ -534,22 +540,11 @@ What it left in Snowflake is live:
 > install` for deliberate one-off installs, and `uv run --with <package>` when a
 > deploy needs a transient tool such as `dbt-snowflake`.
 >
-> **Docker runtime:** on macOS use Colima as the local Docker daemon. On Windows
-> use Docker Desktop. The default macOS fast-feedback path is Colima plus plain
-> `docker build`/`docker push`; `docker buildx` is supported when it is
-> measurably faster or when using Linux/Windows CI registry cache. Do not
-> introduce another container build/runtime stack.
->
-> **One-time Colima setup (macOS):** Docker 29+ in Colima defaults to the
-> containerd image-store snapshotter, which the legacy `docker build` path
-> cannot use. Run this once per workstation (and after any Colima/Docker
-> upgrade) to disable the snapshotter and provision adequate CPU/RAM/disk:
-> ```bash
-> bash infra/scripts/setup-colima.sh           # apply + restart Colima
-> bash infra/scripts/setup-colima.sh --verify  # check current state
-> ```
-> `publish-warehouse-image.sh` fails fast with a pointer to this script if
-> the daemon is misconfigured.
+> **Docker runtime:** use the Docker context already configured on the machine.
+> Leave `DOCKER_HOST` unset. Publish images with `docker build` and
+> `docker push` through `infra/scripts/publish-warehouse-image.sh --mode docker`.
+> Local PostgreSQL 16 for agents is the shared server in
+> [Initialize shared local PostgreSQL](docs/local-agent-testing.md).
 
 ```bash
 # SEC User-Agent for a provider capture (provider_capture); must contain an email
@@ -589,19 +584,7 @@ bash infra/scripts/deploy-snowflake-stack.sh \
   --run-validation \
   --run-dbt
 
-# Docker image publish (Linux / CI with buildx registry cache)
-bash infra/scripts/publish-warehouse-image.sh \
-  --aws-region <region> \
-  --ecr-repository edgartools-dev-images \
-  --role warehouse \
-  --image-tag $(git rev-parse HEAD) \
-  --mode buildx \
-  --cache-tag buildcache \
-  --also-tag dev
-
-# Docker image publish (macOS Colima — see "Manual AWS build and deploy" below for the full recipe)
-colima start
-export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+# Docker image publish (configured Docker context; full recipe below)
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin \
     690839588395.dkr.ecr.us-east-1.amazonaws.com
@@ -707,23 +690,16 @@ rollback archive; nothing pushes to them anymore.)
 | `warehouse-prod` / `mdm-prod` | Manually promoted production image, per role |
 | `warehouse-deps-<hash>` / `mdm-deps-<hash>` | Dependency base image, keyed by lockfile hash |
 
-**Manual AWS build and deploy — complete recipe (macOS Colima)**
+**Manual AWS build and deploy — configured Docker context**
 
-CI (GitHub Actions `deploy.yml`, the "Deploy" workflow — `build-images.yml`
-no longer exists) builds and pushes the DEV images automatically on every push
-to `main` in ~30-45s via buildx registry cache, retagging `warehouse-dev`/
-`mdm-dev` each time. It does NOT promote to prod or register task
-definitions — prod promotion (build/push under `edgartools-prod-images`) is still
-manual; the AWS pipeline deploy script was retired (platform validation 2b,
-2026-09-30). Use the steps below for prod
-promotion, ad-hoc builds, or when CI is unavailable; for a dev image of
-current `main`, prefer CI's digest (`gh run list --workflow deploy.yml`) over
-rebuilding locally.
+Publish with `docker build` and `docker push` through
+`infra/scripts/publish-warehouse-image.sh --mode docker`.
+Prod promotion (build/push under `edgartools-prod-images`) is manual; the AWS
+pipeline deploy script was retired (platform validation 2b, 2026-09-30).
+Use the steps below for prod promotion and ad-hoc builds.
 
 ```bash
-# 1. Start Colima and point Docker CLI at it (do once per terminal session).
-colima start
-export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+# 1. Confirm the configured Docker context answers (`docker info`).
 
 # 2. Authenticate to ECR (token valid for 12 h).
 aws ecr get-login-password --region us-east-1 \
@@ -769,7 +745,7 @@ MDM_REF=$(aws ecr describe-images \
   --output text | xargs -I{} echo "690839588395.dkr.ecr.us-east-1.amazonaws.com/edgartools-dev-images@{}")
 ```
 
-**If publish-warehouse-image.sh fails with a cache layer error (Colima cache corruption)**
+**If publish-warehouse-image.sh fails with a cache layer error**
 
 ```bash
 # Look up current deps tags from ECR (avoids stale hardcoded values)
@@ -816,11 +792,9 @@ docker push "${ECR}/${REPO}:mdm-dev"
 
 **Clean up local images before a build (run this first every time)**
 
-Colima accumulates stale images fast — old SHA tags, debug tags, superseded deps layers. Clean before building to avoid cache confusion and reclaim disk.
+The local Docker daemon accumulates stale images: old SHA tags, debug tags, superseded deps layers. Clean before building to avoid cache confusion and reclaim disk.
 
 ```bash
-export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
-
 # 1. Show what's on disk
 docker system df
 docker images --format "{{.Repository}}:{{.Tag}}\t{{.Size}}"
