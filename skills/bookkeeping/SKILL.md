@@ -139,7 +139,7 @@ always redone or read back (ticket 72).
 
 ## Init and migrate modes
 
-Use `init` for an empty `bookkeeping_clean` PostgreSQL 16 database; use
+Use `init` for an empty `bookkeeping` PostgreSQL 16 database; use
 `migrate` only for an already initialized, checksummed Bookkeeping schema.
 Both apply pending numbered migrations and refresh restricted runtime grants.
 `migrate` refuses to create a missing schema; checksum drift or an untracked

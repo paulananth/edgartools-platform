@@ -22,8 +22,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     quote = engine.dialect.identifier_preparer.quote
     paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
     with engine.begin() as conn:
-        if conn.scalar(text("SELECT current_database()")) != "bookkeeping_clean":
-            raise Blocked("Refusing migration outside fresh bookkeeping_clean")
+        if conn.scalar(text("SELECT current_database()")) != "bookkeeping":
+            raise Blocked("Refusing migration outside fresh bookkeeping")
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Bookkeeping requires PostgreSQL 16")
         role = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=:r"), {"r": runtime_role}).first()

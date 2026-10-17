@@ -120,6 +120,8 @@ class LocalStores:
         return container, volume
 
     def url(self, name: str, database="postgres", user="postgres"):
+        if database == "bookkeeping_clean":
+            database = "bookkeeping"
         identity = self.identity(name)
         container, _ = self.owned(name, identity)
         found = self.resource("container", container)
@@ -221,15 +223,16 @@ class LocalStores:
                     else:
                         suffix = "LOGIN PASSWORD :password" if login else "NOLOGIN"
                         conn.execute(text(f"CREATE ROLE {quote(role)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS {suffix}"), {"password": self.identity(name)["password"]})
-                for database in selected:
+                for store in selected:
+                    database = "bookkeeping" if store == "bookkeeping_clean" else store
                     owner = conn.scalar(text("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=:d"), {"d": database})
-                    if owner and owner != database + "_owner":
+                    if owner and owner != store + "_owner":
                         raise ValueError("Database has a different owner; refusing adoption")
                     if not owner:
-                        conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(database + '_owner')}")
+                        conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(store + '_owner')}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
-                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(database + '_runtime')}")
-                for database, login in (("bookkeeping_clean", "bookkeeping_clean_verifier"), ("mdm", "mdm_verifier"),
+                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(store + '_runtime')}")
+                for database, login in (("bookkeeping", "bookkeeping_clean_verifier"), ("mdm", "mdm_verifier"),
                                         ("mdm", "mdm_governance"), ("rules", "rules_governance")):
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
                 for parent, member in (("bookkeeping_clean_control", "bookkeeping_clean_runtime"),

@@ -12,7 +12,7 @@ legacy caller or qualify a production cutover.**
 
 `edgar_warehouse.bookkeeping.clean` uses only
 `BOOKKEEPING_CLEAN_DATABASE_URL`, never the old `BOOKKEEPING_DATABASE_URL`.
-The PostgreSQL 16 database is `bookkeeping_clean`. Its schema has exactly
+The PostgreSQL 16 database is `bookkeeping`. Its schema has exactly
 five tables: `pipeline_run`, `work_item`, `lease`, `checkpoint`, and
 `journal_outbox`. Migration checksums live in a schema comment, so they do
 not add a sixth control table. No old history or checkpoints are imported.
@@ -306,7 +306,7 @@ and publication verification failure/recovery. Source files validate against
 the same control contract; an unseen source runs without registry edits.
 
 The canonical local PostgreSQL 16 instance was provisioned with empty
-`bookkeeping_clean` and `rules` stores, restricted runtime logins, and NOLOGIN
+`bookkeeping` and `rules` stores, restricted runtime logins, and NOLOGIN
 owners. Its control schema has five tables and zero runs; Rules has zero
 versions. Acceptance fixtures use separate disposable containers, not these
 stores. No AWS state, old Bookkeeping data or active Rules versions were changed.

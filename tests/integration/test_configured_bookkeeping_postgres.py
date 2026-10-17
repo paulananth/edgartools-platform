@@ -69,10 +69,10 @@ def databases():
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
                 conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
                 conn.exec_driver_sql("GRANT rules_approver TO operator")
-                for db in ("bookkeeping_clean", "rules", "change_journal_clean", "destination"):
+                for db in ("bookkeeping", "rules", "change_journal_clean", "destination"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
-            admin = engine("bookkeeping_clean")
-            runtime = engine("bookkeeping_clean", "bk_runtime")
+            admin = engine("bookkeeping")
+            runtime = engine("bookkeeping", "bk_runtime")
             rules_admin = engine("rules")
             ledger_admin = engine("change_journal_clean")
             destination_admin = engine("destination")
@@ -90,7 +90,7 @@ def databases():
                 conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
                 conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
             migrate_guard(destination_admin, runtime_role="clean_application")
-            yield Databases(admin, runtime, engine("bookkeeping_clean", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
+            yield Databases(admin, runtime, engine("bookkeeping", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
                             ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
                             engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
         finally:
@@ -1025,9 +1025,9 @@ def _provision(server, monkeypatch, runpy):
         provision = runpy.run_path(str(script))["provision"]
         monkeypatch.setenv("CHANGE_JOURNAL_RUNTIME_PASSWORD", "test")
         result = provision(url, rules=True, journal=True)
-        assert set(result) == {"bookkeeping_clean", "rules", "change_journal_clean"}
+        assert set(result) == {"bookkeeping", "rules", "change_journal_clean"}
         assert provision(url, rules=True, journal=True) == result
-        for database, role, table in (("bookkeeping_clean", "bookkeeping_clean_runtime", "bookkeeping.pipeline_run"),
+        for database, role, table in (("bookkeeping", "bookkeeping_clean_runtime", "bookkeeping.pipeline_run"),
                                       ("rules", "rules_agent", "rules.rule_version")):
             runtime = create_engine(server.url(database, role, driver="postgresql"))
             engines.append(runtime)
