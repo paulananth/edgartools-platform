@@ -1,7 +1,7 @@
 # Ongoing data operations skill
 
-Status: research and skill documentation complete; runtime automation is not
-implemented by this ticket. Operator requests research of existing skills and a named
+Status: skill documentation complete; PR preparation in progress. Runtime automation
+is not implemented by this ticket. Operator requests research of existing skills and a named
 ongoing skill for available-source processing, load sizing, Bookkeeping and
 Change Journal coordination, and source-file changes. Acquisition remains AWS-owned.
 
@@ -13,6 +13,9 @@ Change Journal coordination, and source-file changes. Acquisition remains AWS-ow
 - [x] Add discovery pointers and verify bundle inclusion, links and real CLI examples without altering global skills or shared stores. Actual offline wheel, isolated installer checks, all new links/commands valid; 17 affected tests passed in 2.50 s, nine unchanged deselected. 2026-10-17 13:07 ET.
 - [x] Exercise realistic scenarios independently: unchanged/renamed files, incomplete deliveries, active leases, capacity pressure and pending Journal delivery. Independent agent preserved ownership/pins, selected renamed inputs safely, bounded concurrency and watch, and withheld completion for pending receipts; no defects found. See VERIFICATION.md. 2026-10-17 13:07 ET.
 - [x] Review Standards, Spec and GoF; record validation and remaining runtime gaps. Three independent reviews found no actionable issues; VERIFICATION.md separates instruction/package evidence from live qualification. 2026-10-17 13:07 ET.
+- [x] Add configuration promotion and skill-location guidance requested in the follow-up; reuse the existing lifecycle and approvals, identify release-transfer/runtime gaps. Final independent promotion scenario distinguishes exact source evidence, mismatched merge versions and missing readiness; no unsafe action. 2026-10-17 13:35 ET.
+- [x] Synchronize with main, verify the final packaged documentation and promotion scenarios, and review Standards/Spec/GoF before publishing. Rebased onto `8d9772ae`; all 26 named affected tests passed in 5.38 s with testmon, final wheel/install/link/command checks passed and three final reviews clean. 2026-10-17 13:35 ET.
+- [ ] Publish the PR and verify its final head and description. CI status is reported separately; no merge or source deployment is part of this request.
 - [x] Learning → skill: new `data-operations`, recurring loop and RUNBOOK.md. Ongoing load management uses existing durable owners rather than introducing a scheduler or parallel control store; renamed keys remain eligible under today's selector. 2026-10-17 13:07 ET.
 
 ## Scope

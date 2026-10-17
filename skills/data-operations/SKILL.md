@@ -23,6 +23,10 @@ CLI help. Report missing enforcement or unsupported stages as runtime gaps;
 instructions cannot make them available. An offline sequence check is not a
 runtime readiness certificate. Recover retained progress before making a new run.
 
+When deploying tested configuration to an environment, follow **Configuration
+promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
+release evidence; distinguish an approved release from its active deployment.
+
 ## Operate the recurring loop
 
 1. **Inventory and readiness.** Account for the entire declared delivery and its

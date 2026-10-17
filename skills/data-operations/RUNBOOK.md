@@ -5,6 +5,46 @@ unfinished run to another agent. Keep the source's runbook current across runs;
 write references to engine evidence rather than copying operational state into
 a second ledger. Store private inventories and captured values outside Git.
 
+## Configuration promotion
+
+Final means a fixed, tested and approved version. Git retains the authoring
+files; the destination Rules database retains execution authority. Approval is
+recorded evidence on a version; activation selects that version in an environment.
+Copying files into a folder named final establishes neither.
+
+| Stage | Owner and completion evidence |
+| --- | --- |
+| Author | data-onboarding creates a source; refining-rules changes an existing source/domain. The exact configuration and generated documents are versioned. |
+| Qualify | Those skills attach genuine matching test/qualification results to the exact content and input evidence. Reuse existing matching evidence; test changed or uncovered behavior. |
+| Approve for release | Follow the shared [approval procedure](../data-onboarding/APPROVE.md), retaining actual approval evidence and applicable operator authorization. A different configuration is a new version. |
+| Deploy | data-operations coordinates saving missing exact versions, recording their evidence/approval through the supported lifecycle, activating the merge policy and then the source, and reading back destination registration/active state. |
+| Operate | data-operations checks the completed delivery, capacity and dependencies, then submits/resumes and verifies through Bookkeeping and Change Journal. |
+
+Keep a release record referencing the source configuration, dataset/matching/
+merge versions, RDM/shared-input pins, runtime, test artifacts and approval.
+Environment connection settings, credentials and operational state remain private
+and separate from that record. A release record is an index into existing
+evidence, not a second Rules database or a new status store.
+
+Promote the same content and applicable evidence to the destination. Recheck
+connectivity, roles, registered worker/verifier capabilities and delivery/dependency
+availability there. A new environment alone does not require repeating unchanged
+business-rule qualification. Exact hashes, retrievable genuine artifacts and
+the supported destination lifecycle must still validate. An older source's
+approval does not approve a changed policy, and a schema migration is separate
+from configuration promotion.
+
+The shared lifecycle already supplies save, record-proof, approve and activate
+operations. There is no single automated release-transfer/import command today.
+If required evidence cannot be represented or a consumer still requires download
+producer steps, report that runtime gap; do not forge proof, register through test
+helpers or bypass activation. Company still has this acquisition/consumer gap.
+Publishing this skill does not resolve it or deploy any Rules version.
+
+The skill's maintained source is `skills/data-operations/` in the repository;
+the data-platform package ships it to the installed agent skill folders. A
+source runbook references the release and its active environment/run IDs.
+
 ## Delivery availability
 
 AWS acquisition or Step Functions supplies the files and completion evidence.

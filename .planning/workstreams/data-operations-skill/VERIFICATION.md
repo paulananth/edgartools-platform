@@ -44,3 +44,21 @@ readiness, file changes, runbooks, Bookkeeping/Journal and research covered.
 The GoF skill was available and applied independently: leave the design as
 written, no findings. No scheduler, resource-lease store or duplicate control
 authority is introduced; runtime code is unchanged.
+
+## PR preparation and promotion follow-up
+
+Rebased onto main `8d9772ae`; added configuration promotion and skill-location
+guidance. The final named test files were rerun with testmon selection disabled:
+26 passed in 5.38 seconds. Skill validation, a rebuilt actual wheel and isolated
+installation into both agent homes all passed with the final documentation.
+No global skill replacement occurred. Final Standards, Spec and GoF reviews
+each reported no actionable findings.
+
+An independent promotion scenario supplied a draft destination source with
+matching retained proof/approval, a mismatched saved merge policy, and missing
+delivery-completion/runtime support. The response reused exact matching
+qualification instead of rerunning everything, kept different merge versions
+distinct, checked source binding changes, and held unsupported source activation
+and loading. It identified Git authoring files, destination Rules authority and
+the package-distributed skill correctly. This is instruction evidence, not an
+automated release importer or source qualification.
