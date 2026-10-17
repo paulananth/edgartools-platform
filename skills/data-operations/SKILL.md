@@ -63,8 +63,8 @@ shows the stores that answer.
 
 Do this after the five schemas are current, for every domain. A domain is one
 source directory under `rules/sources` together with every entity kind that
-source's merge policy names. Walk all of them. Company and Person are two
-domains, not the list.
+source's merge policy names. Walk all of them. Two named kinds are not
+the whole list.
 
 1. **Stores.** Confirm the five schemas in **Apply store DDL** are current on
    the named engine. A refusal from MySQL or SQL Server Express stays a gap.
