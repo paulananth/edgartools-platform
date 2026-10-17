@@ -20,6 +20,33 @@ request to a provider the operator ruled out; never read or print a secret; no v
 in a public repository; never guess an identifier; never invent a command; ask one
 question at a time, with your recommendation.
 
+## Source readiness
+
+When running, recovering or qualifying a source, apply these operator requirements
+(2026-10-17). They are acceptance rules; identify missing runtime enforcement as
+an implementation gap before calling a source ready.
+
+- Qualify retained local captures through genuine provenance, completeness
+  evidence and the normal Rules lifecycle. Local processing qualification can
+  precede AWS capture qualification. Provider requests retain their separate
+  authorization; missing evidence blocks affected processing.
+- Require the common configuration-driven path through dependencies, reading,
+  mastering, merge, independent verification and Journal recording. Run declared
+  approved dependencies from available local captures before freezing consumer
+  inputs. Report any separate preparation command still required as a gap.
+- Call a source locally ready only after its entire declared retained delivery
+  is processed and verified, with accepted/waiting/rejected records accounted
+  for, and an unchanged repeat selects zero files and starts no mastering work.
+  Passing code/fixture tests is implementation evidence. Full retained delivery
+  and full provider history are separate claims. Keep qualification artifacts
+  private and report counts publicly.
+- Preserve original required versions throughout completion and resume.
+  Ordinary supersession leaves those pins intact. Explicit invalidation stops
+  affected work and makes affected outputs unavailable as dependencies until
+  repaired. Preserve history and verified progress, correct through the normal
+  processing path with valid approved inputs, and let unrelated work continue.
+  Never silently repin or clear shared data to repair affected work.
+
 ## The flow
 
 | Step | Mode | Detail in |
