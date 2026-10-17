@@ -104,9 +104,10 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
                      f"{link['source_key']}; empty while that record is not mastered."
                      + (f" Profiling found {share:.1%} of the source keys among the master's keys." if share is not None else ""))
         for c in specs.quality_columns(spec):
+            flags = [k for k in spec["checks"] if k["on_fail"] == "flag"]
             _comment(conn, f"COLUMN {table}.{q(c)}", "The data quality checks this row failed, by id (each "
-                     "flagged, the row still landed); empty when it passed every one. Checks: " + "; ".join(
-                         f"{k['id']}: {k['why']}" for k in spec["checks"]) + ".")
+                     "flagged, the row still landed); empty when it passed every one. Checks: " + ("; ".join(
+                         f"{k['id']}: {k['why']}" for k in flags) or "none flag") + ".")
         for c in specs.added_time(spec):
             _comment(conn, f"COLUMN {table}.{q(c)}", "When the row's delivered values were last written (the as-at "
                      "time); filling an MDM id later does not change it.")

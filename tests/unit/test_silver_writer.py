@@ -160,8 +160,9 @@ CHECKS = [
      "why": "a member id is a CUSIP"},
     {"id": "one_member_per_day", "check": "one_value", "column": "member_id", "per": "visited_on",
      "on_fail": "flag", "why": "one member visits a day"},
-    {"id": "known_amount", "check": "in_set", "column": "amount", "values": ["1", "2"], "on_fail": "exception",
-     "why": "only two amounts exist"},
+    {"id": "known_member", "check": "in_set", "column": "member_id",
+     "values": ["ZZ0000013", "ZZ0000021", "ZZ0000014", "ZZ0000039"], "on_fail": "exception",
+     "why": "four members exist"},
 ]
 
 
@@ -174,7 +175,7 @@ def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_pas
         {"visit_id": 2, "member_id": valid, "amount": "1", "visited_on": "2026-10-01"},
         {"visit_id": 3, "member_id": other, "amount": "2", "visited_on": "2026-10-01"},  # the day's minority
         {"visit_id": 4, "member_id": "ZZ0000014", "amount": None, "visited_on": None},  # bad check digit
-        {"visit_id": 5, "member_id": None, "amount": "9", "visited_on": "2026-10-02"},  # refused
+        {"visit_id": 5, "member_id": "ZZ0000047", "amount": "9", "visited_on": "2026-10-02"},  # refused
         {"visit_id": 6, "member_id": valid, "amount": "1", "visited_on": "2026-10-03"},  # a tie: both flagged
         {"visit_id": 7, "member_id": other, "amount": "1", "visited_on": "2026-10-03"},
     ]
@@ -182,21 +183,28 @@ def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_pas
     assert {r["visit_id"]: r["quality"] for r in sink.written} == {
         1: None, 2: None, 3: ["one_member_per_day"], 4: ["member_shape"],
         6: ["one_member_per_day"], 7: ["one_member_per_day"]}
-    assert result["quality"] == {"member_shape": {"flagged": 1}, "one_member_per_day": {"flagged": 3},
-                                 "known_amount": {"refused": 1}}
+    assert result["quality"] == {"checks": {"member_shape": {"on_fail": "flag", "rows_failed": 1},
+                                            "one_member_per_day": {"on_fail": "flag", "rows_failed": 3},
+                                            "known_member": {"on_fail": "exception", "rows_failed": 1}},
+                                 "rows_flagged": 4, "rows_refused": 1}
     with pytest.raises(Blocked, match="does not name"):  # a delivery cannot write its own flags
         writer.land(sink, "visit", [{"visit_id": 1, "quality": None}], lambda *a: {})
 
 
 @pytest.mark.parametrize("change, refused", [
     ({"check": "pattern"}, "is one of"),
+    ({"check": "in_set", "column": "amount", "values": ["1"], "type": None}, "reads a VARCHAR column"),
+    ({"check": "one_value", "column": "tags", "per": "member_id", "type": None}, "nested values"),
     ({"type": "nope"}, "no identifier type"),
     ({"column": "nope"}, "names a column"),
     ({"on_fail": "withhold"}, "on_fail"),
     ({"why": ""}, "plain words"),
 ])
 def test_a_check_that_could_not_run_is_refused_with_its_spec(change, refused):
+    item = {k: v for k, v in {**CHECKS[0], **change}.items() if v is not None}
     with pytest.raises(Blocked, match=refused):
-        specs.check(a_spec(checks=[{**CHECKS[0], **change}]))
+        specs.check(a_spec(checks=[item]))
+    with pytest.raises(Blocked, match="takes no exception check"):
+        specs.check(a_spec(load_mode="snapshot", checks=[CHECKS[2]]))
     with pytest.raises(Blocked, match="its own id"):
         specs.check(a_spec(checks=[CHECKS[0], CHECKS[0]]))

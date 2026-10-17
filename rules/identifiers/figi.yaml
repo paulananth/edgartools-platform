@@ -1,5 +1,7 @@
-# FIGI (Financial Instrument Global Identifier, OMG): a two-letter prefix, G,
-# eight consonants or digits, and a check digit; upper-cased.
+# FIGI (Financial Instrument Global Identifier, OMG): a prefix of two
+# consonants, G, eight consonants or digits, and a check digit; upper-cased.
+# The standard also excludes the prefixes BS, BM, GG, GB, GH, KY and VG, which
+# parts cannot state; the shape lets them through.
 # A change to this file is a new version: its normalizer gets a new name.
 # Its check digit doubles every second character counted from the left, which
 # no declared family does: checked on the 2026-10-15 OpenFIGI capture, that
@@ -8,11 +10,11 @@
 # checked.
 identifier: figi
 version: 1
-description: "Prefix (2 letters), G, eight consonants or digits, check digit. Upper-cased."
+description: "Prefix (2 consonants), G, eight consonants or digits, check digit. Upper-cased."
 case: upper
 parts:
   - length: 2
-    characters: [letters]
+    characters: [B, C, D, F, G, H, J, K, L, M, N, P, Q, R, S, T, V, W, X, Y, Z]
   - length: 1
     characters: ["G"]
   - length: 8

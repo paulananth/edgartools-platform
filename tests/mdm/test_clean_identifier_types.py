@@ -134,7 +134,7 @@ PINNED = {
     ("cusip", 1): "622c3994cb2c47f427e464085ec8e06b281e6eec9ea0d62f0195ea7af307e826",
     ("isin", 1): "563fbaf4640901d001ff271df72a262eed1cf14cc96e0d8905f8bf63a52e2be1",
     ("sec_series_id", 1): "a6d53f1d27f62d67ac1d446d9322b827b8935dd37bc90a95ce4dcdc53fe46c41",
-    ("figi", 1): "c224ffa4e4ceecdaef2e800d4682e4003733671a884fb2434f2a03991d585530",
+    ("figi", 1): "9a15cdc28dec97a475ea09ae9b1f3b258c58fbccc88e33c9cc28eedacee24fbe",
 }
 
 

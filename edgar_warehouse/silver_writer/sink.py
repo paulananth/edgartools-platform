@@ -66,7 +66,8 @@ class PostgresSink:
         with self.engine.begin() as conn:
             q = specs.quote
             table = f"silver.{q(spec['table'])}"
-            # Derived per row (MDM ids, the checks a row failed): written as delivered, never compared.
+            # Derived per row (MDM ids, the checks a row failed): left out of the `changed`
+            # comparison, so an append table takes a row whose ids or flags moved; updated below.
             derived = ids + quality
             staged = source + derived
             with conn.connection.driver_connection.cursor() as cur:

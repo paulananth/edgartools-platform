@@ -15,9 +15,15 @@ The checks:
 - `one_value`: rows sharing a value of `per` hold one value of `column`
   (a level of a hierarchy has one parent). Within the delivery, a row is
   flagged when its value is not the group's most common one; when two values
-  are equally common, every row of the group is.
-An empty value passes every check: whether a column may be empty is its
-`nullable`.
+  are equally common, every row of the group is. It holds only within one
+  delivery: split a part into several deliveries and each is checked alone.
+`in_set` reads a text column (`VARCHAR`), compared as delivered; no check
+reads a nested column. An empty value passes every check: whether a column may be empty
+is its `nullable`. A snapshot table takes no `exception` check: a row kept
+out of its delivery would be deleted from the table.
+
+The landing report gives, for each check, the rows that failed it (a row
+may fail several), and the rows flagged and refused in all.
 """
 
 from __future__ import annotations
@@ -31,33 +37,47 @@ QUALITY = "quality"  # the column a flagged row's check ids are written to
 ON_FAIL = ("flag", "exception")
 # Each check and the keys it takes beside id, check, why and on_fail.
 ARGUMENTS = {"identifier": {"column", "type"}, "in_set": {"column", "values"}, "one_value": {"column", "per"}}
+TEXT = "VARCHAR"  # the type `in_set` reads
 
 
 def check(spec: dict, names: list[str]) -> None:
     """A spec's checks, refused with Blocked unless each can run on its columns."""
+    from .spec import postgres_type  # spec.py checks a spec through this module
+
     seen = set()
+    types = {c["name"]: c["type"] for c in spec["columns"]}
+    keys = "; ".join(f"{kind}: {', '.join(sorted(args))}" for kind, args in ARGUMENTS.items())
     for item in spec.get("checks") or []:
         kind = item.get("check") if isinstance(item, dict) else None
         if kind not in ARGUMENTS or set(item) != ARGUMENTS[kind] | {"id", "check", "why", "on_fail"}:
             raise Blocked(f"A silver check is one of {sorted(ARGUMENTS)} with id, why, on_fail and its own keys "
-                          f"({ {k: sorted(v) for k, v in ARGUMENTS.items()} }): {item!r}")
+                          f"({keys}): {item!r}")
         if not isinstance(item["id"], str) or not item["id"] or item["id"] in seen:
             raise Blocked(f"Each silver check has its own id: {item['id']!r}")
         seen.add(item["id"])
         if item["on_fail"] not in ON_FAIL:
             raise Blocked(f"Check {item['id']}: on_fail is one of {ON_FAIL}")
+        if item["on_fail"] == "exception" and spec["load_mode"] == "snapshot":
+            raise Blocked(f"Check {item['id']}: a snapshot table takes no exception check; "
+                          "a row kept out of a delivery would be deleted")
         if not isinstance(item["why"], str) or not item["why"].strip():
             raise Blocked(f"Check {item['id']}: why is plain words")
         for role in ("column", "per"):
             if role in item and item[role] not in names:
                 raise Blocked(f"Check {item['id']}: {role} names a column of the spec: {item[role]!r}")
+            if role in item and kind == "in_set" and types[item[role]] != TEXT:
+                raise Blocked(f"Check {item['id']}: in_set reads a {TEXT} column, not {item[role]} "
+                              f"({types[item[role]]})")
+            if role in item and postgres_type(types[item[role]]) == "jsonb":
+                raise Blocked(f"Check {item['id']}: {item[role]} holds nested values, which no check reads")
         if kind == "identifier":
             from edgar_warehouse.mdm.clean.identifier_types import TYPES
 
             if item["type"] not in TYPES:
                 raise Blocked(f"Check {item['id']}: no identifier type {item['type']!r} in rules/identifiers")
-        if kind == "in_set" and (not isinstance(item["values"], list) or not item["values"]):
-            raise Blocked(f"Check {item['id']}: values lists the allowed values")
+        if kind == "in_set" and (not isinstance(item["values"], list) or not item["values"]
+                                 or not all(isinstance(v, str) for v in item["values"])):
+            raise Blocked(f"Check {item['id']}: values lists the allowed values, as text")
 
 
 def run(spec: dict, rows: list[dict]) -> tuple[list[dict], dict]:
@@ -74,12 +94,14 @@ def run(spec: dict, rows: list[dict]) -> tuple[list[dict], dict]:
         for number in fails:
             failed[number].append(item["id"])
     refusing = {c["id"] for c in checks if c["on_fail"] == "exception"}
-    kept = []
+    kept, refused = [], 0
     for row, ids in zip(rows, failed):
         if refusing.intersection(ids):
+            refused += 1
             continue
         kept.append({**row, QUALITY: sorted(ids) or None})
-    report = {c["id"]: {("refused" if c["id"] in refusing else "flagged"): counts[c["id"]]} for c in checks}
+    report = {"checks": {c["id"]: {"on_fail": c["on_fail"], "rows_failed": counts[c["id"]]} for c in checks},
+              "rows_flagged": sum(1 for row in kept if row[QUALITY]), "rows_refused": refused}
     return kept, report
 
 
