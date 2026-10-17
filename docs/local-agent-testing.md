@@ -1,43 +1,72 @@
-# Local testing with independent data copies
+# Initialize shared local PostgreSQL
 
-A baseline is a known starting copy of test data. Each agent works on its own
-copy. Updating the baseline changes what the next copy starts with; it never
-changes another agent's running database.
+Agents use one permanent PostgreSQL server and the same MDM identities.
+Separate Git worktrees isolate code. A separate data copy is for disruptive
+tests or recovery, rather than routine lookups.
 
 Use PostgreSQL 16 on the Docker runtime already configured on the machine.
-The script uses the existing migration implementations for six databases:
-MDM, RDM, silver, Rules, Bookkeeping and Change Journal. It needs the checkout's
+The script uses the existing migrations for five databases by default:
+MDM, RDM, Rules, Bookkeeping and Change Journal. Silver is excluded. It needs the checkout's
 Python dependencies, including the `mdm` extra, and the `postgres:16-alpine`
 image. It makes no source-provider request and deploys nothing to Snowflake.
 
 ```mermaid
 flowchart LR
-  B[Verified baseline backup] --> C[Codex copy: six databases]
-  B --> A[Claude copy: six databases]
-  C --> P[Check backup and restore]
-  P --> B
+  C[Codex worktree] --> S[Shared PostgreSQL: five initialized stores]
+  A[Claude worktree] --> S
+  S --> B[Verified backup]
+  B --> T[Isolated recovery or disruptive test]
 ```
 
-## Create your environment
+## Initialize or reinitialize
 
-Run from your own git worktree. Pick a name for this workstream, rather than
-reusing another agent's name:
+Run lifecycle commands from the worktree that created the shared environment.
+The current `codex-local-lab` owner is
+`edgartools-platform-local-agent-stores-architecture-20261016`. Use the updated
+script from a checkout containing this change; code changes belong on a fresh
+branch, rather than editing that older merged branch. A script at an absolute
+path can run with the owner worktree as its current directory.
 
 ```bash
 docker pull postgres:16-alpine
-uv run --extra mdm python infra/scripts/local-test-stores.py up codex-financials
+uv run --extra mdm python infra/scripts/local-test-stores.py up codex-local-lab
 ```
 
 The command reports its name, state and private environment-file location.
-Source that file in your terminal to set the six runtime connections. It is
+Source that file in your terminal to set runtime and migration connections. It is
 stored outside Git with mode `0600`; do not print it, paste it into chat or
 commit it. Schema-owner connections stay separate from runtime connections.
 Startup applies the real migrations; repeating startup preserves existing data.
+It creates separate Bookkeeping worker and verifier logins, grants opposite
+duties for every registered profile, creates a read-only MDM verifier and a
+narrow MDM registration login, and installs MDM's Bookkeeping lease guard.
+The Rules governance login can record existing approvals and register approved
+versions; provisioning does not approve or activate any source or rule.
+
+Four private files are written in the environment folder:
+
+| File | Use |
+| --- | --- |
+| `connection.env` | Runtime connections plus migration connections for administration |
+| `worker.env` | Five runtime connections; Bookkeeping worker and MDM application logins |
+| `verifier.env` | Separate Bookkeeping verifier and read-only MDM logins |
+| `governance.env` | Rules governance and MDM registration connections |
+
+Source `worker.env` before work and `verifier.env` before verification. These
+files clear owner/activation settings left by another duty and omit silver.
+`BOOKKEEPING_MANIFEST_ROOT` points to private local files. Connections and
+passwords are never printed by initialization.
+
+For an isolated test that explicitly needs silver, add `--include-silver` to
+`up`. A default rerun never initializes or migrates silver. An existing silver
+database stays intact. Older six-store environments remain six-store backup
+sets, even when reinitialized without silver; new environments default to five.
 
 The container listens only on loopback at an automatically assigned port.
 Its named volume survives stops and restarts. Resource labels and the private
-ownership file bind it to the worktree that created it. A different worktree
-must create its own environment; it cannot adopt or stop this one.
+ownership file bind it to the creating worktree. Other worktrees may use the
+private client connections; lifecycle ownership is retained. Coordinate shared
+maintenance and do not stop the server while others use it.
 
 ## Make and use a baseline
 
@@ -49,11 +78,11 @@ distinguishable from captured data, and preserve the original capture receipts.
 Once workers have finished, create a checked baseline:
 
 ```bash
-uv run --extra mdm python infra/scripts/local-test-stores.py backup codex-financials --baseline
+uv run --extra mdm python infra/scripts/local-test-stores.py backup codex-local-lab --baseline
 ```
 
 The script temporarily prevents runtime logins and refuses a backup while other
-database connections are still open. It dumps all six databases, checks a restore
+database connections are still open. It dumps the environment's five or six databases, checks a restore
 into a separate owned environment, and compares table contents. The identity
 registry, accepted decisions and silver links travel with the database contents.
 If a check fails, the prior baseline remains selected. Successful promotion is
@@ -66,7 +95,7 @@ connections can use registered silver tables as well as read their metadata.
 The restore-check environment is stopped after the check. Its volume is retained,
 along with the backup, so this command does not destroy persistent data.
 
-From another worktree, create a new independent copy:
+For an explicitly isolated test or recovery, create a new copy:
 
 ```bash
 uv run --extra mdm python infra/scripts/local-test-stores.py copy claude-source-test
@@ -80,9 +109,9 @@ diagnosis and cannot be started as if it were a verified copy.
 ## Stop, restart and recover
 
 ```bash
-uv run --extra mdm python infra/scripts/local-test-stores.py status codex-financials
-uv run --extra mdm python infra/scripts/local-test-stores.py stop codex-financials
-uv run --extra mdm python infra/scripts/local-test-stores.py up codex-financials
+uv run --extra mdm python infra/scripts/local-test-stores.py status codex-local-lab
+uv run --extra mdm python infra/scripts/local-test-stores.py stop codex-local-lab
+uv run --extra mdm python infra/scripts/local-test-stores.py up codex-local-lab
 ```
 
 For a backup without changing the baseline, omit `--baseline` from `backup`.
@@ -107,8 +136,9 @@ Acceptance tests continue to use disposable PostgreSQL targets. Do not point
 `PG16_ADMIN_URL` at these permanent stores: some existing fixtures intentionally
 drop their own schemas or template databases.
 
-The affected integration test uses invented Company records through the Merge
-Stage, RDM data and a silver row whose MDM ID is looked up from the master. It
-checks six restricted runtimes, independent owners, restart persistence, exact
-integer storage, refusal with active connections and full backup/restore equality.
+The affected integration tests check real five-store startup, separate worker
+and verifier processes, Rules governance handoff, MDM lease refusal, data
+persistence and five-store backup/restore. The optional six-store test uses
+invented Company records, RDM data and a silver row with a looked-up MDM ID and
+an exact BIGINT; core-only reinitialization preserves those older silver rows.
 This local proof does not qualify a hosted PostgreSQL or Snowflake deployment.

@@ -1,12 +1,165 @@
 """Real Docker PG16: six stores, independent agents, restart and exact restore."""
 import json
+import os
 from pathlib import Path
+import shlex
+import subprocess
+import sys
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import event, text
+from sqlalchemy.exc import DBAPIError
 
 from tests.unit.test_local_test_stores import local
+
+
+def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidence(tmp_path):
+    """The generated connections really run work; silver is never created."""
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.rules.db import Rules
+    from edgar_warehouse.workers import PROFILES
+    from tests.integration.test_configured_bookkeeping_postgres import config
+
+    stores = local.LocalStores(tmp_path / "stores", tmp_path / "worktree")
+    name, copy = "core-" + uuid4().hex[:10], "copy-" + uuid4().hex[:10]
+    engines = []
+
+    def engine(database, login):
+        value = stores.engine(name, database, login)
+        engines.append(value)
+        return value
+
+    def environment(filename):
+        values = {**os.environ, "PYTHONPATH": str(Path(local.__file__).parents[2])}
+        for line in (stores.folder(name) / filename).read_text().splitlines():
+            parts = shlex.split(line)
+            if parts[0] == "unset":
+                for key in parts[1:]:
+                    values.pop(key, None)
+            else:
+                key, value = parts[1].split("=", 1)
+                values[key] = value
+        return values
+
+    def cli(duty, *args, success=True):
+        result = subprocess.run([sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())", *args],
+                                env=environment(duty + ".env"), capture_output=True, text=True, timeout=30)
+        # Driver errors may include connection details: never print output here.
+        assert (result.returncode == 0) == success, f"CLI status {result.returncode} for {args[0]}"
+        return json.loads(result.stdout) if success and result.stdout else None
+
+    try:
+        with stores.locked(name):
+            stores.start(name)
+        assert set(stores.stores(name)) == set(local.STORES)
+        admin = engine("postgres", "postgres")
+        with admin.connect() as conn:
+            assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname='silver')"))
+            assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='silver_runtime')"))
+        for filename in ("connection.env", "worker.env", "verifier.env", "governance.env"):
+            assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
+        worker, verifier, governance = (environment(f + ".env") for f in ("worker", "verifier", "governance"))
+        assert "SILVER_DATABASE_URL" not in worker
+        assert "MDM_MIGRATION_DATABASE_URL" not in worker
+        book = engine("bookkeeping_clean", "postgres")
+        with book.connect() as conn:
+            for profile in PROFILES:
+                for login, allowed, denied in (("bookkeeping_clean_runtime", "worker", "verifier"),
+                                              ("bookkeeping_clean_verifier", "verifier", "worker")):
+                    assert conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
+                                       {"l": login, "p": profile, "d": allowed})
+                    assert not conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
+                                           {"l": login, "p": profile, "d": denied})
+        # Governance can register a genuinely validated invented policy, while
+        # workers and verifiers cannot insert master state directly.
+        policy = {"version": 1, "required_consumers": ["export", "graph"], "automatic_rules": []}
+        rules = Rules(engine("rules", "rules_governance"))
+        saved = rules.save("merge", "platform", "invented", policy)
+        proof = {"digest": saved["digest"], "batch_hash": "a" * 64, "passed": True}
+        rules.prove("merge", "platform", "invented", proof)
+        pending = rules.pending()[0]
+        rules.approve("merge", "platform", "invented", evidence=pending["evidence_hash"],
+                      by="invented operator", words="Approved invented fixture")
+        rules.activate("merge", "platform", "invented", mdm_engine=engine("mdm", "mdm_governance"))
+        for login in ("mdm_runtime", "mdm_verifier", "mdm_governance"):
+            reader = engine("mdm", login)
+            with reader.connect() as conn:
+                assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == 1
+                assert not conn.scalar(text("SELECT has_schema_privilege(current_user,'mdm','CREATE')"))
+            with pytest.raises(DBAPIError):
+                with reader.begin() as conn:
+                    conn.execute(text("DELETE FROM mdm.master_entity WHERE false"))
+        application = engine("mdm", "mdm_runtime")
+        def lease(until):
+            return json.dumps([{"resource": "invented", "token": 1, "run_id": str(uuid4()),
+                                "attempt": str(uuid4()), "expires_at": until.isoformat()}])
+        with application.begin() as conn:
+            conn.execute(text("SELECT bookkeeping_guard.authorize(CAST(:p AS jsonb))"),
+                         {"p": lease(datetime.now(timezone.utc) + timedelta(minutes=2))})
+        with pytest.raises(DBAPIError):
+            with application.begin() as conn:
+                conn.execute(text("SELECT bookkeeping_guard.authorize(CAST(:p AS jsonb))"),
+                             {"p": lease(datetime.now(timezone.utc) - timedelta(minutes=1))})
+        # Run a real offline copy using the generated worker/verifier files.
+        artifacts = Artifacts()
+        inp = artifacts.put(tmp_path.as_uri() + "/inputs", {"invented": 1})
+        output = (tmp_path / "copied.json").as_uri()
+        manifest = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": [
+            {"keys": {"id": "one", "destination": output}, "input": inp, "output": output, "cursor": None}]})
+        body = config()
+        body["bookkeeping"]["targets"]["load"] = body["bookkeeping"]["targets"].pop("silver")
+        saved = rules.save("pipeline", "invented-local-load", "1", body)
+        rules.prove("pipeline", "invented-local-load", "1", {"digest": saved["digest"],
+                    "batch_hash": manifest["sha256"], "passed": True})
+        rules.activate("pipeline", "invented-local-load", "1")
+        result = cli("worker", "rules", "run", "--pipeline", "invented-local-load", "--target", "load",
+                     "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"])
+        run_id = str(result["run"]["run_id"])
+        cli("verifier", "workers", "work", "artifact.copy", run_id, success=False)
+        cli("worker", "workers", "work", "artifact.copy", run_id)
+        cli("worker", "workers", "verify", "artifact.copy", run_id, "--reports", (tmp_path / "reports").as_uri(), success=False)
+        cli("verifier", "workers", "verify", "artifact.copy", run_id, "--reports", (tmp_path / "reports").as_uri())
+        cli("worker", "bookkeeping", "finalize", run_id)
+        status = cli("worker", "bookkeeping", "status", run_id)
+        assert status["run"]["state"] == "complete" and status["pending_deliveries"] == 0
+        assert (tmp_path / "copied.json").read_bytes() == artifacts.read(inp["uri"])
+        for value in engines:
+            value.dispose()
+        expected = stores.contents(name)
+        with stores.locked(name):
+            stores.start(name)
+        assert stores.contents(name) == expected
+        # Every generated login is paused/restored by backups, not just workers.
+        active = engine("mdm", "mdm_verifier")
+        with active.connect():
+            with pytest.raises(ValueError, match="connections are active"):
+                stores.backup(name)
+        active.dispose()
+        with stores.locked(name):
+            snapshot = stores.backup(name)
+        assert len(json.loads((snapshot / "manifest.json").read_text())["files"]) == 5
+        with stores.locked(copy):
+            stores.restore(copy, snapshot)
+        assert stores.contents(copy) == expected
+        with book.begin() as conn:
+            role = conn.scalar(text("SELECT bookkeeping.profile_role('artifact.copy','worker')"))
+            conn.exec_driver_sql(f'GRANT "{role}" TO bookkeeping_clean_verifier')
+        with pytest.raises(ValueError, match="duties overlap"):
+            with stores.locked(name):
+                stores.start(name)
+    finally:
+        for value in engines:
+            value.dispose()
+        for selected in (name, copy):
+            if not (stores.folder(selected) / "identity.json").exists():
+                continue
+            container, volume = stores.owned(selected, stores.identity(selected))
+            if stores.resource("container", container):
+                stores.docker("rm", "-f", container)
+            if stores.resource("volume", volume):
+                stores.docker("volume", "rm", volume)
 
 
 def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
@@ -17,12 +170,12 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
     restored = "copy-" + uuid4().hex[:10]
     try:
         with first.locked(one):
-            first.start(one)
-            first.start(one)  # repeated provisioning changes no rows
+            first.start(one, include_silver=True)
+            first.start(one, include_silver=True)  # repeated provisioning changes no rows
         with second.locked(two):
-            second.start(two)
+            second.start(two, include_silver=True)
         # Each store has its own restricted login; it cannot create tables.
-        for database, (_, schema) in local.STORES.items():
+        for database, (_, schema) in local.ALL_STORES.items():
             runtime = first.engine(one, database, database + "_runtime")
             try:
                 with runtime.connect() as conn:
@@ -97,6 +250,11 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             reader.dispose()
         assert expected['silver.silver.visit']['rows'] == 1
         assert second.contents(two)['rdm.rdm.code_set']['rows'] == 0
+        # Old environments predate the selection field; a core-only reinit must
+        # leave their silver data intact and include it in recovery snapshots.
+        identity = first.identity(one)
+        identity.pop("stores")
+        local.private_write(first.folder(one) / "identity.json", json.dumps(identity))
         with pytest.raises(ValueError, match="another worktree"):
             second.start(one)
         with first.locked(one):
@@ -105,11 +263,11 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         assert first.contents(one) == expected
         # Simulate a process dying after it fenced logins but before finally ran.
         local.private_write(first.folder(one) / "backup-paused.json",
-                            json.dumps({d + "_runtime": True for d in local.STORES}))
+                            json.dumps({d + "_runtime": True for d in local.ALL_STORES}))
         admin = first.engine(one)
         try:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                for d in local.STORES:
+                for d in local.ALL_STORES:
                     conn.exec_driver_sql(f'ALTER ROLE "{d}_runtime" NOLOGIN')
         finally:
             admin.dispose()

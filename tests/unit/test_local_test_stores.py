@@ -61,3 +61,21 @@ def test_failed_restore_keeps_the_previous_baseline(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="restore proof"):
         stores.publish_baseline("one")
     assert (tmp_path / "baseline").read_text() == "previous snapshot\n"
+
+
+def test_new_environments_default_to_five_and_legacy_backups_keep_silver(tmp_path):
+    stores = local.LocalStores(tmp_path, tmp_path)
+    identity = stores.identity("one", create=True)
+    assert set(stores.stores("one")) == {"mdm", "rdm", "rules", "bookkeeping_clean", "change_journal_clean"}
+    identity.pop("stores")
+    local.private_write(stores.folder("one") / "identity.json", json.dumps(identity))
+    assert "silver" in stores.stores("one")
+
+
+@pytest.mark.parametrize("selection", [[], ["mdm"], list(local.STORES) + ["other"], list(local.STORES) + ["mdm"]])
+def test_invalid_store_selection_is_refused(tmp_path, selection):
+    stores = local.LocalStores(tmp_path, tmp_path)
+    identity = stores.identity("one", create=True)
+    local.private_write(stores.folder("one") / "identity.json", json.dumps({**identity, "stores": selection}))
+    with pytest.raises(ValueError, match="selection is invalid"):
+        stores.stores("one")
