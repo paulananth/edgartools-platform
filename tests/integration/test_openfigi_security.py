@@ -116,7 +116,7 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
         where, batch = root / f"answers_{number}", f"{kind}/{name.split('.')[0]}"
         request = capture_root / kind / name.replace(".json", ".request.json")
         asked = chain.read(store, where / "requests", files.load(FOLDER / "requests.yaml"),
-                    [{"input": ref(request), "context": context(where / "rq", request, {"batch": batch})}], 2)
+                           [{"input": ref(request), "context": context(where / "rq", request, {"batch": batch})}], 2)
         answer = capture_root / kind / name
         lookups = store.put(where.as_uri(), {"version": 2, "input": ref(answer), "sets": {"asked": {
             "readings": [asked], "table": "asked", "column": "key", "value_column": "id",

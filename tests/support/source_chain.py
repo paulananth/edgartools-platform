@@ -43,9 +43,9 @@ def combine(store: Artifacts, root: Path, contract: Path, readings: dict) -> dic
 
 def prepare(store: Artifacts, root: Path, reading: dict, keys: dict) -> dict:
     """MDM preparation of `reading`; its batches are written under `root`."""
-    task = {"input": reading, "output": (root / "manifest.json").as_uri(), "checks": ["mdm.prepared"], "keys": keys}
+    task = {"input": reading, "output": (root / "manifest.json").as_uri(), "checks": [mdm_prepare.CHECK], "keys": keys}
     prepared = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({mdm_prepare.CHECK: True}, [])
     return prepared
 
 
@@ -54,6 +54,7 @@ def records(store: Artifacts, root: Path, prepared: dict, code: str, contract: d
     """The prepared records normalized under the Dataset Contract `code`. With
     `refused`, a record the contract sets aside is kept there by its `key`
     field, with its reason, instead of failing the test."""
+    assert (refused is None) == (key is None), "refused and key go together"
     out = []
     for batch in store.json(prepared)["batches"]:
         data = batch["input"]
