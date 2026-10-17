@@ -1,6 +1,6 @@
 # Source sequencing configuration check
 
-Status: in progress. Scope: offline configuration checking, not source activation
+Status: implemented and locally verified. Scope: offline configuration checking, not source activation
 or a replacement executor. Base: `06a98a189`.
 
 Operator: implement source sequencing configuration checks; each source can be
@@ -15,9 +15,9 @@ permission to bypass required inputs or change frozen versions.
 - [x] Implement and test the public configuration-check interface: graph validation, independent selection, required dependencies, preferred order and explicit deferrals — command behavior tests passed; 2026-10-17 08:27 ET.
 - [x] Inventory all committed source configurations without claiming runtime readiness — nine-source inventory equality and nine independent selections tested; three existing targets, six explicitly missing; 2026-10-17 08:27 ET.
 - [x] Document commands, exit codes, override behavior and remaining runtime gaps — specification and load-guide link inspected; 2026-10-17 08:27 ET.
-- [ ] Run affected tests under five minutes and review Standards, Spec and GoF.
-- [ ] Commit on the dedicated branch after the overlap guard passes.
-- [ ] Learning → skill: name any required skill follow-up, or none.
+- [x] Run affected tests under five minutes and review Standards, Spec and GoF — 96 passed in 3.46s; diagnostic fix then 29 passed / 68 unchanged deselected in 0.60s; three independent reviews completed, Standards P2 fixed and rechecked; 2026-10-17 08:29 ET.
+- [x] Commit on the dedicated branch after the overlap guard passes — `84a26332`, correct branch and no overlap verified; 2026-10-17 08:29 ET.
+- [x] Learning → skill: none — existing data-platform Source readiness rules already require independent progress, valid required inputs and separate qualification evidence. New command syntax and its offline limit belong in `docs/specs/source-sequencing.md`; no skill defect found; 2026-10-17 08:29 ET.
 
 ## GoF consult
 
@@ -49,3 +49,10 @@ qualification remains governed by the source-readiness specifications.
 - Operator clarification: "it is easy decoupling nothing else". Sources are
   independent; preferred order never creates a required dependency. The
   implementation does not enable old-input fallback or alter running work.
+- Independent reviews: Spec and GoF found no blocking issue. Standards found
+  raw malformed-sequence YAML diagnostics could echo private values. Added a
+  failing public-command regression, replaced loader messages with a category,
+  reran affected tests, and obtained the reviewer's explicit resolved finding.
+- Real `edgar_warehouse.cli.main` calls verified all-source, Person-only and
+  deferred-GLEIF reports. Documentation links resolve. Runtime readiness
+  remains explicitly unchecked; no source load was performed.

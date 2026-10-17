@@ -99,9 +99,14 @@ def plan(document: dict, *, root: Path, selected=(), deferred=()) -> dict:
 def handle(args):
     root = Path(args.root)
     try:
-        result = plan(files.load(Path(args.file) if args.file else root / "source-sequence.yaml"),
-                      root=root, selected=args.source, deferred=args.defer)
-    except (Blocked, OSError, ValueError) as error:
+        document = files.load(Path(args.file) if args.file else root / "source-sequence.yaml")
+    except (OSError, ValueError):
+        # Loader diagnostics can echo private YAML lines and filesystem values.
+        print("Source sequence refused: sequence_file_invalid_or_missing", file=sys.stderr)
+        return 2
+    try:
+        result = plan(document, root=root, selected=args.source, deferred=args.defer)
+    except Blocked as error:
         print(f"Source sequence refused: {error}", file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))

@@ -169,3 +169,14 @@ def test_malformed_source_is_reported_without_leaking_its_values(tmp_path, capsy
     assert code == 3
     assert result["sources"]["company"]["reasons"] == ["source_target_invalid_or_missing"]
     assert "invented-secret" not in json.dumps(result)
+
+
+def test_malformed_sequence_is_reported_without_echoing_private_yaml(tmp_path, capsys):
+    (tmp_path / "source-sequence.yaml").write_text("version: 1\npassword: [invented-secret\n")
+    parser = argparse.ArgumentParser()
+    register(parser.add_subparsers())
+    args = parser.parse_args(["rules", "sequence", "check", "--root", str(tmp_path)])
+    assert args.handler(args) == 2
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == "Source sequence refused: sequence_file_invalid_or_missing\n"
