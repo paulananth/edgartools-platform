@@ -52,8 +52,8 @@ cannot render.
 |---|---|---|
 | MDM | `edgar-warehouse mdm migrate --application-role <role>` | `MDM_DATABASE_URL` |
 | RDM | `edgar-warehouse rdm init --runtime-role <role>`, then `rdm migrate` | `RDM_MIGRATION_DATABASE_URL` |
-| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`, then `bookkeeping migrate`. The database name is `bookkeeping`. | `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` |
-| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate` | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
+| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role bookkeeping_runtime`, then `bookkeeping migrate`. The database name is `bookkeeping`. | `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` |
+| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate`. The database name is `change_journal`. | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
 | Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` | `SILVER_MIGRATION_DATABASE_URL` |
 
 The runtime role exists, is not a superuser, and is not the migration login.

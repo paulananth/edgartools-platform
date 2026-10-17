@@ -147,7 +147,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
         assert conn.scalar(text("SELECT count(*) FROM mdm.outbox WHERE verified_at IS NULL")) == 0
     for consumer in ("export", "graph"):
         assert len(list((out / consumer).glob("*.json"))) == 2  # one contract file per batch
-    owner = create_engine(databases.admin.url.set(database="change_journal_clean"))
+    owner = create_engine(databases.admin.url.set(database="change_journal"))
     with owner.connect() as conn:
         events = conn.execute(text("SELECT event_key, run_id::text AS run_id, source FROM journal.event "
                                    "WHERE producer='mdm' ORDER BY event_key")).mappings().all()

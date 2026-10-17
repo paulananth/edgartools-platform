@@ -66,7 +66,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         book = engine("bookkeeping_clean", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:
-                for login, allowed, denied in (("bookkeeping_clean_runtime", "worker", "verifier"),
+                for login, allowed, denied in (("bookkeeping_runtime", "worker", "verifier"),
                                               ("bookkeeping_clean_verifier", "verifier", "worker")):
                     assert conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
                                        {"l": login, "p": profile, "d": allowed})

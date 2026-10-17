@@ -24,11 +24,11 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 
 def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
     admin = create_engine(admin_url, hide_parameters=True)
-    requested = [("bookkeeping", "bookkeeping_clean_owner", "bookkeeping_clean_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
+    requested = [("bookkeeping", "bookkeeping_clean_owner", "bookkeeping_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
     if rules:
         requested.append(("rules", "rules_owner", "rules_agent", "RULES_AGENT_PASSWORD"))
     if journal:
-        requested.append(("change_journal_clean", "change_journal_owner", "change_journal_runtime", "CHANGE_JOURNAL_RUNTIME_PASSWORD"))
+        requested.append(("change_journal", "change_journal_owner", "change_journal_runtime", "CHANGE_JOURNAL_RUNTIME_PASSWORD"))
     quote = admin.dialect.identifier_preparer.quote
     result = {}
     try:
@@ -68,7 +68,7 @@ def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
                 if database == "rules":
                     result[database] = migrate_rules(engine, agent_role=runtime)
                 else:
-                    migration = migrate_journal if database == "change_journal_clean" else migrate
+                    migration = migrate_journal if database == "change_journal" else migrate
                     result[database] = migration(engine, runtime_role=runtime)
             finally:
                 engine.dispose()

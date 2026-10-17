@@ -43,7 +43,7 @@ the full warehouse distribution. See the
 The full warehouse distribution still carries its other commands' dependencies.
 No container rollout or package publication is included in this refactor.
 
-Provision the new `change_journal_clean` database on PostgreSQL 16. The `journal`
+Provision the new `change_journal` database on PostgreSQL 16. The `journal`
 schema contains exactly one append-only `event` table. Checksummed migrations
 are recorded in its schema comment. Migration and runtime connections are
 separate. Runtime has only schema usage and bounded append/read functions;

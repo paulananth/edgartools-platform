@@ -29,9 +29,17 @@ STORES = {
     "rdm": ("RDM_DATABASE_URL", "rdm"),
     "rules": ("RULES_DATABASE_URL", "rules"),
     "bookkeeping_clean": ("BOOKKEEPING_CLEAN_DATABASE_URL", "bookkeeping"),
-    "change_journal_clean": ("CHANGE_JOURNAL_DATABASE_URL", "journal"),
+    "change_journal": ("CHANGE_JOURNAL_DATABASE_URL", "journal"),
 }
 ALL_STORES = {**STORES, "silver": ("SILVER_DATABASE_URL", "silver")}
+
+
+def physical_database(store: str) -> str:
+    return "bookkeeping" if store == "bookkeeping_clean" else store
+
+
+def runtime_login(store: str) -> str:
+    return "bookkeeping_runtime" if store == "bookkeeping_clean" else store + "_runtime"
 EXTRA_LOGINS = ("bookkeeping_clean_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
@@ -120,8 +128,7 @@ class LocalStores:
         return container, volume
 
     def url(self, name: str, database="postgres", user="postgres"):
-        if database == "bookkeeping_clean":
-            database = "bookkeeping"
+        database = physical_database(database)
         identity = self.identity(name)
         container, _ = self.owned(name, identity)
         found = self.resource("container", container)
@@ -211,8 +218,8 @@ class LocalStores:
         quote = admin.dialect.identifier_preparer.quote
         try:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                roles = {database + suffix: login for database in selected
-                         for suffix, login in (("_owner", False), ("_runtime", True))}
+                roles = {store + "_owner": False for store in selected}
+                roles.update({runtime_login(store): True for store in selected})
                 roles.update({role: True for role in EXTRA_LOGINS})
                 roles.update(bookkeeping_clean_control=False, rules_approver=False)
                 for role, login in roles.items():
@@ -224,25 +231,25 @@ class LocalStores:
                         suffix = "LOGIN PASSWORD :password" if login else "NOLOGIN"
                         conn.execute(text(f"CREATE ROLE {quote(role)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS {suffix}"), {"password": self.identity(name)["password"]})
                 for store in selected:
-                    database = "bookkeeping" if store == "bookkeeping_clean" else store
+                    database = physical_database(store)
                     owner = conn.scalar(text("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=:d"), {"d": database})
                     if owner and owner != store + "_owner":
                         raise ValueError("Database has a different owner; refusing adoption")
                     if not owner:
                         conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(store + '_owner')}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
-                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(store + '_runtime')}")
+                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(runtime_login(store))}")
                 for database, login in (("bookkeeping", "bookkeeping_clean_verifier"), ("mdm", "mdm_verifier"),
                                         ("mdm", "mdm_governance"), ("rules", "rules_governance")):
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
-                for parent, member in (("bookkeeping_clean_control", "bookkeeping_clean_runtime"),
+                for parent, member in (("bookkeeping_clean_control", "bookkeeping_runtime"),
                                        ("bookkeeping_clean_control", "bookkeeping_clean_verifier"),
                                        ("rules_runtime", "rules_governance"), ("rules_approver", "rules_governance")):
                     if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
             if migrate:
                 migrations = {"mdm": mdm, "rdm": rdm, "silver": silver, "rules": rules,
-                              "bookkeeping_clean": bookkeeping, "change_journal_clean": journal}
+                              "bookkeeping_clean": bookkeeping, "change_journal": journal}
                 for database in selected:
                     engine = self.engine(name, database)
                     @event.listens_for(engine, "connect")
@@ -270,10 +277,10 @@ class LocalStores:
         book = self.engine(name, "bookkeeping_clean")
         try:
             for profile in PROFILES:
-                grant_profile(book, profile=profile, worker="bookkeeping_clean_runtime", verifier="bookkeeping_clean_verifier")
+                grant_profile(book, profile=profile, worker="bookkeeping_runtime", verifier="bookkeeping_clean_verifier")
             with book.connect() as conn:
                 for profile in PROFILES:
-                    for login, duty in (("bookkeeping_clean_runtime", "verifier"), ("bookkeeping_clean_verifier", "worker")):
+                    for login, duty in (("bookkeeping_runtime", "verifier"), ("bookkeeping_clean_verifier", "worker")):
                         if conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
                                        {"l": login, "p": profile, "d": duty}):
                             raise ValueError("Worker and verifier duties overlap; refusing initialization")
