@@ -2,6 +2,9 @@
 union, combine -> record -> mdm.prepare + Dataset Contracts. Counts only; reads the kept capture, asks
 OpenFIGI nothing. Usage: openfigi_run.py CAPTURE OUT FILES_PER_KIND (0 = every file)."""
 import hashlib
+import multiprocessing
+import os
+from concurrent.futures import ProcessPoolExecutor
 import json
 import resource
 import sys
@@ -63,28 +66,40 @@ def context(root, path, values):
 answers_body = {k: v for k, v in files.source("openfigi").items() if k in ("source", "execution", "read")}
 doc = files.source("openfigi")
 report["contracts"] = {}
-for kind, (word, _, code) in KINDS.items():
+
+
+def answers_reading(job):
+    """One answers reading (one of a kind's 8), with each file's pair set from its own request file:
+    one built from the whole group is re-read for every file (quadratic, found 2026-10-17)."""
+    kind, word, g, group = job
+    root = OUT / word / f"answers_{g}"
+    arts = []
+    for n in group:
+        batch, request, path = f"{kind}/{n.split('.')[0]}", CAP / kind / n.replace(".json", ".request.json"), CAP / kind / n
+        asked = read(root / "requests" / n, files.load(FOLDER / "requests.yaml"),
+                     [{"input": ref(request), "context": context(root / "ctx-req" / n, request, {"batch": batch})}], 2)
+        lookups = store.put((root / "lk").as_uri(), {"version": 2, "input": ref(path), "sets": {"asked": {
+            "readings": [asked], "table": "asked", "column": "key", "value_column": "id",
+            "max_input_bytes": 1 << 20, "max_input_rows": 1000}}})
+        arts.append({"input": ref(path), "lookups": lookups, "context": context(
+            root / "ctx-ans" / n, path, {"batch": batch, "id_type": word})})
+    return f"answers_{g}", read(root / "answers", answers_body, arts, 3)
+
+
+# All 16 readings at once, one process each (8 cores): each reading is independent, with its own
+# files under OUT; the verifier still replays every one.
+jobs, names_of = [], {}
+for kind, (word, _, _) in KINDS.items():
     names = sorted(p.name.replace(".request", "") for p in (CAP / kind).glob("*.request.json"))
-    names = names[:LIMIT] if LIMIT else names
-    readings = {}
-    for g, group in enumerate([names[i::8] for i in range(8)], 1):  # 8 readings a kind
-        root = OUT / word / f"answers_{g}"
-        asked = []
-        for n in group:
-            path = CAP / kind / n.replace(".json", ".request.json")
-            asked.append({"input": ref(path), "context": context(root / "ctx-req" / n, path,
-                                                                 {"batch": f"{kind}/{n.split('.')[0]}"})})
-        requests = read(root / "requests", files.load(FOLDER / "requests.yaml"), asked, 2)
-        arts = []
-        for n in group:
-            path = CAP / kind / n
-            lookups = store.put((root / "lk").as_uri(), {"version": 2, "input": ref(path), "sets": {"asked": {
-                "readings": [requests], "table": "asked", "column": "key", "value_column": "id",
-                "max_input_bytes": 1 << 30, "max_input_rows": 1_000_000}}})
-            arts.append({"input": ref(path), "lookups": lookups, "context": context(
-                root / "ctx-ans" / n, path, {"batch": f"{kind}/{n.split('.')[0]}", "id_type": word})})
-        readings[f"answers_{g}"] = read(root / "answers", answers_body, arts, 3)
-    stage(f"{word}: read {len(names)} files")
+    names_of[kind] = names = names[:LIMIT] if LIMIT else names
+    jobs += [(kind, word, g, names[g - 1::8]) for g in range(1, 9)]
+# fork: the script's top level must not run again in each worker (macOS defaults to spawn).
+with ProcessPoolExecutor(max_workers=os.cpu_count(), mp_context=multiprocessing.get_context("fork")) as pool:
+    done = list(pool.map(answers_reading, jobs))
+by_kind = {word: dict(done[i * 8:(i + 1) * 8]) for i, (_, (word, _, _)) in enumerate(KINDS.items())}
+stage(f"read {sum(len(v) for v in names_of.values())} files, 16 readings in parallel")
+for kind, (word, _, code) in KINDS.items():
+    names, readings = names_of[kind], by_kind[word]
     counts = combine(OUT / word / "reduce", files.load(FOLDER / "reduce.yaml"), readings)
     union = combine(OUT / word / "union", files.load(FOLDER / "answers-union.yaml"), readings)
     combined = combine(OUT / word / "combine", files.load(FOLDER / "combine.yaml"), {"answers": union, "counts": counts})
