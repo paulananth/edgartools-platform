@@ -2,7 +2,7 @@
 
 Priority: 75, tier 3, product value (numbered after the map was charted). Map: [Rebuild priorities](../map.md).
 
-Status: in review (#1030 merged; #1042 open)
+Status: done (2026-10-17 08:47 ET): #1030 and #1042 merged
 Blocked by: none (74 merged as #960)
 
 ## Why
@@ -17,5 +17,5 @@ Form ADV's custodian links were kept out of MDM only because of the Merge Stage'
 - [x] Resolved in MDM, with GLEIF and SEC Companies loaded beside them (duplicates, an LEI on two Companies, links resolved and waiting, the time per batch): one run, together with ticket 76's re-proof of the ADV rules. `research/76_adv_merge_run.py`, report `research/76-adv-merge-run.json`, PostgreSQL 16, policy `635c6a24…`, 22 min (prepare 53 s; passes 479 s, 371 s, 350 s; slowest batch 11.2 s, against 68 min for the last ADV-only run): **15,339 `CUSTODIAN` links**, which is every adviser-custodian pair named by BD number or LEI (15,381) less the 42 pointing at a custodian set aside for its LEI check digit; the 3,190 pairs named only by name wait for a name rule; 9,267 links seen again after their first month; at most 6,294 links on one custodian. 0 LEIs, 0 CRD numbers and 0 BD numbers on two Companies (2026-10-17 08:29 ET)
 - [x] The ADV matching rules' own switch-on (ticket 76): operator, 2026-10-17 08:31 ET, "Switch on all three (Recommended)"; in #1042 (2026-10-17 08:39 ET)
 - [x] PR, CI green, merge on the operator's word: #1030, merged by the operator 2026-10-17
-- [ ] The run's PR #1042 (script, report, switch-on), CI green, merge on the operator's word
+- [x] The run's PR #1042 (script, report, switch-on), CI green, merge on the operator's word: "merge 1042 when green", merged 2026-10-17 08:47 ET
 - [x] Learning → skill: `skills/mdm-engineering/SKILL.md`, the Merge Stage: a waiting record is looked at again only when applied again, so a run of several feeds applies passes until one changes nothing (this run's second pass bound 97 GLEIF records to custodian Companies the first pass created after them) (2026-10-17 08:29 ET)
