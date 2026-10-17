@@ -3,7 +3,7 @@
 
 Run with uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py.
 BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL names the admin connection (postgres DB),
-BOOKKEEPING_CLEAN_RUNTIME_PASSWORD supplies the new runtime login's password.
+BOOKKEEPING_RUNTIME_PASSWORD supplies the new runtime login's password.
 Optional --rules uses RULES_AGENT_PASSWORD; --journal uses
 CHANGE_JOURNAL_RUNTIME_PASSWORD. No versions are activated.
 """
@@ -24,7 +24,7 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 
 def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
     admin = create_engine(admin_url, hide_parameters=True)
-    requested = [("bookkeeping", "bookkeeping_owner", "bookkeeping_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
+    requested = [("bookkeeping", "bookkeeping_owner", "bookkeeping_runtime", "BOOKKEEPING_RUNTIME_PASSWORD")]
     if rules:
         requested.append(("rules", "rules_owner", "rules_agent", "RULES_AGENT_PASSWORD"))
     if journal:

@@ -28,22 +28,18 @@ STORES = {
     "mdm": ("MDM_DATABASE_URL", "mdm"),
     "rdm": ("RDM_DATABASE_URL", "rdm"),
     "rules": ("RULES_DATABASE_URL", "rules"),
-    "bookkeeping_clean": ("BOOKKEEPING_CLEAN_DATABASE_URL", "bookkeeping"),
+    "bookkeeping": ("BOOKKEEPING_DATABASE_URL", "bookkeeping"),
     "change_journal": ("CHANGE_JOURNAL_DATABASE_URL", "journal"),
 }
 ALL_STORES = {**STORES, "silver": ("SILVER_DATABASE_URL", "silver")}
 
 
-def physical_database(store: str) -> str:
-    return "bookkeeping" if store == "bookkeeping_clean" else store
-
-
 def runtime_login(store: str) -> str:
-    return "bookkeeping_runtime" if store == "bookkeeping_clean" else store + "_runtime"
+    return store + "_runtime"
 
 
 def owner_login(store: str) -> str:
-    return "bookkeeping_owner" if store == "bookkeeping_clean" else store + "_owner"
+    return store + "_owner"
 EXTRA_LOGINS = ("bookkeeping_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
@@ -132,7 +128,6 @@ class LocalStores:
         return container, volume
 
     def url(self, name: str, database="postgres", user="postgres"):
-        database = physical_database(database)
         identity = self.identity(name)
         container, _ = self.owned(name, identity)
         found = self.resource("container", container)
@@ -196,7 +191,7 @@ class LocalStores:
         migration = {variable.replace("_DATABASE_URL", "_MIGRATION_DATABASE_URL"):
                      self.url(name, database).render_as_string(hide_password=False)
                      for database, (variable, _) in selected.items()}
-        verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": self.url(name, "bookkeeping_clean", "bookkeeping_verifier").render_as_string(hide_password=False),
+        verifier = {"BOOKKEEPING_DATABASE_URL": self.url(name, "bookkeeping", "bookkeeping_verifier").render_as_string(hide_password=False),
                     "MDM_DATABASE_URL": self.url(name, "mdm", "mdm_verifier").render_as_string(hide_password=False)}
         governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
                       "RULES_MDM_ACTIVATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
@@ -235,7 +230,7 @@ class LocalStores:
                         suffix = "LOGIN PASSWORD :password" if login else "NOLOGIN"
                         conn.execute(text(f"CREATE ROLE {quote(role)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS {suffix}"), {"password": self.identity(name)["password"]})
                 for store in selected:
-                    database = physical_database(store)
+                    database = store
                     owner = conn.scalar(text("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=:d"), {"d": database})
                     if owner and owner != owner_login(store):
                         raise ValueError("Database has a different owner; refusing adoption")
@@ -253,7 +248,7 @@ class LocalStores:
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
             if migrate:
                 migrations = {"mdm": mdm, "rdm": rdm, "silver": silver, "rules": rules,
-                              "bookkeeping_clean": bookkeeping, "change_journal": journal}
+                              "bookkeeping": bookkeeping, "change_journal": journal}
                 for database in selected:
                     engine = self.engine(name, database)
                     @event.listens_for(engine, "connect")
@@ -263,7 +258,7 @@ class LocalStores:
                         connection.commit()
                     try:
                         key = "application_role" if database == "mdm" else "agent_role" if database == "rules" else "runtime_role"
-                        role = "bookkeeping_control" if database == "bookkeeping_clean" else database + "_runtime"
+                        role = "bookkeeping_control" if database == "bookkeeping" else database + "_runtime"
                         migrations[database](engine, **{key: role})
                         if database == "mdm":
                             from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
@@ -278,7 +273,7 @@ class LocalStores:
         from edgar_warehouse.bookkeeping.clean.database import grant_profile
         from edgar_warehouse.workers import PROFILES
 
-        book = self.engine(name, "bookkeeping_clean")
+        book = self.engine(name, "bookkeeping")
         try:
             for profile in PROFILES:
                 grant_profile(book, profile=profile, worker="bookkeeping_runtime", verifier="bookkeeping_verifier")

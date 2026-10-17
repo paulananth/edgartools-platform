@@ -12,8 +12,7 @@ from .config import Blocked, canonical
 
 
 def get_engine(url: str | None = None):
-    # No fallback to BOOKKEEPING_DATABASE_URL: that is the legacy store.
-    return create_engine(url or os.environ["BOOKKEEPING_CLEAN_DATABASE_URL"], pool_pre_ping=True)
+    return create_engine(url or os.environ["BOOKKEEPING_DATABASE_URL"], pool_pre_ping=True)
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:

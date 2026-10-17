@@ -146,9 +146,9 @@ Both apply pending numbered migrations and refresh restricted runtime grants.
 schema blocks both. These modes create no run, import no legacy history or
 checkpoints, and do not change Rules, Change Journal or destination schemas.
 
-Use a separate migration owner in `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL`
-and an existing restricted runtime role. Never use the legacy
-`BOOKKEEPING_DATABASE_URL` or a runtime login as the migration owner. Check
+Use a separate migration owner in `BOOKKEEPING_MIGRATION_DATABASE_URL`
+and an existing restricted runtime role. Never use the runtime connection
+or a runtime login as the migration owner. Check
 the exact database, PostgreSQL version and role before executing; do not print
 connection secrets. Then run the selected command and verify the returned
 migration checksums, five control tables, runtime privileges and zero imported
@@ -241,7 +241,7 @@ edgar-warehouse bookkeeping checks <run-id>
 edgar-warehouse bookkeeping leases <run-id> --limit 100
 ```
 
-Each needs `BOOKKEEPING_CLEAN_DATABASE_URL` (the runtime login). `status`,
+Each needs `BOOKKEEPING_DATABASE_URL` (the runtime login). `status`,
 `checks` and `leases` take the run id; `runs` lists them.
 
 ## Recover mode

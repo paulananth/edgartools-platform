@@ -11,7 +11,7 @@ The four are separate databases, which can share one PostgreSQL 16 server. Each 
 | Database | Schema | Holds | Created and migrated by | Migrations |
 |---|---|---|---|---|
 | `rules` | `rules` | Every version of every rules file: sources, merge rules, pipelines. Also their test runs and approvals. | `edgar-warehouse rules init` (running it again migrates) | `edgar_warehouse/rules/migrations/`, 001–003 |
-| `bookkeeping_clean` | `bookkeeping` | Runs, their work items, leases, checkpoints and the outbox to the Journal | `edgar-warehouse bookkeeping init` / `migrate --runtime-role` | `edgar_warehouse/bookkeeping/clean/migrations/`, 001–004 |
+| `bookkeeping` | `bookkeeping` | Runs, their work items, leases, checkpoints and the outbox to the Journal | `edgar-warehouse bookkeeping init` / `migrate --runtime-role` | `edgar_warehouse/bookkeeping/clean/migrations/`, 001–004 |
 | each destination database | `bookkeeping_guard` | Which run may write which resource | `bookkeeping init-guard` | `destination_guard.sql` |
 | `change_journal` | `journal` | The append-only record of what was acquired and published | `edgar-warehouse change-journal init` / `migrate --runtime-role` | `edgar_warehouse/change_journal/migrations/`, 001 |
 | `mdm` | `mdm_v2` | MDM: source readings, master entities, decisions, the approved policy | `edgar-warehouse mdm migrate --model clean --application-role …` | `edgar_warehouse/mdm/migrations/`, 023–042 |

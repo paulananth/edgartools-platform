@@ -221,7 +221,7 @@ print(json.dumps({{"shipped": shipped, "modules": modules}}))
 def _stores(databases):
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     return {"RULES_DATABASE_URL": url(databases.rules.engine),
-            "BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.runtime),
+            "BOOKKEEPING_DATABASE_URL": url(databases.runtime),
             "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
 
 
@@ -538,7 +538,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     command("edgar_warehouse.cli", "workers", "work", "source.read", run_id)
     verifier = databases.verifier.url.render_as_string(hide_password=False)
     command("edgar_warehouse.cli", "workers", "verify", "source.read", run_id, "--reports", (tmp_path / "reports").as_uri(),
-            BOOKKEEPING_CLEAN_DATABASE_URL=verifier)
+            BOOKKEEPING_DATABASE_URL=verifier)
     state = json.loads(command("edgar_warehouse.cli", "bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 1} and state["run"]["state"] == "complete"
     tables = json.loads((tmp_path / "holdings.json").read_bytes())["artifacts"][0]["tables"]
@@ -818,7 +818,7 @@ read:
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
     worker = {"MDM_DATABASE_URL": url(mdm_app), "MDM_APPLICATION_ROLE": "clean_application"}
-    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_reader)}
+    verifier = {"BOOKKEEPING_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_reader)}
 
     def cli(*args, **extra):
         done = _run(python, "-m", "edgar_warehouse.cli", *args, env={**env, **extra}, cwd=root)

@@ -57,8 +57,8 @@ def test_installed_control_runs_a_whole_run(control_python, databases, tmp_path)
     def control(url, *arguments, document=None):
         done = subprocess.run([str(control_python), "-I", "-m", "edgar_warehouse.bookkeeping", *arguments],
                               input=None if document is None else json.dumps(document), capture_output=True, text=True,
-                              env={**os.environ, "BOOKKEEPING_CLEAN_DATABASE_URL": url,
-                                   "BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL": owner,
+                              env={**os.environ, "BOOKKEEPING_DATABASE_URL": url,
+                                   "BOOKKEEPING_MIGRATION_DATABASE_URL": owner,
                                    "CHANGE_JOURNAL_DATABASE_URL": journal}, cwd=tmp_path)
         assert done.returncode == 0, done.stderr
         return json.loads(done.stdout)

@@ -165,7 +165,7 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(d
     from edgar_warehouse.cli import main
 
     monkeypatch.setenv(
-        "BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL",
+        "BOOKKEEPING_MIGRATION_DATABASE_URL",
         databases.admin.url.render_as_string(hide_password=False),
     )
     assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
@@ -948,7 +948,7 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 2, "steps": {"s0": copies, "s1": counts}})
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
     databases.rules.activate("source", name, "1")
-    environment = {"BOOKKEEPING_CLEAN_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
+    environment = {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
                    "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
                    "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
                    "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}
@@ -976,9 +976,9 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     verifier_url = databases.verifier.url.render_as_string(hide_password=False)
     for profile in ("artifact.copy", "jsonl.count"):
         process("-m", "edgar_warehouse.workers", "work", profile, rid)
-        env["BOOKKEEPING_CLEAN_DATABASE_URL"], worker_url = verifier_url, env["BOOKKEEPING_CLEAN_DATABASE_URL"]
+        env["BOOKKEEPING_DATABASE_URL"], worker_url = verifier_url, env["BOOKKEEPING_DATABASE_URL"]
         process("-m", "edgar_warehouse.workers", "verify", profile, rid, "--reports", reports)
-        env["BOOKKEEPING_CLEAN_DATABASE_URL"] = worker_url
+        env["BOOKKEEPING_DATABASE_URL"] = worker_url
     finished = json.loads(process("-m", "edgar_warehouse.bookkeeping", "finalize", rid))
     assert finished["run"]["state"] == "complete" and finished["counts"] == {"verified": 4}
     assert json.loads(Path(tmp_path / "count-1").read_text()) == {"lines": 1}
@@ -1019,7 +1019,7 @@ def _provision(server, monkeypatch, runpy):
         url = server.url(driver="postgresql")
         admin = create_engine(url, connect_args={"connect_timeout": 3})
         engines.append(admin)
-        monkeypatch.setenv("BOOKKEEPING_CLEAN_RUNTIME_PASSWORD", "test")
+        monkeypatch.setenv("BOOKKEEPING_RUNTIME_PASSWORD", "test")
         monkeypatch.setenv("RULES_AGENT_PASSWORD", "test")
         script = Path(__file__).parents[2] / "infra/scripts/provision-clean-bookkeeping.py"
         provision = runpy.run_path(str(script))["provision"]

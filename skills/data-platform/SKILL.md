@@ -100,7 +100,7 @@ checks and points to the repository lifecycle script.
 
 3. **Stores.** Four PostgreSQL 16 databases, each set by its variable; never
    paste an address into the chat:
-   `RULES_DATABASE_URL`, `BOOKKEEPING_CLEAN_DATABASE_URL`,
+   `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
    `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`. Their schemas:
    `edgar-warehouse rules init`, `edgar-warehouse bookkeeping init --runtime-role <role>`,
    `edgar-warehouse change-journal init --runtime-role <role>`,
@@ -125,7 +125,7 @@ complete JSON records, column arrays, exact source text and frozen references.
 2. Submit: `edgar-warehouse rules run --pipeline <name> --target <target> --input-manifest <uri> --input-sha256 <sha256>`.
    Keep the `run_id` it prints.
 3. Work, as the worker login: `edgar-warehouse workers work source.read <run_id> --limit 100`.
-4. Verify, as the verifier login (a different `BOOKKEEPING_CLEAN_DATABASE_URL`):
+4. Verify, as the verifier login (a different `BOOKKEEPING_DATABASE_URL`):
    `edgar-warehouse workers verify source.read <run_id> --reports <uri> --limit 100`.
 5. Repeat work and verify until every read unit is verified; the limit bounds
    one invocation. For a read-only target, finish with

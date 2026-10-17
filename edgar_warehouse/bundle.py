@@ -27,7 +27,7 @@ SKILLS = files.BUNDLE_DATA / "skills" if files.BUNDLED.is_dir() else Path(__file
 RULES = files.BUNDLED if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "rules"
 STORES = (
     "RULES_DATABASE_URL",
-    "BOOKKEEPING_CLEAN_DATABASE_URL",
+    "BOOKKEEPING_DATABASE_URL",
     "CHANGE_JOURNAL_DATABASE_URL",
     "MDM_DATABASE_URL",
 )

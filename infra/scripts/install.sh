@@ -729,7 +729,7 @@ uv run --extra s3 --extra mdm-runtime edgar-warehouse rules migrate --agent-role
 
   add_stage \
     "Stores: Bookkeeping" \
-    "Creates and upgrades Bookkeeping (as its owner, BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL): frozen runs, leases, retries and the verifier's admissions, so a load restarts where it stopped. ${bookkeeping_role} is the runtime login; each worker profile's own logins are granted later with bookkeeping grant-profile." \
+    "Creates and upgrades Bookkeeping (as its owner, BOOKKEEPING_MIGRATION_DATABASE_URL): frozen runs, leases, retries and the verifier's admissions, so a load restarts where it stopped. ${bookkeeping_role} is the runtime login; each worker profile's own logins are granted later with bookkeeping grant-profile." \
     "uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping init --runtime-role ${bookkeeping_role}
 uv run --extra s3 --extra mdm-runtime edgar-warehouse bookkeeping migrate --runtime-role ${bookkeeping_role}"
 

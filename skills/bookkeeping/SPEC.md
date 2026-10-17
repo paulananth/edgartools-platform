@@ -11,7 +11,7 @@ legacy caller or qualify a production cutover.**
 ## Implemented boundary
 
 `edgar_warehouse.bookkeeping.clean` uses only
-`BOOKKEEPING_CLEAN_DATABASE_URL`, never the old `BOOKKEEPING_DATABASE_URL`.
+`BOOKKEEPING_DATABASE_URL`.
 The PostgreSQL 16 database is `bookkeeping`. Its schema has exactly
 five tables: `pipeline_run`, `work_item`, `lease`, `checkpoint`, and
 `journal_outbox`. Migration checksums live in a schema comment, so they do
@@ -252,14 +252,14 @@ uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py --rules
 ```
 
 The script requires `BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL`,
-`BOOKKEEPING_CLEAN_RUNTIME_PASSWORD` and, with `--rules`,
+`BOOKKEEPING_RUNTIME_PASSWORD` and, with `--rules`,
 `RULES_AGENT_PASSWORD`. Set runtime connection variables to the created
 logins. `BOOKKEEPING_MANIFEST_ROOT` names file storage for offline acceptance
 or an S3 prefix for AWS.
 
 Existing control databases can be migrated explicitly with
 `bookkeeping migrate --runtime-role <role>` and `rules init`, using
-`BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
+`BOOKKEEPING_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
 Use `bookkeeping init` only to initialize the fresh control schema;
 `bookkeeping migrate` refuses a missing schema. `change-journal init` or
 `change-journal migrate` and `bookkeeping init-guard` use their separate

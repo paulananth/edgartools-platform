@@ -19,7 +19,7 @@
 #
 # After start, databases on the same instance:
 #   export MDM_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/mdm"
-#   export BOOKKEEPING_CLEAN_DATABASE_URL="postgresql://bookkeeping_runtime:<password>@127.0.0.1:5432/bookkeeping"
+#   export BOOKKEEPING_DATABASE_URL="postgresql://bookkeeping_runtime:<password>@127.0.0.1:5432/bookkeeping"
 #   export CHANGE_JOURNAL_DATABASE_URL="postgresql://change_journal_runtime:<password>@127.0.0.1:5432/change_journal"
 #   export SILVER_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/silver"
 #

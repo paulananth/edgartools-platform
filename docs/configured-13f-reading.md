@@ -51,7 +51,7 @@ AWS S3 output/report roots for AWS runs. Submit a frozen worklist:
 uv run --extra engine edgar-warehouse rules run --pipeline sec-13f-reading --target read \
   --input-manifest s3://YOUR-BUCKET/manifests/WORKLIST.json --input-sha256 ACTUAL_SHA256
 uv run --extra engine python -m edgar_warehouse.workers work source.read RUN_ID --limit 1
-# Set BOOKKEEPING_CLEAN_DATABASE_URL to the verifier's separate login.
+# Set BOOKKEEPING_DATABASE_URL to the verifier's separate login.
 uv run --extra engine python -m edgar_warehouse.workers verify source.read RUN_ID \
   --reports s3://YOUR-BUCKET/verification-reports/ --limit 1
 uv run --extra engine edgar-warehouse bookkeeping finalize RUN_ID
