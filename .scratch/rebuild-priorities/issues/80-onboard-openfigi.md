@@ -2,7 +2,7 @@
 
 Priority: 80, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md).
 
-Type: task (onboarding). Status: open; setting up beside ticket 79 (operator, 2026-10-15: "Both, in parallel"). Blocked by: 92 (the capture posts a request with a key) and 79 (Onboard funds and securities with the skills: the Security master this source maps onto).
+Type: task (onboarding). Status: in progress (operator, 2026-10-17: "productionize figi source"); setting up beside ticket 79 (operator, 2026-10-15: "Both, in parallel"). Blocked by: 92 (the capture posts a request with a key) and 79 (Onboard funds and securities with the skills: the Security master this source maps onto).
 
 ## Why
 
@@ -28,15 +28,30 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
 - [x] The operator's permission for the capture, and its route: the mapping API at `https://api.openfigi.com/v3` with the operator's test key (held outside the repo, never printed); "Yes, run it" (2026-10-15): the mapping API with a free key (the key in an environment variable, never printed or typed into the chat), or the Snowflake Marketplace copy read in place
 - [x] Capture (explored; transport only, no Bookkeeping or Journal), 2026-10-15 13:04–13:42 ET, 38 min: 7,714 requests (383,612 CUSIPs, 387,607 ISINs), 0 retries, 621 MB, kept outside the repo with a receipt per file. A probe of 100 CUSIPs found 76 refused as malformed (all failed the CUSIP check digit). Capture: the Security master's CUSIPs and ISINs (ticket 79) sent to the mapping API, each response kept whole with its request, a receipt per file (key, sha256, bytes); counts only in the repo
 - [x] Used for ticket 79 part 1 as configuration over the kept capture (`rules/sources/sec.nport.security/figi-*.yaml`): which ISIN a CUSIP carries (operator: "Use FIGI to add pairs too"); 771,219 answers tied to their identifiers by position, 0 differences from a direct match; #999 merged 2026-10-16 06:29 ET
-- [ ] discover: data-profiling over the capture; approved findings
-- [ ] plan-parts: the listing (FIGI, ticker, exchange) as a cross-reference and attributes of a Security; the three-level hierarchy (listing, composite, share class) as a master data hierarchy or a relationship, for the operator; `securityType`, `securityType2`, `marketSector`, `exchCode` as code sets for RDM
-- [ ] map: the Dataset Contract (source `openfigi`), with FIGI, composite FIGI and share-class FIGI under `cross_references`; how a ticker attaches to a Security when one CUSIP has many listings (per exchange, or the composite's), for the operator
-- [ ] quality: checks for FIGI shape and check digit, ticker and exchange present together; set aside a response that names no instrument
-- [ ] metadata, test, approve, switch-on, as data-onboarding says
+- [x] discover: data-profiling over the capture; approved findings: one full profile, 176 s (`.scratch/onboarding/openfigi/onboarding-log.md`): 771,219 asked identifiers, 2,184,699 listings, 1,392,524 listing, 271,051 composite and 26,509 share-class FIGIs nesting exactly; no new kinds (the three levels are lookup-only cross-references of a Security, from the 2026-10-14 ruling); operator: "Approve (Recommended)" (2026-10-17 08:50 ET); `rules/sources/openfigi/profile.yaml` written from them
+- [x] plan-parts: operator, "(c) MDM + silver listings (Recommended)" and "US composite (Recommended)" (2026-10-17 08:56 ET): one MDM record per identifier asked, joining its Security and never creating one, with the single share-class FIGI, the US composite FIGI and its ticker, or the only listing's FIGI and ticker; every listing in silver; the four code lists for RDM (2026-10-17 12:10 ET). Was: the listing (FIGI, ticker, exchange) as a cross-reference and attributes of a Security; the three-level hierarchy (listing, composite, share class) as a master data hierarchy or a relationship, for the operator; `securityType`, `securityType2`, `marketSector`, `exchCode` as code sets for RDM
+- [x] Ticket 104 (stream a bare JSON array): merged #1044 (2026-10-17 12:38 ET). Was: Ticket 104 (stream a bare JSON array): the reading grammar cannot give a listing row its answer's position, which the rulings' per-identifier counts need (found 2026-10-17 08:59 ET)
+- [x] map: `rules/sources/openfigi/` (`source.yaml` with `openfigi.security.v1` and `openfigi.security_isin.v1`, `requests.yaml`, `reduce.yaml`, `combine.yaml`, `record.yaml`); `rules/merge/kinds/security.yaml` declares `openfigi-security-cusip` and `openfigi-security-isin` (`on_no_match: wait`, not switched on); `rules/source-sequence.yaml` lists it after N-PORT; Mapping Documents written, `mapdoc check` clean. Qualified on 16 files: 0 records differ from a direct count of the raw answers (2026-10-17 12:10 ET). Was: the Dataset Contract (source `openfigi`), with FIGI, composite FIGI and share-class FIGI under `cross_references`; how a ticker attaches to a Security when one CUSIP has many listings (per exchange, or the composite's), for the operator
+- [ ] Silver: the listings table. The profiler's spec keys a listing by its own row number and links it to the FIGI levels; under the rulings it is the identifier asked and the listing FIGI, linked to the Security (`openfigi.security*.v1`): a spec change for the operator, after the MDM part
+- [x] quality, MDM part: the contracts set aside a malformed CUSIP or ISIN (their formats) and an answer that names no instrument (`not_found_by_openfigi`, nonblocking); profiling found no defect in the asked identifiers or the FIGIs a record carries, so no `quality.yaml` (2026-10-17 12:56 ET)
+- [ ] ~~quality: FIGI shape, ticker and exchange present together~~ deferred to the silver part: these are the listings' checks (profiling's 6 listing rows whose name differs under one FIGI go there too). Was: quality: checks for FIGI shape and check digit, ticker and exchange present together; set aside a response that names no instrument
+- [x] metadata: `rules/sources/openfigi/MAPPING.xlsx` and `rules/merge/kinds/security.xlsx` written, `mapdoc check` clean; `profile.yaml` puts the findings in the catalog (2026-10-17 12:56 ET)
+- [x] test: the full configured run, all 7,714 files, 9 min (`.scratch/onboarding/openfigi/openfigi-run.json`): 353,491 CUSIP and 380,047 ISIN records accepted, 30,121 and 7,560 not found set aside; 0 differences from a direct count of the raw answers. `tests/integration/test_openfigi_security.py`: an equity keeps only its US composite and share class, a bond its only listing, a not-found identifier is set aside, a record joins the 13F Security holding its CUSIP and an unheld one waits (no Security created). 983 affected tests pass (2026-10-17 12:56 ET)
+- [ ] Proving Run of the two OpenFIGI matching rules on a pinned cohort beside the N-PORT and 13F Securities (the `mdm-engineering` skill's proof for matching rules), then the switch-on question (switch-on still asks: CLAUDE.md, 2026-10-17)
 - [ ] Refresh: the operator ruled "Open figi rarely changes do not download again" (2026-10-15): reuse this capture; a later run sends only identifiers not yet captured. How often the mapping is re-run for new and changed Securities (Bookkeeping)
+- [ ] Acquisition authority: activation refuses a source with MDM contracts and no approved acquisition (`rules/db.py`), so the POST capture (#994: key variable, 4 a second, approved URL prefix) is declared through Bookkeeping; declaring it sends no request
+- [x] Three-axis review (Standards, Spec, GoF): nothing implemented wrongly. Fixed:
+  - tests added for an equity whose only listing is its US composite, two US composites, the ISIN contract, and a waiting record proven staged and unbound;
+  - the run's direct count now counts by FIGI alone, independent of the reduce, still 0 differences on 64 files a kind;
+  - the stale Mapping Document note regenerated;
+  - the `requests.yaml` comment corrected;
+  - the log's code-list counts corrected (listing level: 9, 123, 34 and 464).
+
+  A mutation (one US composite read as two) fails all 3 tests. 911 affected tests pass (2026-10-17 13:01 ET)
+- [ ] Follow-up: one shared test helper for the read, combine and prepare chain that four integration tests copy (GoF finding 1, repeated by #1022, #1025, #1030 and this one): its own ticket
 - [ ] Every skill gap found on the way: fixed in the skill, on its own branch
 - [ ] PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] Learning → skill: `skills/data-platform/READING.md`, "A key's value from a pair set": scope each artifact's pair set to its own evidence (a group-wide set is re-read per artifact, n²), and independent readings run at once (2026-10-17 12:56 ET)
 
 ## Findings from the first request (2026-10-15 13:02 ET, explored, counts only)
 

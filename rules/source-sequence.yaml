@@ -41,3 +41,9 @@ sources:
     target: null
     requires: []
     after: [sec.nport.fund]
+  # OpenFIGI (ticket 80): its records join the Securities N-PORT gives and
+  # wait otherwise, so it runs after them; it has no run target yet.
+  openfigi:
+    target: null
+    requires: []
+    after: [sec.nport.security]

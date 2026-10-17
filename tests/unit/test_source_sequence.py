@@ -143,13 +143,13 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
     assert result["order"] == ["sec.submissions.company", "gleif", "sec.submissions.person"]
     assert {name for name, item in result["sources"].items() if item["status"] == "blocked"} == {
         "iapd.adv", "sec.ownership", "sec.thirteenf.information_table",
-        "sec.nport.registrant", "sec.nport.fund", "sec.nport.security",
+        "sec.nport.registrant", "sec.nport.fund", "sec.nport.security", "openfigi",
     }
 
 
 @pytest.mark.parametrize("name", [
     "sec.submissions.company", "gleif", "sec.submissions.person", "iapd.adv", "sec.ownership",
-    "sec.thirteenf.information_table", "sec.nport.registrant", "sec.nport.fund", "sec.nport.security",
+    "sec.thirteenf.information_table", "sec.nport.registrant", "sec.nport.fund", "sec.nport.security", "openfigi",
 ])
 def test_each_committed_source_can_be_checked_on_its_own(capsys, name):
     parser = argparse.ArgumentParser()

@@ -1,0 +1,38 @@
+# One flat record per identifier asked (ticket 80), read over combine.yaml's
+# pieces, for mdm.prepare (`record_column: record`): a cross-reference is read
+# from a path of the record, so each single value is taken out of its sample
+# here. The ticker is the US composite's, else the only listing's. Run once per
+# kind asked; mdm.prepare reads its table `security` with that kind's contract.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  limits: {max_bytes: 16777216, max_records: 1000000}
+  tables:
+    security:
+      each: tables.security
+      columns:
+        record:
+          object:
+            omit_nulls: true
+            fields:
+              id: {text: {path: id}}
+              found: {value: {path: found}}
+              share_class_figi:
+                join: {path: share_class.share_class_sample, item_path: share_class_figi, separator: "", max_items: 1, null_if_empty: true}
+              composite_figi:
+                transform:
+                  value: {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                  transforms: [{regex_replace: {pattern: " .*", with: ""}}]
+              listing_figi:
+                transform:
+                  value: {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                  transforms: [{regex_replace: {pattern: " .*", with: ""}}]
+              ticker:
+                transform:
+                  value:
+                    coalesce:
+                      skip: "null"
+                      values:
+                      - {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                      - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                  transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}]

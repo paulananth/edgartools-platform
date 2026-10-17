@@ -1,0 +1,21 @@
+# OpenFIGI's mapping requests as captured (ticket 80): each file is a list of
+# up to 100 jobs, {idType, idValue}. One row per job, keyed by the file's batch
+# name and the job's one-based position ("<batch>:<position>"). OpenFIGI answers
+# by position and names no identifier, so the answers reading (source.yaml)
+# finds each answer's identifier through this key (the pair set `asked`).
+# Derived from sec.nport.security/figi-requests.yaml (N-PORT keeps its own
+# copy); this one upper-cases `id`, as a CUSIP's and an ISIN's format does.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  # Measured (2026-10-15 capture): the largest request file is 4,601 bytes.
+  limits: {max_bytes: 65536, max_records: 100}
+  context:
+    batch: {type: text}
+  tables:
+    asked:
+      each: item
+      columns:
+        key:
+          concat: [{context: {name: batch}}, {const: {value: ":"}}, {ordinal: {}}]
+        id: {text: {path: idValue, transforms: [{case: upper}]}}
