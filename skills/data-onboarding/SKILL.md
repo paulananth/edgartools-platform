@@ -572,6 +572,11 @@ contract's `nonblocking_deferred_reasons`.
      `source_code=`, `policy=files.policy(root=<draft folder>)` and captured
      publication facts. This tests mapping and quality only; it does not
      prove installed parsing, leases, receipts or MDM commits.
+   - **A test over invented files** runs the configured rules through
+     `tests/support/source_chain.py` (`read`, `combine`, `prepare`, each
+     checked by its worker's verifier, then `records`). The test keeps only
+     what is its own: the files, each artifact's context and lookups, and the
+     preparation keys. Never copy the chain into a test.
    - Check the kind's merge rules accept the source. A source missing from
      `defaults.sources` fails its whole batch. Check `defaults.sources` (a
      kind with its own check in code, run it; see Examples). Adding a source to an

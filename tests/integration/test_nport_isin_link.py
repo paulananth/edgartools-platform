@@ -18,14 +18,13 @@ from pathlib import Path
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.mdm.clean.evidence import subject_key
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
-from edgar_warehouse.workers import mdm_prepare
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as cusip
+from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 
@@ -68,19 +67,10 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[d
         {"input": raw, "tables": {"attached": []}, "deferred": []}]})
     combined = cusip.combine(store, root / "combine", "combine.yaml",
                              {"securities": securities, "attached": attached, "issuers": reduced})
-    task = {"input": combined, "output": (root / "mdm/manifest.json").as_uri(), "checks": ["mdm.prepared"],
-            "keys": {"table": "security_isin", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
-                     "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00", "effective_column": "period"}}
-    prepared = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
-    contract = files.source(cusip.NAME)["mdm"][CODE]["contract"]
-    out = []
-    for b in store.json(prepared)["batches"]:
-        for line in (root / "mdm" / b["input"]["path"]).read_bytes().splitlines():
-            out.append(adapters.normalize(json.loads(line), source_code=CODE, contract=contract, publication={
-                **b["input"]["publication"], "semantics": "patch", "artifact_sha256": b["input"]["sha256"],
-                "member": b["input"]["path"], "record_locator": f"{b['input']['sha256']}:{len(out)}"}))
-    return out
+    prepared = chain.prepare(store, root / "mdm", combined, {
+        "table": "security_isin", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
+        "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00", "effective_column": "period"})
+    return chain.records(store, root / "mdm", prepared, CODE, files.source(cusip.NAME)["mdm"][CODE]["contract"])
 
 
 def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):

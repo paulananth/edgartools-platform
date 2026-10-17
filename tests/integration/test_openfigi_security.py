@@ -28,7 +28,6 @@ from pathlib import Path
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
@@ -36,10 +35,10 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land
-from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as nport
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
+from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 FOLDER = files.ROOT / "sources" / "openfigi"
@@ -96,26 +95,6 @@ def capture(root: Path, word: str) -> list[str]:
     return names
 
 
-def run(store: Artifacts, root: Path, body: dict, artifacts: list, version: int) -> dict:
-    root.mkdir(parents=True, exist_ok=True)
-    manifest = store.put(root.as_uri(), {"version": version, "contract": store.put(root.as_uri(), body),
-                                         "artifacts": artifacts})
-    task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
-    out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
-    return out
-
-
-def combine(store: Artifacts, root: Path, contract_file: str, readings: dict) -> dict:
-    root.mkdir(parents=True, exist_ok=True)
-    m = store.put(root.as_uri(), {"version": 1, "contract": store.put(root.as_uri(), files.load(FOLDER / contract_file)),
-                                  "readings": readings})
-    task = {"input": m, "output": (root / "out.json").as_uri(), "checks": [source_combine.CHECK], "keys": {}}
-    out = source_combine.execute(task, store)
-    assert source_combine.verify({**task, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
-    return out
-
-
 def prepared_records(root: Path, word: str = "cusip", listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
     """One kind's records (`cusip` or `isin`), and each refused identifier with its reason;
     `listings`, when given, also gets every listing row of the source extract."""
@@ -136,13 +115,13 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
     for number, name in enumerate(name_list, 1):
         where, batch = root / f"answers_{number}", f"{kind}/{name.split('.')[0]}"
         request = capture_root / kind / name.replace(".json", ".request.json")
-        asked = run(store, where / "requests", files.load(FOLDER / "requests.yaml"),
+        asked = chain.read(store, where / "requests", files.load(FOLDER / "requests.yaml"),
                     [{"input": ref(request), "context": context(where / "rq", request, {"batch": batch})}], 2)
         answer = capture_root / kind / name
         lookups = store.put(where.as_uri(), {"version": 2, "input": ref(answer), "sets": {"asked": {
             "readings": [asked], "table": "asked", "column": "key", "value_column": "id",
             "max_input_bytes": 1 << 20, "max_input_rows": 1000}}})
-        readings[f"answers_{number}"] = run(store, where / "answers", answers_body, [{
+        readings[f"answers_{number}"] = chain.read(store, where / "answers", answers_body, [{
             "input": ref(answer), "lookups": lookups,
             "context": context(where / "an", answer, {"batch": batch, "id_type": word})}], 3)
     if listings is not None:
@@ -150,30 +129,20 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
             for artifact in store.json(reading)["artifacts"]:
                 for part in artifact["partitions"]:
                     listings += store.json(part["receipt"])["tables"]["listings"]
-    counts = combine(store, root / "reduce", "reduce.yaml", readings)
-    combined = combine(store, root / "combine", "combine.yaml", {"counts": counts})
+    counts = chain.combine(store, root / "reduce", FOLDER / "reduce.yaml", readings)
+    combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml", {"counts": counts})
     piece_root = root / "record"
     piece_root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
-    records = run(store, piece_root, files.load(FOLDER / "record.yaml"), [
+    records = chain.read(store, piece_root, files.load(FOLDER / "record.yaml"), [
         {"input": p, "context": store.put(piece_root.as_uri(), {"version": 1, "input": p, "values": {}})}
         for p in pieces], 2)
-    task = {"input": records, "output": (root / "mdm/manifest.json").as_uri(), "checks": ["mdm.prepared"],
-            "keys": {"table": "security", "record_column": "record", "dataset": code, "policy": "0" * 64,
-                     "consumer": "check", "batch_id": "check-openfigi", "as_of": "2026-10-17T00:00:00+00:00"}}
-    prepared = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
-    contract = files.source("openfigi")["mdm"][code]["contract"]
-    out, refused = [], {}
-    for b in store.json(prepared)["batches"]:
-        for line in (root / "mdm" / b["input"]["path"]).read_bytes().splitlines():
-            row = json.loads(line)
-            try:
-                out.append(adapters.normalize(row, source_code=code, contract=contract, publication={
-                    **b["input"]["publication"], "semantics": "patch", "artifact_sha256": b["input"]["sha256"],
-                    "member": b["input"]["path"], "record_locator": f"{b['input']['sha256']}:{len(out)}"}))
-            except adapters.UnsupportedRecord as error:
-                refused[row["id"]] = error.reason
+    prepared = chain.prepare(store, root / "mdm", records, {
+        "table": "security", "record_column": "record", "dataset": code, "policy": "0" * 64,
+        "consumer": "check", "batch_id": "check-openfigi", "as_of": "2026-10-17T00:00:00+00:00"})
+    refused: dict[str, str] = {}
+    out = chain.records(store, root / "mdm", prepared, code, files.source("openfigi")["mdm"][code]["contract"],
+                        refused=refused, key="id")
     return out, refused
 
 
