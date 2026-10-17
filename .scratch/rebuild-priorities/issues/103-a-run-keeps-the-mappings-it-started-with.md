@@ -2,7 +2,7 @@
 
 Priority: 103, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (code). Status: in progress. Blocked by: none. From: the source
+Type: task (code). Status: in review (draft PR). Blocked by: none. From: the source
 readiness design (`docs/specs/source-readiness.md`, PR #1036), "Confirmed
 synchronization behavior": a consumer run keeps the required versions it
 started with, through every batch and on resume; a newer run uses newer ones.
@@ -36,7 +36,7 @@ receipts) and the Change Journal processing identity; each is its own ticket.
 - [x] Failing test first: `tests/integration/test_clean_run_pins_postgres.py` on unchanged code, 2 failed, 1 passed. The resumed run's second batch was stored under mapping 2 with no error; a run naming an unregistered source left a started `mdm.run` row behind. The new-run case passed on both, as it should (2026-10-17 07:38 ET)
 - [x] Code: `pinned_mapping_versions` (`cli.py`) picks each manifest source's newest mapping once, before the run starts, across all stages; `RunCoordinator.start` keeps them in the frozen scope as `mapping_versions`; every later call and resume reads each batch through `reading_at` at the pinned version; preview uses an existing run's pins; a scope that pins no reading of a source it reads is refused. `batch_assertions`/`batch_evidence` (no run) still read the newest mapping. Verified by the same three tests, now 3 passed (2026-10-17 07:39 ET)
 - [x] Tests pass: `test_clean_run_pins_postgres.py` 3, `test_clean_run_postgres.py` and `test_mdm_merge_worker_postgres.py` 11, `test_clean_quality.py` and `test_clean_gleif_publication.py` 103, the reading tests of `test_clean_mdm_postgres.py` 5; all passed, each under 30 s (2026-10-17 07:44 ET)
-- [ ] Wider affected run: `pytest --testmon` over `tests/mdm`, `tests/unit`, `tests/architecture`, `tests/integration`
+- [x] Wider affected run: `pytest --testmon` over `tests/mdm`, `tests/unit`, `tests/architecture`, `tests/integration`: 2145 passed, 1 expected failure. It took 9 min 25 s, over the five-minute local limit: testmon had no record for most of these tests and ran them all. Narrow it to named files next time (2026-10-17 07:49 ET)
 - [x] Finding: which run a later Bookkeeping run resumes. The worker's MDM run id is `uuid5(effect_key)`, and the effect key hashes the submitted Rules export, step, key and unit (`bookkeeping/clean/engine.py:329`). A mapping is registered only by activating a source Rules version (`rules/db.py:210`). A run submitted from that source version therefore gets a new effect key and a new MDM run, which pins the new mapping. A run submitted from a pipeline Rules version does not change when a source mapping changes, so the same unit resumes the old MDM run. That was already so before this ticket (its committed batches were skipped); it is the design's Change Journal processing-identity requirement, a follow-up (below), not this slice (2026-10-17 07:43 ET)
 - [x] Three-axis review. GoF: leave it. Standards: the code part's verification was not named (fixed above); the unregistered-source check is now only on the unpinned path, where it can fire; the long call reformatted. Spec: the old-scope case and the all-stages refusal, both kept and recorded below; the race of two first starts fails closed in `mdm.start_run` ("Root run scope changed"), untested here (2026-10-17 07:44 ET)
 - [ ] PR, CI green; merge only on the operator's word
