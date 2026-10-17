@@ -38,12 +38,15 @@ MySQL, or SQL Server Express. When that engine does not answer, start its
 container from [Local testing](../data-platform/LOCAL-TESTING.md). The
 container has no agent and no worktree owner. Do not use
 `local-test-stores.py up` for it. Read each command's `--help` before the
-first use. A missing subcommand, or a command that refuses the dialect, is a
-runtime gap. Report it and leave that schema unapplied. Do not hand-write
-`CREATE TABLE`.
+first use. A missing subcommand is a runtime gap. A command that refuses
+MySQL or SQL Server Express does not get a SQL script pasted into this skill.
+[sql-writer](../sql-writer/SKILL.md) renders the table statement for that
+engine. A PostgreSQL function body is not rendered that way and stays
+unapplied.
 
-The commands below exist for PostgreSQL 16. Each one refuses MySQL and SQL
-Server Express. That refusal is the gap for those engines.
+The commands below run on PostgreSQL 16. On MySQL and SQL Server Express they
+refuse. Use sql-writer for the tables, and report every function the library
+cannot render.
 
 | Schema | Command | Owner connection |
 |---|---|---|
@@ -86,9 +89,8 @@ domains, not the list.
    then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
    material commentary are the fields the spec already names. The same spec
    is the DDL for MySQL and for SQL Server Express. `silver register` today
-   emits PostgreSQL only and refuses another dialect. That refusal is a
-   runtime gap: report it and leave the table unregistered. Do not hand-write
-   `CREATE TABLE`. A part with no approved spec, or a pipeline silver step
+   emits PostgreSQL only and refuses another dialect. Render that table with
+   [sql-writer](../sql-writer/SKILL.md) and run the compiled statement. A part with no approved spec, or a pipeline silver step
    with no worker, stays blocked and is reported. `silver land` is the manual
    write until that worker exists
    ([data-onboarding](../data-onboarding/SKILL.md), Two targets).
