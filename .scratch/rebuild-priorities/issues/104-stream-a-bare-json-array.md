@@ -2,7 +2,7 @@
 
 Priority: 104, tier 2. Map: [Rebuild priorities](../map.md).
 
-Type: task (code, engine). Status: in progress. Blocked by: none. Blocks: 80 (Onboard OpenFIGI with the skills).
+Type: task (code, engine). Status: done (#1044 merged 2026-10-17 12:37 ET). Blocked by: none. Blocks: 80 (Onboard OpenFIGI with the skills).
 
 ## Why
 
@@ -35,5 +35,5 @@ An answer names no identifier. It is tied to its request only by its position in
 - [x] `wrapper: null` streams a root array; tests: rows and `ordinal_context` per element, a nested `each` keeps its element's position, an object root refuses when no wrapper is declared, an array root refuses when a wrapper is declared, trailing data and bounds as before. Rust `a_bare_array_streams_when_no_wrapper_is_declared`, Python `test_a_bare_array_streams_when_no_wrapper_is_declared` and the worker test `test_a_bare_array_streams_each_element_with_its_position` (rows (F1,1), (F2,1), (F3,3), verifier replay equal, a wrapped document refused); every Rust test and 181 engine tests pass (2026-10-17 09:16 ET)
 - [x] READING.md, "Streamed JSON record projection": the bare-array form (2026-10-17 09:16 ET)
 - [x] Three-axis review (Standards, Spec, GoF): no defects; added the record-count, depth and isolated extra-key refusal cases, a docstring line, and READING.md says a bare `wrapper:` line is also no value. GoF: leave it (the three wrapper checks moved together once; extract a shared predicate if the rule changes again) (2026-10-17 09:18 ET)
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR #1044, CI green, merged on the operator's word (2026-10-17 12:37 ET)
 - [x] Learning → skill: `skills/data-platform/READING.md`, "Streamed JSON record projection": a bare array streams with `wrapper: null`, and a nested list's rows keep their element's position (2026-10-17 09:18 ET)

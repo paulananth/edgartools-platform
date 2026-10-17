@@ -74,6 +74,11 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [ISIN-only Securities link to their issuer](issues/102-isin-only-securities-link-to-their-issuer.md): by the one issuer LEI an ISIN's holdings state; 25,173 links, equal to a direct count (#1025)
 - [Integration tests share their containers and fixtures](issues/98-integration-tests-share-containers-and-fixtures.md): one PostgreSQL 16 per session for the MDM store's tests; CI integration 310 s to 217 s (#1027)
 
+- [A large CSV or TSV is read in pieces](issues/89-a-large-csv-or-tsv-is-read-in-pieces.md): a CSV or TSV larger than memory is read in pieces (#990)
+- [09 Profiler gap: objects keyed by data are read as columns](issues/41-company-financials-09-profiler-reads-object-keys-as-columns.md): the profiler reads an object keyed by data as rows, not columns (#1016)
+- [A run keeps the mappings it started with](issues/103-a-run-keeps-the-mappings-it-started-with.md): a run keeps the mappings it started with (#1037)
+- [Stream a bare JSON array](issues/104-stream-a-bare-json-array.md): a bare top-level JSON array streams one record per element, with its position (#1044)
+
 ## Not yet specified
 
 - **Where gold stands in the rebuild.** The agent decision inputs, the unified Company dimension, the dashboards and the promotion criteria (tickets 49–62) were written against the Snowflake gold layer. Once the silver writer (ticket 17) and the context views (ticket 18) land, each needs a decision: re-point it at the rebuild's silver, or retire it.

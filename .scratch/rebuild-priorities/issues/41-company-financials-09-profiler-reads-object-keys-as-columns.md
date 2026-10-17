@@ -2,7 +2,7 @@
 
 Priority: 41, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/09-profiler-reads-object-keys-as-columns.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: claimed. Blocked by: none. Map: [map](../../company-financials/map.md).
+Type: task. Status: done (#1016 merged 2026-10-16 15:13 ET). Blocked by: none. Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -16,7 +16,7 @@ The data-profiling skill reads a JSON object's keys as columns, so a document ke
 - [x] Run affected input/profiling tests with testmon, each run bounded to five minutes — 2026-10-16 14:12 ET; initial inputs: 52 passed in 34.94 s; broader area before precision follow-up: 131 passed / 135 deselected in 49.12 s; final affected inputs/run/genericity: 58 passed / 110 deselected in 3.48 s.
 - [x] Review Standards, Spec and GoF; verify no unrelated shape regression and no private data in the public diff — 2026-10-16 14:12 ET; independent three-axis rechecks clean after claimed-state/checklist and precision fixes. Spec independently reproduced both-order, cross-document and nested refusals with no loaded tables.
 - [x] Commit and push on this ticket's fresh branch after overlap checks; open its separate PR — 2026-10-16 14:13 ET; commit fa946a86 pushed after both guard passes, PR [#1016](https://github.com/paulananth/edgartools-platform/pull/1016) is open with four scoped files.
-- [ ] Land PR #1016 only after CI is green and the operator names it for merging; then record resolution in the shared map after its overlap guard passes.
+- [x] PR #1016, CI green, merged 2026-10-16 15:13 ET; resolution recorded in the map
 - [x] Learning → skill — 2026-10-16 14:12 ET; data-profiling SKILL.md, Objects keyed by data: inference threshold, key/value provenance, conservative exclusions, exact-number refusal, and approved-findings reuse. This ticket is the dedicated profiling skill-fix branch/PR.
 
 ## Review follow-up

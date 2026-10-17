@@ -2,7 +2,7 @@
 
 Priority: 103, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (code). Status: in review (draft PR). Blocked by: none. From: the source
+Type: task (code). Status: done (#1037 merged 2026-10-17 08:13 ET). Blocked by: none. From: the source
 readiness design (`docs/specs/source-readiness.md`, PR #1036), "Confirmed
 synchronization behavior": a consumer run keeps the required versions it
 started with, through every batch and on resume; a newer run uses newer ones.
@@ -39,8 +39,8 @@ receipts) and the Change Journal processing identity; each is its own ticket.
 - [x] Wider affected run: `pytest --testmon` over `tests/mdm`, `tests/unit`, `tests/architecture`, `tests/integration`: 2145 passed, 1 expected failure. It took 9 min 25 s, over the five-minute local limit: testmon had no record for most of these tests and ran them all. Narrow it to named files next time (2026-10-17 07:49 ET)
 - [x] Finding: which run a later Bookkeeping run resumes. The worker's MDM run id is `uuid5(effect_key)`, and the effect key hashes the submitted Rules export, step, key and unit (`bookkeeping/clean/engine.py:329`). A mapping is registered only by activating a source Rules version (`rules/db.py:210`). A run submitted from that source version therefore gets a new effect key and a new MDM run, which pins the new mapping. A run submitted from a pipeline Rules version does not change when a source mapping changes, so the same unit resumes the old MDM run. That was already so before this ticket (its committed batches were skipped); it is the design's Change Journal processing-identity requirement, a follow-up (below), not this slice (2026-10-17 07:43 ET)
 - [x] Three-axis review. GoF: leave it. Standards: the code part's verification was not named (fixed above); the unregistered-source check is now only on the unpinned path, where it can fire; the long call reformatted. Spec: the old-scope case and the all-stages refusal, both kept and recorded below; the worker (`mdm_merge.execute`) resumes by calling `execute_manifest` again with the same run id, so the resume test covers its path; no separate worker test. The race of two first starts fails closed in `mdm.start_run` ("Root run scope changed"), untested here (2026-10-17 07:44 ET)
-- [ ] PR #1037: CI green, all six checks, 2026-10-17 07:59 ET; merge waits for the operator's word
-- [ ] Map entry under "Decisions so far" once merged, as the map records merged tickets
+- [x] PR #1037: CI green, all six checks, merged 2026-10-17 08:13 ET
+- [x] Map entry under "Decisions so far" (2026-10-17, with the tick of #1037)
 - [x] Learning → skill (added after the three-axis review; skill tests 72 passed): `skills/mdm-engineering/SKILL.md`, Writes and transactions, gains "A run reads what it started with": pin a dependency registered anew mid-run in the run's frozen scope at first start; never resolve it again per batch (2026-10-17 07:50 ET)
 
 ## Decisions that follow from the design
