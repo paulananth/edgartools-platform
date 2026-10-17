@@ -54,9 +54,10 @@ METADATA_BYTES = 64 * 1024
 POPULATION_BYTES = 64 * 1024**2
 COMPANY, COMPANY_CODE = "sec.submissions.company", "sec.submissions.company.v1"
 COMPANY_ROOT = rules_files.ROOT / "sources" / COMPANY
-# The run id bound into the cascade's readings and combination: its rows are read for the
-# cascade only, never staged.
+# The run ids and times bound into the cascade's readings and combination: its rows are read
+# for the cascade only, never staged.
 CASCADE_RUN = "name-frequency"
+CASCADE_PINS = {"capture_run": CASCADE_RUN, "catalog_run": CASCADE_RUN, "load_mode": "census", "observed_at": ""}
 # A filer's record is read for the cascade only: its publication is never staged.
 CASCADE_PUBLICATION = {"publication_key": "name-frequency", "revision": 0, "effective_at": None,
                        "semantics": "patch", "artifact_sha256": "0" * 64, "member": "name-frequency"}
@@ -67,7 +68,7 @@ COMBINE_ROWS = 1_000_000
 def _cascade_combination() -> dict:
     """The Company chain's own combination (`combine-census-captured.yaml`) without its
     census groups: the census is what is being written, and the cascade reads no census."""
-    body = company_prepare._bind(rules_files.load(COMPANY_ROOT / "combine-census-captured.yaml"), {
+    body = company_prepare.bind(rules_files.load(COMPANY_ROOT / "combine-census-captured.yaml"), {
         "APPROVED_COMPANY_CAPTURE_RUN": CASCADE_RUN, "APPROVED_CATALOG_CAPTURE_RUN": CASCADE_RUN})
     groups = body["combine"]["groups"]
     census = {name for name, group in groups.items() if group["source"] == "census"}
@@ -90,21 +91,17 @@ def _cascade_filers(capture: Path, receipts: dict, keys: list[str], catalog: str
     raw_capture.document_bytes(capture, receipts, catalog)
     _, catalog_reading = raw_capture.read_unit(store, folder, "catalog", rules_files.load(
         COMPANY_ROOT / "catalog.yaml"), [{"input": catalog_ref, "context": store.put(folder.as_uri(), {
-            "version": 1, "input": catalog_ref, "values": {
-                "sync_run_id": CASCADE_RUN, "last_synced_at": "", "source_name": "catalog_exchange"}})}])
+            "version": 1, "input": catalog_ref, "values": company_prepare.catalog_context(CASCADE_PINS)})}])
     combination = _cascade_combination()
     contract = rules_files.source(COMPANY)["mdm"][COMPANY_CODE]["contract"]
     policy = rules_files.policy()
-    sized = [(key, len(raw_capture.document_bytes(capture, receipts, key))) for key in keys]
     filers = []
-    for n, unit in enumerate(raw_capture.slices(sized, company_prepare.MAIN_READING_BYTES,
-                                                main["execution"]["max_artifacts"])):
+    for n, unit in enumerate(company_prepare.main_units(capture, receipts, keys, main["execution"]["max_artifacts"])):
         artifacts = []
         for key in unit:
             ref = raw_capture.document(capture, receipts, key)
-            artifacts.append({"input": ref, "context": store.put(folder.as_uri(), {"version": 1, "input": ref, "values": {
-                "cik": raw_capture.cik(key), "sync_run_id": CASCADE_RUN, "raw_object_id": receipts[key],
-                "load_mode": "census", "recent_limit": None, "last_synced_at": "", "bronze_object": key}})})
+            artifacts.append({"input": ref, "context": store.put(folder.as_uri(), {
+                "version": 1, "input": ref, "values": company_prepare.main_context(key, receipts, CASCADE_PINS)})})
         _, reading = raw_capture.read_unit(store, folder, f"cascade-main-{n}", deepcopy(main), artifacts)
         combined = _combine(store, folder, f"cascade-combine-{n}", combination,
                             {"main": reading, "catalog_exchange": catalog_reading})

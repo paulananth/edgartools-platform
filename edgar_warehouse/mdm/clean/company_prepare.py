@@ -58,14 +58,33 @@ RULES = ("census-main.yaml", "census-keys.yaml", "catalog.yaml", "census.yaml", 
 CENSUS_DIGEST = "0" * 64
 
 
-def _bind(value, bindings):
+def bind(value, bindings):
     if isinstance(value, str):
         return bindings.get(value, value)
     if isinstance(value, list):
-        return [_bind(item, bindings) for item in value]
+        return [bind(item, bindings) for item in value]
     if isinstance(value, dict):
-        return {key: _bind(item, bindings) for key, item in value.items()}
+        return {key: bind(item, bindings) for key, item in value.items()}
     return value
+
+
+def main_units(folder: Path, receipts: dict, keys: list[str], max_artifacts: int) -> list[list[str]]:
+    """The documents of each main unit: consecutive documents up to `MAIN_READING_BYTES`,
+    each checked against its receipt first (its size cuts the units)."""
+    sized = [(key, len(raw_capture.document_bytes(folder, receipts, key))) for key in keys]
+    return raw_capture.slices(sized, MAIN_READING_BYTES, max_artifacts)
+
+
+def main_context(key: str, receipts: dict, pins: dict) -> dict:
+    """A main document's context values for `census-main.yaml`."""
+    return {"cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],
+            "load_mode": pins["load_mode"], "recent_limit": None, "last_synced_at": pins["observed_at"],
+            "bronze_object": key}
+
+
+def catalog_context(pins: dict) -> dict:
+    """The exchange catalog's context values for `catalog.yaml`."""
+    return {"sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"], "source_name": "catalog_exchange"}
 
 
 def _unit(output: str, keys: dict, source: dict) -> dict:
@@ -81,14 +100,11 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
     main_contract = put(main_rules)
     keys_contract = put(rules_files.load(ROOT / "census-keys.yaml"))
     # Each document equal to its receipt before it is frozen; its size cuts the main units.
-    sized = [(key, len(raw_capture.document_bytes(folder, receipts, key))) for key in keys]
     main, start = [], 0
-    for unit in raw_capture.slices(sized, MAIN_READING_BYTES, main_rules["execution"]["max_artifacts"]):
+    for unit in main_units(folder, receipts, keys, main_rules["execution"]["max_artifacts"]):
         documents = [raw_capture.document(folder, receipts, key) for key in unit]
-        contexts = [put({"version": 1, "input": ref, "values": {
-            "cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],
-            "load_mode": pins["load_mode"], "recent_limit": None, "last_synced_at": pins["observed_at"],
-            "bronze_object": key}}) for key, ref in zip(unit, documents)]
+        contexts = [put({"version": 1, "input": ref, "values": main_context(key, receipts, pins)})
+                    for key, ref in zip(unit, documents)]
         main.append(_unit(f"{root}/main/{start}.reading.json", {"unit": f"main-{start}"}, put({
             "version": 2, "contract": main_contract,
             "artifacts": [{"input": ref, "context": c} for ref, c in zip(documents, contexts)]})))
@@ -100,9 +116,8 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
     raw_capture.document_bytes(folder, receipts, catalog)
     catalog_unit = _unit(f"{root}/catalog.reading.json", {"unit": "catalog"}, put({
         "version": 2, "contract": put(rules_files.load(ROOT / "catalog.yaml")),
-        "artifacts": [{"input": catalog_ref, "context": put({"version": 1, "input": catalog_ref, "values": {
-            "sync_run_id": pins["catalog_run"], "last_synced_at": pins["observed_at"],
-            "source_name": "catalog_exchange"}})}]}))
+        "artifacts": [{"input": catalog_ref, "context": put({"version": 1, "input": catalog_ref,
+                                                              "values": catalog_context(pins)})}]}))
     # The census is read as its canonical bytes, whose sha256 is the digest bound into the contracts.
     census_ref = store.put_bytes(f"{inputs}/name-census.json", census)
     readings = [{"step": "keys", "key": unit["keys"]["unit"]} for unit in readers]
@@ -110,14 +125,14 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
                    "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
             for name, column in (("names", "_name_key"), ("ciks", "_cik_key"))}
     census_unit = _unit(f"{root}/census.reading.json", {"unit": "census"}, {"compose": {
-        "document": {"version": 3, "contract": put(_bind(rules_files.load(ROOT / "census.yaml"),
+        "document": {"version": 3, "contract": put(bind(rules_files.load(ROOT / "census.yaml"),
                                                          {CENSUS_DIGEST: census_hash})),
                      "artifacts": [{"input": census_ref,
                                     "context": put({"version": 1, "input": census_ref, "values": {}}),
                                     "lookups": {"slot": "lookups"}}]},
         "slots": {"lookups": {"compose": {"document": {"version": 2, "input": census_ref, "sets": sets},
                                           "slots": {"keys": readings}}}}}})
-    combine_contract = put(_bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
+    combine_contract = put(bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
         "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
         CENSUS_DIGEST: census_hash}))
     combine = [_unit(f"{root}/combine/{n}.reading.json", {"unit": f"combine-{n}"}, {"compose": {
