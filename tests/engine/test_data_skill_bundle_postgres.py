@@ -312,7 +312,7 @@ def test_configured_stream_worker_runs_from_installed_bundle(installed):
 import json
 from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
+from edgar_warehouse.workers import source_read, source_readings, source_combine, mdm_prepare
 store = Artifacts()
 root = Path("configured-stream").resolve()
 root.mkdir()
@@ -336,6 +336,22 @@ reading = store.json(receipt)
 parts = reading["artifacts"][0]["partitions"]
 assert reading["version"] == 2 and len(parts) == 2
 assert [store.json(part["receipt"])["tables"]["rows"][0]["n"] for part in parts] == [1,2]
+# Evidence is inspected through the installed module, without a worker-shaped
+# request at the consumption seam. Original extraction and verification still
+# validate the version-3 request before using the same lookup implementation.
+contract["read"]["lookup_sets"] = {"wanted":{"max_values":3,"max_bytes":8,"max_value_bytes":4}}
+scoped_rules = store.put(root.as_uri(), contract)
+lookup = store.put(root.as_uri(), {"version":1,"input":ref,"sets":{"wanted":["A"]}})
+scoped_manifest = store.put(root.as_uri(), {"version":3,"contract":scoped_rules,
+    "artifacts":[{"input":ref,"context":context,"lookups":lookup}]})
+scoped_task = {**task,"input":scoped_manifest,"output":(root / "scoped-index.json").as_uri()}
+scoped = source_read.execute(scoped_task, store)
+assert source_read.verify({**scoped_task,"candidate":scoped},store) == ({"source.output":True},[])
+opened = source_readings.OpenedExtract(scoped,store,max_bytes=1024**2,max_rows=100,
+    max_contract_bytes=1024**2,allow_lookup_receipts=True)
+assert "site-packages" in source_readings.__file__
+assert opened.contract == contract and opened.lookup_sets(0) == {"wanted":["A"]}
+assert [row["n"] for _,_,chunk,_ in opened.chunks() for row in chunk["tables"]["rows"]] == [1,2]
 combine_rules = store.put(root.as_uri(), {"execution":{"profile":"source.combine"},
  "combine":{"max_rows":100,"groups":{},"tables":{"rows":{"source":"streamed","table":"rows",
  "checks":{},"where":{},"joins":{}}}}})
