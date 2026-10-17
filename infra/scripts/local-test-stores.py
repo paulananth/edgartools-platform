@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent persistent PostgreSQL 16 copies for local agent work.
+"""Persistent shared PostgreSQL 16, with optional silver for isolated tests.
 
 Run with uv run --extra mdm infra/scripts/local-test-stores.py --help.
 Connection details are written to a private env file, never stdout.
@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import subprocess
 import time
 from uuid import uuid4
@@ -26,11 +27,12 @@ from sqlalchemy.engine import URL
 STORES = {
     "mdm": ("MDM_DATABASE_URL", "mdm"),
     "rdm": ("RDM_DATABASE_URL", "rdm"),
-    "silver": ("SILVER_DATABASE_URL", "silver"),
     "rules": ("RULES_DATABASE_URL", "rules"),
     "bookkeeping_clean": ("BOOKKEEPING_CLEAN_DATABASE_URL", "bookkeeping"),
     "change_journal_clean": ("CHANGE_JOURNAL_DATABASE_URL", "journal"),
 }
+ALL_STORES = {**STORES, "silver": ("SILVER_DATABASE_URL", "silver")}
+EXTRA_LOGINS = ("bookkeeping_clean_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
 
@@ -93,9 +95,18 @@ class LocalStores:
             return value
         if not create:
             raise ValueError("Environment does not exist")
-        value = {"owner": self.owner, "password": secrets.token_hex(24), "restoring": False}
+        value = {"owner": self.owner, "password": secrets.token_hex(24), "restoring": False,
+                 "stores": list(STORES)}
         private_write(path, json.dumps(value))
         return value
+
+    def stores(self, name: str):
+        # Before store selection existed every environment contained six stores.
+        selected = self.identity(name).get("stores", list(ALL_STORES))
+        if (not isinstance(selected, list) or len(set(selected)) != len(selected)
+                or not set(STORES) <= set(selected) <= set(ALL_STORES)):
+            raise ValueError("Environment store selection is invalid")
+        return {database: ALL_STORES[database] for database in selected}
 
     def owned(self, name: str, identity: dict):
         container = "edgartools-local-" + name
@@ -124,10 +135,13 @@ class LocalStores:
         return create_engine(self.url(name, database, user), hide_parameters=True,
                              connect_args={"connect_timeout": 3})
 
-    def start(self, name: str, *, empty=False):
+    def start(self, name: str, *, empty=False, include_silver=False):
         identity = self.identity(name, create=True)
         if identity["restoring"]:
             raise ValueError("An interrupted restore is retained for diagnosis; choose a fresh copy name")
+        if include_silver and "silver" not in self.stores(name):
+            identity["stores"] = list(ALL_STORES)
+            private_write(self.folder(name) / "identity.json", json.dumps(identity))
         container, volume = self.owned(name, identity)
         if not self.resource("volume", volume):
             self.docker("volume", "create", "--label", f"{LABEL}={self.owner}", volume)
@@ -157,35 +171,57 @@ class LocalStores:
             finally:
                 engine.dispose()
         self.recover_backup(name)
-        self.provision(name, migrate=not empty)
-        env_lines = []
-        for database, (variable, _) in STORES.items():
-            runtime = database + "_runtime"
-            env_lines.append(f"export {variable}='{self.url(name, database, runtime).render_as_string(hide_password=False)}'")
-            migration = variable.replace("_DATABASE_URL", "_MIGRATION_DATABASE_URL")
-            env_lines.append(f"export {migration}='{self.url(name, database).render_as_string(hide_password=False)}'")
-        private_write(self.folder(name) / "connection.env", "\n".join(env_lines) + "\n")
+        self.provision(name, migrate=not empty, include_silver=include_silver)
+        self.connections(name, include_silver=include_silver)
 
-    def provision(self, name: str, *, migrate=True):
+    def connections(self, name: str, *, include_silver=False):
+        selected = ALL_STORES if include_silver else STORES
+        common = {variable: self.url(name, database, database + "_runtime").render_as_string(hide_password=False)
+                  for database, (variable, _) in selected.items()}
+        common.update(MDM_APPLICATION_ROLE="mdm_runtime",
+                      BOOKKEEPING_MANIFEST_ROOT=(self.folder(name) / "manifests").as_uri())
+        migration = {variable.replace("_DATABASE_URL", "_MIGRATION_DATABASE_URL"):
+                     self.url(name, database).render_as_string(hide_password=False)
+                     for database, (variable, _) in selected.items()}
+        verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": self.url(name, "bookkeeping_clean", "bookkeeping_clean_verifier").render_as_string(hide_password=False),
+                    "MDM_DATABASE_URL": self.url(name, "mdm", "mdm_verifier").render_as_string(hide_password=False)}
+        governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
+                      "RULES_MDM_ACTIVATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
+        for filename, extra in (("connection.env", migration), ("worker.env", {}),
+                                ("verifier.env", verifier), ("governance.env", governance)):
+            # Clear a previous shell's owner/silver settings before choosing a duty.
+            unset = [*migration, "RULES_MDM_ACTIVATION_DATABASE_URL", "DESTINATION_MIGRATION_DATABASE_URL"]
+            if not include_silver:
+                unset += ["SILVER_DATABASE_URL", "SILVER_MIGRATION_DATABASE_URL"]
+            lines = ["unset " + " ".join(unset)]
+            lines += [f"export {key}={shlex.quote(value)}" for key, value in {**common, **extra}.items()]
+            private_write(self.folder(name) / filename, "\n".join(lines) + "\n")
+
+    def provision(self, name: str, *, migrate=True, include_silver=False):
         from edgar_warehouse.mdm.clean.store import migrate as mdm
         from edgar_warehouse.rdm.database import migrate as rdm
         from edgar_warehouse.silver_writer.database import migrate as silver
         from edgar_warehouse.rules.db import migrate as rules
         from edgar_warehouse.bookkeeping.clean.database import migrate as bookkeeping
         from edgar_warehouse.change_journal.database import migrate as journal
+        selected = ALL_STORES if include_silver else STORES
         admin = self.engine(name)
         quote = admin.dialect.identifier_preparer.quote
         try:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                for database in STORES:
-                    for role, login in ((database + "_owner", False), (database + "_runtime", True)):
-                        held = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolcanlogin,rolbypassrls FROM pg_roles WHERE rolname=:r"), {"r": role}).first()
-                        if held:
-                            if any((held[0], held[1], held[2], held[4])) or held[3] != login:
-                                raise ValueError("Existing role has incompatible privileges")
-                        else:
-                            suffix = "LOGIN PASSWORD :password" if login else "NOLOGIN"
-                            conn.execute(text(f"CREATE ROLE {quote(role)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS {suffix}"), {"password": self.identity(name)["password"]})
+                roles = {database + suffix: login for database in selected
+                         for suffix, login in (("_owner", False), ("_runtime", True))}
+                roles.update({role: True for role in EXTRA_LOGINS})
+                roles.update(bookkeeping_clean_control=False, rules_approver=False)
+                for role, login in roles.items():
+                    held = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolcanlogin,rolbypassrls FROM pg_roles WHERE rolname=:r"), {"r": role}).first()
+                    if held:
+                        if any((held[0], held[1], held[2], held[4])) or held[3] != login:
+                            raise ValueError("Existing role has incompatible privileges")
+                    else:
+                        suffix = "LOGIN PASSWORD :password" if login else "NOLOGIN"
+                        conn.execute(text(f"CREATE ROLE {quote(role)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS {suffix}"), {"password": self.identity(name)["password"]})
+                for database in selected:
                     owner = conn.scalar(text("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=:d"), {"d": database})
                     if owner and owner != database + "_owner":
                         raise ValueError("Database has a different owner; refusing adoption")
@@ -193,11 +229,18 @@ class LocalStores:
                         conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(database + '_owner')}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(database + '_runtime')}")
-                if not conn.scalar(text("SELECT 1 FROM pg_roles WHERE rolname='rules_approver'")):
-                    conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
+                for database, login in (("bookkeeping_clean", "bookkeeping_clean_verifier"), ("mdm", "mdm_verifier"),
+                                        ("mdm", "mdm_governance"), ("rules", "rules_governance")):
+                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
+                for parent, member in (("bookkeeping_clean_control", "bookkeeping_clean_runtime"),
+                                       ("bookkeeping_clean_control", "bookkeeping_clean_verifier"),
+                                       ("rules_runtime", "rules_governance"), ("rules_approver", "rules_governance")):
+                    if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
+                        conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
             if migrate:
-                migrations = (mdm, rdm, silver, rules, bookkeeping, journal)
-                for database, migration in zip(STORES, migrations):
+                migrations = {"mdm": mdm, "rdm": rdm, "silver": silver, "rules": rules,
+                              "bookkeeping_clean": bookkeeping, "change_journal_clean": journal}
+                for database in selected:
                     engine = self.engine(name, database)
                     @event.listens_for(engine, "connect")
                     def owner_role(connection, _, selected=database + "_owner"):
@@ -206,16 +249,46 @@ class LocalStores:
                         connection.commit()
                     try:
                         key = "application_role" if database == "mdm" else "agent_role" if database == "rules" else "runtime_role"
-                        migration(engine, **{key: database + "_runtime"})
+                        role = "bookkeeping_clean_control" if database == "bookkeeping_clean" else database + "_runtime"
+                        migrations[database](engine, **{key: role})
+                        if database == "mdm":
+                            from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
+                            migrate_guard(engine, runtime_role="mdm_runtime")
                     finally:
                         engine.dispose()
+                self.execution_access(name)
         finally:
             admin.dispose()
+
+    def execution_access(self, name: str):
+        from edgar_warehouse.bookkeeping.clean.database import grant_profile
+        from edgar_warehouse.workers import PROFILES
+
+        book = self.engine(name, "bookkeeping_clean")
+        try:
+            for profile in PROFILES:
+                grant_profile(book, profile=profile, worker="bookkeeping_clean_runtime", verifier="bookkeeping_clean_verifier")
+            with book.connect() as conn:
+                for profile in PROFILES:
+                    for login, duty in (("bookkeeping_clean_runtime", "verifier"), ("bookkeeping_clean_verifier", "worker")):
+                        if conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
+                                       {"l": login, "p": profile, "d": duty}):
+                            raise ValueError("Worker and verifier duties overlap; refusing initialization")
+        finally:
+            book.dispose()
+        mdm = self.engine(name, "mdm")
+        try:
+            with mdm.begin() as conn:
+                conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_verifier,mdm_governance")
+                conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_verifier,mdm_governance")
+                conn.exec_driver_sql("GRANT INSERT ON mdm.policy,mdm.dataset,mdm.dataset_mapping TO mdm_governance")
+        finally:
+            mdm.dispose()
 
     def contents(self, name: str):
         """Private checksums, never row values, prove what a restored copy holds."""
         result = {}
-        for database in STORES:
+        for database in self.stores(name):
             engine = self.engine(name, database)
             try:
                 with engine.connect() as conn:
@@ -239,7 +312,8 @@ class LocalStores:
         if not marker.exists():
             return
         previous = json.loads(marker.read_text())
-        if set(previous) != {d + "_runtime" for d in STORES} or any(type(v) is not bool for v in previous.values()):
+        base = {d + "_runtime" for d in self.stores(name)}
+        if not base <= set(previous) <= base | set(EXTRA_LOGINS) or any(type(v) is not bool for v in previous.values()):
             raise ValueError("Backup recovery record is invalid; retained for diagnosis")
         engine = self.engine(name)
         try:
@@ -259,15 +333,17 @@ class LocalStores:
         target.mkdir(mode=0o700, parents=True)
         try:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                previous = {d + "_runtime": bool(conn.scalar(text("SELECT rolcanlogin FROM pg_roles WHERE rolname=:r"), {"r": d + "_runtime"})) for d in STORES}
+                candidates = [*(d + "_runtime" for d in self.stores(name)), *EXTRA_LOGINS]
+                previous = {role: bool(login) for role in candidates
+                            if (login := conn.scalar(text("SELECT rolcanlogin FROM pg_roles WHERE rolname=:r"), {"r": role})) is not None}
                 private_write(self.folder(name) / "backup-paused.json", json.dumps(previous))
-                for database in STORES:
-                    conn.exec_driver_sql(f'ALTER ROLE "{database}_runtime" NOLOGIN')
+                for role in previous:
+                    conn.exec_driver_sql(f'ALTER ROLE "{role}" NOLOGIN')
                 if conn.scalar(text("SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()")):
                     raise ValueError("Workers or other connections are active; retry the backup after they finish")
             contents = self.contents(name)
             files = {}
-            for database in STORES:
+            for database in self.stores(name):
                 path = target / (database + ".dump")
                 with open(path, "wb", opener=lambda p, flags: os.open(p, flags, 0o600)) as out:
                     self.docker("exec", container, "pg_dump", "-U", "postgres", "-Fc", "--no-owner", "-d", database, stdout=out)
@@ -280,27 +356,28 @@ class LocalStores:
 
     def restore(self, name: str, snapshot: Path):
         manifest = json.loads((snapshot / "manifest.json").read_text())
-        if set(manifest["files"]) != {d + ".dump" for d in STORES}:
-            raise ValueError("Backup does not contain exactly the six stores")
+        selected = {database for database in ALL_STORES if database + ".dump" in manifest["files"]}
+        if not set(STORES) <= selected or set(manifest["files"]) != {d + ".dump" for d in selected}:
+            raise ValueError("Backup must contain the five core stores and optionally silver")
         for file, sha in manifest["files"].items():
             if file_hash(snapshot / file) != sha:
                 raise ValueError("Backup checksum differs")
         if (self.folder(name) / "identity.json").exists():
             raise ValueError("Copy requires a new environment name; existing data is never overwritten")
-        self.start(name, empty=True)
+        self.start(name, empty=True, include_silver="silver" in selected)
         identity = self.identity(name)
         identity["restoring"] = True
         private_write(self.folder(name) / "identity.json", json.dumps(identity))
 
         container, _ = self.owned(name, identity)
-        for database in STORES:
+        for database in self.stores(name):
             with (snapshot / (database + ".dump")).open("rb") as data:
                 found = subprocess.run(["docker", "exec", "-i", container, "pg_restore", "-U", "postgres", "--exit-on-error", "--no-owner", "--role", database + "_owner", "-d", database], stdin=data, capture_output=True, timeout=180)
                 if found.returncode:
                     raise RuntimeError("Restore failed; retained the incomplete environment for diagnosis")
-        self.provision(name)
         if self.contents(name) != manifest["contents"]:
             raise ValueError("Restored contents differ; baseline was not promoted")
+        self.provision(name, include_silver="silver" in selected)
         identity["restoring"] = False
         private_write(self.folder(name) / "identity.json", json.dumps(identity))
 
@@ -337,6 +414,8 @@ def main():
     for command in ("up", "stop", "status", "backup", "copy"):
         part = sub.add_parser(command)
         part.add_argument("name")
+        if command == "up":
+            part.add_argument("--include-silver", action="store_true", help="Also initialize silver (isolated tests only)")
         if command == "copy":
             part.add_argument("--snapshot", type=Path, help="Omit to copy the latest verified baseline")
         if command == "backup":
@@ -346,7 +425,7 @@ def main():
     try:
         with stores.locked(args.name):
             if args.command == "up":
-                stores.start(args.name)
+                stores.start(args.name, include_silver=args.include_silver)
             elif args.command == "stop":
                 stores.stop(args.name)
             elif args.command == "backup":
@@ -359,7 +438,7 @@ def main():
             identity = stores.identity(args.name)
             container, _ = stores.owned(args.name, identity)
             found = stores.resource("container", container)
-            print(json.dumps({"name": args.name, "state": found["State"]["Status"] if found else "missing", "stores": len(STORES), "env_file": str(stores.folder(args.name) / "connection.env")}))
+            print(json.dumps({"name": args.name, "state": found["State"]["Status"] if found else "missing", "stores": len(stores.stores(args.name)), "env_file": str(stores.folder(args.name) / "connection.env")}))
     except Exception as exc:
         # Driver/subprocess exception messages may hold source data or credentials.
         message = str(exc) if type(exc) in (ValueError, RuntimeError) else type(exc).__name__

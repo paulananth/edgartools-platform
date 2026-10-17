@@ -453,11 +453,17 @@ See the [catalog implementation](edgar_warehouse/rules/catalog.py),
 
 ## Getting started
 
-For persistent local MDM, RDM and silver testing before Snowflake, use
-[Independent agent test environments](docs/local-agent-testing.md). Each agent
-gets its own PostgreSQL 16 copy with all six stores, private connections and
-ordinary backup/restore. Updating the starting baseline leaves existing copies
-unchanged.
+For local development before Snowflake, use
+[Shared PostgreSQL initialization](docs/local-agent-testing.md). Agents share
+one server containing MDM, RDM, Rules, Bookkeeping and the Change Journal.
+Initialization excludes silver by default and provisions worker/verifier
+access and MDM's lease guard. Separate data copies are for disruptive tests
+or recovery; reinitialization preserves existing data.
+
+Before loading retained captures, follow the
+[initial and daily source-load sequence](docs/initial-and-daily-source-load.md).
+It separates complete source coverage from Change Journal selection and lists
+the remaining source-registration and mastering gaps.
 
 Start with the [data-platform setup guide](skills/data-platform/SKILL.md#0-setup)
 for the packaged `edgartools-data` CLI, Rust engine, skills and pinned rules.
