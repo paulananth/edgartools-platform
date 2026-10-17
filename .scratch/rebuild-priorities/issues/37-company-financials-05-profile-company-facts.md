@@ -18,7 +18,8 @@ Input ready: the long form (`company-facts/cohort-long/`: facts, concepts, entit
 - [x] Authenticate original capture receipts and check integer representability independently of analytical policy — 2026-10-16 14:30 ET; all 368 captured files match raw checksums and byte counts, raw counts reconcile to the derivative, and one changed integer is traced privately to its source observation. Full receipt/count check took 22.31 seconds; no provider requests.
 - [x] Inventory every original source element before asking analytical-policy questions — 2026-10-16 14:46 ET; all 368 original documents and 5,134,979 observations visited without sampling in 94.03 seconds; 23 structural paths / 16 scalar elements, nine observation fields, and 38 additional metadata-only Company headers. Public [element inventory](../evidence/company-financials-37-source-elements.md); complete 8,495-concept catalog and detailed evidence remain private.
 - [x] Record operator clarification on skill responsibility and integer widths — 2026-10-16 14:46 ET; data-profiling proposes classification/routing, operator approves, data-onboarding implements. Integer fields/counters use BIGINT / 64-bit long. No time-model answer or findings approval inferred.
-- [ ] Resolve unknowns and obtain the operator's explicit findings approval before catalog publication or onboarding.
+- [x] Resolve the MDM lookup unknown — 2026-10-17 16:35 ET; the captured Company file has 329 rows, 329 distinct CIKs and no empty CIK. The shared local MDM has 0 rows in `company`, `master_entity`, `stage_record` and `current_record`, so 0 of the 329 CIKs match a Company master. The captured list still matches itself. Live master coverage is measured as none in this store, not untested.
+- [ ] Obtain the operator's explicit findings approval before catalog publication or onboarding. Three draft questions remain: concepts are not proposed as a new master kind (recommendation: no; Company is the existing kind), the fact key is the measured eight-column key rather than a designed surrogate, and facts stay an undecided class until the operator names one.
 - [x] Review the counts-only ticket evidence under Standards, Spec and GoF; run overlap checks before commit and push — 2026-10-16 14:16 ET; progress review below, counts reconciled to private findings, whitespace and both guard passes clean, checkpoint 8377111a pushed. The incomplete reporting/approval items stay open.
 - [x] Learning → skill: none — 2026-10-16 14:16 ET; existing profile-once, unknowns and approval rules apply. Original-JSON reading changes are isolated in ticket 41 / PR #1016, not silently applied to these draft findings.
 
@@ -73,7 +74,7 @@ Completed 2026-10-16 14:24 ET. A local, read-only DuckDB qualification took 5.48
 
 The candidate key's uniqueness is observed in this delivery only. Persistence across deliveries, absent values, conflict handling, source ordinals and the silver grain still need their own decisions/tests. These counts include every captured form and period: they do not select annual line items, choose latest/first values, align fiscal years or prove MDM links.
 
-No local MDM connection is configured in the current environment, and no master snapshot exists under the permitted Company facts capture. Consequently the 100% CIK link above proves the captured Company list only. Existing MDM Company lookup coverage is explicitly unknown and needs the local lookup proof, not a production query or a guessed master id.
+The shared local MDM was read on 2026-10-17 16:35 ET. `company`, `master_entity`, `stage_record` and `current_record` each have 0 rows, so none of the 329 captured CIKs match a Company master. The 100% CIK link above still proves only the captured Company list. Master coverage in this store is measured as none.
 
 ### Original capture authentication and precision boundary
 
@@ -91,7 +92,7 @@ Dedicated fresh ticket branch/worktree; evidence contains only counts and schema
 
 ### Spec
 
-This is a checkpoint, not a completed ticket: the unchecked checklist items remain pending. No operator answer or findings approval has been inferred.
+The MDM lookup unknown is measured. Findings approval is still open, so this is not a completed ticket. No operator answer has been inferred.
 
 ### GoF
 
