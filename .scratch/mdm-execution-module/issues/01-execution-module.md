@@ -17,10 +17,11 @@ worktree. No deployment, shared-store mutation or merge is part of this ticket.
 - [x] Remove worker orchestration and CLI runtime coupling; audit scoped fingerprint dependencies — worker calls execution once; fingerprint checks pass for CLI independence and execution/connection/matching changes (2026-10-17 14:33 ET).
 - [x] Migrate committed diagnostic/proving script callers; retain historical measurements without rerunning captured source data — seven callers migrated and syntax-checked; no remaining Python import of moved CLI functions (2026-10-17 14:36 ET).
 - [x] Preserve PostgreSQL behavior: mappings, stage order, replay, receipts, deferred evidence, quality reports and fencing — affected core/run/execution group: 70 passed in 20.03s; commands/quality/artifacts/worker/publication group: 156 passed in 32.93s (2026-10-17 14:36 ET).
-- [ ] Run affected tests with testmon, each invocation under five minutes; preserve isolated PostgreSQL cleanup.
-- [ ] Review Standards, Spec and GoF; fix findings and document runtime transition.
+- [x] Prove actual killed-worker recovery after one durable batch, with unchanged retry effects and independent receipt verification — real subprocess SIGKILL after one confirmed batch; same run resumes to two batches/checkpoints `[1, 1]`, stable retry receipt, independent reader verifies; worker file: 4 passed in 23.66s (2026-10-17 14:41 ET).
+- [x] Run affected tests with testmon, each invocation under five minutes; preserve isolated PostgreSQL cleanup — affected groups 70 + 156 + 62 passed; installed proof 4 passed in 180.63s; worker recovery group 4 passed in 23.66s; scoped Pyright clean (2026-10-17 14:41 ET).
+- [x] Review Standards, Spec and GoF; fix findings and document runtime transition — separate Standards/Spec agents and implementing-agent GoF review found no actionable issues; the added kill-proof test also received both independent reviews; see `review.md` (2026-10-17 14:40 ET).
 - [ ] Commit, push and open a reviewable PR; run full CI with a deadline.
-- [ ] Learning → skill: assess whether operational guidance changes; name the changed line or none.
+- [x] Learning → skill: none — existing MDM engineering guidance on pinning, batching, destination enforcement and isolated proofs remains accurate; command/operator workflows are unchanged. The implementation interface and one-time fingerprint transition are documented in the runtime responsibility map (2026-10-17 14:41 ET).
 
 ## GoF consultation
 
@@ -50,6 +51,13 @@ dynamic JSON/module metadata were resolved without changing runtime semantics.
 Existing full executable reproducibility work in TODOS.md is separate; this
 ticket does not close it. Runtime transition is documented in
 `docs/architecture/runtime-responsibilities.md`.
+
+Installed proof at committed code `3a5c118f`: 4 passed in 180.63 seconds
+(181.60 seconds for the deadline-controlled invocation), on configured Company,
+raw Person, XML streaming recovery and configured GLEIF mapping/publication
+recovery. The bundle was installed from this commit, outside the checkout, and
+the checks used isolated PostgreSQL 16. Context/configured-mapping/runtime-pin
+checks also passed: 62 cases in 5.30 seconds.
 
 The isolated `uv sync --frozen --extra mdm --extra s3 --extra mdm-runtime`
 completed in about 95 seconds. The local pgserver launcher then failed before

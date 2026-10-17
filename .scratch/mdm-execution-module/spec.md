@@ -1,6 +1,7 @@
 # MDM resumable execution module
 
-Design agreed through the architecture discussion. Implementation has not started.
+Design agreed through the architecture discussion. Implementation and proof are
+tracked in [the ticket](issues/01-execution-module.md).
 
 Reviewed source: `66ab7b43ab2fd04472a233b48a33727fb2f0b210`.
 Recorded: 2026-10-17 14:02:53 ET.
@@ -63,4 +64,5 @@ Existing evidence anchors: `tests/integration/test_clean_run_pins_postgres.py`, 
 
 ## Status
 
-Design decisions agreed. No source changes, test execution, qualification, deployment or merge has occurred. Learning → skill: none yet; assess skill changes against the implemented behavior and proof.
+Design decisions agreed. See the ticket for implementation and verification
+status; this design record itself establishes no deployment or merge.
