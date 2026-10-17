@@ -11,7 +11,8 @@ mdm.prepare and the CUSIP and ISIN Dataset Contracts), then the Merge Stage besi
 - an identifier OpenFIGI did not find is set aside (`not_found_by_openfigi`);
 - a record joins the Security that holds its CUSIP, and one no Security holds
   waits: OpenFIGI never creates a Security.
-The rule is switched on here only, in a copy of the repo's policy.
+The CUSIP rule is on in the repo's policy; the ISIN rules are switched on
+here only, in a copy of it.
 Invented values only.
 """
 
@@ -164,12 +165,13 @@ def prepared_records(root: Path, word: str = "cusip") -> tuple[list[dict], dict[
 
 
 def policy_body() -> dict:
-    """Both OpenFIGI rules, and N-PORT's ISIN-only rule that gives a Security its ISIN; the ISIN
-    Identifier Contract is not yet verified on main, so it is stamped here, for the test only."""
+    """The OpenFIGI ISIN rule, and N-PORT's ISIN-only rule that gives a Security its ISIN (the CUSIP
+    rule is on in the live policy, 2026-10-17); the ISIN Identifier Contract is not yet verified on
+    main, so it is stamped here, for the test only."""
     body = copy.deepcopy(files.policy())
     body["kinds"]["security"]["identifiers"]["isin"].setdefault("verification", {
         "corpus_sha256": "0" * 64, "approved_by": "check", "approved_at": core.AS_OF, "reason": "check only"})
-    for rule_id in ("openfigi-security-cusip", "openfigi-security-isin", "nport-isin-security-isin"):
+    for rule_id in ("openfigi-security-isin", "nport-isin-security-isin"):
         rule = next(r for r in body["kinds"]["security"]["rules"] if r["rule_id"] == rule_id)
         body["automatic_rules"].append({"kind": "security", "family": "binding", "rule_id": rule_id,
                                         "rule_version": rule["version"], "verdict": "bind",
