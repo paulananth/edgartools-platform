@@ -40,8 +40,9 @@ configured. Read each command's `--help` before the first use. A missing
 subcommand is a runtime gap to report.
 
 1. **Stores.** PostgreSQL 16 is the only engine for MDM, RDM and silver. When
-   it does not answer, start the shared server in
-   [Local testing](../data-platform/LOCAL-TESTING.md) (`up codex-local-lab`).
+   it does not answer, start `edgartools-local-postgres` from
+   [Local testing](../data-platform/LOCAL-TESTING.md). That container has no
+   agent and no worktree owner. Do not use `local-test-stores.py up` for it.
    MySQL and SQL Server, when the task names them, are separate engines from
    that same page. They do not hold MDM, RDM or silver.
    Confirm PostgreSQL 16 answers for MDM, RDM and silver.
