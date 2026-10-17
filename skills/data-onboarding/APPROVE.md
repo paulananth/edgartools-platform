@@ -74,6 +74,24 @@ in `rules/merge/pending-proofs.yaml`:
    its test run, and record the same words on it when `rules pending` shows
    it changes only that rule.
 
+## Switch on an identifier matching rule
+
+A matching rule that joins on an issued identifier (`identifier_match@1`,
+`activation: deterministic`) has no measured proof for `rules approve
+--rule`: its evidence is a Proving Run where each identifier landed on one
+entity. No command records it yet, so after the operator's words, by hand:
+
+1. In the kind's file, the identifier's Identifier Contract gets
+   `verification`: `corpus_sha256` (the Proving Run's report), `approved_by`,
+   `approved_at` (the time of their words) and a one-line `reason` with its
+   counts, as a switched-on Identifier Contract in the kind files shows.
+2. `rules/merge/policy.yaml` gets the rule in `automatic_rules`: `kind`,
+   `family: binding`, `rule_id`, `rule_version`, `verdict: bind`,
+   `activation: deterministic`, under a comment with the operator's words
+   and the ET time.
+3. The policy is then a new merge version: its pinned digests move, as for
+   any merge-rule change.
+
 ## Switch on (activate)
 
 ```bash
