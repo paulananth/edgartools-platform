@@ -39,7 +39,12 @@ checked against that ready store. Use the private role connections already
 configured. Read each command's `--help` before the first use. A missing
 subcommand is a runtime gap to report.
 
-1. **Stores.** Confirm PostgreSQL 16 answers for MDM, RDM and silver.
+1. **Stores.** PostgreSQL 16 is the only engine for MDM, RDM and silver. When
+   it does not answer, start the shared server in
+   [Local testing](../data-platform/LOCAL-TESTING.md) (`up codex-local-lab`).
+   MySQL and SQL Server, when the task names them, are separate engines from
+   that same page. They do not hold MDM, RDM or silver.
+   Confirm PostgreSQL 16 answers for MDM, RDM and silver.
    `edgar-warehouse mdm migrate` brings MDM current.
    `edgar-warehouse rdm init --runtime-role <role>` creates RDM;
    `edgar-warehouse rdm migrate --runtime-role <role>` updates an existing RDM.
