@@ -29,6 +29,31 @@
 source: openfigi
 bronze:
   family: openfigi
+acquisition:
+  version: 1
+  feeds:
+    mapping:
+      family: openfigi
+      datasets:
+      - openfigi.security.v1
+      - openfigi.security_isin.v1
+      scope:
+      - batch
+      capabilities:
+        capture: provider.capture
+        fetch: https.post
+      completeness:
+        format: json_array
+        required: []
+        allow_empty: false
+        max_bytes: 16777216
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://api.openfigi.com/v3/
+      secret_header:
+        name: X-OPENFIGI-APIKEY
+        environment: OPENFIGI_API_KEY
 execution:
   profile: source.read
   workers: 1

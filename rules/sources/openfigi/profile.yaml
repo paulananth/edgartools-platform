@@ -28,7 +28,7 @@ parts:
       sensitivity: none
     - name: ticker
       type: VARCHAR
-      nullable: true
+      nullable: false
       sensitivity: none
     - name: exchCode
       type: VARCHAR
@@ -59,7 +59,7 @@ parts:
       code_set: answers.data.securityType2
     - name: marketSector
       type: VARCHAR
-      nullable: true
+      nullable: false
       sensitivity: none
       code_set: answers.data.marketSector
     - name: securityDescription
@@ -68,10 +68,10 @@ parts:
       sensitivity: none
     links:
     - source_key: id
-      to_part: answers
+      to_part: security
       mdm_id_column: security_mdm_id_by_cusip
     - source_key: id
-      to_part: answers
+      to_part: security
       mdm_id_column: security_mdm_id_by_isin
   quality:
   - check: missing

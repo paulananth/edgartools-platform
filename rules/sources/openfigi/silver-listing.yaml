@@ -11,6 +11,8 @@
 #   identifier joined. Evidence (the 2026-10-15 capture, read by the full
 #   configured run): 0 duplicate keys over 872,383 CUSIP and 1,312,316 ISIN
 #   listings.
+# Profiling found every listing with a ticker and a market sector, so both are
+# never empty: a delivery without one is refused, not landed.
 # Rows are the source extract's `listings` table, with OpenFIGI's own field
 # names, without `figi_ticker` (a helper for reduce.yaml). An identifier is a
 # CUSIP or an ISIN, so each row fills one MDM id: the one whose Dataset
@@ -36,7 +38,7 @@ columns:
   sensitivity: none
 - name: ticker
   type: VARCHAR
-  nullable: true
+  nullable: false
   definition: The listing's ticker on its exchange.
   source: data[].ticker
   sensitivity: none
@@ -67,21 +69,25 @@ columns:
 - name: securityType
   type: VARCHAR
   nullable: true
+  definition: The security type (OpenFIGI's code).
   source: data[].securityType
   sensitivity: none
 - name: securityType2
   type: VARCHAR
   nullable: true
+  definition: The broader security type (OpenFIGI's code).
   source: data[].securityType2
   sensitivity: none
 - name: marketSector
   type: VARCHAR
-  nullable: true
+  nullable: false
+  definition: The market sector (OpenFIGI's code).
   source: data[].marketSector
   sensitivity: none
 - name: securityDescription
   type: VARCHAR
   nullable: true
+  definition: OpenFIGI's description of the security.
   source: data[].securityDescription
   sensitivity: none
 key:
@@ -92,14 +98,14 @@ links:
   - id
   kind: security
   source_code: openfigi.security.v1
-  to_part: answers
+  to_part: security
   source_key: id
   mdm_id_column: security_mdm_id_by_cusip
 - columns:
   - id
   kind: security
   source_code: openfigi.security_isin.v1
-  to_part: answers
+  to_part: security
   source_key: id
   mdm_id_column: security_mdm_id_by_isin
 time:

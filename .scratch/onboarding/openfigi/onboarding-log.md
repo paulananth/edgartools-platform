@@ -116,3 +116,5 @@ This is engine work, written as ticket 104 ("Stream a bare JSON array"), with a 
 - **Names:** the source extract's `listings` table now keeps OpenFIGI's field names (`exchCode`, `compositeFIGI` …), so silver keeps the source's own terms and the profile's code-set and quality lineage stays on its columns.
 - **One table, two links:** the writer resolves a link through one Dataset Contract, and an identifier is a CUSIP or an ISIN, so each row fills one of `security_mdm_id_by_cusip` and `security_mdm_id_by_isin`.
 - **Gaps:** the table's checks run nowhere yet (ticket 105); scheduled landing needs a Bookkeeping output worker (ticket 71).
+- **Review fixes (2026-10-17 13:44 ET):** the test now lands ISIN listings too, and proves each link resolves only through OpenFIGI's own Dataset Contract (a link pointed at the 13F or N-PORT contract fails it); ticker and market sector are never empty, as profiling found.
+- **Acquisition authority declared** (`source.yaml`, feed `mapping`): the POST capture of #994 as it ran; declaring it sent no request. Source activation still needs an acquisition proof from a configured capture run (ticket 71).
