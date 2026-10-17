@@ -59,7 +59,8 @@ def proving_policy() -> dict:
     security["identifiers"]["isin"].setdefault("verification", {
         "corpus_sha256": "0" * 64, "approved_by": "proving-run", "approved_at": AS_OF,
         "reason": "Proving Run only; not an approval"})
-    for rule_id in RULES:
+    active = {r["rule_id"] for r in body["automatic_rules"]}
+    for rule_id in (r for r in RULES if r not in active):
         rule = next(r for r in security["rules"] if r["rule_id"] == rule_id)
         body["automatic_rules"].append({"kind": "security", "family": "binding", "rule_id": rule_id,
                                         "rule_version": rule["version"], "verdict": "bind",

@@ -92,7 +92,9 @@ rules:
 # OpenFIGI (ticket 80; operator, 2026-10-17: "(c) MDM + silver listings
 # (Recommended)"): each record is an identifier the platform asked, so it
 # joins the one Security that holds that CUSIP or ISIN and waits otherwise; it
-# never creates a Security. Declared, not switched on.
+# never creates a Security. The CUSIP rule is switched on (operator, 2026-10-17
+# 13:12 ET: "Switch on CUSIP rule (Recommended)"); the ISIN rule is declared only,
+# until the ISIN Identifier Contract and N-PORT's ISIN rules are (ticket 79).
 - rule_id: openfigi-security-cusip
   version: 2026-10-17.1
   family: binding
