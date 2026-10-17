@@ -34,9 +34,36 @@ receipts) and the Change Journal processing identity; each is its own ticket.
 - [x] Ticket written; 103 free in every worktree and remote branch; overlap guard clean ("this branch changes no files") (2026-10-17 07:35 ET)
 - [x] Pre-code `/gof-refactor-reviewer` consult on `cli.py` and `run.py`: leave the structure. `cli.py` changed 29 times since July, along feature lines rather than one repeated conditional; the change is one parameter and one small function, no pattern (2026-10-17 07:36 ET)
 - [x] Failing test first: `tests/integration/test_clean_run_pins_postgres.py` on unchanged code, 2 failed, 1 passed. The resumed run's second batch was stored under mapping 2 with no error; a run naming an unregistered source left a started `mdm.run` row behind. The new-run case passed on both, as it should (2026-10-17 07:38 ET)
-- [x] Code: `pinned_mapping_versions` (`cli.py`) picks each manifest source's newest mapping once, before the run starts, across all stages; `RunCoordinator.start` keeps them in the frozen scope as `mapping_versions`; every later call and resume reads each batch through `reading_at` at the pinned version; preview uses an existing run's pins; a scope that pins no reading of a source it reads is refused. `batch_assertions`/`batch_evidence` (no run) still read the newest mapping (2026-10-17 07:39 ET)
-- [ ] Tests pass: the new tests and the affected files (named below)
-- [ ] Finding recorded: whether a later Bookkeeping run over the same input resumes the old MDM run (effect key)
-- [ ] Three-axis review (Standards, Spec, GoF) and fixes
+- [x] Code: `pinned_mapping_versions` (`cli.py`) picks each manifest source's newest mapping once, before the run starts, across all stages; `RunCoordinator.start` keeps them in the frozen scope as `mapping_versions`; every later call and resume reads each batch through `reading_at` at the pinned version; preview uses an existing run's pins; a scope that pins no reading of a source it reads is refused. `batch_assertions`/`batch_evidence` (no run) still read the newest mapping. Verified by the same three tests, now 3 passed (2026-10-17 07:39 ET)
+- [x] Tests pass: `test_clean_run_pins_postgres.py` 3, `test_clean_run_postgres.py` and `test_mdm_merge_worker_postgres.py` 11, `test_clean_quality.py` and `test_clean_gleif_publication.py` 103, the reading tests of `test_clean_mdm_postgres.py` 5; all passed, each under 30 s (2026-10-17 07:44 ET)
+- [ ] Wider affected run: `pytest --testmon` over `tests/mdm`, `tests/unit`, `tests/architecture`, `tests/integration`
+- [x] Finding: which run a later Bookkeeping run resumes. The worker's MDM run id is `uuid5(effect_key)`, and the effect key hashes the submitted Rules export, step, key and unit (`bookkeeping/clean/engine.py:329`). A mapping is registered only by activating a source Rules version (`rules/db.py:210`). A run submitted from that source version therefore gets a new effect key and a new MDM run, which pins the new mapping. A run submitted from a pipeline Rules version does not change when a source mapping changes, so the same unit resumes the old MDM run. That was already so before this ticket (its committed batches were skipped); it is the design's Change Journal processing-identity requirement, a follow-up (below), not this slice (2026-10-17 07:43 ET)
+- [x] Three-axis review. GoF: leave it. Standards: the code part's verification was not named (fixed above); the unregistered-source check is now only on the unpinned path, where it can fire; the long call reformatted. Spec: the old-scope case and the all-stages refusal, both kept and recorded below; the race of two first starts fails closed in `mdm.start_run` ("Root run scope changed"), untested here (2026-10-17 07:44 ET)
 - [ ] PR, CI green; merge only on the operator's word
 - [ ] Learning → skill
+
+## Decisions that follow from the design
+
+- A run scope written before this ticket names no mapping versions; resuming such a run that reads a source is refused ("Run scope pins no reading of ..."). The shared local MDM held 0 runs, 0 entities and 0 registered mappings when read on 2026-10-17 07:40 ET, and the rebuild keeps no old behaviour, so nothing is stranded.
+- Pins cover every source the manifest reads, in every stage, and a source that is not registered refuses the run before it starts: the design's "block required inputs" for the whole run, rather than failing part way.
+
+## Follow-ups (not this ticket)
+
+- Change Journal processing identity: a file must be reconsidered when a dependency it was processed under changes (a source mapping, RDM, matching and merge policy, Name Frequency, lookup receipts), and a pipeline-submitted MDM run must not resume across such a change. New ticket, after this one merges.
+- The other required versions (RDM, Name Frequency, lookup receipts) pinned for a whole run the same way. New ticket.
+
+## Source readiness gaps, mapped to existing tickets
+
+From the nine-source audit in `docs/specs/source-readiness.md` (PR #1036). None of the nine meets the common-command target; this list only says where each gap is already tracked.
+
+| Gap | Sources | Tracked by |
+| --- | --- | --- |
+| Approved acquisition authority, so normal activation registers the source's mappings | 8 of 9 (all but `sec.submissions.company`) | 71 (Company, GLEIF, Person activation parts); the others: none yet |
+| `rules run --target mdm` end to end | all | 71 (part from ticket 02) and 13 (run a source into MDM) |
+| N-PORT run construction: quarter `period`, publication key and revision, lookup producers | `sec.nport.registrant`, `sec.nport.fund`, `sec.nport.security` | 79 (claimed, `claude/nport-onboarding`) |
+| Security cross-references from OpenFIGI | `sec.nport.security` (consumer) | 80 |
+| GLEIF Level 1's `nport_issuer` record extras | `gleif` | 71 (part from tickets 22 and 97) |
+| A source-specific preparation command replaced by the common path | `sec.submissions.company` (`prepare-clean-company`), `sec.submissions.person` (`prepare-capture`) | none yet |
+| Read, combine, prepare and processed path | `iapd.adv`, `sec.ownership`, `sec.thirteenf.information_table`, `gleif` members | none yet (ADV matching rules are 76) |
+
+No source was activated, no shared store was written and no provider was asked anything for this map.

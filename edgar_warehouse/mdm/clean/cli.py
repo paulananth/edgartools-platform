@@ -149,13 +149,14 @@ def batch_input(
         raise ValueError(f"Source member exceeds {limits.RECORDS_FILE_BYTES:,} bytes; partition the manifest")
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
+    code = spec["source_code"]
     with store.engine.connect() as conn:
         if mapping_versions is None:
-            reading = current_reading(conn, spec["source_code"])
+            reading = current_reading(conn, code)
+            if reading is None:
+                raise Conflict("Unregistered dataset")
         else:
-            reading = reading_at(conn, spec["source_code"], mapping_versions[spec["source_code"]])
-    if reading is None:
-        raise Conflict("Unregistered dataset")
+            reading = reading_at(conn, code, mapping_versions[code])
     # A corrected mapping applies to publications read from here on, and every
     # record says which reading produced it (ticket 01, decision 4).
     mapping_version, contract = reading
@@ -341,8 +342,13 @@ def execute_manifest(
             continue
         if not prerequisites <= observed:
             raise Conflict("Complete preceding manifest batches before this stage")
-        found = batch_input(batch, root, store, policy_digest=manifest["policy_digest"],
-                            mapping_versions=mapping_versions)
+        found = batch_input(
+            batch,
+            root,
+            store,
+            policy_digest=manifest["policy_digest"],
+            mapping_versions=mapping_versions,
+        )
         assertions, deferred = found["assertions"], found["deferred"]
         occurrences = found["occurrences"]
         batch_quality = quality_counts(assertions, deferred)
