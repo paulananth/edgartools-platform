@@ -154,6 +154,7 @@ without giving an agent authority to approve its own findings or activate rules.
 | Skill | Question it answers | Result or handoff |
 | --- | --- | --- |
 | [data-platform](skills/data-platform/SKILL.md) | Where do I start, and how do I run the whole flow? | Setup, reading, combining, mastering, recovery and links to specialist skills. |
+| [data-operations](skills/data-operations/SKILL.md) | How do agents manage recurring loads as deliveries and capacity change? | Delivery readiness, changed/renamed files, resource sizing, run monitoring, recovery and a maintained operational runbook using Bookkeeping and Change Journal. |
 | [data-profiling](skills/data-profiling/SKILL.md) | What is in this delivery, and how do its parts connect? | Human report, machine-readable findings, keys, quality requirements, code sets and silver specifications. Approved findings can produce a public catalog summary. |
 | [data-modeling](skills/data-modeling/SKILL.md) | What does each part mean in the model? | Evidence-based decisions about master kinds, identity identifiers, lookup-only references, relationships, code sets and time. |
 | [data-onboarding](skills/data-onboarding/SKILL.md) | How do we introduce a new feed or master kind? | Contracts, mappings, quality checks, generated metadata and test evidence, followed by operator approval and activation. Master parts first, then needed reference data, then silver. |

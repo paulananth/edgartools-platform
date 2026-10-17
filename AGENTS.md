@@ -72,6 +72,9 @@ Claude and Codex may work on this repository independently, but they must not sh
 
 ## Shared local data (operator, 2026-10-16)
 
+For recurring loads, delivery readiness, file changes, resource sizing and run
+recovery, use [data-operations](skills/data-operations/SKILL.md).
+
 - Initial and daily runs enumerate the entire available source delivery
   (operator: "always load everything from source"). The Change Journal skips
   files already processed with the same source, key, content hash and processing
