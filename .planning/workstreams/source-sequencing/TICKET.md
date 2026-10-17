@@ -17,6 +17,8 @@ permission to bypass required inputs or change frozen versions.
 - [x] Document commands, exit codes, override behavior and remaining runtime gaps — specification and load-guide link inspected; 2026-10-17 08:27 ET.
 - [x] Run affected tests under five minutes and review Standards, Spec and GoF — 96 passed in 3.46s; diagnostic fix then 29 passed / 68 unchanged deselected in 0.60s; three independent reviews completed, Standards P2 fixed and rechecked; 2026-10-17 08:29 ET.
 - [x] Commit on the dedicated branch after the overlap guard passes — `84a26332`, correct branch and no overlap verified; 2026-10-17 08:29 ET.
+- [ ] Fix CI packaging failure: include the sequencing module in the data wheel, verify a fresh installation and rerun affected tests.
+- [ ] Recheck the updated PR's complete CI result.
 - [x] Learning → skill: none — existing data-platform Source readiness rules already require independent progress, valid required inputs and separate qualification evidence. New command syntax and its offline limit belong in `docs/specs/source-sequencing.md`; no skill defect found; 2026-10-17 08:29 ET.
 
 ## GoF consult

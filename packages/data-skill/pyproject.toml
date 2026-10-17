@@ -53,6 +53,7 @@ bypass-selection = true
 "../../edgar_warehouse/rules/cli.py" = "edgar_warehouse/rules/cli.py"
 "../../edgar_warehouse/rules/db.py" = "edgar_warehouse/rules/db.py"
 "../../edgar_warehouse/rules/mapdoc.py" = "edgar_warehouse/rules/mapdoc.py"
+"../../edgar_warehouse/rules/sequence.py" = "edgar_warehouse/rules/sequence.py"
 "../../edgar_warehouse/rules/source_engine.py" = "edgar_warehouse/rules/source_engine.py"
 "../../edgar_warehouse/rules/steps.py" = "edgar_warehouse/rules/steps.py"
 "../../edgar_warehouse/rules/migrations" = "edgar_warehouse/rules/migrations"
