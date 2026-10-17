@@ -225,6 +225,27 @@ def _stores(databases):
             "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
 
 
+def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
+    python, root = installed
+    # The installed CLI must discover both its module and bundled sequence YAML.
+    # No database or source activation is needed for this configuration check.
+    single = _run(python, "-m", "edgar_warehouse.cli", "rules", "sequence", "check",
+                  "--source", "sec.submissions.person", cwd=root)
+    assert single.returncode == 0, single.stderr
+    report = json.loads(single.stdout)
+    assert report["order"] == ["sec.submissions.person"]
+    assert set(report["sources"]) == {"sec.submissions.person"}
+    assert report["runtime_readiness"] == "not_checked"
+
+    delayed = _run(python, "-m", "edgar_warehouse.cli", "rules", "sequence", "check",
+                   "--defer", "gleif", cwd=root)
+    assert delayed.returncode == 3, delayed.stderr
+    report = json.loads(delayed.stdout)
+    assert report["order"] == ["sec.submissions.company", "sec.submissions.person"]
+    assert report["sources"]["gleif"]["status"] == "deferred"
+    assert report["runtime_readiness"] == "not_checked"
+
+
 def test_publication_preparation_runs_from_installed_bundle_without_checkout(installed):
     python, root = installed
     result = _run(python, "-c", '''

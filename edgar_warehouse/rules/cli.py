@@ -189,6 +189,8 @@ def _catalog(args):
 def register(subparsers):
     parser = subparsers.add_parser("rules", help="Versioned Rules files, approvals and configured run submission")
     commands = parser.add_subparsers(dest="rules_command", required=True)
+    from .sequence import register as register_sequence
+    register_sequence(commands)
     # init and migrate both create or upgrade the Rules Database schema:
     # "migrate" means a schema upgrade in every store (platform validation,
     # operator 2026-09-30).

@@ -1,0 +1,43 @@
+# Offline processing inventory, not activation or runtime readiness evidence.
+# `after` is a preferred order only; it never pulls another source into a run.
+# Declare `requires` only for genuine required source inputs, not waiting links.
+# Rules, RDM, capture completeness and frozen-input checks stay in the runtime.
+version: 1
+sources:
+  sec.submissions.company:
+    target: mastering
+    requires: []
+    after: []
+  gleif:
+    # This target currently merges prepared records; it is not the full path.
+    target: mdm
+    requires: []
+    after: [sec.submissions.company]
+  sec.submissions.person:
+    target: mastering
+    requires: []
+    after: [gleif]
+  iapd.adv:
+    target: null
+    requires: []
+    after: [sec.submissions.person]
+  sec.ownership:
+    target: null
+    requires: []
+    after: [sec.submissions.person]
+  sec.thirteenf.information_table:
+    target: null
+    requires: []
+    after: [gleif]
+  sec.nport.registrant:
+    target: null
+    requires: []
+    after: [sec.submissions.company]
+  sec.nport.fund:
+    target: null
+    requires: []
+    after: [sec.nport.registrant]
+  sec.nport.security:
+    target: null
+    requires: []
+    after: [sec.nport.fund]
