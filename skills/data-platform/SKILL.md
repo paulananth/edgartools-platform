@@ -1,6 +1,6 @@
 ---
 name: data-platform
-description: The whole data skill, installed as one package. Use it to set up a machine, then to take a feed from its captured files all the way through - onboarding its rules, parsing it with the configured engine, mastering it into MDM - and to write a custom parsing step only when the engine cannot state something. Start here; it sends you to data-onboarding, refining-rules, bookkeeping or change-journal for each step's detail.
+description: The whole data skill, installed as one package. Use it to set up a machine, create the databases, then take a feed from its captured files all the way through - onboarding its rules, parsing it with the configured engine, mastering it into MDM - and to write a custom parsing step only when the engine cannot state something. Start here; it sends you to data-onboarding, refining-rules, bookkeeping or change-journal for each step's detail.
 ---
 
 # Data Platform
@@ -98,15 +98,16 @@ checks and points to the repository lifecycle script.
    `export EDGAR_RULES_ROOT=<that folder>`. Without it, the bundle reads its
    own read-only copy of the rules.
 
-3. **Stores.** Four PostgreSQL 16 databases, each set by its variable; never
-   paste an address into the chat:
+3. **Databases.** This skill creates the databases. Start the engine first
+   from [Local testing](LOCAL-TESTING.md). That container has no agent and no
+   worktree owner. On it, create these databases when they are missing:
+   `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`, and `silver`.
+   Do not paste the statement or an address into the chat. Do not apply the
+   store schemas here. [data-operations](../data-operations/SKILL.md) applies
+   that DDL into these databases. The connection variables, never printed, are
    `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
-   `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`. Their schemas:
-   `edgar-warehouse rules init`, `edgar-warehouse bookkeeping init --runtime-role <role>`,
-   `edgar-warehouse change-journal init --runtime-role <role>`,
-   `edgar-warehouse mdm migrate`. The roles and the migration addresses are in
-   [data-onboarding](../data-onboarding/SKILL.md) (Rules Database) and
-   [bookkeeping](../bookkeeping/SKILL.md) (init, migrate).
+   `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
+   `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
 
 4. **Check.** `edgar-warehouse doctor` must print `"ok": true`. It lists any
    command a skill names that does not exist, whether the engine loads, the

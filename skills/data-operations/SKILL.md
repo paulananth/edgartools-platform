@@ -33,11 +33,10 @@ This skill applies DDL. Data-profiling writes a logical silver spec and does
 not. MDM engineering writes the MDM migration files and does not apply a
 profile's silver spec.
 
-Apply these five schemas on the engine the environment names: PostgreSQL 16,
-MySQL, or SQL Server Express. When that engine does not answer, start its
-container from [Local testing](../data-platform/LOCAL-TESTING.md). The
-container has no agent and no worktree owner. Do not use
-`local-test-stores.py up` for it. Read each command's `--help` before the
+Apply these five schemas into databases that
+[data-platform](../data-platform/SKILL.md) already created: `mdm`, `rdm`,
+`bookkeeping`, `change_journal`, and `silver`. This skill does not create
+the databases or the engines. Read each command's `--help` before the
 first use. A missing subcommand is a runtime gap. A command that refuses
 MySQL or SQL Server Express does not get a SQL script pasted into this skill.
 [sql-writer](../sql-writer/SKILL.md) renders the table statement for that
