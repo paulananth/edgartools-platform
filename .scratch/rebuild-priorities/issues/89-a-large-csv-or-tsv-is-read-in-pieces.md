@@ -2,7 +2,7 @@
 
 Priority: 89, tier 1. Map: [Rebuild priorities](../map.md).
 
-Type: task (engine). Status: in progress (branch `claude/csv-streaming`). Blocked by: 86 (CSV and TSV are read the same way).
+Type: task (engine). Status: done (#990 merged 2026-10-15 08:09 ET). Blocked by: 86 (CSV and TSV are read the same way).
 
 ## Why
 
