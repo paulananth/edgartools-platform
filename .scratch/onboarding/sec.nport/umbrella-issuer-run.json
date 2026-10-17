@@ -1,0 +1,14 @@
+{
+ "securities_with_issued_by": 217100,
+ "direct_cusips_with_one_issuer": 217945,
+ "linked_and_direct_agree": 217100,
+ "linked_not_direct": 0,
+ "direct_not_linked": 845,
+ "newly_one_issuer": 540,
+ "moved_to_an_umbrella": 1967,
+ "still_several": 2852,
+ "seconds": {
+  "chain": 506,
+  "all": 552
+ }
+}

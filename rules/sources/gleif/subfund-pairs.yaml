@@ -1,0 +1,48 @@
+# Each fund and the umbrella it is a sub-fund of, from GLEIF's relationship
+# file (active IS_SUBFUND_OF records): the pair set the N-PORT issuer reading
+# looks up, so a filed fund-series LEI counts as its umbrella trust's
+# (rebuild-priorities ticket 23; operator, 2026-10-17: "Umbrella trust
+# (Recommended)"). Two columns, no whole record: it feeds a lookup, not MDM.
+# One level only: an umbrella that is itself a sub-fund is not followed.
+source: gleif.relationships
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 100}
+  tables:
+    subfund:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left: {text: {path: RelationshipRecord.Relationship.RelationshipType.$}}
+              right: {const: {value: IS_SUBFUND_OF}}
+          then:
+            choose:
+              condition:
+                equal:
+                  left: {text: {path: RelationshipRecord.Relationship.RelationshipStatus.$}}
+                  right: {const: {value: ACTIVE}}
+              then: {test: {path: RelationshipRecord.Relationship.EndNode.NodeID.$, kind: present}}
+              else: {value: {path: NO_SUCH_FIELD}}
+          else: {value: {path: NO_SUCH_FIELD}}
+      columns:
+        fund: {text: {path: RelationshipRecord.Relationship.StartNode.NodeID.$, transforms: [{case: upper}], null_if: [""]}}
+        umbrella: {text: {path: RelationshipRecord.Relationship.EndNode.NodeID.$, transforms: [{case: upper}], null_if: [""]}}
+  stream:
+    wrapper: relations
+    container: zip
+    max_input_bytes: 1073741824
+    max_bytes: 17179869184
+    max_record: 1048576
+    max_records: 10000000
+    max_depth: 64
+    min_integer: -9223372036854775807
+    record_encoding: python
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 4096
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000

@@ -5,14 +5,20 @@
 # taken as source.yaml takes it, from the `isin` pair set. A holding whose
 # issuer LEI is not 20 letters and digits ending in two digits (blank, "N/A",
 # all zeros), or with no CUSIP or ISIN to hang it on, is not read.
-# issuer-reduce.yaml counts the LEIs of each CUSIP and each ISIN; combine.yaml
-# keeps the one LEI of a key that has one.
+# A fund series' LEI counts as its umbrella trust's (ticket 23; operator,
+# 2026-10-17: "Umbrella trust (Recommended)"): the `umbrella` pair set
+# (gleif/subfund-pairs.yaml, GLEIF's active IS_SUBFUND_OF) maps each filed LEI
+# to the trust it is a sub-fund of; an LEI with no umbrella is kept as filed.
+# So a share whose holdings name the trust and its series has one issuer, the
+# trust. The same expression is in both tables: keep the two in step. issuer-reduce.yaml counts the LEIs of each CUSIP and each ISIN;
+# combine.yaml keeps the one LEI of a key that has one.
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:
   format: json
   limits: {max_bytes: 1048576, max_records: 1}
   lookup_sets:
     isin: {max_values: 10000000, max_bytes: 268435456, max_value_bytes: 64, pairs: true}
+    umbrella: {max_values: 1000000, max_bytes: 67108864, max_value_bytes: 64, pairs: true}
   tables:
     security_issuer:
       each: .
@@ -50,10 +56,11 @@ read:
             default: ""
             transforms: [{case: upper}]
         issuer_lei:
-          text:
-            path: ISSUER_LEI
-            default: ""
-            transforms: [{case: upper}]
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: umbrella, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}
+            - text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}
     isin_issuer:
       each: .
       select:
@@ -93,10 +100,11 @@ read:
       columns:
         isin: {member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
         issuer_lei:
-          text:
-            path: ISSUER_LEI
-            default: ""
-            transforms: [{case: upper}]
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: umbrella, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}
+            - text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}
   stream:
     framing: delimited
     delimited: {format: tsv, encoding: utf-8}
