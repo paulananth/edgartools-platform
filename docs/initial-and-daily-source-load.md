@@ -14,6 +14,11 @@ invented operational history or clear them between daily runs.
 
 ## Initial load sequence
 
+Sources can run independently; this preferred order does not make one delayed
+source hold up the others. Use the [source sequencing configuration check](specs/source-sequencing.md)
+to select one source or explicitly defer a delayed source. Genuine required
+inputs still block only the work that needs them.
+
 | Order | Work | Required result before the dependent work |
 | --- | --- | --- |
 | 1 | Freeze a complete inventory of every retained SEC, GLEIF and OpenFIGI delivery, with its files, receipts, hashes, publication identity and time. | Every file accounted for. Full available capture and full provider coverage are separate claims; report missing pages, history or identifier coverage. |
