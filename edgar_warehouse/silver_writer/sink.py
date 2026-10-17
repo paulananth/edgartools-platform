@@ -59,12 +59,17 @@ class PostgresSink:
         source = [c["name"] for c in spec["columns"]]
         types = {c["name"]: specs.postgres_type(c["type"]) for c in spec["columns"]}
         ids = specs.mdm_id_columns(spec)
+        quality = specs.quality_columns(spec)
+        types.update({c: "jsonb" for c in quality})
         stamped = specs.added_time(spec)
         key = spec["key"]
         with self.engine.begin() as conn:
             q = specs.quote
             table = f"silver.{q(spec['table'])}"
-            staged = source + ids
+            # Derived per row (MDM ids, the checks a row failed): left out of the `changed`
+            # comparison, so an append table takes a row whose ids or flags moved; updated below.
+            derived = ids + quality
+            staged = source + derived
             with conn.connection.driver_connection.cursor() as cur:
                 cur.execute(f"LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE")
                 cur.execute("CREATE TEMP TABLE silver_in (" + ", ".join(f"{q(c)} text" for c in staged)
@@ -78,7 +83,8 @@ class PostgresSink:
                 try:
                     cur.execute("CREATE TEMP TABLE silver_rows ON COMMIT DROP AS SELECT "
                                 + ", ".join([f"CAST({q(c)} AS {types[c]}) AS {q(c)}" for c in source]
-                                            + [q(c) for c in ids]) + " FROM silver_in")
+                                            + [q(c) for c in ids]
+                                            + [f"CAST({q(c)} AS jsonb) AS {q(c)}" for c in quality]) + " FROM silver_in")
                 except DataError as exc:
                     # The database's message quotes the value; a cell may be personal, so only its type is named.
                     raise Blocked(f"silver.{spec['table']}: a value is not its column's type "
@@ -107,12 +113,14 @@ class PostgresSink:
                 cur.execute(f"INSERT INTO {table} ({', '.join(q(c) for c in written)}) "
                             f"SELECT {', '.join(values)} FROM silver_rows s ON CONFLICT ({keys}) DO NOTHING")
                 inserted = cur.rowcount
-                ids_updated = 0
-                if ids:  # before changed rows are rewritten, so this counts every landed row whose id moved
-                    cur.execute(f"UPDATE {table} t SET {', '.join(f'{q(c)} = s.{q(c)}' for c in ids)} "
-                                f"FROM silver_rows s WHERE {match} AND ROW({', '.join('t.' + q(c) for c in ids)}) "
-                                f"IS DISTINCT FROM ROW({', '.join('s.' + q(c) for c in ids)})")
-                    ids_updated = cur.rowcount
+                updated = {"mdm_ids_updated": 0}
+                # Before changed rows are rewritten, so each counts every landed row whose ids or flags moved.
+                for name, group in (("mdm_ids_updated", ids), ("quality_updated", quality)):
+                    if group:
+                        cur.execute(f"UPDATE {table} t SET {', '.join(f'{q(c)} = s.{q(c)}' for c in group)} "
+                                    f"FROM silver_rows s WHERE {match} AND ROW({', '.join('t.' + q(c) for c in group)}) "
+                                    f"IS DISTINCT FROM ROW({', '.join('s.' + q(c) for c in group)})")
+                        updated[name] = cur.rowcount
                 if changed:
                     sets = [f"{q(c)} = s.{q(c)}" for c in staged] + [f"{q(c)} = now()" for c in stamped]
                     cur.execute(f"UPDATE {table} t SET {', '.join(sets)} FROM silver_rows s WHERE {match} AND {differs}")
@@ -121,7 +129,7 @@ class PostgresSink:
                     cur.execute(f"DELETE FROM {table} t WHERE NOT EXISTS (SELECT 1 FROM silver_rows s WHERE {match})")
                     deleted = cur.rowcount
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
-                "deleted": deleted, "mdm_ids_updated": ids_updated}
+                "deleted": deleted, **updated}
 
     def link_keys(self, spec: dict, link: dict) -> set[str]:
         q = specs.quote

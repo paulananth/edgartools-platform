@@ -322,7 +322,20 @@ time: {as_of: <col|null>, as_at: <col>, event_time: <col|null>}
 partition: [<col>]              # e.g. a date
 load_mode: append|upsert|snapshot
 why: <plain words for each choice above>
+checks:                         # optional; data-onboarding writes them
+  - {id: <name>, check: identifier, column: <col>, type: <rules/identifiers name>, on_fail: flag|exception, why: <words>}
+  - {id: <name>, check: in_set, column: <col>, values: [...], on_fail: flag|exception, why: <words>}
+  - {id: <name>, check: one_value, column: <col>, per: <col>, on_fail: flag|exception, why: <words>}
 ```
+
+`checks` run on each delivery as it lands (ticket 105; operator, 2026-10-17:
+"Flag, land the row"). A row failing a `flag` check lands with the check's id
+in its `quality` column (jsonb, added by the writer); a row failing an
+`exception` check is not landed. `one_value` holds within the delivery: rows
+sharing a `per` value hold one value of `column`, and a row whose value is not
+the group's most common one is flagged (on a tie, the whole group). An empty
+value passes every check; `nullable` governs emptiness. The landing report
+counts each check's flagged or refused rows.
 
 Each link keeps the source's own key and an MDM id column filled after
 mastering; a row whose entity is not mastered yet keeps an empty MDM id.

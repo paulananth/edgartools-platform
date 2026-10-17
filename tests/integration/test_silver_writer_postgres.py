@@ -181,6 +181,41 @@ def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_cha
     assert land(sink, "visit", visits(), ids)["inserted"] == 0
 
 
+def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(stores, database):
+    owner, runtime, ids, _ = stores
+    checks = [{"id": "known_member", "check": "in_set", "column": "member_id", "values": ["a", "b"],
+               "on_fail": "flag", "why": "members are a or b"},
+              {"id": "has_day", "check": "one_value", "column": "member_id", "per": "visited_on",
+               "on_fail": "exception", "why": "one member a day"}]
+    silver.register(owner, visit_spec(table="checked_visit", checks=checks), runtime_role=RUNTIME)
+    with owner.connect() as conn:
+        assert "known_member: members are a or b" in conn.scalar(text(
+            "SELECT col_description('silver.checked_visit'::regclass, attnum) FROM pg_attribute "
+            "WHERE attrelid = 'silver.checked_visit'::regclass AND attname = 'quality'"))
+    sink = PostgresSink(runtime)
+    delivered = visits() + [{"visit_id": 4, "member_id": "a", "amount": None, "visited_on": "2026-10-09", "tags": None},
+                            {"visit_id": 5, "member_id": "b", "amount": None, "visited_on": "2026-10-09", "tags": None}]
+    first = land(sink, "checked_visit", delivered, ids)
+    assert first["inserted"] == 3 and (first["quality"]["rows_flagged"], first["quality"]["rows_refused"]) == (1, 2)
+    rows = table(runtime, "checked_visit")
+    assert {k: r["quality"] for k, r in rows.items()} == {1: None, 2: None, 3: ["known_member"]}  # jsonb, read back
+    again = land(sink, "checked_visit", delivered, ids)
+    assert (again["inserted"], again["changed"], again["quality_updated"]) == (0, 0, 0)
+    assert table(runtime, "checked_visit") == rows
+    # One member a day, flagged: delivered together, rows 1 and 2 tie on their day and are both flagged;
+    # row 1 delivered alone passes. An append table takes the moved flag, and nothing else changes.
+    day = [{"id": "one_member_a_day", "check": "one_value", "column": "member_id", "per": "visited_on",
+            "on_fail": "flag", "why": "one member a day"}]
+    silver.register(owner, visit_spec(table="daily_visit", checks=day), runtime_role=RUNTIME)
+    same_day = [{**v, "visited_on": "2026-10-01"} for v in visits()[:2]]
+    land(sink, "daily_visit", same_day, ids)
+    assert {k: r["quality"] for k, r in table(runtime, "daily_visit").items()} == {
+        1: ["one_member_a_day"], 2: ["one_member_a_day"]}
+    alone = land(sink, "daily_visit", same_day[:1], ids)
+    assert (alone["changed"], alone["quality_updated"]) == (0, 1)
+    assert table(runtime, "daily_visit")[1]["quality"] is None
+
+
 def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, database):
     owner, runtime, ids, mastered = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)

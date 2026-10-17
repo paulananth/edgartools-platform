@@ -83,6 +83,7 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
         lines = [f"{q(c['name'])} {specs.postgres_type(c['type'])}{'' if c['nullable'] else ' NOT NULL'}"
                  for c in spec["columns"]]
         lines += [f"{q(c)} text" for c in specs.mdm_id_columns(spec)]
+        lines += [f"{q(c)} jsonb" for c in specs.quality_columns(spec)]
         lines += [f"{q(c)} timestamp with time zone NOT NULL" for c in specs.added_time(spec)]
         lines.append(f"PRIMARY KEY ({', '.join(q(k) for k in spec['key'])})")
         _ddl(conn, f"CREATE TABLE {table} ({', '.join(lines)})")
@@ -102,6 +103,11 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
                      f"The MDM id of the {link['kind']} whose {link['source_code']} record key is "
                      f"{link['source_key']}; empty while that record is not mastered."
                      + (f" Profiling found {share:.1%} of the source keys among the master's keys." if share is not None else ""))
+        for c in specs.quality_columns(spec):
+            flags = [k for k in spec["checks"] if k["on_fail"] == "flag"]
+            _comment(conn, f"COLUMN {table}.{q(c)}", "The data quality checks this row failed, by id (each "
+                     "flagged, the row still landed); empty when it passed every one. Checks: " + ("; ".join(
+                         f"{k['id']}: {k['why']}" for k in flags) or "none flag") + ".")
         for c in specs.added_time(spec):
             _comment(conn, f"COLUMN {table}.{q(c)}", "When the row's delivered values were last written (the as-at "
                      "time); filling an MDM id later does not change it.")
