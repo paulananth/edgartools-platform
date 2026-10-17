@@ -1,9 +1,11 @@
-# Initial and daily full-source loads
+# Initial and daily source loads with the Change Journal
 
 Operator ruling, 2026-10-16: **"always load everything from source"**.
-Initial and daily processing cover the entire available delivery of each source.
-Use batches to divide that work, never a cohort, sample limit or changed-file
-filter. Repeating unchanged source evidence must remain idempotent.
+Clarification from the operator: daily processing selects changed data through
+the Change Journal. Initial and daily discovery cover the entire available
+delivery, without a cohort or sample limit. The preparer then selects files the
+Journal does not record as processed under the same processing identity. Full
+source coverage does not mean forced reprocessing of unchanged files.
 
 The destinations in this scope are the shared local Rules, RDM and MDM stores.
 Silver is excluded. Bookkeeping and the Change Journal start empty and acquire
@@ -28,13 +30,15 @@ invented operational history or clear them between daily runs.
 | 12 | Finalize every declared run, verify all source totals and identity/link invariants, then retain a populated backup. | All declared work verified, pending Journal delivery zero, accepted/waiting/rejected totals reconciled, source and filing provenance retained. |
 
 Batch size affects how the work is scheduled, not population coverage. Enumerate
-every selected key once across the complete worklist, including every bundle;
-check the union against the source inventory before reporting a full load.
+every source key once across the complete inventory, including every bundle;
+reconcile considered files as selected plus already-processed files. On an
+empty Journal all are selected. Check the inventory before reporting full
+coverage; do not mistake files skipped by the Journal for omitted source data.
 Historical counts from the 6,414-Company cohort are not expected counts for the
 full 76,230-document submissions capture or the 3,428,477-record GLEIF Level 1
 publication. Derive actual full-load counts from verified results.
 
-## Daily sequence: full deliveries again
+## Daily sequence: full coverage, changed-file processing
 
 Use the same mapping, mastering and verification order as the initial run.
 Daily describes execution cadence; it does not turn a quarterly feed into
@@ -56,11 +60,14 @@ separate from local processing.
    when its underlying complete population changes. Preserve the exact version
    used by each run. Current Rules body and reference files do not replace the
    frozen inputs of an older interrupted run.
-5. **Process every source record**, in the initial-load dependency order above.
-   For Company and Person preparers, `--all` disables the existing processed-file
-   skip. Include it for every bundle and exhaust the complete worklist. Other
-   loaders must expose equivalent full-delivery selection before use; do not
-   invent an option or treat a read-only target as a mastering load.
+5. **Select work through the Change Journal**, then process the selected files
+   in the initial-load dependency order above. For Company and Person, omit
+   `--all`: the same source, file key, content hash and processing identity is
+   skipped. If every file was already processed, the preparer returns
+   `manifest: null`; report a no-op without submitting an empty mastering run.
+   A new/changed file, different source rule or policy, or meaningful change
+   to a relevant shared input requires processing. Other source loaders need
+   equivalent Journal integration before claiming this daily behavior.
 6. **Reconcile links and verify results.** Check the full delivery's accounting,
    unique identifiers, surviving values and relationship dates. Reprocessing
    identical facts must not duplicate identities, source assertions or links.
@@ -68,18 +75,40 @@ separate from local processing.
    date. A genuinely new or revised source publication receives its proper
    revision and effective time.
 7. **Finalize and retain recovery evidence.** Bookkeeping records work and the
-   Change Journal records verified outcomes, even for forced full processing.
-   Keep them for recovery and auditing; their contents do not justify skipping
-   source records under this full-load policy. Back up after writers are idle.
+   Change Journal records each file only after its merge is verified. Retain
+   that evidence so future unchanged deliveries can be skipped. Explicit forced
+   replays use `--all` and record `files.forced`; they are not the daily default.
+   Back up after writers are idle.
+
+### What the Journal actually compares
+
+The implemented selector in `edgar_warehouse/mdm/clean/changed_files.py`
+uses the source, file key, content hash and processing identity. Company and
+Person call it before constructing their work manifests. Company includes the
+logical Name Frequency content and catalog hash as shared inputs: a new capture
+timestamp alone does not invalidate an unchanged Name Frequency result.
+
+The comparison is **per file, not per row or field**. A changed multi-record
+file is selected as a whole; MDM still preserves identity and write idempotency.
+The `journal.record` worker records processed files after verified merges and
+verifies the receipts. Plain Bookkeeping events in the Journal are not a
+substitute for those file-specific records. Existing integration covers Company
+and Person selection and the Journal worker; GLEIF/OpenFIGI and other unfinished
+loaders must be wired and qualified rather than assumed to inherit it.
+
+With an empty Journal, the first complete inventory selects every file. After
+its verified processing is recorded, the same inventory selects zero files.
+One changed file selects that file; changed rules or shared inputs may select
+many unchanged files for recomputation. Do not use `--all` for either normal run.
 
 ### Source cadence and full-load meaning
 
-| Source | Each daily execution processes | Special treatment |
+| Source | Each daily execution considers | Special treatment |
 | --- | --- | --- |
-| SEC submissions, Company and Person | Every document in the selected complete capture, with required catalog, filing/page and Name Frequency inputs. | `prepare-clean-company --all` and `prepare-capture --all` per bundle; no subset of recently changed CIKs. |
+| SEC submissions, Company and Person | Every document in the complete capture, with required catalog, filing/page and Name Frequency inputs. | Omit `--all` from both preparers. The Journal selects new/changed or invalidated files; unchanged files produce no work. |
 | SEC ownership and 13F | Every file/record in the complete declared retained scope. | Amendments and previously captured filings keep their real identities and provenance. No arbitrary first-N filing limit. |
 | N-PORT | Complete retained quarter publications selected for the run, including all rows of each selected source part. | New quarter: new revision/time as supported by the contract; replay of the same quarter: same source facts. Process registrants, funds and Securities in dependency order. |
-| GLEIF | A complete Golden Copy baseline of all declared members and records in scope. | A delta alone does not meet this full-load policy. Any future delta-based capture must first produce a proven complete snapshot; that reconstruction is not assumed implemented. Explicit source deletion/status evidence controls retirement, not absence from a partial file. |
+| GLEIF | The declared baseline and publication members required for complete source coverage. | Qualify publication continuity and Journal integration before daily execution. A changed bulk member may require processing all its records. Explicit deletion/status evidence controls retirement, not absence from a partial file. |
 | OpenFIGI | Every retained request and response in the declared complete mapping capture. | Mapping responses cover requested identifiers, not the provider's entire instrument universe. No automatic new requests or re-download: the operator previously ruled that the capture is reused. Standalone listing enrichment still needs onboarding. |
 
 This scope covers master/reference data and relationships accepted by the
@@ -107,8 +136,9 @@ wait for their supported paths; report the missing source and stage explicitly.
 
 ## Verification and recovery record
 
-For every source record the run's full scope, file/row counts, capture age,
-Rules and reference pins, accepted/waiting/rejected totals, reason counts,
+For every source record the run's full scope, considered/selected/skipped file
+counts, processed-row counts, capture age, Rules and reference pins,
+accepted/waiting/rejected totals, reason counts,
 master and relationship counts, duplicate-identifier checks, run IDs, verification
 status and backup reference. Store row-level evidence and connection files
 privately; only counts and invented examples belong in this public repository.
