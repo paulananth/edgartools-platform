@@ -153,7 +153,7 @@ impl PyEngine {
     }
 
     #[pyo3(signature = (stream, wrapper, on_reading, *, max_bytes, max_record, max_records, max_depth=64, min_integer=i64::MIN, record_encoding="native", context="{}", ordinal_context=None, lookups=None))]
-    fn scan_json_array(&self, py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_reading: Py<PyAny>,
+    fn scan_json_array(&self, py: Python<'_>, stream: Py<PyAny>, wrapper: Option<String>, on_reading: Py<PyAny>,
                        max_bytes: usize, max_record: usize, max_records: usize, max_depth: usize,
                        min_integer: i64, record_encoding: &str, context: &str, ordinal_context: Option<String>, lookups: Option<&Bound<'_, PyDict>>) -> PyResult<(usize, usize)> {
         let record_encoding = match record_encoding {
@@ -166,7 +166,7 @@ impl PyEngine {
         let mut values = stream_context(context, &ordinal_context)?;
         self.inner.validate_context(&values).map_err(rejected)?;
         let limits = crate::json_sequence::Limits { max_bytes, max_record, max_records, max_depth, min_integer, record_encoding };
-        let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), &wrapper, limits, |record, ordinal| {
+        let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), wrapper.as_deref(), limits, |record, ordinal| {
             emit(&mut values, &ordinal_context, ordinal, &on_reading, |values| projection.read_json_value(record, values))
         })).map_err(rejected)?;
         Ok((result.records, result.bytes))
@@ -416,7 +416,7 @@ fn json_to_py(py: Python<'_>, value: &serde_json::Value) -> PyResult<PyObject> {
 
 #[pyfunction]
 #[pyo3(signature = (stream, wrapper, on_record, *, max_bytes, max_record, max_records, max_depth=64, min_integer=i64::MIN, record_encoding="native"))]
-fn scan_json_array(py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_record: Py<PyAny>,
+fn scan_json_array(py: Python<'_>, stream: Py<PyAny>, wrapper: Option<String>, on_record: Py<PyAny>,
                    max_bytes: usize, max_record: usize, max_records: usize, max_depth: usize, min_integer: i64, record_encoding: &str) -> PyResult<(usize, usize)> {
     let record_encoding = match record_encoding {
         "native" => crate::json_sequence::RecordEncoding::Native,
@@ -424,7 +424,7 @@ fn scan_json_array(py: Python<'_>, stream: Py<PyAny>, wrapper: String, on_record
         _ => return Err(rejected(crate::Rejected::new("contract", "record_encoding is native or python"))),
     };
     let limits = crate::json_sequence::Limits { max_bytes, max_record, max_records, max_depth, min_integer, record_encoding };
-    let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), &wrapper, limits, |record, ordinal| {
+    let result = py.allow_threads(|| crate::json_sequence::scan(PythonReader(stream), wrapper.as_deref(), limits, |record, ordinal| {
         Python::with_gil(|py| on_record.call1(py, (json_to_py(py, &record)?, ordinal)).map(|_| ()))
             .map_err(|error| crate::Rejected::new("stream_consumer", error))
     })).map_err(rejected)?;

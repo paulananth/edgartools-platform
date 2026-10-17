@@ -1,4 +1,4 @@
-//! Bounded single-wrapper JSON arrays. Consumers prepare candidates; EOF
+//! Bounded JSON arrays, bare or under one named wrapper. Consumers prepare candidates; EOF
 //! verification must succeed before a caller publishes or commits anything.
 use std::cell::Cell;
 use std::fmt;
@@ -224,10 +224,11 @@ impl<'de, F: FnMut(Value, usize) -> Result<(), Rejected>> Visitor<'de> for Envel
     }
 }
 
+/// `wrapper: None` reads a document that is itself the array.
 pub fn scan<R: Read, F: FnMut(Value, usize) -> Result<(), Rejected>>(
-    reader: R, wrapper: &str, limits: Limits, mut consume: F,
+    reader: R, wrapper: Option<&str>, limits: Limits, mut consume: F,
 ) -> Result<Stats, Rejected> {
-    if wrapper.is_empty() || wrapper.len() > 128 || limits.max_bytes == 0 || limits.max_record == 0
+    if wrapper.is_some_and(|name| name.is_empty() || name.len() > 128) || limits.max_bytes == 0 || limits.max_record == 0
         || !(1..=64).contains(&limits.max_depth) {
         return Err(Rejected::new("contract", "invalid JSON stream wrapper or limits"));
     }
@@ -238,9 +239,12 @@ pub fn scan<R: Read, F: FnMut(Value, usize) -> Result<(), Rejected>>(
     let mut parser = serde_json::Deserializer::from_reader(BufReader::with_capacity(BUFFER, budget));
     let mut count = 0;
     let mut consumer_error = None;
-    let result = Envelope { wrapper, records: Records { limits, since_record: &since_record,
-        count: &mut count, consume: &mut consume, consumer_error: &mut consumer_error } }.deserialize(&mut parser)
-        .and_then(|_| parser.end());
+    let records = Records { limits, since_record: &since_record,
+        count: &mut count, consume: &mut consume, consumer_error: &mut consumer_error };
+    let result = match wrapper {
+        Some(wrapper) => Envelope { wrapper, records }.deserialize(&mut parser),
+        None => records.deserialize(&mut parser),
+    }.and_then(|_| parser.end());
     if let Some(error) = consumer_error { return Err(error); }
     result.map_err(|error| Rejected::new(if failed.get() { "limit_exceeded" } else { "malformed" }, error))?;
     Ok(Stats { records: count, bytes: total.get() })
