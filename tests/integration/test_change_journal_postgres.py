@@ -261,7 +261,7 @@ def test_cli_delivery_recovery_reports_pending_without_executing_work(
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     complete(book, rid)
     monkeypatch.setenv(
-        "BOOKKEEPING_CLEAN_DATABASE_URL",
+        "BOOKKEEPING_DATABASE_URL",
         databases.runtime.url.render_as_string(hide_password=False),
     )
     monkeypatch.setenv(

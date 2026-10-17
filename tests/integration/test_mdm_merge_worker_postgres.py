@@ -107,7 +107,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
     databases.rules.activate("pipeline", "mdm-merge-fixture", "1")
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**os.environ,
-           "BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.runtime),
+           "BOOKKEEPING_DATABASE_URL": url(databases.runtime),
            "RULES_DATABASE_URL": url(databases.rules.engine),
            "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine),
            "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
@@ -124,7 +124,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
         return done.stdout
 
     worker = {"MDM_DATABASE_URL": url(mdm.application), "MDM_APPLICATION_ROLE": "clean_application"}
-    verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm.reader)}
+    verifier = {"BOOKKEEPING_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm.reader)}
     reports = ("--reports", (tmp_path / "reports").as_uri())
     command("workers", "work", "mdm.merge", run_id, **worker)
     with mdm.admin.connect() as conn:
@@ -147,7 +147,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
         assert conn.scalar(text("SELECT count(*) FROM mdm.outbox WHERE verified_at IS NULL")) == 0
     for consumer in ("export", "graph"):
         assert len(list((out / consumer).glob("*.json"))) == 2  # one contract file per batch
-    owner = create_engine(databases.admin.url.set(database="change_journal_clean"))
+    owner = create_engine(databases.admin.url.set(database="change_journal"))
     with owner.connect() as conn:
         events = conn.execute(text("SELECT event_key, run_id::text AS run_id, source FROM journal.event "
                                    "WHERE producer='mdm' ORDER BY event_key")).mappings().all()

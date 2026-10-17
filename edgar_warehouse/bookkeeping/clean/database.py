@@ -12,8 +12,7 @@ from .config import Blocked, canonical
 
 
 def get_engine(url: str | None = None):
-    # No fallback to BOOKKEEPING_DATABASE_URL: that is the legacy store.
-    return create_engine(url or os.environ["BOOKKEEPING_CLEAN_DATABASE_URL"], pool_pre_ping=True)
+    return create_engine(url or os.environ["BOOKKEEPING_DATABASE_URL"], pool_pre_ping=True)
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
@@ -22,8 +21,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     quote = engine.dialect.identifier_preparer.quote
     paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
     with engine.begin() as conn:
-        if conn.scalar(text("SELECT current_database()")) != "bookkeeping_clean":
-            raise Blocked("Refusing migration outside fresh bookkeeping_clean")
+        if conn.scalar(text("SELECT current_database()")) != "bookkeeping":
+            raise Blocked("Refusing migration outside fresh bookkeeping")
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Bookkeeping requires PostgreSQL 16")
         role = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=:r"), {"r": runtime_role}).first()

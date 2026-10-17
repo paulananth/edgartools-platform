@@ -207,7 +207,7 @@ def test_installed_company_population(installed, databases, tmp_path):  # noqa: 
     url = lambda engine: engine.url.render_as_string(hide_password=False)  # noqa: E731
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
     worker = {**env, "MDM_DATABASE_URL": url(mdm_app), "MDM_APPLICATION_ROLE": "clean_application"}
-    verifier = {**env, "BOOKKEEPING_CLEAN_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_reader)}
+    verifier = {**env, "BOOKKEEPING_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_reader)}
     entry = ("-c", "import sys; from edgar_warehouse.cli import main; sys.exit(main(sys.argv[1:]))")
 
     def cli(*args, env=env):

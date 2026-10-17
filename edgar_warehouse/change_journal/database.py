@@ -18,11 +18,11 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if (
-            conn.scalar(text("SELECT current_database()")) != "change_journal_clean"
+            conn.scalar(text("SELECT current_database()")) != "change_journal"
             or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16
         ):
             raise Blocked(
-                "Journal migration requires change_journal_clean on PostgreSQL 16"
+                "Journal migration requires change_journal on PostgreSQL 16"
             )
         role = conn.execute(
             text(

@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Manages recurring loads from completed local deliveries, detects changed or renamed files, sizes work to available resources, and coordinates Bookkeeping, verification and Change Journal recovery. Use when operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -26,6 +26,80 @@ runtime readiness certificate. Recover retained progress before making a new run
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
+
+## Apply store DDL
+
+This skill applies DDL. Data-profiling writes a logical silver spec and does
+not. MDM engineering writes the MDM migration files and does not apply a
+profile's silver spec.
+
+Apply these five schemas into databases that
+[data-platform](../data-platform/SKILL.md) already created: `mdm`, `rdm`,
+`bookkeeping`, `change_journal`, and `silver`. This skill does not create
+the databases or the engines. Read each command's `--help` before the
+first use. A missing subcommand is a runtime gap. A command that refuses
+MySQL or SQL Server Express does not get a SQL script pasted into this skill.
+[sql-writer](../sql-writer/SKILL.md) renders the table statement for that
+engine. A PostgreSQL function body is not rendered that way and stays
+unapplied.
+
+The commands below run on PostgreSQL 16. On MySQL and SQL Server Express they
+refuse. Use sql-writer for the tables, and report every function the library
+cannot render.
+
+| Schema | Command | Owner connection |
+|---|---|---|
+| MDM | `edgar-warehouse mdm migrate --application-role <role>` | `MDM_DATABASE_URL` |
+| RDM | `edgar-warehouse rdm init --runtime-role <role>`, then `rdm migrate` | `RDM_MIGRATION_DATABASE_URL` |
+| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role bookkeeping_runtime`, then `bookkeeping migrate`. The database name is `bookkeeping`. | `BOOKKEEPING_MIGRATION_DATABASE_URL` |
+| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate`. The database name is `change_journal`. | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
+| Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` | `SILVER_MIGRATION_DATABASE_URL` |
+
+The runtime role exists, is not a superuser, and is not the migration login.
+Done when each command reports the schema current. `edgar-warehouse doctor`
+shows the stores that answer.
+
+## Operationalize every domain
+
+Do this after the five schemas are current, for every domain. A domain is one
+source directory under `rules/sources` together with every entity kind that
+source's merge policy names. Walk all of them. Two named kinds are not
+the whole list.
+
+1. **Stores.** Confirm the five schemas in **Apply store DDL** are current on
+   the named engine. A refusal from MySQL or SQL Server Express stays a gap.
+2. **MDM, per domain.** Follow **Configuration promotion** in RUNBOOK.md for
+   that source and its merge policy. Read back the active version. A domain
+   whose source or policy is still a draft, or whose activation is refused,
+   stays blocked. Record the refusal and go on to the next domain. Loading
+   entities waits until that version is the active proven one.
+3. **RDM, per domain.** `edgar-warehouse rdm list`, then
+   `edgar-warehouse rdm describe <code set>` for every code set that domain
+   pins. A published version is operational. A missing or draft code set is a
+   blocker for that domain: route it through data-profiling's RDM steps
+   (`rdm draft`, `rdm diff`, operator `rdm approve`, `rdm publish`). Leave the
+   code set unpublished until those words exist.
+4. **Apply the silver spec.** This skill applies DDL. Data-profiling writes
+   the logical spec and does not. MDM engineering writes the MDM store's own
+   migrations and does not apply a profile's silver spec.
+   For each part with an approved spec, apply that spec to the engine named
+   by `SILVER_DATABASE_URL`. On PostgreSQL,
+   `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
+   then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
+   material commentary are the fields the spec already names. The same spec
+   is the DDL for MySQL and for SQL Server Express. `silver register` today
+   emits PostgreSQL only and refuses another dialect. Render that table with
+   [sql-writer](../sql-writer/SKILL.md) and run the compiled statement. A part with no approved spec, or a pipeline silver step
+   with no worker, stays blocked and is reported. `silver land` is the manual
+   write until that worker exists
+   ([data-onboarding](../data-onboarding/SKILL.md), Two targets).
+
+A domain is operational when its MDM source and merge policy are the active
+proven versions, every code set it pins is published in RDM, and every approved
+silver spec is a registered table. Report one line per domain: operational, or
+the blocker. The recurring loop below then loads that domain's entities from a
+finished delivery. This section does not download, does not invent a command,
+and does not mark a blocked domain complete.
 
 ## Operate the recurring loop
 

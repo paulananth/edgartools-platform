@@ -54,7 +54,7 @@ edgar-warehouse workers work provider.capture "$RUN_ID" --limit 1
 edgar-warehouse workers verify provider.capture "$RUN_ID" --reports "$REPORTS_URI" --limit 1
 ```
 
-Set `BOOKKEEPING_CLEAN_DATABASE_URL` to the appropriate login and
+Set `BOOKKEEPING_DATABASE_URL` to the appropriate login and
 `CHANGE_JOURNAL_DATABASE_URL` to the restricted Journal login. These commands
 do not author, qualify, approve or activate a Source version.
 

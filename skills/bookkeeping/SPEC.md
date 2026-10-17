@@ -11,8 +11,8 @@ legacy caller or qualify a production cutover.**
 ## Implemented boundary
 
 `edgar_warehouse.bookkeeping.clean` uses only
-`BOOKKEEPING_CLEAN_DATABASE_URL`, never the old `BOOKKEEPING_DATABASE_URL`.
-The PostgreSQL 16 database is `bookkeeping_clean`. Its schema has exactly
+`BOOKKEEPING_DATABASE_URL`.
+The PostgreSQL 16 database is `bookkeeping`. Its schema has exactly
 five tables: `pipeline_run`, `work_item`, `lease`, `checkpoint`, and
 `journal_outbox`. Migration checksums live in a schema comment, so they do
 not add a sixth control table. No old history or checkpoints are imported.
@@ -251,15 +251,15 @@ printed or committed.
 uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py --rules
 ```
 
-The script requires `BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL`,
-`BOOKKEEPING_CLEAN_RUNTIME_PASSWORD` and, with `--rules`,
+The script requires `BOOKKEEPING_ADMIN_DATABASE_URL`,
+`BOOKKEEPING_RUNTIME_PASSWORD` and, with `--rules`,
 `RULES_AGENT_PASSWORD`. Set runtime connection variables to the created
 logins. `BOOKKEEPING_MANIFEST_ROOT` names file storage for offline acceptance
 or an S3 prefix for AWS.
 
 Existing control databases can be migrated explicitly with
 `bookkeeping migrate --runtime-role <role>` and `rules init`, using
-`BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
+`BOOKKEEPING_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
 Use `bookkeeping init` only to initialize the fresh control schema;
 `bookkeeping migrate` refuses a missing schema. `change-journal init` or
 `change-journal migrate` and `bookkeeping init-guard` use their separate
@@ -306,7 +306,7 @@ and publication verification failure/recovery. Source files validate against
 the same control contract; an unseen source runs without registry edits.
 
 The canonical local PostgreSQL 16 instance was provisioned with empty
-`bookkeeping_clean` and `rules` stores, restricted runtime logins, and NOLOGIN
+`bookkeeping` and `rules` stores, restricted runtime logins, and NOLOGIN
 owners. Its control schema has five tables and zero runs; Rules has zero
 versions. Acceptance fixtures use separate disposable containers, not these
 stores. No AWS state, old Bookkeeping data or active Rules versions were changed.

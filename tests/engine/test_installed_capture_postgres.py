@@ -37,7 +37,7 @@ print(json.dumps(candidate))
     worked = _run(python, '-c', script, cwd=root, document=envelope)
     assert worked.returncode == 0, worked.stderr
     candidate = json.loads(worked.stdout)
-    env = {'BOOKKEEPING_CLEAN_DATABASE_URL': databases.verifier.url.render_as_string(hide_password=False)}
+    env = {'BOOKKEEPING_DATABASE_URL': databases.verifier.url.render_as_string(hide_password=False)}
     verified = _run(python, '-m', 'edgar_warehouse.workers', 'verify', 'provider.capture', envelope['claim']['run_id'],
                     '--reports', (root / 'capture-reports').as_uri(), '--limit', '1', cwd=root, env=env)
     assert verified.returncode == 0, verified.stderr

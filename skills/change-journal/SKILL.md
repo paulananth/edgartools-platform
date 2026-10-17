@@ -50,7 +50,7 @@ platform modules and is not the independence proof.
 
 ## Init and migrate
 
-Use init for an empty `change_journal_clean` PostgreSQL 16 database; migrate
+Use init for an empty `change_journal` PostgreSQL 16 database; migrate
 only for its already initialized checksummed journal schema. Check the exact
 database, version and separate migration/runtime roles without printing secrets.
 Use `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` for the migration owner and

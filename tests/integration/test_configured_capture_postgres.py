@@ -24,7 +24,7 @@ from tests.support.rules_approval import approve
 @pytest.fixture
 def setup(databases, tmp_path, monkeypatch, request):
     grant_profile(databases.admin, profile=capture.PRODUCER, worker='bk_runtime', verifier='bk_verifier')
-    monkeypatch.setenv('BOOKKEEPING_CLEAN_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
+    monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
     monkeypatch.setenv('CHANGE_JOURNAL_DATABASE_URL', databases.ledger.engine.url.render_as_string(hide_password=False))
     monkeypatch.setenv('EDGAR_IDENTITY', 'Offline fixture test@example.com')
     book, verifier = Bookkeeping(databases.runtime), Bookkeeping(databases.verifier)
@@ -82,14 +82,14 @@ def setup(databases, tmp_path, monkeypatch, request):
         with pytest.raises(DBAPIError):
             book.verifications(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
         verification, = verifier.verifications(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
-        monkeypatch.setenv('BOOKKEEPING_CLEAN_DATABASE_URL', databases.verifier.url.render_as_string(hide_password=False))
+        monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.verifier.url.render_as_string(hide_password=False))
         try:
             renewed = control.renew(verification)
             checks, proofs = capture.verify(renewed, book.artifacts)
             report = book.artifacts.put(tmp_path.as_uri() + '/reports', control.report_document(renewed, checks, proofs, runtime(capture)))
             control.admit(renewed, report)
         finally:
-            monkeypatch.setenv('BOOKKEEPING_CLEAN_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
+            monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
         book.deliver(databases.ledger, envelope['claim']['run_id'])
         assert book.finalize(envelope['claim']['run_id'])['run']['state'] == 'complete'
         return verification

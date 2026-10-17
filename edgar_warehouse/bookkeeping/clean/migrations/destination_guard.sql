@@ -1,4 +1,4 @@
--- Applied in each transactional destination, never in bookkeeping_clean.
+-- Applied in each transactional destination, never in bookkeeping.
 CREATE SCHEMA bookkeeping_guard;
 REVOKE ALL ON SCHEMA bookkeeping_guard FROM PUBLIC;
 CREATE TABLE bookkeeping_guard.resource (

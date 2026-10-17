@@ -2,8 +2,8 @@
 """Create fresh local control stores; never import or reset legacy state.
 
 Run with uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py.
-BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL names the admin connection (postgres DB),
-BOOKKEEPING_CLEAN_RUNTIME_PASSWORD supplies the new runtime login's password.
+BOOKKEEPING_ADMIN_DATABASE_URL names the admin connection (postgres DB),
+BOOKKEEPING_RUNTIME_PASSWORD supplies the new runtime login's password.
 Optional --rules uses RULES_AGENT_PASSWORD; --journal uses
 CHANGE_JOURNAL_RUNTIME_PASSWORD. No versions are activated.
 """
@@ -24,11 +24,11 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 
 def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
     admin = create_engine(admin_url, hide_parameters=True)
-    requested = [("bookkeeping_clean", "bookkeeping_clean_owner", "bookkeeping_clean_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
+    requested = [("bookkeeping", "bookkeeping_owner", "bookkeeping_runtime", "BOOKKEEPING_RUNTIME_PASSWORD")]
     if rules:
         requested.append(("rules", "rules_owner", "rules_agent", "RULES_AGENT_PASSWORD"))
     if journal:
-        requested.append(("change_journal_clean", "change_journal_owner", "change_journal_runtime", "CHANGE_JOURNAL_RUNTIME_PASSWORD"))
+        requested.append(("change_journal", "change_journal_owner", "change_journal_runtime", "CHANGE_JOURNAL_RUNTIME_PASSWORD"))
     quote = admin.dialect.identifier_preparer.quote
     result = {}
     try:
@@ -68,7 +68,7 @@ def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
                 if database == "rules":
                     result[database] = migrate_rules(engine, agent_role=runtime)
                 else:
-                    migration = migrate_journal if database == "change_journal_clean" else migrate
+                    migration = migrate_journal if database == "change_journal" else migrate
                     result[database] = migration(engine, runtime_role=runtime)
             finally:
                 engine.dispose()
@@ -82,7 +82,7 @@ def main():
     parser.add_argument("--rules", action="store_true", help="Also create the one-table Rules store, without activating any version")
     parser.add_argument("--journal", action="store_true", help="Also create the empty shared Change Journal")
     args = parser.parse_args()
-    result = provision(os.environ["BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL"], rules=args.rules, journal=args.journal)
+    result = provision(os.environ["BOOKKEEPING_ADMIN_DATABASE_URL"], rules=args.rules, journal=args.journal)
     print(json.dumps(result, sort_keys=True))
 
 

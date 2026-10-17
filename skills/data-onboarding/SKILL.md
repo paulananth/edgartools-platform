@@ -111,12 +111,16 @@ Every step says what differs for each target.
     records, keyed apart from the identifier, and asserts each MDM id; a link
     pointed at another Dataset Contract must fail it.
 
-  Then:
-  1. The schema owner (`SILVER_MIGRATION_DATABASE_URL`) runs
-     `edgar-warehouse silver init --runtime-role <runtime login>` once, and
-     `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
-     for the table (or `register <findings.yaml> --part <part>`). A changed
-     spec is refused for a registered table: register it as a new table.
+  1. Hand the approved spec to
+  [data-operations](../data-operations/SKILL.md), which applies it as DDL.
+  On PostgreSQL the schema owner (`SILVER_MIGRATION_DATABASE_URL`) runs
+  `edgar-warehouse silver init --runtime-role <runtime login>` once, and
+  `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
+  for the table (or `register <findings.yaml> --part <part>`). A changed
+  spec is refused for a registered table: register it as a new table.
+  MySQL and SQL Server Express use the same spec. When `silver register`
+  refuses that dialect, data-operations reports the gap and does not
+  hand-write `CREATE TABLE`.
   2. The runtime (`SILVER_DATABASE_URL`, plus `MDM_DATABASE_URL` to read MDM
      ids) runs `edgar-warehouse silver land <table> <rows file>` with the
      part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same

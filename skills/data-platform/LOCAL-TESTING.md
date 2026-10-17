@@ -9,9 +9,11 @@ so it can be restored. This is local testing, not a production deployment.
 - Work automatically within the assigned task. The operator authorized no
   intermediate approval prompts for this local testing work on 2026-10-16.
   Ask only when agents would overlap or the requested scope is unclear.
-- Use a dedicated worktree and PostgreSQL 16 container/volume per active
-  agent environment. Check ownership before changing a resource. Another
-  agent's files, database and volume are never an automatic cleanup target.
+- Use a dedicated worktree for code. The data-platform skill starts a test
+  container or a production container. A production container stays. Do not
+  remove it and do not remove its volume. `local-test-stores.py` is only for
+  a worktree-owned test copy. Another agent's files and that copy are never
+  an automatic cleanup target.
 - Keep the six stores together for a test copy: MDM, RDM, silver, Rules,
   Bookkeeping and Change Journal. Reuse their existing migrations and
   restricted runtime roles. Use the Docker runtime already configured.
@@ -28,24 +30,29 @@ so it can be restored. This is local testing, not a production deployment.
   outside Docker volumes. Reports contain counts, never source values,
   credentials or database addresses.
 
-## Run from your worktree
+## Containers
 
-Use a repository checkout containing `infra/scripts/local-test-stores.py`.
-Run `uv run --extra mdm python infra/scripts/local-test-stores.py --help`
-to check that the implementation is present. From your own worktree:
+The [data-platform skill](SKILL.md) starts the container. It selects a test
+instance or a production instance. This page does not start those containers.
+A production container stays. Do not remove it here.
+
+## Worktree-owned test copy
+
+`infra/scripts/local-test-stores.py up <name>` attaches that environment to
+the current worktree and refuses every other checkout. Use it only for a
+private test copy, never for the shared engines above.
 
 ```bash
 uv run --extra mdm python infra/scripts/local-test-stores.py up agent-test
-uv run --extra mdm python infra/scripts/local-test-stores.py status agent-test
 uv run --extra mdm python infra/scripts/local-test-stores.py backup agent-test --baseline
 ```
 
-`up` creates empty migrated stores. Load the assigned data through qualified
-readers and workers before treating the backup as a source-data baseline.
-`backup --baseline` checks a restore before selecting it for future copies.
-From another worktree, `copy <new-name>` uses that baseline; `stop <name>`
-preserves the environment. Source the reported private environment file in
-your terminal; keep its contents out of reports.
+`up` creates empty migrated stores for that copy. Load the assigned data
+through qualified readers and workers before treating the backup as a
+source-data baseline. `backup --baseline` checks a restore before selecting
+it for future copies. From another worktree, `copy <new-name>` uses that
+baseline; `stop <name>` preserves the copy. Source the reported private
+environment file in your terminal; keep its contents out of reports.
 
 Read `docs/local-agent-testing.md` in that checkout for recovery and backup
 details. Verify startup and the task's data checks before claiming readiness.

@@ -63,11 +63,11 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         worker, verifier, governance = (environment(f + ".env") for f in ("worker", "verifier", "governance"))
         assert "SILVER_DATABASE_URL" not in worker
         assert "MDM_MIGRATION_DATABASE_URL" not in worker
-        book = engine("bookkeeping_clean", "postgres")
+        book = engine("bookkeeping", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:
-                for login, allowed, denied in (("bookkeeping_clean_runtime", "worker", "verifier"),
-                                              ("bookkeeping_clean_verifier", "verifier", "worker")):
+                for login, allowed, denied in (("bookkeeping_runtime", "worker", "verifier"),
+                                              ("bookkeeping_verifier", "verifier", "worker")):
                     assert conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
                                        {"l": login, "p": profile, "d": allowed})
                     assert not conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
@@ -145,7 +145,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         assert stores.contents(copy) == expected
         with book.begin() as conn:
             role = conn.scalar(text("SELECT bookkeeping.profile_role('artifact.copy','worker')"))
-            conn.exec_driver_sql(f'GRANT "{role}" TO bookkeeping_clean_verifier')
+            conn.exec_driver_sql(f'GRANT "{role}" TO bookkeeping_verifier')
         with pytest.raises(ValueError, match="duties overlap"):
             with stores.locked(name):
                 stores.start(name)

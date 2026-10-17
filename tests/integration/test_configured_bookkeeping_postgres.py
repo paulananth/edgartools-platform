@@ -69,12 +69,12 @@ def databases():
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
                 conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
                 conn.exec_driver_sql("GRANT rules_approver TO operator")
-                for db in ("bookkeeping_clean", "rules", "change_journal_clean", "destination"):
+                for db in ("bookkeeping", "rules", "change_journal", "destination"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
-            admin = engine("bookkeeping_clean")
-            runtime = engine("bookkeeping_clean", "bk_runtime")
+            admin = engine("bookkeeping")
+            runtime = engine("bookkeeping", "bk_runtime")
             rules_admin = engine("rules")
-            ledger_admin = engine("change_journal_clean")
+            ledger_admin = engine("change_journal")
             destination_admin = engine("destination")
             with pytest.raises(Blocked, match="not initialized"):
                 migrate(admin, runtime_role="bk_control", existing_only=True)
@@ -90,8 +90,8 @@ def databases():
                 conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
                 conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
             migrate_guard(destination_admin, runtime_role="clean_application")
-            yield Databases(admin, runtime, engine("bookkeeping_clean", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
-                            ChangeJournal(engine("change_journal_clean", "ledger_runtime")), ledger_admin,
+            yield Databases(admin, runtime, engine("bookkeeping", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
+                            ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin,
                             engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
         finally:
             for value in engines:
@@ -165,7 +165,7 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(d
     from edgar_warehouse.cli import main
 
     monkeypatch.setenv(
-        "BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL",
+        "BOOKKEEPING_MIGRATION_DATABASE_URL",
         databases.admin.url.render_as_string(hide_password=False),
     )
     assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
@@ -948,7 +948,7 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 2, "steps": {"s0": copies, "s1": counts}})
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
     databases.rules.activate("source", name, "1")
-    environment = {"BOOKKEEPING_CLEAN_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
+    environment = {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
                    "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
                    "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
                    "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}
@@ -976,9 +976,9 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     verifier_url = databases.verifier.url.render_as_string(hide_password=False)
     for profile in ("artifact.copy", "jsonl.count"):
         process("-m", "edgar_warehouse.workers", "work", profile, rid)
-        env["BOOKKEEPING_CLEAN_DATABASE_URL"], worker_url = verifier_url, env["BOOKKEEPING_CLEAN_DATABASE_URL"]
+        env["BOOKKEEPING_DATABASE_URL"], worker_url = verifier_url, env["BOOKKEEPING_DATABASE_URL"]
         process("-m", "edgar_warehouse.workers", "verify", profile, rid, "--reports", reports)
-        env["BOOKKEEPING_CLEAN_DATABASE_URL"] = worker_url
+        env["BOOKKEEPING_DATABASE_URL"] = worker_url
     finished = json.loads(process("-m", "edgar_warehouse.bookkeeping", "finalize", rid))
     assert finished["run"]["state"] == "complete" and finished["counts"] == {"verified": 4}
     assert json.loads(Path(tmp_path / "count-1").read_text()) == {"lines": 1}
@@ -1019,15 +1019,15 @@ def _provision(server, monkeypatch, runpy):
         url = server.url(driver="postgresql")
         admin = create_engine(url, connect_args={"connect_timeout": 3})
         engines.append(admin)
-        monkeypatch.setenv("BOOKKEEPING_CLEAN_RUNTIME_PASSWORD", "test")
+        monkeypatch.setenv("BOOKKEEPING_RUNTIME_PASSWORD", "test")
         monkeypatch.setenv("RULES_AGENT_PASSWORD", "test")
         script = Path(__file__).parents[2] / "infra/scripts/provision-clean-bookkeeping.py"
         provision = runpy.run_path(str(script))["provision"]
         monkeypatch.setenv("CHANGE_JOURNAL_RUNTIME_PASSWORD", "test")
         result = provision(url, rules=True, journal=True)
-        assert set(result) == {"bookkeeping_clean", "rules", "change_journal_clean"}
+        assert set(result) == {"bookkeeping", "rules", "change_journal"}
         assert provision(url, rules=True, journal=True) == result
-        for database, role, table in (("bookkeeping_clean", "bookkeeping_clean_runtime", "bookkeeping.pipeline_run"),
+        for database, role, table in (("bookkeeping", "bookkeeping_runtime", "bookkeeping.pipeline_run"),
                                       ("rules", "rules_agent", "rules.rule_version")):
             runtime = create_engine(server.url(database, role, driver="postgresql"))
             engines.append(runtime)
@@ -1035,13 +1035,13 @@ def _provision(server, monkeypatch, runpy):
                 assert conn.scalar(text(f"SELECT count(*) FROM {table}")) == 0
             with pytest.raises(DBAPIError), runtime.begin() as conn:
                 conn.execute(text(f"DELETE FROM {table}"))
-        journal_admin = create_engine(server.url("change_journal_clean", driver="postgresql"))
+        journal_admin = create_engine(server.url("change_journal", driver="postgresql"))
         engines.append(journal_admin)
         with journal_admin.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM journal.event")) == 0
             assert conn.scalars(text("SELECT schemaname||'.'||tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')")).all() == ["journal.event"]
         with admin.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_clean_owner','change_journal_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 3
+            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_owner','change_journal_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 3
     finally:
         for engine in engines:
             engine.dispose()

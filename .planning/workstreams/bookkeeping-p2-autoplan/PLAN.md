@@ -190,7 +190,7 @@ explicit recovery resume and ready terminal reconciliation through `finalize`/
 `record_checks`, consistently with the authority amendment below. Bounded outbox
 delivery before readiness continues under its existing runtime authority; the
 terminal full audit and completion transition require control credentials.
-Worker/verifier processes continue using their own `BOOKKEEPING_CLEAN_DATABASE_URL`.
+Worker/verifier processes continue using their own `BOOKKEEPING_DATABASE_URL`.
 Missing submitter configuration fails closed rather than falling back to the worker
 URL for new-format submission. Add owner-only `bookkeeping grant-submitter --login
 <login>` to the existing CLI/database modules. Its grant qualification rejects

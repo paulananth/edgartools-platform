@@ -1,6 +1,6 @@
 ---
 name: mdm-engineering
-description: Change the MDM store's code or schema - the Merge Stage, its SQL functions, migrations, lookups and indexes, transactions - and choose the cheapest proof that the change is right. Use before writing or reviewing any change under the MDM code or its migrations, when a mastering run is slow or refuses work, or when deciding which proof a change needs.
+description: Change the MDM store's code or schema on PostgreSQL, MySQL or SQL Server Express - the Merge Stage, its SQL functions, migrations, lookups and indexes, transactions - and choose the cheapest proof that the change is right. Use before writing or reviewing any change under the MDM code or its migrations, when a mastering run is slow or refuses work, or when deciding which proof a change needs. Silver DDL from a profile is applied by data-operations, not here.
 ---
 
 # MDM Engineering
@@ -9,19 +9,27 @@ description: Change the MDM store's code or schema - the Merge Stage, its SQL fu
 > refining-rules, data-quality) change rules as data; this skill is for a
 > change to the MDM engine and store themselves.
 
-It answers: **is this change to the MDM store lean, fast on a hosted
-Postgres, safe to migrate, and proved by the cheapest check that proves it?**
+It answers: **is this change to the MDM store lean, fast on the engine it
+runs on, safe to migrate, and proved by the cheapest check that proves it?**
+
+The store runs on PostgreSQL, MySQL, or SQL Server Express. The Merge Stage
+below is the same on all three. A silver table spec is not applied here.
+[data-operations](../data-operations/SKILL.md) applies that DDL. The running
+MDM code is PostgreSQL. A change for MySQL or SQL Server Express follows that
+engine's lookup section. It does not copy the PostgreSQL statements.
 
 Each rule below was learned from a failure here. The Examples section names
 where.
 
 ## Hard stops
 
-- **Design for the hosted target.** MDM, Rules and Bookkeeping run on a
-  hosted, Postgres-compatible service. A local PostgreSQL 16 (in Docker) is
-  for tests and Proving Runs only. Never choose a cap, a batch budget or a
-  refusal to fit a local machine. Only PostgreSQL's own limits and the hosted
-  service's documented ones apply.
+- **Design for the hosted target.** MDM, Rules and Bookkeeping run on the
+  hosted engine that environment uses: PostgreSQL, MySQL, or SQL Server
+  Express. A local container of that same engine is for tests and Proving
+  Runs only. Never choose a cap, a batch budget or a refusal to fit a local
+  machine. Only that engine's own limits apply. SQL Server Express's 10 GB
+  per database is an edition limit: report it, and do not add a batch cap to
+  stay under it.
 - **Never refuse work by size.** Cut the input into batches; that divides
   work and refuses nothing. A size cap that stops a run is a defect.
 - **Remove a layer rather than tune it.** When a copy, a trigger chain or a
@@ -70,36 +78,37 @@ it took; the last pass must change nothing.
 Never load "everything connected" to a batch. Through one shared end, a
 network of links makes every batch cost the whole network.
 
-## Postgres: lookups and indexes
+## Lookups and indexes
 
-- **Look up a list of keys one index probe per key:**
-  `unnest(keys) k(key) CROSS JOIN LATERAL (SELECT ... FROM t WHERE t.col =
-  k.key OFFSET 0)`. The `OFFSET 0` keeps PostgreSQL from folding the probe
-  into a join that reads a whole index, which it prefers on a small table and
-  which grows with the store. When the lookup covers several indexed
-  columns, write one branch per column under `UNION ALL`.
-- **Never use `col = ANY(keys)` under an `OR`, nor an `OR` beside an
-  `IN (subquery)`.** Both read the whole table.
-- **Probe a GIN index one key at a time** (`@> ARRAY[k.key]`, `? k.key`),
-  never with the whole list (`&&`, `?|`). Keep `fastupdate = off` on such an
-  index, or every search reads its growing pending list. When code starts
-  probing an existing GIN index this way, check that index's `fastupdate`
-  too: binding started probing the identifier index with its list still on.
-- **A PL/pgSQL function that looks rows up against a key list held in a
-  variable carries `SET plan_cache_mode = force_custom_plan`.** After five
-  calls PL/pgSQL may reuse a generic plan, which cannot hash the list, so
-  every row is compared with every key. No other function carries the
-  setting, and a session never sets it.
-- **Read set-based.** A batch's reads are a few queries over its keys, never
-  one query per record. Fetch what a batch needs at once, memoize what does
-  not change within it, and write it back in one statement. Assume a new
-  batch path does one query per row until a run at scale shows it does not:
-  tests on a small or in-memory store never show it.
-- **A whole read is allowed only for a table that stays a handful of rows**
-  (for example, the decisions that retire a source), and its docstring says so.
-- **Prove it.** A test runs each lookup with sequential scans off and checks
-  that it uses its index. Another refuses a whole-list search in any MDM
-  function, and a `CREATE OR REPLACE` that drops the plan setting.
+On every engine, a list of keys is one index seek per key. A plan that scans
+the table, or reads a whole index, is a defect. Several indexed columns are
+separate seeks, never one `OR` across them. Reads are a few queries over the
+batch's keys, never one query per record. A whole read is allowed only for a
+table that stays a handful of rows, and its docstring says so. A test shows
+the seek. Integer columns that count records are 64-bit (`BIGINT`).
+
+**PostgreSQL.** Look up with `unnest(keys) k(key) CROSS JOIN LATERAL (SELECT
+... FROM t WHERE t.col = k.key OFFSET 0)`. The `OFFSET 0` keeps the planner
+from folding the probe into a join that reads a whole index. Several columns
+are one branch each under `UNION ALL`. Do not use `col = ANY(keys)` under an
+`OR`, or an `OR` beside an `IN (subquery)`. Probe a GIN index one key at a
+time (`@> ARRAY[k.key]`, `? k.key`), never with the whole list (`&&`, `?|`),
+and keep `fastupdate = off`. A PL/pgSQL function that holds the key list in a
+variable carries `SET plan_cache_mode = force_custom_plan`. No other function
+carries it, and a session never sets it. A test turns sequential scans off
+and refuses a whole-list search or a `CREATE OR REPLACE` that drops the plan
+setting.
+
+**MySQL.** Join the key list as its own derived table and require a `ref` or
+`eq_ref` access in `EXPLAIN`. A scan (`ALL`) fails the test. Do not look an
+identifier up with JSON containment. MySQL has no `plan_cache_mode`; keep the
+key list in the statement that is planned for that list, not in a reused
+prepared statement whose plan was chosen for a different list size.
+
+**SQL Server Express.** Join the key list as a table-valued parameter or a
+temporary table and require an index seek in the plan. A scan fails the test.
+A statement whose key-list size changes enough to pick a bad cached plan uses
+`OPTION (RECOMPILE)` on that statement only. Do not put it on every procedure.
 
 ## Migrations
 
@@ -107,8 +116,10 @@ network of links makes every batch cost the whole network.
   registered list. Never edit an applied one.
 - Test every migration against a **populated** table. An empty-table test
   proves nothing about what a migration exists to do.
-- Postgres cannot defer a **partial** unique index. It is checked at every
-  row-level update, so order and flush multi-row status changes yourself.
+- PostgreSQL cannot defer a **partial** unique index, and SQL Server checks a
+  filtered unique index at each row. Order and flush multi-row status changes
+  yourself. MySQL has no partial unique index; enforce that rule in the same
+  ordered write, and do not invent a second table to imitate the index.
 - Guard a privileged `GRANT` with an "already satisfied" check, so a rerun by
   a role without the admin option does not fail.
 - A migration is applied explicitly. A deploy that carries a new migration is

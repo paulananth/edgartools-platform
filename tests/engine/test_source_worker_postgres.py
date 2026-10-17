@@ -31,7 +31,7 @@ def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
                           {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
     databases.rules.activate("pipeline", "sec-13f-reading", "1")
     env = {**os.environ,
-           "BOOKKEEPING_CLEAN_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
+           "BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
            "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
            "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
            "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
@@ -51,7 +51,7 @@ def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
     # A reported candidate must remain unverified until the other login checks it.
     state = json.loads(command("edgar_warehouse.bookkeeping", "status", run_id))
     assert state["counts"] != {"verified": 1}
-    env["BOOKKEEPING_CLEAN_DATABASE_URL"] = databases.verifier.url.render_as_string(hide_password=False)
+    env["BOOKKEEPING_DATABASE_URL"] = databases.verifier.url.render_as_string(hide_password=False)
     command("edgar_warehouse.workers", "verify", "source.read", run_id,
             "--reports", (tmp_path / "reports").as_uri())
     state = json.loads(command("edgar_warehouse.bookkeeping", "finalize", run_id))
