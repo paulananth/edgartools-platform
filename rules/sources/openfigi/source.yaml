@@ -21,7 +21,8 @@
 # levels that are single onto each answer; record.yaml
 # makes one flat record per identifier, which mdm.prepare reads (table
 # `security`). The context names each file's `batch` ("id_cusip/00000") and
-# its `id_type`. Stream bounds hold for a whole reading of up to 512 files: each
+# its `id_type`. A select that gives null excludes its row (`value: {path:
+# NO_SUCH_FIELD}`, the null idiom of the engine). Stream bounds hold for a whole reading of up to 512 files: each
 # file is at least one piece, and an ISIN file projects about 1.4 MB (measured
 # 2026-10-17 on 8 files), so about 700 MB a reading.
 source: openfigi

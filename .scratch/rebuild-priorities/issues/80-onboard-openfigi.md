@@ -40,6 +40,15 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
 - [ ] Proving Run of the two OpenFIGI matching rules on a pinned cohort beside the N-PORT and 13F Securities (the `mdm-engineering` skill's proof for matching rules), then the switch-on question (switch-on still asks: CLAUDE.md, 2026-10-17)
 - [ ] Refresh: the operator ruled "Open figi rarely changes do not download again" (2026-10-15): reuse this capture; a later run sends only identifiers not yet captured. How often the mapping is re-run for new and changed Securities (Bookkeeping)
 - [ ] Acquisition authority: activation refuses a source with MDM contracts and no approved acquisition (`rules/db.py`), so the POST capture (#994: key variable, 4 a second, approved URL prefix) is declared through Bookkeeping; declaring it sends no request
+- [x] Three-axis review (Standards, Spec, GoF): nothing implemented wrongly. Fixed:
+  - tests added for an equity whose only listing is its US composite, two US composites, the ISIN contract, and a waiting record proven staged and unbound;
+  - the run's direct count now counts by FIGI alone, independent of the reduce, still 0 differences on 64 files a kind;
+  - the stale Mapping Document note regenerated;
+  - the `requests.yaml` comment corrected;
+  - the log's code-list counts corrected (listing level: 9, 123, 34 and 464).
+
+  A mutation (one US composite read as two) fails all 3 tests. 911 affected tests pass (2026-10-17 13:01 ET)
+- [ ] Follow-up: one shared test helper for the read, combine and prepare chain that four integration tests copy (GoF finding 1, repeated by #1022, #1025, #1030 and this one): its own ticket
 - [ ] Every skill gap found on the way: fixed in the skill, on its own branch
 - [ ] PR, CI green, merge on the operator's word
 - [x] Learning → skill: `skills/data-platform/READING.md`, "A key's value from a pair set": scope each artifact's pair set to its own evidence (a group-wide set is re-read per artifact, n²), and independent readings run at once (2026-10-17 12:56 ET)

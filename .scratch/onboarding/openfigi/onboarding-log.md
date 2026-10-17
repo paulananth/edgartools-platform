@@ -49,11 +49,13 @@ Findings: `~/edgar-local-tmp/t80/profile/findings.yaml` and `REPORT.md`, outside
   - Under one composite, 22,059 listing rows give another name and 745 another security type.
   - Under one share class, 23,486 rows give another name.
   - So a composite's or share class's name varies across its listings, and the listing's own name is the one to keep.
-- **Code lists:**
+- **Code lists**, at the listing level (`profile.yaml`):
   - market sector: 9 codes;
-  - security type: 34;
-  - security type 2: 10;
-  - exchange code: counted per part in `findings.yaml`.
+  - security type: 123;
+  - security type 2: 34;
+  - exchange code: 464.
+
+  At the composite level it is 30 and 10, and at the share-class level 28 and 9. Corrected 2026-10-17: an earlier line gave 34 and 10, from the wrong level.
 - **"Hierarchies" from market sector to exchange code or security type** hold only 0.992 to 0.9998. They are code co-occurrence, not reference hierarchies, so they are not proposed.
 - **Profiler questions 1–6, recorded in `findings.yaml` as following from rulings or repo facts, not as operator words:**
   - No new kinds: the three FIGI levels are lookup-only cross-references of a Security. Ruling of 2026-10-14: "FIGI, ticker and SEDOL are lookup only".

@@ -19,7 +19,7 @@ from edgar_warehouse.workers import mdm_prepare, source_combine, source_read, so
 
 CAP, OUT, LIMIT = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
 FOLDER = files.ROOT / "sources" / "openfigi"
-KINDS = {"id_cusip": ("cusip", None, "openfigi.security.v1"), "id_isin": ("isin", None, "openfigi.security_isin.v1")}
+KINDS = {"id_cusip": ("cusip", "openfigi.security.v1"), "id_isin": ("isin", "openfigi.security_isin.v1")}
 store = Artifacts()
 clock = time.monotonic()
 report = {"stages": {}}
@@ -89,16 +89,16 @@ def answers_reading(job):
 # All 16 readings at once, one process each (8 cores): each reading is independent, with its own
 # files under OUT; the verifier still replays every one.
 jobs, names_of = [], {}
-for kind, (word, _, _) in KINDS.items():
+for kind, (word, _) in KINDS.items():
     names = sorted(p.name.replace(".request", "") for p in (CAP / kind).glob("*.request.json"))
     names_of[kind] = names = names[:LIMIT] if LIMIT else names
     jobs += [(kind, word, g, names[g - 1::8]) for g in range(1, 9)]
 # fork: the script's top level must not run again in each worker (macOS defaults to spawn).
 with ProcessPoolExecutor(max_workers=os.cpu_count(), mp_context=multiprocessing.get_context("fork")) as pool:
     done = list(pool.map(answers_reading, jobs))
-by_kind = {word: dict(done[i * 8:(i + 1) * 8]) for i, (_, (word, _, _)) in enumerate(KINDS.items())}
+by_kind = {word: dict(done[i * 8:(i + 1) * 8]) for i, (_, (word, _)) in enumerate(KINDS.items())}
 stage(f"read {sum(len(v) for v in names_of.values())} files, 16 readings in parallel")
-for kind, (word, _, code) in KINDS.items():
+for kind, (word, code) in KINDS.items():
     names, readings = names_of[kind], by_kind[word]
     counts = combine(OUT / word / "reduce", files.load(FOLDER / "reduce.yaml"), readings)
     combined = combine(OUT / word / "combine", files.load(FOLDER / "combine.yaml"), {"counts": counts})
@@ -124,17 +124,18 @@ for kind, (word, _, code) in KINDS.items():
         for job, answer in zip(json.loads((CAP / kind / n.replace(".json", ".request.json")).read_text()),
                                json.loads((CAP / kind / n).read_text())):
             listings = answer.get("data") or []
-            pairs = {(x["figi"], x["ticker"]) for x in listings}
+            # Counted by FIGI alone, not by the reduce's "<FIGI> <ticker>", so the count is independent of it.
+            figis = {x["figi"]: x["ticker"] for x in listings}
             classes = {x["shareClassFIGI"] for x in listings if x.get("shareClassFIGI")}
-            us = {(x["figi"], x["ticker"]) for x in listings if x.get("exchCode") == "US" and x["figi"] == x.get("compositeFIGI")}
+            us = {x["figi"]: x["ticker"] for x in listings if x.get("exchCode") == "US" and x["figi"] == x.get("compositeFIGI")}
             want = {}
             if len(classes) == 1:
                 want["share_class_figi"] = next(iter(classes))
             if len(us) == 1:
-                want["composite_figi"], want["openfigi_ticker"] = next(iter(us))
-            if len(pairs) == 1:
-                want["figi"] = next(iter(pairs))[0]
-                want.setdefault("openfigi_ticker", next(iter(pairs))[1])
+                want["composite_figi"], want["openfigi_ticker"] = next(iter(us.items()))
+            if len(figis) == 1:
+                want["figi"], ticker = next(iter(figis.items()))
+                want.setdefault("openfigi_ticker", ticker)
             expected[job["idValue"].upper()] = want if listings else None
     differences = 0
     outcome, filled = Counter(), Counter()
