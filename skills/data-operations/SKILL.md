@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates MDM, RDM and silver for every domain and entity, and manages recurring loads from completed local deliveries. Use when making those stores operational, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates MDM, RDM and silver for every domain and entity, applies an approved silver spec as DDL on PostgreSQL, MySQL or SQL Server Express, and manages recurring loads from completed local deliveries. Use when making those stores operational, applying a profile's table spec, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -39,13 +39,12 @@ checked against that ready store. Use the private role connections already
 configured. Read each command's `--help` before the first use. A missing
 subcommand is a runtime gap to report.
 
-1. **Stores.** PostgreSQL 16 is the only engine for MDM, RDM and silver. When
-   it does not answer, start `edgartools-local-postgres` from
-   [Local testing](../data-platform/LOCAL-TESTING.md). That container has no
+1. **Stores.** MDM, RDM and silver run on the engine the environment names:
+   PostgreSQL 16, MySQL, or SQL Server Express. When that engine does not
+   answer, start its container from
+   [Local testing](../data-platform/LOCAL-TESTING.md). The container has no
    agent and no worktree owner. Do not use `local-test-stores.py up` for it.
-   MySQL and SQL Server, when the task names them, are separate engines from
-   that same page. They do not hold MDM, RDM or silver.
-   Confirm PostgreSQL 16 answers for MDM, RDM and silver.
+   Confirm the named engine answers for MDM, RDM and silver.
    `edgar-warehouse mdm migrate` brings MDM current.
    `edgar-warehouse rdm init --runtime-role <role>` creates RDM;
    `edgar-warehouse rdm migrate --runtime-role <role>` updates an existing RDM.
@@ -66,12 +65,20 @@ subcommand is a runtime gap to report.
    blocker for that domain: route it through data-profiling's RDM steps
    (`rdm draft`, `rdm diff`, operator `rdm approve`, `rdm publish`). Leave the
    code set unpublished until those words exist.
-4. **Silver, per domain.** For each part with an approved silver spec,
+4. **Apply the silver spec.** This skill applies DDL. Data-profiling writes
+   the logical spec and does not. MDM engineering writes the MDM store's own
+   migrations and does not apply a profile's silver spec.
+   For each part with an approved spec, apply that spec to the engine named
+   by `SILVER_DATABASE_URL`. On PostgreSQL,
    `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
    then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
-   material commentary are the fields the spec already names. A part with no
-   approved spec, or a pipeline silver step with no worker, stays blocked and
-   is reported. `silver land` is the manual write until that worker exists
+   material commentary are the fields the spec already names. The same spec
+   is the DDL for MySQL and for SQL Server Express. `silver register` today
+   emits PostgreSQL only and refuses another dialect. That refusal is a
+   runtime gap: report it and leave the table unregistered. Do not hand-write
+   `CREATE TABLE`. A part with no approved spec, or a pipeline silver step
+   with no worker, stays blocked and is reported. `silver land` is the manual
+   write until that worker exists
    ([data-onboarding](../data-onboarding/SKILL.md), Two targets).
 
 A domain is operational when its MDM source and merge policy are the active
