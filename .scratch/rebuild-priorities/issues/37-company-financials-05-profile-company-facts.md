@@ -2,7 +2,7 @@
 
 Priority: 37, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/05-profile-company-facts.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: claimed. Blocked by: 36. Map: [map](../../company-financials/map.md).
+Type: task. Status: approved. Blocked by: 36. Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -19,7 +19,7 @@ Input ready: the long form (`company-facts/cohort-long/`: facts, concepts, entit
 - [x] Inventory every original source element before asking analytical-policy questions — 2026-10-16 14:46 ET; all 368 original documents and 5,134,979 observations visited without sampling in 94.03 seconds; 23 structural paths / 16 scalar elements, nine observation fields, and 38 additional metadata-only Company headers. Public [element inventory](../evidence/company-financials-37-source-elements.md); complete 8,495-concept catalog and detailed evidence remain private.
 - [x] Record operator clarification on skill responsibility and integer widths — 2026-10-16 14:46 ET; data-profiling proposes classification/routing, operator approves, data-onboarding implements. Integer fields/counters use BIGINT / 64-bit long. No time-model answer or findings approval inferred.
 - [x] Resolve the MDM lookup unknown — 2026-10-17 16:35 ET; the captured Company file has 329 rows, 329 distinct CIKs and no empty CIK. The shared local MDM has 0 rows in `company`, `master_entity`, `stage_record` and `current_record`, so 0 of the 329 CIKs match a Company master. The captured list still matches itself. Live master coverage is measured as none in this store, not untested.
-- [ ] Obtain the operator's explicit findings approval before catalog publication or onboarding. Three draft questions remain: concepts are not proposed as a new master kind (recommendation: no; Company is the existing kind), the fact key is the measured eight-column key rather than a designed surrogate, and facts stay an undecided class until the operator names one.
+- [x] Obtain the operator's explicit findings approval before catalog publication or onboarding — 2026-10-17 16:54 ET; recorded on the private findings with `--by operator` and the operator's word "approved". That approval covers the three recorded recommendations: concepts are not a new master kind, the fact key is the measured eight-column key, and the fact class stays unnamed. Catalog publication and onboarding are not started.
 - [x] Review the counts-only ticket evidence under Standards, Spec and GoF; run overlap checks before commit and push — 2026-10-16 14:16 ET; progress review below, counts reconciled to private findings, whitespace and both guard passes clean, checkpoint 8377111a pushed. The incomplete reporting/approval items stay open.
 - [x] Learning → skill: none — 2026-10-16 14:16 ET; existing profile-once, unknowns and approval rules apply. Original-JSON reading changes are isolated in ticket 41 / PR #1016, not silently applied to these draft findings.
 
@@ -47,7 +47,7 @@ The heuristic calls the Company list reference data and concept definitions mast
 
 The suggested `unit > concept` hierarchy is only a measured dependency in this capture, not an approved business hierarchy. Units must remain part of fact identity and comparability. The long-form conversion stores `val` as DOUBLE; production number precision must be proved from the original captured JSON by reader ticket 45, not inferred from this profiling derivative.
 
-The generic findings did not measure complete per-concept Company/year coverage or test a fact key beyond three columns. A targeted qualification below closes those measurement gaps without repeating the profiler or changing its draft findings. Choosing the production grain, interpreting classes, proving original numeric precision and approving the findings remain open. Findings approval and catalog publication remain pending.
+The generic findings did not measure complete per-concept Company/year coverage or test a fact key beyond three columns. A targeted qualification below closes those measurement gaps without repeating the profiler or changing its draft findings. The findings were approved on 2026-10-17 16:54 ET with the word "approved". Production grain and the out-of-range integer stay with tickets 40, 44 and 45. Catalog publication is not started.
 
 ### Targeted qualification of the pinned derivative
 
@@ -56,7 +56,7 @@ Completed 2026-10-16 14:24 ET. A local, read-only DuckDB qualification took 5.48
 - `concept-coverage.json`: every taxonomy/concept's row count, Company count, unit count, observed period-end years, Company/end-year combinations, distinct period ends and instant/duration counts.
 - `qualification-summary.json`: counts below and explicit limits.
 - `qualify-profile37.py`: exact executed qualification code.
-- `qualification-evidence.json`: input, script and artifact checksums; actual ET completion stamp; no approval granted.
+- `qualification-evidence.json`: input, script and artifact checksums; actual ET completion stamp. Findings approval is recorded separately on `findings.yaml`.
 
 | Measurement | Result | Meaning |
 |---|---:|---|
@@ -92,7 +92,7 @@ Dedicated fresh ticket branch/worktree; evidence contains only counts and schema
 
 ### Spec
 
-The MDM lookup unknown is measured. Findings approval is still open, so this is not a completed ticket. No operator answer has been inferred.
+The MDM lookup is measured. The operator approved the findings on 2026-10-17 16:54 ET with the word "approved". Every checklist item is checked.
 
 ### GoF
 
