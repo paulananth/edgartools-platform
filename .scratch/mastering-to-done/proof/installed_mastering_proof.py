@@ -367,8 +367,11 @@ def _gleif(old, store, tmp_path, policy) -> tuple[dict, int]:
     raw = {"uri": old.GOLDEN.as_uri(), "sha256": old.GOLDEN_SHA256}
     context = store.put(tmp_path.as_uri(), {"version": 1, "input": raw,
                                             "values": {"publication_count": old.PUBLICATION_COUNT}})
-    reading = store.put(tmp_path.as_uri(), {"version": 2, "contract": contract_ref,
-                                            "artifacts": [{"input": raw, "context": context}]})
+    # The N-PORT issuer set (ticket 97) is empty: it flags no record, so a GLEIF
+    # record only joins a Company the SEC filers made, as the pinned counts expect.
+    lookups = store.put(tmp_path.as_uri(), {"version": 1, "input": raw, "sets": {"nport_issuers": []}})
+    reading = store.put(tmp_path.as_uri(), {"version": 3, "contract": contract_ref,
+                                            "artifacts": [{"input": raw, "context": context, "lookups": lookups}]})
     keys = {"batch_id": "gleif-first-level1", "consumer": f"{GLEIF}:gleif-first"}
     base = tmp_path / "gleif-first"
     return store.put(tmp_path.as_uri(), {"version": 2, "steps": {
