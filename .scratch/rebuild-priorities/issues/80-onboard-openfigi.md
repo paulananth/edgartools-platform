@@ -58,7 +58,8 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
   A mutation (one US composite read as two) fails all 3 tests. 911 affected tests pass (2026-10-17 13:01 ET)
 - [ ] Follow-up: one shared test helper for the read, combine and prepare chain that four integration tests copy (GoF finding 1, repeated by #1022, #1025, #1030 and this one): its own ticket
 - [ ] Every skill gap found on the way: fixed in the skill, on its own branch
-- [ ] PR, CI green, merge on the operator's word
+- [x] PRs so far, CI green, merged: #1046 (the source, rules declared; 2026-10-17 13:07 ET) and #1047 (the Proving Run and the CUSIP rule switched on; 2026-10-17 13:22 ET), merged on green under the standing rule (operator, 2026-10-17: "auto merge and not ask for approval")
+- [ ] PR for the remaining parts (silver listings, acquisition authority, refresh), CI green, merged on green
 - [x] Learning → skill: `skills/data-platform/READING.md`, "A key's value from a pair set": scope each artifact's pair set to its own evidence (a group-wide set is re-read per artifact, n²), and independent readings run at once (2026-10-17 12:56 ET)
 
 ## Findings from the first request (2026-10-15 13:02 ET, explored, counts only)
