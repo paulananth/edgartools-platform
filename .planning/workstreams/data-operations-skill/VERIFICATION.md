@@ -62,3 +62,18 @@ distinct, checked source binding changes, and held unsupported source activation
 and loading. It identified Git authoring files, destination Rules authority and
 the package-distributed skill correctly. This is instruction evidence, not an
 automated release importer or source qualification.
+
+## CI genericity correction
+
+PR head `076aa9b6`, CI run `39054577779`, unit job `117460084439`:
+one failed, 702 passed. The existing genericity test identified the master-kind
+name in RUNBOOK.md's promotion section, outside an Examples section. Exact local
+reproduction failed in 0.11 seconds. This was a documentation scope violation,
+not missing loader functionality or a reason to weaken the check.
+
+The shared runbook now keeps source-specific readiness status in the source's
+operational record; the actual source gap remains in this ticket. All 97 named
+genericity, role-skill, Rules-command and Bookkeeping-skill checks passed in
+2.70 seconds. The actual rebuilt wheel and both isolated agent installations
+contain the correction and retain valid commands/links. Standards, Spec and GoF
+each independently reviewed this correction with no actionable findings.

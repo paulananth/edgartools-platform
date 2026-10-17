@@ -38,8 +38,9 @@ The shared lifecycle already supplies save, record-proof, approve and activate
 operations. There is no single automated release-transfer/import command today.
 If required evidence cannot be represented or a consumer still requires download
 producer steps, report that runtime gap; do not forge proof, register through test
-helpers or bypass activation. Company still has this acquisition/consumer gap.
-Publishing this skill does not resolve it or deploy any Rules version.
+helpers or bypass activation. Keep source-specific readiness status in its
+operational record. Publishing this skill does not resolve runtime gaps or
+deploy any Rules version.
 
 The skill's maintained source is `skills/data-operations/` in the repository;
 the data-platform package ships it to the installed agent skill folders. A
