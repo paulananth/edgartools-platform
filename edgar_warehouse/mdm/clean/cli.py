@@ -56,6 +56,8 @@ def name_census(args) -> int:
         gleif_reading={"uri": Path(args.gleif_reading).resolve().as_uri(), "sha256": args.gleif_reading_sha256},
         gleif_metadata=args.gleif_metadata,
         output=args.output,
+        cascade=args.cascade,
+        catalog=args.catalog,
     )
     print(json.dumps(report, sort_keys=True))
     return 0
