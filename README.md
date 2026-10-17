@@ -460,6 +460,11 @@ Initialization excludes silver by default and provisions worker/verifier
 access and MDM's lease guard. Separate data copies are for disruptive tests
 or recovery; reinitialization preserves existing data.
 
+Before loading retained captures, follow the
+[initial and daily source-load sequence](docs/initial-and-daily-source-load.md).
+It separates complete source coverage from Change Journal selection and lists
+the remaining source-registration and mastering gaps.
+
 Start with the [data-platform setup guide](skills/data-platform/SKILL.md#0-setup)
 for the packaged `edgartools-data` CLI, Rust engine, skills and pinned rules.
 Python 3.12+, Rust tooling and the appropriate PostgreSQL 16 stores are needed.

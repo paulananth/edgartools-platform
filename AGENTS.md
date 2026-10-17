@@ -79,8 +79,9 @@ Claude and Codex may work on this repository independently, but they must not sh
   Leave `--all` off for normal runs; use it only for an explicit forced replay.
   Read [the load sequence](docs/initial-and-daily-source-load.md) before SEC,
   GLEIF or OpenFIGI loads. Provider access retains its existing authorization.
-- Use one permanent local PostgreSQL 16 server shared by all agents. It holds
-  the MDM, RDM, silver, Rules, Bookkeeping and Change Journal databases.
+- Use one permanent local PostgreSQL 16 server shared by all agents. Initialize
+  MDM, RDM, Rules, Bookkeeping and Change Journal by default; retain existing
+  silver without initializing or migrating it.
   All agents look up the same Company identities in the shared MDM.
 - Separate Git worktrees isolate code edits; routine lookups and development
   use the existing shared server, without creating a server per agent.
