@@ -1,0 +1,18 @@
+# One kind's answers (one row per identifier asked) as one table (ticket 80):
+# its 8 answers readings (`answers_1`..`answers_8`) put together, so
+# combine.yaml takes them under one name (a combination takes at most 8
+# readings). Run once per kind asked. Pin canonical JSON of this file as the
+# source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  # Measured (2026-10-15 capture): 383,612 CUSIPs and 387,607 ISINs asked.
+  max_rows: 1000000
+  groups: {}
+  tables:
+    answers:
+      source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8]
+      table: answers
+      checks: {}
+      where: {}
+      joins: {}

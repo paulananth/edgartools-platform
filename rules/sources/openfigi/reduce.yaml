@@ -1,0 +1,27 @@
+# For each identifier asked (ticket 80): how many listings, share classes and
+# US composites OpenFIGI gave it, each with its lexically first member
+# (`sample_limit: 1`), so combine.yaml keeps one only where there is exactly
+# one (operator, 2026-10-17: "(c) MDM + silver listings (Recommended)", "US
+# composite (Recommended)"). A listing and a US composite are counted as
+# "<FIGI> <ticker>" (`figi_ticker`): a FIGI has one ticker (profiled), so the
+# count is the FIGIs', and the one member carries both (`last` would need a
+# single reading; a FIGI never holds a space, so record.yaml splits at the
+# first one). Run once per kind asked (CUSIP, ISIN) over that kind's answers
+# readings (`answers_1`..`answers_8`, at most 512 files each). Pin canonical
+# JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+reduce:
+  # Measured (2026-10-15 capture): 387,607 ISINs asked at most, 2,184,699
+  # listings in all, at most 301 for one identifier.
+  max_rows: 10000000
+  max_input_bytes: 8589934592
+  max_state_bytes: 2147483648
+  max_keys: 1000000
+  max_members: 4000000
+  max_output_rows: 1000000
+  max_output_bytes: 1073741824
+  groups:
+    listings: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: listings, keys: [id], mode: members, member: figi_ticker, count: listings, sample: listing_sample, sample_limit: 1}
+    share_classes: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: share_classes, keys: [id], mode: members, member: share_class_figi, count: share_classes, sample: share_class_sample, sample_limit: 1}
+    us_composites: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: us_composites, keys: [id], mode: members, member: figi_ticker, count: us_composites, sample: us_composite_sample, sample_limit: 1}

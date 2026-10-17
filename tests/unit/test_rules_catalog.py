@@ -157,5 +157,12 @@ def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_t
     assert catalog.plan(root) == plan  # the same rules, the same catalog
 
 
-def test_without_a_profile_the_catalog_has_no_silver_or_rdm_database():
-    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm"}
+def test_without_a_profile_the_catalog_has_no_silver_or_rdm_database(tmp_path):
+    root = tmp_path / "rules"
+    shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml"))
+    assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm"}
+
+
+def test_an_approved_profile_in_the_repo_adds_silver_and_rdm():
+    # OpenFIGI's approved findings (ticket 80) are the first profile committed.
+    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm", "silver", "rdm"}

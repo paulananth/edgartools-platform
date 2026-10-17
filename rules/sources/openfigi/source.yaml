@@ -1,0 +1,390 @@
+# OpenFIGI's mapping answers for the Security master (ticket 80), from the
+# approved OpenFIGI findings (profiled 2026-10-17, operator: "Approve
+# (Recommended)", 08:50 ET). The capture of 2026-10-15 is reused, never asked
+# again (operator, 2026-10-15: "Open figi rarely changes do not download
+# again"). Rulings it rests on (operator):
+# - "FIGI, ticker and SEDOL are lookup only" (2026-10-14): every FIGI and the
+#   ticker are cross-references of a Security, never joined on.
+# - "(c) MDM + silver listings (Recommended)" (2026-10-17): one record per
+#   identifier asked joins the Security that holds it and never creates one;
+#   it carries only levels with one value; every listing lands in silver.
+# - "US composite (Recommended)" (2026-10-17): the share-class FIGI when there
+#   is one, the US composite FIGI and its ticker when there is one, and the
+#   FIGI and ticker of the only listing when there is one.
+# The run, in order: requests.yaml gives the pair set `asked` (batch and
+# position to the identifier); this reading streams each answer file, one
+# answer a record (`wrapper: null`, ticket 104), its position the context
+# `answer`, so its listings name their identifier. Then, once per kind asked
+# (the CUSIPs for the first contract, the ISINs for the second), over that
+# kind's 8 readings: reduce.yaml counts each identifier's listings, share
+# classes and US composites; answers-union.yaml puts its answers in one table;
+# combine.yaml joins the levels that are single onto each answer; record.yaml
+# makes one flat record per identifier, which mdm.prepare reads (table
+# `security`). The context names each file's `batch` ("id_cusip/00000") and
+# its `id_type`. Stream bounds hold for a whole reading of up to 512 files: each
+# file is at least one piece, and an ISIN file projects about 1.4 MB (measured
+# 2026-10-17 on 8 files), so about 700 MB a reading.
+source: openfigi
+bronze:
+  family: openfigi
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 512
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1000
+  context:
+    batch:
+      type: text
+    id_type:
+      type: text
+    answer:
+      type: integer
+  lookup_sets:
+    asked:
+      max_values: 51200
+      max_bytes: 4194304
+      max_value_bytes: 64
+      pairs: true
+  tables:
+    answers:
+      each: .
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        id_type:
+          context:
+            name: id_type
+        found:
+          test:
+            path: data
+            kind: present
+    listings:
+      each: data
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        figi:
+          text:
+            path: figi
+            null_if:
+            - ""
+        composite_figi:
+          text:
+            path: compositeFIGI
+            null_if:
+            - ""
+        share_class_figi:
+          text:
+            path: shareClassFIGI
+            null_if:
+            - ""
+        ticker:
+          text:
+            path: ticker
+            null_if:
+            - ""
+        exchange_code:
+          text:
+            path: exchCode
+            null_if:
+            - ""
+        name:
+          text:
+            path: name
+            null_if:
+            - ""
+        security_type:
+          text:
+            path: securityType
+            null_if:
+            - ""
+        security_type2:
+          text:
+            path: securityType2
+            null_if:
+            - ""
+        market_sector:
+          text:
+            path: marketSector
+            null_if:
+            - ""
+        security_description:
+          text:
+            path: securityDescription
+            null_if:
+            - ""
+        figi_ticker:
+          concat:
+          - text:
+              path: figi
+          - const:
+              value: ' '
+          - text:
+              path: ticker
+    us_composites:
+      each: data
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: exchCode
+              right:
+                const:
+                  value: US
+          then:
+            equal:
+              left:
+                text:
+                  path: figi
+              right:
+                text:
+                  path: compositeFIGI
+          else:
+            value:
+              path: NO_SUCH_FIELD
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        figi_ticker:
+          concat:
+          - text:
+              path: figi
+          - const:
+              value: ' '
+          - text:
+              path: ticker
+    share_classes:
+      each: data
+      select:
+        test:
+          path: shareClassFIGI
+          kind: not_null
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        share_class_figi:
+          text:
+            path: shareClassFIGI
+            null_if:
+            - ""
+  stream:
+    wrapper: null
+    container: none
+    max_input_bytes: 16777216
+    max_bytes: 16777216
+    max_record: 1048576
+    max_records: 100
+    max_depth: 64
+    min_integer: -9223372036854775808
+    record_encoding: native
+    ordinal_context: answer
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1024
+    max_spool_bytes: 4294967296
+    max_output_rows: 10000000
+mdm:
+  openfigi.security.v1:
+    contract:
+      provider: OpenFIGI
+      family: openfigi
+      schema_version: openfigi-security-v1
+      record_key: the CUSIP asked, upper-cased; one record per CUSIP asked
+      publication_key: the capture's mapping answer files and the reduce, combine and record
+        contracts
+      effective_time: 'none: an answer states no date'
+      semantics: patch
+      completeness: the CUSIPs asked of OpenFIGI; no retirement by absence
+      nonblocking_deferred_reasons:
+      - invalid_cusip
+      - invalid_cusip_checksum
+      - missing_record_identity
+      - not_found_by_openfigi
+      adapter:
+        reading:
+          source: openfigi
+          read:
+            format: json
+            limits:
+              max_bytes: 1048576
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                checks:
+                - check: required
+                  column: _found
+                  reason: not_found_by_openfigi
+                  on_fail: defer
+                columns:
+                  _found:
+                    choose:
+                      condition:
+                        value:
+                          path: found
+                      then:
+                        const:
+                          value: found
+                      else:
+                        value:
+                          path: NO_SUCH_FIELD
+                  fields:
+                    object:
+                      fields: {}
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - id
+          - found
+          - share_class_figi
+          - composite_figi
+          - listing_figi
+          - ticker
+        version: openfigi-security-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: security
+        record_key:
+        - id
+        record_key_format: cusip
+        identifiers:
+          cusip: id
+        identifier_formats:
+          cusip: cusip
+        cross_references:
+          figi: listing_figi
+          composite_figi: composite_figi
+          share_class_figi: share_class_figi
+          openfigi_ticker: ticker
+  openfigi.security_isin.v1:
+    contract:
+      provider: OpenFIGI
+      family: openfigi
+      schema_version: openfigi-security-isin-v1
+      record_key: the ISIN asked, upper-cased; one record per ISIN asked
+      publication_key: the capture's mapping answer files and the reduce, combine and record
+        contracts
+      effective_time: 'none: an answer states no date'
+      semantics: patch
+      completeness: the ISINs asked of OpenFIGI; no retirement by absence
+      nonblocking_deferred_reasons:
+      - invalid_isin
+      - invalid_isin_checksum
+      - missing_record_identity
+      - not_found_by_openfigi
+      adapter:
+        reading:
+          source: openfigi
+          read:
+            format: json
+            limits:
+              max_bytes: 1048576
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                checks:
+                - check: required
+                  column: _found
+                  reason: not_found_by_openfigi
+                  on_fail: defer
+                columns:
+                  _found:
+                    choose:
+                      condition:
+                        value:
+                          path: found
+                      then:
+                        const:
+                          value: found
+                      else:
+                        value:
+                          path: NO_SUCH_FIELD
+                  fields:
+                    object:
+                      fields: {}
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - id
+          - found
+          - share_class_figi
+          - composite_figi
+          - listing_figi
+          - ticker
+        version: openfigi-security-isin-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: security
+        record_key:
+        - id
+        record_key_format: isin
+        identifiers:
+          isin: id
+        identifier_formats:
+          isin: isin
+        cross_references:
+          figi: listing_figi
+          composite_figi: composite_figi
+          share_class_figi: share_class_figi
+          openfigi_ticker: ticker

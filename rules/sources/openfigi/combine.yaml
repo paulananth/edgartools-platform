@@ -1,0 +1,26 @@
+# One row per identifier asked (ticket 80): its answer (answers-union.yaml's
+# output, `answers`) joined with reduce.yaml's counts (`counts`) where a level
+# has exactly one member (operator, 2026-10-17: "(c) MDM + silver listings
+# (Recommended)", "US composite (Recommended)"): `listing` when the identifier
+# has one listing, `share_class` when one share class, `us_composite` when one
+# US composite. Each group holds at most one row per identifier, so `one`
+# never chooses. Run once per kind asked. Pin canonical JSON of this file as
+# the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 10000000
+  groups:
+    listing: {source: counts, table: listings, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {listings: 1}}
+    share_class: {source: counts, table: share_classes, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {share_classes: 1}}
+    us_composite: {source: counts, table: us_composites, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {us_composites: 1}}
+  tables:
+    security:
+      source: answers
+      table: answers
+      checks: {}
+      where: {}
+      joins:
+        listing: {group: listing, key: id, on_missing: skip, replace: false}
+        share_class: {group: share_class, key: id, on_missing: skip, replace: false}
+        us_composite: {group: us_composite, key: id, on_missing: skip, replace: false}

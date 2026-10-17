@@ -15,6 +15,9 @@ defaults:
   - sec.thirteenf.information_table.security.v1
   - sec.nport.security.v1
   - sec.nport.security_isin.v1
+  # OpenFIGI fills no field, only lookup-only cross-references (ticket 80).
+  - openfigi.security.v1
+  - openfigi.security_isin.v1
   allow_unknown_effective: true
 rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its
@@ -86,12 +89,47 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: isin
+# OpenFIGI (ticket 80; operator, 2026-10-17: "(c) MDM + silver listings
+# (Recommended)"): each record is an identifier the platform asked, so it
+# joins the one Security that holds that CUSIP or ISIN and waits otherwise; it
+# never creates a Security. Declared, not switched on.
+- rule_id: openfigi-security-cusip
+  version: 2026-10-17.1
+  family: binding
+  source: openfigi.security.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cusip
+- rule_id: openfigi-security-isin
+  version: 2026-10-17.1
+  family: binding
+  source: openfigi.security_isin.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: isin
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: isin
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
     sources:
     - sec.thirteenf.information_table.security.v1
     - sec.nport.security.v1
+    - openfigi.security.v1
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@cusip-v1
@@ -119,6 +157,7 @@ identifiers:
     sources:
     - sec.nport.security.v1
     - sec.nport.security_isin.v1
+    - openfigi.security_isin.v1
     # rules/identifiers/isin.yaml (ticket 81): 12 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@isin-v1
