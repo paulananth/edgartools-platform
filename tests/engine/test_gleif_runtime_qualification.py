@@ -49,7 +49,7 @@ def test_complete_runtime_receipt_requires_every_pin(tmp_path, format_name, faul
         assert receipt["callback_count"] == 1
         assert receipt["receipt"]["canonical_source_hash"] == report["canonical_source_hash"]
         paths = {p["path"] for p in receipt["runtime_implementation"]}
-        for helper in ("rules/files.py", "clean/store.py", "clean/evidence.py"):
+        for helper in ("rules/files.py", "clean/store.py", "clean/evidence.py", "workers/source_traversal.py"):
             assert any(p.endswith(helper) for p in paths)
         assert any(p["path"].endswith((".so", ".pyd", ".dylib"))
                    for p in receipt["runtime_implementation"])

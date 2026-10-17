@@ -9,9 +9,14 @@ import copy
 import hashlib
 import json
 import tempfile
-import zipfile
+from pathlib import Path
+from typing import cast
 
-from .source_stream import stream_policy
+from . import source_traversal
+
+
+def runtime_files():
+    return [Path(__file__), *source_traversal.runtime_files()]
 
 
 def attest_zip(stream, *, contract, context, expected_sha256, on_record=None):
@@ -35,16 +40,10 @@ all source facts, including facts outside an approved mastering cohort.
     if any(declaration[key] not in columns for key in ("record_column", "ordinal_column")):
         raise ValueError("Attestation column is absent from the configured table")
     read["tables"][table].pop("select", None)
-    spec, engine, header_engine = stream_policy(contract)
-    expected_name = spec.get("expected_records_context")
-    expected_count = context.get(expected_name)
-    if (spec["container"] != "zip" or expected_name is None
-            or type(expected_count) is not int or not 0 <= expected_count <= spec["max_records"]):
-        raise ValueError("Attestation requires a ZIP and bounded pinned record count")
-    ordinal = spec["ordinal_context"]
-    if ordinal is None or ordinal in context:
-        raise ValueError("Attestation generates the configured ordinal context")
-    engine.validate_context({**context, ordinal: 1})
+    traversal = source_traversal.Traversal(contract, archive_policy="whole")
+    spec = traversal.spec
+    # Whole-archive validation requires a pinned integer count.
+    expected_count = cast(int, traversal.validate_context(context))
     sha, content = hashlib.sha256(), hashlib.sha256()
     size, count = 0, 0
     consumer_error = None
@@ -84,31 +83,10 @@ all source facts, including facts outside an approved mastering cohort.
             if sha.hexdigest() != expected_sha256:
                 raise ValueError("Source archive hash mismatch")
             snapshot.seek(0)
-            with zipfile.ZipFile(snapshot) as archive:
-                members = archive.infolist()
-                if len(members) != 1 or members[0].is_dir() or members[0].flag_bits & 1:
-                    raise ValueError("Source requires one unencrypted ZIP member")
-                if members[0].file_size > spec["max_bytes"]:
-                    raise ValueError("Expanded source size exceeds bound")
-                with archive.open(members[0]) as source:
-                    arguments = {key: spec[key] for key in
-                                 ("max_bytes", "max_record", "max_depth")}
-                    arguments.update(max_records=expected_count, context=context,
-                                     ordinal_context=ordinal, on_reading=consume)
-                    if header_engine is None:
-                        # Attestation checks the archive and its records, never a value a
-                        # lookup set adds beside them (ticket 97): each declared set is empty.
-                        declared = contract["read"].get("lookup_sets") or {}
-                        if declared:
-                            arguments["lookups"] = {name: [] for name in declared}
-                        scan = engine.stream_json_array(source, wrapper=spec["wrapper"],
-                            min_integer=spec["min_integer"], record_encoding=spec["record_encoding"],
-                            **arguments)
-                    else:
-                        scan = engine.stream_xml_records(source, envelope=spec["xml"],
-                            header_engine=header_engine, max_header=spec.get("max_header"), **arguments)
-                    if count != expected_count or scan["expanded_bytes"] != members[0].file_size:
-                        raise ValueError("Source record count or expanded length mismatch")
+            # Whole-source attestation ignores values contributed by lookup sets.
+            declared = read.get("lookup_sets") or {}
+            scan = traversal.scan(snapshot, context=context, on_reading=consume,
+                                  lookups={name: [] for name in declared})
     except BaseException:
         # Native callback wrappers must not replace consumer failures, including
         # cancellation and SourceRejected/ValueError raised by the consumer.

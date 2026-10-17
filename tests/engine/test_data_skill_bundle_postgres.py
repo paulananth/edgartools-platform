@@ -1245,20 +1245,18 @@ second=stage.apply(**second_command)
 import io, base64
 import zipfile
 from edgar_warehouse.mdm.clean import name_census
-from edgar_warehouse.workers import source_stream
+from edgar_warehouse.workers.source_traversal import Traversal
 assert not any(hasattr(name_census,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
 packed=base64.b64decode(body["census_archive"],validate=True)
 census_arguments=body["census_arguments"]
 assert hashlib.sha256(packed).hexdigest()==census_arguments["gleif_sha256"]
 # The Golden Copy through the installed configured complete reading, folded as `mdm name-census` folds it.
 held,wanted=name_census._sec_population(census_arguments["filers"])
-spec,stream,_=source_stream.stream_policy(files.load(files.ROOT/"sources/gleif/census-complete-stream.yaml"))
+traversal=Traversal(files.load(files.ROOT/"sources/gleif/census-complete-stream.yaml"),archive_policy="configured")
 tables=[]
-with zipfile.ZipFile(io.BytesIO(packed)) as z, z.open(z.namelist()[0]) as member:
-    stream.stream_json_array(member,wrapper=spec["wrapper"],lookups={"wanted":sorted(wanted)},
-        context={"publication_count":census_arguments["gleif_metadata"]["record_count"]},
-        ordinal_context=spec["ordinal_context"],on_reading=lambda reading,_:tables.append(reading.tables),
-        **{k:spec[k] for k in ("max_bytes","max_record","max_records","max_depth","min_integer","record_encoding")})
+traversal.scan(io.BytesIO(packed),lookups={"wanted":sorted(wanted)},
+    context={"publication_count":census_arguments["gleif_metadata"]["record_count"]},
+    on_reading=lambda reading,_:tables.append(reading.tables))
 meta=census_arguments["gleif_metadata"]
 census=name_census.census(sec_population=census_arguments["sec_population"],
     gleif={"archive_sha256":census_arguments["gleif_sha256"],"content_date":meta["content_date"],
@@ -1570,7 +1568,7 @@ def test_census_derived_wanted_scope_exhausts_authenticated_inputs_before_source
 
 def test_complete_census_projection_keeps_global_duplicates_and_pair_scoped_last_updates():
     import io
-    from edgar_warehouse.workers import source_stream
+    from edgar_warehouse.workers.source_traversal import Traversal
     from tests.engine.test_gleif_configured_fields import raw
     records = [copy.deepcopy(raw()) for _ in range(5)]
     for row in records:
@@ -1582,12 +1580,11 @@ def test_complete_census_projection_keeps_global_duplicates_and_pair_scoped_last
     records[3]["Registration"]["LastUpdateDate"] = {"$": "another-name-update"}
     records[4]["Registration"]["LastUpdateDate"] = {"$": "latest-example-update"}
     config = files.load(files.ROOT / "sources/gleif/census-complete-stream.yaml")
-    engine = source_stream.stream_policy(config)[1]
+    config["read"]["stream"]["container"] = "none"
     found = []
-    receipt = engine.stream_json_array(io.BytesIO(json.dumps({"records": records}).encode()),
-        wrapper="records", lookups={"wanted": {"EXAMPLE", "ANOTHER"}},
-        context={"publication_count": len(records)}, ordinal_context="source_index",
-        max_bytes=1048576, max_record=1048576, max_records=100000,
+    receipt = Traversal(config, archive_policy="configured").scan(
+        io.BytesIO(json.dumps({"records": records}).encode()),
+        lookups={"wanted": {"EXAMPLE", "ANOTHER"}}, context={"publication_count": len(records)},
         on_reading=lambda reading, index: found.append(reading.tables))
     assert receipt["record_count"] == len(records)
     addresses = Counter(tuple(row.values()) for tables in found for row in tables["d_addresses"])

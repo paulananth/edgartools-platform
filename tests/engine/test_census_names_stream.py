@@ -8,7 +8,7 @@ import pytest
 from edgar_warehouse.rules import files
 
 from edgar_warehouse.rules.source_engine import SourceRejected
-from edgar_warehouse.workers import source_stream
+from edgar_warehouse.workers.source_traversal import Traversal
 from tests.mdm.test_clean_name_census import gleif
 from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
 
@@ -29,11 +29,12 @@ def no_custom_steps(monkeypatch):
 
 def project(records, wanted):
     found = []
-    engine = source_stream.stream_policy(files.load(RULE))[1]
-    receipt = engine.stream_json_array(
-        io.BytesIO(json.dumps({'records': records}).encode()), wrapper='records',
-        lookups={'wanted': wanted}, context={'publication_count':len(records)}, max_bytes=1048576, max_record=1048576,
-        max_records=100000, on_reading=lambda reading, ordinal: found.append(reading.tables))
+    rules = files.load(RULE)
+    rules["read"]["stream"]["container"] = "none"
+    receipt = Traversal(rules, archive_policy="configured").scan(
+        io.BytesIO(json.dumps({'records': records}).encode()),
+        lookups={'wanted': wanted}, context={'publication_count': len(records)},
+        on_reading=lambda reading, ordinal: found.append(reading.tables))
     assert receipt['record_count'] == len(records)
     return found
 

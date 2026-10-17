@@ -14,7 +14,7 @@ import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import canonical, reference
-from . import Redo, source_stream, source_readings, source_parquet
+from . import Redo, source_stream, source_readings, source_parquet, source_traversal
 
 # The whole-output form is kept up to the index bound, the size every consumer
 # reads a reading's index under (a reduction refused a 112 MB whole output). A
@@ -41,7 +41,7 @@ ARTIFACT_CODEC_FILE = Path(artifact_store.__file__).with_name("config.py")
 def runtime_files() -> list[Path]:
     """Pin the facade, value registry and loaded Rust extension with this worker."""
     return [*source_engine.runtime_files(), Path(files.__file__), Path(artifact_store.__file__),
-            Path(source_stream.__file__), Path(source_readings.__file__),
+            Path(source_stream.__file__), *source_traversal.runtime_files(),
             Path(source_parquet.__file__), *source_parquet.runtime_files(),
             # Artifacts' codec dependency is pinned as bytes, without importing
             # Bookkeeping control internals into the worker's execution surface.
