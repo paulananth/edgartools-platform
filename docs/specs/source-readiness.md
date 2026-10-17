@@ -5,6 +5,9 @@ requirements, not claims that the runtime already enforces them. Implementation
 and behavior qualification have not started. Evidence was inspected at main
 `48ca68c63`; the related initializer/load guide is PR #1035.
 
+For the subsequent local qualification, delivery-proof and invalidated-input
+decisions, read [the acceptance requirements](source-readiness-acceptance.md).
+
 ## Confirmed dependency behavior
 
 The operator chose: **block required inputs; let unresolved links wait**
