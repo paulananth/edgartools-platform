@@ -40,6 +40,10 @@ def physical_database(store: str) -> str:
 
 def runtime_login(store: str) -> str:
     return "bookkeeping_runtime" if store == "bookkeeping_clean" else store + "_runtime"
+
+
+def owner_login(store: str) -> str:
+    return "bookkeeping_owner" if store == "bookkeeping_clean" else store + "_owner"
 EXTRA_LOGINS = ("bookkeeping_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
@@ -218,10 +222,10 @@ class LocalStores:
         quote = admin.dialect.identifier_preparer.quote
         try:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                roles = {store + "_owner": False for store in selected}
+                roles = {owner_login(store): False for store in selected}
                 roles.update({runtime_login(store): True for store in selected})
                 roles.update({role: True for role in EXTRA_LOGINS})
-                roles.update(bookkeeping_clean_control=False, rules_approver=False)
+                roles.update(bookkeeping_control=False, rules_approver=False)
                 for role, login in roles.items():
                     held = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolcanlogin,rolbypassrls FROM pg_roles WHERE rolname=:r"), {"r": role}).first()
                     if held:
@@ -233,17 +237,17 @@ class LocalStores:
                 for store in selected:
                     database = physical_database(store)
                     owner = conn.scalar(text("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=:d"), {"d": database})
-                    if owner and owner != store + "_owner":
+                    if owner and owner != owner_login(store):
                         raise ValueError("Database has a different owner; refusing adoption")
                     if not owner:
-                        conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(store + '_owner')}")
+                        conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(owner_login(store))}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(runtime_login(store))}")
                 for database, login in (("bookkeeping", "bookkeeping_verifier"), ("mdm", "mdm_verifier"),
                                         ("mdm", "mdm_governance"), ("rules", "rules_governance")):
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
-                for parent, member in (("bookkeeping_clean_control", "bookkeeping_runtime"),
-                                       ("bookkeeping_clean_control", "bookkeeping_verifier"),
+                for parent, member in (("bookkeeping_control", "bookkeeping_runtime"),
+                                       ("bookkeeping_control", "bookkeeping_verifier"),
                                        ("rules_runtime", "rules_governance"), ("rules_approver", "rules_governance")):
                     if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
@@ -253,13 +257,13 @@ class LocalStores:
                 for database in selected:
                     engine = self.engine(name, database)
                     @event.listens_for(engine, "connect")
-                    def owner_role(connection, _, selected=database + "_owner"):
+                    def owner_role(connection, _, selected=owner_login(database)):
                         with connection.cursor() as cursor:
                             cursor.execute(f"SET ROLE {quote(selected)}")
                         connection.commit()
                     try:
                         key = "application_role" if database == "mdm" else "agent_role" if database == "rules" else "runtime_role"
-                        role = "bookkeeping_clean_control" if database == "bookkeeping_clean" else database + "_runtime"
+                        role = "bookkeeping_control" if database == "bookkeeping_clean" else database + "_runtime"
                         migrations[database](engine, **{key: role})
                         if database == "mdm":
                             from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
