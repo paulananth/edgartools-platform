@@ -22,6 +22,7 @@ from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import adapters
+from edgar_warehouse.mdm.clean.evidence import subject_key
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
@@ -40,11 +41,11 @@ HOLDINGS = [["1", "Example Corp", LEI, "Common", "ZZ0000013"],
 Q2, Q3 = "2026-06-30T00:00:00+00:00", "2026-09-30T00:00:00+00:00"
 
 
-def capture(root: Path) -> Path:
+def capture(root: Path, holdings: list[list[str]]) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / "nport.zip"
     with zipfile.ZipFile(path, "w") as z:
-        z.writestr("FUND_REPORTED_HOLDING.tsv", "\n".join("\t".join(r) for r in [COLUMNS, *HOLDINGS]) + "\n")
+        z.writestr("FUND_REPORTED_HOLDING.tsv", "\n".join("\t".join(r) for r in [COLUMNS, *holdings]) + "\n")
         z.writestr("IDENTIFIERS.tsv", "HOLDING_ID\tIDENTIFIER_ISIN\n")
     return path
 
@@ -74,13 +75,15 @@ def combine(store, root, contract_file, readings):
     return out
 
 
-def prepared_records(root: Path, period: str, revision: int | None = None) -> list[dict]:
-    """The quarter's Security assertions, through the real chain."""
+def prepared_records(root: Path, period: str, revision: int | None = None,
+                     holdings: list[list[str]] = HOLDINGS, umbrella: list[list[str]] = ()) -> list[dict]:
+    """The quarter's Security assertions, through the real chain; `umbrella`
+    pairs each fund LEI with the trust it is a sub-fund of."""
     store = Artifacts()
-    zipped = capture(root)
+    zipped = capture(root, holdings)
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
     holdings = read(store, root / "holdings", "source.yaml", raw, period, lookups={"isin": []})
-    issuers = read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": []})
+    issuers = read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": [], "umbrella": list(umbrella)})
     securities = combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
@@ -182,3 +185,22 @@ def test_a_later_quarter_keeps_the_first_start(database, tmp_path):
     ((periods, last_seen),) = issued_by(database)
     assert [(p["valid_from"], p["valid_from_basis"]) for p in periods] == [(Q2, "observed")]
     assert last_seen == Q3
+
+
+def test_a_fund_series_counts_as_its_umbrella_trust(tmp_path):
+    """Ticket 23 (operator, 2026-10-17: "Umbrella trust (Recommended)"): holdings
+    naming a fund series and its trust give one issuer, the trust; without the
+    pair the two LEIs leave the Security with no link."""
+    trust = "9999000000EXAMPLE113"  # invented
+    holdings = [["1", "Example Fund", LEI, "ETF", "ZZ0000013"],
+                ["2", "Example Fund", LEI, "ETF", "ZZ0000013"],
+                ["3", "Example Trust", trust, "ETF", "ZZ0000013"]]
+    pairs = [[LEI, trust]]
+    (linked,) = prepared_records(tmp_path / "with", Q2, holdings=holdings, umbrella=pairs)
+    def targets(record):
+        return [l["target_subject"] for l in record.get("relationships") or [] if l["type"] == "ISSUED_BY"]
+
+    assert targets(linked) == [subject_key(GLEIF, trust)]
+    (unpaired,) = prepared_records(tmp_path / "without", Q2, holdings=holdings)
+    assert targets(unpaired) == []
+

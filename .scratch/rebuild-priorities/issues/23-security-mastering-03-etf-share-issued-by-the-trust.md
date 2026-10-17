@@ -6,12 +6,12 @@ Priority: 23, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 **Blocked by:** 22: Point ISSUED_BY at a mastered Company.
 
-**Status:** findings recorded; waits for the operator's ruling on the issuer (asked 2026-10-16 20:05 ET)
+**Status:** in review (PR open, 2026-10-17)
 
-- [ ] `464287200` with issuer `ISHARES TR` is `ISSUED_BY` the iShares Trust Company, not BlackRock.
-- [ ] `922908363` is issued by the Vanguard trust Company, not Vanguard the adviser.
-- [ ] `78462F103` is issued by the SPDR trust Company, not SSGA.
-- [ ] Passing only the adviser name, with no trust Company, writes no `ISSUED_BY`.
+- [x] `464287200` with issuer `ISHARES TR` is `ISSUED_BY` the iShares Trust Company, not BlackRock: its 3 filed LEIs map to one umbrella, GLEIF's record of the trust (local check; 2026-10-17 07:51 ET)
+- [ ] ~~`922908363` is issued by the Vanguard trust Company~~ not reached by the ruling: its holdings keep 4 LEIs after mapping (3 without the adviser's), so it has no link; never the adviser. One of the 2,852 CUSIPs still filed with several issuers (2026-10-17 07:51 ET)
+- [x] `78462F103` is issued by the SPDR trust Company, not SSGA: one filed LEI, GLEIF's record of the trust (ticket 22's rule, unchanged; 2026-10-17 07:51 ET)
+- [x] Passing only the adviser name, with no trust Company, writes no `ISSUED_BY`: links go by LEI only, never a name; a holding with no LEI gives none (`test_nport_link_start.py`; 2026-10-17 07:51 ET)
 
 ## Findings (2026q2 N-PORT and GLEIF's 2026-09-11 golden copy, local; counts only) (2026-10-16 19:56 ET)
 
@@ -24,7 +24,7 @@ Priority: 23, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 ## Checklist
 
 - [x] Measure the filed issuer LEIs of the three ETF CUSIPs and of every CUSIP with several (above) (2026-10-16 19:56 ET)
-- [ ] The operator's ruling: the issuer is the umbrella trust (map each filed LEI to its GLEIF umbrella) or the filed fund series (the trust read through the sub-fund link)
-- [ ] Configuration to the ruling, tested on invented records through the chain and the Merge Stage; counted on the real quarter
+- [x] The operator's ruling: the issuer is the umbrella trust (map each filed LEI to its GLEIF umbrella) or the filed fund series (the trust read through the sub-fund link): "Umbrella trust (Recommended)" (2026-10-17, answered before 07:42 ET)
+- [x] Configuration to the ruling, tested on invented records through the chain and the Merge Stage; counted on the real quarter: `gleif/subfund-pairs.yaml` (GLEIF's active IS_SUBFUND_OF; 73,664 pairs, no fund with two umbrellas, 55 s) feeds the `umbrella` pair set; `issuers.yaml` counts each filed LEI as its umbrella's. Test: a series and its trust give one issuer, the trust; without the pair, no link. Real 2026q2 (`umbrella_issuer_run.py`, 9 min): 217,100 Securities with ISSUED_BY (216,560 + 540), 1,967 moved from a series to its trust, every link equal to a direct count, 0 extra; the 845 one-issuer CUSIPs the CUSIP contract sets aside (check digit) unchanged from ticket 22; 2,852 still several (2026-10-17 07:51 ET)
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Learning → skill

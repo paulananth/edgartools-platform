@@ -60,7 +60,7 @@ def prepared_records(root: Path) -> list[dict]:
             cusip.COLUMNS, *([*h, ""] for h in HOLDINGS), WITH_CUSIP]) + "\n")
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2, lookups={"isin": PAIRS})
-    issuers = cusip.read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": PAIRS})
+    issuers = cusip.read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": PAIRS, "umbrella": []})
     securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
