@@ -251,7 +251,7 @@ printed or committed.
 uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py --rules
 ```
 
-The script requires `BOOKKEEPING_CLEAN_ADMIN_DATABASE_URL`,
+The script requires `BOOKKEEPING_ADMIN_DATABASE_URL`,
 `BOOKKEEPING_RUNTIME_PASSWORD` and, with `--rules`,
 `RULES_AGENT_PASSWORD`. Set runtime connection variables to the created
 logins. `BOOKKEEPING_MANIFEST_ROOT` names file storage for offline acceptance
