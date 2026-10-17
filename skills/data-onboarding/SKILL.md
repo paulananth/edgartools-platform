@@ -71,6 +71,7 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 |---|---|
 | `rules/sources/<source>/source.yaml` | The feed: `source`, `bronze` and `mdm` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
 | `rules/sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
+| `rules/sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
 | `rules/merge/kinds/<kind>.yaml` | A new domain's matching and merge rules (only when the kind is new) |
 | `rules/sources/<source>/MAPPING.xlsx`, `rules/merge/kinds/<kind>.xlsx` | The Mapping Documents, generated for stewards (**metadata**) |
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
@@ -93,12 +94,30 @@ Every step says what differs for each target.
   in `findings.yaml`). The spec's links point to master parts only; fill each
   link's `kind` and `source_code` (the master's Dataset Contract) from the
   onboarded master, since the writer looks each row's MDM id up by them and
-  refuses a link without them. Then:
+  refuses a link without them.
+  - **One link, one Dataset Contract.** The writer finds a row's MDM id by
+    the source key among the records that one Dataset Contract staged. When
+    a key may have been staged by either of two contracts (one column holding
+    either of two identifier types), give that column two links, each with its
+    own MDM id column; each row fills the one whose contract staged its key.
+  - **The spec goes in the repo.** Write the approved spec to
+    `rules/sources/<source>/silver-<table>.yaml` (comments carry the rulings),
+    put the same spec in the part's `silver` in `findings.yaml`, and
+    regenerate `profile.yaml` (**plan-parts**), so the catalog shows the table
+    that is registered.
+  - **Its checks run nowhere yet.** A silver table spec holds no checks and
+    `silver land` runs none (rebuild-priorities ticket 105). List each check
+    the part needs on the ticket as deferred to that ticket.
+  - **Prove the link.** A test lands invented rows beside the master's
+    records, keyed apart from the identifier, and asserts each MDM id; a link
+    pointed at another Dataset Contract must fail it.
+
+  Then:
   1. The schema owner (`SILVER_MIGRATION_DATABASE_URL`) runs
      `edgar-warehouse silver init --runtime-role <runtime login>` once, and
-     `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <runtime login>`
-     for the part. A changed spec is refused for a registered table: register
-     it as a new table.
+     `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
+     for the table (or `register <findings.yaml> --part <part>`). A changed
+     spec is refused for a registered table: register it as a new table.
   2. The runtime (`SILVER_DATABASE_URL`, plus `MDM_DATABASE_URL` to read MDM
      ids) runs `edgar-warehouse silver land <table> <rows file>` with the
      part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same
@@ -729,6 +748,7 @@ Either way, write it in the log.
 | Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
 | Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a follow-up of profiling ticket 06 |
 | Silver output worker in a pipeline | not built | Run `silver land` by hand (**Two targets**) | a Bookkeeping worker ticket |
+| Checks on a silver table | not built: a silver spec holds none | List each check on the ticket as deferred | rebuild-priorities ticket 105 |
 
 ## Examples (this repo's sources)
 
