@@ -1,0 +1,98 @@
+{
+ "cohort": {
+  "cusips_asked": 2000,
+  "files_per_kind": 20,
+  "isins_asked": 2000,
+  "request_files_sha256": {
+   "id_cusip/00000.request.json": "8e185eef550581df9392dd51ccba88a2988c6025f8aeac3314df3cb820545b13",
+   "id_cusip/00001.request.json": "131c3755ce15c46104d3194d7f0a2bf94601137c2fe2d38ea90caafcca638a5b",
+   "id_cusip/00002.request.json": "ece38bd6fd9dcce70cf3e769bd7acae5a750fc5547debd4774481e78f60f4d49",
+   "id_cusip/00003.request.json": "6b4b53eee762f34adf5469d4916512c9dcc8b95b3772edd7e4767b4b1cb6cdc2",
+   "id_cusip/00004.request.json": "f0020fa3d600a074dbf74a8907df651f3eaec543e0806497e3a5e970d85c8f07",
+   "id_cusip/00005.request.json": "bf5b714804a5dc32503dfb6af8e5317257f6d5a900905ad3c371c9ef6a70a6cf",
+   "id_cusip/00006.request.json": "85c547d64a31143ff12ebbae6b76d690425fde328bc6c69ec6fca46feb6659a3",
+   "id_cusip/00007.request.json": "dc448aa577d1b5e7a8700a6003a44b9d9c9326dcef5787f66476147e3be21553",
+   "id_cusip/00008.request.json": "722c4d26b17ccafa740b46883ee1e793e1d1839bbc74914f8ace4fe65f0a2f63",
+   "id_cusip/00009.request.json": "c4b28e8332f0e9083b6e3bcc1503073f08c452259e5e5e8a93bacb5026eb7def",
+   "id_cusip/00010.request.json": "fdad4a316f00092ef628ecb60f3fddc855e74960d2565840ace78df52062376b",
+   "id_cusip/00011.request.json": "1338df01f566a71365459f5c404645c5ecd5799803a873c165d1147a84e375a5",
+   "id_cusip/00012.request.json": "e4fb35e732f7d1051c8e875d5a2e7fe90e2ebcb3e96e6c8a415390f5f4828e30",
+   "id_cusip/00013.request.json": "2a0b4d15cf5127ffc39f9f7fc34b28c7cf6205b812f7497af7dbaecc545bb692",
+   "id_cusip/00014.request.json": "873143fbb133a676e952294d31ecb8049bcf3a33e9ab7587102b23b3181298e5",
+   "id_cusip/00015.request.json": "428cbbee9b18a519c76fdb3ade34013de8e21932fee1b3bb8a28f46993090ae1",
+   "id_cusip/00016.request.json": "7ab20a766841117afb3b434ae554afa6f2017ea2e7d73bc37aee42302930a3b6",
+   "id_cusip/00017.request.json": "94409c57092548d9e7ac3bc5ada5122ffd7ce1cec1b170c007379d01e11c25e2",
+   "id_cusip/00018.request.json": "684f74059a2c29341b6b0339b22c88db03e7a51c05665cc626e3aeba108b1d42",
+   "id_cusip/00019.request.json": "52d092a8181d8f0b041c0331f4d7a16ede9c3d90523ab7e373f21e1503c7c24b",
+   "id_isin/00000.request.json": "380297aa56a6614b8c41b0bbd28ec48a23acbeebf85c31f11e223ae679a75f12",
+   "id_isin/00001.request.json": "21bac1923d3776ff536211794957b65ad0e890aed70b248bd21607aa0afa2d20",
+   "id_isin/00002.request.json": "286e506a555057bb3f7e75e2552cf2d7b999b179fa8e62ac73bfee1fd60173e6",
+   "id_isin/00003.request.json": "fd741e3354bbc3dd68e5e49f5938793c22c242a72bf1321f9489b71f5b167b6f",
+   "id_isin/00004.request.json": "7684cc568d85d022d622a98e9b49d4505de5ca702469cdb65e772d7b74422a50",
+   "id_isin/00005.request.json": "a04dff9f830c020881ab40f5ee8a9d3045c1834e1a58966adfd9ac6db8f88fb0",
+   "id_isin/00006.request.json": "b2633caaff467ea25ae1c3d93ab146be3181e869d07367cc2083acffbd206f89",
+   "id_isin/00007.request.json": "7e8dd2a5292bab82ef66c48269c5c3c24ebeb58a4aa321d4ab7094a205d91f80",
+   "id_isin/00008.request.json": "59c470e64d2a850f94fe7537e369b29588193ae4db30e926b60058bb9a46338a",
+   "id_isin/00009.request.json": "512606eb74fb7cacae0381c36e6b09ef6efc04658b593427706450432492a860",
+   "id_isin/00010.request.json": "b8965fa6e83b88b8e58a576b089d29190434c4f79174989a812c827cd79a456d",
+   "id_isin/00011.request.json": "280e4e06e185b80992a2d5c9381a762c9aee66a7f511f85e05bfa79a264d4810",
+   "id_isin/00012.request.json": "86af0e8cca8a7a4eb246dfc419632d10d70b08c3076dd9595b34b4e18af0af43",
+   "id_isin/00013.request.json": "c5310959440d6461388691b58a025a632e985760565f5620178cf40bd6310425",
+   "id_isin/00014.request.json": "101a4ce4c9a44262d16a906feb482815631f9514a4daeaa2d594b725c265fb7d",
+   "id_isin/00015.request.json": "85aa9b3bfad5b6ebe8b29f8ba826cde3f346558c8b174582a1452cf3cc7155c5",
+   "id_isin/00016.request.json": "cc1c0bd879dc0cb5358148fd9f32c1e340015fafe60cabebf04744ceaeb4b31b",
+   "id_isin/00017.request.json": "84e73657579ed14e9ba3882564fcf9e4c3355f91d6e1861bf235f74a4003df88",
+   "id_isin/00018.request.json": "01a3176e55284966439db537eb59ae6d1aa3d6935af56b50e050a23e4e6fc1f3",
+   "id_isin/00019.request.json": "7b870afac7a52dd64e87d280b4358ffbab739183f721bed37c7eff14fa644e58"
+  }
+ },
+ "first": {
+  "bound": {
+   "openfigi.security.v1": 1886,
+   "openfigi.security_isin.v1": 1899,
+   "sec.nport.security.v1": 2319,
+   "sec.nport.security_isin.v1": 1882
+  },
+  "cusips_on_two_securities": 0,
+  "decisions": {
+   "bind": 7986
+  },
+  "isins_on_two_securities": 0,
+  "seconds": 14.4,
+  "securities": 3927,
+  "waiting": {
+   "openfigi.security_isin.v1": 53
+  }
+ },
+ "prepare_seconds": 9.0,
+ "read": {
+  "openfigi.security.v1 accepted": 1886,
+  "openfigi.security.v1 set aside: not_found_by_openfigi": 114,
+  "openfigi.security_isin.v1 accepted": 1952,
+  "openfigi.security_isin.v1 set aside: not_found_by_openfigi": 48,
+  "sec.nport.security.v1 accepted": 2319,
+  "sec.nport.security_isin.v1 accepted": 1882
+ },
+ "run": "OpenFIGI's matching rules beside the N-PORT Securities (ticket 80)",
+ "second": {
+  "bound": {
+   "openfigi.security.v1": 1886,
+   "openfigi.security_isin.v1": 1899,
+   "sec.nport.security.v1": 2319,
+   "sec.nport.security_isin.v1": 1882
+  },
+  "cusips_on_two_securities": 0,
+  "decisions": {
+   "bind": 7986
+  },
+  "isins_on_two_securities": 0,
+  "seconds": 6.2,
+  "securities": 3927,
+  "waiting": {
+   "openfigi.security_isin.v1": 53
+  }
+ },
+ "second_pass_changed_nothing": true,
+ "securities_before_openfigi": 3927,
+ "slowest_batch_seconds": 1.9
+}
