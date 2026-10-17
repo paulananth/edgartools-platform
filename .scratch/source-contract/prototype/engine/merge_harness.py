@@ -11,10 +11,8 @@ Knows no source: the policy comes from the Rules Database stand-in
 
 from __future__ import annotations
 
-import os
 import subprocess
 import time
-from pathlib import Path
 from uuid import uuid4
 
 AT = "2026-01-01T00:00:00+00:00"
@@ -23,8 +21,7 @@ IMAGE = "postgres:16-alpine"
 
 
 def _docker(*args):
-    env = {**os.environ, "DOCKER_HOST": os.environ.get("DOCKER_HOST", f"unix://{Path.home()}/.colima/default/docker.sock")}
-    return subprocess.run(["docker", *args], check=True, capture_output=True, text=True, env=env).stdout.strip()
+    return subprocess.run(["docker", *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
 class Postgres:
@@ -39,7 +36,7 @@ class Postgres:
         import sys as _sys
         _sys.modules["source_engine"].LOOPBACK_ALLOWED = True
         self.admin = create_engine(f"postgresql+psycopg2://postgres:test@127.0.0.1:{port}/postgres")
-        deadline = time.time() + 60  # research 03: an 8 s wait failed 4 of 7 runs on Colima
+        deadline = time.time() + 60  # research 03: an 8 s wait failed 4 of 7 runs
         while True:
             try:
                 with self.admin.connect() as c:

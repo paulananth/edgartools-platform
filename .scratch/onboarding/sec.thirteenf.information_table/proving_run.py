@@ -15,7 +15,6 @@ nothing. The report holds counts only.
 
     PREPARED=~/edgar-local-tmp/t13f/mdm \\
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/thirteenf \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly .scratch/onboarding/sec.thirteenf.information_table/proving_run.py
 """
 
@@ -50,7 +49,6 @@ SOURCE, CODE = "sec.thirteenf.information_table", "sec.thirteenf.information_tab
 AS_OF = "2026-10-14T00:00:00+00:00"
 MAX_RECORDS, MAX_BYTES = 1000, 12 * 1024 * 1024
 
-
 def proving_policy(approval: dict) -> dict:
     """The repo's merge rules with the Security matching rule switched on for this run."""
     body = files.policy()
@@ -63,7 +61,6 @@ def proving_policy(approval: dict) -> dict:
             "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}]
     return body
 
-
 def read(row: dict, contract: dict, policy: dict, publication: dict) -> tuple[str, dict]:
     try:
         return "assertions", normalize(row, source_code=CODE, contract=contract,
@@ -75,7 +72,6 @@ def read(row: dict, contract: dict, policy: dict, publication: dict) -> tuple[st
             reason=exc.reason, raw_record=row, probable_kind=exc.probable_kind,
             provenance={"artifact_sha256": publication["artifact_sha256"], "member": publication["member"],
                         "adapter_version": contract["adapter"]["version"], **exc.detail})
-
 
 def counts(conn) -> dict:
     group = lambda sql: {str(k): v for k, v in conn.execute(text(sql)).all()}
@@ -90,13 +86,11 @@ def counts(conn) -> dict:
                                "jsonb_each(s.reading->'fields') f WHERE f.value <> 'null'::jsonb GROUP BY 1"),
     }
 
-
 def cusips(conn) -> Counter:
     """How many Securities hold each CUSIP."""
     return Counter(cusip for cusip, _ in conn.execute(text(
         "SELECT DISTINCT s.reading->'identifiers'->>'cusip', s.entity_id FROM mdm.stage_record s "
         "JOIN mdm.master_entity m ON m.entity_id = s.entity_id WHERE m.kind = 'security'")).all())
-
 
 def test_proving_run(database):
     prepared = Path(os.environ["PREPARED"]).expanduser()

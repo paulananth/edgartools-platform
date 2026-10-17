@@ -440,7 +440,7 @@ This phase has no pytest-based tests. The validation strategy uses static defini
 ## Project Constraints (from CLAUDE.md)
 
 - **uv for Python:** Not applicable — no Python package changes in this phase.
-- **Colima on macOS:** Not applicable — no Docker build.
+- **Docker on macOS:** Not applicable — no Docker build.
 - **AWS ECR only:** Not applicable — no image changes.
 - **DEC-009 idempotency:** Recovery runbook explicitly leverages this — full `bootstrap_phased` re-run is safe because already-loaded CIKs are skipped.
 - **DEC-011 Terraform passive infra only:** State machine changes go in `deploy-aws-application.sh`, not Terraform. Confirmed — no Terraform changes needed.

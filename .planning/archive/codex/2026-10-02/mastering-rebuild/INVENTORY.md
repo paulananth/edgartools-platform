@@ -63,7 +63,7 @@ schema), Rules (`rules` schema), Change Journal (`journal` schema), with
 destination-local `bookkeeping_guard` authority. Test fixtures create and
 remove their own databases. Templates remain necessary during a test run.
 
-No pre-existing database is marked unused. Live Colima/database inventory is
+No pre-existing database is marked unused. Live Docker/database inventory is
 blocked by the stopped VM and denied Docker socket. No database or Docker
 volume was deleted; no production target was selected. Historical local
 `mdm`, `silver`, `bookkeeping`, `change_ledger` examples are not deletion proof.

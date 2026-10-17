@@ -57,12 +57,9 @@ log() { echo "==> $*"; }
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
 ensure_docker() {
-    if [[ -S "$HOME/.colima/default/docker.sock" ]]; then
-        export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
-    fi
     command -v docker >/dev/null 2>&1 || fail "docker CLI is not installed"
     if ! docker info >/dev/null 2>&1; then
-        fail "Docker daemon is not reachable. On macOS start Colima, then: export DOCKER_HOST=unix://\$HOME/.colima/default/docker.sock"
+        fail "Docker daemon is not reachable. Use the Docker context already configured on the machine."
     fi
 }
 

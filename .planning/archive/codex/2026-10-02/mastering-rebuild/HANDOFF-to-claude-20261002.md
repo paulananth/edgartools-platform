@@ -171,7 +171,7 @@ main's platform-validation ticket 06. Synthetic acceptance is no rule approval.
 - [x] Publish and verify the source draft — PR #780 is OPEN and draft against
   main, head 30c4f3c1 at creation; gh pr view; 2026-10-02 08:52 ET. Record its
   current URL and head again in Claude's continuation ticket.
-- [x] Establish Docker access — colima status confirms running, Docker server
+- [x] Establish Docker access — docker status confirms running, Docker server
   29.5.2 and postgres:16-alpine image inspection succeed; 2026-10-02 08:52 ET.
   Recheck these prerequisites in Claude's session before acceptance.
 - [ ] Review Standards, Spec and GoF for the implementation before changes.
@@ -201,7 +201,6 @@ main's platform-validation ticket 06. Synthetic acceptance is no rule approval.
 Commands from Claude's worktree after prerequisites are ready:
 
 ```bash
-colima start
 docker pull postgres:16-alpine
 uv sync --frozen --extra s3 --extra mdm
 uv run pytest tests/integration/test_fresh_mastering_postgres.py -q --tb=short

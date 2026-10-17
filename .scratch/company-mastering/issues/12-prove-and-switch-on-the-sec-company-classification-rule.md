@@ -88,13 +88,13 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
   (2026-09-24 21:29 ET).
 - [x] Repair classification, source, activation, and integration tests; add
   a check that re-hashes the research files against the proof — 97 focused
-  MDM tests passed; PG16 tests collected but sandbox denied Colima socket
+  MDM tests passed; PG16 tests collected but sandbox denied private Docker socket
   (2026-09-24 21:29 ET).
 - [x] Write a plain-English approval brief with the exact digest, per-step
   numbers, and reversal; keep approval pending — `12-approval-brief.md`
   reviewed against `PROOF` and policy digest (2026-09-24 21:29 ET).
 - [x] Run MDM and architecture tests and attempt local PG16 integration —
-  888 MDM and 570 architecture tests passed; PG16 setup blocked by Colima
+  888 MDM and 570 architecture tests passed; PG16 setup blocked by Docker
   socket permission, not a test assertion (2026-09-24 21:29 ET).
 - [x] Commit the proved failed gate and pending approval brief on the Codex
   branch as `476003cd` (`git diff --cached --check`, 2026-09-24 21:32 ET).
@@ -113,7 +113,7 @@ Kept current per the task-checklist rule (CLAUDE.md). Times are local ET.
 - [x] Rewrite the operator brief, pin pending policy digest and all five proof
   file hashes; re-hash verification passes, approval pending
   (2026-09-24 21:44 ET).
-- [x] Run MDM and architecture tests and retry PostgreSQL 16 with Colima
+- [x] Run MDM and architecture tests and retry PostgreSQL 16 with Docker
   (2026-09-24 22:07 ET: MDM 889, architecture 570, PG16 130 passed; two PG16
   tests fixed for the policy the SEC contract now needs; 1 `fastapi` baseline;
   CI green on 72b76362).

@@ -42,7 +42,7 @@ keep their own path on the container's base database.
     module is registered once per importing module, so it gained nothing
     and was reverted.
   - The idle OpenMetadata stack (Elasticsearch and two services, about a
-    third of the Colima VM's CPU and 2.6 GB) was stopped;
+    third of the Docker VM's CPU and 2.6 GB) was stopped;
     `docker compose -p edgartools-catalog -f infra/openmetadata/docker-compose.yml start`
     brings it back.
 - [ ] Full suite green; PR; CI; merge on the operator's word.

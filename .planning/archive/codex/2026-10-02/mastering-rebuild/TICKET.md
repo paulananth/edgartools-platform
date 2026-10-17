@@ -77,7 +77,7 @@ to another runtime's dependencies. PostgreSQL qualification remains incomplete.
 ## Prerequisite refresh (2026-10-02 08:52 ET)
 
 The earlier sandbox blockers are resolved in the refreshed session. gh auth
-status confirms paulananth and PR #780 was created and verified. colima status
+status confirms paulananth and PR #780 was created and verified. docker status
 confirms it is running; docker version reports server 29.5.2; docker image
 inspect confirms postgres:16-alpine is available. The Codex memory notes
 directory is writable. These prerequisite checks do not qualify mastering,

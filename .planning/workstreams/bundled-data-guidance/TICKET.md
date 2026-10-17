@@ -15,7 +15,7 @@ Design review: documentation change only. Reviewed worker trial and skill histor
 
 ## Evidence and limits
 
-Local installed test command: `uv run --no-project <shared Python> -m pytest tests/engine/test_data_skill_bundle_postgres.py -q`, using local Colima PostgreSQL 16 and restricted worker/verifier roles. Installed from committed fea082ec with no checkout runtime; all nine distinct parse→prepare→merge trials retained. Final instruction fixes c05b1fcf additionally passed full CI (37232982803). No maintained cases were removed or added.
+Local installed test command: `uv run --no-project <shared Python> -m pytest tests/engine/test_data_skill_bundle_postgres.py -q`, using local Docker PostgreSQL 16 and restricted worker/verifier roles. Installed from committed fea082ec with no checkout runtime; all nine distinct parse→prepare→merge trials retained. Final instruction fixes c05b1fcf additionally passed full CI (37232982803). No maintained cases were removed or added.
 
 Independent Spec review found two real gaps: missing mandatory execution configuration and premature finalization/resubmission for a combined run. Both corrected; final review passed. Independent Standards review found no scoped blocker; its relative reference link improvement is applied.
 

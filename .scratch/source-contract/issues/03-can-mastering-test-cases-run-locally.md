@@ -44,6 +44,6 @@ and quarantine — not "the engine bound this record to X". Engine-chosen
 bindings become testable only when the Mastering Policy's automatic rules
 can activate. The shared fixture's readiness wait is ~8 s
 (`tests/integration/test_clean_mdm_postgres.py:65-73`), which failed 4 of 7
-runs on Colima; the runner needs ≥30 s. Three Codex proposals: a longer
+runs locally; the runner needs ≥30 s. Three Codex proposals: a longer
 readiness wait, a named offline registry authority for tests, and a test
 mode for automatic rules.

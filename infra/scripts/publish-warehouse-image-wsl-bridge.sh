@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode)
             [[ $# -ge 2 ]] || fail "--mode requires a value"
-            [[ "$2" == "linux" ]] || fail "publish-warehouse-image-wsl-bridge.sh only supports --mode linux"
+            [[ "$2" == "docker" || "$2" == "linux" || "$2" == "auto" ]] || fail "publish-warehouse-image-wsl-bridge.sh publishes with docker; pass --mode docker"
             MODE_SEEN=1
             FORWARDED_ARGS+=("$1" "$2")
             shift 2
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${MODE_SEEN}" -eq 0 ]]; then
-    FORWARDED_ARGS+=(--mode linux)
+    FORWARDED_ARGS+=(--mode docker)
 fi
 
 if ! printf '%s\n' "${FORWARDED_ARGS[@]}" | grep -q '^--push-attempts$'; then

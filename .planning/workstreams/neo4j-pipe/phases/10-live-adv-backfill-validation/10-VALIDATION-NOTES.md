@@ -85,7 +85,7 @@ uv run --extra s3 edgar-warehouse mdm run --entity-type fund
 | mdm run --entity-type adviser | 0 | mdm_command_completed |
 | mdm run --entity-type fund | 0 | mdm_command_completed (3122 ms) |
 
-**Postgres counts (Colima local MDM):**
+**Postgres counts (Docker local MDM):**
 
 | Table | Count |
 |-------|-------|

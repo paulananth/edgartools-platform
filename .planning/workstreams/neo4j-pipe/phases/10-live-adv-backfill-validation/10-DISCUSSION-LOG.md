@@ -153,7 +153,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Local Colima Postgres | MDM_DATABASE_URL=postgresql://postgres:test@localhost:5432/mdm | ✓ |
+| Local Postgres | MDM_DATABASE_URL=postgresql://postgres:test@localhost:5432/mdm | ✓ |
 | VPC dev Postgres | Requires VPN or port-forwarding | |
 | You decide | Claude uses whatever available | |
 
@@ -181,7 +181,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Local Colima Neo4j | NEO4J_URI=bolt://localhost:7687 | ✓ |
+| Local Neo4j | NEO4J_URI=bolt://localhost:7687 | ✓ |
 | Dev VPC Neo4j | Requires VPN or SSH tunnel | |
 | You decide | Claude picks based on availability | |
 
@@ -191,7 +191,7 @@
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Include startup steps | colima start, docker run for Postgres and Neo4j | ✓ |
+| Include startup steps | docker run for Postgres and Neo4j | ✓ |
 | Assume already running | Add preflight check note only | |
 | docker-compose reference | Point to existing compose file | |
 

@@ -23,7 +23,6 @@ manifest's run and attempts are recorded in MDM by the run coordinator
 Then everything is applied again; the second pass must change nothing.
 
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/cm27 \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly \\
         .scratch/company-mastering/research/27_proving_run.py
 """
@@ -64,7 +63,6 @@ AS_OF = "2026-09-29T15:00:00+00:00"
 GLEIF_BATCH = 200
 NAMED = {"0000320193": "Apple", "0000789019": "Microsoft", "0001306965": "Shell", "0000937966": "ASML"}
 
-
 def cohort_leis(bundles: list[Path]) -> set[str]:
     """Every LEI the census names for a cohort record's name."""
     found = set()
@@ -76,7 +74,6 @@ def cohort_leis(bundles: list[Path]) -> set[str]:
             found.update(pair[0] for pair in entry.get("leis", []))
     return found
 
-
 def gleif_rows(leis: set[str], metadata: dict) -> list[tuple[int, dict]]:
     rows = []
 
@@ -87,7 +84,6 @@ def gleif_rows(leis: set[str], metadata: dict) -> list[tuple[int, dict]]:
     inspect_archive(ARCHIVE.open("rb"), member="level1", metadata=metadata,
                     expected_sha256=ARCHIVE_SHA256, on_record=keep)
     return rows
-
 
 def counts(conn) -> dict:
     one = lambda sql: conn.execute(text(sql)).scalar()
@@ -105,7 +101,6 @@ def counts(conn) -> dict:
                                    "FROM mdm.decision GROUP BY 1"),
     }
 
-
 def masters(conn) -> dict:
     """Each open Company's CIKs and LEIs, from the records bound to it."""
     out: dict[str, dict] = {}
@@ -119,7 +114,6 @@ def masters(conn) -> dict:
         if lei:
             m["leis"].add(lei)
     return out
-
 
 def test_proving_run(database, tmp_path):
     work = Path(os.environ["PROVING_WORK"]).expanduser()

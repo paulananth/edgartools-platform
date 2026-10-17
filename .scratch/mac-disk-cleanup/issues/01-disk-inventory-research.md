@@ -6,7 +6,7 @@ Blocked by:
 
 ## Question
 
-Where is the disk space going — caches, temp, duplicates, Docker/Colima, large user folders?
+Where is the disk space going — caches, temp, duplicates, Docker, large user folders?
 
 ## Answer
 
@@ -15,7 +15,7 @@ Measured on 2026-08-07:
 | Bucket | Size |
 |--------|-----:|
 | Documents/Existing files/Macintosh HD - Data | ~21 GB |
-| ~/.colima (actual) | ~11 GB; sparse datadisk apparent 80 GB |
+| the local Docker data directory (actual) | ~11 GB; sparse datadisk apparent 80 GB |
 | ~/projects | ~6.9 GB |
 | Application Support | ~3.1 GB |
 | ~/.claude | ~3.1 GB (gstack + gstack.bak = 2.2 GB) |

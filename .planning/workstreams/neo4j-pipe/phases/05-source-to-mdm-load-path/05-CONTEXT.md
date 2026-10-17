@@ -77,7 +77,7 @@ Phase 5 is complete when:
   silver rows, `mdm run` loads all 5 entity types, `mdm derive-relationships` creates
   MDM relationship rows, `mdm sync-graph` materializes to Snowflake NEO4J_GRAPH_MIGRATION
   with all 11 GRAPH_EDGE_* tables having at least 1 row.
-- **D-16:** MDM target for the 05-05 live run: local Postgres via Colima + Docker
+- **D-16:** MDM target for the 05-05 live run: local Postgres via Docker
   (`docker run --platform linux/amd64 postgres:15`). Local Postgres avoids VPC
   dependency and is more production-realistic than SQLite.
 - **D-17:** Snowflake sync uses `SNOWFLAKE_*` env vars or SnowCLI connection
@@ -211,7 +211,7 @@ Phase 5 is complete when:
   `MDM_SILVER_DUCKDB` (silver) and `EDGAR_MDM_DATABASE_URL` (MDM Postgres) to compute deltas.
 - `mdm sync-graph` already routes through `SnowflakeGraphSyncExecutor`; 05-05 verifies it works
   against the dev Snowflake account with the test CIK's data.
-- Colima + `postgres:15` container: set `EDGAR_MDM_DATABASE_URL=postgresql://...@localhost:5432/mdm`
+- Docker + `postgres:15` container: set `EDGAR_MDM_DATABASE_URL=postgresql://...@localhost:5432/mdm`
   for the 05-05 live run.
 - `sec_ownership_reporting_owner.is_company` (or equivalent field) is the predicate that distinguishes
   natural persons from corporate owners in person-domain coverage.

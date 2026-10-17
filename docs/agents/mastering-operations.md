@@ -26,10 +26,10 @@ fixture. It does not implement that reader or certify all Person populations.
 
 ## Fresh local qualification
 
-Prepare Colima/Docker, the PostgreSQL image and locked dependencies:
+Prepare Docker, the PostgreSQL image and locked dependencies. Use the Docker
+context already configured on the machine:
 
 ```bash
-colima start
 docker pull postgres:16-alpine
 uv sync --frozen --extra s3 --extra mdm
 uv run python scripts/ops/qualify_local_mastering.py \

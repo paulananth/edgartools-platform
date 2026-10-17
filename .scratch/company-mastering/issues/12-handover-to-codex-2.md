@@ -57,7 +57,7 @@ empty, so nothing acts alone.
      - step asserts `"5"` → `"8"`;
      - the step-four test now concerns step `10`;
      - records need `tickers`/`forms` where a step reads them.
-2. Run the MDM unit suite plus `tests/architecture`, and the PG16 clean suite (`tests/integration/test_clean_*.py`, Docker via Colima). Get CI green.
+2. Run the MDM unit suite plus `tests/architecture`, and the PG16 clean suite (`tests/integration/test_clean_*.py`, Docker locally). Get CI green.
 3. Run the three-axis `/code-review` (Standards, Spec, GoF) of the branch against `origin/main`, and fix the findings.
 4. Write a plain-English approval brief that says what the rule does, the numbers, the borderline readings, and what the digest is. The operator approves the **exact digest**, then set `approved_by`/`approved_at` from the operator's real approval time, taken from `date`.
 5. Activate (`POLICY["automatic_rules"] = [PENDING_ACTIVATION]` with approval), re-run the four-company PG16 test, get CI green, and merge only on the operator's word.

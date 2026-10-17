@@ -215,7 +215,7 @@ option), Phase 2 should add a SECOND table with this same header but labeled
 ### New runbook docs (`runbook/aws-deploy.md`, `runbook/snowflake-native-pull.md`, `runbook/dbt-gold.md`) (doc, request-response)
 
 **Analog 1 — command block formatting:** `CLAUDE.md` "Manual AWS build and deploy —
-complete recipe (macOS Colima)" section. Pattern: numbered steps (`# 1. ...`, `# 2.
+complete recipe (the configured Docker context)" section. Pattern: numbered steps (`# 1. ...`, `# 2.
 ...`), each step is a fenced ` ```bash ` block with inline `#` comments explaining
 *why*, followed by a "NOTE:"/"If X fails" callout in plain text immediately after the
 block when there's a known gotcha. Phase 2's `aws-deploy.md` should mirror this

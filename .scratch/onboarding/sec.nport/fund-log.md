@@ -40,7 +40,7 @@ Decided from part 1's precedent (an ISIN filed with several CUSIPs is attached t
 
 ## The one Proving Run (2026-10-16 08:06 ET, tested locally, passed)
 
-`fund_proving_run.py`, report `fund-proving-run.json` (sha256 792af1f5...e0d56e58, counts only). Docker no longer starts on this Mac (macOS 27 refuses Lima built for Intel under Rosetta; MacPorts' colima and limactl are x86_64), so the run used the fixtures' local PostgreSQL 16 (`PG16_SERVER=pgserver`, deleted afterwards). Both Fund rules switched on only in the run's copy of the policy, stamped "proving-run", with stand-in verifications.
+`fund_proving_run.py`, report `fund-proving-run.json` (sha256 792af1f5...e0d56e58, counts only). Docker no longer starts on this Mac (macOS 27 refuses Lima built for Intel under Rosetta; MacPorts' docker and limactl are x86_64), so the run used the fixtures' local PostgreSQL 16 (`PG16_SERVER=pgserver`, deleted afterwards). Both Fund rules switched on only in the run's copy of the policy, stamped "proving-run", with stand-in verifications.
 - First pass 48 s, 28 batches: **12,937 Funds**, 12,937 bind decisions; **0 series ids and 0 LEIs on two Funds**; 12,867 hold a joining LEI. 7 records wait as open reviews (`invalid_lei_checksum`).
 - **Second pass (9 s) changed nothing.**
 - The 30 series LEIs GLEIF holds as GENERAL (a Company in GLEIF's contract) cannot join these Funds: the LEI contract joins only records of one kind (`kind_equal@1`). Logged for when GLEIF's FUND records are mastered.

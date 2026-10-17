@@ -21,7 +21,6 @@ applied again under a new run; the second pass must create nothing.
     PROVING_BUNDLES=<dir holding chunk1..chunk7> PROVING_OUT=<report.json> \\
     PROVING_MANIFEST_SHA256=<sha256 of 05-manifest.json> \\
     [PROVING_CHUNKS=1,2,...  (default all seven; a trial runs fewer)] \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -p no:cacheprovider -s \\
         .scratch/company-mastering/research/05_proving_run.py
 """
@@ -80,7 +79,6 @@ CIK_RULE = {
     ],
 }
 
-
 def cik_contract(corpus_sha256: str, approval: dict) -> dict:
     """The CIK Identifier Contract (policy-language.md §9.3; Company Q14).
 
@@ -95,7 +93,6 @@ def cik_contract(corpus_sha256: str, approval: dict) -> dict:
         "verification": {"corpus_sha256": corpus_sha256, **approval},
         "tolerance": {"unit": "items", "warm_up_decisions": 10000, "max_per_10k": 5},
     }
-
 
 def candidate(corpus_sha256: str, approval: dict) -> dict:
     body = copy.deepcopy(POLICY)
@@ -116,9 +113,7 @@ def candidate(corpus_sha256: str, approval: dict) -> dict:
     ]
     return body
 
-
 PENDING = {"approved_by": None, "approved_at": None, "reason": None}
-
 
 def counts(conn) -> dict:
     one = lambda sql: conn.execute(text(sql)).scalar()
@@ -168,7 +163,6 @@ def counts(conn) -> dict:
         "batches": one("SELECT count(*) FROM mdm_v2.batch"),
     }
 
-
 def records(conn) -> dict[str, dict]:
     """Each SEC record's outcome, by CIK."""
     out: dict[str, dict] = {}
@@ -198,7 +192,6 @@ def records(conn) -> dict[str, dict]:
             }
         )
     return out
-
 
 def test_proving_run(database, command_databases, tmp_path):
     bundles = Path(os.environ["PROVING_BUNDLES"])

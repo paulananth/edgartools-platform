@@ -59,7 +59,7 @@ proving run as a command), 3 (a command writes the input manifest) and 12
   so the first comparison is against the previous contract in git (for
   ticket 18: SEC v6 and the GLEIF contract before #753), named in the
   evidence.
-- Size: a full Golden Copy is millions of records and Colima has 8 GB (a run
+- Size: a full Golden Copy is millions of records and Docker has 8 GB (a run
   was killed for low memory before). First run on 10,000 records, streamed,
   and tell the operator the projected full time before running it.
 

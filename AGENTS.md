@@ -86,6 +86,11 @@ recovery, use [data-operations](skills/data-operations/SKILL.md).
   MDM, RDM, Rules, Bookkeeping and Change Journal by default; retain existing
   silver without initializing or migrating it.
   All agents look up the same Company identities in the shared MDM.
+  The server runs on the Docker context already configured on the machine
+  (operator, 2026-10-17). Start, inspect, back up and copy it with
+  `infra/scripts/local-test-stores.py`. The procedure is
+  [Initialize shared local PostgreSQL](docs/local-agent-testing.md).
+  Source its private `worker.env` before work and `verifier.env` before verification.
 - Separate Git worktrees isolate code edits; routine lookups and development
   use the existing shared server, without creating a server per agent.
   Use its private runtime connection file outside Git; never print its values.
@@ -251,6 +256,7 @@ Learned the hard way; each is a standing operator rule.
 | AWS image publish script | `infra/scripts/publish-warehouse-image.sh` |
 | AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh` |
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
+| Shared local PostgreSQL | `docs/local-agent-testing.md`, `infra/scripts/local-test-stores.py` |
 
 Large files should be read in chunks before editing: `edgar_warehouse/mdm/clean/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.
 
@@ -263,8 +269,8 @@ Large files should be read in chunks before editing: `edgar_warehouse/mdm/clean/
 - Prefer `uv run --with dbt-snowflake dbt ...` over bare `dbt`.
 - Project dependency source is PyPI. `edgartools>=5.29.0` is not vendored here.
 - Docker images use AWS ECR for deployable artifacts.
-- On macOS, use Colima for local Docker fast feedback. On Linux/CI, `docker buildx` with registry cache is the default path.
-- After local Docker builds on macOS, inspect `docker system df -v` and clear unused build cache with `docker builder prune` while Colima is running. To reclaim host space afterward, run `colima ssh -- sudo fstrim -a` and compare `du -h ~/.colima/_lima/_disks/colima/datadisk` and `df -h` before and after. `colima prune` clears downloaded assets, not the VM disk. Preserve Docker volumes and the Colima VM unless the user authorizes their exact removal; do not use `docker system prune -a --volumes` or delete VM disk files for routine cleanup. If Colima or the Docker socket is unavailable, report that blocker.
+- Use the Docker context already configured on the machine. Leave `DOCKER_HOST` unset. Publish images with `docker build` and `docker push` through `infra/scripts/publish-warehouse-image.sh --mode docker`.
+- After a local image build, inspect `docker system df` and clear unused build cache with `docker builder prune`. Keep named volumes unless the operator names a volume to remove. If `docker info` cannot reach the daemon, report that blocker.
 
 ## GoF Design Review
 
@@ -294,7 +300,6 @@ export WAREHOUSE_RUNTIME_MODE="bronze_capture"
 export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
 export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse/warehouse"
 export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
-export MDM_DATABASE_URL="postgresql://postgres:test@localhost:5432/mdm"
 export AWS_DEFAULT_REGION=us-east-1
 ```
 
@@ -304,6 +309,7 @@ Notes:
 - `WAREHOUSE_RUNTIME_MODE` is `bronze_capture` or `infrastructure_validation`.
 - Gold-affecting commands require `SERVING_EXPORT_ROOT`; `SNOWFLAKE_EXPORT_ROOT` is accepted as a compatibility fallback.
 - For AWS work, prefer S3 roots. Do not introduce other storage roots into new AWS guidance.
+- Local MDM, RDM, Rules, Bookkeeping and Change Journal connections come from the shared server's private `worker.env`. See [Initialize shared local PostgreSQL](docs/local-agent-testing.md). Hosted MDM uses its secret. Never print either value.
 
 ## Data And Parser Notes
 

@@ -92,16 +92,14 @@ Scope: tooling, developer workflow
 
 ---
 
-## DEC-007: Use Colima on macOS for local Docker
+## DEC-007: Use the Docker context already configured
 
 status: policy-locked (project policy)
 source: CLAUDE.md, AGENTS.md
 
-Decision: On macOS, use Colima as the local Docker daemon. On Windows, use Docker Desktop. On
-Linux/CI, docker buildx with registry cache is the default path. Do not introduce another
-container build/runtime stack. Docker 29+ in Colima defaults to the containerd image-store
-snapshotter (incompatible with legacy docker build) — run infra/scripts/setup-colima.sh once
-per workstation to disable the snapshotter.
+Decision: Use the Docker context already configured on the machine, including Linux and WSL.
+Leave DOCKER_HOST unset. Publish images with docker build and docker push. Do not introduce
+another container build or runtime stack.
 
 Scope: local development, Docker runtime
 

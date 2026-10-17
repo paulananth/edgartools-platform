@@ -24,7 +24,7 @@ Where and in what order do the approved versions get switched on (`rules activat
 
 Operator, 2026-10-02: "agreed" (to fresh local Rules and MDM stores kept as the operator's, re-proving, then re-approval).
 
-- [x] **The lost Rules Database.** At 15:42:42 ET a Docker prune (not Claude's) deleted every Colima image and volume, including `rules-local-person-feed-1` and its approvals. No backup existed; the rules files are in git and each approval's digest and words are in the tickets. Evidence: `docker events` (volume destroy, then volume prune at 15:42:42 and 15:43:10 ET). 2026-10-02 16:15 ET
+- [x] **The lost Rules Database.** At 15:42:42 ET a Docker prune (not Claude's) deleted every Docker image and volume, including `rules-local-person-feed-1` and its approvals. No backup existed; the rules files are in git and each approval's digest and words are in the tickets. Evidence: `docker events` (volume destroy, then volume prune at 15:42:42 and 15:43:10 ET). 2026-10-02 16:15 ET
 - [x] **The target** (decided, per "agreed"):
   - `edgartools-rules-local` on 127.0.0.1:5433 and `edgartools-mdm-local` on 127.0.0.1:5434, both postgres:16-alpine with `--restart unless-stopped`;
   - named volumes `edgartools-rules-local-data` and `edgartools-mdm-local-data`, labelled `edgartools.keep=operator`;

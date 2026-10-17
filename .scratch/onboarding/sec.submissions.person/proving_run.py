@@ -21,7 +21,6 @@ second pass must change nothing.
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/person-feed-1 \\
     [PROVING_LIMIT=<n documents, for a small first run>] \\
     [PROVING_SAMPLE=<n documents, a seeded random cohort>] \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly \\
         .scratch/onboarding/sec.submissions.person/proving_run.py
 """
@@ -66,7 +65,6 @@ MAX_RECORDS, MAX_BYTES = 1000, 12 * 1024 * 1024
 SEED = 20261001
 COHORT = Path.home() / ".local/share/edgartools/clean-mdm/proving/cm27/bundles"
 
-
 def documents() -> list[dict]:
     """Each filer's document, as `receipts.jsonl` lists it, sorted by key."""
     found = []
@@ -76,7 +74,6 @@ def documents() -> list[dict]:
         if re.search(r"CIK\d{10}\.json$", key) and "/pagination/" not in key:
             found.append(receipt)
     return sorted(found, key=lambda r: r["key"])
-
 
 def proving_policy(approval: dict) -> dict:
     """The repo's merge rules with `person-cik` switched on for this run."""
@@ -90,7 +87,6 @@ def proving_policy(approval: dict) -> dict:
             "kind": "person", "family": "binding", "rule_id": rule["rule_id"],
             "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"}]
     return body
-
 
 def read(receipt: dict, contract: dict, policy: dict) -> tuple[str, dict]:
     member = receipt["key"].removeprefix("warehouse/bronze/")
@@ -109,7 +105,6 @@ def read(receipt: dict, contract: dict, policy: dict) -> tuple[str, dict]:
             provenance={"artifact_sha256": receipt["sha256"], "member": member,
                         "adapter_version": contract["adapter"]["version"], **exc.detail})
 
-
 def counts(conn) -> dict:
     one = lambda sql: conn.execute(text(sql)).scalar()
     group = lambda sql: {str(k): v for k, v in conn.execute(text(sql)).all()}
@@ -125,7 +120,6 @@ def counts(conn) -> dict:
         "decisions_by_actor": group("SELECT body->>'actor', count(*) FROM mdm.decision GROUP BY 1"),
     }
 
-
 def people(conn) -> dict[str, set[str]]:
     """Each Person's CIKs, from the records bound to it."""
     out: dict[str, set[str]] = {}
@@ -135,7 +129,6 @@ def people(conn) -> dict[str, set[str]]:
     )):
         out.setdefault(entity, set()).add(cik)
     return out
-
 
 def population_pass(every: list[dict], policy: dict) -> dict:
     """The classification rule over every document, with no database: how
@@ -156,7 +149,6 @@ def population_pass(every: list[dict], policy: dict) -> dict:
     return {"filers": len(every), "steps": dict(sorted(steps.items())), "persons": len(ciks),
             "person_ciks_in_company_cohort": sorted(ciks & cohort), "company_cohort_ciks": len(cohort)}
 
-
 def company_cohort_ciks() -> set[str]:
     """The CIKs of Company mastering ticket 27's cohort: 6,414 Companies and
     586 controls, every one a filer Company's rule read as a company."""
@@ -167,7 +159,6 @@ def company_cohort_ciks() -> set[str]:
             if cik:
                 found.add(str(cik).zfill(10))
     return found
-
 
 def test_proving_run(database):
     work = Path(os.environ["PROVING_WORK"]).expanduser()
@@ -282,7 +273,6 @@ def test_proving_run(database):
     print(json.dumps({k: v for k, v in report.items() if k not in ("review_sample", "timings")},
                      indent=1, default=str))
     assert report["second_pass_changed_nothing"]
-
 
 def hashlib_sha256(path: Path) -> str:
     import hashlib

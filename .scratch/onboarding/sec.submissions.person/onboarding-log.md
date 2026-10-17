@@ -171,7 +171,7 @@ copied into `rules/` and corrected (comments only, see map).
   `[sec.submissions.person.v1]`. The Person workbook's Preferred sources sheet shows the same.
 - "Run the reader's tests, if any": no reader, and pytest is not allowed this session.
 - **Proving run. SKILL-GAP: needs code, not configurable.** Skill: "Write it as a pytest
-  file that uses the Clean MDM fixtures ... Run it with Docker (on macOS, Colima)". Not done.
+  file that uses the Clean MDM fixtures ... Run it with Docker (on macOS, Docker)". Not done.
 - **Inputs and proof. SKILL-GAP: needs code, not configurable.** Skill: "**Digest, before
   saving:** `from edgar_warehouse.bookkeeping.clean.config import digest`" and "**Input
   manifest:** a JSON list of `{"member", "sha256", "bytes"}`". Not done. For a bronze

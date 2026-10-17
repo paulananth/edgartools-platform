@@ -10,7 +10,7 @@ Operator, 2026-09-28: "new branch PR that publishes the data catalog to
 OpenMetadata". Rulings behind it (ticket 11): the catalog server is
 OpenMetadata, published one way from the rules, nobody edits rules in it;
 its scope is sources, datasets and MDM fields; it runs first on a laptop
-(Colima), hosting in AWS is a later decision.
+(Docker), hosting in AWS is a later decision.
 
 ## Design
 
@@ -35,7 +35,7 @@ its scope is sources, datasets and MDM fields; it runs first on a laptop
   `docker-compose-postgres.yml`; no ingestion (Airflow) container; only the
   server's port on 127.0.0.1, so it clashes with no local Postgres.
 
-## Evidence (OpenMetadata 2.0.2, revision c49ec6b1, on Colima)
+## Evidence (OpenMetadata 2.0.2, revision c49ec6b1, locally)
 
 Probes before the client was written (2026-09-28):
 - A name holding a dot is quoted in its fully qualified name
@@ -59,7 +59,7 @@ Live proof, 2026-09-28 19:27 ET:
 - [x] Branch off main 3a7d5313 (18:25 ET).
 - [x] `/gof-refactor-reviewer`: leave the structure; make `mapdoc.winners`
   public and reuse it.
-- [x] OpenMetadata on Colima (compose committed); API probed.
+- [x] OpenMetadata (compose committed); API probed.
 - [x] `catalog.py` plan and publish; `rules catalog plan|publish`.
 - [x] Tests: `tests/unit/test_rules_catalog.py` (plan covers every source
   and field; lineage; the same rules give the same catalog; publish deletes

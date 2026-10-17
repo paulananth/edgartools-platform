@@ -92,7 +92,7 @@ against the NEW code this ticket adds:
    exception's own docstring. Fixed by catching the driver error in
    `finalize_fetch`'s Postgres branch, matching on the known message, and
    re-raising as `StaleFencingToken`. Regression test, run against real
-   Postgres (Docker/Colima):
+   Postgres (Docker):
    `tests/integration/test_acquisition_ledger_postgres.py::test_finalize_fetch_raises_python_stale_fencing_token_against_real_postgres`
    -- exercises the actual `AcquisitionLedger.finalize_fetch` Python API,
    not raw SQL (prior coverage of this exact race only asserted on stderr
@@ -118,5 +118,5 @@ Tests: 6 new in `tests/acquisition/test_ledger.py`, 4 new in
 `tests/acquisition/test_facade.py`, 2 new in
 `tests/acquisition/test_discovery.py`, 2 new in
 `tests/integration/test_acquisition_ledger_postgres.py` (both run against
-real `postgres:16-alpine` via Docker/Colima, not mocked). Full repo suite
+real `postgres:16-alpine` via Docker, not mocked). Full repo suite
 green.

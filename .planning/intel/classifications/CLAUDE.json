@@ -18,7 +18,6 @@
     "infra/terraform/accounts/prod/",
     "infra/terraform/snowflake/accounts/prod/",
     "infra/scripts/",
-    "infra/scripts/setup-colima.sh",
     "infra/scripts/publish-warehouse-image.sh",
     "infra/scripts/deploy-snowflake-stack.sh",
     "infra/scripts/deploy-aws-application.sh",
@@ -38,7 +37,7 @@
     "SEC filing artifacts are additive and immutable after capture — skip by default, re-fetch only with explicit --force flag",
     "Use AWS ECR only for deployable images — do not add non-ECR registry, non-AWS SDK, ODBC, or non-AWS deployment steps",
     "Always use uv for Python dependency management — never bare pip or bare dbt",
-    "On macOS use Colima as the local Docker daemon; do not introduce another container build/runtime stack"
+    "Use the Docker context already configured; do not introduce another container build/runtime stack"
   ],
   "key_requirements": [
     "edgartools PyPI package >= 5.29.0 required (not a local path dependency)",
@@ -51,7 +50,7 @@
     "bootstrap-batch must NOT be in GOLD_AFFECTING_COMMANDS",
     "silver_mdm_gold map MUST pass --artifact-policy skip to bootstrap-batch",
     "Use uv (not pip) for all Python dependency management",
-    "Use Colima (not Docker Desktop or other runtimes) on macOS",
+    "Use the Docker context already configured",
     "ECR tags must be MUTABLE for :dev to be overwritten",
     "edgartools >= 5.29.0 installed from PyPI",
     "Ownership import pattern: from edgar.ownership import Ownership — do not change without checking changelog"
