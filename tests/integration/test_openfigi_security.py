@@ -54,8 +54,9 @@ ISIN, ISIN_OTHERS = "ZZ0000000016", ["ZZ0000000024", "ZZ0000000032", "ZZ00000000
 
 
 def listing(figi, ticker, exchange, composite, share_class, sector="Equity"):
-    row = {"figi": figi, "name": "EXAMPLE CORP", "ticker": ticker, "exchCode": exchange, "securityType": "Common Stock",
-           "marketSector": sector, "securityType2": "Common Stock", "securityDescription": ticker}
+    kind = "Common Stock" if sector == "Equity" else "Corporate Bond"
+    row = {"figi": figi, "name": "EXAMPLE CORP", "ticker": ticker, "exchCode": exchange, "securityType": kind,
+           "marketSector": sector, "securityType2": kind, "securityDescription": ticker}
     return row | ({"compositeFIGI": composite} if composite else {}) | ({"shareClassFIGI": share_class} if share_class else {})
 
 
@@ -270,5 +271,8 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
         **{f: (equity, None) for f in ("BBGZZ0000US1", "BBGZZ0000UN1", "BBGZZ0000GR1", "BBGZZ0000GY1")},
         **{f: (None, isin) for f in ("BBGZZ0000US5", "BBGZZ0000LN5")}}
     assert landed[(EQUITY, "BBGZZ0000GR1")]["ticker"] == "EXB"
+    # A FIGI off its declared shape (a vowel among its eight) is flagged and still lands.
+    assert landed[(EQUITY, "BBGZZ0000US1")]["quality"] == ["figi_shape"]
+    assert landed[(BOND, "BBGZZ000BND1")]["quality"] is None
     # UNHELD waits in MDM, so its listing keeps an empty MDM id.
     assert landed[(UNHELD, "BBGZZ000BND2")]["security_mdm_id_by_cusip"] is None

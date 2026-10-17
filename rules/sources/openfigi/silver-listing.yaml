@@ -114,4 +114,43 @@ time:
   event_time: null
 partition: []
 load_mode: append
+# Data quality (ticket 105; operator, 2026-10-17: "Flag, land the row"): a
+# listing that fails a check lands, the check's id in its `quality` column.
+# Measured on the 2026-10-15 capture, one delivery per kind asked (872,383
+# CUSIP and 1,312,316 ISIN listings): FIGI shape 0; one name per FIGI 0; one
+# market sector per exchange 11,805, per security type 10,249, per second
+# security type 340 rows (profiling: 11,870, 10,249 and 340). Profiling's
+# "ticker and exchange together" is not a check: 632,078 listings carry a
+# ticker and no exchange code, as OpenFIGI gives them.
+checks:
+- id: figi_shape
+  check: identifier
+  column: figi
+  type: figi
+  on_fail: flag
+  why: A FIGI has the shape rules/identifiers/figi.yaml declares.
+- id: one_name_per_figi
+  check: one_value
+  column: name
+  per: figi
+  on_fail: flag
+  why: One FIGI names one instrument.
+- id: one_market_sector_per_exchange
+  check: one_value
+  column: marketSector
+  per: exchCode
+  on_fail: flag
+  why: An exchange code belongs to one market sector (a reference hierarchy profiling found, 99.2% of rows).
+- id: one_market_sector_per_security_type
+  check: one_value
+  column: marketSector
+  per: securityType
+  on_fail: flag
+  why: A security type belongs to one market sector (a reference hierarchy profiling found, 99.5% of rows).
+- id: one_market_sector_per_security_type2
+  check: one_value
+  column: marketSector
+  per: securityType2
+  on_fail: flag
+  why: A second security type belongs to one market sector (a reference hierarchy profiling found).
 why: Every listing OpenFIGI gave, for lookup by ticker, exchange or any FIGI; the MDM record keeps only the levels with one value.

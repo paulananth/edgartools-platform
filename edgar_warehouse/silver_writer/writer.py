@@ -5,6 +5,10 @@ beside it: read from MDM by the link's Dataset Contract, kind and record key
 (compared as text). A record MDM has not mastered keeps an empty id; a later
 landing of the row, or `refresh_ids` for rows already landed, fills it.
 
+A spec's data quality checks run on the delivery first (`checks.py`): a
+flagged row lands with the ids of the checks it failed in its `quality`
+column, and a row an exception refuses does not land.
+
 A delivery is held in memory while its keys are looked up (the sink copies it
 in bounded chunks); a part too large for that is landed in several deliveries.
 """
@@ -17,6 +21,7 @@ from sqlalchemy import bindparam, text
 
 from edgar_warehouse.control_contract import Blocked
 
+from . import checks
 from .sink import Sink
 
 LOOKUP = 10_000  # record keys per MDM query
@@ -60,6 +65,7 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
         if unknown:
             raise Blocked(f"Record {number} holds fields silver.{table} does not name: {sorted(unknown)}")
         rows.append(record)
+    rows, quality = checks.run(spec, rows)
     links = spec["links"] or []
     if links and ids is None:
         raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (MDM_DATABASE_URL)")
@@ -72,7 +78,7 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
             row[link["mdm_id_column"]] = found.get(_key(row.get(column)))
         known += sum(1 for v in found.values() if v)
     result = sink.write(spec, rows)
-    return {**result, "mdm_keys_found": known}
+    return {**result, "mdm_keys_found": known, **({"quality": quality} if quality else {})}
 
 
 def refresh_ids(sink: Sink, table: str, ids) -> dict:

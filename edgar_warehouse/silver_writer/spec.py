@@ -11,8 +11,11 @@ import re
 
 from edgar_warehouse.control_contract import Blocked
 
+from .checks import QUALITY
+from .checks import check as check_quality
+
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
-OPTIONAL = {"definition"}
+OPTIONAL = {"definition", "checks"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
 LINK_KEYS = {"columns", "kind", "source_code", "to_part", "source_key", "mdm_id_column", "inclusion"}
 LOAD_MODES = ("append", "upsert", "snapshot")
@@ -99,6 +102,8 @@ def check(spec: dict) -> dict:
                                                       and 0 <= link["inclusion"] <= 1):
             raise Blocked(f"Link on {link['source_key']}: inclusion is a share from 0 to 1")
         added.append(_name(link["mdm_id_column"], "column"))
+    check_quality(spec, names)
+    added += quality_columns(spec)
     time = spec["time"]
     if not isinstance(time, dict) or set(time) != {"as_of", "as_at", "event_time"} or not time["as_at"]:
         raise Blocked("time holds as_of, as_at and event_time; as_at is always named")
@@ -118,8 +123,14 @@ def check(spec: dict) -> dict:
 
 
 def columns(spec: dict) -> list[str]:
-    """Every column of the table: the spec's columns, each link's MDM id column, and loaded_at when added."""
-    return [c["name"] for c in spec["columns"]] + mdm_id_columns(spec) + added_time(spec)
+    """Every column of the table: the spec's columns, each link's MDM id column, the
+    quality column when the spec has checks, and loaded_at when added."""
+    return [c["name"] for c in spec["columns"]] + mdm_id_columns(spec) + quality_columns(spec) + added_time(spec)
+
+
+def quality_columns(spec: dict) -> list[str]:
+    """The column a flagged row's check ids are written to, when the spec has checks."""
+    return [QUALITY] if spec.get("checks") else []
 
 
 def mdm_id_columns(spec: dict) -> list[str]:

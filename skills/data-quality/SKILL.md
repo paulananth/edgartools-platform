@@ -19,12 +19,20 @@ This skill turns them into the engine's checks and fixes, measures them, and
 writes them once the operator decides.
 
 **A part that goes to silver** (transaction or event data, published
-reference data) has no `quality.yaml`: these checks read MDM records only,
-and a silver table spec holds no checks. Fix its defects in the part's
-reading instead (a date written with a time-zone offset read as a calendar
-date, the spellings of one flag looked up to a boolean, codes read against
-their full list from its authority, not one sample's) and type them in its
-silver spec. A check on silver rows is new code: log it for a ticket.
+reference data) has no `quality.yaml`: those checks read MDM records only.
+Fix what the reading can fix there (a date written with a time-zone offset
+read as a calendar date, the spellings of one flag looked up to a boolean,
+codes read against their full list from its authority, not one sample's) and
+type it in its silver spec. Every other rule goes in the spec's `checks`
+(`docs/specs/profiling/findings.md`, section 6): `identifier` (a declared
+identifier type), `in_set` and `one_value` (one value per group, which carries
+a reference hierarchy's rule). A row failing a `flag` check lands with the
+check's id in its `quality` column (operator, 2026-10-17: "Flag, land the
+row"); `exception` keeps it out. Measure each check on the delivery first,
+with the writer's own code (`edgar_warehouse.silver_writer.checks.run`), and
+write each count in the check's comment; a check that flags rows the source
+gives on purpose is no check. A rule none of the three carries is new code:
+log it for a ticket.
 
 **Use the other skill when:**
 - there are no approved findings yet: use **data-profiling** first;

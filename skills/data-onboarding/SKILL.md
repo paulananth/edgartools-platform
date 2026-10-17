@@ -105,9 +105,8 @@ Every step says what differs for each target.
     put the same spec in the part's `silver` in `findings.yaml`, and
     regenerate `profile.yaml` (**plan-parts**), so the catalog shows the table
     that is registered.
-  - **Its checks run nowhere yet.** A silver table spec holds no checks and
-    `silver land` runs none (rebuild-priorities ticket 105). List each check
-    the part needs on the ticket as deferred to that ticket.
+  - **Its checks are in the spec.** The data-quality skill writes them into
+    the spec's `checks`; a failing row lands flagged in its `quality` column.
   - **Prove the link.** A test lands invented rows beside the master's
     records, keyed apart from the identifier, and asserts each MDM id; a link
     pointed at another Dataset Contract must fail it.
@@ -753,7 +752,6 @@ Either way, write it in the log.
 | Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
 | Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a follow-up of profiling ticket 06 |
 | Silver output worker in a pipeline | not built | Run `silver land` by hand (**Two targets**) | a Bookkeeping worker ticket |
-| Checks on a silver table | not built: a silver spec holds none | List each check on the ticket as deferred | rebuild-priorities ticket 105 |
 
 ## Examples (this repo's sources)
 

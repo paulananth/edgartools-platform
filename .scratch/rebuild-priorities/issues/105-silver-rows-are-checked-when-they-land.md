@@ -2,7 +2,7 @@
 
 Priority: 105, tier 2. Map: [Rebuild priorities](../map.md).
 
-Type: task (code, silver writer; data-quality skill). Status: open. Blocked by: none. Raised by: 80 (Onboard OpenFIGI with the skills), 2026-10-17.
+Type: task (code, silver writer; data-quality skill). Status: in review. Blocked by: none. Raised by: 80 (Onboard OpenFIGI with the skills), 2026-10-17.
 
 ## Why
 
@@ -18,9 +18,10 @@ Where a silver table's checks are declared (the spec, or `quality.yaml` keyed by
 
 ## Checklist
 
-- [ ] GoF consult on `edgar_warehouse/silver_writer/` (spec, writer, sink)
-- [ ] Where a silver table's checks live, and what a failed check does (flag or set aside), following the data-quality skill
-- [ ] Build it; a test per check family on real PG16
-- [ ] OpenFIGI's listing checks declared and run on its table
+- [x] GoF consult on `edgar_warehouse/silver_writer/`: one commit since it was written (#879), no churn; leave its shape. Checks run where the writer already holds the delivery (`checks.py`, three plain functions in a table), and the `quality` column is added like the MDM id columns (2026-10-17 14:01 ET)
+- [x] Ruling: operator, "Flag, land the row (Recommended)" (2026-10-17 14:01 ET): a failing row lands, the check's id in its `quality` column; `exception` keeps a row out. Checks live in the silver spec (`checks`: `identifier`, `in_set`, `one_value`)
+- [x] Built: `edgar_warehouse/silver_writer/checks.py`, the spec's `checks`, the `quality` jsonb column with a comment naming each check, the landing report's counts (`quality`, `quality_updated`); `rules/identifiers/figi.yaml` (shape only). Tests: unit (each check, a tie, an empty value, a forged `quality` refused, refused specs) and real PG16 (flags read back as jsonb, an exception's rows kept out, a rerun changes nothing); 271 affected tests pass (2026-10-17 14:12 ET)
+- [x] OpenFIGI's listing checks in `silver-listing.yaml`, each measured with the writer's own code on the 2026-10-15 capture: FIGI shape 0, one name per FIGI 0, one market sector per exchange 11,805, per security type 10,249, per second security type 340 (profiling: 11,870, 10,249, 340). "Ticker and exchange together" dropped: 632,078 listings carry a ticker and no exchange code, as OpenFIGI gives them. The OpenFIGI test lands an invented FIGI off its shape flagged (2026-10-17 14:12 ET)
+- [ ] ~~FIGI check digit~~ moved to 107 (FIGI's check-digit family): it doubles every second character from the left, which no declared family does (0 failures in 51,623 FIGIs that way; 46,384 under "luhn over letter values")
 - [ ] Three-axis review (Standards, Spec, GoF); PR, CI green, merged on green
-- [ ] Learning → skill
+- [x] Learning → skill: `skills/data-quality/SKILL.md` (a silver part's rules go in the spec's `checks`, measured with the writer's code first; a check that flags what the source gives on purpose is no check), `skills/data-onboarding/SKILL.md` and `docs/specs/profiling/findings.md` section 6 (2026-10-17 14:12 ET)
