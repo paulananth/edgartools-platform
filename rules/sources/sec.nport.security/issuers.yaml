@@ -10,7 +10,7 @@
 # (gleif/subfund-pairs.yaml, GLEIF's active IS_SUBFUND_OF) maps each filed LEI
 # to the trust it is a sub-fund of; an LEI with no umbrella is kept as filed.
 # So a share whose holdings name the trust and its series has one issuer, the
-# trust. issuer-reduce.yaml counts the LEIs of each CUSIP and each ISIN;
+# trust. The same expression is in both tables: keep the two in step. issuer-reduce.yaml counts the LEIs of each CUSIP and each ISIN;
 # combine.yaml keeps the one LEI of a key that has one.
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:

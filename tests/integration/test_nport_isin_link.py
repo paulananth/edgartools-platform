@@ -19,6 +19,7 @@ from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import adapters
+from edgar_warehouse.mdm.clean.evidence import subject_key
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
@@ -51,7 +52,7 @@ def policy_body() -> dict:
     return body
 
 
-def prepared_records(root: Path) -> list[dict]:
+def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[dict]:
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
     body = io.BytesIO()
@@ -60,7 +61,7 @@ def prepared_records(root: Path) -> list[dict]:
             cusip.COLUMNS, *([*h, ""] for h in HOLDINGS), WITH_CUSIP]) + "\n")
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2, lookups={"isin": PAIRS})
-    issuers = cusip.read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": PAIRS, "umbrella": []})
+    issuers = cusip.read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": PAIRS, "umbrella": list(umbrella)})
     securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
@@ -104,3 +105,12 @@ def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
             "AND body->>'type'='ISSUED_BY'")).all()]
     (only,) = periods
     assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.Q2, "observed")]
+
+
+def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):
+    """Ticket 23 on the ISIN table: TWO's holdings name two LEIs; with the
+    second a sub-fund of the first, TWO has one issuer, the umbrella."""
+    records = prepared_records(tmp_path, umbrella=([OTHER, LEI],))
+    targets = {r["provenance"]["record_key"]: [l["target_subject"] for l in r.get("relationships") or []
+                                               if l["type"] == "ISSUED_BY"] for r in records}
+    assert targets == {ONE: [subject_key(cusip.GLEIF, LEI)], TWO: [subject_key(cusip.GLEIF, LEI)], NONE: []}

@@ -76,11 +76,11 @@ def combine(store, root, contract_file, readings):
 
 
 def prepared_records(root: Path, period: str, revision: int | None = None,
-                     holdings: list[list[str]] = HOLDINGS, umbrella: list[list[str]] = ()) -> list[dict]:
+                     rows: list[list[str]] = HOLDINGS, umbrella: tuple[list[str], ...] = ()) -> list[dict]:
     """The quarter's Security assertions, through the real chain; `umbrella`
     pairs each fund LEI with the trust it is a sub-fund of."""
     store = Artifacts()
-    zipped = capture(root, holdings)
+    zipped = capture(root, rows)
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
     holdings = read(store, root / "holdings", "source.yaml", raw, period, lookups={"isin": []})
     issuers = read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": [], "umbrella": list(umbrella)})
@@ -195,12 +195,11 @@ def test_a_fund_series_counts_as_its_umbrella_trust(tmp_path):
     holdings = [["1", "Example Fund", LEI, "ETF", "ZZ0000013"],
                 ["2", "Example Fund", LEI, "ETF", "ZZ0000013"],
                 ["3", "Example Trust", trust, "ETF", "ZZ0000013"]]
-    pairs = [[LEI, trust]]
-    (linked,) = prepared_records(tmp_path / "with", Q2, holdings=holdings, umbrella=pairs)
+    pairs = ([LEI, trust],)
+    (linked,) = prepared_records(tmp_path / "with", Q2, rows=holdings, umbrella=pairs)
     def targets(record):
         return [l["target_subject"] for l in record.get("relationships") or [] if l["type"] == "ISSUED_BY"]
 
     assert targets(linked) == [subject_key(GLEIF, trust)]
-    (unpaired,) = prepared_records(tmp_path / "without", Q2, holdings=holdings)
+    (unpaired,) = prepared_records(tmp_path / "without", Q2, rows=holdings)
     assert targets(unpaired) == []
-

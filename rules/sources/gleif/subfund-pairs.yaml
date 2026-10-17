@@ -3,6 +3,7 @@
 # looks up, so a filed fund-series LEI counts as its umbrella trust's
 # (rebuild-priorities ticket 23; operator, 2026-10-17: "Umbrella trust
 # (Recommended)"). Two columns, no whole record: it feeds a lookup, not MDM.
+# One level only: an umbrella that is itself a sub-fund is not followed.
 source: gleif.relationships
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:
@@ -27,8 +28,8 @@ read:
               else: {value: {path: NO_SUCH_FIELD}}
           else: {value: {path: NO_SUCH_FIELD}}
       columns:
-        fund: {text: {path: RelationshipRecord.Relationship.StartNode.NodeID.$, transforms: [{case: upper}]}}
-        umbrella: {text: {path: RelationshipRecord.Relationship.EndNode.NodeID.$, transforms: [{case: upper}]}}
+        fund: {text: {path: RelationshipRecord.Relationship.StartNode.NodeID.$, transforms: [{case: upper}], null_if: [""]}}
+        umbrella: {text: {path: RelationshipRecord.Relationship.EndNode.NodeID.$, transforms: [{case: upper}], null_if: [""]}}
   stream:
     wrapper: relations
     container: zip
