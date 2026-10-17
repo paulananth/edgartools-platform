@@ -127,6 +127,11 @@ must not share an uncoordinated edit surface.
 
 ## Shared local data (operator, 2026-10-16)
 
+- Initial and daily source loads process the entire available source delivery
+  (operator: "always load everything from source"). Batch the work without
+  cohort/sample or changed-file-only selection; preserve idempotency. Read
+  [the load sequence](docs/initial-and-daily-source-load.md) before SEC, GLEIF
+  or OpenFIGI loads. Provider access remains subject to its existing authorization.
 - Use one permanent local PostgreSQL 16 server shared by all agents. It holds
   the MDM, RDM, silver, Rules, Bookkeeping and Change Journal databases.
   All agents look up the same Company identities in the shared MDM.
@@ -345,8 +350,9 @@ When the `edgartools` version is bumped, run the batch scripts in `scripts/batch
 ## SEC data idempotency
 
 SEC filing artifacts are treated as additive and immutable after they have been
-captured. Warehouse loaders must skip already loaded SEC files by default and
-only re-fetch when an operator passes an explicit `--force` repair flag.
+captured. Processing follows the full-source policy under "Shared local data"
+and preserves idempotency. Reprocessing retained bytes is separate from a
+provider re-fetch, which requires its existing authorization.
 
 ## Schema conventions
 

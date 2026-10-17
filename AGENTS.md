@@ -72,6 +72,11 @@ Claude and Codex may work on this repository independently, but they must not sh
 
 ## Shared local data (operator, 2026-10-16)
 
+- Initial and daily source loads process the entire available source delivery
+  (operator: "always load everything from source"). Batch the work without
+  cohort/sample or changed-file-only selection; preserve idempotency. Read
+  [the load sequence](docs/initial-and-daily-source-load.md) before SEC, GLEIF
+  or OpenFIGI loads. Provider access remains subject to its existing authorization.
 - Use one permanent local PostgreSQL 16 server shared by all agents. It holds
   the MDM, RDM, silver, Rules, Bookkeeping and Change Journal databases.
   All agents look up the same Company identities in the shared MDM.
@@ -299,7 +304,8 @@ Notes:
 - Raw provider download (capture) and bronze persistence are implemented by this repo, not by `edgartools`: a capture is a Bookkeeping worker (`edgar_warehouse/workers/provider_capture.py`).
 - Every feed is read by the source engine from its rules (`rules/sources/<source>/`), with zero provider requests at read time; the old per-form parsers are deleted. The data skills (`skills/data-platform/`, `skills/data-onboarding/`) hold the how-to.
 - SEC filing artifacts are additive and immutable after capture.
-- Loaders should skip already loaded SEC files by default. Use explicit `--force` only for operator repair.
+- Processing follows the full-source policy under "Shared local data"; reusing
+  immutable captures does not mean skipping their records during processing.
 - When bumping `edgartools`, run the relevant scripts in `scripts/batch/` to smoke-test parser surfaces.
 
 ## AWS Terraform Model
@@ -597,4 +603,4 @@ from edgar.entity.constants import _classify_is_individual
 - Do not broaden IAM policies casually. Keep runner roles service-assumed and scoped.
 - Do not remove S3 object/versioning/encryption/public-access protections.
 - Do not destroy prod bronze storage without an explicit operator request and a reviewed migration plan.
-- Preserve loader idempotency: default behavior skips already captured SEC files; repair paths require `--force`.
+- Preserve loader idempotency when reprocessing a full source delivery.
