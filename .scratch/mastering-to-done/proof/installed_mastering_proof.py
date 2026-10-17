@@ -26,6 +26,7 @@ second pass changes nothing, and the bindings equal the checkout replay's
 (`/private/tmp/counts-pin-20261009.json`, 9216cc18…).
 
     PG16_SERVER=pgserver COMPANY_PROOF_OUT=<report.json> PATH="$HOME/.cargo/bin:$PATH" \\
+      COMPANY_PROOF_PAIRS=<pairs.json, optional: each Company's CIK and bound LEI, kept on this machine> \\
       uv run --extra mdm --with pgserver pytest -q -s -p no:randomly \\
       .scratch/mastering-to-done/proof/installed_mastering_proof.py
 
@@ -72,7 +73,9 @@ SEC, GLEIF = old.SEC, old.GLEIF
 PROFILES = ("source.read", "source.combine", "mdm.prepare")
 LIMIT = "1000"  # a worker claims one unit at a time, up to this many
 MIN_FREE = 3 * 1024**3
-PIN = json.loads(Path("/private/tmp/counts-pin-20261009.json").read_text())  # the checkout replay's counts
+# The checkout replay's counts, compared when the file is on this machine (it was kept in /private/tmp).
+_PIN_FILE = Path(os.environ.get("COMPANY_PROOF_PIN", "/private/tmp/counts-pin-20261009.json"))
+PIN = json.loads(_PIN_FILE.read_text()) if _PIN_FILE.exists() else None
 
 MASTERING = files.source("sec.submissions.company")["bookkeeping"]["targets"]["mastering"]["steps"]
 assert [s["name"] for s in MASTERING][-2:] == ["merge", "processed"]  # ticket 22: then the Change Journal
@@ -245,6 +248,15 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         timings["gleif_first"] = minutes()
     first, first_bindings = snapshot()
     first_writes = writes()
+    if pairs := os.environ.get("COMPANY_PROOF_PAIRS"):
+        # Ticket 09: each Company's CIK and the LEI the switched-on rules bound to it, on this
+        # machine only (real identifiers never enter the repository).
+        with mdm_reader.connect() as conn:
+            found = conn.execute(text(
+                "SELECT s.record_key, g.record_key FROM mdm.stage_record s JOIN mdm.stage_record g "
+                "ON g.entity_id = s.entity_id AND g.source_code = :gleif WHERE s.source_code = :sec"),
+                {"sec": SEC, "gleif": GLEIF}).all()
+        Path(pairs).write_text(json.dumps(dict(sorted(found)), indent=0))
     old.say(stage="first pass", writes=first_writes, **first)
 
     # Ticket 22: the same documents prepared again name no file and start no run.
@@ -295,7 +307,7 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         "writes": {"after_first_pass": first_writes, "after_second_pass": second_writes},
         "recovery": recovery, "changed_data": changed_data, "minutes_since_start": timings,  # cumulative: each stage's end
         "bindings_equal_checkout_replay": first_bindings == old.CHECKOUT_BINDINGS if only != "sec" and whole else None,
-        "checkout_replay": {k: v for k, v in PIN["after_first_pass"].items() if k in first},
+        "checkout_replay": {k: v for k, v in PIN["after_first_pass"].items() if k in first} if PIN else None,
         "minutes": minutes(),
     }
     out.write_text(json.dumps(report, sort_keys=True, indent=1) + "\n")
@@ -312,11 +324,12 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         if only != "sec":
             assert first["companies_open"] == 6414 and first["stage_bound"].get(GLEIF) == 3052
             assert report["bindings_equal_checkout_replay"] is True
-            replay = PIN["after_first_pass"]
-            for key in ("companies_open", "stage_records", "stage_bound", "decisions_by_rule"):
-                assert first[key] == replay[key], key
-            # The replay counted the records GLEIF cannot bind apart; here they are open reviews.
-            assert first["open_reviews"] == {**replay["open_reviews"], **PIN["gleif_set_aside"]}
+            if PIN:
+                replay = PIN["after_first_pass"]
+                for key in ("companies_open", "stage_records", "stage_bound", "decisions_by_rule"):
+                    assert first[key] == replay[key], key
+                # The replay counted the records GLEIF cannot bind apart; here they are open reviews.
+                assert first["open_reviews"] == {**replay["open_reviews"], **PIN["gleif_set_aside"]}
 
 
 def kill_and_recover(python, entry, worker, root, run_id, items, snapshot) -> dict:
