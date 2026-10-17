@@ -78,6 +78,7 @@ functions. Migration prerequisites apply before replacing the current owner.
 
 | Responsibility | Current owner and evidence | Recommended owner | Migration prerequisites / skill impact |
 |---|---|---|---|
+| Complete/bounded MDM manifest execution, mapping pins and preview | Python [execution](../../edgar_warehouse/mdm/clean/execution.py), `execute_manifest`; [connections](../../edgar_warehouse/mdm/clean/connections.py) owns environment-backed restricted-role setup; [merge worker](../../edgar_warehouse/workers/mdm_merge.py) supplies transport, lease authority and independent receipts | Retain Python execution behind one module interface | Full execution finishes committed manifest batches; bounded invocation and single-batch preview retain their existing semantics. Publication/review completion is reported separately. Preserve frozen mappings, source evidence, destination fencing and atomic commits. |
 | Configured parsing, projection, coercion, assertions and record deferral | Rust: [source-contract](../../crates/source-contract/src/lib.rs), `Engine`; Python boundary: [SourceEngine](../../edgar_warehouse/rules/source_engine.py) | Rust kernel behind Python facade | Preserve types, rejection codes, ordinals, context and lookup bounds. Update READING only when interface, configuration, limits or verification changes. |
 | JSON/XML framing and native record projection | Rust scans through [PyO3](../../crates/source-contract/src/python.rs), `scan_json_array` / `scan_xml_records`; Python supplies streams and callbacks | Rust computation; Python transport, authentication and publication | Exhaust valid EOF and authenticate all input before publishing. GIL release does not remove callback or row-materialization costs. No interface change here. |
 | Keyed collection, sorting, distinctness and local joins | Rust: [combination](../../crates/source-contract/src/combination.rs), `combine_tables`; Python [source_combine](../../edgar_warehouse/workers/source_combine.py), `_documents`, authenticates and bounds input/output | Rust configured core; Python worker/caller | Preserve stable sorting, first/last/one, exact typed identities, null policy and aggregate budgets. Python canonical callbacks/payload access still hold the GIL; Rust scalar sorts release it. COMBINING records retained Python object overhead. See join qualification before performance claims. |
@@ -99,6 +100,13 @@ These ownership requirements do not establish that every existing authority path
 is fully qualified. The [Bookkeeping plan](../../.planning/workstreams/bookkeeping-p2-autoplan/PLAN.md)
 and [follow-ups](../../TODOS.md) retain separate P1 work on authenticating destination
 fencing proofs and complete runtime fingerprints; this map does not close either.
+
+The merge worker's runtime fingerprint includes execution, connection setup and
+the scoped Python/native execution dependencies; it excludes command presentation
+in `mdm/clean/cli.py`. A CLI-only edit therefore leaves this fingerprint stable.
+The module extraction itself changes the fingerprint: an in-flight run must
+finish with its pinned runtime, rather than relabel changed code with the old
+digest. This is a local code refactor, not evidence of an AWS or Snowflake rollout.
 
 ## Existing database computation
 

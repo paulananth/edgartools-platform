@@ -42,8 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.run import RunCoordinator
-from edgar_warehouse.mdm.clean.cli import execute_manifest
+from edgar_warehouse.mdm.clean.execution import execute_manifest
 from edgar_warehouse.mdm.clean.company_source import (
     CONTRACT,
     POLICY,
@@ -238,7 +237,6 @@ def test_proving_run(database, command_databases, tmp_path):
         conn.execute(text("SELECT pg_stat_reset()"))
 
     store = Store(database.application)
-    coordinator = RunCoordinator(store)
 
     # Each bundle is applied as soon as it exists (a bundle directory appears
     # whole, by rename), in the order given; the chunks share no CIK, so the
@@ -263,7 +261,6 @@ def test_proving_run(database, command_databases, tmp_path):
         started = time.monotonic()
         result = execute_manifest(
             store,
-            coordinator,
             path=str(target / "manifest.json"),
             run_id=str(uuid4()),
             stage="mastering",
@@ -296,7 +293,6 @@ def test_proving_run(database, command_databases, tmp_path):
     for _, path, _ in manifests:
         execute_manifest(
             store,
-            coordinator,
             path=str(path),
             run_id=str(uuid4()),
             stage="mastering",

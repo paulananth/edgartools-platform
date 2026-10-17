@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.cli import batch_input
+from edgar_warehouse.mdm.clean.execution import batch_input
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files

@@ -38,11 +38,10 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from edgar_warehouse.mdm.clean import names
-from edgar_warehouse.mdm.clean.cli import execute_manifest
+from edgar_warehouse.mdm.clean.execution import execute_manifest
 from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
 from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, record_evidence
 from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.run import RunCoordinator
 from edgar_warehouse.mdm.clean.store import Store, digest, register_policy
 from edgar_warehouse.rules import files
 from sqlalchemy import text
@@ -103,7 +102,7 @@ def test_counts_run(database, tmp_path):
         register_dataset(conn, GLEIF, database.registry, dataset_contract("level1"))
         policy = register_policy(conn, POLICY)
     store = Store(database.application)
-    coordinator, stage = RunCoordinator(store), MergeStage(store)
+    stage = MergeStage(store)
     bundles = []
     for n in range(1, 8):
         source, copy = work / "bundles" / f"chunk{n}", tmp_path / f"chunk{n}"
@@ -120,7 +119,7 @@ def test_counts_run(database, tmp_path):
     def apply_sec() -> None:
         for bundle in bundles:
             started = time.monotonic()
-            execute_manifest(store, coordinator, path=str(bundle / "manifest.json"), run_id=str(uuid4()),
+            execute_manifest(store, path=str(bundle / "manifest.json"), run_id=str(uuid4()),
                              stage="mastering", limit=1000)
             timings.append({"sec": bundle.name, "seconds": round(time.monotonic() - started, 1)})
             print(json.dumps(timings[-1]), flush=True)

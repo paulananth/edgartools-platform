@@ -15,8 +15,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.cli import execute_manifest
-from edgar_warehouse.mdm.clean.run import RunCoordinator
+from edgar_warehouse.mdm.clean.execution import execute_manifest
 from edgar_warehouse.mdm.clean.store import Conflict, Store, register_policy
 from tests.support.rules_authority import register_dataset
 
@@ -59,7 +58,7 @@ def correct_mapping(database, contract):
 
 def run(database, path, run_id, limit):
     store = Store(database.application)
-    return execute_manifest(store, RunCoordinator(store), path=str(path), run_id=run_id,
+    return execute_manifest(store, path=str(path), run_id=run_id,
                             stage="mastering", limit=limit)
 
 

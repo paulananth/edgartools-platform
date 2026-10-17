@@ -42,8 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.run import RunCoordinator
-from edgar_warehouse.mdm.clean.cli import execute_manifest
+from edgar_warehouse.mdm.clean.execution import execute_manifest
 from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY, SOURCE_CODE
 from edgar_warehouse.mdm.clean.gleif_source import dataset_contract, inspect_archive, record_evidence
 from edgar_warehouse.mdm.clean.merge import MergeStage
@@ -131,7 +130,6 @@ def test_proving_run(database, tmp_path):
         register_dataset(conn, GLEIF, database.registry, dataset_contract("level1"))
         policy = register_policy(conn, POLICY)
     store = Store(database.application)
-    coordinator = RunCoordinator(store)
     stage = MergeStage(store)
 
     bundles = [work / "bundles" / f"chunk{n}" for n in range(1, 8)]
@@ -140,7 +138,7 @@ def test_proving_run(database, tmp_path):
     def apply_sec() -> None:
         for bundle in bundles:
             started = time.monotonic()
-            result = execute_manifest(store, coordinator, path=str(bundle / "manifest.json"),
+            result = execute_manifest(store, path=str(bundle / "manifest.json"),
                                       run_id=str(uuid4()), stage="mastering", limit=1000)
             timings.append({"sec": bundle.name, "seconds": round(time.monotonic() - started, 1),
                             "records": result.get("records_processed")})

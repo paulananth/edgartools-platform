@@ -124,7 +124,7 @@ def _engine(store: Store = STORES["MDM"], subject: str | None = None):
 
     from sqlalchemy import event
 
-    from edgar_warehouse.mdm.clean.cli import engine_from_env
+    from edgar_warehouse.mdm.clean.connections import engine_from_env
 
     if not os.environ.get(store.variable):
         if store.name == "RDM" and subject:  # a misspelled kind lands here too
