@@ -198,7 +198,7 @@ never suggest a global prune or deleting all pg16 containers.
 
 Resolve the effective Docker endpoint without changing user context. Reject ssh,
 tcp/http or other remote endpoints before creation; do not echo endpoint values.
-Support existing local Unix sockets for Colima/Docker Desktop on macOS and the
+Support existing local Unix sockets for the configured Docker context on macOS and the
 local Docker Unix socket on Linux; validate the resolved socket path/type. Pass
 that validated local endpoint explicitly to every Docker subprocess so subsequent
 environment/context changes cannot redirect cleanup. Docker daemon unavailability

@@ -129,7 +129,7 @@ per-image sizes). `edgartools-dev-images` has 0 images despite existing (created
 2026-08-08). Cost Explorer's `Amazon EC2 Container Registry (ECR)` line item is
 `$0.0017–0.0073/day` across every sampled day — negligible, and already covered by CLAUDE.md's
 existing "Clean up local images before a build" guidance (that guidance is about local
-Colima disk, not ECR billing, but the same old-tag cleanup habit keeps ECR storage bounded
+Docker disk, not ECR billing, but the same old-tag cleanup habit keeps ECR storage bounded
 too).
 
 ### 6. S3 — the actual driver (`aws s3api list-buckets` + CloudWatch `BucketSizeBytes`)

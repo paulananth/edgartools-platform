@@ -8,7 +8,7 @@
 
 Phase 10 delivers the first end-to-end operational proof that `parse-adv-bronze` (Phase 9) correctly populates silver ADV tables (`sec_adv_filing`, `sec_adv_private_fund`) and fully unblocks MDM adviser and fund entity loaders — including running the relationship pipeline through to Neo4j sync.
 
-The phase runs locally against dev S3, local Colima Postgres, and local Colima Neo4j. It produces no new application code; all deliverables are operational: a validated pipeline run and a documented evidence artifact (`10-VALIDATION-NOTES.md`).
+The phase runs locally against dev S3, local Postgres, and local Neo4j. It produces no new application code; all deliverables are operational: a validated pipeline run and a documented evidence artifact (`10-VALIDATION-NOTES.md`).
 
 **In scope:**
 - Pre-run selection of 50 ADV accessions from silver (with storage-path pre-filter)
@@ -69,11 +69,11 @@ The phase runs locally against dev S3, local Colima Postgres, and local Colima N
   7. A `## Next Steps` section pointing to Phase 5 resume: `mdm-backfill-relationships → mdm-sync-graph → mdm-verify-graph` for the full adviser/fund graph (note: the Phase 10 run covers a 50-accession sample; full-scale graph sync is Phase 5 resume)
 - **D-18:** `STATE.md` must be updated to reflect Phase 10 completion with row count summary.
 
-### Environment (local Colima)
+### Environment (local Docker)
 - **D-19:** All steps run locally: `edgar-warehouse` CLI on dev machine, `WAREHOUSE_STORAGE_ROOT=s3://edgartools-dev-warehouse-077127448006/warehouse`.
 - **D-20:** Silver DuckDB is at `$WAREHOUSE_STORAGE_ROOT/silver.duckdb` (CLI syncs locally before reads/writes).
-- **D-21:** MDM Postgres: `MDM_DATABASE_URL=postgresql://postgres:test@localhost:5432/mdm` (local Colima). Plan includes startup steps: `colima start` and the Postgres container `docker run` command.
-- **D-22:** Neo4j: local Colima container (`NEO4J_URI=bolt://localhost:7687`). Plan includes startup steps.
+- **D-21:** MDM Postgres: `MDM_DATABASE_URL=postgresql://postgres:test@localhost:5432/mdm` (local Docker). Plan includes a Postgres container `docker run` command.
+- **D-22:** Neo4j: local Docker container (`NEO4J_URI=bolt://localhost:7687`). Plan includes startup steps.
 - **D-23:** No VPN or port-forwarding to VPC services required.
 - **D-24:** Plan starts with local environment startup steps (raw `docker run` commands, not a docker-compose file).
 

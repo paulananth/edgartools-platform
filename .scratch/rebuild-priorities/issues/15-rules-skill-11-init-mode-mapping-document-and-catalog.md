@@ -83,7 +83,7 @@ A **data catalog** lists every source, dataset and MDM field in one place.
   the stewards; only an agreed workbook's rules are saved.
 - **Catalog:** OpenMetadata, published from the rules: each source and
   dataset, each MDM field with the sources that fill it, in priority order.
-  It runs first on a laptop (Colima); hosting in AWS is a later decision.
+  It runs first on a laptop (Docker); hosting in AWS is a later decision.
 
 ## Checklist (times ET)
 
@@ -105,7 +105,7 @@ A **data catalog** lists every source, dataset and MDM field in one place.
   read as a formula; `diff` by row position; `--only` matching folder
   names), a per-field "Who wins" sheet, conditions in plain words, every
   exception check listed as critical, byte-stable workbooks.
-- [x] OpenMetadata on Colima; publish the catalog: moved to ticket 13
+- [x] OpenMetadata; publish the catalog: moved to ticket 13
   (`13-publish-the-data-catalog.md`). The per-field winner was already
   possible in the rules; ticket 12 corrected that claim.
 - [x] Three-axis review, PR, CI; merged as #743.

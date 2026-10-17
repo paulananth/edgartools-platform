@@ -1,7 +1,7 @@
 # Local PostgreSQL 16 for Clean MDM
 
-Operator note for other agents on this Mac. The live database is a Colima
-Docker volume, not git. This file is the recipe and the last observed state.
+Operator note for other agents on this Mac. The live database is a Docker
+volume, not git. This file is the recipe and the last observed state.
 
 Snowflake is unavailable for this workstream (trial ended on
 `PRJEDJU-QJB05385`). Test warehouse → silver → MDM mastering locally against
@@ -17,7 +17,6 @@ Earlier DSN/provision PR: `grok/clean-mdm-local-postgres` (#655)
 Same instance, four databases. Password `test` is local-only.
 
 ```bash
-export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
 export MDM_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/mdm"
 export BOOKKEEPING_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/bookkeeping"
 export CHANGE_LEDGER_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/change_ledger"

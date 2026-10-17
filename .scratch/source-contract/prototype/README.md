@@ -10,7 +10,7 @@ spec (ticket 08).
 ```bash
 cd .scratch/source-contract/prototype
 ./source prove sources/form345 --gate --proof-dir rules_db   # Proving Run: validate → cases → checks → gate
-./source prove sources/gleif   --gate --proof-dir rules_db   # includes one merge case (needs Colima + postgres:16-alpine)
+./source prove sources/gleif   --gate --proof-dir rules_db   # includes one merge case (needs Docker + postgres:16-alpine)
 ./source prove sources/gleif --json                          # the agent-facing output
 ./source mapdoc sources/form345                              # generated Mapping Document
 uv run --project ../../.. --offline --with ruamel.yaml --with jsonschema python engine/selftest.py   # as-of lookup

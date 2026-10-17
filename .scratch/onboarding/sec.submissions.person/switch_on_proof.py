@@ -12,7 +12,6 @@ Then everything again: the second pass must change nothing. Zero requests leave
 the machine; the report holds counts only (names and CIKs stay local).
 
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/person-switch-on \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly .scratch/onboarding/sec.submissions.person/switch_on_proof.py
 """
 
@@ -54,7 +53,6 @@ COMPANY, OWNER, PERSON = ownership.COMPANY, ownership.OWNER, person_feed.SOURCE_
 AS_OF = "2026-10-14T00:00:00+00:00"
 MAX_RECORDS, MAX_BYTES = 1000, 12 * 1024 * 1024
 
-
 def people_by_source(conn) -> dict:
     """How many Persons each combination of feeds states."""
     rows = conn.execute(text(
@@ -62,7 +60,6 @@ def people_by_source(conn) -> dict:
         "FROM mdm.stage_record s JOIN mdm.master_entity m ON m.entity_id = s.entity_id "
         "WHERE m.kind = 'person' GROUP BY s.entity_id")).all()
     return dict(sorted(Counter(r[0] for r in rows).items()))
-
 
 def test_switch_on_proof(database):
     work = Path(os.environ["PROVING_WORK"]).expanduser()

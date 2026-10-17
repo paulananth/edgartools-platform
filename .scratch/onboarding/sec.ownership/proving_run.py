@@ -14,7 +14,6 @@ a copy of the policy in the disposable database. Then everything is applied
 again; the second pass must change nothing. The report holds counts only.
 
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/ownership \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly .scratch/onboarding/sec.ownership/proving_run.py
 """
 
@@ -58,11 +57,9 @@ AS_OF = "2026-10-13T00:00:00+00:00"
 MAX_RECORDS, MAX_BYTES = 1000, 12 * 1024 * 1024
 MEASURED = Path(__file__).with_name("measure.json")
 
-
 def bound(n: int) -> float:
     """The Wilson lower bound of n correct of n, rounded down as the policy checks it."""
     return math.floor(wilson_lower_bound(n, n, 0.975) * 1e6) / 1e6
-
 
 def proof(approval: dict) -> dict:
     measured = json.loads(MEASURED.read_text())
@@ -74,7 +71,6 @@ def proof(approval: dict) -> dict:
             "lower_bound": bound(n),
             "adversarial": {"fixture_sha256": sha, **measured["adversarial"]},
             "cohort": {"by_step": steps, "files": {"measure.json": sha}}, **approval}
-
 
 def proving_policy(approval: dict) -> dict:
     """The repo's merge rules with the two ownership rules switched on for this run."""
@@ -97,7 +93,6 @@ def proving_policy(approval: dict) -> dict:
         "activation": "deterministic"}) if (entry["kind"], entry["family"], entry["rule_id"]) not in active)]
     return body
 
-
 def filings() -> list[tuple[str, dict]]:
     """Each local filing's tables, read by the source extract for its shape."""
     folder = files.ROOT / "sources" / "sec.ownership"
@@ -116,7 +111,6 @@ def filings() -> list[tuple[str, dict]]:
         out.append((hashlib.sha256(raw).hexdigest(), tables))
     return out
 
-
 def companies(issuers: set[int]) -> list[dict]:
     """The cm27 Companies the filings name as issuers."""
     rows, seen = [], set()
@@ -129,7 +123,6 @@ def companies(issuers: set[int]) -> list[dict]:
                 rows.append(row)
     return rows
 
-
 def read(row: dict, source_code: str, contract: dict, policy: dict, publication: dict) -> tuple[str, dict]:
     try:
         return "assertions", normalize(row, source_code=source_code, contract=contract,
@@ -141,7 +134,6 @@ def read(row: dict, source_code: str, contract: dict, policy: dict, publication:
             reason=exc.reason, raw_record=row, probable_kind=exc.probable_kind,
             provenance={"artifact_sha256": publication["artifact_sha256"], "member": publication["member"],
                         "adapter_version": contract["adapter"]["version"], **exc.detail})
-
 
 def counts(conn) -> dict:
     one = lambda sql: conn.execute(text(sql)).scalar()
@@ -160,7 +152,6 @@ def counts(conn) -> dict:
                                    "FROM mdm.current_record WHERE object_type='relationship'"),
     }
 
-
 def ciks_by_kind(conn) -> dict[str, Counter]:
     """How many entities of each kind hold each CIK."""
     out: dict[str, Counter] = {}
@@ -169,7 +160,6 @@ def ciks_by_kind(conn) -> dict[str, Counter]:
         "JOIN mdm.master_entity m ON m.entity_id = s.entity_id")).all():
         out.setdefault(kind, Counter())[cik] += 1
     return out
-
 
 def test_proving_run(database):
     work = Path(os.environ["PROVING_WORK"]).expanduser()

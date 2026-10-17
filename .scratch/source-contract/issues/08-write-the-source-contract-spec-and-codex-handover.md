@@ -23,7 +23,7 @@ Send together in one note (operator, 2026-09-21), not piecemeal:
    Codex (`.scratch/handover/2026-09-20-claude-to-codex-mastering-policy-language.md:21`).
 2. **A readiness wait of at least 30 s** in the shared Postgres fixture
    (`tests/integration/test_clean_mdm_postgres.py:65-73`, ~8 s today; 4 of 7
-   runs failed on Colima).
+   runs failed locally).
 3. **A named offline registry authority** for local tests
    (`docs/specs/mdm/local-operations.md:46-47` forbids manufacturing
    activation authority).

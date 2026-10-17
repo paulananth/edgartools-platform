@@ -50,7 +50,7 @@
 
 12. **Is the merge case worth writing when the source wins no field?**
     Where I looked: §15 and §13.2a.
-    What I assumed: yes, for `bound` and `binding_required` only, with no `winner` line, because this source cannot win `name`. Docker (Colima) was available, and the case passed in about 24 s.
+    What I assumed: yes, for `bound` and `binding_required` only, with no `winner` line, because this source cannot win `name`. Docker (Docker) was available, and the case passed in about 24 s.
 
 13. **What should I do about `allow_unknown_effective` when I cannot touch the policy?**
     Where I looked: §13.3 says `effective_time: unknown` needs the policy to be given `allow_unknown_effective`.

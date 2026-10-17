@@ -52,7 +52,7 @@ Verified twice, independently: the full test suite (`tests/acquisition/
 test_facade.py`, `tests/acquisition/test_source_family_registry.py`,
 `tests/application/test_capture_filing_artifact_command.py`,
 `tests/integration/test_acquisition_ledger_postgres.py` against real
-Postgres via Docker/Colima), and a manual end-to-end smoke test against
+Postgres via Docker), and a manual end-to-end smoke test against
 real infrastructure (not mocks): an ephemeral `postgres:16-alpine`
 container with migration `013_acquisition_ledger.sql` applied fresh, and a
 real live SEC filing (Apple's latest Form 4). Confirmed

@@ -8,7 +8,7 @@ Clean MDM files were read only. Nothing under `edgar_warehouse/mdm/clean/`, `doc
 ## Answer in brief
 
 - **Yes, but only against a real PostgreSQL 16.** There is no SQLite or in-memory path. A disposable
-  `postgres:16-alpine` container on Colima, bound to `127.0.0.1`, is enough. It needs no network once the
+  `postgres:16-alpine` container locally, bound to `127.0.0.1`, is enough. It needs no network once the
   image is pulled and the uv cache is warm.
 - **Main limit on what a test can claim:** the Merge Stage does not choose bindings today. Automatic rules
   are rejected, so "the engine bound this record to identity X" cannot be tested. A test *can* check that a
@@ -121,7 +121,7 @@ fixture in `tests/mdm/conftest.py:88-102` serves the legacy MDM model, not `mdm_
 - The spec's own acceptance runner uses the same approach, "fails rather than skips missing prerequisites"
   (`local-operations.md:9-12`). It needs no Snowflake and no network source (`local-operations.md:22-24`).
 
-### Measured runtime (this laptop, Colima, `postgres:16-alpine` = PostgreSQL 16.15)
+### Measured runtime (this laptop, Docker, `postgres:16-alpine` = PostgreSQL 16.15)
 
 | Run | Result | pytest time | Notes |
 | --- | --- | --- | --- |
@@ -144,12 +144,12 @@ Slowest steps in the passing full run:
 | Per-test `database` setups | 2.8-7.5 s |
 
 Wall-clock time for the Postgres runs varied from 29 s to 1170 s. The gaps outside pytest's own session
-time happened on the first cold venv build and during heavy Colima load. They were not reproduced in a
+time happened on the first cold venv build and during heavy Docker load. They were not reproduced in a
 later timestamped run (83 s wall for a 61 s session).
 
 **Readiness defect:** the fixture waits about 8 s (`test_clean_mdm_postgres.py:65-73`). The container needs
 about 16 s here (probe) and took 14-28 s inside the suite. As a result, **4 of 7 container-starting
-invocations failed at setup.** This is a steady shortfall in the wait budget on Colima, not a random flake.
+invocations failed at setup.** This is a steady shortfall in the wait budget locally, not a random flake.
 `evidence.md:22-24` recorded 116 passing in 52.35 s on a faster setup. Any "one command" runner needs its
 own longer readiness budget. It must not reuse this fixture as it stands.
 
@@ -270,7 +270,7 @@ seed to be committed first, because preview runs against the current generation.
 No CLI path, no Bookkeeping and no change-ledger database.**
 
 1. **Prerequisites (one time, done outside the check):**
-   - Colima is running.
+   - Docker is running.
    - `postgres:16-alpine` has been pulled.
    - `uv sync --frozen --extra s3 --extra mdm-runtime` is done.
 

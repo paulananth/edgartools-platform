@@ -112,7 +112,6 @@ then found:
 - **Checklist:** keep the ticket checklist live, with ET times and how each
   part was verified.
 - **Tests:** PG16 tests use
-  `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock`. The `fastapi`
   import failures in `tests/mdm/test_runtime_ops.py`, `test_api.py` and
   `test_temporal_graph_queries.py` are the known baseline.
 

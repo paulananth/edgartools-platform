@@ -62,7 +62,7 @@
     "Do not put image digests, workflow rollout, schedules, or EDGAR identity values into AWS Terraform inputs",
     "Do not remove S3 object/versioning/encryption/public-access protections",
     "Large files (runtime.py, silver.py, gold.py) must be read in chunks before editing",
-    "Use Colima on macOS for local Docker; do not introduce other container build/runtime stacks",
+    "Use the Docker context already configured; do not introduce other container build/runtime stacks",
     "S3 backend state locking uses use_lockfile=true; no DynamoDB lock table required",
     "prod uses protected storage; bronze bucket has prevent_destroy=true",
     "Runner roles must be service-assumed; do not create runner access keys"

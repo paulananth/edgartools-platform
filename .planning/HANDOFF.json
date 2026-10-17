@@ -127,11 +127,6 @@
         "total_cik_limit": 2,
         "artifact_policy": "skip"
       }
-    },
-    {
-      "type": "local service",
-      "name": "Colima",
-      "status": "running"
     }
   ],
   "required_reading": [

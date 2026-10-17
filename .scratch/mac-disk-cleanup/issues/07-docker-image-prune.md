@@ -10,7 +10,7 @@ Prune old Docker images; keep warehouse-prod / mdm-prod.
 
 ## Answer
 
-After Colima delete+recreate at 20 GiB, Docker has **zero images**. No prune needed.
+After Docker delete+recreate at 20 GiB, Docker has **zero images**. No prune needed.
 
 To restore only what you need later (example):
 

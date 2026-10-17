@@ -13,7 +13,6 @@ applied again; the second pass must change nothing. Counts only.
 
     PREPARED_REGISTRANT=~/edgar-local-tmp/nreg/mdm \\
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/nport-registrant \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly .scratch/onboarding/sec.nport/registrant_proving_run.py
 """
 
@@ -50,7 +49,6 @@ RULE = "nport-registrant-cik"
 COMPANY, REGISTRANT = "sec.submissions.company.v1", "sec.nport.registrant.v1"
 COHORT = Path.home() / ".local/share/edgartools/clean-mdm/proving/cm27/bundles"
 
-
 def proving_policy() -> dict:
     """The repo's merge rules with the registrant's matching rule switched on for this run."""
     body = files.policy()
@@ -60,7 +58,6 @@ def proving_policy() -> dict:
             "kind": "company", "family": "binding", "rule_id": RULE,
             "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"})
     return body
-
 
 def read(row, code, contract, policy, publication):
     try:
@@ -73,7 +70,6 @@ def read(row, code, contract, policy, publication):
             provenance={"artifact_sha256": publication["artifact_sha256"], "member": publication["member"],
                         "adapter_version": contract["adapter"]["version"], **exc.detail})
 
-
 def registrants(prepared: Path):
     """(row, publication) for each prepared registrant record."""
     manifest = json.loads((prepared / "manifest.json").read_bytes())
@@ -82,7 +78,6 @@ def registrants(prepared: Path):
         for n, line in enumerate((prepared / data["path"]).read_bytes().splitlines(), 1):
             yield json.loads(line), {**data["publication"], "semantics": "patch", "artifact_sha256": data["sha256"], "member": data["path"],
                                      "record_locator": f"{data['sha256']}:line:{n}"}
-
 
 def cohort(ciks: set[int]):
     """(row, publication) for each cm27 SEC Company holding one of these CIKs."""
@@ -98,7 +93,6 @@ def cohort(ciks: set[int]):
                 yield row, {"publication_key": f"{member}@{sha}", "revision": 1, "artifact_sha256": sha,
                             "member": member, "record_locator": member}
 
-
 def counts(conn) -> dict:
     group = lambda sql: {str(k): v for k, v in conn.execute(text(sql)).all()}
     return {
@@ -110,20 +104,17 @@ def counts(conn) -> dict:
         "decisions": group("SELECT operation, count(*) FROM mdm.decision GROUP BY 1"),
     }
 
-
 def companies_by_feeds(conn) -> dict:
     return {str(k): v for k, v in conn.execute(text(
         "SELECT feeds, count(*) FROM (SELECT s.entity_id, string_agg(DISTINCT s.source_code, ' + ' "
         "ORDER BY s.source_code) AS feeds FROM mdm.stage_record s JOIN mdm.master_entity m "
         "ON m.entity_id = s.entity_id WHERE m.kind = 'company' GROUP BY 1) t GROUP BY 1")).all()}
 
-
 def cik_holders(conn) -> Counter:
     return Counter(value for value, _ in conn.execute(text(
         "SELECT DISTINCT s.reading->'identifiers'->>'cik', s.entity_id FROM mdm.stage_record s "
         "JOIN mdm.master_entity m ON m.entity_id = s.entity_id "
         "WHERE m.kind = 'company' AND s.reading->'identifiers' ? 'cik'")).all())
-
 
 def test_proving_run(database):
     work = Path(os.environ["PROVING_WORK"]).expanduser()

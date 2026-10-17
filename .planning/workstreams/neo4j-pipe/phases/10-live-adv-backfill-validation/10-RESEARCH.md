@@ -62,7 +62,7 @@ approach directly violates the milestone's locked constraint.
 - SEC alternate URL load validation stays in backlog Phase 999.1.
 - Phase 5 D-10: "Treat already-captured bronze primary XML as the prerequisite. If XML artifacts are absent, report the gap clearly — do not silently re-fetch SEC data."
 - Phase 5 D-14: "The test CIK must have both Forms 3/4/5 bronze AND ADV filing bronze already in S3."
-- Phase 5 D-16: MDM target for live tests is local Postgres via Colima.
+- Phase 5 D-16: MDM target for live tests is local Postgres locally.
 
 ### Claude's Discretion
 - How to structure the operator runbook update for MDM-ADV-03.
@@ -452,7 +452,7 @@ edgar-warehouse parse-adv-bronze --limit 10
 | DuckDB | Silver reads | ✓ | In uv.lock | — |
 | `uv` | Python execution | ✓ | Project-standard | — |
 | ADV bronze artifacts in S3 | MDM-ADV-01, MDM-ADV-02 live validation | **✗** | 0 ADV objects confirmed | Fork B (fixture) or Fork A (adviser bootstrap, requires constraint relaxation) |
-| Local Postgres via Colima | MDM adviser/fund load (live) | Unknown | Not verified | Colima setup in CLAUDE.md |
+| Local Postgres locally | MDM adviser/fund load (live) | Unknown | Not verified | Docker setup in CLAUDE.md |
 
 **Missing dependencies with no fallback:**
 - ADV bronze artifacts in S3 — this blocks MDM-ADV-01 and MDM-ADV-02 (live validation). No fallback that satisfies "live S3 ADV sample." Fork A or Fork B is required for these requirements.

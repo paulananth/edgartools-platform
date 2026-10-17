@@ -15,7 +15,6 @@ applied again; the second pass must change nothing. Counts only.
     PREPARED_13F=~/edgar-local-tmp/t13f/mdm \\
     PREPARED_NPORT=~/edgar-local-tmp/figi-attach \\
     PROVING_WORK=~/.local/share/edgartools/clean-mdm/proving/nport \\
-    DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \\
     uv run --no-sync pytest -q -s -p no:randomly .scratch/onboarding/sec.nport/proving_run.py
 """
 
@@ -54,7 +53,6 @@ FEEDS = (("sec.thirteenf.information_table", "sec.thirteenf.information_table.se
          ("sec.nport.security", "sec.nport.security.v1", "PREPARED_NPORT", "mdm-security"),
          ("sec.nport.security", "sec.nport.security_isin.v1", "PREPARED_NPORT", "mdm-security_isin"))
 
-
 def proving_policy(approval: dict) -> dict:
     """The repo's merge rules with N-PORT's three matching rules switched on for this run."""
     body = files.policy()
@@ -68,7 +66,6 @@ def proving_policy(approval: dict) -> dict:
                 "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"})
     return body
 
-
 def read(row, code, contract, policy, publication):
     try:
         return "assertions", normalize(row, source_code=code, contract=contract, publication=publication, policy=policy)
@@ -79,7 +76,6 @@ def read(row, code, contract, policy, publication):
             reason=exc.reason, raw_record=row, probable_kind=exc.probable_kind,
             provenance={"artifact_sha256": publication["artifact_sha256"], "member": publication["member"],
                         "adapter_version": contract["adapter"]["version"], **exc.detail})
-
 
 def counts(conn) -> dict:
     group = lambda sql: {str(k): v for k, v in conn.execute(text(sql)).all()}
@@ -94,7 +90,6 @@ def counts(conn) -> dict:
                                "jsonb_each(s.reading->'fields') f WHERE f.value <> 'null'::jsonb GROUP BY 1"),
     }
 
-
 def holders(conn, namespace: str) -> Counter:
     """How many Securities hold each identifier of a namespace."""
     return Counter(value for value, _ in conn.execute(text(
@@ -102,13 +97,11 @@ def holders(conn, namespace: str) -> Counter:
         "JOIN mdm.master_entity m ON m.entity_id = s.entity_id "
         "WHERE m.kind = 'security' AND s.reading->'identifiers' ? :ns"), {"ns": namespace}).all())
 
-
 def sources_per_security(conn) -> dict:
     return {str(k): v for k, v in conn.execute(text(
         "SELECT feeds, count(*) FROM (SELECT s.entity_id, string_agg(DISTINCT s.source_code, ' + ' "
         "ORDER BY s.source_code) AS feeds FROM mdm.stage_record s JOIN mdm.master_entity m "
         "ON m.entity_id = s.entity_id WHERE m.kind = 'security' GROUP BY 1) t GROUP BY 1")).all()}
-
 
 def test_proving_run(database):
     work = Path(os.environ["PROVING_WORK"]).expanduser()

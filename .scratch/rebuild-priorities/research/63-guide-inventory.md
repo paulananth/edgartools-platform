@@ -42,7 +42,7 @@ therefore runs without those rules today.
 | Hard-won operational rules | 97 | keep the Snowflake, Postgres-deployment and credential rules (about 30 lines); MDM store rules already live in the `mdm-engineering` skill and stay there | rules, not stories |
 | Known open items | 17 | move to `TODOS.md` | a backlog, not a rule |
 | Snowflake-side facts from the old pipeline | 23 | move to `docs/agents/snowflake.md` | reference for the target platform |
-| Development Commands, Image management, dbt smoke test | 26 + ~200 + 55 | move to `docs/agents/build-and-deploy.md`; the Colima recipes rewritten for OrbStack or dropped | recipes; Colima does not start since macOS 27 |
+| Development Commands, Image management, dbt smoke test | 26 + ~200 + 55 | move to `docs/agents/build-and-deploy.md`; Docker recipes use the context already configured | recipes |
 | gstack, Skill routing, the GoF and three-axis review rules | 44 + 46 | keep in CLAUDE.md (Claude's own); the three-axis rule is also in AGENTS.md's "GoF Design Review" | runtime-specific |
 | Agent skills (tracker, triage, domain docs) | 13 | keep (3 lines) | pointers |
 
@@ -52,7 +52,7 @@ therefore runs without those rules today.
 |---|---|---|---|
 | Scope | 15 | keep, its pipeline drawing updated to the rebuild (MDM, the data skills) | the drawing names only the old AWS path |
 | High-Value Files | 25 | move to `docs/agents/architecture.md` | reference |
-| Tooling Rules (`gh`, `uv`, ECR) | 12 | keep; the Colima lines become OrbStack or "a working Docker" | rules; Colima is broken |
+| Tooling Rules (`gh`, `uv`, ECR) | 12 | keep; Docker lines use the context already configured | rules |
 | GoF Design Review | 13 | keep | rule, both runtimes |
 | Runtime Settings | 22 | move to the build page; its `edgartools-dev-*` buckets are decommissioned | stale reference |
 | Data And Parser Notes | 8 | keep | rules |
@@ -65,7 +65,7 @@ therefore runs without those rules today.
 
 1. ECS cost sizing (old pipeline), CLAUDE.md: the retired pipeline's sizing study.
 2. AGENTS.md "Dev Snowflake Connection": dev Snowflake is decommissioned.
-3. The Colima recipes (both guides), unless kept for a machine where it works: it does not start on this one since macOS 27; OrbStack works.
+3. Docker recipes in both guides use the Docker context already configured.
 4. The dated incident narratives inside "Parallel Agent Workstreams" and "Git/GitHub text with backticks": their rules stay.
 
 Expected size: `AGENTS.md` about 200 lines, `CLAUDE.md` about 60 lines plus the

@@ -57,7 +57,7 @@ ticket 05's own framing.
 
 **Deferred, not part of this ticket:** the user separately asked mid-session to build a new
 prod warehouse image from PR #298 and redeploy it. That build hit two unrelated environment
-issues — this workstation's Colima daemon (containerd-snapshotter misconfiguration, then a
+issues — this workstation's Docker daemon (containerd-snapshotter misconfiguration, then a
 `--memory 8` request against an 8GB-total-RAM host that got the VM OOM-killed) and a
 pre-existing, unrelated CI OIDC trust failure blocking `deploy.yml` on the last 3 runs
 regardless of commit. Neither blocks this ticket — Proof 2 only needed two *distinct* already-

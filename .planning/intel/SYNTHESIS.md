@@ -49,7 +49,7 @@ Policy-locked decisions (8):
     source: CLAUDE.md
   DEC-006: Use uv for all Python dependency management
     source: CLAUDE.md, AGENTS.md
-  DEC-007: Use Colima on macOS for local Docker
+  DEC-007: Use the Docker context already configured
     source: CLAUDE.md, AGENTS.md
   DEC-008: Use AWS ECR only for deployable images
     source: CLAUDE.md, AGENTS.md
@@ -98,7 +98,7 @@ Total: 20
 
 Type breakdown:
   api-contract: 3 (edgartools version/import, SNOWFLAKE_ACCOUNT format, SERVING_EXPORT_ROOT trailing slash)
-  tooling: 3 (uv required, Colima required, Terraform CLI/provider version pins)
+  tooling: 3 (uv required, configured Docker context, Terraform CLI/provider version pins)
   security: 5 (no runner IAM user, no secrets in VCS, no S3 protections removed, Neo4j Fleet tokens, cloud workload identity only)
   operational: 3 (ECR only, prod bronze prevent_destroy, large files read in chunks)
   protocol: 1 (Terraform passive infra only)

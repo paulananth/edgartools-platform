@@ -395,7 +395,7 @@ so Phase 2.5 runs fully. No design score or design-model consensus is invented.
 engineer, in an existing checkout. They know Bookkeeping's business role but should
 not need to read private engine methods to run a baseline. Their job is to collect
 trustworthy evidence without contacting data sources or disrupting Claude's work.
-They have local Python/uv and may or may not have a ready Colima/Docker environment;
+They have local Python/uv and may or may not have a ready Docker environment;
 Rust/native dependencies can make a cold install materially slower than a warm run.
 
 Initial intake DX completeness was 5/10: a script name and desired outputs were
@@ -449,8 +449,7 @@ Proposed copy/paste path after implementation (these commands are not run proof)
 
 ```bash
 uv sync --extra mdm-runtime --group dev
-# macOS, if the existing Colima environment is stopped:
-colima start
+# Confirm the configured Docker context answers (`docker info`).
 # Explicit prerequisite, outside the benchmark's five-minute budget:
 docker pull postgres:16-alpine
 uv run --no-sync --offline python scripts/benchmarks/benchmark_bookkeeping_control.py --help
@@ -545,7 +544,7 @@ eligible. Plan score 9/10; a 10 requires the first real compatibility fixture pa
 ## Pass 6 — Developer environment and tooling
 
 Use uv and the repository's mdm-runtime/dev dependencies. On macOS the existing
-Colima/Docker route is supported; the fixed PG16 image must be preloaded. Native
+Docker route is supported; the fixed PG16 image must be preloaded. Native
 import identity is recorded by relative module label plus content hash, not by
 printing an absolute home path. Source/build correspondence is independently proven
 or explicitly unknown; import success never proves checkout freshness.
@@ -613,7 +612,7 @@ support paths; no unimplemented item is checked as behavior proof.
 ## NOT in scope / reuse / TODOs
 
 No root README edits, new website, telemetry, service, SDK, CI timing gate or new
-community infrastructure. Reuse uv, Colima/Docker, existing PG16 migration/support
+community infrastructure. Reuse uv, Docker, existing PG16 migration/support
 APIs and GitHub review. Existing P2 work owns future runtime qualification; zero
 new TODOs are added. The optional skill-tooling appendix is inapplicable because
 this deliverable is a Python engineering script, not a new skill or MCP service.

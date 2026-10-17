@@ -50,7 +50,7 @@ they change on every image rebuild).
 
 ```bash
 # 2. Re-tag :dev digest as :prod within the same repo via registry-side
-#    manifest copy (no local docker pull/push, no Colima required).
+#    manifest copy (no local docker pull/push, no a configured Docker context).
 WAREHOUSE_MANIFEST=$(aws ecr batch-get-image --region us-east-1 \
   --repository-name edgartools-dev-warehouse \
   --image-ids imageDigest="$WAREHOUSE_DEV_DIGEST" \

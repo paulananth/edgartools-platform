@@ -29,14 +29,12 @@ source: CLAUDE.md, AGENTS.md
 
 ---
 
-## CON-003: Colima required on macOS — no other container runtime stacks
+## CON-003: Use the Docker context already configured
 
 type: tooling
-content: On macOS, Colima is the required local Docker daemon. Docker Desktop is permitted
-  only on Windows. Do not introduce other container build or runtime stacks. When using
-  Colima, run infra/scripts/setup-colima.sh once per workstation to disable the containerd
-  image-store snapshotter (Docker 29+ default, incompatible with legacy docker build).
-  Set DOCKER_HOST=unix://$HOME/.colima/default/docker.sock each terminal session.
+content: Use the Docker context already configured on the machine. Leave DOCKER_HOST unset.
+  Publish images with docker build and docker push. Do not introduce another container
+  build or runtime stack.
 source: CLAUDE.md, AGENTS.md
 
 ---

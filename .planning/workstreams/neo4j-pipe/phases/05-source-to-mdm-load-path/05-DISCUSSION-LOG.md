@@ -280,11 +280,11 @@ Plans 05-01 through 05-04 had been executed (all 28 tests passing) but VALIDATIO
 | MDM Postgres (separate from local SQLite) | Local Postgres instance | |
 | Reconsider: use local Postgres via Docker | More production-realistic | ✓ |
 
-**Notes:** User is on macOS. Per CLAUDE.md: use Colima as Docker daemon. Decision: `colima start` + `docker run --platform linux/amd64 postgres:15`.
+**Notes:** User is on macOS. Per CLAUDE.md: use the Docker context already configured. Decision: `docker run --platform linux/amd64 postgres:15`.
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Docker postgres:15 container | Clean slate, matches ECS, via Colima | ✓ |
+| Docker postgres:15 container | Clean slate, matches ECS, locally | ✓ |
 | Existing local Postgres | May have schema conflicts | |
 | Researcher determines availability | | |
 

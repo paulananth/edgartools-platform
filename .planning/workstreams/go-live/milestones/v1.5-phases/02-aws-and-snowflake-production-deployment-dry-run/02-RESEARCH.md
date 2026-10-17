@@ -466,7 +466,7 @@ snow sql --connection edgartools-prod -q \
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
 | Reading current `:dev` image digest | Custom docker pull + inspect script | `aws ecr describe-images --image-ids imageTag=dev --query 'imageDetails[0].imageDigest'` | Registry API gives the digest without pulling gigabytes of image layers |
-| Re-tagging an ECR image | `docker pull` + `docker tag` + `docker push` round trip | `aws ecr batch-get-image` + `aws ecr put-image` | Registry-side copy avoids local Docker/Colima entirely — works from any shell with AWS creds |
+| Re-tagging an ECR image | `docker pull` + `docker tag` + `docker push` round trip | `aws ecr batch-get-image` + `aws ecr put-image` | Registry-side copy avoids local Docker entirely — works from any shell with AWS creds |
 | Read-only Terraform plan against real cloud account without real backend | Custom state-stubbing scripts | Terraform's native `override.tf` local-backend override mechanism | Officially supported, automatically cleaned up, zero risk to real state |
 | Checking dynamic-table freshness | Custom Snowflake polling script | Existing `EDGARTOOLS_GOLD_STATUS` view (`infra/snowflake/dbt/edgartools_gold/models/gold/edgartools_gold_status.sql`) | Already built, already the canonical verification query in `docs/runbook.md` |
 
@@ -622,7 +622,7 @@ error referencing a specific model file).
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|---------------|--------|
-| Manual docker pull/tag/push for ECR re-tagging | Registry-side `aws ecr batch-get-image` + `put-image` | N/A (always available) | Avoids requiring Colima/Docker for image promotion — works from any CI/operator shell with AWS creds |
+| Manual docker pull/tag/push for ECR re-tagging | Registry-side `aws ecr batch-get-image` + `put-image` | N/A (always available) | Avoids requiring Docker for image promotion — works from any CI/operator shell with AWS creds |
 | Assuming dev `versions.tf` pattern applies uniformly | Prod roots use a stricter (and likely accidental) `~>` constraint | Discovered this session | Must work around (Pattern 1's temporary edit-then-revert, default) or fix permanently (Pattern 0, optional/authorized) before any prod `terraform plan`/`init`/`validate` |
 
 **Deprecated/outdated:** None identified — all scripts/configs examined are current

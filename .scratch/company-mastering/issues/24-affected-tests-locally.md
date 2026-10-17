@@ -22,7 +22,7 @@ only the affected tests locally with the full suite in CI.
 - The other ~275 tests, about 1.8 s each: ~8.3 min.
 
 Tried and dropped: running 4 files at a time (pytest-xdist). This Mac has 4
-cores and Colima 4 CPUs and 8 GB; 4 workers plus 4 databases share the
+cores and Docker 4 CPUs and 8 GB; 4 workers plus 4 databases share the
 same cores, and the two largest files still run whole on one worker. The run
 was stopped at 8 minutes, about 80% done.
 

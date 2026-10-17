@@ -15,7 +15,7 @@
 11. **Does a check need an explicit gate limit?** Looked in §16: "every check defaults to 0". Only `rows` needs a `min`. I added an explicit `check.pattern(office_state): { max: 0 }` to confirm that a named limit is accepted. It was.
 12. **How does a Custom Step import the API?** §11 says `from source_contract import …`. `engine/source_contract.py` re-exports from `source_engine`, and the import worked without a `requires` (standard library only).
 13. **Where should the fixture CSV live, and must it keep the original bytes?** Looked in §5 and §15. I cut the header plus 7 whole original lines (CRLF endings kept) into `fixtures/march-2026-seven-rows.csv`.
-14. **Merge cases and Docker.** Looked in §15 and §4.1. `docker info` worked through the Colima socket (`DOCKER_HOST` exported), and the merge case passed. I could not tell from the spec whether the runner needs `DOCKER_HOST` set or finds Colima itself.
+14. **Merge cases and Docker.** Looked in §15 and §4.1. `docker info` worked through the private Docker socket (`DOCKER_HOST` exported), and the merge case passed. I could not tell from the spec whether the runner needs `DOCKER_HOST` set or finds Docker itself.
 
 ## Errors met
 
