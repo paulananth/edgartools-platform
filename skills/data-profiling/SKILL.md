@@ -1,6 +1,6 @@
 ---
 name: data-profiling
-description: Profile ANY data set (files of several formats, or a set of database tables) and find what each part is - master data, reference data, relationships, transaction data or metadata - with evidence. Finds keys, links between parts, code lists, hierarchies, time roles and personal data; writes REPORT.md for the operator and findings.yaml for agents; specifies silver tables; suggests a store (advice only). Use before onboarding a new data set (data-onboarding calls it), or to compare a new delivery with approved findings (refining-rules calls compare).
+description: Profile ANY data set and record the silver fields it needs - every number, every identifier, and commentary text only when that text is material - plus the part's class, keys, links, code lists and time roles. Writes REPORT.md and findings.yaml. Use before onboarding a new data set (data-onboarding calls it), or to compare a new delivery with approved findings (refining-rules calls compare).
 ---
 
 # Data Profiling
@@ -8,9 +8,31 @@ description: Profile ANY data set (files of several formats, or a set of databas
 > Part of the **data-platform** skill set. This skill only reads data and
 > writes findings. It never changes a store, a rule or a source.
 
-Given a data set, it answers: **what is each part, and how do the parts
-connect?** Finding the classes is the first job. The store suggestion is
-advice only.
+Given a data set, it records **what silver needs from each part**: every
+numerical column and every identifying column (keys, codes, links, dates and
+names), and commentary text only when that text is material. It also says how
+the parts connect. The store suggestion is advice only.
+
+## Silver fields
+
+Operator, 2026-10-17. This is the rule the silver spec follows.
+
+- A number is a silver field when it is filled on any row. The column profile
+  records its minimum, maximum, how many values are zero, how many are
+  negative, and, for a decimal or fraction, the most decimal places seen.
+  Cardinality (`unique`, distinct divided by filled rows) near 1 is an
+  identifier; near 0 is a category or a repeated measure.
+- An identifier is a silver field: the record key, a code, a link, a date, or
+  a name. A check digit and a second unique shape are recorded on
+  `identifiers`, as data-onboarding's identifier types already expect.
+- Commentary is text that is not an identifier. It is a silver field only when
+  it is material: filled on at least half the rows, at least two values, and
+  the most common value is under nine tenths of the filled rows. A constant
+  sentence, an empty column, or a rare note stays in the column profile and
+  stays out of the silver spec.
+- When the five class tests do not pick one class, the part's class is
+  `silver`. The tests stay in the findings. The run still writes the silver
+  fields. It does not stop to ask which class the part is.
 
 **Use the other skill when:**
 - the findings are approved and you are bringing a part in: use
@@ -23,7 +45,7 @@ advice only.
 | Never | Instead |
 |---|---|
 | Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve` |
-| Guess a class, a key or a link | Report "unknown" with the failing tests, and ask |
+| Guess a class, a key or a link | Record the measured tests and the silver fields (numbers, identifiers, material commentary). A class the tests do not pick is `silver` |
 | Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`); samples are masked to their shape; the run's working copy is deleted when it ends |
 | Request anything from a provider's website | Profile the local copies only |
 | Pin a finding on one source or one domain | Use the tests; names in this skill are generic |
@@ -78,17 +100,17 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | Mode | What it does | Output |
 |---|---|---|
 | inventory | Lists every input, its format, size and parts (nested lists become child parts; equal-length lists of records stay separate parts, and only lists of plain values are read as a table stored by column) | `dataset.inputs`, parts |
-| profile | Exact counts per column: fill, distinct, unique, shape, length, top values | `columns` |
+| profile | Exact counts per column: fill, distinct, cardinality (`unique`), shape, length, top values; for a number, zero rows, negative rows, and decimal places | `columns` |
 | entities | An entity carried inside another part (an identifier-shaped column that repeats, with a name-like column of the same object that follows it on at least 95% of rows) becomes its own part, one row per identifier; the part it came from links to it. An id with only a name is a code with its label until other attributes show otherwise | `derived_from` |
 | keys | The record key: one unique column, else the smallest unique set of up to 3; a designed key when none exists (a nested record with none of its own: its parent's key and its place in the list, which classification counts as a key) | `record_key` |
 | links | Each column pointing at another part's key (inclusion ≥ 0.9), with cardinality and evidence | `relationships` |
-| classify | The five classes, each from named tests; "unknown" when the tests do not decide | `class`, `confidence`, `tests` |
+| classify | The five classes, each from named tests. When the tests do not pick one class, the part is `silver` and its fields are still recorded | `class`, `confidence`, `tests` |
 | hierarchies | Per source: parent columns, functional dependencies, code nesting, separate level tables (a list naming its coarser list); a yes/no flag, or a dependency that holds by coincidence (a near-constant parent, or child values seen once), is listed apart, never a hierarchy | `hierarchies`, `dependencies_not_hierarchies` |
 | time | As of (valid from/to), as at (record time), event time, time series | `time` |
 | sensitivity | none, personal, sensitive personal, each with its signals: words in the column's name, detectors on its values, a vote over its values (a column named for people whose values are mostly people's names), and whether the part describes people (then its address counts too); samples masked, and free-text samples too, since a sentence can name anyone | `sensitivity`, `sensitivity_signals` |
 | quality | Every data quality rule each part needs on every load, with the rows that fail it: a defect when above 0, a rule the clean data passes at 0 (a key column filled, an identifier's one shape or check digit, a link that resolves, a code list); masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | code sets | The RDM code sets the data set needs: each existing or proposed set, the columns that use it, how many codes | `code_sets` |
-| suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec for every part, every column a field (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
+| suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec per part under "Silver fields" (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
 | catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only | `rules/sources/<source>/profile.yaml` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
@@ -229,8 +251,9 @@ present a name pairing where an id exists.
 1. **Ask what the data set is called and where its copies are.** One question.
 2. **Run** the command above. Read `REPORT.md` first; `findings.yaml` holds
    the detail and the evidence for every claim.
-3. **Check every "unknown"**, every designed key, and every proposed new kind.
-   These become the questions in `findings.yaml`.
+3. **Read the silver fields**, every designed key, and every proposed new kind.
+   A designed key and a proposed new kind are the questions in `findings.yaml`.
+   A part classed `silver` already has its numbers and identifiers recorded.
 4. **Ask the operator the questions, one at a time,** each with its
    recommendation. Record each answer in the question's `answer`, in their
    words.
@@ -323,7 +346,7 @@ that matter most:
   `invalid_rows.jsonl` beside the findings, never dropped. Each part's key
   sample for `compare` (hashes only) is in `fingerprints.json` beside them;
   keep it with the approved findings.
-- **silver:** the table spec for every part, every column a field. Its links
+- **silver:** the table spec for every part, under "Silver fields". Its links
   point to master parts only, each with an empty `kind` and `source_code` that
   data-onboarding fills; a master part's rows link to themselves (`mdm_id`).
   `edgar-warehouse silver register` makes the table and `silver land` writes
@@ -354,7 +377,7 @@ uv run --with duckdb --with pyyaml python profile_data.py compare \
 
 It refuses findings that are not approved. Key persistence (the same record
 keeping its key between deliveries), snapshot-or-changes and the refresh rate
-need two deliveries: a single run reports them as unknown, and `compare`
+need two deliveries: a single run leaves them for `compare`, which
 measures them from each part's key sample (`deliveries` in `drift.yaml`).
 Versions per key are measured in one delivery when the key holds a time.
 

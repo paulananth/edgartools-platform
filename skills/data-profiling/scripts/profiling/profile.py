@@ -110,6 +110,15 @@ def column(con, part: str, name: str, kind: str, rows: int) -> dict:
     if kind in INTEGERS | FLOATS | TEMPORAL or kind.startswith("DECIMAL"):
         low, high = con.execute(f"SELECT CAST(min({c}) AS VARCHAR), CAST(max({c}) AS VARCHAR) FROM {t}").fetchone()
         profile.update({"min": low, "max": high})
+    if kind in INTEGERS | FLOATS or kind.startswith("DECIMAL"):
+        zeros, negatives = con.execute(
+            f"SELECT count(*) FILTER (WHERE {c} = 0), count(*) FILTER (WHERE {c} < 0) FROM {t}").fetchone()
+        profile.update({"zero_rows": zeros, "negative_rows": negatives})
+        if kind in FLOATS or kind.startswith("DECIMAL"):
+            places = con.execute(
+                f"SELECT max(length(split_part(rtrim(rtrim(CAST({c} AS VARCHAR), '0'), '.'), '.', 2))) "
+                f"FROM {t} WHERE {c} IS NOT NULL AND position('.' IN CAST({c} AS VARCHAR)) > 0").fetchone()[0]
+            profile["decimal_places"] = int(places or 0)
     return profile
 
 
