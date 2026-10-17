@@ -117,6 +117,11 @@ network of links makes every batch cost the whole network.
   loop.
 - A function that looks up or writes many keys takes them as one array, not
   one call per key.
+- A run reads what it started with. Anything the store registers anew while
+  the run is part way through (a source's mapping today) is chosen once when
+  the run first starts, kept in its frozen scope (`mdm.run.scope`), and read
+  back on every later call and resume, never resolved again per batch. The
+  commit still checks it.
 
 ## Choose the cheapest proof
 
