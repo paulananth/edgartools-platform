@@ -54,8 +54,9 @@ docker run -d --name edgartools-local-postgres --restart unless-stopped \
 The private file sets `POSTGRES_PASSWORD`.
 
 MySQL and SQL Server are separate engines, not databases inside PostgreSQL.
-Start MySQL when the task names MySQL. Start SQL Server only when the task
-names SQL Server.
+Start MySQL when the task names MySQL. Start SQL Server Express when the task
+names SQL Server. Express is the free edition and is limited to 10 GB per
+database. Do not set `MSSQL_PID` to Standard or Enterprise.
 
 ```bash
 docker pull mysql:8
@@ -78,8 +79,8 @@ docker run -d --name edgartools-local-sqlserver --platform linux/amd64 \
 ```
 
 The MySQL file sets `MYSQL_ROOT_PASSWORD`. The SQL Server file sets
-`ACCEPT_EULA=Y` and `MSSQL_SA_PASSWORD`. On Apple Silicon, SQL Server runs as
-`linux/amd64`.
+`ACCEPT_EULA=Y`, `MSSQL_PID=Express`, and `MSSQL_SA_PASSWORD`. On Apple
+Silicon, SQL Server runs as `linux/amd64`.
 
 ## Worktree-owned test copy
 
