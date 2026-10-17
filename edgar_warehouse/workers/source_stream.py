@@ -62,8 +62,9 @@ def stream_policy(contract):
     if (read.get("format") != "json" or "container" in read
             or spec["container"] not in ("none", "zip")):
         raise ValueError("read.stream requires JSON record projection and explicit framing policy")
-    if framing == "json_array" and (not isinstance(spec["wrapper"], str) or not spec["wrapper"]
-            or len(spec["wrapper"].encode()) > 128
+    # `wrapper: null` reads a document that is itself the array (ticket 104).
+    if framing == "json_array" and ((spec["wrapper"] is not None and (not isinstance(spec["wrapper"], str)
+                                     or not spec["wrapper"] or len(spec["wrapper"].encode()) > 128))
             or type(spec["min_integer"]) is not int
             or not -(2**63) <= spec["min_integer"] <= 2**63 - 1
             or spec["record_encoding"] not in ("native", "python")):

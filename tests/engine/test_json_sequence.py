@@ -175,3 +175,17 @@ def test_callback_refusal_stops_stream_and_cannot_return_an_eof_receipt():
 def test_invalid_bounds_are_refused_before_emitting_rows(changes):
     with pytest.raises(SourceRejected, match="contract"):
         native(b'{"records":[{}]}', **changes)
+
+
+def test_a_bare_array_streams_when_no_wrapper_is_declared():
+    """Ticket 104: a document that is itself the array, one record per element."""
+    rows = []
+    body = b'[{"data":[{"figi":"F1"}]},{"warning":"none"}]'
+    result = stream_json_array(io.BytesIO(body), wrapper=None, on_record=lambda row, n: rows.append((n, row)), **LIMITS)
+    assert result == {"record_count": 2, "expanded_bytes": len(body)}
+    assert rows == [(0, {"data": [{"figi": "F1"}]}), (1, {"warning": "none"})]
+    for refused in (b'{"records":[]}', b'[null]', b'[] null'):
+        with pytest.raises(SourceRejected):
+            stream_json_array(io.BytesIO(refused), wrapper=None, on_record=lambda row, n: None, **LIMITS)
+    with pytest.raises(SourceRejected, match="wrapper"):
+        stream_json_array(io.BytesIO(body), wrapper="", on_record=lambda row, n: None, **LIMITS)

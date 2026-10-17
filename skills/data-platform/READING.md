@@ -67,6 +67,12 @@ read:
         source_index: {context: {name: source_index}}
 ```
 
+`wrapper` names the one array under the document's single key; `wrapper: null`
+reads a document that is itself the array, one record per element (ticket 104).
+Each still refuses the other shape. With `ordinal_context`, a table that iterates
+a list inside each record (`each: data`) gives every row its record's position,
+so rows of a nested list stay tied to the element they came from.
+
 Every stream field is required. `container` is `none` or `zip`; ZIP requires
 one unencrypted file, verifies its CRC through EOF and enforces the expanded
 byte limit. `max_input_bytes` bounds the authenticated snapshot and
@@ -941,8 +947,8 @@ mastering follows from successful catalog source extract.
 
 ## Large JSON array framing foundation
 
-For a captured document shaped as one object containing one named array,
-`source_engine.stream_json_array` reads object records incrementally through
+For a captured document shaped as one object containing one named array, or
+a bare array (`wrapper=None`), `source_engine.stream_json_array` reads object records incrementally through
 the native binding. Its callback receives the typed record and zero-based
 ordinal. Only successful return supplies an EOF receipt; callbacks prepare
 candidates and must not commit, publish or authenticate partial records.

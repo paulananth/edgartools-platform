@@ -77,10 +77,11 @@ def _rejected(error: source_contract.SourceRejected) -> SourceRejected:
     return SourceRejected(*error.args)
 
 
-def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
+def stream_json_array(stream, *, wrapper: str | None, on_record, max_bytes: int,
                       max_record: int, max_records: int, max_depth: int = 64,
                       min_integer: int = -(2**63), record_encoding: str = "native") -> dict:
-    """Read one named object array without retaining the whole document.
+    """Read one named object array, or a bare array (`wrapper=None`), without
+    retaining the whole document.
 
     Callbacks may prepare candidates. Only a successful return proves EOF;
     callers must not publish, commit or authenticate earlier callback rows.
@@ -99,8 +100,8 @@ def stream_json_array(stream, *, wrapper: str, on_record, max_bytes: int,
 
 
 def _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, min_integer, record_encoding):
-    if not isinstance(wrapper, str) or not wrapper or len(wrapper.encode()) > 128:
-        raise SourceRejected("contract", "JSON stream wrapper is bounded nonempty text")
+    if wrapper is not None and (not isinstance(wrapper, str) or not wrapper or len(wrapper.encode()) > 128):
+        raise SourceRejected("contract", "JSON stream wrapper is bounded nonempty text, or None for a bare array")
     bounds = {"max_bytes": max_bytes, "max_record": max_record, "max_records": max_records, "max_depth": max_depth}
     if any(type(value) is not int or not 0 <= value <= 2**63 - 1 for value in bounds.values()):
         raise SourceRejected("contract", "JSON stream bounds must be nonnegative signed integers")
@@ -131,7 +132,7 @@ class SourceEngine:
         except source_contract.SourceRejected as error:
             raise _rejected(error) from None
 
-    def stream_json_array(self, stream, *, wrapper: str, on_reading, max_bytes: int,
+    def stream_json_array(self, stream, *, wrapper: str | None, on_reading, max_bytes: int,
                           max_record: int, max_records: int, max_depth: int = 64,
                           min_integer: int = -(2**63), record_encoding: str = "native",
                           context: Mapping[str, object] | None = None, ordinal_context: str | None = None,

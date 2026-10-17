@@ -105,6 +105,27 @@ def test_unknown_stream_fields_are_refused_before_opening_the_source(tmp_path):
         source_read.execute(envelope, store)
 
 
+def test_a_bare_array_streams_each_element_with_its_position(tmp_path):
+    """Ticket 104: with no wrapper, each element of a bare array is a record; a
+    nested list's rows keep their element's position (`ordinal_context`)."""
+    rules = contract()
+    rules["read"]["stream"]["wrapper"] = None
+    rules["read"]["tables"]["rows"] = {"each": "data", "columns": {
+        "figi": {"text": {"path": "figi"}}, "index": {"context": {"name": "source_index"}}}}
+    store = Artifacts()
+    body = b'[{"data":[{"figi":"F1"},{"figi":"F2"}]},{"warning":"none"},{"data":[{"figi":"F3"}]}]'
+    envelope = task(tmp_path, store, [body], rules)
+    receipt = source_read.execute(envelope, store)
+    reading = store.json(receipt)["artifacts"][0]
+    assert reading["record_count"] == 3
+    rows = [row for part in reading["partitions"] for row in store.json(part["receipt"])["tables"]["rows"]]
+    assert rows == [{"figi": "F1", "index": 1}, {"figi": "F2", "index": 1}, {"figi": "F3", "index": 3}]
+    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    wrapped = task(tmp_path / "wrapped", store, [b'{"records":[{"data":[]}]}'], rules)
+    with pytest.raises(SourceRejected):
+        source_read.execute(wrapped, store)
+
+
 @pytest.mark.parametrize("values", [{}, {"required": 7}, {"required": "ok", "surprise": True}])
 def test_empty_array_still_validates_bound_context(tmp_path, values):
     store = Artifacts()
