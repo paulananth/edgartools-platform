@@ -1,7 +1,7 @@
 # MDM resumable execution module
 
 Type: task
-Status: claimed
+Status: resolved
 
 Implement the operator's [agreed design](../spec.md). The implementation base
 is `5e1061ec4` from refreshed `origin/main`; the architecture review used
@@ -22,7 +22,7 @@ worktree. No deployment, shared-store mutation or merge is part of this ticket.
 - [x] Review Standards, Spec and GoF; fix findings and document runtime transition — separate Standards/Spec agents and implementing-agent GoF review found no actionable issues; the added kill-proof test also received both independent reviews; see `review.md` (2026-10-17 14:40 ET).
 - [x] Fix the CI architecture finding: execution dependency metadata belongs to MDM; workers must not import Bookkeeping control internals, including only for fingerprinting. Retain all intended fingerprint coverage and the unchanged architecture guard — reproduced the exact guard failure locally (1 failed in 0.22s); moved the descriptor to `execution.runtime_files`; 55 architecture/runtime/mapping cases and scoped Pyright passed; then 28 architecture/runtime/PostgreSQL cases passed, including destination-guard digest sensitivity and real killed-worker recovery. Both independent review axes accepted the correction (2026-10-17 14:47 ET).
 - [x] Commit, push and open a reviewable PR — implementation `3a5c118f`, recovery proof `842931e8`, [PR #1056](https://github.com/paulananth/edgartools-platform/pull/1056); overlap guards passed before every commit/push (2026-10-17 14:47 ET).
-- [ ] Full CI green on the final PR head; monitor with a 30-minute deadline and stop on failure, head change, closure or merge.
+- [x] Full implementation CI green; monitor with a 30-minute deadline and stop on failure, head change, closure or merge — all six checks passed on `dd27c497`, [run 39059731190](https://github.com/paulananth/edgartools-platform/actions/runs/39059731190), including the CI gate. Corrected-run watcher exited successfully after 357 seconds; qualification including the initial architecture correction took about twelve minutes (2026-10-17 14:54 ET).
 - [x] Learning → skill: none — existing MDM engineering guidance on pinning, batching, destination enforcement and isolated proofs remains accurate; command/operator workflows are unchanged. The implementation interface and one-time fingerprint transition are documented in the runtime responsibility map (2026-10-17 14:41 ET).
 
 ## GoF consultation
@@ -69,6 +69,19 @@ that guard. The correction makes MDM execution own its dependency descriptor;
 the worker sees only the MDM connection/execution interfaces. The guard remains
 unchanged, and destination-authority code still affects the merge digest.
 The architecture control tests are now explicitly included in local proof.
+
+The corrected descriptor at `dd27c497` also passed a fresh installed-package
+source-to-master check: 1 passed in 130.46 seconds (131.47 seconds for the
+deadline-controlled invocation), outside the checkout on isolated PostgreSQL 16.
+
+## Completion
+
+Every part above is checked with verification evidence. The final source/test
+implementation is `dd27c497`; following verification-record commits change only
+Markdown. [PR #1056](https://github.com/paulananth/edgartools-platform/pull/1056)
+shows the live checks for its current head. The work is committed and published
+for review; this ticket authorizes neither merge nor deployment. The existing
+runtime must finish any run pinned to it.
 
 The isolated `uv sync --frozen --extra mdm --extra s3 --extra mdm-runtime`
 completed in about 95 seconds. The local pgserver launcher then failed before

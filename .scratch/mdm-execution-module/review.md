@@ -6,6 +6,7 @@ Spec; the implementing agent performed the GoF axis after implementation.
 Both independent agents also reviewed the additional real process-kill recovery
 test. CI subsequently found a control-import ownership violation missed by the
 initial static review. Both agents reviewed the correction described below.
+That correction is pinned by `git diff 842931e8...dd27c497`.
 
 ## Standards
 
@@ -59,3 +60,13 @@ passed in 34.41 seconds. Scoped Pyright remains clean. The runtime tests verify
 that destination-guard changes still invalidate the fingerprint after the
 descriptor move. Initial CI failure and final CI status are retained in the
 ticket.
+
+A fresh installed-package check of corrected commit `dd27c497` passed in
+130.46 seconds; it exercises runtime fingerprint admission and source-to-master
+execution outside the checkout.
+
+All six CI checks, including the gate, passed on `dd27c497` in
+[run 39059731190](https://github.com/paulananth/edgartools-platform/actions/runs/39059731190).
+Subsequent verification-record changes are Markdown only. The PR's live checks
+are authoritative for its current head. Final findings: Standards 0, Spec 0,
+GoF 0; the initial architecture finding and its correction remain recorded above.
