@@ -34,23 +34,9 @@ STAGE = "mastering"
 
 def runtime_files() -> list[Path]:
     """The Merge Stage is part of what a run pins for this profile."""
-    from edgar_warehouse.bookkeeping.clean import config, destinations
-    from edgar_warehouse.mdm.clean import (
-        activation, adapters, assessment, binding, cascade, classification, connections,
-        correction, evidence, execution, identifier_types, identity, matching, merge,
-        name_census, names, primitives, quality, relationships, run, scope, store, survivorship,
-    )
-    from edgar_warehouse.rules import files, source_engine
-    from . import source_mapping
+    from edgar_warehouse.mdm.clean import connections, execution
 
-    # Explicit execution dependencies, including role selection and destination
-    # authority. CLI presentation is not executable merge behavior. This is not
-    # the separately tracked complete environment/reproducibility fingerprint.
-    modules = (activation, adapters, assessment, binding, cascade, classification, config,
-               connections, correction, destinations, evidence, execution, files, identifier_types,
-               identity, limits, matching, merge, name_census, names, primitives, quality,
-               relationships, run, scope, source_mapping, store, survivorship)
-    return [*[Path(getfile(module)) for module in modules], *source_engine.runtime_files()]
+    return [Path(getfile(connections)), *execution.runtime_files()]
 
 
 def mdm_run(envelope: dict) -> str:

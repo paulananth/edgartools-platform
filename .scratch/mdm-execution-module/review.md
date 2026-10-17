@@ -4,12 +4,17 @@ Code reviewed: `git diff 5e1061ec4...3a5c118f`.
 Spec: [agreed design](spec.md). Separate read-only agents reviewed Standards and
 Spec; the implementing agent performed the GoF axis after implementation.
 Both independent agents also reviewed the additional real process-kill recovery
-test and found no actionable issues. Production code is unchanged after the
-reviewed implementation commit.
+test. CI subsequently found a control-import ownership violation missed by the
+initial static review. Both agents reviewed the correction described below.
 
 ## Standards
 
-Clean: no actionable documented-rule violations or baseline design smells.
+Clean after the CI correction: no remaining actionable documented-rule
+violations or baseline design smells. The initial fingerprint descriptor in the
+worker imported Bookkeeping control modules. It now lives in
+`execution.runtime_files`, behind the MDM interface; the worker pins connection
+code plus that descriptor. Destination authorization remains inside Store's
+destination transaction. The existing architecture guard was not relaxed.
 Execution retains mapping pins and delegates durable scope, reconciliation and
 atomic saves to Store/RunCoordinator. Connection consumers retain lifecycle
 ownership and restricted-role selection. Worker transport, destination authority
@@ -47,3 +52,10 @@ process-kill/retry/verification proof: the worker file's 4 cases passed in
 in the [ticket](issues/01-execution-module.md) when complete. Static review is
 not deployment qualification. Complete runtime environment reproducibility
 remains the separate P1 item in TODOS.md.
+
+After the CI correction: 55 architecture/runtime/configured-mapping cases passed,
+then 28 architecture/runtime/PostgreSQL execution and worker-recovery cases
+passed in 34.41 seconds. Scoped Pyright remains clean. The runtime tests verify
+that destination-guard changes still invalidate the fingerprint after the
+descriptor move. Initial CI failure and final CI status are retained in the
+ticket.

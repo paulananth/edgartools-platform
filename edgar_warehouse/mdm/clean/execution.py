@@ -12,6 +12,7 @@ import json
 import math
 from collections import Counter
 from functools import partial
+from inspect import getfile
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -27,6 +28,27 @@ from .merge import MergeStage
 from .quality import counts as quality_counts
 from .quality import profile as quality_profile
 from .store import Conflict, Store, current_reading, reading_at
+
+
+def runtime_files() -> list[Path]:
+    """The execution module owns the code its caller must pin."""
+    from edgar_warehouse.bookkeeping.clean import config, destinations
+    from edgar_warehouse.mdm.clean import (
+        activation, adapters, assessment, binding, cascade, classification,
+        correction, evidence, identifier_types, identity, matching, merge,
+        name_census, names, primitives, quality, relationships, run, scope, store, survivorship,
+    )
+    from edgar_warehouse.rules import files, source_engine
+    from edgar_warehouse.workers import source_mapping
+
+    # Explicit execution dependencies, including destination authority.
+    # CLI presentation is not executable merge behavior. This is not
+    # the separately tracked complete environment/reproducibility fingerprint.
+    modules = (activation, adapters, assessment, binding, cascade, classification, config,
+               correction, destinations, evidence, files, identifier_types,
+               identity, limits, matching, merge, name_census, names, primitives, quality,
+               relationships, run, scope, source_mapping, store, survivorship)
+    return [Path(__file__), *[Path(getfile(module)) for module in modules], *source_engine.runtime_files()]
 
 
 def _reject_json_constant(value):

@@ -20,7 +20,9 @@ worktree. No deployment, shared-store mutation or merge is part of this ticket.
 - [x] Prove actual killed-worker recovery after one durable batch, with unchanged retry effects and independent receipt verification — real subprocess SIGKILL after one confirmed batch; same run resumes to two batches/checkpoints `[1, 1]`, stable retry receipt, independent reader verifies; worker file: 4 passed in 23.66s (2026-10-17 14:41 ET).
 - [x] Run affected tests with testmon, each invocation under five minutes; preserve isolated PostgreSQL cleanup — affected groups 70 + 156 + 62 passed; installed proof 4 passed in 180.63s; worker recovery group 4 passed in 23.66s; scoped Pyright clean (2026-10-17 14:41 ET).
 - [x] Review Standards, Spec and GoF; fix findings and document runtime transition — separate Standards/Spec agents and implementing-agent GoF review found no actionable issues; the added kill-proof test also received both independent reviews; see `review.md` (2026-10-17 14:40 ET).
-- [ ] Commit, push and open a reviewable PR; run full CI with a deadline.
+- [x] Fix the CI architecture finding: execution dependency metadata belongs to MDM; workers must not import Bookkeeping control internals, including only for fingerprinting. Retain all intended fingerprint coverage and the unchanged architecture guard — reproduced the exact guard failure locally (1 failed in 0.22s); moved the descriptor to `execution.runtime_files`; 55 architecture/runtime/mapping cases and scoped Pyright passed; then 28 architecture/runtime/PostgreSQL cases passed, including destination-guard digest sensitivity and real killed-worker recovery. Both independent review axes accepted the correction (2026-10-17 14:47 ET).
+- [x] Commit, push and open a reviewable PR — implementation `3a5c118f`, recovery proof `842931e8`, [PR #1056](https://github.com/paulananth/edgartools-platform/pull/1056); overlap guards passed before every commit/push (2026-10-17 14:47 ET).
+- [ ] Full CI green on the final PR head; monitor with a 30-minute deadline and stop on failure, head change, closure or merge.
 - [x] Learning → skill: none — existing MDM engineering guidance on pinning, batching, destination enforcement and isolated proofs remains accurate; command/operator workflows are unchanged. The implementation interface and one-time fingerprint transition are documented in the runtime responsibility map (2026-10-17 14:41 ET).
 
 ## GoF consultation
@@ -58,6 +60,15 @@ raw Person, XML streaming recovery and configured GLEIF mapping/publication
 recovery. The bundle was installed from this commit, outside the checkout, and
 the checks used isolated PostgreSQL 16. Context/configured-mapping/runtime-pin
 checks also passed: 62 cases in 5.30 seconds.
+
+CI run `39059270285` found an architecture regression in fingerprint metadata:
+the worker imported Bookkeeping control modules to obtain their file paths.
+This is a deterministic ownership violation named by the existing architecture
+guard, not an execution-data failure. The initial local selection/reviews missed
+that guard. The correction makes MDM execution own its dependency descriptor;
+the worker sees only the MDM connection/execution interfaces. The guard remains
+unchanged, and destination-authority code still affects the merge digest.
+The architecture control tests are now explicitly included in local proof.
 
 The isolated `uv sync --frozen --extra mdm --extra s3 --extra mdm-runtime`
 completed in about 95 seconds. The local pgserver launcher then failed before
