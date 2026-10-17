@@ -49,6 +49,11 @@ an implementation gap before calling a source ready.
 
 ## The flow
 
+For recurring loads, backlog/resource sizing, renamed files, run monitoring and
+operational handoff, use [data-operations](../data-operations/SKILL.md). It
+coordinates this flow and the existing Bookkeeping/Change Journal skills;
+AWS acquisition supplies completed deliveries separately.
+
 | Step | Mode | Detail in |
 |---|---|---|
 | 0 | Setup, once per machine | this file |

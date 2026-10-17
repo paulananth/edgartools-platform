@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Operations"
+  short_description: "Manage recurring loads, readiness and recovery"
+  default_prompt: "Use $data-operations to inspect available deliveries, size the backlog to current resources, coordinate Bookkeeping and Change Journal, and maintain the operational runbook."
