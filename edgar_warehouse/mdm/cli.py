@@ -84,7 +84,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _handle_migrate(args: argparse.Namespace) -> int:
-    from edgar_warehouse.mdm.clean.cli import engine_from_env
+    from edgar_warehouse.mdm.clean.connections import engine_from_env
     from edgar_warehouse.mdm.clean.store import migrate
 
     engine = engine_from_env("MDM_DATABASE_URL", restricted=False)

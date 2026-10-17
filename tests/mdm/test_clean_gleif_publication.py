@@ -299,10 +299,10 @@ def test_a_native_publication_manifest_is_refused_before_any_work(tmp_path):
     fails closed, before any database read, rather than running as a plain manifest."""
     from uuid import uuid4
 
-    from edgar_warehouse.mdm.clean import cli
+    from edgar_warehouse.mdm.clean import execution
 
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps({"contract_version": 2, "native_source": {}, "batches": [
         {"batch_id": "b0", "stage": "mastering"}]}))
     with pytest.raises(Conflict, match="retired"):
-        cli.execute_manifest(None, None, path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
+        execution.execute_manifest(None, path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)

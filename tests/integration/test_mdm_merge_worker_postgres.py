@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from datetime import UTC, datetime, timedelta
@@ -203,3 +204,55 @@ def test_mdm_refuses_a_merge_whose_lease_has_lapsed(mdm, tmp_path, monkeypatch):
     with mdm.admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
     assert not (tmp_path / "receipt.json").exists()
+
+
+def test_a_killed_worker_resumes_after_its_first_committed_batch(mdm, tmp_path, monkeypatch):
+    artifacts = Artifacts()
+    manifest_ref, _ = _manifest(mdm.policy, tmp_path, artifacts)
+    envelope = {"effect_key": "a" * 64, "input": manifest_ref,
+                "output": (tmp_path / "receipt.json").as_uri(), "checks": ["mdm.committed"],
+                "claim": {"proof": _proof(60)}}
+    monkeypatch.setenv("MDM_DATABASE_URL", mdm.application.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("MDM_APPLICATION_ROLE", "clean_application")
+    committed = tmp_path / "committed"
+    child = r'''
+import json, os, time
+from pathlib import Path
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.mdm.clean.run import RunCoordinator
+from edgar_warehouse.workers import mdm_merge
+execute = RunCoordinator.execute
+def pause_after_commit(self, *args, **kwargs):
+    result = execute(self, *args, **kwargs)
+    Path(os.environ["COMMITTED_SIGNAL"]).write_text("committed")
+    time.sleep(60)
+    return result
+RunCoordinator.execute = pause_after_commit
+mdm_merge.execute(json.loads(os.environ["MERGE_ENVELOPE"]), Artifacts())
+'''
+    worker = subprocess.Popen([sys.executable, "-c", child], cwd=ROOT,
+                              env={**os.environ, "MERGE_ENVELOPE": json.dumps(envelope),
+                                   "COMMITTED_SIGNAL": str(committed)},
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + 20
+        while not committed.exists() and worker.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert committed.exists(), "The worker did not reach its first durable commit before the deadline"
+        with mdm.admin.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
+        worker.kill()
+        worker.wait(timeout=10)
+    finally:
+        if worker.poll() is None:
+            worker.kill()
+            worker.wait(timeout=10)
+
+    receipt = mdm_merge.execute(envelope, artifacts)
+    assert mdm_merge.execute(envelope, artifacts) == receipt
+    with mdm.admin.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM mdm.run")) == 1
+        assert list(conn.scalars(text("SELECT checkpoint FROM mdm.batch ORDER BY batch_id"))) == [1, 1]
+    monkeypatch.setenv("MDM_DATABASE_URL", mdm.reader.url.render_as_string(hide_password=False))
+    assert mdm_merge.verify({**envelope, "candidate": receipt}, artifacts) == ({"mdm.committed": True}, [])

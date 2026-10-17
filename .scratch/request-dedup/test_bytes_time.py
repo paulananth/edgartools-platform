@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import event
 
 from edgar_warehouse.mdm.clean import survivorship
-from edgar_warehouse.mdm.clean.cli import batch_input
+from edgar_warehouse.mdm.clean.execution import batch_input
 from edgar_warehouse.mdm.clean.company_source import CONTRACT, POLICY
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy

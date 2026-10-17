@@ -870,7 +870,7 @@ def test_company_and_person_role_profiles_and_field_provenance(database):
 
 
 def test_versioned_representative_fixture_and_alias_read_contract(database):
-    from edgar_warehouse.mdm.clean.cli import batch_assertions, read_manifest
+    from edgar_warehouse.mdm.clean.execution import batch_input, read_manifest
     from edgar_warehouse.mdm.clean.consumer import ContractReader
 
     fixture = Path(__file__).parents[1] / "fixtures" / "clean_mdm" / "v1"
@@ -888,7 +888,7 @@ def test_versioned_representative_fixture_and_alias_read_contract(database):
         )
     store = Store(database.application)
     batch = manifest["batches"][0]
-    evidence = batch_assertions(batch, root, store)
+    evidence = batch_input(batch, root, store)["assertions"]
     MergeStage(store).apply(
         batch_id=batch["batch_id"],
         run_id=str(uuid4()),
@@ -1801,7 +1801,7 @@ def test_a_corrected_mapping_reaches_the_adapter_that_reads_the_source(database)
     and to call normalize with no reading at all. Both readings then produced
     byte-identical assertion ids: the collision the feature exists to prevent.
     """
-    from edgar_warehouse.mdm.clean.cli import batch_assertions, read_manifest
+    from edgar_warehouse.mdm.clean.execution import batch_input, read_manifest
 
     fixture = Path(__file__).parents[1] / "fixtures" / "clean_mdm" / "v1"
     contract = json.loads((fixture / "dataset.json").read_text())
@@ -1812,7 +1812,7 @@ def test_a_corrected_mapping_reaches_the_adapter_that_reads_the_source(database)
     store = Store(database.application)
     batch = manifest["batches"][0]
 
-    first = batch_assertions(batch, root, store)
+    first = batch_input(batch, root, store)["assertions"]
     assert all("mapping_version" not in a for a in first)
 
     with database.admin.begin() as conn:
@@ -1822,7 +1822,7 @@ def test_a_corrected_mapping_reaches_the_adapter_that_reads_the_source(database)
             database.registry,
             {**contract, "semantics": "snapshot"},
         )
-    corrected = batch_assertions(batch, root, store)
+    corrected = batch_input(batch, root, store)["assertions"]
     assert {a["mapping_version"] for a in corrected} == {2}
     # Same records and publication, so the subjects stand and no Company moves;
     # only the assertion ids differ, which is what lets both readings be stored.

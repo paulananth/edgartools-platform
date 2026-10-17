@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from inspect import getfile
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
@@ -33,12 +34,9 @@ STAGE = "mastering"
 
 def runtime_files() -> list[Path]:
     """The Merge Stage is part of what a run pins for this profile."""
-    from edgar_warehouse.mdm.clean import adapters, cli, evidence, identity, merge, run, store, survivorship
-    from edgar_warehouse.rules import source_engine
-    from . import source_mapping
+    from edgar_warehouse.mdm.clean import connections, execution
 
-    return [*[Path(m.__file__) for m in (adapters, cli, evidence, identity, limits, merge, run, store, survivorship, source_mapping)],
-            *source_engine.runtime_files()]
+    return [Path(getfile(connections)), *execution.runtime_files()]
 
 
 def mdm_run(envelope: dict) -> str:
@@ -58,7 +56,7 @@ class Lease:
 
 
 def _store(*, restricted: bool, envelope: dict | None = None):
-    from edgar_warehouse.mdm.clean.cli import engine_from_env
+    from edgar_warehouse.mdm.clean.connections import engine_from_env
     from edgar_warehouse.mdm.clean.store import Store
 
     return Store(engine_from_env("MDM_DATABASE_URL", restricted=restricted),
@@ -111,8 +109,7 @@ def receipt(store, manifest: dict, run_id: str, manifest_digest: str) -> bytes:
 
 
 def execute(envelope: dict, artifacts) -> dict:
-    from edgar_warehouse.mdm.clean.cli import execute_manifest
-    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.mdm.clean.execution import execute_manifest
 
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"mdm.merge verifies {CHECK} only")
@@ -122,14 +119,7 @@ def execute(envelope: dict, artifacts) -> dict:
             path, manifest = _stage(envelope, artifacts, Path(folder))
             if any(b["stage"] != STAGE for b in manifest["batches"]):
                 raise ValueError("mdm.merge runs mastering batches only")
-            coordinator = RunCoordinator(store)
-            while True:
-                result = execute_manifest(store, coordinator, path=str(path), run_id=run_id, stage=STAGE,
-                                          limit=limits.BATCH_RECORDS)
-                if not result["missing_batches"]:
-                    break
-                if not result["commits"]:
-                    raise ValueError(f"MDM made no progress on {result['missing_batches']}")
+            execute_manifest(store, path=str(path), run_id=run_id, stage=STAGE)
             return artifacts.put_bytes(envelope["output"], receipt(store, manifest, run_id, envelope["input"]["sha256"]))
     finally:
         store.engine.dispose()
