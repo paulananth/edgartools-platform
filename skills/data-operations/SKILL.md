@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Manages recurring loads from completed local deliveries, detects changed or renamed files, sizes work to available resources, and coordinates Bookkeeping, verification and Change Journal recovery. Use when operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates MDM, RDM and silver for every domain and entity, and manages recurring loads from completed local deliveries. Use when making those stores operational, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -26,6 +26,54 @@ runtime readiness certificate. Recover retained progress before making a new run
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
+
+## Operationalize MDM, RDM and silver
+
+Do this before the recurring loop, for every domain. A domain is one source
+directory under `rules/sources` together with every entity kind that source's
+merge policy names. Walk all of them. Company and Person are two domains, not
+the list.
+
+The three stores are made ready once per environment, then each domain is
+checked against that ready store. Use the private role connections already
+configured. Read each command's `--help` before the first use. A missing
+subcommand is a runtime gap to report.
+
+1. **Stores.** Confirm PostgreSQL 16 answers for MDM, RDM and silver.
+   `edgar-warehouse mdm migrate` brings MDM current.
+   `edgar-warehouse rdm init --runtime-role <role>` creates RDM;
+   `edgar-warehouse rdm migrate --runtime-role <role>` updates an existing RDM.
+   The migration owner connection is `RDM_MIGRATION_DATABASE_URL`.
+   `edgar-warehouse silver init --runtime-role <role>` creates silver;
+   `edgar-warehouse silver migrate --runtime-role <role>` updates it.
+   The runtime connection is `SILVER_DATABASE_URL`.
+   Done when each store's migrate reports current and `edgar-warehouse doctor`
+   shows those three stores answering.
+2. **MDM, per domain.** Follow **Configuration promotion** in RUNBOOK.md for
+   that source and its merge policy. Read back the active version. A domain
+   whose source or policy is still a draft, or whose activation is refused,
+   stays blocked. Record the refusal and go on to the next domain. Loading
+   entities waits until that version is the active proven one.
+3. **RDM, per domain.** `edgar-warehouse rdm list`, then
+   `edgar-warehouse rdm describe <code set>` for every code set that domain
+   pins. A published version is operational. A missing or draft code set is a
+   blocker for that domain: route it through data-profiling's RDM steps
+   (`rdm draft`, `rdm diff`, operator `rdm approve`, `rdm publish`). Leave the
+   code set unpublished until those words exist.
+4. **Silver, per domain.** For each part with an approved silver spec,
+   `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
+   then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
+   material commentary are the fields the spec already names. A part with no
+   approved spec, or a pipeline silver step with no worker, stays blocked and
+   is reported. `silver land` is the manual write until that worker exists
+   ([data-onboarding](../data-onboarding/SKILL.md), Two targets).
+
+A domain is operational when its MDM source and merge policy are the active
+proven versions, every code set it pins is published in RDM, and every approved
+silver spec is a registered table. Report one line per domain: operational, or
+the blocker. The recurring loop below then loads that domain's entities from a
+finished delivery. This section does not download, does not invent a command,
+and does not mark a blocked domain complete.
 
 ## Operate the recurring loop
 
