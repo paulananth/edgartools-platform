@@ -61,6 +61,44 @@ Missing captures, unsupported workers or unapproved configuration stop affected
 work with explicit reasons. Do not download data, invent rules or bypass source
 activation. Resume unfinished work rather than creating competing runs.
 
+### Download completion is an external prerequisite
+
+Operator clarification, 2026-10-17: downloading belongs to the separate AWS
+acquisition process or Step Functions. This processing path starts with files
+already available locally. It must know that the selected delivery finished
+downloading and is ready; it must not perform or trigger acquisition.
+
+```text
+AWS acquisition / Step Functions
+  -> completed delivery and retained download evidence
+  -> local delivery-readiness check
+  -> configured reading, mastering, merge, verification and Change Journal
+```
+
+The readiness check must establish:
+
+- which source, delivery and complete expected file inventory were downloaded;
+- a successful completion record from acquisition, with expected and completed
+  file counts reconciled; an existing folder alone is not a completion record;
+- that every required file is available locally and matches its retained
+  receipt/hash, and that the evidence belongs to the selected delivery;
+- that required approved processing rules and reference/shared inputs are
+  available before the processing run begins.
+
+Freeze the selected delivery and its evidence references for the run and its
+resume. A newer download must not replace an unfinished run's original input.
+Missing, partial or inconsistent delivery evidence blocks that source with a
+reason while independent sources continue. It does not cause a download,
+automatically invoke an AWS workflow or require acquisition worker steps inside
+a mastering target. Acquisition readiness is a prerequisite result, rather
+than work the processing command performs.
+
+Reuse genuine retained captures where their evidence establishes these facts.
+Do not manufacture a download-success record from the mere presence of files.
+This clarification defines the contract; the existing acquisition/consumer
+checks still need implementation changes and behavior tests before claiming
+that local processing enforces it.
+
 Use existing Bookkeeping dependency and worker mechanisms where suitable. The
 decision does not select a new workflow service, configuration schema or CLI
 spelling. Define those only after inspecting the current interfaces and the
