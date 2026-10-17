@@ -24,7 +24,7 @@ Optional:
   --context <path>               Docker build context. Default: repo root.
   --dockerfile <path>            Override Dockerfile path.
   --platform <platform>          Target platform. Default: linux/amd64.
-  --mode <docker|crane>          Build mode. Default: docker. auto and linux select docker.
+  --mode docker                  Publish with docker build and docker push. auto and linux select docker.
   --deps-repository <name>       Dependency image ECR repository for final images. Default: same
                                   as --ecr-repository (deps images share the repo too).
   --deps-tag <tag>               Dependency image tag (before role-prefixing). Default: lock hash.
@@ -173,8 +173,7 @@ verify_image_in_ecr() {
 normalize_mode() {
     case "$1" in
         auto|docker|macos-docker|linux) printf '%s\n' docker ;;
-        crane) printf '%s\n' crane ;;
-        *) fail "--mode must be docker or crane" ;;
+        *) fail "--mode must be docker" ;;
     esac
 }
 
@@ -296,28 +295,6 @@ publish_docker() {
     fi
 }
 
-publish_crane() {
-    local crane_bin tar_path local_image_ref
-    require_command docker
-    require_command aws
-    crane_bin="${CRANE_BIN:-crane}"
-    require_command "${crane_bin}"
-
-    local_image_ref="${LOCAL_IMAGE_NAME:-edgartools-${ROLE}:${IMAGE_TAG}}"
-    tar_path="${TARBALL_PATH:-/tmp/${ECR_REPOSITORY//\//-}-${IMAGE_TAG}-${PLATFORM//\//-}.tar}"
-
-    docker build \
-        --platform "${PLATFORM}" \
-        --tag "${local_image_ref}" \
-        ${BUILD_ARG_ARGS[@]+"${BUILD_ARG_ARGS[@]}"} \
-        --file "${DOCKERFILE_PATH}" \
-        "${BUILD_CONTEXT}"
-
-    docker save "${local_image_ref}" --output "${tar_path}"
-    aws_cli ecr get-login-password | "${crane_bin}" auth login --username AWS --password-stdin "${REGISTRY}"
-    "${crane_bin}" push "${tar_path}" "${REMOTE_IMAGE_REF}"
-}
-
 build_dependency_image_if_needed() {
     local deps_role deps_args=() deps_tag_input
     case "${ROLE}" in
@@ -408,7 +385,6 @@ PLATFORM="linux/amd64"
 REQUESTED_MODE="auto"
 PUSH_ATTEMPTS=1
 OUTPUT_FILE=""
-LOCAL_IMAGE_NAME=""
 DEPS_REPOSITORY=""
 DEPS_TAG=""
 DEPS_DOCKERFILE=""
@@ -433,7 +409,6 @@ while [[ $# -gt 0 ]]; do
         --mode) REQUESTED_MODE="${2:?}"; shift 2 ;;
         --push-attempts) PUSH_ATTEMPTS="${2:?}"; shift 2 ;;
         --output-file) OUTPUT_FILE="${2:?}"; shift 2 ;;
-        --local-image) LOCAL_IMAGE_NAME="${2:?}"; shift 2 ;;
         --deps-repository) DEPS_REPOSITORY="${2:?}"; shift 2 ;;
         --deps-tag) DEPS_TAG="${2:?}"; shift 2 ;;
         --dependency-image) DEPENDENCY_IMAGE="${2:?}"; shift 2 ;;
@@ -494,7 +469,6 @@ build_arg_args
 log "Publishing ${ROLE} image ${REMOTE_IMAGE_REF} with ${RESOLVED_MODE} mode"
 case "${RESOLVED_MODE}" in
     docker) publish_docker ;;
-    crane) publish_crane ;;
     *) fail "unsupported resolved mode: ${RESOLVED_MODE}" ;;
 esac
 

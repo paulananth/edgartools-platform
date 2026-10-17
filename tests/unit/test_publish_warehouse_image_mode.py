@@ -55,22 +55,29 @@ def _run(args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[st
 def test_help_publishes_with_docker() -> None:
     result = subprocess.run(["bash", str(SCRIPT), "--help"], capture_output=True, text=True, check=False)
     assert result.returncode == 0
-    assert "--mode <docker|crane>" in result.stdout
+    assert "--mode docker" in result.stdout
     assert "docker build and docker push" in result.stdout
     lowered = result.stdout.lower()
     assert "buildx" not in lowered
+    assert "crane" not in lowered
     assert "colima" not in lowered
 
 
-def test_removed_mode_is_rejected_before_docker(tmp_path: Path) -> None:
+def test_removed_modes_are_rejected_before_docker(tmp_path: Path) -> None:
     env = _fakes(tmp_path, "linux")
-    result = _run(
-        ["--aws-region", "us-east-1", "--ecr-repository", "example", "--mode", "buildx"],
-        env,
-    )
-    assert result.returncode == 1
-    assert "--mode must be docker or crane" in result.stderr
-    assert "unexpected docker" not in result.stderr
+    for mode in ("buildx", "crane"):
+        result = _run(
+            ["--aws-region", "us-east-1", "--ecr-repository", "example", "--mode", mode],
+            env,
+        )
+        assert result.returncode == 1
+        assert "--mode must be docker" in result.stderr
+        assert "unexpected docker" not in result.stderr
+
+
+def test_colima_files_are_gone() -> None:
+    assert not (REPO_ROOT / "infra" / "scripts" / "setup-colima.sh").exists()
+    assert not (REPO_ROOT / "docs" / "colima-docker-macos.md").exists()
 
 
 def test_linux_alias_accepts_wsl_carriage_return(tmp_path: Path) -> None:

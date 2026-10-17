@@ -644,11 +644,6 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   Set `WINDOWS_AWS_BRIDGE` if different.
 - **Default WSL distro is `Ubuntu`.** Pass `--wsl-distro <name>` if yours is named
   differently (e.g. `Ubuntu-22.04`).
-- **Alternative: `--mode crane`** — builds locally, saves a tarball, and pushes with
-  `crane`. Requires `crane`:
-  ```bash
-  go install github.com/google/go-containerregistry/cmd/crane@latest
-  ```
 - **Publish with `docker build` and `docker push`** (`--mode docker`). `auto` and `linux` select that mode, on Linux and on WSL.
 - **ECR repository must exist before the image push.** It is created by the
   AWS infrastructure apply in Step 2.
