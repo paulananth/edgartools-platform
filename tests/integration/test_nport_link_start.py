@@ -12,7 +12,6 @@ observed, at the quarter; a later quarter, a later revision, keeps that start
 from __future__ import annotations
 
 import copy
-import io
 import json
 import zipfile
 from pathlib import Path
@@ -21,13 +20,12 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.mdm.clean.evidence import subject_key
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
-from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_clean_mdm_postgres as core
+from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 
@@ -57,22 +55,11 @@ def read(store, root, contract_file, raw, period, lookups=None):
     entry = {"input": raw, "context": context}
     if lookups is not None:
         entry["lookups"] = store.put(root.as_uri(), {"version": 1, "input": raw, "sets": lookups})
-    manifest = store.put(root.as_uri(), {"version": 3 if lookups is not None else 2,
-                                         "contract": store.put(root.as_uri(), body), "artifacts": [entry]})
-    task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
-    out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
-    return out
+    return chain.read(store, root, body, [entry], 3 if lookups is not None else 2)
 
 
 def combine(store, root, contract_file, readings):
-    root.mkdir(parents=True, exist_ok=True)
-    m = store.put(root.as_uri(), {"version": 1, "contract": store.put(root.as_uri(), files.load(FOLDER / contract_file)),
-                                  "readings": readings})
-    task = {"input": m, "output": (root / "out.json").as_uri(), "checks": [source_combine.CHECK], "keys": {}}
-    out = source_combine.execute(task, store)
-    assert source_combine.verify({**task, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
-    return out
+    return chain.combine(store, root, FOLDER / contract_file, readings)
 
 
 def prepared_records(root: Path, period: str, revision: int | None = None,
@@ -90,25 +77,15 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
         {"input": raw, "tables": {"attached": []}, "deferred": []}]})
     combined = combine(store, root / "combine", "combine.yaml",
                        {"securities": securities, "attached": attached, "issuers": reduced})
-    task = {"input": combined, "output": (root / "mdm/manifest.json").as_uri(), "checks": ["mdm.prepared"],
-            "keys": {"table": "security", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
-                     "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",
-                     # One quarter dates its publication by its column; quarters that
-                     # follow one another are revisions stating their own time (ticket 101).
-                     **({"effective_column": "period"} if revision is None else
-                        {"publication_key": f"nport:{period[:10]}", "revision": str(revision),
-                         "effective_at": period})}}
-    prepared = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
-    contract = files.source(NAME)["mdm"][CODE]["contract"]
-    out = []
-    for b in store.json(prepared)["batches"]:
-        assert b["input"]["publication"]["effective_at"] == period
-        for line in (root / "mdm" / b["input"]["path"]).read_bytes().splitlines():
-            out.append(adapters.normalize(json.loads(line), source_code=CODE, contract=contract, publication={
-                **b["input"]["publication"], "semantics": "patch", "artifact_sha256": b["input"]["sha256"],
-                "member": b["input"]["path"], "record_locator": f"{b['input']['sha256']}:{len(out)}"}))
-    return out
+    prepared = chain.prepare(store, root / "mdm", combined, {
+        "table": "security", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
+        "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",
+        # One quarter dates its publication by its column; quarters that
+        # follow one another are revisions stating their own time (ticket 101).
+        **({"effective_column": "period"} if revision is None else
+           {"publication_key": f"nport:{period[:10]}", "revision": str(revision), "effective_at": period})})
+    assert all(b["input"]["publication"]["effective_at"] == period for b in store.json(prepared)["batches"])
+    return chain.records(store, root / "mdm", prepared, CODE, files.source(NAME)["mdm"][CODE]["contract"])
 
 
 def policy_body() -> dict:

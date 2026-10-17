@@ -21,13 +21,12 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.mdm.clean.evidence import subject_key
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, canonical, register_policy
 from edgar_warehouse.rules import files
-from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_clean_mdm_postgres as core
+from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 NAME, FILINGS, CUSTODIANS = "iapd.adv", "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
@@ -69,29 +68,14 @@ def read(store, root: Path, contract_file: str, raw: dict, published: str) -> di
     body = {"source": NAME, "execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1},
             **files.load(FOLDER / contract_file)}
     context = store.put(root.as_uri(), {"version": 1, "input": raw, "values": {"published": published}})
-    manifest = store.put(root.as_uri(), {"version": 2, "contract": store.put(root.as_uri(), body),
-                                         "artifacts": [{"input": raw, "context": context}]})
-    task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
-    out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
-    return out
+    return chain.read(store, root, body, [{"input": raw, "context": context}], 2)
 
 
 def prepare(store, root: Path, reading: dict, table: str, code: str, **keys) -> list[dict]:
-    task = {"input": reading, "output": (root / "manifest.json").as_uri(), "checks": ["mdm.prepared"],
-            "keys": {"table": table, "dataset": code, "policy": "0" * 64, "consumer": "check",
-                     "batch_id": f"check-{code}", "as_of": "2026-10-16T00:00:00+00:00",
-                     "effective_column": "published", **keys}}
-    prepared = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
-    contract = files.source(NAME)["mdm"][code]["contract"]
-    out = []
-    for b in store.json(prepared)["batches"]:
-        for line in (root / b["input"]["path"]).read_bytes().splitlines():
-            out.append(adapters.normalize(json.loads(line), source_code=code, contract=contract, publication={
-                **b["input"]["publication"], "semantics": "patch", "artifact_sha256": b["input"]["sha256"],
-                "member": b["input"]["path"], "record_locator": f"{b['input']['sha256']}:{len(out)}"}))
-    return out
+    prepared = chain.prepare(store, root, reading, {
+        "table": table, "dataset": code, "policy": "0" * 64, "consumer": "check", "batch_id": f"check-{code}",
+        "as_of": "2026-10-16T00:00:00+00:00", "effective_column": "published", **keys})
+    return chain.records(store, root, prepared, code, files.source(NAME)["mdm"][code]["contract"])
 
 
 def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
@@ -107,11 +91,8 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     filings = read(store, root / "filings", "adviser-filings-csv.yaml", raw, published)
     custody_rows = read(store, root / "custody", "custody-csv.yaml", raw, published)
-    m = store.put(root.as_uri(), {"version": 1, "contract": store.put(root.as_uri(), files.load(FOLDER / "combine.yaml")),
-                                  "readings": {"filings": filings, "custody": custody_rows}})
-    task = {"input": m, "output": (root / "combine/out.json").as_uri(), "checks": [source_combine.CHECK], "keys": {}}
-    combined = source_combine.execute(task, store)
-    assert source_combine.verify({**task, "candidate": combined}, store) == ({source_combine.CHECK: True}, [])
+    combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
+                             {"filings": filings, "custody": custody_rows})
     custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS, distinct_on=["custodian_id"])
     advisers = prepare(store, root / "mdm-filings", combined, "filings", FILINGS)
     return custodians, advisers
