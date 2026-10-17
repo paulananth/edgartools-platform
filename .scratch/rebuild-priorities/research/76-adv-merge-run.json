@@ -1,0 +1,243 @@
+{
+ "batches": {
+  "first gleif.level1.v1": {
+   "batches": 30,
+   "seconds": 76.9,
+   "slowest": 4.2
+  },
+  "first iapd.adv.custodians.v1": {
+   "batches": 27,
+   "seconds": 70.1,
+   "slowest": 11.2
+  },
+  "first iapd.adv.filings.v1": {
+   "batches": 52,
+   "seconds": 238.2,
+   "slowest": 8.5
+  },
+  "first sec.submissions.company.v1": {
+   "batches": 8,
+   "seconds": 24.2,
+   "slowest": 6.1
+  },
+  "second gleif.level1.v1": {
+   "batches": 30,
+   "seconds": 97.2,
+   "slowest": 4.9
+  },
+  "second iapd.adv.custodians.v1": {
+   "batches": 27,
+   "seconds": 40.5,
+   "slowest": 2.1
+  },
+  "second iapd.adv.filings.v1": {
+   "batches": 52,
+   "seconds": 144.8,
+   "slowest": 3.9
+  },
+  "second sec.submissions.company.v1": {
+   "batches": 8,
+   "seconds": 19.9,
+   "slowest": 3.6
+  },
+  "third gleif.level1.v1": {
+   "batches": 30,
+   "seconds": 76.3,
+   "slowest": 3.9
+  },
+  "third iapd.adv.custodians.v1": {
+   "batches": 27,
+   "seconds": 40.9,
+   "slowest": 2.2
+  },
+  "third iapd.adv.filings.v1": {
+   "batches": 52,
+   "seconds": 144.6,
+   "slowest": 3.7
+  },
+  "third sec.submissions.company.v1": {
+   "batches": 8,
+   "seconds": 20.4,
+   "slowest": 3.2
+  }
+ },
+ "gleif_records_read": 28890,
+ "issuer_leis_listed": 28397,
+ "last_pass_changed_nothing": true,
+ "passes": [
+  {
+   "after": {
+    "bd_numbers_on_two_or_more_entities": 0,
+    "companies_by_feeds": {
+     "gleif.level1.v1 + iapd.adv.custodians.v1 + sec.submissions.company.v1": 24,
+     "gleif.level1.v1 + sec.submissions.company.v1": 3028,
+     "iapd.adv.custodians.v1": 700,
+     "iapd.adv.filings.v1": 17646,
+     "sec.submissions.company.v1": 3362
+    },
+    "counts": {
+     "bound": {
+      "gleif.level1.v1": 3052,
+      "iapd.adv.custodians.v1": 2906,
+      "iapd.adv.filings.v1": 46640,
+      "sec.submissions.company.v1": 6414
+     },
+     "decisions": {
+      "bind": 59012
+     },
+     "identities": {
+      "company": 24760
+     },
+     "open_reviews": {
+      "binding_required": 25350,
+      "classification_deferred": 312,
+      "invalid_lei_checksum": 76,
+      "unsupported_identity_kind": 4299
+     },
+     "relationships": {
+      "CUSTODIAN company -> company": 15339
+     },
+     "stage_records": {
+      "gleif.level1.v1": 24591,
+      "iapd.adv.custodians.v1": 6717,
+      "iapd.adv.filings.v1": 46640,
+      "sec.submissions.company.v1": 6414
+     },
+     "waiting": {
+      "classification_deferred": 312,
+      "invalid_lei_checksum": 76,
+      "unsupported_identity_kind": 4299
+     }
+    },
+    "crds_on_two_or_more_entities": 0,
+    "custodian_links_seen_after_their_first_month": 9267,
+    "leis_on_two_or_more_entities": 0,
+    "most_custodian_links_on_one_custodian": 6294
+   },
+   "pass": "first",
+   "seconds": 479.0
+  },
+  {
+   "after": {
+    "bd_numbers_on_two_or_more_entities": 0,
+    "companies_by_feeds": {
+     "gleif.level1.v1 + iapd.adv.custodians.v1": 97,
+     "gleif.level1.v1 + iapd.adv.custodians.v1 + sec.submissions.company.v1": 24,
+     "gleif.level1.v1 + sec.submissions.company.v1": 3028,
+     "iapd.adv.custodians.v1": 603,
+     "iapd.adv.filings.v1": 17646,
+     "sec.submissions.company.v1": 3362
+    },
+    "counts": {
+     "bound": {
+      "gleif.level1.v1": 3149,
+      "iapd.adv.custodians.v1": 2906,
+      "iapd.adv.filings.v1": 46640,
+      "sec.submissions.company.v1": 6414
+     },
+     "decisions": {
+      "bind": 59109
+     },
+     "identities": {
+      "company": 24760
+     },
+     "open_reviews": {
+      "binding_required": 25253,
+      "classification_deferred": 312,
+      "invalid_lei_checksum": 76,
+      "unsupported_identity_kind": 4299
+     },
+     "relationships": {
+      "CUSTODIAN company -> company": 15339,
+      "SUCCESSOR_ENTITY company -> company": 2
+     },
+     "stage_records": {
+      "gleif.level1.v1": 24591,
+      "iapd.adv.custodians.v1": 6717,
+      "iapd.adv.filings.v1": 46640,
+      "sec.submissions.company.v1": 6414
+     },
+     "waiting": {
+      "classification_deferred": 312,
+      "invalid_lei_checksum": 76,
+      "unsupported_identity_kind": 4299
+     }
+    },
+    "crds_on_two_or_more_entities": 0,
+    "custodian_links_seen_after_their_first_month": 9267,
+    "leis_on_two_or_more_entities": 0,
+    "most_custodian_links_on_one_custodian": 6294
+   },
+   "pass": "second",
+   "seconds": 370.5
+  },
+  {
+   "after": {
+    "bd_numbers_on_two_or_more_entities": 0,
+    "companies_by_feeds": {
+     "gleif.level1.v1 + iapd.adv.custodians.v1": 97,
+     "gleif.level1.v1 + iapd.adv.custodians.v1 + sec.submissions.company.v1": 24,
+     "gleif.level1.v1 + sec.submissions.company.v1": 3028,
+     "iapd.adv.custodians.v1": 603,
+     "iapd.adv.filings.v1": 17646,
+     "sec.submissions.company.v1": 3362
+    },
+    "counts": {
+     "bound": {
+      "gleif.level1.v1": 3149,
+      "iapd.adv.custodians.v1": 2906,
+      "iapd.adv.filings.v1": 46640,
+      "sec.submissions.company.v1": 6414
+     },
+     "decisions": {
+      "bind": 59109
+     },
+     "identities": {
+      "company": 24760
+     },
+     "open_reviews": {
+      "binding_required": 25253,
+      "classification_deferred": 312,
+      "invalid_lei_checksum": 76,
+      "unsupported_identity_kind": 4299
+     },
+     "relationships": {
+      "CUSTODIAN company -> company": 15339,
+      "SUCCESSOR_ENTITY company -> company": 2
+     },
+     "stage_records": {
+      "gleif.level1.v1": 24591,
+      "iapd.adv.custodians.v1": 6717,
+      "iapd.adv.filings.v1": 46640,
+      "sec.submissions.company.v1": 6414
+     },
+     "waiting": {
+      "classification_deferred": 312,
+      "invalid_lei_checksum": 76,
+      "unsupported_identity_kind": 4299
+     }
+    },
+    "crds_on_two_or_more_entities": 0,
+    "custodian_links_seen_after_their_first_month": 9267,
+    "leis_on_two_or_more_entities": 0,
+    "most_custodian_links_on_one_custodian": 6294
+   },
+   "pass": "third",
+   "seconds": 349.7
+  }
+ ],
+ "policy_digest": "635c6a242f7f8a6eacd7f7288c50225ab4b2eccef664e775b7b10f039a02d07a",
+ "read": {
+  "gleif.level1.v1 assertions": 24591,
+  "gleif.level1.v1 deferred: unsupported_identity_kind": 4299,
+  "iapd.adv.custodians.v1 assertions": 6717,
+  "iapd.adv.custodians.v1 deferred: invalid_lei_checksum": 76,
+  "iapd.adv.filings.v1 assertions": 46640,
+  "sec.submissions.company.v1 assertions": 6414,
+  "sec.submissions.company.v1 deferred: classification_deferred": 312
+ },
+ "run": "Form ADV through the Merge Stage beside GLEIF and SEC (tickets 75, 76)",
+ "seconds": {
+  "prepare": 53.2
+ }
+}

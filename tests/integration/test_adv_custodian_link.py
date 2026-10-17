@@ -12,7 +12,6 @@ its `last_seen` at the later one. Invented values only.
 
 from __future__ import annotations
 
-import copy
 import io
 import json
 import zipfile
@@ -118,20 +117,6 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
     return custodians, advisers
 
 
-def policy_body() -> dict:
-    body = copy.deepcopy(files.policy())
-    company = body["kinds"]["company"]
-    for namespace in ("crd", "lei", "bd_number"):
-        company["identifiers"][namespace].setdefault("verification", {
-            "corpus_sha256": "0" * 64, "approved_by": "check", "approved_at": core.AS_OF, "reason": "check only"})
-    for rule_id in ("iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd"):
-        rule = next(r for r in company["rules"] if r["rule_id"] == rule_id)
-        body["automatic_rules"].append({"kind": "company", "family": "binding", "rule_id": rule_id,
-                                        "rule_version": rule["version"], "verdict": "bind",
-                                        "activation": "deterministic"})
-    return body
-
-
 def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
     may_custodians, may_filings = month(tmp_path / "may", MAY)
     june_custodians, june_filings = month(tmp_path / "june", JUNE)
@@ -144,7 +129,7 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
     with database.admin.begin() as conn:
         for code in (FILINGS, CUSTODIANS):
             register_dataset(conn, code, database.registry, files.mdm_contract(NAME, code))
-        policy = register_policy(conn, policy_body())
+        policy = register_policy(conn, files.policy())
     stage = MergeStage(Store(database.application))
     for n, (batch, records) in enumerate([("may-custodians", may_custodians), ("may-filings", may_filings),
                                           ("june-custodians", june_custodians), ("june-filings", june_filings)], 1):

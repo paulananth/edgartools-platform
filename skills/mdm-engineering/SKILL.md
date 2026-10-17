@@ -61,6 +61,12 @@ affected master is recomputed alone and written only if it changed; reviews
 cover only the affected masters, records and links. The proposal and the
 batch are saved in one transaction.
 
+**A waiting record is looked at again only when it is applied again.** A
+record whose matching rule waits for a master another feed creates later in
+the same pass stays waiting in that pass. A run that loads several feeds
+therefore applies its passes until one changes nothing, and reports how many
+it took; the last pass must change nothing.
+
 Never load "everything connected" to a batch. Through one shared end, a
 network of links makes every batch cost the whole network.
 
