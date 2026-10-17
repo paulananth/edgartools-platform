@@ -25,7 +25,7 @@ class RunCoordinator:
     def __init__(self, mdm: Store):
         self.mdm = mdm
 
-    def _scope(self, run_id: str) -> dict | None:
+    def scope(self, run_id: str) -> dict | None:
         with self.mdm.engine.connect() as conn:
             return conn.scalar(
                 text("SELECT scope FROM mdm.run WHERE run_id=CAST(:run AS uuid)"),
@@ -76,6 +76,7 @@ class RunCoordinator:
         expected_batches: list[str],
         *,
         manifest_digest: str,
+        mapping_versions: dict[str, int] | None = None,
     ) -> None:
         if not expected_batches or len(expected_batches) != len(set(expected_batches)):
             raise ValueError("A root run requires a nonempty frozen batch manifest")
@@ -84,7 +85,9 @@ class RunCoordinator:
             "manifest_digest": manifest_digest,
             "contract_version": 2,
         }
-        existing = self._scope(run_id)
+        if mapping_versions:
+            scope["mapping_versions"] = mapping_versions
+        existing = self.scope(run_id)
         if existing is not None and existing != scope:
             raise Conflict("Root run scope changed")
         # start_run refuses a changed scope too, for a concurrent start.
@@ -95,7 +98,7 @@ class RunCoordinator:
             )
 
     def reconcile(self, run_id: str) -> dict:
-        scope = self._scope(run_id)
+        scope = self.scope(run_id)
         if scope is None:
             raise Conflict("Root run was not registered")
         expected = set(scope["expected_batches"])

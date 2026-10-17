@@ -21,7 +21,7 @@ from .evidence import deferred_record
 from .merge import MergeStage
 from .quality import counts as quality_counts
 from .quality import profile as quality_profile
-from .store import Conflict, Store, current_reading
+from .store import Conflict, Store, current_reading, reading_at
 
 
 def _reject_json_constant(value):
@@ -113,7 +113,12 @@ def batch_evidence(
 
 
 def batch_input(
-    batch: dict, root: Path, store: Store, *, policy_digest: str | None = None
+    batch: dict,
+    root: Path,
+    store: Store,
+    *,
+    policy_digest: str | None = None,
+    mapping_versions: dict[str, int] | None = None,
 ) -> dict:
     """A batch's readings, its deferred records, and each reading's bronze object.
 
@@ -121,6 +126,9 @@ def batch_input(
     (`_origin.bronze`: object, sha256, locator). That is where the record was
     delivered, not what it says, so it travels beside the reading as an
     occurrence and the Stage keeps the winner's (ticket 10).
+
+    A run passes the `mapping_versions` its scope pins; without them the batch
+    is read under the source's newest reading.
     """
     if "input" not in batch:
         return {
@@ -142,7 +150,10 @@ def batch_input(
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     with store.engine.connect() as conn:
-        reading = current_reading(conn, spec["source_code"])
+        if mapping_versions is None:
+            reading = current_reading(conn, spec["source_code"])
+        else:
+            reading = reading_at(conn, spec["source_code"], mapping_versions[spec["source_code"]])
     if reading is None:
         raise Conflict("Unregistered dataset")
     # A corrected mapping applies to publications read from here on, and every
@@ -252,6 +263,29 @@ def batch_input(
     return {"assertions": result, "deferred": deferred, "occurrences": occurrences}
 
 
+def pinned_mapping_versions(store: Store, manifest: dict, scope: dict | None) -> dict[str, int]:
+    """The mapping version of each source the manifest reads, for the whole run.
+
+    Chosen once, when the run first starts, and kept in its frozen scope: a
+    corrected mapping registered part way through applies to the next run,
+    never to this run's later batches or its resume (rebuild ticket 103).
+    """
+    codes = sorted({b["input"]["source_code"] for b in manifest["batches"] if "input" in b})
+    if scope is not None:
+        pinned = scope.get("mapping_versions", {})
+        if missing := [code for code in codes if code not in pinned]:
+            raise Conflict(f"Run scope pins no reading of {', '.join(missing)}")
+        return pinned
+    pinned = {}
+    with store.engine.connect() as conn:
+        for code in codes:
+            reading = current_reading(conn, code)
+            if reading is None:
+                raise Conflict(f"Unregistered dataset {code}")
+            pinned[code] = reading[0]
+    return pinned
+
+
 def execute_manifest(
     store: Store,
     coordinator: RunCoordinator,
@@ -288,11 +322,13 @@ def execute_manifest(
                 {"ids": [b["batch_id"] for b in manifest["batches"]]},
             )
         )
+    mapping_versions = pinned_mapping_versions(store, manifest, coordinator.scope(run_id))
     if not preview:
         coordinator.start(
             run_id,
             [b["batch_id"] for b in manifest["batches"]],
             manifest_digest=manifest_hash,
+            mapping_versions=mapping_versions,
         )
     prerequisites = set()
     quality: Counter = Counter()
@@ -305,7 +341,8 @@ def execute_manifest(
             continue
         if not prerequisites <= observed:
             raise Conflict("Complete preceding manifest batches before this stage")
-        found = batch_input(batch, root, store, policy_digest=manifest["policy_digest"])
+        found = batch_input(batch, root, store, policy_digest=manifest["policy_digest"],
+                            mapping_versions=mapping_versions)
         assertions, deferred = found["assertions"], found["deferred"]
         occurrences = found["occurrences"]
         batch_quality = quality_counts(assertions, deferred)
