@@ -69,7 +69,7 @@ read:
 
 `wrapper` names the one array under the document's single key; `wrapper: null`
 reads a document that is itself the array, one record per element (ticket 104).
-Each still refuses the other shape. With `ordinal_context`, a table that iterates
+Write `null`: a bare `wrapper:` line is also no value. Each still refuses the other shape. With `ordinal_context`, a table that iterates
 a list inside each record (`each: data`) gives every row its record's position,
 so rows of a nested list stay tied to the element they came from.
 

@@ -96,4 +96,10 @@ fn a_bare_array_streams_when_no_wrapper_is_declared() {
     let large = format!(r#"[{{"text":"{}"}}]"#, "x".repeat(200_000));
     assert_eq!(scan(large.as_bytes(), None, limits(), |_, _| Ok(())).unwrap_err().code, "limit_exceeded");
     assert_eq!(scan(&br#"[{"a":1}]"#[..], Some(""), limits(), |_, _| Ok(())).unwrap_err().code, "contract");
+    let two = Limits { max_records: 2, ..limits() };
+    assert!(scan(&br#"[{},{},{}]"#[..], None, two, |_, _| Ok(())).is_err());
+    let shallow = Limits { max_depth: 1, ..limits() };
+    assert!(scan(&br#"[{"a":{"b":1}}]"#[..], None, shallow, |_, _| Ok(())).is_err());
+    // A named wrapper still refuses an extra key after its array.
+    assert!(scan(&br#"{"records":[],"x":0}"#[..], Some("records"), limits(), |_, _| Ok(())).is_err());
 }

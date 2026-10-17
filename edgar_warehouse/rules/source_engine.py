@@ -137,7 +137,8 @@ class SourceEngine:
                           min_integer: int = -(2**63), record_encoding: str = "native",
                           context: Mapping[str, object] | None = None, ordinal_context: str | None = None,
                           lookups: Mapping[str, Iterable[str]] | None = None) -> dict:
-        """Frame and project inside Rust; callbacks prepare readings until valid EOF."""
+        """Frame and project inside Rust (a named wrapper, or `wrapper=None` for a bare
+        array); callbacks prepare readings until valid EOF."""
         arguments = _stream_arguments(wrapper, max_bytes, max_record, max_records, max_depth, min_integer, record_encoding)
         def receive(body, index):
             on_reading(Reading(tables=body["tables"], deferred=body["deferred"]), index)
