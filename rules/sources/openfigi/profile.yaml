@@ -9,26 +9,26 @@ parts:
   kind: null
   rows: 2184699
   record_key:
-  - record_id
+  - id
   - figi
   silver:
-    table: answers_data
+    table: openfigi_listing
     load_mode: append
     key:
-    - record_id
+    - id
     - figi
     fields:
+    - name: id
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
     - name: figi
       type: VARCHAR
       nullable: false
       sensitivity: none
-    - name: name
-      type: VARCHAR
-      nullable: true
-      sensitivity: none
     - name: ticker
       type: VARCHAR
-      nullable: false
+      nullable: true
       sensitivity: none
     - name: exchCode
       type: VARCHAR
@@ -39,39 +39,40 @@ parts:
       type: VARCHAR
       nullable: true
       sensitivity: none
+    - name: shareClassFIGI
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: name
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
     - name: securityType
       type: VARCHAR
       nullable: true
       sensitivity: none
       code_set: answers.data.securityType
-    - name: marketSector
-      type: VARCHAR
-      nullable: false
-      sensitivity: none
-      code_set: answers.data.marketSector
-    - name: shareClassFIGI
-      type: VARCHAR
-      nullable: true
-      sensitivity: none
     - name: securityType2
       type: VARCHAR
       nullable: true
       sensitivity: none
       code_set: answers.data.securityType2
+    - name: marketSector
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.marketSector
     - name: securityDescription
       type: VARCHAR
       nullable: true
       sensitivity: none
     links:
-    - source_key: compositeFIGI
-      to_part: answers.data.compositeFIGI
-      mdm_id_column: compositeFIGI_mdm_id
-    - source_key: figi
-      to_part: answers.data.figi
-      mdm_id_column: figi_mdm_id
-    - source_key: shareClassFIGI
-      to_part: answers.data.shareClassFIGI
-      mdm_id_column: shareClassFIGI_mdm_id
+    - source_key: id
+      to_part: answers
+      mdm_id_column: security_mdm_id_by_cusip
+    - source_key: id
+      to_part: answers
+      mdm_id_column: security_mdm_id_by_isin
   quality:
   - check: missing
     column: figi

@@ -108,3 +108,11 @@ This is engine work, written as ticket 104 ("Stream a bare JSON array"), with a 
   - Each answer file's pair set was built from the whole group's requests, which is quadratic: about 6 minutes for a reading of 480 files. Each file now uses its own request file.
   - Putting the 8 readings together loaded several GB. The streamed reduce now gives each identifier's answer instead.
   - The 16 readings run at once, one process each: 91 s for all 7,714 files.
+
+## Silver: the listings table (2026-10-17 13:39 ET)
+
+- **Finding:** every listing is unique by the identifier asked and its FIGI: 0 duplicates over 872,383 CUSIP and 1,312,316 ISIN listings (2,184,699, as profiled). Profiling's key (its parent answer's row number and the FIGI) is the same key, since each answer is one identifier asked.
+- **Spec change, approved under the standing rule** (operator, 2026-10-17: "auto merge and not ask for approval"): `openfigi_listing` keyed by `id` and `figi`, linked to the Security its identifier joined, instead of to the three FIGI levels (lookup-only cross-references, 2026-10-14 ruling). Append only (refresh asks only new identifiers). Written to `rules/sources/openfigi/silver-listing.yaml`, put in the findings' `answers.data` part, and `profile.yaml` regenerated.
+- **Names:** the source extract's `listings` table now keeps OpenFIGI's field names (`exchCode`, `compositeFIGI` …), so silver keeps the source's own terms and the profile's code-set and quality lineage stays on its columns.
+- **One table, two links:** the writer resolves a link through one Dataset Contract, and an identifier is a CUSIP or an ISIN, so each row fills one of `security_mdm_id_by_cusip` and `security_mdm_id_by_isin`.
+- **Gaps:** the table's checks run nowhere yet (ticket 105); scheduled landing needs a Bookkeeping output worker (ticket 71).

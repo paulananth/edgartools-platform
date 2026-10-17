@@ -22,7 +22,8 @@
 # makes one flat record per identifier, which mdm.prepare reads (table
 # `security`). The context names each file's `batch` ("id_cusip/00000") and
 # its `id_type`. A select that gives null excludes its row (`value: {path:
-# NO_SUCH_FIELD}`, the null idiom of the engine). Stream bounds hold for a whole reading of up to 512 files: each
+# NO_SUCH_FIELD}`, the null idiom of the engine). The `listings` table keeps
+# OpenFIGI's field names, and lands in silver (silver-listing.yaml). Stream bounds hold for a whole reading of up to 512 files: each
 # file is at least one piece, and an ISIN file projects about 1.4 MB (measured
 # 2026-10-17 on 8 files), so about 700 MB a reading.
 source: openfigi
@@ -101,24 +102,24 @@ read:
             path: figi
             null_if:
             - ""
-        composite_figi:
-          text:
-            path: compositeFIGI
-            null_if:
-            - ""
-        share_class_figi:
-          text:
-            path: shareClassFIGI
-            null_if:
-            - ""
         ticker:
           text:
             path: ticker
             null_if:
             - ""
-        exchange_code:
+        exchCode:
           text:
             path: exchCode
+            null_if:
+            - ""
+        compositeFIGI:
+          text:
+            path: compositeFIGI
+            null_if:
+            - ""
+        shareClassFIGI:
+          text:
+            path: shareClassFIGI
             null_if:
             - ""
         name:
@@ -126,22 +127,22 @@ read:
             path: name
             null_if:
             - ""
-        security_type:
+        securityType:
           text:
             path: securityType
             null_if:
             - ""
-        security_type2:
+        securityType2:
           text:
             path: securityType2
             null_if:
             - ""
-        market_sector:
+        marketSector:
           text:
             path: marketSector
             null_if:
             - ""
-        security_description:
+        securityDescription:
           text:
             path: securityDescription
             null_if:

@@ -1,0 +1,111 @@
+# The silver table of OpenFIGI's listings (ticket 80): `edgar-warehouse silver
+# register` reads this spec (docs/specs/profiling/findings.md, section 6).
+# Rulings it rests on (operator):
+# - "(c) MDM + silver listings (Recommended)" (2026-10-17 08:56 ET): every
+#   listing lands in silver; the MDM record keeps only the single levels.
+# - "auto merge and not ask for approval" (2026-10-17): this spec change is
+#   recorded as approved under that standing rule. Profiling proposed a table
+#   keyed by its own row number and linked to the three FIGI levels; under the
+#   rulings the FIGIs are lookup-only cross-references, so a listing is keyed
+#   by the identifier asked and its FIGI, and links to the Security that
+#   identifier joined. Evidence (the 2026-10-15 capture, read by the full
+#   configured run): 0 duplicate keys over 872,383 CUSIP and 1,312,316 ISIN
+#   listings.
+# Rows are the source extract's `listings` table, with OpenFIGI's own field
+# names, without `figi_ticker` (a helper for reduce.yaml). An identifier is a
+# CUSIP or an ISIN, so each row fills one MDM id: the one whose Dataset
+# Contract staged that identifier.
+# Append only: a refresh asks only identifiers not yet captured (operator,
+# 2026-10-15: "Open figi rarely changes do not download again"), so a
+# delivered row that changes a landed one is refused, never overwritten.
+table: openfigi_listing
+definition: One listing (an instrument on one exchange) that OpenFIGI's mapping gave for a CUSIP or ISIN asked.
+grain: one row per identifier asked and listing FIGI
+columns:
+- name: id
+  type: VARCHAR
+  nullable: false
+  definition: The CUSIP or ISIN asked, upper-cased.
+  source: the request's idValue, by the answer's position
+  sensitivity: none
+- name: figi
+  type: VARCHAR
+  nullable: false
+  definition: The listing's FIGI.
+  source: data[].figi
+  sensitivity: none
+- name: ticker
+  type: VARCHAR
+  nullable: true
+  definition: The listing's ticker on its exchange.
+  source: data[].ticker
+  sensitivity: none
+- name: exchCode
+  type: VARCHAR
+  nullable: true
+  definition: The exchange's code.
+  source: data[].exchCode
+  sensitivity: none
+- name: compositeFIGI
+  type: VARCHAR
+  nullable: true
+  definition: The FIGI of the security across one country's exchanges.
+  source: data[].compositeFIGI
+  sensitivity: none
+- name: shareClassFIGI
+  type: VARCHAR
+  nullable: true
+  definition: The FIGI of the share class across countries.
+  source: data[].shareClassFIGI
+  sensitivity: none
+- name: name
+  type: VARCHAR
+  nullable: true
+  definition: The instrument's name.
+  source: data[].name
+  sensitivity: none
+- name: securityType
+  type: VARCHAR
+  nullable: true
+  source: data[].securityType
+  sensitivity: none
+- name: securityType2
+  type: VARCHAR
+  nullable: true
+  source: data[].securityType2
+  sensitivity: none
+- name: marketSector
+  type: VARCHAR
+  nullable: true
+  source: data[].marketSector
+  sensitivity: none
+- name: securityDescription
+  type: VARCHAR
+  nullable: true
+  source: data[].securityDescription
+  sensitivity: none
+key:
+- id
+- figi
+links:
+- columns:
+  - id
+  kind: security
+  source_code: openfigi.security.v1
+  to_part: answers
+  source_key: id
+  mdm_id_column: security_mdm_id_by_cusip
+- columns:
+  - id
+  kind: security
+  source_code: openfigi.security_isin.v1
+  to_part: answers
+  source_key: id
+  mdm_id_column: security_mdm_id_by_isin
+time:
+  as_of: null
+  as_at: loaded_at
+  event_time: null
+partition: []
+load_mode: append
+why: Every listing OpenFIGI gave, for lookup by ticker, exchange or any FIGI; the MDM record keeps only the levels with one value.
