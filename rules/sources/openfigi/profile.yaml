@@ -1,0 +1,567 @@
+# Written by data-profiling `catalog` from approved findings: names and counts only.
+version: 1
+dataset: OpenFIGI mapping 2026q2-nport
+profiled_at: '2026-10-17T08:48:37-04:00'
+approved_at: '2026-10-17T08:50:35-04:00'
+parts:
+- part: answers.data
+  class: transaction
+  kind: null
+  rows: 2184699
+  record_key:
+  - record_id
+  - figi
+  silver:
+    table: answers_data
+    load_mode: append
+    key:
+    - record_id
+    - figi
+    fields:
+    - name: figi
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: name
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: ticker
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: exchCode
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.exchCode
+    - name: compositeFIGI
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: securityType
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.securityType
+    - name: marketSector
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+      code_set: answers.data.marketSector
+    - name: shareClassFIGI
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: securityType2
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.securityType2
+    - name: securityDescription
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    links:
+    - source_key: compositeFIGI
+      to_part: answers.data.compositeFIGI
+      mdm_id_column: compositeFIGI_mdm_id
+    - source_key: figi
+      to_part: answers.data.figi
+      mdm_id_column: figi_mdm_id
+    - source_key: shareClassFIGI
+      to_part: answers.data.shareClassFIGI
+      mdm_id_column: shareClassFIGI_mdm_id
+  quality:
+  - check: missing
+    column: figi
+    failed_rows: 0
+    proposal: exception
+    why: 'a record key column is empty: the record cannot be identified'
+  - check: code_set
+    column: exchCode
+    failed_rows: 0
+    proposal: flag
+    why: a code of code set answers.data.exchCode, checked once RDM publishes it
+  - check: code_set
+    column: securityType
+    failed_rows: 0
+    proposal: flag
+    why: a code of code set answers.data.securityType, checked once RDM publishes it
+  - check: code_list
+    column: marketSector
+    failed_rows: 0
+    proposal: flag
+    why: 9 codes in this delivery; a new code is flagged until the code set has it
+  - check: code_list
+    column: securityType2
+    failed_rows: 0
+    proposal: flag
+    why: 34 codes in this delivery; a new code is flagged until the code set has it
+  - check: link_not_found
+    column: compositeFIGI
+    failed_rows: 0
+    proposal: flag
+    why: every value is found in answers.data.compositeFIGI.compositeFIGI
+  - check: link_not_found
+    column: figi
+    failed_rows: 0
+    proposal: flag
+    why: every value is found in answers.data.figi.figi
+  - check: link_not_found
+    column: shareClassFIGI
+    failed_rows: 0
+    proposal: flag
+    why: every value is found in answers.data.shareClassFIGI.shareClassFIGI
+  - check: hierarchy_invalid
+    column: marketSector
+    failed_rows: 11870
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+  - check: hierarchy_invalid
+    column: marketSector
+    failed_rows: 10249
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+  - check: hierarchy_invalid
+    column: marketSector
+    failed_rows: 340
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+- part: answers
+  class: unknown
+  kind: null
+  rows: 771219
+  record_key:
+  - record_id
+  silver:
+    table: answers
+    load_mode: append
+    key:
+    - record_id
+    fields:
+    - name: warning
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    links: []
+  quality:
+  - check: no_natural_key
+    column: null
+    failed_rows: 0
+    proposal: flag
+    why: no column or combination is unique
+- part: requests
+  class: unknown
+  kind: null
+  rows: 771219
+  record_key:
+  - idValue
+  silver:
+    table: requests
+    load_mode: append
+    key:
+    - idValue
+    fields:
+    - name: idType
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+      code_set: requests.idType
+    - name: idValue
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    links: []
+  quality:
+  - check: missing
+    column: idValue
+    failed_rows: 0
+    proposal: exception
+    why: 'a record key column is empty: the record cannot be identified'
+  - check: check_digit
+    column: idValue
+    failed_rows: 344247
+    proposal: withhold
+    why: 'the luhn over letter digits check digit fails: a mistyped or invented identifier'
+  - check: code_list
+    column: idType
+    failed_rows: 0
+    proposal: flag
+    why: 2 codes in this delivery; a new code is flagged until the code set has it
+- part: answers.data.figi
+  class: master
+  kind: figi
+  rows: 1392524
+  record_key:
+  - figi
+  silver:
+    table: answers_data_figi
+    load_mode: upsert
+    key:
+    - figi
+    fields:
+    - name: figi
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: name
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: ticker
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: exchCode
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.figi.exchCode
+    - name: compositeFIGI
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: securityType
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.figi.securityType
+    - name: marketSector
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+      code_set: answers.data.figi.marketSector
+    - name: shareClassFIGI
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: securityType2
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.figi.securityType2
+    - name: securityDescription
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    links:
+    - source_key: figi
+      to_part: answers.data.figi
+      mdm_id_column: mdm_id
+    - source_key: compositeFIGI
+      to_part: answers.data.compositeFIGI
+      mdm_id_column: compositeFIGI_mdm_id
+    - source_key: shareClassFIGI
+      to_part: answers.data.shareClassFIGI
+      mdm_id_column: shareClassFIGI_mdm_id
+  quality:
+  - check: missing
+    column: figi
+    failed_rows: 0
+    proposal: exception
+    why: 'a record key column is empty: the record cannot be identified'
+  - check: code_set
+    column: exchCode
+    failed_rows: 0
+    proposal: flag
+    why: a code of code set answers.data.figi.exchCode, checked once RDM publishes it
+  - check: code_set
+    column: securityType
+    failed_rows: 0
+    proposal: flag
+    why: a code of code set answers.data.figi.securityType, checked once RDM publishes it
+  - check: code_list
+    column: marketSector
+    failed_rows: 0
+    proposal: flag
+    why: 9 codes in this delivery; a new code is flagged until the code set has it
+  - check: code_list
+    column: securityType2
+    failed_rows: 0
+    proposal: flag
+    why: 34 codes in this delivery; a new code is flagged until the code set has it
+  - check: link_not_found
+    column: compositeFIGI
+    failed_rows: 0
+    proposal: flag
+    why: every value is found in answers.data.compositeFIGI.compositeFIGI
+  - check: link_not_found
+    column: shareClassFIGI
+    failed_rows: 0
+    proposal: flag
+    why: every value is found in answers.data.shareClassFIGI.shareClassFIGI
+  - check: carried_value_disagrees
+    column: name
+    failed_rows: 6
+    proposal: flag
+    why: 6 rows of answers.data give name another value than the one kept for their figi (the most common); the entity holds
+      one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: securityType
+    failed_rows: 4
+    proposal: flag
+    why: 4 rows of answers.data give securityType another value than the one kept for their figi (the most common); the entity
+      holds one value, so these rows need a steward
+  - check: hierarchy_invalid
+    column: marketSector
+    failed_rows: 7186
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+  - check: hierarchy_invalid
+    column: marketSector
+    failed_rows: 6271
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+  - check: hierarchy_invalid
+    column: marketSector
+    failed_rows: 340
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+- part: answers.data.compositeFIGI
+  class: master
+  kind: compositeFIGI
+  rows: 271051
+  record_key:
+  - compositeFIGI
+  silver:
+    table: answers_data_compositefigi
+    load_mode: upsert
+    key:
+    - compositeFIGI
+    fields:
+    - name: compositeFIGI
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: name
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: ticker
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: securityType
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+      code_set: answers.data.compositeFIGI.securityType
+    - name: marketSector
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: shareClassFIGI
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    - name: securityType2
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+      code_set: answers.data.compositeFIGI.securityType2
+    - name: securityDescription
+      type: VARCHAR
+      nullable: true
+      sensitivity: none
+    links:
+    - source_key: compositeFIGI
+      to_part: answers.data.compositeFIGI
+      mdm_id_column: mdm_id
+    - source_key: shareClassFIGI
+      to_part: answers.data.shareClassFIGI
+      mdm_id_column: shareClassFIGI_mdm_id
+  quality:
+  - check: missing
+    column: compositeFIGI
+    failed_rows: 0
+    proposal: exception
+    why: 'a record key column is empty: the record cannot be identified'
+  - check: code_list
+    column: securityType
+    failed_rows: 0
+    proposal: flag
+    why: 30 codes in this delivery; a new code is flagged until the code set has it
+  - check: code_list
+    column: securityType2
+    failed_rows: 0
+    proposal: flag
+    why: 10 codes in this delivery; a new code is flagged until the code set has it
+  - check: link_not_found
+    column: shareClassFIGI
+    failed_rows: 0
+    proposal: flag
+    why: every value is found in answers.data.shareClassFIGI.shareClassFIGI
+  - check: carried_value_disagrees
+    column: name
+    failed_rows: 22059
+    proposal: flag
+    why: 22059 rows of answers.data give name another value than the one kept for their compositeFIGI (the most common); the
+      entity holds one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: ticker
+    failed_rows: 58
+    proposal: flag
+    why: 58 rows of answers.data give ticker another value than the one kept for their compositeFIGI (the most common); the
+      entity holds one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: securityType
+    failed_rows: 745
+    proposal: flag
+    why: 745 rows of answers.data give securityType another value than the one kept for their compositeFIGI (the most common);
+      the entity holds one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: securityType2
+    failed_rows: 590
+    proposal: flag
+    why: 590 rows of answers.data give securityType2 another value than the one kept for their compositeFIGI (the most common);
+      the entity holds one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: securityDescription
+    failed_rows: 58
+    proposal: flag
+    why: 58 rows of answers.data give securityDescription another value than the one kept for their compositeFIGI (the most
+      common); the entity holds one value, so these rows need a steward
+  - check: hierarchy_invalid
+    column: securityType2
+    failed_rows: 1
+    proposal: flag
+    why: rows that break the rule 'each value of a level has one value at the next coarser level'
+- part: answers.data.shareClassFIGI
+  class: master
+  kind: shareClassFIGI
+  rows: 26509
+  record_key:
+  - shareClassFIGI
+  silver:
+    table: answers_data_shareclassfigi
+    load_mode: upsert
+    key:
+    - shareClassFIGI
+    fields:
+    - name: shareClassFIGI
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: name
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: securityType
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+      code_set: answers.data.shareClassFIGI.securityType
+    - name: marketSector
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+    - name: securityType2
+      type: VARCHAR
+      nullable: false
+      sensitivity: none
+      code_set: answers.data.shareClassFIGI.securityType2
+    links:
+    - source_key: shareClassFIGI
+      to_part: answers.data.shareClassFIGI
+      mdm_id_column: mdm_id
+  quality:
+  - check: missing
+    column: shareClassFIGI
+    failed_rows: 0
+    proposal: exception
+    why: 'a record key column is empty: the record cannot be identified'
+  - check: code_list
+    column: securityType
+    failed_rows: 0
+    proposal: flag
+    why: 28 codes in this delivery; a new code is flagged until the code set has it
+  - check: code_list
+    column: securityType2
+    failed_rows: 0
+    proposal: flag
+    why: 9 codes in this delivery; a new code is flagged until the code set has it
+  - check: carried_value_disagrees
+    column: name
+    failed_rows: 23486
+    proposal: flag
+    why: 23486 rows of answers.data give name another value than the one kept for their shareClassFIGI (the most common);
+      the entity holds one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: securityType
+    failed_rows: 812
+    proposal: flag
+    why: 812 rows of answers.data give securityType another value than the one kept for their shareClassFIGI (the most common);
+      the entity holds one value, so these rows need a steward
+  - check: carried_value_disagrees
+    column: securityType2
+    failed_rows: 639
+    proposal: flag
+    why: 639 rows of answers.data give securityType2 another value than the one kept for their shareClassFIGI (the most common);
+      the entity holds one value, so these rows need a steward
+code_sets:
+- code_set: answers.data.compositeFIGI.securityType
+  existing: false
+  codes: 30
+  columns:
+  - answers.data.compositeFIGI.securityType
+- code_set: answers.data.compositeFIGI.securityType2
+  existing: false
+  codes: 10
+  columns:
+  - answers.data.compositeFIGI.securityType2
+- code_set: answers.data.exchCode
+  existing: false
+  codes: 464
+  columns:
+  - answers.data.exchCode
+- code_set: answers.data.figi.exchCode
+  existing: false
+  codes: 464
+  columns:
+  - answers.data.figi.exchCode
+- code_set: answers.data.figi.marketSector
+  existing: false
+  codes: 9
+  columns:
+  - answers.data.figi.marketSector
+- code_set: answers.data.figi.securityType
+  existing: false
+  codes: 123
+  columns:
+  - answers.data.figi.securityType
+- code_set: answers.data.figi.securityType2
+  existing: false
+  codes: 34
+  columns:
+  - answers.data.figi.securityType2
+- code_set: answers.data.marketSector
+  existing: false
+  codes: 9
+  columns:
+  - answers.data.marketSector
+- code_set: answers.data.securityType
+  existing: false
+  codes: 123
+  columns:
+  - answers.data.securityType
+- code_set: answers.data.securityType2
+  existing: false
+  codes: 34
+  columns:
+  - answers.data.securityType2
+- code_set: answers.data.shareClassFIGI.securityType
+  existing: false
+  codes: 28
+  columns:
+  - answers.data.shareClassFIGI.securityType
+- code_set: answers.data.shareClassFIGI.securityType2
+  existing: false
+  codes: 9
+  columns:
+  - answers.data.shareClassFIGI.securityType2
+- code_set: requests.idType
+  existing: false
+  codes: 2
+  columns:
+  - requests.idType

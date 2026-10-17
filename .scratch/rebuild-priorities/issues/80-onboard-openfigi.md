@@ -2,7 +2,7 @@
 
 Priority: 80, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md).
 
-Type: task (onboarding). Status: open; setting up beside ticket 79 (operator, 2026-10-15: "Both, in parallel"). Blocked by: 92 (the capture posts a request with a key) and 79 (Onboard funds and securities with the skills: the Security master this source maps onto).
+Type: task (onboarding). Status: in progress (operator, 2026-10-17: "productionize figi source"); setting up beside ticket 79 (operator, 2026-10-15: "Both, in parallel"). Blocked by: 92 (the capture posts a request with a key) and 79 (Onboard funds and securities with the skills: the Security master this source maps onto).
 
 ## Why
 
@@ -28,12 +28,14 @@ Our sources give a Security its CUSIP and ISIN but hardly any tickers: N-PORT na
 - [x] The operator's permission for the capture, and its route: the mapping API at `https://api.openfigi.com/v3` with the operator's test key (held outside the repo, never printed); "Yes, run it" (2026-10-15): the mapping API with a free key (the key in an environment variable, never printed or typed into the chat), or the Snowflake Marketplace copy read in place
 - [x] Capture (explored; transport only, no Bookkeeping or Journal), 2026-10-15 13:04–13:42 ET, 38 min: 7,714 requests (383,612 CUSIPs, 387,607 ISINs), 0 retries, 621 MB, kept outside the repo with a receipt per file. A probe of 100 CUSIPs found 76 refused as malformed (all failed the CUSIP check digit). Capture: the Security master's CUSIPs and ISINs (ticket 79) sent to the mapping API, each response kept whole with its request, a receipt per file (key, sha256, bytes); counts only in the repo
 - [x] Used for ticket 79 part 1 as configuration over the kept capture (`rules/sources/sec.nport.security/figi-*.yaml`): which ISIN a CUSIP carries (operator: "Use FIGI to add pairs too"); 771,219 answers tied to their identifiers by position, 0 differences from a direct match; #999 merged 2026-10-16 06:29 ET
-- [ ] discover: data-profiling over the capture; approved findings
+- [x] discover: data-profiling over the capture; approved findings: one full profile, 176 s (`.scratch/onboarding/openfigi/onboarding-log.md`): 771,219 asked identifiers, 2,184,699 listings, 1,392,524 listing, 271,051 composite and 26,509 share-class FIGIs nesting exactly; no new kinds (the three levels are lookup-only cross-references of a Security, from the 2026-10-14 ruling); operator: "Approve (Recommended)" (2026-10-17 08:50 ET); `rules/sources/openfigi/profile.yaml` written from them
 - [ ] plan-parts: the listing (FIGI, ticker, exchange) as a cross-reference and attributes of a Security; the three-level hierarchy (listing, composite, share class) as a master data hierarchy or a relationship, for the operator; `securityType`, `securityType2`, `marketSector`, `exchCode` as code sets for RDM
+- [ ] Ticket 104 (stream a bare JSON array): the reading grammar cannot give a listing row its answer's position, which the rulings' per-identifier counts need (found 2026-10-17 08:59 ET)
 - [ ] map: the Dataset Contract (source `openfigi`), with FIGI, composite FIGI and share-class FIGI under `cross_references`; how a ticker attaches to a Security when one CUSIP has many listings (per exchange, or the composite's), for the operator
 - [ ] quality: checks for FIGI shape and check digit, ticker and exchange present together; set aside a response that names no instrument
 - [ ] metadata, test, approve, switch-on, as data-onboarding says
 - [ ] Refresh: the operator ruled "Open figi rarely changes do not download again" (2026-10-15): reuse this capture; a later run sends only identifiers not yet captured. How often the mapping is re-run for new and changed Securities (Bookkeeping)
+- [ ] Acquisition authority: activation refuses a source with MDM contracts and no approved acquisition (`rules/db.py`), so the POST capture (#994: key variable, 4 a second, approved URL prefix) is declared through Bookkeeping; declaring it sends no request
 - [ ] Every skill gap found on the way: fixed in the skill, on its own branch
 - [ ] PR, CI green, merge on the operator's word
 - [ ] Learning → skill
