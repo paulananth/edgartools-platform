@@ -9,11 +9,11 @@ so it can be restored. This is local testing, not a production deployment.
 - Work automatically within the assigned task. The operator authorized no
   intermediate approval prompts for this local testing work on 2026-10-16.
   Ask only when agents would overlap or the requested scope is unclear.
-- Use a dedicated worktree for code. The shared database engines below have
-  no agent and no worktree owner. Any checkout may start a missing engine
-  and may use it. Leaving a worktree does not stop or delete an engine.
-  `local-test-stores.py` is only for a worktree-owned test copy. Another
-  agent's files and that copy are never an automatic cleanup target.
+- Use a dedicated worktree for code. The data-platform skill starts a test
+  container or a production container. A production container stays. Do not
+  remove it and do not remove its volume. `local-test-stores.py` is only for
+  a worktree-owned test copy. Another agent's files and that copy are never
+  an automatic cleanup target.
 - Keep the six stores together for a test copy: MDM, RDM, silver, Rules,
   Bookkeeping and Change Journal. Reuse their existing migrations and
   restricted runtime roles. Use the Docker runtime already configured.
@@ -30,57 +30,11 @@ so it can be restored. This is local testing, not a production deployment.
   outside Docker volumes. Reports contain counts, never source values,
   credentials or database addresses.
 
-## Shared engines
+## Containers
 
-Create these on the Docker context already configured. Leave `DOCKER_HOST`
-unset. Do not pass a worktree path, an agent name, or an owner label. If a
-named container already exists, start it. Do not create a second one. Each
-password lives in a private mode `0600` env file and is never printed or
-committed.
-
-PostgreSQL 16 is the platform engine. MDM, RDM, Rules, Bookkeeping, Change
-Journal and silver stay here.
-
-```bash
-docker pull postgres:16-alpine
-docker volume create edgartools-local-postgres-data
-docker run -d --name edgartools-local-postgres --restart unless-stopped \
-  -p 127.0.0.1::5432 \
-  --env-file <private-postgres-env> \
-  -v edgartools-local-postgres-data:/var/lib/postgresql/data \
-  postgres:16-alpine
-```
-
-The private file sets `POSTGRES_PASSWORD`.
-
-MySQL and SQL Server are separate engines, not databases inside PostgreSQL.
-Start MySQL when the task names MySQL. Start SQL Server Express when the task
-names SQL Server. Express is the free edition and is limited to 10 GB per
-database. Do not set `MSSQL_PID` to Standard or Enterprise.
-
-```bash
-docker pull mysql:8
-docker volume create edgartools-local-mysql-data
-docker run -d --name edgartools-local-mysql \
-  -p 127.0.0.1::3306 \
-  --env-file <private-mysql-env> \
-  -v edgartools-local-mysql-data:/var/lib/mysql \
-  mysql:8
-```
-
-```bash
-docker pull mcr.microsoft.com/mssql/server:2022-latest
-docker volume create edgartools-local-sqlserver-data
-docker run -d --name edgartools-local-sqlserver --platform linux/amd64 \
-  -p 127.0.0.1::1433 \
-  --env-file <private-sqlserver-env> \
-  -v edgartools-local-sqlserver-data:/var/opt/mssql \
-  mcr.microsoft.com/mssql/server:2022-latest
-```
-
-The MySQL file sets `MYSQL_ROOT_PASSWORD`. The SQL Server file sets
-`ACCEPT_EULA=Y`, `MSSQL_PID=Express`, and `MSSQL_SA_PASSWORD`. On Apple
-Silicon, SQL Server runs as `linux/amd64`.
+The [data-platform skill](SKILL.md) starts the container. It selects a test
+instance or a production instance. This page does not start those containers.
+A production container stays. Do not remove it here.
 
 ## Worktree-owned test copy
 

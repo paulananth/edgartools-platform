@@ -98,18 +98,76 @@ checks and points to the repository lifecycle script.
    `export EDGAR_RULES_ROOT=<that folder>`. Without it, the bundle reads its
    own read-only copy of the rules.
 
-3. **Databases.** This skill creates the databases. Start the engine first
-   from [Local testing](LOCAL-TESTING.md). That container has no agent and no
-   worktree owner. On it, create these databases when they are missing:
-   `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`, and `silver`.
-   Do not paste the statement or an address into the chat. Do not apply the
-   store schemas here. [data-operations](../data-operations/SKILL.md) applies
-   that DDL into these databases. The connection variables, never printed, are
+3. **Container.** This skill starts the container. Select **test** or
+   **production** before the command. Use the Docker context already
+   configured. Leave `DOCKER_HOST` unset. Do not pass a worktree path, an
+   agent name, or an owner label. If that container already exists, start it.
+   Do not create a second container with the same name.
+
+   | Instance | PostgreSQL | MySQL | SQL Server Express |
+   |---|---|---|---|
+   | test | `edgartools-test-postgres` | `edgartools-test-mysql` | `edgartools-test-sqlserver` |
+   | production | `edgartools-prod-postgres` | `edgartools-prod-mysql` | `edgartools-prod-sqlserver` |
+
+   The volume name is the container name plus `-data`. A password lives in a
+   private mode `0600` file and is never printed or committed.
+
+   ```bash
+   docker pull postgres:16-alpine
+   docker volume create <container>-data
+   docker run -d --name <container> --restart unless-stopped \
+     -p 127.0.0.1::5432 \
+     --env-file <private-postgres-env> \
+     -v <container>-data:/var/lib/postgresql/data \
+     postgres:16-alpine
+   ```
+
+   The private file sets `POSTGRES_PASSWORD`. MDM, RDM, Rules, Bookkeeping,
+   the Change Journal, and silver use this PostgreSQL container.
+
+   Start MySQL only when the task names MySQL. Start SQL Server Express only
+   when the task names SQL Server. They are separate containers. Express is
+   limited to 10 GB per database.
+
+   ```bash
+   docker pull mysql:8
+   docker volume create <container>-data
+   docker run -d --name <container> --restart unless-stopped \
+     -p 127.0.0.1::3306 \
+     --env-file <private-mysql-env> \
+     -v <container>-data:/var/lib/mysql \
+     mysql:8
+   ```
+
+   ```bash
+   docker pull mcr.microsoft.com/mssql/server:2022-latest
+   docker volume create <container>-data
+   docker run -d --name <container> --platform linux/amd64 --restart unless-stopped \
+     -p 127.0.0.1::1433 \
+     --env-file <private-sqlserver-env> \
+     -v <container>-data:/var/opt/mssql \
+     mcr.microsoft.com/mssql/server:2022-latest
+   ```
+
+   The MySQL file sets `MYSQL_ROOT_PASSWORD`. The SQL Server file sets
+   `ACCEPT_EULA=Y`, `MSSQL_PID=Express`, and `MSSQL_SA_PASSWORD`. On Apple
+   Silicon, SQL Server runs as `linux/amd64`.
+
+   You may remove a **test** container and its volume when the test is
+   finished. You do not remove a **production** container. You do not remove
+   its volume. You do not stop it to clear a worktree.
+
+4. **Databases.** On the container you started, create these databases when
+   they are missing: `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`,
+   and `silver`. Do not paste the statement or an address into the chat. Do
+   not apply the store schemas here.
+   [data-operations](../data-operations/SKILL.md) applies that DDL into these
+   databases. The connection variables, never printed, are
    `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
    `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
    `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
 
-4. **Check.** `edgar-warehouse doctor` must print `"ok": true`. It lists any
+5. **Check.** `edgar-warehouse doctor` must print `"ok": true`. It lists any
    command a skill names that does not exist, whether the engine loads, the
    rules folder in use, and which stores answer (`not set` is fine for a store
    the task does not use).
