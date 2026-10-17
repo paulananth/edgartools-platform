@@ -148,11 +148,38 @@ def test_metadata_the_publisher_would_not_have_written_is_refused(tmp_path, capt
             census_of(tmp_path, capture, gleif_reading=reading)
 
 
-def test_a_switched_on_cascade_is_refused(tmp_path, capture, monkeypatch):
-    # Name Frequency has no configured cascade reading yet; the cascade is off in today's policy.
-    from edgar_warehouse.mdm.clean import cascade, name_frequency
+def test_a_switched_on_cascade_runs_and_the_census_holds_its_answers(tmp_path, capture):
+    # Today's policy declares the passes and switches none on, so `cascade=True` stands for switching one on.
+    folder, population, archive, metadata, wanted = capture
+    reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
+    census_of(tmp_path, capture, gleif_reading=reading)
+    without = json.loads((tmp_path / "x.json").read_text())
+    assert "cascade" not in without
+    census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "with.json"), cascade=True)
+    found = json.loads((tmp_path / "with.json").read_text())
+    assert found["cascade"]["version"] == "sec-gleif-cascade-v1" and isinstance(found["cascade"]["assignments"], dict)
+    assert {k: v for k, v in found.items() if k != "cascade"} == without
 
-    monkeypatch.setattr(name_frequency, "active_rules",
-                        lambda policy: [("on", {"when": [{"primitive": cascade.TEST}]})])
-    with pytest.raises(Conflict, match="cascade is switched on"):
-        census_of(tmp_path, capture, gleif_reading={"uri": "file:///unused", "sha256": "0" * 64})
+
+def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tmp_path):
+    """The census reads a filer through the Company extract's own tables and Dataset Contract;
+    the full chain's prepared records (the target test's answer file) give the same filer."""
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean import adapters, cascade, name_frequency
+    from edgar_warehouse.rules import files
+    from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, documents
+
+    folder, population = write_capture(tmp_path / "capture", documents(), CATALOG_ROWS)
+    with TemporaryDirectory() as scratch:
+        _, _, filers = name_frequency._population(folder, population, Artifacts(), Path(scratch), cascade=True)
+    answers = json.loads((Path(__file__).parents[1] / "integration/fixtures/company-mastering-records.json").read_text())
+    contract = files.source("sec.submissions.company")["mdm"]["sec.submissions.company.v1"]["contract"]
+    expected = [cascade.filer_of(adapters.normalize(json.loads(line), source_code=b["source_code"], contract=contract,
+                                                    policy=files.policy(), publication={
+                                                        **name_frequency.CASCADE_PUBLICATION, "record_locator": "x"}))
+                for b in answers["batches"] for line in b["records_jsonl"].splitlines()]
+    assert len(filers) == 3 and {f.cik: f for f in filers} == {f.cik: f for f in expected}
+    assert {f.cik: f.business_country for f in filers} == {"0000320193": "US", "0000789019": "US", "0000000042": "GB"}

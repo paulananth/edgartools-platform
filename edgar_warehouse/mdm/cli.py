@@ -64,6 +64,9 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     census.add_argument("--gleif-reading-sha256", required=True)
     census.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
     census.add_argument("--output", required=True)
+    census.add_argument("--cascade", action="store_true",
+                        help="Also run the Company rules' matching cascade over both sources (always, once a pass "
+                             "is switched on); the census then holds its answers")
     census.set_defaults(handler=_logged_handler("name-census", _clean("name_census")))
 
     force = mdm_sub.add_parser("force-publish", help="Publish every current record to one consumer, changed or not "
