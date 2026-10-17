@@ -86,7 +86,8 @@ def test_generic_attestation_refuses_deliberate_faults(fault):
         assert caught.value.code != "contract"
 
 
-@pytest.mark.parametrize("failure", [ValueError("retry"), RuntimeError("retry"), KeyboardInterrupt()])
+@pytest.mark.parametrize("failure", [ValueError("retry"), RuntimeError("retry"),
+                                     SourceRejected("consumer", "retry"), KeyboardInterrupt(), SystemExit(2)])
 def test_generic_callback_failure_identity(failure):
     raw = archive_bytes(b'{"observations":[{}]}')
     def fail(row, index): raise failure

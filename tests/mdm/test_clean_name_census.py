@@ -3,6 +3,7 @@
 Company mastering ticket 08.
 """
 
+import copy
 import hashlib
 import io
 import json
@@ -13,7 +14,7 @@ from edgar_warehouse.mdm.clean import name_census
 from edgar_warehouse.mdm.clean.name_census import VERSION, entry
 from edgar_warehouse.mdm.clean.store import digest
 from edgar_warehouse.rules import files
-from edgar_warehouse.workers import source_stream
+from edgar_warehouse.workers.source_traversal import Traversal
 
 COMPLETE_READING = files.ROOT / "sources/gleif/census-complete-stream.yaml"
 
@@ -57,13 +58,13 @@ def configured(filers, records, *, cascade=None, recipe=None, population=None, a
     complete reading (`census-complete-stream.yaml`), folded, then `document`.
     `cascade` is {"spec", "filers"}: the passes and every SEC filer as the cascade reads it."""
     held, wanted = name_census._sec_population(filers)
-    spec, engine, _ = source_stream.stream_policy(recipe or files.load(COMPLETE_READING))
+    rules = copy.deepcopy(recipe or files.load(COMPLETE_READING))
+    rules["read"]["stream"]["container"] = "none"
     found = []
-    engine.stream_json_array(
-        io.BytesIO(json.dumps({"records": records}).encode()), wrapper=spec["wrapper"],
+    Traversal(rules, archive_policy="configured").scan(
+        io.BytesIO(json.dumps({"records": records}).encode()),
         lookups={"wanted": sorted(wanted)}, context={"publication_count": len(records)},
-        ordinal_context=spec["ordinal_context"], on_reading=lambda reading, _ordinal: found.append(reading.tables),
-        **{k: spec[k] for k in ("max_bytes", "max_record", "max_records", "max_depth", "min_integer", "record_encoding")})
+        on_reading=lambda reading, _ordinal: found.append(reading.tables))
     return name_census.census(
         sec_population=population or {"capture_run_id": "run-1", "filers": len(filers)},
         gleif={"archive_sha256": archive_sha256 or hashlib.sha256(archive(records)).hexdigest(),

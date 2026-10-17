@@ -15,7 +15,7 @@ from urllib.parse import unquote, urlparse
 
 from edgar_warehouse.mdm.clean import gleif_publication, evidence as evidence_module, store as store_module
 from edgar_warehouse.rules import source_engine, files
-from edgar_warehouse.workers import source_attestation, source_stream, source_readings
+from edgar_warehouse.workers import source_attestation
 
 MEMBERS = {"level1": "lei2", "relationships": "rr", "reporting_exceptions": "repex"}
 
@@ -52,7 +52,7 @@ def qualify(member, format_name, parity_path, parity_sha256, publisher_path, pub
                 "content_date": content_date, "file_content": "GLEIF_FULL_PUBLISHED",
                 "delta_start": None, "record_count": publisher["record_count"]}
     runtime = [Path(__file__), Path(gleif_publication.__file__),
-               Path(source_attestation.__file__), Path(source_stream.__file__), Path(source_readings.__file__),
+               *source_attestation.runtime_files(),
                Path(files.__file__),
                Path(store_module.__file__), Path(evidence_module.__file__), *source_engine.runtime_files(),
                files.ROOT / "sources" / "gleif" / f"{member.replace('_', '-')}-{format_name}.yaml",

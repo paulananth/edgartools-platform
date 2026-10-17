@@ -130,8 +130,11 @@ def test_too_small_header_bound_yields_no_candidate(tmp_path):
 
 @pytest.mark.parametrize("maximum", [True, 0, -1, "4096", 2**63])
 def test_facade_validates_separate_header_bound(maximum):
-    from edgar_warehouse.workers.source_stream import stream_policy
-    spec, engine, header = stream_policy(xml_contract())
+    from edgar_warehouse.rules.source_engine import SourceEngine
+    rules = xml_contract()
+    spec = rules["read"].pop("stream")
+    engine = SourceEngine(rules)
+    header = SourceEngine({"read": spec["header_read"]})
     with pytest.raises(SourceRejected, match="header bound"):
         engine.stream_xml_records(io.BytesIO(document()), envelope=spec["xml"],
             header_engine=header, on_reading=lambda *_: None,
