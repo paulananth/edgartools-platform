@@ -57,6 +57,7 @@ def name_census(args) -> int:
         gleif_metadata=args.gleif_metadata,
         output=args.output,
         cascade=args.cascade,
+        catalog=args.catalog,
     )
     print(json.dumps(report, sort_keys=True))
     return 0

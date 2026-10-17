@@ -13,12 +13,12 @@ The GLEIF reading projected only the names the SEC population holds, so its
 count must equal the full publication's metadata.
 
 With the matching cascade (`cascade=True`, or any pass switched on), the same
-documents are also read through the Company source extract's own `company`
-and `addresses` tables (`source.yaml`, never a second set of paths), joined
-as `combine.yaml` joins them, and normalized through the Company Dataset
-Contract, so each filer reaches the cascade as the Merge Stage holds it
-(rebuild priorities ticket 09). A record the contract sets aside never stages,
-so it is no filer.
+documents also run through the Company chain's own readings and combination
+(`census-main.yaml`, `catalog.yaml`, `combine-census-captured.yaml` less its
+census groups) and the Company Dataset Contract, so each filer reaches the
+cascade as the Merge Stage holds it: its forms and tickers decide its
+classification as there (rebuild priorities ticket 09). A record the contract
+sets aside never stages, so it is no filer.
 """
 
 from __future__ import annotations
@@ -32,11 +32,9 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
-from edgar_warehouse.workers import source_read, source_readings
+from edgar_warehouse.workers import source_combine, source_read, source_readings
 
-from . import raw_capture
-
-from . import adapters
+from . import adapters, company_prepare, raw_capture
 from . import cascade as cascaded
 from . import name_census
 from .gleif_publication import validate_metadata
@@ -55,51 +53,95 @@ CONTRACT_BYTES = 1024**2
 METADATA_BYTES = 64 * 1024
 POPULATION_BYTES = 64 * 1024**2
 COMPANY, COMPANY_CODE = "sec.submissions.company", "sec.submissions.company.v1"
-# What the cascade reads of a filer comes from these tables of the main document alone
-# (name, state of incorporation, business address); the rest of the extract is not needed.
-CASCADE_TABLES = ("company", "addresses")
-# A filer's record is read for the cascade only: its publication and capture run are never staged.
+COMPANY_ROOT = rules_files.ROOT / "sources" / COMPANY
+# The run id bound into the cascade's readings and combination: its rows are read for the
+# cascade only, never staged.
+CASCADE_RUN = "name-frequency"
+# A filer's record is read for the cascade only: its publication is never staged.
 CASCADE_PUBLICATION = {"publication_key": "name-frequency", "revision": 0, "effective_at": None,
                        "semantics": "patch", "artifact_sha256": "0" * 64, "member": "name-frequency"}
+COMBINE_BYTES = 256 * 1024**2
+COMBINE_ROWS = 1_000_000
 
 
-def _cascade_reading() -> dict:
-    """The Company source extract restricted to the tables the cascade reads."""
-    read = deepcopy(rules_files.source(COMPANY)["read"])
-    read["tables"] = {name: read["tables"][name] for name in CASCADE_TABLES}
-    return {"source": COMPANY, "execution": rules_files.load(SEC_READING)["execution"], "read": read}
+def _cascade_combination() -> dict:
+    """The Company chain's own combination (`combine-census-captured.yaml`) without its
+    census groups: the census is what is being written, and the cascade reads no census."""
+    body = company_prepare._bind(rules_files.load(COMPANY_ROOT / "combine-census-captured.yaml"), {
+        "APPROVED_COMPANY_CAPTURE_RUN": CASCADE_RUN, "APPROVED_CATALOG_CAPTURE_RUN": CASCADE_RUN})
+    groups = body["combine"]["groups"]
+    census = {name for name, group in groups.items() if group["source"] == "census"}
+    for name in census:
+        del groups[name]
+    joins = body["combine"]["tables"]["company"]["joins"]
+    for name in [n for n, join in joins.items() if join["group"] in census]:
+        del joins[name]
+    return body
 
 
-def _cascade_filer(tables: dict, contract: dict, policy: dict) -> cascaded.Filer | None:
-    """One document's filer as the Merge Stage holds it: its company row with its last
-    business address (`combine.yaml`'s `address` group), through the Dataset Contract."""
-    (company,) = tables["company"]
-    address = None
-    for row in tables["addresses"]:
-        address = row["business_address"] if row["business_address"] is not None else address
-    try:
-        record = adapters.normalize({**company, "business_address": address}, source_code=COMPANY_CODE,
-                                    contract=contract, policy=policy,
-                                    publication={**CASCADE_PUBLICATION, "record_locator": str(company["cik"])})
-    except adapters.UnsupportedRecord:
-        return None
-    return cascaded.filer_of(record)
+def _cascade_filers(capture: Path, receipts: dict, keys: list[str], catalog: str, store: Artifacts,
+                    folder: Path) -> list[cascaded.Filer]:
+    """Every filer as the Merge Stage holds it: the population's documents read by the Company
+    chain's `census-main.yaml`, in its units, combined with the exchange catalog (`catalog.yaml`)
+    by its combination, each row normalized through the Company Dataset Contract. A record the
+    contract sets aside never stages, so it is no filer."""
+    main = rules_files.load(COMPANY_ROOT / "census-main.yaml")
+    catalog_ref = raw_capture.document(capture, receipts, catalog)
+    raw_capture.document_bytes(capture, receipts, catalog)
+    _, catalog_reading = raw_capture.read_unit(store, folder, "catalog", rules_files.load(
+        COMPANY_ROOT / "catalog.yaml"), [{"input": catalog_ref, "context": store.put(folder.as_uri(), {
+            "version": 1, "input": catalog_ref, "values": {
+                "sync_run_id": CASCADE_RUN, "last_synced_at": "", "source_name": "catalog_exchange"}})}])
+    combination = _cascade_combination()
+    contract = rules_files.source(COMPANY)["mdm"][COMPANY_CODE]["contract"]
+    policy = rules_files.policy()
+    sized = [(key, len(raw_capture.document_bytes(capture, receipts, key))) for key in keys]
+    filers = []
+    for n, unit in enumerate(raw_capture.slices(sized, company_prepare.MAIN_READING_BYTES,
+                                                main["execution"]["max_artifacts"])):
+        artifacts = []
+        for key in unit:
+            ref = raw_capture.document(capture, receipts, key)
+            artifacts.append({"input": ref, "context": store.put(folder.as_uri(), {"version": 1, "input": ref, "values": {
+                "cik": raw_capture.cik(key), "sync_run_id": CASCADE_RUN, "raw_object_id": receipts[key],
+                "load_mode": "census", "recent_limit": None, "last_synced_at": "", "bronze_object": key}})})
+        _, reading = raw_capture.read_unit(store, folder, f"cascade-main-{n}", deepcopy(main), artifacts)
+        combined = _combine(store, folder, f"cascade-combine-{n}", combination,
+                            {"main": reading, "catalog_exchange": catalog_reading})
+        for artifact, _ in source_readings.iter_artifacts(combined, store, max_bytes=COMBINE_BYTES,
+                                                          max_rows=COMBINE_ROWS, allow_lookup_receipts=True):
+            for row in artifact["tables"]["company"]:
+                try:
+                    record = adapters.normalize(row, source_code=COMPANY_CODE, contract=contract, policy=policy,
+                                                publication={**CASCADE_PUBLICATION, "record_locator": str(row["cik"])})
+                except adapters.UnsupportedRecord:
+                    continue
+                filers.append(cascaded.filer_of(record))
+    return filers
 
 
-def _population(capture: Path, population: Path, store: Artifacts, folder: Path,
-                cascade: bool = False) -> tuple[list, dict, list]:
+def _combine(store: Artifacts, folder: Path, name: str, contract: dict, readings: dict) -> dict:
+    """One `source.combine` unit, executed then verified."""
+    request = store.put(folder.as_uri(), {"version": 1, "contract": store.put(folder.as_uri(), contract),
+                                          "readings": readings})
+    task = {"input": request, "output": (folder / f"{name}.json").as_uri(), "checks": [source_combine.CHECK],
+            "keys": {}}
+    candidate = source_combine.execute(task, store)
+    if source_combine.verify({**task, "candidate": candidate}, store) != ({source_combine.CHECK: True}, []):
+        raise ValueError("Configured combination verification failed")
+    return candidate
+
+
+def _population(capture: Path, population: Path, store: Artifacts, folder: Path) -> tuple[list, dict, list, dict]:
     """The filers of the population's documents, each read from the receipt-bound capture,
-    and with `cascade` each filer as the cascade reads it (a record set aside is left out)."""
+    with the population's receipt keys and the capture's receipts."""
     receipts_raw, receipts = raw_capture.receipts(capture)
     population_raw = raw_capture.read_bounded(population, POPULATION_BYTES)
     keys = json.loads(population_raw)
     if not isinstance(keys, list) or not keys or len(set(keys)) != len(keys):
         raise Conflict("A population names one or more distinct receipt keys")
     contract = rules_files.load(SEC_READING)
-    company = _cascade_reading() if cascade else None
-    dataset = rules_files.source(COMPANY)["mdm"][COMPANY_CODE]["contract"] if cascade else None
-    policy = rules_files.policy() if cascade else None
-    filers, cascade_filers = [], []
+    filers = []
     for start in range(0, len(keys), contract["execution"]["max_artifacts"]):
         artifacts = []
         for key in keys[start:start + contract["execution"]["max_artifacts"]]:
@@ -110,23 +152,13 @@ def _population(capture: Path, population: Path, store: Artifacts, folder: Path,
                                                   "values": {"cik": raw_capture.cik(key)}})
             artifacts.append({"input": document, "context": context})
         _, reading = raw_capture.read_unit(store, folder, f"population-{start}", deepcopy(contract), artifacts)
-        if cascade:
-            company_artifacts = [{"input": a["input"], "context": store.put(folder.as_uri(), {
-                "version": 1, "input": a["input"], "values": {
-                    "cik": store.json(a["context"])["values"]["cik"], "sync_run_id": "name-frequency",
-                    "raw_object_id": a["input"]["sha256"], "load_mode": "census", "recent_limit": None,
-                    "last_synced_at": ""}})} for a in artifacts]
-            _, read = raw_capture.read_unit(store, folder, f"cascade-{start}", deepcopy(company), company_artifacts)
-            for found in store.json(read)["artifacts"]:
-                if filer := _cascade_filer(found["tables"], dataset, policy):
-                    cascade_filers.append(filer)
         for reading in store.json(reading)["artifacts"]:
             (filer,) = reading["tables"]["filer"]
             former = [row["name"] for row in reading["tables"]["former"] if row["name"]]
             filers.append((f"{filer['cik']:010d}", filer["name"], former))
     sec = {"receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
            "population_sha256": hashlib.sha256(population_raw).hexdigest(), "filers": len(filers)}
-    return filers, sec, cascade_filers
+    return filers, sec, keys, receipts
 
 
 def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tuple[dict, object]:
@@ -154,30 +186,37 @@ def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tupl
 
 
 def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, gleif_metadata: str,
-                         output: str, cascade: bool = False) -> dict:
+                         output: str, cascade: bool = False, catalog: str | None = None) -> dict:
     """Count the SEC population and the configured Golden Copy reading into a census file.
 
     A name is unique only if it is unique among all SEC filers (ticket 08), so
     the population names every main submissions document counted, each by its
     receipt in the capture. The matching cascade runs when asked (`cascade`)
-    and always once a pass is switched on; the census then holds its answers.
+    and always once a pass is switched on, and reads each filer's tickers from
+    the capture's exchange `catalog` (its receipt key); the census then holds
+    its answers.
     An existing file is never overwritten with different content.
     """
     policy = rules_files.policy()
     spec = cascaded.spec(policy)
     switched_on = any(t["primitive"] == cascaded.TEST for _, rule in active_rules(policy) for t in rule["when"])
-    cascade = bool(spec["passes"]) and (cascade or switched_on)
+    if (cascade or switched_on) and not spec["passes"]:
+        raise Conflict("The matching cascade was asked for, and the Company rules declare no pass")
+    runs = cascade or switched_on
+    if runs and not catalog:
+        raise Conflict("The matching cascade reads each filer's tickers: name the capture's exchange catalog")
     store = Artifacts()
     with tempfile.TemporaryDirectory(prefix=".name-frequency-") as scratch:
-        filers, sec, cascade_filers = _population(Path(capture).resolve(), Path(population).resolve(), store,
-                                                  Path(scratch), cascade)
+        folder = Path(capture).resolve()
+        filers, sec, keys, receipts = _population(folder, Path(population).resolve(), store, Path(scratch))
+        cascade_filers = _cascade_filers(folder, receipts, keys, catalog, store, Path(scratch)) if runs else []
     if len({cik for cik, _, _ in filers}) != len(filers):
         raise Conflict("A filer is in the population twice")
     held, wanted = name_census._sec_population(filers)
     metadata = json.loads(raw_capture.read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
     gleif, readings = _gleif(gleif_reading, store, metadata, wanted)
     census = name_census.census(sec_population=sec, gleif=gleif, held=held, wanted=wanted, readings=readings,
-                                cascade={"spec": spec, "filers": cascade_filers} if cascade else None)
+                                cascade={"spec": spec, "filers": cascade_filers} if runs else None)
     data = (canonical(census) + "\n").encode()
     target = Path(output).resolve()
     if target.exists():

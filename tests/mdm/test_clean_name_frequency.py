@@ -11,7 +11,7 @@ from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
 from edgar_warehouse.mdm.clean.store import Conflict, canonical
 from tests.support.name_census_inputs import gleif_archive, gleif_reading
 from tests.mdm.test_clean_name_census import gleif
-from tests.support.sec_capture import key, write_capture
+from tests.support.sec_capture import catalog, key, write_capture
 
 
 RECORDS = [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.", other=["Old Name Inc"]),
@@ -27,7 +27,7 @@ def capture(tmp_path):
     folder, population = write_capture(tmp_path / "capture", {
         320193: {"name": "APPLE INC", "formerNames": [{"name": "Old Name Inc", "from": "2000-01-01"}, {"name": ""}]},
         1: {"name": "OLD NAME INC", "formerNames": []},
-        789019: {"name": "Apple Inc."}})
+        789019: {"name": "Apple Inc."}}, catalog())
     (tmp_path / "g").mkdir()
     archive, metadata, _ = gleif_archive(tmp_path / "g", RECORDS)
     return folder, population, archive, metadata, _sec_population(FILERS)[1]
@@ -155,26 +155,40 @@ def test_a_switched_on_cascade_runs_and_the_census_holds_its_answers(tmp_path, c
     census_of(tmp_path, capture, gleif_reading=reading)
     without = json.loads((tmp_path / "x.json").read_text())
     assert "cascade" not in without
-    census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "with.json"), cascade=True)
+    from tests.support.sec_capture import CATALOG
+
+    census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "with.json"), cascade=True,
+              catalog=CATALOG)
     found = json.loads((tmp_path / "with.json").read_text())
     assert found["cascade"]["version"] == "sec-gleif-cascade-v1" and isinstance(found["cascade"]["assignments"], dict)
     assert {k: v for k, v in found.items() if k != "cascade"} == without
 
 
-def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tmp_path):
-    """The census reads a filer through the Company extract's own tables and Dataset Contract;
-    the full chain's prepared records (the target test's answer file) give the same filer."""
+def _cascade_filers(tmp_path, found, rows):
     from pathlib import Path
     from tempfile import TemporaryDirectory
 
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean import name_frequency, raw_capture
+    from tests.support.sec_capture import CATALOG
+
+    folder, population = write_capture(tmp_path / "capture", found, rows)
+    _, receipts = raw_capture.receipts(folder)
+    with TemporaryDirectory() as scratch:
+        return name_frequency._cascade_filers(folder, receipts, json.loads(population.read_text()), CATALOG,
+                                              Artifacts(), Path(scratch))
+
+
+def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tmp_path):
+    """The census reads a filer through the Company chain's own readings, combination and Dataset
+    Contract; the full chain's prepared records (the target test's answer file) give the same filer."""
+    from pathlib import Path
+
     from edgar_warehouse.mdm.clean import adapters, cascade, name_frequency
     from edgar_warehouse.rules import files
     from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, documents
 
-    folder, population = write_capture(tmp_path / "capture", documents(), CATALOG_ROWS)
-    with TemporaryDirectory() as scratch:
-        _, _, filers = name_frequency._population(folder, population, Artifacts(), Path(scratch), cascade=True)
+    filers = _cascade_filers(tmp_path, documents(), CATALOG_ROWS)
     answers = json.loads((Path(__file__).parents[1] / "integration/fixtures/company-mastering-records.json").read_text())
     contract = files.source("sec.submissions.company")["mdm"]["sec.submissions.company.v1"]["contract"]
     expected = [cascade.filer_of(adapters.normalize(json.loads(line), source_code=b["source_code"], contract=contract,
@@ -183,3 +197,16 @@ def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tm
                 for b in answers["batches"] for line in b["records_jsonl"].splitlines()]
     assert len(filers) == 3 and {f.cik: f for f in filers} == {f.cik: f for f in expected}
     assert {f.cik: f.business_country for f in filers} == {"0000320193": "US", "0000789019": "US", "0000000042": "GB"}
+
+
+def test_forms_and_tickers_classify_a_filer_as_the_merge_stage_does(tmp_path):
+    """A fund's report forms set an operating filer aside, and a ticker keeps a REIT a Company,
+    so the cascade counts exactly the filers MDM stages."""
+    from tests.support.sec_capture import address, catalog, document
+
+    fund = document(11, "EXAMPLE HOLDINGS INC", forms=("N-CSR",), business=address())
+    reit = {**document(22, "EXAMPLE REALTY TRUST", business=address(street="2 MAIN ST")), "sic": "6798"}
+    plain = document(33, "EXAMPLE TOOLS INC", business=address(street="3 MAIN ST"))
+    filers = _cascade_filers(tmp_path, {11: fund, 22: reit, 33: plain},
+                             catalog((22, "EXAMPLE REALTY TRUST", "EXRT", "NYSE")))
+    assert sorted(f.cik for f in filers) == ["0000000022", "0000000033"]
