@@ -1,7 +1,7 @@
 """Real PG16: OpenFIGI answers join the Securities they were asked for (ticket 80).
 
 Invented answer files through the real chain (requests.yaml, the streamed
-answers reading, reduce.yaml, answers-union.yaml, combine.yaml, record.yaml,
+answers reading, reduce.yaml, combine.yaml, record.yaml,
 mdm.prepare and the CUSIP Dataset Contract), then the Merge Stage beside a
 13F Security:
 - an equity keeps its one share class, and its US composite with that
@@ -121,8 +121,7 @@ def prepared_records(root: Path) -> tuple[list[dict], dict[str, str]]:
             "input": ref(answer), "lookups": lookups,
             "context": context(where / "an", answer, {"batch": batch, "id_type": "cusip"})}], 3)
     counts = combine(store, root / "reduce", "reduce.yaml", readings)
-    union = combine(store, root / "union", "answers-union.yaml", readings)
-    combined = combine(store, root / "combine", "combine.yaml", {"answers": union, "counts": counts})
+    combined = combine(store, root / "combine", "combine.yaml", {"counts": counts})
     piece_root = root / "record"
     piece_root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]

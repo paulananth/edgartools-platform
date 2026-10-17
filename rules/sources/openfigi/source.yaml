@@ -16,9 +16,9 @@
 # answer a record (`wrapper: null`, ticket 104), its position the context
 # `answer`, so its listings name their identifier. Then, once per kind asked
 # (the CUSIPs for the first contract, the ISINs for the second), over that
-# kind's 8 readings: reduce.yaml counts each identifier's listings, share
-# classes and US composites; answers-union.yaml puts its answers in one table;
-# combine.yaml joins the levels that are single onto each answer; record.yaml
+# kind's 8 readings: reduce.yaml gives each identifier's answer and counts its
+# listings, share classes and US composites, streamed; combine.yaml joins the
+# levels that are single onto each answer; record.yaml
 # makes one flat record per identifier, which mdm.prepare reads (table
 # `security`). The context names each file's `batch` ("id_cusip/00000") and
 # its `id_type`. Stream bounds hold for a whole reading of up to 512 files: each
@@ -69,9 +69,17 @@ read:
           context:
             name: id_type
         found:
-          test:
-            path: data
-            kind: present
+          choose:
+            condition:
+              test:
+                path: data
+                kind: present
+            then:
+              const:
+                value: found
+            else:
+              const:
+                value: not found
     listings:
       each: data
       columns:
@@ -270,16 +278,10 @@ mdm:
                   on_fail: defer
                 columns:
                   _found:
-                    choose:
-                      condition:
-                        value:
-                          path: found
-                      then:
-                        const:
-                          value: found
-                      else:
-                        value:
-                          path: NO_SUCH_FIELD
+                    text:
+                      path: found
+                      null_if:
+                      - not found
                   fields:
                     object:
                       fields: {}
@@ -349,16 +351,10 @@ mdm:
                   on_fail: defer
                 columns:
                   _found:
-                    choose:
-                      condition:
-                        value:
-                          path: found
-                      then:
-                        const:
-                          value: found
-                      else:
-                        value:
-                          path: NO_SUCH_FIELD
+                    text:
+                      path: found
+                      null_if:
+                      - not found
                   fields:
                     object:
                       fields: {}

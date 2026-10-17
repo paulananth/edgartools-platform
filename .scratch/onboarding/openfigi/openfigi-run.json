@@ -1,0 +1,43 @@
+{
+ "stages": {
+  "read 7714 files, 16 readings in parallel": 91.0,
+  "cusip: reduce, combine": 82.6,
+  "cusip: record, prepare, contract": 126.3,
+  "isin: reduce, combine": 94.6,
+  "isin: record, prepare, contract": 137.8
+ },
+ "contracts": {
+  "openfigi.security.v1": {
+   "files": 3837,
+   "outcome": {
+    "not_found_by_openfigi": 30121,
+    "accepted": 353491
+   },
+   "filled": {
+    "id:cusip": 353491,
+    "xref:figi": 344986,
+    "xref:openfigi_ticker": 352416,
+    "xref:composite_figi": 9482,
+    "xref:share_class_figi": 10058
+   },
+   "differences_from_direct_count": 0,
+   "identifiers_not_prepared": 0
+  },
+  "openfigi.security_isin.v1": {
+   "files": 3877,
+   "outcome": {
+    "accepted": 380047,
+    "not_found_by_openfigi": 7560
+   },
+   "filled": {
+    "id:isin": 380047,
+    "xref:share_class_figi": 25532,
+    "xref:figi": 357830,
+    "xref:openfigi_ticker": 369821,
+    "xref:composite_figi": 13910
+   },
+   "differences_from_direct_count": 0,
+   "identifiers_not_prepared": 0
+  }
+ }
+}

@@ -1,5 +1,5 @@
 """OpenFIGI through the configured chain (ticket 80): requests -> answers (streamed) -> per kind: reduce,
-union, combine -> record -> mdm.prepare + Dataset Contracts. Counts only; reads the kept capture, asks
+combine -> record -> mdm.prepare + Dataset Contracts. Counts only; reads the kept capture, asks
 OpenFIGI nothing. Usage: openfigi_run.py CAPTURE OUT FILES_PER_KIND (0 = every file)."""
 import hashlib
 import multiprocessing
@@ -101,9 +101,8 @@ stage(f"read {sum(len(v) for v in names_of.values())} files, 16 readings in para
 for kind, (word, _, code) in KINDS.items():
     names, readings = names_of[kind], by_kind[word]
     counts = combine(OUT / word / "reduce", files.load(FOLDER / "reduce.yaml"), readings)
-    union = combine(OUT / word / "union", files.load(FOLDER / "answers-union.yaml"), readings)
-    combined = combine(OUT / word / "combine", files.load(FOLDER / "combine.yaml"), {"answers": union, "counts": counts})
-    stage(f"{word}: reduce, union, combine")
+    combined = combine(OUT / word / "combine", files.load(FOLDER / "combine.yaml"), {"counts": counts})
+    stage(f"{word}: reduce, combine")
     index = store.json(combined)
     root = OUT / word / "record"
     # A large output is in pieces (version 2); a small one holds its tables inline, given here as one piece.

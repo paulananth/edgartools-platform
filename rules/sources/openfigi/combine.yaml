@@ -1,5 +1,5 @@
-# One row per identifier asked (ticket 80): its answer (answers-union.yaml's
-# output, `answers`) joined with reduce.yaml's counts (`counts`) where a level
+# One row per identifier asked (ticket 80): its answer (reduce.yaml's `answers`)
+# joined with reduce.yaml's counts (`counts`) where a level
 # has exactly one member (operator, 2026-10-17: "(c) MDM + silver listings
 # (Recommended)", "US composite (Recommended)"): `listing` when the identifier
 # has one listing, `share_class` when one share class, `us_composite` when one
@@ -16,7 +16,7 @@ combine:
     us_composite: {source: counts, table: us_composites, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {us_composites: 1}}
   tables:
     security:
-      source: answers
+      source: counts
       table: answers
       checks: {}
       where: {}
