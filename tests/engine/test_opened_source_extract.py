@@ -16,6 +16,10 @@ def test_evidence_and_lookup_values_belong_to_the_same_opened_extract(tmp_path):
     ref = source_read.execute(work, store)
     opened = source_readings.OpenedExtract(ref, store, max_bytes=1024**2, max_rows=100,
                                          max_contract_bytes=1024**2, allow_lookup_receipts=True)
+    assert opened.reading == ref
+    exposed = opened.reading
+    exposed['sha256'] = '0' * 64
+    assert opened.reading == ref
     assert opened.contract == store.json(manifest['contract'])
     assert opened.artifacts[0]['input'] == manifest['artifacts'][0]['input']
     assert opened.lookup_sets(0) == {'wanted': ['A']}

@@ -318,6 +318,11 @@ class OpenedExtract:
         self._lookups = {}
 
     @property
+    def reading(self):
+        """The original receipt, isolated from the private traversal identity."""
+        return copy.deepcopy(self._ref)
+
+    @property
     def contract(self):
         return copy.deepcopy(self._contract)
 
