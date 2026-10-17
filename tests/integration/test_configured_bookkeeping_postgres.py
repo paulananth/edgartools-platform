@@ -1041,7 +1041,7 @@ def _provision(server, monkeypatch, runpy):
             assert conn.scalar(text("SELECT count(*) FROM journal.event")) == 0
             assert conn.scalars(text("SELECT schemaname||'.'||tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')")).all() == ["journal.event"]
         with admin.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_clean_owner','change_journal_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 3
+            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_owner','change_journal_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 3
     finally:
         for engine in engines:
             engine.dispose()

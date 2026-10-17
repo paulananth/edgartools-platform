@@ -40,7 +40,7 @@ def physical_database(store: str) -> str:
 
 def runtime_login(store: str) -> str:
     return "bookkeeping_runtime" if store == "bookkeeping_clean" else store + "_runtime"
-EXTRA_LOGINS = ("bookkeeping_clean_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
+EXTRA_LOGINS = ("bookkeeping_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
 
@@ -192,7 +192,7 @@ class LocalStores:
         migration = {variable.replace("_DATABASE_URL", "_MIGRATION_DATABASE_URL"):
                      self.url(name, database).render_as_string(hide_password=False)
                      for database, (variable, _) in selected.items()}
-        verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": self.url(name, "bookkeeping_clean", "bookkeeping_clean_verifier").render_as_string(hide_password=False),
+        verifier = {"BOOKKEEPING_CLEAN_DATABASE_URL": self.url(name, "bookkeeping_clean", "bookkeeping_verifier").render_as_string(hide_password=False),
                     "MDM_DATABASE_URL": self.url(name, "mdm", "mdm_verifier").render_as_string(hide_password=False)}
         governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
                       "RULES_MDM_ACTIVATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
@@ -239,11 +239,11 @@ class LocalStores:
                         conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(store + '_owner')}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(runtime_login(store))}")
-                for database, login in (("bookkeeping", "bookkeeping_clean_verifier"), ("mdm", "mdm_verifier"),
+                for database, login in (("bookkeeping", "bookkeeping_verifier"), ("mdm", "mdm_verifier"),
                                         ("mdm", "mdm_governance"), ("rules", "rules_governance")):
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
                 for parent, member in (("bookkeeping_clean_control", "bookkeeping_runtime"),
-                                       ("bookkeeping_clean_control", "bookkeeping_clean_verifier"),
+                                       ("bookkeeping_clean_control", "bookkeeping_verifier"),
                                        ("rules_runtime", "rules_governance"), ("rules_approver", "rules_governance")):
                     if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
@@ -277,10 +277,10 @@ class LocalStores:
         book = self.engine(name, "bookkeeping_clean")
         try:
             for profile in PROFILES:
-                grant_profile(book, profile=profile, worker="bookkeeping_runtime", verifier="bookkeeping_clean_verifier")
+                grant_profile(book, profile=profile, worker="bookkeeping_runtime", verifier="bookkeeping_verifier")
             with book.connect() as conn:
                 for profile in PROFILES:
-                    for login, duty in (("bookkeeping_runtime", "verifier"), ("bookkeeping_clean_verifier", "worker")):
+                    for login, duty in (("bookkeeping_runtime", "verifier"), ("bookkeeping_verifier", "worker")):
                         if conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
                                        {"l": login, "p": profile, "d": duty}):
                             raise ValueError("Worker and verifier duties overlap; refusing initialization")

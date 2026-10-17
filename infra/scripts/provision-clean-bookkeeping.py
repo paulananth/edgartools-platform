@@ -24,7 +24,7 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 
 def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
     admin = create_engine(admin_url, hide_parameters=True)
-    requested = [("bookkeeping", "bookkeeping_clean_owner", "bookkeeping_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
+    requested = [("bookkeeping", "bookkeeping_owner", "bookkeeping_runtime", "BOOKKEEPING_CLEAN_RUNTIME_PASSWORD")]
     if rules:
         requested.append(("rules", "rules_owner", "rules_agent", "RULES_AGENT_PASSWORD"))
     if journal:
