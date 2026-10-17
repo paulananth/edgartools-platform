@@ -8,8 +8,8 @@ Reinitialization applies migrations and access setup; existing data is retained.
 - [x] Implement five-store initialization, execution roles, private connection files and the MDM destination guard; preserve older backups. Core-only defaults, optional silver and legacy six-store selection are covered by PostgreSQL acceptance (2026-10-16 20:40 ET).
 - [x] Verify meaningful role separation, guard behavior, reinitialization and backup/restore on disposable PostgreSQL 16 in affected tests under five minutes. Final testmon run: 16 passed, 1 deselected, 26.80 s; the unchanged six-store acceptance also passed in the preceding 57.69 s run. All 17 affected cases passed across those runs (2026-10-16 20:40 ET).
 - [x] Update initialization documentation and review Standards, Spec and GoF. README and local guide explain the five-store default and duty-specific connections; CLI examples/shell blocks and whitespace checked; overlap guard passed (2026-10-16 20:40 ET).
-- [ ] Rerun initialization on the owned shared server and verify all five stores, role access and unchanged existing contents, including silver.
-- [ ] Learning → skill.
+- [x] Rerun initialization on the owned shared server and verify all five stores, role access and unchanged existing contents, including silver. Ran the committed initializer from the original lifecycle-owner worktree after a six-store backup and an idle-client check. Same container retained; all 40 existing table fingerprints unchanged, silver unchanged; only `mdm.bookkeeping_guard.resource` added. Nine profiles have distinct worker/verifier duties, four private environment files have mode 0600 and no silver exports. Runtime CLI checks passed for all five stores; MDM has 21 migrations and 0 entities. Private report: the environment's `last-reinitialization.json` (2026-10-16 20:42 ET).
+- [x] Learning → skill: none changed. The existing source/MDM skills already require separate worker/verifier duties and destination lease enforcement; the initializer now implements them. The local guide records the five-store default, retained legacy silver data and recoverable reinitialization (2026-10-16 20:42 ET).
 
 ## GoF consult
 
