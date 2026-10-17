@@ -783,6 +783,12 @@ preparation and publication. Direct MDM preparation of a lookup-bearing
 source extract refuses until its identity contract supports that evidence. Declare
 a combine step before preparation for this route; never discard the receipt.
 
+Scope each artifact's pair set to that artifact's own evidence (its own
+request file's reading, say): a set derived from a whole group's reading is
+read again for every artifact, so a reading of n artifacts costs n² (OpenFIGI,
+2026-10-17: 6 minutes for 480 files, against seconds). Readings that do not
+depend on each other can run at once, one process each.
+
 Construct the set from verified upstream population evidence and pin its
 receipt in the worklist. Authentication proves the supplied bytes and input
 binding; it does not prove that the set is complete or that a supplied count

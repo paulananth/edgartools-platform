@@ -89,3 +89,20 @@ The rulings need each identifier's single share class, its US composite and tick
 An answer is tied to its identifier only by its position in the file. The grammar gives either one row per answer, with its position, or one row per listing, without it. The streamed form would carry the position into each listing, but it takes only a wrapped array, and OpenFIGI's files are bare arrays.
 
 This is engine work, written as ticket 104 ("Stream a bare JSON array"), with a minimal failing example. Configuration only, so it waits for the operator's word to code.
+
+## The full configured run (2026-10-17 12:45–12:54 ET, 9 min)
+
+`openfigi_run.py`; report `openfigi-run.json` (counts only). It reads the kept capture only.
+
+- **CUSIPs:** 353,491 records accepted, plus 30,121 OpenFIGI did not find, set aside.
+  - 344,986 carry the FIGI and ticker of their only listing.
+  - 9,482 carry a US composite and 10,058 a share class.
+- **ISINs:** 380,047 records accepted, plus 7,560 not found.
+  - 357,830 carry a single listing's FIGI.
+  - 13,910 carry a US composite and 25,532 a share class.
+- Every record equals a direct count from the raw answers: 0 differences, and every identifier prepared.
+- **Faults found on the way, each fixed before this run:**
+  - The stream bounds held the output of a whole reading, not of one file, so they were raised from measurements.
+  - Each answer file's pair set was built from the whole group's requests, which is quadratic: about 6 minutes for a reading of 480 files. Each file now uses its own request file.
+  - Putting the 8 readings together loaded several GB. The streamed reduce now gives each identifier's answer instead.
+  - The 16 readings run at once, one process each: 91 s for all 7,714 files.
