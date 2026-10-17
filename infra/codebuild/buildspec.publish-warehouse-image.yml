@@ -7,7 +7,6 @@ phases:
   install:
     commands:
       - docker version
-      - docker buildx version
   pre_build:
     commands:
       - export AWS_REGION="${AWS_REGION:-${AWS_DEFAULT_REGION}}"
@@ -18,8 +17,7 @@ phases:
       - test -n "${AWS_REGION}"
   build:
     commands:
-      - docker buildx ls | tee buildx-ls.txt
-      - set -o pipefail; bash infra/scripts/publish-warehouse-image.sh --aws-region "${AWS_REGION}" --ecr-repository "${IMAGE_REPOSITORY_NAME}" --role "${IMAGE_ROLE:-warehouse}" --image-tag "${IMAGE_TAG}" --mode buildx --cache-tag "${CACHE_TAG:-buildcache}" --also-tag "${ALSO_TAG:-dev}" --output-file "${OUTPUT_FILE}" 2>&1 | tee "${PUBLISH_LOG}"
+      - set -o pipefail; bash infra/scripts/publish-warehouse-image.sh --aws-region "${AWS_REGION}" --ecr-repository "${IMAGE_REPOSITORY_NAME}" --role "${IMAGE_ROLE:-warehouse}" --image-tag "${IMAGE_TAG}" --mode docker --cache-from-tag "${CACHE_TAG:-buildcache}" --cache-tag "${CACHE_TAG:-buildcache}" --also-tag "${ALSO_TAG:-dev}" --output-file "${OUTPUT_FILE}" 2>&1 | tee "${PUBLISH_LOG}"
   post_build:
     commands:
       - test -s "${OUTPUT_FILE}"
@@ -29,5 +27,4 @@ artifacts:
   files:
     - image-ref.txt
     - publish.log
-    - buildx-ls.txt
   discard-paths: yes

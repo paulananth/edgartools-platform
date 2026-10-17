@@ -8,7 +8,7 @@ Usage:
   publish-warehouse-image-via-wsl.sh [--wsl-distro <name>] --aws-region <region> --ecr-repository <name> --image-tag <tag> [options]
 
 This wrapper is the canonical local Windows publish path. Run it from Git Bash.
-It re-enters WSL, bridges to the Windows Docker and AWS CLIs, forces linux publish mode,
+It re-enters WSL, bridges to the Windows Docker and AWS CLIs, and publishes with docker build and docker push.
 and delegates to infra/scripts/publish-warehouse-image-wsl-bridge.sh.
 EOF
 }

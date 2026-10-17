@@ -405,7 +405,7 @@ bash infra/scripts/publish-warehouse-image.sh \
   --ecr-repository edgartools-prod-images \
   --role mdm \
   --image-tag sha-$(git rev-parse --short=12 HEAD) \
-  --mode auto
+  --mode docker
 ```
 
 Running feeds is the Bookkeeping skill's **run** mode (`skills/bookkeeping/`), and
@@ -635,9 +635,9 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
 
 ### Docker Image Creation
 
-- **Windows cannot use `linux` mode directly.** Use
-  `infra/scripts/publish-warehouse-image-via-wsl.sh` from Git Bash (not PowerShell). It
-  re-enters WSL and bridges to the Windows Docker and AWS CLIs.
+- **On Windows, publish from Git Bash through**
+  `infra/scripts/publish-warehouse-image-via-wsl.sh` (not PowerShell). It
+  re-enters WSL and publishes with `docker build` and `docker push`.
 - **WSL bridge assumes Docker at** `C:\Program Files\Docker\Docker\resources\bin\docker.exe`.
   Set `WINDOWS_DOCKER_BRIDGE` (as a WSL path: `/mnt/c/...`) if your Docker is elsewhere.
 - **WSL bridge assumes AWS CLI at** `C:\Program Files\Amazon\AWSCLIV2\aws.exe`.
@@ -649,7 +649,7 @@ SELECT * FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS LIMIT 10;
   ```bash
   go install github.com/google/go-containerregistry/cmd/crane@latest
   ```
-- **`docker buildx` is required** regardless of mode. Docker Desktop >= 24 ships it.
+- **Publish with `docker build` and `docker push`** (`--mode docker`). `auto` and `linux` select that mode, on Linux and on WSL.
 - **ECR repository must exist before the image push.** It is created by the
   AWS infrastructure apply in Step 2.
 
