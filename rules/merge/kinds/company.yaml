@@ -558,8 +558,8 @@ rules:
 # `custodian_lei` only when a row has no BD number, so the two custodian
 # rules never apply to one record and their order here does not matter). A
 # custodian named by neither is not bound (its name id is lookup only) until a
-# proven name rule (ticket 07b). Declared, not switched on: each rule activates
-# on its Identifier Contract, approved by the operator.
+# proven name rule (ticket 07b). Switched on (rebuild-priorities ticket 76;
+# operator, 2026-10-17 08:31 ET: "Switch on all three (Recommended)").
 - rule_id: iapd-adv-crd
   version: 2026-10-09.1
   family: binding
@@ -790,8 +790,8 @@ identifiers:
       unit: items
       warm_up_decisions: 10000
       max_per_10k: 5
-  # Form ADV (ticket 07). Verification is filled in when the operator approves
-  # each contract on its proving corpus.
+  # Form ADV (ticket 07). Verified on the ticket 76 run; operator, 2026-10-17
+  # 08:31 ET: "Switch on all three (Recommended)".
   crd:
     authority: FINRA Central Registration Depository
     sources:
@@ -803,6 +803,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93
+      approved_by: operator
+      approved_at: "2026-10-17T12:31:29Z"
+      reason: "tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000
@@ -820,6 +825,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93
+      approved_by: operator
+      approved_at: "2026-10-17T12:31:29Z"
+      reason: "tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000
@@ -837,6 +847,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93
+      approved_by: operator
+      approved_at: "2026-10-17T12:31:29Z"
+      reason: "tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000

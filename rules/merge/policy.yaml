@@ -247,3 +247,25 @@ automatic_rules:
   rule_version: 2026-10-14.1
   verdict: bind
   activation: deterministic
+# iapd-adv-crd, iapd-adv-custodian-lei, iapd-adv-custodian-bd: switched on by
+# operator, 2026-10-17 08:31 ET, in their words: Switch on all three
+# (Recommended). They activate on their verified Identifier Contracts
+# (kinds/company.yaml: crd, lei, bd_number), the ticket 76 run.
+- kind: company
+  family: binding
+  rule_id: iapd-adv-crd
+  rule_version: 2026-10-09.1
+  verdict: bind
+  activation: deterministic
+- kind: company
+  family: binding
+  rule_id: iapd-adv-custodian-lei
+  rule_version: 2026-10-09.1
+  verdict: bind
+  activation: deterministic
+- kind: company
+  family: binding
+  rule_id: iapd-adv-custodian-bd
+  rule_version: 2026-10-09.1
+  verdict: bind
+  activation: deterministic

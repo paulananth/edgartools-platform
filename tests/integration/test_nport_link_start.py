@@ -113,12 +113,10 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
 
 def policy_body() -> dict:
     body = copy.deepcopy(files.policy())
-    company = body["kinds"]["company"]
-    company["identifiers"]["lei"]["verification"] = {
-        "corpus_sha256": "0" * 64, "approved_by": "check", "approved_at": core.AS_OF, "reason": "check only"}
     body["kinds"]["security"]["identifiers"]["cusip"].setdefault("verification", {
         "corpus_sha256": "0" * 64, "approved_by": "check", "approved_at": core.AS_OF, "reason": "check only"})
-    for kind, rule_id in (("company", "iapd-adv-custodian-lei"), ("company", "gleif-issuer-lei"),
+    # The ADV custodian LEI rule is on in the live policy (ticket 76).
+    for kind, rule_id in (("company", "gleif-issuer-lei"),
                           ("security", "nport-security-cusip")):
         rule = next(r for r in body["kinds"][kind]["rules"] if r["rule_id"] == rule_id)
         body["automatic_rules"].append({"kind": kind, "family": "binding", "rule_id": rule_id,

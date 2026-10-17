@@ -73,6 +73,18 @@ def without_nport_registrant(policy: dict) -> dict:
     return body
 
 
+def without_adv_switch_on(policy: dict) -> dict:
+    """Rebuild priorities ticket 76 (operator, 2026-10-17 08:31 ET: "Switch on
+    all three (Recommended)"): the Form ADV matching rules switched on, with
+    their Identifier Contracts' verification on the ticket 76 run. Peeled, the
+    policy is the one before."""
+    body = _copy(policy)
+    for namespace in ("crd", "lei", "bd_number"):
+        body["kinds"]["company"]["identifiers"][namespace].pop("verification")
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] not in FORM_ADV_RULES]
+    return body
+
+
 def without_custodian(policy: dict) -> dict:
     """Rebuild priorities ticket 75 (operator, 2026-10-14: "Yes, a new ticket
     (Recommended)"): the CUSTODIAN relationship type, an adviser to the
@@ -196,6 +208,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Switched on: "Switch on all three (Recommended)" (2026-10-17 08:31 ET).
+    (without_adv_switch_on, "a5e9b1133ec597add432e3d3d0fbea1886f9f3baa4424c6c063f02824cc8dba8"),
     # Not yet approved: the operator approves its digest with the proof.
     (without_custodian, "bd71d9ad021660644ae3a14185c3ceea4923fd175cf94b23a1e3c187bce09f3c"),
     (without_issuer_lei, "7dc2e9f1cf68ae76fbf151b617997f2f8478be3092931d5e943ddb9cb3b4c5e5"),

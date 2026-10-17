@@ -789,11 +789,13 @@ class TestTheNameMatchingRules:
 
     def test_both_name_matching_rules_are_on_by_the_operators_approval(self):
         # The classification rule, the CIK matching rule (ticket 15), and the
-        # two name matching rules (ticket 25, "yes", 2026-09-29 21:04 ET).
+        # two name matching rules (ticket 25, "yes", 2026-09-29 21:04 ET),
+        # then the three Form ADV matching rules (rebuild priorities ticket
+        # 76, "Switch on all three (Recommended)", 2026-10-17 08:31 ET).
         company = policy_layers.company_part(POLICY)["automatic_rules"]
         assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert [e["rule_id"] for e in company[2:]] == [
-            "sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
+            "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", *policy_layers.FORM_ADV_RULES]
         check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):

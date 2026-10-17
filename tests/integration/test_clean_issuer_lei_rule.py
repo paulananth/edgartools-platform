@@ -20,21 +20,19 @@ from tests.integration.test_clean_cik_rule import GLEIF, companies, load, operat
 
 
 ISSUER, OTHER = "9999000000EXAMPLE113", "9999000000EXAMPLE210"  # invented; check digits hold
-RULE, CUSTODIAN = "gleif-issuer-lei", "iapd-adv-custodian-lei"
+RULE = "gleif-issuer-lei"
 ADV = "iapd.adv.custodians.v1"
 
 
 def switched_on() -> dict:
-    """The issuer rule, and the ADV custodian rule that gives a Company an LEI to join."""
+    """The issuer rule; the ADV custodian rule that gives a Company an LEI to
+    join is on in the live policy (ticket 76)."""
     body = copy.deepcopy(files.policy())
     company = body["kinds"]["company"]
-    company["identifiers"]["lei"]["verification"] = {
-        "corpus_sha256": "0" * 64, "approved_by": "test", "approved_at": core.AS_OF, "reason": "test only"}
-    for rule_id in (RULE, CUSTODIAN):
-        rule = next(r for r in company["rules"] if r["rule_id"] == rule_id)
-        body["automatic_rules"].append({"kind": "company", "family": "binding", "rule_id": rule_id,
-                                        "rule_version": rule["version"], "verdict": "bind",
-                                        "activation": "deterministic"})
+    rule = next(r for r in company["rules"] if r["rule_id"] == RULE)
+    body["automatic_rules"].append({"kind": "company", "family": "binding", "rule_id": RULE,
+                                    "rule_version": rule["version"], "verdict": "bind",
+                                    "activation": "deterministic"})
     return body
 
 
