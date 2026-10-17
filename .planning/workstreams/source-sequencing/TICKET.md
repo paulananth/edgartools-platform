@@ -17,7 +17,7 @@ permission to bypass required inputs or change frozen versions.
 - [x] Document commands, exit codes, override behavior and remaining runtime gaps — specification and load-guide link inspected; 2026-10-17 08:27 ET.
 - [x] Run affected tests under five minutes and review Standards, Spec and GoF — 96 passed in 3.46s; diagnostic fix then 29 passed / 68 unchanged deselected in 0.60s; three independent reviews completed, Standards P2 fixed and rechecked; 2026-10-17 08:29 ET.
 - [x] Commit on the dedicated branch after the overlap guard passes — `84a26332`, correct branch and no overlap verified; 2026-10-17 08:29 ET.
-- [ ] Fix CI packaging failure: include the sequencing module in the data wheel, verify a fresh installation and rerun affected tests.
+- [x] Fix CI packaging failure: include the sequencing module in the data wheel, verify a fresh installation and rerun affected tests — actual wheel omission reproduced, installed-bundle suite 80 passed in 283.36s, three review axes passed; 2026-10-17 08:43 ET.
 - [ ] Recheck the updated PR's complete CI result.
 - [x] Learning → skill: none — existing data-platform Source readiness rules already require independent progress, valid required inputs and separate qualification evidence. New command syntax and its offline limit belong in `docs/specs/source-sequencing.md`; no skill defect found; 2026-10-17 08:29 ET.
 
@@ -58,3 +58,25 @@ qualification remains governed by the source-readiness specifications.
 - Real `edgar_warehouse.cli.main` calls verified all-source, Person-only and
   deferred-GLEIF reports. Documentation links resolve. Runtime readiness
   remains explicitly unchecked; no source load was performed.
+
+## CI packaging follow-up
+
+CI run `39032746991` had 19 installed-bundle failures with
+`ModuleNotFoundError: edgar_warehouse.rules.sequence`; its other 1,018 engine
+tests passed. The data wheel deliberately lists individual source-facing Rules
+modules because Bookkeeping owns the shared Rules files in a separate wheel.
+The new module was absent from that list. A real wheel build reproduced the
+omission; adding its canonical file to the data wheel fixes ownership without
+duplicating files across wheels.
+
+GoF consult: inspected packaging history and wheel ownership before editing;
+retain the explicit split, with no new abstraction. Standards, Spec and GoF
+reviewed the package entry and installed-CLI regression with no findings.
+
+Verification: wheel contains the Python module and bundled sequence YAML;
+the complete affected installed-bundle suite passed 80 tests in 283.36 seconds.
+Tests installed committed code, ran in Python isolated mode outside the checkout
+and used disposable PostgreSQL stores. Test containers stopped on completion;
+the existing shared and unrelated test containers were preserved. No provider
+request or shared-store write. The existing installed-bundle qualification
+requirements remain the skill guidance; no new skill defect was identified.
