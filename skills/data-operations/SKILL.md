@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates MDM, RDM and silver for every domain and entity, applies an approved silver spec as DDL on PostgreSQL, MySQL or SQL Server Express, and manages recurring loads from completed local deliveries. Use when making those stores operational, applying a profile's table spec, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -27,33 +27,45 @@ When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
 
-## Operationalize MDM, RDM and silver
+## Apply store DDL
 
-Do this before the recurring loop, for every domain. A domain is one source
-directory under `rules/sources` together with every entity kind that source's
-merge policy names. Walk all of them. Company and Person are two domains, not
-the list.
+This skill applies DDL. Data-profiling writes a logical silver spec and does
+not. MDM engineering writes the MDM migration files and does not apply a
+profile's silver spec.
 
-The three stores are made ready once per environment, then each domain is
-checked against that ready store. Use the private role connections already
-configured. Read each command's `--help` before the first use. A missing
-subcommand is a runtime gap to report.
+Apply these five schemas on the engine the environment names: PostgreSQL 16,
+MySQL, or SQL Server Express. When that engine does not answer, start its
+container from [Local testing](../data-platform/LOCAL-TESTING.md). The
+container has no agent and no worktree owner. Do not use
+`local-test-stores.py up` for it. Read each command's `--help` before the
+first use. A missing subcommand, or a command that refuses the dialect, is a
+runtime gap. Report it and leave that schema unapplied. Do not hand-write
+`CREATE TABLE`.
 
-1. **Stores.** MDM, RDM and silver run on the engine the environment names:
-   PostgreSQL 16, MySQL, or SQL Server Express. When that engine does not
-   answer, start its container from
-   [Local testing](../data-platform/LOCAL-TESTING.md). The container has no
-   agent and no worktree owner. Do not use `local-test-stores.py up` for it.
-   Confirm the named engine answers for MDM, RDM and silver.
-   `edgar-warehouse mdm migrate` brings MDM current.
-   `edgar-warehouse rdm init --runtime-role <role>` creates RDM;
-   `edgar-warehouse rdm migrate --runtime-role <role>` updates an existing RDM.
-   The migration owner connection is `RDM_MIGRATION_DATABASE_URL`.
-   `edgar-warehouse silver init --runtime-role <role>` creates silver;
-   `edgar-warehouse silver migrate --runtime-role <role>` updates it.
-   The runtime connection is `SILVER_DATABASE_URL`.
-   Done when each store's migrate reports current and `edgar-warehouse doctor`
-   shows those three stores answering.
+The commands below exist for PostgreSQL 16. Each one refuses MySQL and SQL
+Server Express. That refusal is the gap for those engines.
+
+| Schema | Command | Owner connection |
+|---|---|---|
+| MDM | `edgar-warehouse mdm migrate --application-role <role>` | `MDM_DATABASE_URL` |
+| RDM | `edgar-warehouse rdm init --runtime-role <role>`, then `rdm migrate` | `RDM_MIGRATION_DATABASE_URL` |
+| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`, then `bookkeeping migrate` | `BOOKKEEPING_CLEAN_MIGRATION_DATABASE_URL` |
+| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate` | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
+| Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` | `SILVER_MIGRATION_DATABASE_URL` |
+
+The runtime role exists, is not a superuser, and is not the migration login.
+Done when each command reports the schema current. `edgar-warehouse doctor`
+shows the stores that answer.
+
+## Operationalize every domain
+
+Do this after the five schemas are current, for every domain. A domain is one
+source directory under `rules/sources` together with every entity kind that
+source's merge policy names. Walk all of them. Company and Person are two
+domains, not the list.
+
+1. **Stores.** Confirm the five schemas in **Apply store DDL** are current on
+   the named engine. A refusal from MySQL or SQL Server Express stays a gap.
 2. **MDM, per domain.** Follow **Configuration promotion** in RUNBOOK.md for
    that source and its merge policy. Read back the active version. A domain
    whose source or policy is still a draft, or whose activation is refused,
