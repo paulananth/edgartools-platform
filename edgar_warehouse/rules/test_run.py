@@ -45,8 +45,9 @@ class TestRunError(ValueError):
     """A test run that cannot start or did not complete, with the reason."""
 
 
-def duties(stores: Path) -> dict[str, dict[str, str]]:
-    """Each duty's connection settings, from the local stores' private env files."""
+def duties(stores: Path) -> dict[str, dict[str, str | None]]:
+    """Each duty's connection settings, from the local stores' private env files, line by
+    line: a key the file unsets is None, so no login leaks in from the caller's shell."""
     found = {}
     for duty in DUTIES:
         path = stores / f"{duty}.env"
@@ -55,7 +56,9 @@ def duties(stores: Path) -> dict[str, dict[str, str]]:
         values = {}
         for line in path.read_text().splitlines():
             parts = shlex.split(line)
-            if parts and parts[0] == "export":
+            if parts and parts[0] == "unset":
+                values.update(dict.fromkeys(parts[1:]))
+            elif parts and parts[0] == "export":
                 key, _, value = parts[1].partition("=")
                 values[key] = value
         found[duty] = values
@@ -112,6 +115,7 @@ class _Commands:
 
     def __call__(self, duty: str, *args: str) -> str:
         environment = {**os.environ, **self.env[duty]}
+        environment = {key: value for key, value in environment.items() if value is not None}
         # The platform's command in its own process, on this interpreter: the same code.
         command = [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())"]
         done = subprocess.run([*command, *args], env=environment, capture_output=True, text=True)
