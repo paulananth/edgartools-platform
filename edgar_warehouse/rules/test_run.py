@@ -112,9 +112,9 @@ class _Commands:
 
     def __call__(self, duty: str, *args: str) -> str:
         environment = {**os.environ, **self.env[duty]}
-        # The installed command beside this interpreter: the same code, its own process.
-        command = Path(sys.executable).with_name("edgar-warehouse")
-        done = subprocess.run([str(command), *args], env=environment, capture_output=True, text=True)
+        # The platform's command in its own process, on this interpreter: the same code.
+        command = [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())"]
+        done = subprocess.run([*command, *args], env=environment, capture_output=True, text=True)
         if done.returncode not in (0, 3):
             # The first line names the refusal; a traceback may hold values, so no more.
             first = (done.stderr.strip().splitlines() or ["(no message)"])[-1][:300]
@@ -199,8 +199,8 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                 raise TestRunError(f"pass {number} ended {final['run']['state']}, not complete")
             held = counts(mdm)
             passes.append({"run_counts": final.get("counts"), "mdm": held,
-                           "records_in_mdm": sum(sum(held[part].values()) for part in
-                                                 ("stage_records", "open_reviews", "set_aside")),
+                           # A held-back record is set aside and has a review: count it once.
+                           "records_in_mdm": sum(sum(held[part].values()) for part in ("stage_records", "set_aside")),
                            "seconds": round(time.monotonic() - began, 1)})
         result = {
             "test_run": f"{source}, target {TARGET}, on a local capture",
