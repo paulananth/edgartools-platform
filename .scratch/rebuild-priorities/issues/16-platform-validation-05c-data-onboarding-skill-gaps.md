@@ -49,18 +49,18 @@ given.
     refused-flags list now reads "none". Values still show as the rules file
     holds them (a field's name, `True`, a category as SEC files it); that is
     the record's own text, kept on purpose
-- [ ] 11. Catalog lineage is missing for a second kind read from another
-  source's feed
-- [ ] 12. The input manifest includes a non-feed file (the ticker catalog):
-  say whether `batch_hash` covers only the feed's own files
+- [x] 11. Catalog lineage is missing for a second kind read from another
+  source's feed (fixed: a source with no feed of its own gets lineage from the feed that captures its `bronze.family`; `sec.submissions.person.v1` now reads from the Company source's `submissions` feed; a family no feed captures gets none; every feed capturing the family leads there, and a feed naming no family leads nowhere. Tests `test_a_second_kind_from_another_sources_files_has_its_feed_lineage` (failing without the change) and `test_each_feed_that_captures_the_family_gives_lineage`. Not covered: a source with feeds of its own that also joins another source's files (none today); GoF leave it: `catalog.py` grew one section a ticket, never along this axis, 2026-10-17 20:31 ET)
+- [x] 12. The input manifest includes a non-feed file (the ticker catalog):
+  say whether `batch_hash` covers only the feed's own files (written: the manifest lists exactly the files the test read: the feed's own and any other source's file the reading joins, since the counts depend on it; a `receipts.jsonl` naming a file the test never read (Person's lists the ticker catalog, which only the Company reading joins) or missing one it read is not the manifest. Data-onboarding **test** and refining-rules step 2; the engine checks only that `batch_hash` is a well-formed reference, `bookkeeping/clean/engine.py`, 2026-10-17 20:31 ET)
 - [x] 13. Say up front which variables the whole walk needs. The Rules
   Database can be a local throwaway (operator, 2026-10-01: "no login needed") (written under the variables table: none is live, so approvals go on the ticket and the walk needs only Docker or a local PostgreSQL 16 for test; operator 2026-10-06: "There is no login", 2026-10-16 19:46 ET)
 - [ ] 14. (skill part done: APPROVE.md "Switch on an identifier matching rule" gives the hand steps, `verification` and the `automatic_rules` entry, as the switched-on identifier rules hold them, 2026-10-16 19:46 ET; the command is still open) APPROVE.md does not say how an identifier rule is approved. The
   approval goes on its Identifier Contract's `verification`, plus its
   `automatic_rules` entry, by hand; `rules approve --rule` records measured
   proofs only. Make it a command
-- [ ] 15. Switch-on needs a Clean MDM database. Say which one, and what to do
-  while the operator's local store holds the retired `mdm_v2` schema
+- [x] 15. Switch-on needs a Clean MDM database. Say which one, and what to do
+  while the operator's local store holds the retired `mdm_v2` schema (written in APPROVE.md "Switch on": the database the MDM runs use, schema `mdm`, made by `mdm migrate`; locally a disposable PostgreSQL 16; a store that still holds `mdm_v2` is not it: `mdm migrate` refuses it (`store.py`), so create a fresh one and leave the old one to the operator to drop. Review (Standards, Spec, GoF) fixed this reason and item 12's wording, 2026-10-17 20:39 ET)
 - [x] 16. Relationships come with MDM (operator, 2026-10-01) (plan-parts already onboards `together` relationships with their master; added under map's Relationships: count each wording that states a relationship and bring it to the operator as a proposed link in the same onboarding, the name kept as written until ruled, 2026-10-16 19:46 ET). The skill must
   plan person–role–entity links in the same onboarding, including names that
   state a relationship ("a series of", "Trustee UAD", "dba", "ET AL")

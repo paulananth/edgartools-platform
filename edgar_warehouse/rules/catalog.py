@@ -195,6 +195,11 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
     return silver_schemas, tables, lineage
 
 
+def _feeds(body: dict) -> list[tuple[str, dict]]:
+    """A source's declared feeds, by name."""
+    return sorted(((body.get("acquisition") or {}).get("feeds") or {}).items())
+
+
 def plan(root: Path | None = None) -> dict:
     """The whole catalog the rules under `root` describe, sorted, so the same
     rules always give the same plan."""
@@ -206,13 +211,21 @@ def plan(root: Path | None = None) -> dict:
     silver_schemas, profiled, profiled_lineage = _profiles(root)
     tables += profiled
     lineage += profiled_lineage
-    for path in sorted((root / "sources").glob("*/source.yaml")):
-        body = files.load_source(path)
+    bodies = [(path, files.load_source(path)) for path in sorted((root / "sources").glob("*/source.yaml"))]
+    # A feed captures one bronze family; a source that declares no feed of its own
+    # reads the files of each feed that captures its family (a second kind from
+    # another source's files).
+    captured: dict[str, list[tuple[str, str]]] = {}
+    for path, body in bodies:
+        for feed, spec in _feeds(body):
+            if spec.get("family"):
+                captured.setdefault(spec["family"], []).append((body.get("source") or path.parent.name, feed))
+    for path, body in bodies:
         source = body.get("source") or path.parent.name
         mdm = body.get("mdm") or {}
         schemas.append({"name": source, "database": fqn(SERVICE, SOURCES),
                         "description": f"The source `{source}`: rules/sources/{path.parent.name}/."})
-        for feed, spec in sorted(((body.get("acquisition") or {}).get("feeds") or {}).items()):
+        for feed, spec in _feeds(body):
             required = (spec.get("completeness") or {}).get("required") or []
             columns = [{"name": key, "dataType": TEXT, "description": "Names one captured file."}
                        for key in spec.get("scope") or []]
@@ -226,6 +239,13 @@ def plan(root: Path | None = None) -> dict:
                     lineage.append({"from": fqn(SERVICE, SOURCES, source, feed),
                                     "to": fqn(SERVICE, SOURCES, source, code), "columns": [],
                                     "description": f"Dataset `{code}` reads the files feed `{feed}` captures."})
+        family = (body.get("bronze") or {}).get("family")
+        for owner, feed in (captured.get(family, []) if family and not _feeds(body) else []):
+            for code in sorted(mdm):
+                lineage.append({"from": fqn(SERVICE, SOURCES, owner, feed),
+                                "to": fqn(SERVICE, SOURCES, source, code), "columns": [],
+                                "description": f"Dataset `{code}` reads the {family} files feed `{feed}` "
+                                               f"of `{owner}` captures."})
         for code, entry in sorted(mdm.items()):
             contract = entry.get("contract") or {}
             fills = {kind: {f for f, (sources, _) in by_field.items() if code in sources}
