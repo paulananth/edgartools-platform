@@ -87,23 +87,22 @@ Layers:
 | Tool | Version | Install |
 |------|---------|---------|
 | Python | 3.12+ | python.org or `pyenv install 3.12` |
-| pip / uv | latest | bundled or `pip install uv` |
+| uv | latest | docs.astral.sh/uv |
 | git | any | pre-installed |
 | GitHub CLI (`gh`) | >= 2.0 | `winget install GitHub.cli` |
 | Docker Desktop | >= 24 | docker.com |
 | AWS CLI | v2 | aws.amazon.com/cli |
 | Terraform | **1.14.8 or later in the 1.14.x line** | terraform.io |
-| SnowCLI (`snow`) | latest | `pip install snowflake-cli-labs` |
+| SnowCLI (`snow`) | latest | `uv tool install snowflake-cli-labs` |
 | Bash | any | native on Linux/Mac; WSL on Windows |
-| dbt-snowflake | >= 1.7 | `pip install dbt-snowflake` |
+| dbt-snowflake | >= 1.7 | none: `uv run --with dbt-snowflake dbt ...` fetches it per run |
 
 ### Clone the Repository
 
 ```bash
 git clone https://github.com/paulananth/edgartools-platform
 cd edgartools-platform
-pip install -e ".[s3,snowflake]"
-pip install dbt-snowflake
+uv sync --extra s3 --extra snowflake
 ```
 
 ### Environment Variables
@@ -593,7 +592,7 @@ After upload, open Snowsight → Streamlit →
 
 ```bash
 cd examples/dashboard
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
 export SNOWFLAKE_ACCOUNT="ORGNAME-ACCOUNTNAME"
 export SNOWFLAKE_USER="your_user"
@@ -617,10 +616,10 @@ cd infra/snowflake/dbt/edgartools_gold
 uv run --with dbt-snowflake dbt test --target prod
 
 # Verify the warehouse CLI is installed
-edgar-warehouse --help
+uv run edgar-warehouse --help
 
 # Verify the Python package is importable
-python -c "from edgar_warehouse.cli import main; print('OK')"
+uv run python -c "from edgar_warehouse.cli import main; print('OK')"
 ```
 
 In Snowflake, confirm the gold status view returns rows:
