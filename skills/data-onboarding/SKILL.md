@@ -152,7 +152,8 @@ Every step says what differs for each target.
   trial, a sandbox), copy `rules/` to a folder and pass that folder:
   - to Python: `root=<folder>` in `files.source`, `files.mdm_contract` and
     `files.policy`;
-  - to commands: `--root <folder>` in `rules mapdoc` and `rules catalog`.
+  - to commands: `--root <folder>` in `rules check`, `rules mapdoc` and
+    `rules catalog`.
   In a sandbox or trial, keep the log beside that folder, not in the repo.
 - Environment:
 
@@ -477,8 +478,9 @@ starting from its "Defaults".
   field left out, a surprising path.
 - Check it: `edgar-warehouse rules check --source <source>` loads it as
   `rules save` would, offline. Each file says `ok`, or `refused` with the
-  error's kind; it checks that the file reads back as written, that each
-  Bookkeeping target and the acquisition hold, and that the merge rules pass.
+  error's kind; it checks that the file loads (the loader refuses a value
+  YAML would guess), that each Bookkeeping target and the acquisition hold,
+  and that the merge rules pass.
   Run it with no `--source` after a change to the merge rules.
 - Write `source`, `bronze`, `execution`, `read` and `mdm` for a configured
   captured-file path. The source worker requires
@@ -537,8 +539,8 @@ steward) and **write** (`rules/sources/<source>/quality.yaml`, never inside
 the contract). Each `exception` check's reason `quality_<id>` goes in the
 contract's `nonblocking_deferred_reasons`.
 
-**Output:** `quality.yaml` that `files.source('<source>')` loads, with
-`quality` inside each contract, and the data-quality skill's `QUALITY.md`.
+**Output:** `quality.yaml` that `rules check --source <source>` passes (it
+loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
 
 ### metadata: the Mapping Document and the Data Catalog
 

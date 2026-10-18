@@ -476,13 +476,20 @@ def _write_plain(body: dict, path: Path) -> None:
 # of documents uses this table, so a kind whose layout splits (merge into
 # kinds and reference tables; source into source and quality) changes here
 # only.
+LAYOUT = {
+    "source": (load_source, lambda body, path: write_source(body, path.parent)),
+    "pipeline": (load, _write_plain),
+    "merge": (lambda path: policy(path.parents[1]), lambda body, path: write_policy(body, path.parents[1])),
+}
+
+
 def check_document(kind: str, body: dict) -> None:
     """Refuse a Rules document that cannot be saved as it stands: the one list of
-    checks `rules save` and `rules check` share. Every document reads back exactly
-    as written; a source's Bookkeeping targets and acquisition hold; the merge
-    rules pass `check_policy`."""
+    checks `rules save` and `rules check` share. The body holds JSON values only (a
+    loaded file always does; a body built in code may not); a source's Bookkeeping
+    targets and acquisition hold; the merge rules pass `check_policy`."""
     if loads(dumps(body)) != body:
-        raise RulesFileError("The document does not read back as written")
+        raise RulesFileError("The document holds a value that is not JSON (a tuple, a number as a key)")
     if kind == "source":
         from edgar_warehouse.bookkeeping.clean.config import validate
 
@@ -512,7 +519,10 @@ def documents(root: Path | None = None) -> list[tuple[str, str, Path]]:
 def check(names: list[str] | None = None, root: Path | None = None) -> dict:
     """Each rules file loaded and checked as `rules save` would, offline: `ok`, or the
     reason it is refused. Named sources only, when names are given. A loader's message
-    can quote a private YAML line, so a refusal names the error's kind and the file."""
+    can quote a private YAML line, so its refusal names the error's kind and the file only."""
+    from edgar_warehouse.control_contract import Blocked
+    from edgar_warehouse.mdm.clean.store import Conflict
+
     results = {}
     for kind, name, path in documents(root):
         if names and (kind != "source" or name not in names):
@@ -520,16 +530,11 @@ def check(names: list[str] | None = None, root: Path | None = None) -> dict:
         try:
             check_document(kind, LAYOUT[kind][0](path))
             results[f"{kind}:{name}"] = "ok"
-        except Exception as error:  # every refusal is reported, the rest still checked
+        except RulesFileError as error:
             results[f"{kind}:{name}"] = f"refused ({type(error).__name__}): {path}"
+        except (Blocked, Conflict) as error:  # the engine's own fixed words, never a file's line
+            results[f"{kind}:{name}"] = f"refused ({type(error).__name__}): {error}: {path}"
     missing = sorted(set(names or ()) - {key.split(":", 1)[1] for key in results if key.startswith("source:")})
     for name in missing:
-        results[f"source:{name}"] = "refused (missing): no rules/sources/<name>/source.yaml"
+        results[f"source:{name}"] = f"refused (missing): no {root or ROOT}/sources/{name}/source.yaml"
     return results
-
-
-LAYOUT = {
-    "source": (load_source, lambda body, path: write_source(body, path.parent)),
-    "pipeline": (load, _write_plain),
-    "merge": (lambda path: policy(path.parents[1]), lambda body, path: write_policy(body, path.parents[1])),
-}

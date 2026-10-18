@@ -37,7 +37,8 @@ def test_each_refusal_is_named_and_the_rest_still_checked(root):
     results = files.check(root=root)
 
     assert results["source:example.good"] == "ok"
-    assert results["source:example.bad-target"].startswith("refused (Blocked)")
+    # The engine's refusal keeps its own words; the loader's names only its kind.
+    assert results["source:example.bad-target"].startswith("refused (Blocked): A target requires steps")
     assert results["source:example.guessed"].startswith("refused (RulesFileError)")
     assert results["merge:platform"] == "ok"
 
@@ -53,9 +54,24 @@ def test_named_sources_only_and_a_missing_one_is_refused(root):
 
     assert files.check(["example.good", "example.absent"], root) == {
         "source:example.good": "ok",
-        "source:example.absent": "refused (missing): no rules/sources/<name>/source.yaml"}
+        "source:example.absent": f"refused (missing): no {root}/sources/example.absent/source.yaml"}
 
 
-def test_save_refuses_what_check_refuses():
-    with pytest.raises(files.RulesFileError, match="read back"):
+def test_a_body_that_is_not_json_is_refused():
+    with pytest.raises(files.RulesFileError, match="not JSON"):
         files.check_document("source", {"source": "example", "when": ("a", "b")})
+
+
+def test_save_refuses_what_check_refuses_before_writing():
+    from edgar_warehouse.control_contract import Blocked
+    from edgar_warehouse.mdm.clean.store import Conflict
+    from edgar_warehouse.rules.db import Rules
+
+    rules = Rules(engine=None)  # a refusal comes before any database work
+    with pytest.raises(Blocked, match="A target requires steps"):
+        rules.save("source", "example", "1", {"source": "example",
+                                               "bookkeeping": {"version": 1, "targets": {"mastering": {"steps": []}}}})
+    policy = files.policy()
+    policy["kinds"]["company"]["rules"] = policy["kinds"]["company"]["rules"] * 2
+    with pytest.raises(Conflict, match="Rule .* version .*"):
+        rules.save("merge", "platform", "1", policy)

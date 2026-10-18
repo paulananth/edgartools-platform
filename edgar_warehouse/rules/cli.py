@@ -261,7 +261,7 @@ def register(subparsers):
     test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
     test.set_defaults(handler=_test)
     check = commands.add_parser("check", help="Check each rules file as `rules save` would, offline: "
-                                "it reads back as written, its targets and acquisition hold, the merge rules pass")
+                                "it loads, its targets and acquisition hold, the merge rules pass")
     check.add_argument("--source", action="append", help="Only this source (repeatable); default every file")
     check.add_argument("--root", default=str(files.ROOT))
     check.set_defaults(handler=_check)
