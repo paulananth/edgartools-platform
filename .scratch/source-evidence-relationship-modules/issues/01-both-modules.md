@@ -1,7 +1,7 @@
 # Source evidence and relationship calculation modules
 
 Type: task
-Status: in progress
+Status: resolved
 
 Spec: [combined scope](../spec.md). Base `1f1c55edc`. Implement both in one dedicated branch and PR; preserve behavior.
 
@@ -18,7 +18,7 @@ Spec: [combined scope](../spec.md). Base `1f1c55edc`. Implement both in one dedi
 - [x] Verify runtime fingerprints, scoped types/architecture and installed full-path proof on disposable PostgreSQL. — fingerprint sensitivity/architecture in 190-case group; core Pyright clean/no new caller diagnostics; installed extraction/evidence and GLEIF mastering/publication/recovery 2 passed in 149.71s from committed 4f953cd5 (2026-10-17 19:57 ET).
 - [x] Complete pre-iteration reading identity access found by Spec review — first failed on missing reading property, then all 93 affected/interface cases passed in 6.63s (2026-10-17 19:54 ET).
 - [x] Review Standards, Spec and GoF independently where required and resolve findings. — independent Standards/Spec rechecked 4f953cd5, root/independent GoF clean; pre-iteration identity omission fixed and 93 cases passed (2026-10-17 19:55 ET).
-- [ ] Commit/push with overlap guards, open PR and verify full CI with a bounded watcher.
+- [x] Commit/push with overlap guards, open PR and verify full CI with a bounded watcher — [PR #1067](https://github.com/paulananth/edgartools-platform/pull/1067); all six checks passed on 7bb56f3f, [CI run 39081002468](https://github.com/paulananth/edgartools-platform/actions/runs/39081002468); watcher exited successfully after 297.9s (2026-10-17 20:03 ET).
 - [x] Learning → skill: none — existing provisional-output/EOF, destination enforcement and isolated-proof guidance remains applicable; no operator workflow changed (2026-10-17 19:54 ET).
 
 ## Verification notes
@@ -32,3 +32,5 @@ Pyright is clean for source_read, source_readings and relationships. Compared wi
 Real PostgreSQL qualification used disposable Docker PG16 only; all 62 cases passed in 130.69s and fixture cleanup completed. No shared database was touched. Independent Standards and GoF review were clean; Spec identified pre-iteration identity inspection, now addressed with defensive copying and a failing-then-passing assertion. Recheck pending.
 
 Installed proof from committed `4f953cd5`, outside the checkout: version-3 configured extraction/independent verification/opened evidence and empty restricted-PG16 GLEIF mastering/publication/lost-ACK recovery both passed (149.71s). This is bounded fixture qualification, not the full source population or deployment. Fixture cleanup completed.
+
+Every ticket part is verified. Full implementation CI passed on `7bb56f3f`; subsequent closeout edits are Markdown verification records only. No merge or deployment is included.

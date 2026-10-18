@@ -1,6 +1,6 @@
 # Source Extract evidence behind its owning module
 
-Design only. Inspected origin/main `a01719c43` on 2026-10-17. The operator agreed to the ownership split and to opening one Source Extract, inspecting authenticated evidence, then iterating tables from the same private snapshot. Implementation authorized by the operator on 2026-10-17, together with Relationship Interval ownership. No runtime implementation, behavioral qualification, provider request or store change is included in this design.
+Implementation specification. Inspected origin/main `a01719c43` on 2026-10-17. The operator agreed to the ownership split and to opening one Source Extract, inspecting authenticated evidence, then iterating tables from the same private snapshot. Implementation authorized by the operator on 2026-10-17, together with Relationship Interval ownership. Implementation and qualification are recorded in the [combined ticket](issues/01-both-modules.md); no provider request or shared-store change is included.
 
 ## Outcome
 
@@ -59,18 +59,18 @@ The newly merged Company cascade preparation, configured combination, contract n
 
 Use invented local fixtures and the existing Artifacts adapter. Establish the affected baseline first; every local test invocation uses testmon and finishes within five minutes. CI performs broader verification. No provider access is needed.
 
-- [ ] Prove opening and iterating inline and partitioned readings preserves existing table events, source identities, bytes and rows, including empty inputs and multiple artifacts.
-- [ ] Prove the opened view uses one authenticated private index and later partitions remain unopened until requested.
-- [ ] Prove mutations of original references and returned evidence, contract, lookup values and chunk metadata cannot redirect iteration or alter later events.
-- [ ] Prove scalar/pair and inline/derived lookup sets preserve exact input binding, declared-set equality, raw count/UTF-8 and aggregate limits; retain worker version checks and independent verification coverage.
-- [ ] Prove malformed final partitions, gaps, count/byte/schema faults, aggregate budget failures, early stop and cancellation never establish complete consumption.
-- [ ] Retain Name Frequency wrong-population, wrong-recipe, missing/invalid metadata, delta-publication and record-count rejection cases, with unchanged canonical output for valid inputs.
-- [ ] Add a Name Frequency late-corruption case proving no new file is published and an existing file is unchanged.
-- [ ] Retain Company cascade and classification coverage added in the newer main; do not remove cases merely because they are outside the extracted mechanics.
-- [ ] Prove existing public loaders preserve their distinct compatibility behavior and explicit lookup opt-in.
-- [ ] Prove affected runtime fingerprints change when moved code changes; exercise an installed configured extraction/verification path if dependency movement affects packaging.
-- [ ] Review Standards, Spec and GoF on the implementation; run overlap guard before each commit/push and obtain full green CI. Merge requires the operator's explicit words naming the PR.
-- [ ] Learning → skill: assess implementation findings; none from this design-only review.
+- [x] Prove opening and iterating inline and partitioned readings preserves existing table events, source identities, bytes and rows, including empty inputs and multiple artifacts. — opened/incremental format, empty and multiple-artifact cases in 190 passing tests (2026-10-17 20:03 ET).
+- [x] Prove the opened view uses one authenticated private index and later partitions remain unopened until requested. — private-index-once/lazy-partition interface case passed (2026-10-17 20:03 ET).
+- [x] Prove mutations of original references and returned evidence, contract, lookup values and chunk metadata cannot redirect iteration or alter later events. — opened reference/evidence/contract/lookup/chunk mutation cases passed (2026-10-17 20:03 ET).
+- [x] Prove scalar/pair and inline/derived lookup sets preserve exact input binding, declared-set equality, raw count/UTF-8 and aggregate limits; retain worker version checks and independent verification coverage. — worker/opened scalar/pair and derived lookup suites passed (2026-10-17 20:03 ET).
+- [x] Prove malformed final partitions, gaps, count/byte/schema faults, aggregate budget failures, early stop and cancellation never establish complete consumption. — prefix/budget/corruption and cancellation cases passed (2026-10-17 20:03 ET).
+- [x] Retain Name Frequency wrong-population, wrong-recipe, missing/invalid metadata, delta-publication and record-count rejection cases, with unchanged canonical output for valid inputs. — canonical-output and wrong-publication/recipe/population cases passed (2026-10-17 20:03 ET).
+- [x] Add a Name Frequency late-corruption case proving no new file is published and an existing file is unchanged. — four late corruption/cancellation publication cases passed (2026-10-17 20:03 ET).
+- [x] Retain Company cascade and classification coverage added in the newer main; do not remove cases merely because they are outside the extracted mechanics. — newer Company cascade/classification cases retained and passed (2026-10-17 20:03 ET).
+- [x] Prove existing public loaders preserve their distinct compatibility behavior and explicit lookup opt-in. — existing public-loader compatibility and lookup opt-in tests passed (2026-10-17 20:03 ET).
+- [x] Prove affected runtime fingerprints change when moved code changes; exercise an installed configured extraction/verification path if dependency movement affects packaging. — two runtime fingerprint cases and two committed installed-package checks passed (2026-10-17 20:03 ET).
+- [x] Review Standards, Spec and GoF on the implementation; run overlap guard before each commit/push and obtain full green CI. Merge requires the operator's explicit words naming the PR. — independent Standards/Spec/GoF clean; six full CI checks passed on 7bb56f3f (2026-10-17 20:03 ET).
+- [x] Learning → skill: assess implementation findings; none from this design-only review. — none; existing skill guidance remains applicable (2026-10-17 20:03 ET).
 
 Existing coverage includes `tests/mdm/test_clean_name_frequency.py`, `tests/engine/test_incremental_readings.py`, `tests/engine/test_partitioned_reading_consumers.py`, `tests/engine/test_source_lookup_receipts.py` and `tests/engine/test_source_lookup_sets.py`. Migrate tests reaching retired private mechanics to the actual owning interface; retain independent worker/consumer proof and distinct failure cases.
 
@@ -91,7 +91,7 @@ Leverage is modest: one consumer currently reaches through private functions. Lo
 
 ## Review status and domain language
 
-**Standards:** read-only source/history inspection in a dedicated worktree at `a01719c43`; this document is outside the repository. Implementation has not begun. Existing runtime ownership and protected shared work remain intact.
+**Standards:** read-only source/history inspection in a dedicated worktree at `a01719c43`; this document is outside the repository. Implementation is verified in the combined ticket. Existing runtime ownership and protected shared work remain intact.
 
 **Spec:** both operator decisions are captured: Source Extract owns evidence mechanics; Name Frequency owns domain checks/publication; one opened private view supports evidence inspection followed by bounded iteration. Implementation authorized by the operator on 2026-10-17, together with Relationship Interval ownership.
 

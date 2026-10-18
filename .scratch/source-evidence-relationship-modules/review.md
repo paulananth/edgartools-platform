@@ -24,6 +24,6 @@ The available gof-refactor-reviewer skill was applied before implementation and 
 
 ## Qualification status
 
-Installed-package proof passed from committed 4f953cd5 outside the checkout: 2 tests in 149.71s, including extraction/evidence and empty restricted-PG16 mastering/publication/recovery. Full CI is pending. Local tests are not deployment or full-population qualification. Existing runs must finish with their pinned runtime; changed reader and relationship code produce new fingerprints.
+Installed-package proof passed from committed 4f953cd5 outside the checkout: 2 tests in 149.71s, including extraction/evidence and empty restricted-PG16 mastering/publication/recovery. All six full CI checks passed on 7bb56f3f in run 39081002468. The bounded watcher exited successfully after 297.9s; subsequent changes are Markdown closeout records only. Local tests are not deployment or full-population qualification. Existing runs must finish with their pinned runtime; changed reader and relationship code produce new fingerprints.
 
 Reviewed 2026-10-17 19:55 ET.
