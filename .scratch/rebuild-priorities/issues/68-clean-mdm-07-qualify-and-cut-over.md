@@ -19,3 +19,8 @@ and 30 days of legacy retention after cutover. Snowflake qualification is
 deferred. The user asked for an explanation of pinned inputs; the inherited
 three-company local landing bundle is being inspected as a candidate.
 Source/consumer integration gates must finish before any consumer cutover.
+
+## Checklist
+
+- [ ] Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET
+- [ ] Learning → skill
