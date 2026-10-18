@@ -25,12 +25,56 @@ def _integer(value, low, high, name):
     return value
 
 
+# Version 2 (ticket 14): a step may also say how its units are formed (`units`)
+# and what each unit's input names (`input`), which the input-manifest writer
+# reads. They are checked here and stripped, so the engine sees version-1 steps.
+PLAN_KEYS = frozenset({"units", "input"})
+INPUT_KEYS = frozenset({"contract", "keys", "readings"})
+
+
+SLICE_BYTES = 1024**3
+
+
+def _units(units) -> None:
+    if units == "one":
+        return
+    if not isinstance(units, dict) or len(units) != 1 or not set(units) <= {"slices", "groups"}:
+        raise Blocked(f"A step's units are one, slices of at most N bytes, or groups of 1..{COMPOSE_SLOTS} files")
+    if "slices" in units:
+        slices = units["slices"]
+        if (not isinstance(slices, dict) or set(slices) != {"bytes"} or type(slices["bytes"]) is not int
+                or not 1 <= slices["bytes"] <= SLICE_BYTES):
+            raise Blocked(f"A step's slices name their bytes, 1..{SLICE_BYTES}")
+    elif type(units["groups"]) is not int or not 1 <= units["groups"] <= COMPOSE_SLOTS:
+        raise Blocked(f"A step's groups hold 1..{COMPOSE_SLOTS} files (the composed-slot limit)")
+
+
+def _plan(step: dict) -> None:
+    _units(step.get("units", "one"))
+    shape = step.get("input", {})
+    if not isinstance(shape, dict) or set(shape) - INPUT_KEYS:
+        raise Blocked("A step's input names its contract, keys and readings only")
+    if "contract" in shape and (not isinstance(shape["contract"], str)
+                                or not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
+        raise Blocked("A step's contract is a rules file in the source's folder")
+    if "keys" in shape and (not isinstance(shape["keys"], dict)
+                            or any(not isinstance(v, str) or not v for v in shape["keys"].values())):
+        raise Blocked("A step's keys are nonempty text")
+    readings = shape.get("readings", {})
+    if not isinstance(readings, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in readings):
+        raise Blocked("A step's readings are named by identifiers")
+    if any(not isinstance(value, dict) or len(value) != 1 or not set(value) <= {"all", "step"}
+           or value.get("all", value.get("step")) not in step["requires"] for value in readings.values()):
+        raise Blocked("A step's readings each name one prerequisite step: {all: <step>} or {step: <step>}")
+
+
 def validate(document: dict, target: str) -> dict:
     """Strict versioned contract; reject unknown keys rather than guessing."""
     try:
         body = document["bookkeeping"]
-        if set(body) != {"version", "targets"} or type(body["version"]) is not int or body["version"] != 1:
+        if set(body) != {"version", "targets"} or type(body["version"]) is not int or body["version"] not in (1, 2):
             raise Blocked("Unsupported bookkeeping configuration")
+        planned = body["version"] == 2
         selected = body["targets"][target]
         if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks"}:
             raise Blocked("Unknown target option")
@@ -47,6 +91,10 @@ def validate(document: dict, target: str) -> dict:
         steps = selected["steps"]
         if not isinstance(steps, list) or not steps:
             raise Blocked("A target requires steps")
+        if planned:
+            for step in steps:
+                _plan(step)
+            steps = [{k: v for k, v in step.items() if k not in PLAN_KEYS} for step in steps]
         seen = set()
         for step in steps:
             if set(step) != {"name", "operation", "requires", "key", "leases", "checks"}:
@@ -83,7 +131,7 @@ def validate(document: dict, target: str) -> dict:
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
                 or any(c not in RUN_CHECKS for c in checks)):
             raise Blocked("A target requires supported final checks")
-        return {**selected, "lease_seconds": duration, "heartbeat_seconds": heartbeat,
+        return {**selected, "steps": steps, "lease_seconds": duration, "heartbeat_seconds": heartbeat,
                 "retry": {"attempts": attempts, "base_ms": base, "cap_ms": cap}}
     except Blocked:
         raise

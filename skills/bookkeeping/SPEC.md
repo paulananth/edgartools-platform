@@ -112,6 +112,28 @@ Defaults are 120 seconds, 30 seconds, and five bounded attempts with
 exponential backoff capped at five seconds and jitter. Unknown options,
 capabilities, missing keys and dependency cycles block execution.
 
+A section of `version: 2` lets each step also say how its units are formed
+and what each unit's input names, so one writer builds the run's input
+manifest from the declaration (`mdm/clean/target_manifest.py`) and a source
+needs no writer of its own:
+
+- `units`: `one` (the default), `{slices: {bytes: N}}` (the bundle's
+  documents cut into units of at most N bytes, each at most the reading's
+  `max_artifacts`), or `{groups: N}` (groups of at most N files, N at most 16,
+  the composed-slot limit);
+- `input`: `contract` (a rules file in the source's folder, default
+  `source.yaml`), `keys` (for `mdm.prepare`: `table`, `record_column`,
+  `dataset`) and `readings` (each name `{all: <step>}`, every unit of a
+  prerequisite as one list, or `{step: <step>}`, its one unit).
+
+Today the writer forms `slices` for a `source.read` of captured documents
+and `{all: <step>}` readings for `mdm.prepare`, and refuses the rest;
+`groups` and `{step: <step>}` come with OpenFIGI's target (rebuild ticket 14).
+Both are checked when the section is validated and stripped before the
+engine sees the steps, so a run's worklist rules are unchanged. Adding them
+changes the source's digest, so the Change Journal treats its files as not
+yet processed under these rules once.
+
 Input worklists belong to the source. They contain identifiers and references,
 not business records:
 

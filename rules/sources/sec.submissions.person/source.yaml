@@ -109,8 +109,11 @@ mdm:
 # Person preparation and mastering of one bundle (Issue 20 slice 20d): the
 # input manifest is written by `mdm prepare-capture --source sec.submissions.person`;
 # the records input is composed from the verified readings.
+# Version 2 (ticket 14): each step also says how its units are formed and what
+# each unit's input names, so one writer builds the run's input manifest
+# (`mdm/clean/target_manifest.py`) and this source needs no writer of its own.
 bookkeeping:
-  version: 1
+  version: 2
   targets:
     mastering:
       steps:
@@ -120,12 +123,18 @@ bookkeeping:
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
+          # The documents in units of at most 8 MiB, each at most max_artifacts.
+          units: {slices: {bytes: 8388608}}
         - name: records
           operation: mdm.prepare
           requires: [read]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
+          # Every reading of the bundle as one publication.
+          input:
+            keys: {table: submissions, record_column: record, dataset: sec.submissions.person.v1}
+            readings: {read: {all: read}}
         - name: merge
           operation: mdm.merge
           requires: [records]
