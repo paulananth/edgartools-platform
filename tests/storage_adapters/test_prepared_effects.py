@@ -92,6 +92,7 @@ def test_native_connection_uses_configured_driver_and_restricted_principal(adapt
 def test_native_policy_registration_uses_the_selected_engine_and_transaction(database, storage_api):
     """Exercise the actual native registration caller, not an opaque effect."""
     from edgar_warehouse.mdm.clean.store import current_reading, reading_at, register_policy
+    from edgar_warehouse.mdm.clean.merge import MergeStage
     from tests.support.rules_authority import register_dataset
 
     admin, runtime, role = database
@@ -116,6 +117,7 @@ def test_native_policy_registration_uses_the_selected_engine_and_transaction(dat
         first = register_policy(conn, policy)
         assert register_policy(conn, dict(policy)) == first
         assert storage_api.registered_policies(conn) == [policy]
+        assert MergeStage._check_rule_proposals(conn, first, None, []) == policy
         version = str(uuid4())
         contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
                     "record_key": "key", "publication_key": "revision", "effective_time": "effective_at", "semantics": "patch"}
@@ -135,14 +137,19 @@ def test_native_policy_registration_uses_the_selected_engine_and_transaction(dat
         assert current_reading(conn, "fixture.records")[0] == 2
         assert current_reading(conn, "fixture.records")[1]["schema_version"] == "2"
         assert reading_at(conn, "fixture.records", 1) == initial
+        expected_contracts = {"fixture.records": initial[1]}
         for n, code in enumerate(("fixture.Café.資料.🧪." + "x" * 300,
                                   "fixture.café.資料.🧪." + "x" * 300,
                                   "fixture.Cafe.資料.🧪." + "x" * 300)):
             distinct = {**contract, "schema_version": str(n + 10)}
             register_dataset(conn, code, str(uuid4()), distinct)
             assert current_reading(conn, code)[1]["schema_version"] == str(n + 10)
+            expected_contracts[code] = current_reading(conn, code)[1]
         # Database case/accent folding must not have conflated earlier names.
         assert current_reading(conn, "fixture.Café.資料.🧪." + "x" * 300)[1]["schema_version"] == "10"
+        assert storage_api.dataset_contracts(conn, [*expected_contracts, "fixture.absent", "fixture.records"]) == expected_contracts
+        assert storage_api.dataset_contracts(conn, []) == {}
+        assert storage_api.registered_policy(conn, "0" * 64) is None
     with runtime.connect() as conn:
         assert storage_api.registered_policies(conn) == [policy]
     with pytest.raises(DBAPIError), runtime.begin() as conn:

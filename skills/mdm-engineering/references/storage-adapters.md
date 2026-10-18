@@ -102,6 +102,13 @@ connect as an owner, apply native migrations or activate a source. Frozen runs
 keep their original mapping versions. Worker runtime pins include all three
 adapter implementation files, which ship with the installed engine.
 
+Consume policy and dataset content through typed adapter queries too. Raw text
+queries can return undecoded JSON and a fixed schema name can select another
+database on an engine without the same schema model. Policy validation stays
+in the shared Merge Stage; the adapter reads the selected connection's typed
+policy row and exact source contracts. The append-only original dataset
+contract remains distinct from its versioned current/frozen mappings.
+
 Keep unbounded source names as Unicode text. Where a text index has bounded
 keys or database collation changes equality, index the UTF-8 digest and check
 the retained exact name on readback. Put the source key before the mapping

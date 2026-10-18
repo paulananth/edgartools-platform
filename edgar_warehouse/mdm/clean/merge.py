@@ -23,7 +23,7 @@ from . import scope as scoping
 from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
-from .store import Conflict, Store, canonical, digest, rows
+from .store import Conflict, Store, canonical, digest, rows, storage_adapter
 from .survivorship import PROFILE_IDENTITY, current_claims, select_fields
 
 
@@ -147,10 +147,7 @@ class MergeStage:
     def propose(self, **command) -> dict:
         """What the policy's active identifier and name rules would bind or create."""
         with self.store.engine.connect() as conn:
-            policy = conn.scalar(
-                text("SELECT body FROM mdm.policy WHERE digest=:digest"),
-                {"digest": command["policy_digest"]},
-            )
+            policy = storage_adapter().registered_policy(conn, command["policy_digest"])
             if policy is None:
                 return binding.nothing()
             # A record this batch releases (a revoked bind, ticket 13) or
@@ -220,8 +217,7 @@ class MergeStage:
         than mint twice, join the wrong Company, or publish a new Company before
         one already stored. A preview passes no proposals and checks only the
         policy. Returns the policy."""
-        policy = conn.scalar(text("SELECT body FROM mdm.policy WHERE digest=:digest"),
-                             {"digest": policy_digest})
+        policy = storage_adapter().registered_policy(conn, policy_digest)
         if policy is None:
             raise Conflict("Unknown or unqualified policy")
         # Again per batch, not only at registration: a body that reached
@@ -595,14 +591,9 @@ class MergeStage:
                 live.add(key)
                 if body != old.get(key):
                     projections.append({"object_type": "review", "object_id": key[1], "body": body})
-            deferred_contracts = {
-                row["source_code"]: row["body"]
-                for row in rows(
-                    conn,
-                    "SELECT source_code,body FROM mdm.dataset WHERE source_code=ANY(:codes)",
-                    codes=sorted({r["source_code"] for r in deferred}),
-                )
-            }
+            deferred_contracts = storage_adapter().dataset_contracts(
+                conn, (r["source_code"] for r in deferred)
+            )
             # A set-aside record's review is always sent: the save checks it.
             projections.extend(
                 {
