@@ -48,7 +48,11 @@ def runtime_files() -> list[Path]:
                correction, destinations, evidence, files, identifier_types,
                identity, limits, matching, merge, name_census, names, primitives, quality,
                relationships, run, scope, source_mapping, store, survivorship)
-    return [Path(__file__), *[Path(getfile(module)) for module in modules], *source_engine.runtime_files()]
+    adapter = store.storage_adapter()
+    adapter_files = [Path(getfile(adapter)).with_name(name) for name in
+                     ("database_adapter.py", "adapter_model.py", "adapter_sql.py")]
+    return [Path(__file__), *[Path(getfile(module)) for module in modules],
+            *source_engine.runtime_files(), *adapter_files]
 
 
 def _reject_json_constant(value):

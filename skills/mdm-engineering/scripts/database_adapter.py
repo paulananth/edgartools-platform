@@ -37,15 +37,81 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import DBAPIError, SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, IntegrityError, SQLAlchemyError
 from sqlalchemy.schema import CreateIndex, CreateTable
 
-from adapter_model import model
-from adapter_sql import capabilities, commit_guards
+if __package__:
+    from .adapter_model import model, native_registry_model
+    from .adapter_sql import capabilities, commit_guards
+else:
+    from adapter_model import model, native_registry_model
+    from adapter_sql import capabilities, commit_guards
 
 
 class AdapterError(ValueError):
     """A data-free capability refusal safe to include in an operational report."""
+
+
+def registered_policies(conn) -> list[dict]:
+    """The bounded governance registry, not a read over master records."""
+    _, tables = native_registry_model(conn.dialect.name)
+    table = tables["policy"]
+    return list(conn.scalars(select(table.c.body).order_by(table.c.digest)))
+
+
+def retain_policy(conn, body: dict, digest: str) -> None:
+    """Retain immutable policy content in the caller's governance transaction.
+
+    The native registry's SELECT/INSERT grants remain the authority; this
+    function never opens an owner connection or commits the caller's work.
+    """
+    if hashlib.sha256(canonical(body)).hexdigest() != digest:
+        raise AdapterError("Policy content differs from its digest")
+    _, tables = native_registry_model(conn.dialect.name)
+    table = tables["policy"]
+    # The key arbitrates competing inserts. A savepoint contains an identical
+    # concurrent registration without rolling back the caller's earlier work.
+    # Nothing updates an existing policy, including a nominally no-op upsert.
+    prior = conn.scalar(select(table.c.body).where(table.c.digest == digest))
+    if prior is not None:
+        if canonical(prior) != canonical(body):
+            raise AdapterError("Policy digest collision")
+        return
+    try:
+        with conn.begin_nested():
+            conn.execute(insert(table).values(digest=digest, body=body))
+    except IntegrityError:
+        # A locking read sees the winning insert even under MySQL's default
+        # repeatable-read snapshot. An unrelated integrity error still fails.
+        prior = conn.scalar(select(table.c.body).where(table.c.digest == digest).with_for_update())
+        if prior is None:
+            raise
+        if canonical(prior) != canonical(body):
+            raise AdapterError("Policy digest collision") from None
+
+
+def dataset_reading(conn, code: str, version: int | None = None) -> dict | None:
+    """One native mapping by its source key and optionally its frozen version."""
+    _, tables = native_registry_model(conn.dialect.name)
+    table = tables["dataset_mapping"]
+    statement = select(table.c.mapping_version, table.c.body, table.c.registry_version).where(table.c.source_code == code)
+    if version is not None:
+        statement = statement.where(table.c.mapping_version == version)
+    row = conn.execute(statement.order_by(table.c.mapping_version.desc()).limit(1)).mappings().first()
+    return None if row is None else dict(row)
+
+
+def retain_dataset_reading(conn, code: str, version: int, body: dict, registry: str) -> None:
+    """Append a native mapping in the caller's governance transaction.
+
+    Existing source and version keys arbitrate competing registrations. Neither
+    the first source body nor an earlier mapping is ever updated in place.
+    """
+    counter(version, positive=True)
+    _, tables = native_registry_model(conn.dialect.name)
+    if version == 1:
+        conn.execute(insert(tables["dataset"]).values(source_code=code, registry_version=registry, body=body))
+    conn.execute(insert(tables["dataset_mapping"]).values(source_code=code, mapping_version=version, body=body, registry_version=registry))
 
 
 def canonical(value: Any) -> bytes:

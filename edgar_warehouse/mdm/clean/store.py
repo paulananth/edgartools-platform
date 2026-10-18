@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
@@ -37,6 +38,14 @@ def digest(value: Any) -> str:
 
 def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings()]
+
+
+def storage_adapter():
+    """Load the canonical skill-owned adapter in a checkout or installed bundle."""
+    from edgar_warehouse.rules.files import BUNDLED
+
+    package = "edgar_warehouse.bundle_data.skills" if BUNDLED.is_dir() else "skills"
+    return import_module(f"{package}.mdm-engineering.scripts.database_adapter")
 
 
 # The schema's first file, then each later file once, in order, by checksum.
@@ -208,10 +217,8 @@ def register_policy(conn: Connection, body: dict) -> str:
     from .activation import check_policy, rule_version_conflicts
 
     check_policy(body)
-    registered = [
-        r["body"]
-        for r in rows(conn, "SELECT body FROM mdm.policy WHERE body ? 'kinds'")
-    ]
+    adapter = storage_adapter()
+    registered = [b for b in adapter.registered_policies(conn) if "kinds" in b]
     reused = rule_version_conflicts(body, registered)
     if reused:
         # A rule version names one exact set of steps (§10 check 9). A new
@@ -234,12 +241,7 @@ def register_policy(conn: Connection, body: dict) -> str:
     ):
         raise ValueError("A policy requires distinct nonempty consumer names")
     key = digest(body)
-    conn.execute(
-        text(
-            "INSERT INTO mdm.policy VALUES(:key,CAST(:body AS jsonb)) ON CONFLICT DO NOTHING"
-        ),
-        {"key": key, "body": canonical(body)},
-    )
+    adapter.retain_policy(conn, body, key)
     return key
 
 
@@ -251,8 +253,8 @@ def _bound_namespaces(conn: Connection | None) -> frozenset[str]:
 
     if conn is None:
         return frozenset()
-    bodies = conn.execute(text("SELECT body FROM mdm.policy WHERE body ? 'kinds'")).scalars()
-    return frozenset().union(*(declared_namespaces(body["kinds"]) for body in bodies))
+    bodies = storage_adapter().registered_policies(conn)
+    return frozenset().union(*(declared_namespaces(body["kinds"]) for body in bodies if "kinds" in body))
 
 
 def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
@@ -343,45 +345,20 @@ def register_dataset(
     # version bump is not a mapping change, and must not mint a reading that
     # would fork every later assertion id for a mapping nobody corrected.
     pinned = {**body, "registry_evidence": evidence}
-    current = rows(
-        conn,
-        """SELECT body,registry_version::text,mapping_version FROM mdm.dataset_mapping
-        WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
-        code=code,
-    )
-    if current:
-        stored = current[0]["body"]
-        if stored == pinned and current[0]["registry_version"] == authority_version:
+    adapter = storage_adapter()
+    current = adapter.dataset_reading(conn, code)
+    if current is not None:
+        stored = current["body"]
+        if stored == pinned and current["registry_version"] == authority_version:
             return
         if _mapping_of(stored) == _mapping_of(pinned):
             raise Conflict(
                 "Dataset mapping is unchanged; a registry version bump is not a new reading"
             )
         protected_change(stored, pinned)
-        conn.execute(
-            text("""INSERT INTO mdm.dataset_mapping(source_code,mapping_version,body,registry_version)
-            VALUES(:code,:version,CAST(:body AS jsonb),:registry)"""),
-            {
-                "code": code,
-                "version": current[0]["mapping_version"] + 1,
-                "body": canonical(pinned),
-                "registry": str(UUID(authority_version)),
-            },
-        )
+        adapter.retain_dataset_reading(conn, code, current["mapping_version"] + 1, pinned, str(UUID(authority_version)))
         return
-    for statement in (
-        "INSERT INTO mdm.dataset VALUES(:code,:registry,CAST(:body AS jsonb))",
-        """INSERT INTO mdm.dataset_mapping(source_code,mapping_version,body,registry_version)
-        VALUES(:code,1,CAST(:body AS jsonb),:registry)""",
-    ):
-        conn.execute(
-            text(statement),
-            {
-                "code": code,
-                "registry": str(UUID(authority_version)),
-                "body": canonical(pinned),
-            },
-        )
+    adapter.retain_dataset_reading(conn, code, 1, pinned, str(UUID(authority_version)))
 
 
 def _mapping_of(body: dict) -> dict:
@@ -412,13 +389,8 @@ def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
     `mdm.dataset` cannot answer this: it is append-only,
     so its body stays whatever was registered first.
     """
-    found = rows(
-        conn,
-        """SELECT mapping_version,body FROM mdm.dataset_mapping
-        WHERE source_code=:code ORDER BY mapping_version DESC LIMIT 1""",
-        code=code,
-    )
-    return (found[0]["mapping_version"], found[0]["body"]) if found else None
+    found = storage_adapter().dataset_reading(conn, code)
+    return (found["mapping_version"], found["body"]) if found is not None else None
 
 
 def reading_at(conn: Connection, code: str, mapping_version: int) -> tuple[int, dict]:
@@ -429,18 +401,12 @@ def reading_at(conn: Connection, code: str, mapping_version: int) -> tuple[int, 
     a corrected mapping mid-run changes the reconstructed run scope and the
     run can never be resumed (Codex review of PR #695, P1).
     """
-    found = rows(
-        conn,
-        """SELECT mapping_version,body FROM mdm.dataset_mapping
-        WHERE source_code=:code AND mapping_version=:version""",
-        code=code,
-        version=mapping_version,
-    )
-    if not found:
+    found = storage_adapter().dataset_reading(conn, code, mapping_version)
+    if found is None:
         raise Conflict(
             f"Run pins reading {mapping_version} of {code}, which is not registered"
         )
-    return found[0]["mapping_version"], found[0]["body"]
+    return found["mapping_version"], found["body"]
 
 
 def protected_change(current: dict, proposed: dict) -> None:

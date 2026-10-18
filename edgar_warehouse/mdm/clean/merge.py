@@ -81,23 +81,25 @@ def review_scope(
     return sorted(subjects), sorted(entities)
 
 
-def check_company_sources(policy: dict, assertions: list[dict]) -> None:
-    """A kind-level fill rule must name every Company source now in scope.
+def check_source_priorities(policy: dict, assertions: list[dict]) -> None:
+    """A kind-level fill rule must name every source of that kind in scope.
 
     A policy may be registered before a later source dataset, but once that
     source first arrives, an incorrect priority name must fail the batch
     instead of silently omitting all its fields.
     """
-    defaults = (policy.get("kinds") or {}).get("company", {}).get("defaults")
-    if not defaults:
-        return
-    declared = set(defaults.get("sources", []))
-    present = {a["source_code"] for a in assertions if a["kind"] == "company"}
-    missing = present - declared
-    if missing:
-        raise Conflict(
-            "Company policy has no source priority for: " + ", ".join(sorted(missing))
-        )
+    present = defaultdict(set)
+    for assertion in assertions:
+        present[assertion["kind"]].add(assertion["source_code"])
+    for kind, block in sorted((policy.get("kinds") or {}).items()):
+        defaults = block.get("defaults")
+        if not defaults:
+            continue
+        missing = present[kind] - set(defaults.get("sources", []))
+        if missing:
+            raise Conflict(
+                f"{kind} policy has no source priority for: " + ", ".join(sorted(missing))
+            )
 
 
 def link_only(claim: dict) -> bool:
@@ -397,7 +399,7 @@ class MergeStage:
             # The masters this batch touches, whole; nothing it is only
             # linked to (ticket 77, `scope`).
             scope = scoping.identities(conn, assertions, decisions)
-            check_company_sources(policy, [*scope.readings.values(), *assertions])
+            check_source_priorities(policy, [*scope.readings.values(), *assertions])
             evidence = dict(scope.readings)
             for a in assertions:
                 if a["assertion_id"] in evidence and a != evidence[a["assertion_id"]]:

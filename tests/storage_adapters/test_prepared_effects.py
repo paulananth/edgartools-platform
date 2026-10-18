@@ -9,10 +9,11 @@ import json
 import time
 from xml.etree import ElementTree
 from collections import Counter
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
 from sqlalchemy import func, select, text, update
+from sqlalchemy.schema import CreateSchema
 from sqlalchemy.exc import DBAPIError
 
 
@@ -47,6 +48,69 @@ def batch(api, **overrides):
 def count(adapter, table):
     with adapter.engine.connect() as conn:
         return conn.scalar(select(func.count()).select_from(adapter.tables[table]))
+
+
+def test_native_policy_registration_uses_the_selected_engine_and_transaction(database, storage_api):
+    """Exercise the actual native registration caller, not an opaque effect."""
+    from edgar_warehouse.mdm.clean.store import current_reading, reading_at, register_policy
+    from tests.support.rules_authority import register_dataset
+
+    admin, runtime, role = database
+    metadata, tables = storage_api.native_registry_model(admin.dialect.name)
+    with admin.begin() as conn:
+        if metadata.schema:
+            conn.execute(CreateSchema(metadata.schema))
+        metadata.create_all(conn)
+        quote = admin.dialect.identifier_preparer.quote
+        principal = f"'{role}'@'%'" if admin.dialect.name == "mysql" else quote(role)
+        if admin.dialect.name == "postgresql":
+            conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA {quote(metadata.schema)} TO {principal}")
+        for table in tables.values():
+            name = admin.dialect.identifier_preparer.format_table(table)
+            conn.execute(text(f"GRANT SELECT ON {name} TO {principal}"))
+    policy = {"version": "native-registry-proof", "required_consumers": ["fixture"], "automatic_rules": []}
+    with pytest.raises(RuntimeError, match="interrupt registration"), admin.begin() as conn:
+        register_policy(conn, policy)
+        raise RuntimeError("interrupt registration")
+    with admin.begin() as conn:
+        assert storage_api.registered_policies(conn) == []
+        first = register_policy(conn, policy)
+        assert register_policy(conn, dict(policy)) == first
+        assert storage_api.registered_policies(conn) == [policy]
+        version = str(uuid4())
+        contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
+                    "record_key": "key", "publication_key": "revision", "effective_time": "effective_at", "semantics": "patch"}
+        register_dataset(conn, "fixture.records", version, contract)
+        initial = current_reading(conn, "fixture.records")
+        assert initial[0] == 1 and initial[1]["schema_version"] == "1"
+        assert current_reading(conn, "fixture.absent") is None
+    revised = {**contract, "schema_version": "2"}
+    revised_version = str(uuid4())
+    with pytest.raises(RuntimeError, match="interrupt mapping"), admin.begin() as conn:
+        register_dataset(conn, "fixture.records", str(uuid4()), revised)
+        raise RuntimeError("interrupt mapping")
+    with admin.begin() as conn:
+        assert current_reading(conn, "fixture.records") == initial
+        register_dataset(conn, "fixture.records", revised_version, revised)
+        register_dataset(conn, "fixture.records", revised_version, revised)
+        assert current_reading(conn, "fixture.records")[0] == 2
+        assert current_reading(conn, "fixture.records")[1]["schema_version"] == "2"
+        assert reading_at(conn, "fixture.records", 1) == initial
+    with runtime.connect() as conn:
+        assert storage_api.registered_policies(conn) == [policy]
+    with pytest.raises(DBAPIError), runtime.begin() as conn:
+        register_policy(conn, {**policy, "version": "forbidden-runtime-registration"})
+    concurrent = {**policy, "version": "concurrent-registration"}
+
+    def register(_):
+        with admin.begin() as conn:
+            return register_policy(conn, concurrent)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        digests = list(pool.map(register, range(8)))
+    assert len(set(digests)) == 1
+    with admin.connect() as conn:
+        assert len(storage_api.registered_policies(conn)) == 2
 
 
 def test_generically_persists_all_requested_and_unrelated_types(adapters, storage_api):

@@ -12,13 +12,49 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    JSON,
     MetaData,
     String,
     Table,
+    Uuid,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.mssql import VARBINARY
 from sqlalchemy.dialects.mysql import LONGBLOB
+from sqlalchemy.dialects.postgresql import JSONB
+
+
+def native_registry_model(dialect: str) -> tuple[MetaData, dict[str, Table]]:
+    """The native MDM registry's existing tables, compiled for its connection.
+
+    Governance owns these writes. This model neither creates tables on import
+    nor grants a mastering worker permission to register configuration.
+    """
+    if dialect not in {"postgresql", "mysql", "mssql"}:
+        raise ValueError("Unsupported registry database engine")
+    metadata = MetaData(schema=None if dialect == "mysql" else "mdm")
+    body = JSON().with_variant(JSONB(), "postgresql")
+    tables = {
+        "policy": Table(
+            "policy", metadata,
+            Column("digest", String(64), primary_key=True),
+            Column("body", body, nullable=False),
+        ),
+        "dataset": Table(
+            "dataset", metadata,
+            Column("source_code", String(255), primary_key=True),
+            Column("registry_version", Uuid(as_uuid=False), nullable=False),
+            Column("body", body, nullable=False),
+        ),
+        "dataset_mapping": Table(
+            "dataset_mapping", metadata,
+            Column("source_code", String(255), primary_key=True),
+            Column("mapping_version", BigInteger, primary_key=True, autoincrement=False),
+            Column("body", body, nullable=False),
+            Column("registry_version", Uuid(as_uuid=False), nullable=False),
+        ),
+    }
+    return metadata, tables
 
 
 def model(prefix: str, schema: str | None = None) -> tuple[MetaData, dict[str, Table]]:
