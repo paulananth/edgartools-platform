@@ -59,10 +59,9 @@ implement the adapter.
 
 ### Prove the same behavior on every engine
 
-For database-support work, run the same pinned Company and Person fixtures,
-contracts and policies through real PostgreSQL, MySQL and SQL Server test
-instances with restricted runtime roles, covering other affected kinds and
-sources as well. Compare identity decisions, field
+For database-support work, run the same pinned fixtures, contracts and policies
+for every affected kind and source through real PostgreSQL, MySQL and SQL
+Server test instances with restricted runtime roles. Compare identity decisions, field
 and profile winners, relationship history, waiting/rejected outcomes and
 publication content; normalize independently allocated IDs only through a
 verified identity crosswalk. Exercise exact numeric and temporal boundaries,
@@ -198,7 +197,7 @@ A statement whose key-list size changes enough to pick a bad cached plan uses
 | Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI") |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
 | The Merge Stage, matching rules, a Dataset Contract, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
-| A storage adapter or a change claimed to work across databases | The shared Company/Person behavior checks above on each real engine; preserve its restricted-role, transaction and recovery guarantees |
+| A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
 | Speed | Time per batch over a whole feed: flat, not growing with the store |
 
 Say the time of any proof over ten minutes before starting it. Stop its
@@ -208,6 +207,10 @@ containers when it ends, whatever the outcome.
 
 These name this repo's code and the failures each rule came from.
 
+- **Database portability:** use the same pinned Company and Person fixtures
+  and policies on PostgreSQL, MySQL and SQL Server, plus every other affected
+  kind/source, applying the qualification checks above. These are concrete
+  test cohorts, not limits on the shared merge algorithm.
 - **Code:** the Merge Stage is `edgar_warehouse/mdm/clean/merge.py`, and what
   a batch reads is `edgar_warehouse/mdm/clean/scope.py`; the
   input cut is `edgar_warehouse/mdm/clean/limits.py` (1,000 records and

@@ -1,6 +1,6 @@
 # Database choice and database-agnostic merge requirements
 
-Status: complete — skill changes published for review in PR #1070; not merged.
+Status: in progress — fixing PR #1070's generic-skill CI failure; not merged.
 
 Operator ruling: fix the skills to allow the selected database and make the
 merge logic database agnostic in the MDM engineering skill. This is a skill
@@ -15,7 +15,26 @@ separate work and must not be claimed from documentation edits.
 - [x] Align SQL-writer with the shared merge contract and complete store migration/registration requirements; reviewed that portable table DDL alone cannot count as initialized or registered — 2026-10-17 20:26 ET.
 - [x] Validate changed skills, internal references and command examples; four skill validators passed, doctor returned `ok: true`, all 146 command examples and links resolved in both the checkout and an isolated skills-only copy; no application tests required for these Markdown-only changes — 2026-10-17 20:26 ET.
 - [x] Review Standards, Spec and GoF, then create a separate skill PR without merging it; [PR #1070](https://github.com/paulananth/edgartools-platform/pull/1070) is open, CI pending — 2026-10-17 20:27 ET.
-- [x] Learning → skill: data-platform Setup and data-operations Apply store DDL preserve operator engine choice; mdm-engineering Database-agnostic merge logic owns shared computation, destination enforcement and per-engine proof; SQL-writer routes nonportable behavior to that contract — 2026-10-17 20:27 ET.
+- [x] Reproduce the CI failure and identify its cause; the existing genericity test fails locally with four named-domain occurrences outside Examples — 2026-10-17 20:34 ET.
+- [x] Keep per-engine qualification generic and move named fixture cohorts into Examples; existing genericity test unchanged and now passes — 2026-10-17 20:35 ET.
+- [x] Run the affected genericity tests, skill validation and doctor; 70 passed with 2 previously passing cases deselected by testmon, four skill validators passed, doctor resolved all 146 examples, and the three-axis review below passed — 2026-10-17 20:35 ET.
+- [ ] Push the correction and verify all checks on the final PR head, with a bounded CI monitor that exits on success, failure, PR closure or deadline.
+- [x] Learning → skill: MDM engineering now keeps qualification instructions generic for every affected kind/source and places concrete domain fixture cohorts under Examples; engine choice and shared merge requirements remain intact — 2026-10-17 20:35 ET.
+
+## CI diagnosis
+
+CI run `39082834619`, Unit tests: the genericity guard rejected Company and
+Person in the new qualification section and proof table. The local targeted
+test reproduced the same four occurrences in 0.14 seconds. This deterministic
+documentation-lint failure needs no competing runtime hypotheses or temporary
+instrumentation; the existing regression test is the correct feedback loop.
+The previous skill/command validators do not enforce generic-domain wording.
+
+CI-fix review: **Standards** — the existing genericity guard stays unchanged;
+only the skill wording and this ticket change. **Spec** — all three engines
+retain the same shared merge contract, with concrete domain fixtures retained
+as examples. **GoF** — the reviewer skill is available; no application code or
+module structure changes, so no design-pattern refactor is warranted.
 
 ## Standards
 
