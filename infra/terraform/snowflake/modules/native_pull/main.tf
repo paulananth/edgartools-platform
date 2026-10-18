@@ -731,9 +731,8 @@ resource "snowflake_task" "manifest_processor" {
   # COPY Parquet with USE_LOGICAL_TYPE = false, which labels UTC timestamps
   # with the session TIMEZONE (account default America/Los_Angeles, 7-8 hours
   # late). Owner's-rights procedures use the caller's TIMEZONE, so the task's
-  # session is pinned. This task is also created by deploy-snowflake-stack.sh
-  # and 04_refresh_wrapper.sql; all three must keep TIMEZONE = UTC
-  # (tests/unit/test_loader_task_timezone_sql.py).
+  # session is pinned (tests/unit/test_loader_task_timezone_sql.py). This is
+  # the task's one definition (rebuild priorities ticket 66).
   timezone = "UTC"
 
   # Standalone task (no predecessor DAG) -- Snowflake requires an explicit
