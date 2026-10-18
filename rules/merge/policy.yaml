@@ -324,3 +324,15 @@ automatic_rules:
   rule_version: 2026-10-15.1
   verdict: bind
   activation: deterministic
+# openfigi-security-isin: switched on by operator, 2026-10-18 13:22 ET, in their
+# words: Switch it on (Recommended). It activates on the ISIN Identifier Contract
+# (kinds/security.yaml, verified on ticket 79's part 1 Proving Run), with ticket
+# 80's Proving Run (.scratch/onboarding/openfigi/openfigi-proving-run.json, sha256
+# b80a12e6...e67d): 1,899 ISIN records joined their Security, 53 waited, none
+# created, none on two.
+- kind: security
+  family: binding
+  rule_id: openfigi-security-isin
+  rule_version: 2026-10-17.1
+  verdict: bind
+  activation: deterministic
