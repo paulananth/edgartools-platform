@@ -2,7 +2,7 @@
 
 Priority: 84, tier 2. Map: [Rebuild priorities](../map.md).
 
-Type: grilling, then task. Status: claimed (Claude, 2026-10-18 ET, branch `claude/t84-source-order`). Blocked by: 79 (Onboard funds and securities with the skills: the Security master these words sit on).
+Type: grilling, then task. Status: done (#1085 merged 2026-10-18 14:04 ET). Blocked by: 79 (Onboard funds and securities with the skills: the Security master these words sit on).
 
 ## Why
 
@@ -36,5 +36,5 @@ Options to put to the operator, one at a time:
   - [x] Approval of the source order and the contract versions: the operator's rulings above, recorded under the standing words (2026-10-15, "Approved the rules always") with this test evidence (2026-10-18 13:44 ET)
 - [x] Every skill gap found on the way: fixed in the skill, on its own branch: no skill could set a source order from the data; ticket 110 added data-profiling's rank mode, and refining-rules and data-onboarding now measure before reordering (#1080, merged 2026-10-18 13:07 ET) (2026-10-18 13:48 ET)
 - [x] Three-axis review (2026-10-18 13:48 ET): Standards found a misplaced comment and a skipped part's format (fixed); Spec asked for the ranking evidence committed, the reading of "rerun the data profile" said plainly, and the 1,700 13F-to-N-PORT moves named (done); GoF: leave it
-- [ ] PR, CI green, merge on the operator's word
+- [x] PR, CI green, merged on green: #1085, rerun on main after the identifier-rule test fix (#1087), merged 2026-10-18 14:04 ET
 - [x] Learning → skill: data-profiling's "Rank several sources" (#1080): a source order is set from measured coverage, one-value rate and pairwise agreement; a source's contract must map the field for its rank to matter
