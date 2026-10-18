@@ -42,5 +42,6 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [x] the N-PORT parts 1 and 2: #999 and #1001, CI green, merged on the operator's words "merge one by one" 2026-10-16 07:55 ET
   - [x] part 3: #1003, CI green, merged on the operator's words "merge one by one" 2026-10-16 09:13 ET; main's CI green after it
   - [x] The switch-on's three-axis review (2026-10-18 12:33 ET): Standards found two comments that still named the 13F run alone (fixed); Spec found the registrant CIK reason overstated what the run read (now "read with the 20 SEC Companies that hold the same CIKs"; ticket 05's run stands); GoF: leave the policy layers; one follow-up below. 852 tests pass
+  - [x] The switch-on: #1075, CI green after its two test fixes (the CIK approval layer, the answer file's policy digest), merged on green 2026-10-18 12:48 ET
   - [ ] ~~A shared `with_rules_on` test helper~~ deferred to ticket 108 (GoF, 2026-10-18): four test files switch a rule on locally with the same five lines; nothing is broken
 - [ ] Learning → skill

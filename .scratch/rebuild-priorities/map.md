@@ -82,6 +82,8 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [Silver rows are checked when they land](issues/105-silver-rows-are-checked-when-they-land.md): a silver spec declares identifier, in-set and one-value checks; a failing row lands flagged in `quality`, an `exception` check keeps it out (#1055)
 - [One test helper runs the source chain](issues/106-one-test-helper-runs-the-source-chain.md): `tests/support/source_chain.py` reads, combines and prepares through each worker's verifier (#1054)
 - [FIGI's check-digit family](issues/107-figi-check-digit-family.md): "luhn over letter values from the left"; FIGI version 2 checks it; 0 failures over 1,618,040 captured FIGIs (#1069)
+- [One definition of the manifest task](issues/66-duckdb-retirement-cutover-23-consolidate-snowflake-run-manifest-task-definitions.md): Terraform owns `SNOWFLAKE_RUN_MANIFEST_TASK`; the script and bootstrap copies deleted, held by a test (#1076); the duplicated procedures are ticket 109
+- [dbt and installs run through uv](issues/64-uv-migration-03-audit-dbt-invocation-sites.md): the runbook's dbt commands (#1078) and the dashboard and runbook installs ([65](issues/65-uv-migration-04-fix-examples-dashboard-pip-install-drift.md), #1079)
 
 ## Not yet specified
 

@@ -1,6 +1,6 @@
 # 23 — Keep one definition of `SNOWFLAKE_RUN_MANIFEST_TASK`
 
-Status: in review (2026-10-18).
+Status: done (#1076 merged 2026-10-18 12:51 ET).
 
 Priority: 66, tier 4, housekeeping. Map: [Rebuild priorities](../map.md). Moved from `.scratch/duckdb-retirement-cutover/issues/23-consolidate-snowflake-run-manifest-task-definitions.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
@@ -47,6 +47,6 @@ before any prod run.
 - [x] The task block deleted from `04_refresh_wrapper.sql`, procedures kept; Terraform's comment says it is the one definition (2026-10-18 12:39 ET)
 - [x] One test that only Terraform creates the task, shown to name both old copies on main; `test_loader_task_timezone_sql.py` and `test_install_wizard.py` pass (38); `bash -n` clean (2026-10-18 12:39 ET)
 - [x] Three-axis review (2026-10-18 12:44 ET): Standards found an unused constant and a long line (fixed); Spec asked the answer to say why two tests remain (said) and noted a one-line regex; GoF asked for a wider search: the test now reads every `.sql`, `.sh` and `.py` under `infra/` and spans lines (on main it names both old copies; here none). GoF also found `04`'s two procedures duplicated by Terraform with different bodies: ticket 109
-- [ ] PR, CI green, merged on green
+- [x] PR, CI green, merged on green: #1076, merged 2026-10-18 12:51 ET
 - [ ] ~~Prod run~~ skipped, none is needed: nothing runs against prod in this change; the next `install.sh` run no longer moves the task's schedule
-- [ ] Learning → skill
+- [x] Learning → skill: none; the test (only Terraform creates the task) holds the rule, and CLAUDE.md's "Provisioning that isn't Terraform" rule already says it

@@ -3,7 +3,7 @@
 Priority: 65, tier 4, housekeeping. Map: [Rebuild priorities](../map.md). Moved from `.scratch/uv-migration/issues/04-fix-examples-dashboard-pip-install-drift.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: in review (2026-10-18)
+Status: done (#1079 merged 2026-10-18 12:53 ET)
 Blocked by: uv-migration 01
 
 ## Question
@@ -26,5 +26,5 @@ command, and check whether any other line in that README (or a sibling
 - [x] `examples/dashboard/README.md`: `uv venv` and `uv pip install -r examples/dashboard/requirements.txt`, as CLAUDE.md's "Standalone dashboard (local)" says (2026-10-18 12:37 ET)
 - [x] The same drift elsewhere in this repo's own setup steps, `docs/runbook.md`: the tools table (uv; SnowCLI by `uv tool install`; dbt-snowflake fetched per run by `uv run --with`), the clone step (`uv sync --extra s3 --extra snowflake`) and the external Streamlit step (`uv pip install`), and the verify step's `edgar-warehouse --help` and `python -c` (now `uv run`, since `uv sync` activates nothing; found by the Spec review). Verified by `grep -rn "pip install"` over the repo outside `.scratch/` and `.planning/`: only `uv pip` lines and the deps Dockerfiles (image builds, out of scope) (2026-10-18 12:37 ET)
 - [x] Three-axis review (2026-10-18 12:43 ET): Standards asked for the grep's scope and result (now named); Spec found the two verify commands (fixed); GoF: leave it
-- [ ] PR, CI green, merged on green
-- [ ] Learning → skill
+- [x] PR, CI green, merged on green: #1079, merged 2026-10-18 12:53 ET
+- [x] Learning → skill: none; CLAUDE.md's uv rule already covers it

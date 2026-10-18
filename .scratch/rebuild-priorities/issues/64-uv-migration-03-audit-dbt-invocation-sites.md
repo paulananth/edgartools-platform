@@ -3,7 +3,7 @@
 Priority: 64, tier 4, housekeeping. Map: [Rebuild priorities](../map.md). Moved from `.scratch/uv-migration/issues/03-audit-dbt-invocation-sites.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: in review (2026-10-18)
+Status: done (#1078 merged 2026-10-18 12:52 ET)
 Blocked by: uv-migration 01
 
 ## Question
@@ -41,5 +41,5 @@ part of the eventual migration plan's action list.
 - [x] Every bare `dbt deps|run|test|compile|build|seed|debug` outside `.scratch/` and `.planning/` found by grep and read in context; table above (2026-10-18 12:37 ET)
 - [x] The two runbook sites fixed (2026-10-18 12:37 ET)
 - [x] Three-axis review (2026-10-18 12:45 ET): Standards and GoF no findings; Spec found two prose files the table did not name (named)
-- [ ] PR, CI green, merged on green
-- [ ] Learning → skill
+- [x] PR, CI green, merged on green: #1078, merged 2026-10-18 12:52 ET
+- [x] Learning → skill: none; CLAUDE.md already says every dbt command runs through `uv run --with dbt-snowflake`, and the runbook now does
