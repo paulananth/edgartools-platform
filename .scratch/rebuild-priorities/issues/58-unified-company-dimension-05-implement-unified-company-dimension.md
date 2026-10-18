@@ -3,7 +3,7 @@
 Priority: 58, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/unified-company-dimension/issues/05-implement-unified-company-dimension.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: claimed
+Status: closed (2026-10-18 12:25 ET, operator: "Close all, re-raise later (Recommended)"): written for the retired Snowflake gold layer; product value on the rebuild comes from the financials (33–48), then new tickets written against silver and the context views
 Labels: needs-triage
 Blocked by: unified-company-dimension 01, unified-company-dimension 02, unified-company-dimension 03, unified-company-dimension 04
 
