@@ -13,8 +13,7 @@ mdm.prepare and the CUSIP and ISIN Dataset Contracts), then the Merge Stage besi
   waits: OpenFIGI never creates a Security;
 - every listing lands in silver (`silver-listing.yaml`) with the MDM id of
   the Security its identifier joined, or none while it waits.
-The CUSIP rule is on in the repo's policy; the ISIN rules are switched on
-here only, in a copy of it.
+OpenFIGI's CUSIP and ISIN rules are on in the repo's policy.
 Invented values only.
 """
 

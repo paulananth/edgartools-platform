@@ -11,12 +11,11 @@ switched on here only, in a copy of the repo's policy.
 
 from __future__ import annotations
 
-import copy
-
 from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_clean_cik_rule as cik
 from tests.integration.test_clean_cik_rule import GLEIF, companies, load, operations
+from tests.mdm import policy_layers
 
 
 ISSUER, OTHER = "9999000000EXAMPLE113", "9999000000EXAMPLE210"  # invented; check digits hold
@@ -27,13 +26,7 @@ ADV = "iapd.adv.custodians.v1"
 def switched_on() -> dict:
     """The issuer rule; the ADV custodian rule that gives a Company an LEI to
     join is on in the live policy (ticket 76)."""
-    body = copy.deepcopy(files.policy())
-    company = body["kinds"]["company"]
-    rule = next(r for r in company["rules"] if r["rule_id"] == RULE)
-    body["automatic_rules"].append({"kind": "company", "family": "binding", "rule_id": RULE,
-                                    "rule_version": rule["version"], "verdict": "bind",
-                                    "activation": "deterministic"})
-    return body
+    return policy_layers.with_rules_on(files.policy(), "company", RULE)
 
 
 def register(database, body) -> str:

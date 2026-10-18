@@ -11,7 +11,6 @@ observed, at the quarter; a later quarter, a later revision, keeps that start
 
 from __future__ import annotations
 
-import copy
 import json
 import zipfile
 from pathlib import Path
@@ -25,6 +24,7 @@ from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
+from tests.mdm import policy_layers
 from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
@@ -89,15 +89,9 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
 
 
 def policy_body() -> dict:
-    body = copy.deepcopy(files.policy())
     # The ADV custodian LEI rule (ticket 76) and the N-PORT Security rules (ticket 79) are on in
     # the live policy; the issuer LEI rule is switched on here for the test only.
-    for kind, rule_id in (("company", "gleif-issuer-lei"),):
-        rule = next(r for r in body["kinds"][kind]["rules"] if r["rule_id"] == rule_id)
-        body["automatic_rules"].append({"kind": kind, "family": "binding", "rule_id": rule_id,
-                                        "rule_version": rule["version"], "verdict": "bind",
-                                        "activation": "deterministic"})
-    return body
+    return policy_layers.with_rules_on(files.policy(), "company", "gleif-issuer-lei")
 
 
 def apply(stage, policy, batch, assertions, checkpoint):

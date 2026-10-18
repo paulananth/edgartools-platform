@@ -2,7 +2,7 @@
 
 Priority: 108, tier 4, housekeeping (numbered after the map was charted). Map: [Rebuild priorities](../map.md).
 
-Type: task (tests). Status: open. Blocked by: none.
+Type: task (tests). Status: in review (2026-10-18). Blocked by: none.
 
 ## Why
 
@@ -10,6 +10,7 @@ Found by the GoF review of ticket 79's switch-on (2026-10-18): four or more test
 
 ## Checklist
 
-- [ ] `with_rules_on(policy, kind, rule_ids)` in `tests/mdm/policy_layers.py`; each test that switches a rule on locally calls it
-- [ ] The affected tests pass; PR, CI green, merged on green
-- [ ] Learning → skill
+- [x] `with_rules_on(policy, kind, *rule_ids)` in `tests/mdm/policy_layers.py`; the two tests that switched a rule on in a copy of the live policy (`test_clean_issuer_lei_rule.py`, `test_nport_link_start.py`, both `gleif-issuer-lei`) call it. The others named in Why build a whole invented policy inline, a different job, so they stay; the OpenFIGI test reads the live policy since #1083. Verified: both tests, and the 812 tests of `tests/mdm` and the N-PORT link tests, pass (2026-10-18 13:51 ET)
+- [x] Three-axis review (2026-10-18 13:53 ET): Standards found a blank line and a tick without its evidence (fixed); Spec found the OpenFIGI test's header still saying the ISIN rules are switched on there (fixed), and confirmed the helper's entries equal the removed code's; GoF: leave it
+- [ ] PR, CI green, merged on green
+- [x] Learning → skill: none; a test helper
