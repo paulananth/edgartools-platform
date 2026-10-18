@@ -22,8 +22,8 @@ change.
 - [x] Validate both skills, 25 affected genericity/mapping tests (0.71 seconds), 36 local links/anchors, five actual lifecycle help commands and four exact packaged resources — 2026-10-18 12:43 ET.
 - [x] Review Standards, Spec and GoF against final documentation; no runtime/schema refactor or pattern hierarchy added — 2026-10-18 12:43 ET.
 - [x] Commit `e8000791`, push the dedicated branch and open review PR [#1077](https://github.com/paulananth/edgartools-platform/pull/1077); CI is pending and its live results remain on the PR checks — 2026-10-18 12:45 ET.
-- [ ] Reproduce the installed-bundle doctor failures, replace the checkout-only reference with a packaged reference and verify the exact failed tests without weakening their assertions.
-- [x] Learning → skill: data-platform now follows COMPLETION.md through missing evidence and authorized engineering to verified operation; mdm-engineering owns cross-reference completion and its native per-engine proof — 2026-10-18 12:43 ET.
+- [x] Reproduce both installed-bundle doctor failures (2 failed in 133.20 seconds), replace the checkout-only reference with packaged data-modeling guidance, then run the exact unchanged tests from committed fix `29b39be7` (2 passed in 118.49 seconds); all local test invocations stayed below five minutes — 2026-10-18 13:06 ET.
+- [x] Learning → skill: data-platform now follows COMPLETION.md through missing evidence and authorized engineering to verified operation; mdm-engineering owns cross-reference completion and its native per-engine proof; completion step 1 now requires installed doctor validation of shipped references/commands — 2026-10-18 13:06 ET.
 
 
 ## Manual scenario walkthrough
@@ -78,3 +78,16 @@ boundary and MDM-derived lookup preserve one authority; a separate registry or
 new pattern hierarchy would add synchronization and review cost without solving
 the missing native integration. Keep the design. This documentation diff adds
 ordered guidance and explicit completion criteria, not a structural code change.
+
+
+## Installed-package correction
+
+CI found one repository-only reference in the new MDM guidance: CONTEXT.md was
+available in the checkout but was not shipped by the skill package. The two
+existing installed-bundle doctor tests reproduced that exact unresolved link.
+The fix uses the already-packaged data-modeling identity/cross-reference
+reference and adds installed doctor validation to the completion guide.
+No test assertion or package membership was weakened/expanded. Both exact tests
+now pass from the committed fix outside the checkout; extracted-wheel link
+checks also pass. The disposable PostgreSQL test server was stopped by fixture
+cleanup. This is packaged instruction validation, not source activation.
