@@ -105,8 +105,9 @@ passes; compilation, connectivity and PostgreSQL-only tests are insufficient.
 
 MDM owns source-record identity bindings, canonical master redirects and
 lookup-only cross-references. Keep those roles distinct: a cross-reference
-finds records but does not establish sameness. Identity binding/merging remains
-governed by the kind's Identifier Contract and approved matching rules.
+finds records but does not establish sameness. Binding/merging goes through
+approved matching rules or authorized steward decisions, with the kind's
+Identifier Contract enforced.
 RDM owns versioned code-set crosswalks; they do not resolve source records to
 master entities. Use the business definitions in [Context](../../CONTEXT.md).
 
