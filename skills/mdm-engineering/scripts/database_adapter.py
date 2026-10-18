@@ -61,6 +61,31 @@ def registered_policies(conn) -> list[dict]:
     return list(conn.scalars(select(table.c.body).order_by(table.c.digest)))
 
 
+def registered_policy(conn, digest: str) -> dict | None:
+    """Read typed policy content in the caller's transaction and database."""
+    _, tables = native_registry_model(conn.dialect.name)
+    table = tables["policy"]
+    return conn.scalar(select(table.c.body).where(table.c.digest == digest))
+
+
+def dataset_contracts(conn, codes) -> dict[str, dict]:
+    """Exact source contracts for a bound key collection, with no row cap."""
+    _, tables = native_registry_model(conn.dialect.name)
+    table = tables["dataset"]
+    codes = sorted(set(codes))
+    found = {}
+    for start in range(0, len(codes), 400):
+        chunk = codes[start:start + 400]
+        keys = [key(code) for code in chunk]
+        predicate = (table.c.source_code.in_(chunk) if conn.dialect.name == "postgresql"
+                     else table.c.source_key.in_(keys))
+        for row in conn.execute(select(table.c.source_code, table.c.body).where(predicate)).mappings():
+            if row["source_code"] not in chunk:
+                raise AdapterError("Stored source identity differs from its key")
+            found[row["source_code"]] = row["body"]
+    return found
+
+
 def retain_policy(conn, body: dict, digest: str) -> None:
     """Retain immutable policy content in the caller's governance transaction.
 

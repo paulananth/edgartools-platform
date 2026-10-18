@@ -27,7 +27,7 @@ from .evidence import deferred_record
 from .merge import MergeStage
 from .quality import counts as quality_counts
 from .quality import profile as quality_profile
-from .store import Conflict, Store, current_reading, reading_at
+from .store import Conflict, Store, current_reading, reading_at, storage_adapter
 
 
 def runtime_files() -> list[Path]:
@@ -137,10 +137,7 @@ def batch_input(
     policy = None
     if contract["adapter"].get("classification"):
         with store.engine.connect() as conn:
-            policy = conn.scalar(
-                text("SELECT body FROM mdm.policy WHERE digest=:digest"),
-                {"digest": policy_digest},
-            )
+            policy = storage_adapter().registered_policy(conn, policy_digest)
         if policy is None:
             # Fail before reading a record, not on the first one.
             raise Conflict(
