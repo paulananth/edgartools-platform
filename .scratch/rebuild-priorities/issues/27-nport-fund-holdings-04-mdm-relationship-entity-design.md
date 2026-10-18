@@ -1,8 +1,7 @@
 
 Priority: 27, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/nport-fund-holdings/issues/04-mdm-relationship-entity-design.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 Type: grilling
-Status: open
-
+Status: closed, moved to ticket 79 (2026-10-18)
 Blocked by: nport-fund-holdings 01, nport-fund-holdings 02, 26, 30
 
 ## Question
@@ -23,6 +22,10 @@ report, so double-representation risk needs a deliberate answer, not an
 accident.
 
 ## Answer
+
+Answered by ticket 79's rulings (2026-10-18 13:35 ET): the N-PORT universe has its own entity, the Fund (kind `fund_structure`, not the retired `MdmFund`), and a holding is a relationship from the Fund to the Security; operator, 2026-10-14: "funds hold securities". Building it is ticket 79's open part "Funds hold securities: HOLDS" (measured there: 5,347,869 holding rows make 3,251,006 distinct Fund-to-Security links by CUSIP from 12,387 Funds). How it sits beside 13F's manager holdings is ticket 29's answer.
+
+<details><summary>Earlier notes</summary>
 
 (not yet resolved -- working framework sketched below, to be settled once
 Ticket 07 lands the entity model)
@@ -88,3 +91,5 @@ dedupe amendments, it assumes its input already is deduped. This map's
 own Ticket 01 already flagged N-PORT has "no built-in amendment-
 supersession logic" -- that gap is exactly what a `FUND_HOLDS`
 implementation would need to close first.
+
+</details>

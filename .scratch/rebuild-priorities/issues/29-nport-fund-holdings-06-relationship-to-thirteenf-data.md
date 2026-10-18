@@ -1,8 +1,7 @@
 
 Priority: 29, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/nport-fund-holdings/issues/06-relationship-to-thirteenf-data.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 Type: grilling
-Status: open
-
+Status: closed (2026-10-18): the Securities are shared; the holdings question moved to ticket 79
 Blocked by: nport-fund-holdings 02, 26
 
 ## Question
@@ -21,4 +20,10 @@ holdings actually differ for the same fund/period).
 
 ## Answer
 
+Answered for the instruments (2026-10-18 13:35 ET): 13F and N-PORT describe the same Securities, and both bind to one Security per CUSIP (13F's `security-cusip`, N-PORT's `nport-security-cusip`, both switched on, #984 and #1075); 0 CUSIPs on two Securities in the part 1 Proving Run, which read 13F first, then N-PORT. The holdings stay two facts from two filers (a manager's 13F position, a fund's N-PORT holding), not deduplicated; how a fund's holdings relate to its manager's is part of ticket 79's "Funds hold securities: HOLDS".
+
+<details><summary>Earlier notes</summary>
+
 (not yet resolved)
+
+</details>
