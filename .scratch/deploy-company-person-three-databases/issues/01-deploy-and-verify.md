@@ -29,7 +29,8 @@ effects. No source approval or activation is implied by fixture qualification.
 - [ ] Deploy operational Company and Person configuration on PostgreSQL: existing drafts lack genuine proof/approval and required published reference versions. Fixture results do not supply release authority.
 - [ ] Deploy operational Company and Person pipelines on MySQL: native Rules, Bookkeeping, reference and application Store integration remain unimplemented; this prepared-effect adapter is not that integration.
 - [ ] Deploy operational Company and Person pipelines on SQL Server: native Rules, Bookkeeping, reference and application Store integration remain unimplemented; this prepared-effect adapter is not that integration.
-- [x] Learning → skill: `references/storage-adapters.md` documents executable ownership, exact JSON bytes, frozen preparation generation, destination enforcement, restricted grants, qualification scope and the native integration boundary — 2026-10-18 08:41 ET.
+- [x] Reproduce and fix CI inventory failure without changing the test: move the real-server matrix into canonical CI and its required gate; exact two architecture checks and matrix/gate readback pass — 2026-10-18 08:49 ET.
+- [x] Learning → skill: `references/storage-adapters.md` documents executable ownership, exact JSON bytes, frozen preparation generation, destination enforcement, restricted grants, qualification scope, canonical CI inventory/gate registration and the native integration boundary — 2026-10-18 08:49 ET.
 
 ## Selected databases and physical results
 

@@ -149,6 +149,11 @@ lookup plans, concurrent/stale writes, rollback, lease expiry, interrupted
 recovery and unchanged replay. Passing an isolated type or lock check does
 not qualify a complete adapter.
 
+Register the parity matrix in the repository's canonical CI workflow and
+include it in the required aggregate gate. A separate workflow can pass
+while the maintained test-folder inventory cannot see it. Reproduce the
+inventory check locally; keep its coverage assertion intact.
+
 Hand qualified configuration and supported migrations to
 [Data Operations](../../data-operations/SKILL.md#apply-store-ddl). Preserve the
 existing Rules approval/activation and published-reference lifecycle. A
