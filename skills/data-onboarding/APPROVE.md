@@ -77,18 +77,28 @@ in `rules/merge/pending-proofs.yaml`:
 ## Switch on an identifier matching rule
 
 A matching rule that joins on an issued identifier (`identifier_match@1`,
-`activation: deterministic`) has no measured proof for `rules approve
---rule`: its evidence is a Proving Run where each identifier landed on one
-entity. No command records it yet, so after the operator's words, by hand:
+`activation: deterministic`) has no measured proof: its evidence is a
+Proving Run where each identifier landed on one entity.
 
-1. In the kind's file, the identifier's Identifier Contract gets
-   `verification`: `corpus_sha256` (the Proving Run's report), `approved_by`,
-   `approved_at` (the time of their words) and a one-line `reason` with its
-   counts, as a switched-on Identifier Contract in the kind files shows.
-2. `rules/merge/policy.yaml` gets the rule in `automatic_rules`: `kind`,
-   `family: binding`, `rule_id`, `rule_version`, `verdict: bind`,
-   `activation: deterministic`, under a comment with the operator's words
-   and the ET time.
+1. Say in plain words what it joins and what the Proving Run showed: how
+   many records joined, waited or were created, and that no identifier sits
+   on two entities.
+2. Wait for their words, then:
+   ```bash
+   edgar-warehouse rules approve --merge platform --rule <rule_id> \
+     --proof <the Proving Run report> --reason "<one line of its counts>" \
+     --by "<their name>" --words "<their exact words>" --at <when they said it, UTC>
+   ```
+   It adds the rule to `automatic_rules` in `rules/merge/policy.yaml`, under
+   a comment with their words, their time in ET, the report's name and its sha256. When the
+   identifier's Identifier Contract has no `verification` yet, it stamps
+   one from the report (`corpus_sha256`, `approved_by`, `approved_at`,
+   `reason`). A contract already verified keeps its stamp. Both files keep
+   their comments.
+
+   **Refused:** no report file, no reason, a rule that does not join on an
+   identifier (use the measured-proof steps above), or one already on. The
+   files are left as they were.
 3. The policy is then a new merge version: its pinned digests move, as for
    any merge-rule change.
 

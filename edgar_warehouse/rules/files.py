@@ -341,6 +341,94 @@ def approve_rule(rule_id: str, *, by: str, words: str, at: str, root: Path | Non
     return entry
 
 
+def _identifier_namespace(rule: dict) -> str | None:
+    """The identifier a matching rule joins on (`identifier_match@1`), or None for any other rule."""
+    for step in rule.get("when") or []:
+        if step.get("primitive") == "identifier_match@1":
+            return step["args"]["namespace"]
+    return None
+
+
+def _eastern(at: str) -> str:
+    """A UTC time (`...Z`) as the operator reads it: local ET (America/New_York, via pytz)."""
+    from datetime import datetime
+
+    import pytz
+
+    moment = datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
+    return moment.astimezone(pytz.timezone("America/New_York")).strftime("%Y-%m-%d %H:%M ET")
+
+
+def approve_identifier_rule(rule_id: str, *, proof: Path, reason: str, by: str, words: str, at: str,
+                            root: Path | None = None) -> dict:
+    """Switch one declared identifier matching rule on, on the operator's words. Its evidence
+    is a Proving Run report, where each identifier landed on one entity (APPROVE.md, "Switch on
+    an identifier matching rule"). The rule joins `automatic_rules` with `activation:
+    deterministic` under a comment naming the words, the report and its sha256; its Identifier
+    Contract gets `verification` from the report when it has none. Appended or inserted as text,
+    so the files' comments stay; both files are restored if either does not read back as written."""
+    import hashlib
+
+    from edgar_warehouse.mdm.clean.activation import check_policy
+
+    root = root or ROOT
+    if not by.strip() or not words.strip():
+        raise RulesFileError("An approval names who approved and holds their exact words")
+    if not reason.strip():
+        raise RulesFileError("Say in one line what the Proving Run showed (--reason)")
+    if not proof.is_file():
+        raise RulesFileError(f"No test evidence for rule {rule_id}: the Proving Run report {proof} is not a file")
+    digest = hashlib.sha256(proof.read_bytes()).hexdigest()
+    body = policy(root)
+    declared = [(kind, rule) for kind, rules in body["kinds"].items()
+                for rule in rules.get("rules") or [] if rule.get("rule_id") == rule_id]
+    if len(declared) != 1:
+        raise RulesFileError(f"Rule {rule_id} is declared {len(declared)} times in merge/kinds")
+    if any(entry.get("rule_id") == rule_id for entry in body.get("automatic_rules") or []):
+        raise RulesFileError(f"Rule {rule_id} is already switched on")
+    kind, rule = declared[0]
+    namespace = _identifier_namespace(rule)
+    if namespace is None:
+        raise RulesFileError(f"Rule {rule_id} does not join on an identifier: approve it on its measured proof")
+    contract = body["kinds"][kind]["identifiers"][namespace]
+    verification = {"corpus_sha256": digest, "approved_by": by, "approved_at": at,
+                    "reason": f"{reason.strip()}, approved in their words: {words.strip()}"}
+    stamp = not contract.get("verification")
+    if stamp:
+        contract["verification"] = verification
+    entry = {"kind": kind, "family": rule["family"], "rule_id": rule_id, "rule_version": rule["version"],
+             "verdict": rule["emits"][0], "activation": "deterministic"}
+    check_policy({**body, "automatic_rules": [*(body.get("automatic_rules") or []), entry]})
+
+    policy_path, kind_path = root / "merge" / "policy.yaml", root / "merge" / "kinds" / f"{kind}.yaml"
+    before = {policy_path: policy_path.read_text(encoding="utf-8"), kind_path: kind_path.read_text(encoding="utf-8")}
+    lines = before[kind_path].split("\n")
+    if stamp:
+        heads = [i for i, line in enumerate(lines) if line.rstrip() == "identifiers:"]
+        starts = [i for i in range(heads[0] + 1, len(lines)) if lines[i].rstrip() == f"  {namespace}:"] if heads else []
+        if not starts:
+            raise RulesFileError(f"Could not place the {namespace} contract's verification in kinds/{kind}.yaml")
+        block = dumps({"verification": verification}).rstrip("\n").split("\n")
+        lines[starts[0] + 1:starts[0] + 1] = ["    " + line for line in block]
+    note = (f"# {rule_id}: switched on by {by}, {_eastern(at)}, in their words: {words}. It activates on the "
+            f"{namespace} Identifier Contract (kinds/{kind}.yaml); evidence: {proof.name} (sha256 "
+            f"{digest}): {reason}").replace("\n", " ")
+    try:
+        kind_path.write_text("\n".join(lines), encoding="utf-8")
+        policy_path.write_text(before[policy_path].rstrip("\n") + "\n" + note + "\n" + dumps([entry]),
+                               encoding="utf-8")
+        after = policy(root)
+        check_policy(after)
+        if (after.get("automatic_rules") or [])[-1] != entry or (
+                stamp and after["kinds"][kind]["identifiers"][namespace].get("verification") != verification):
+            raise RulesFileError("The rules files did not take the switch-on as written; left unchanged")
+    except Exception:
+        for path, text in before.items():  # any failure leaves both files as they were
+            path.write_text(text, encoding="utf-8")
+        raise
+    return {**entry, "contract_verified_here": stamp, "proof_sha256": digest}
+
+
 def reference(name: str, root: Path | None = None) -> dict:
     """A reference table rules and readers share: `reference/<name>.yaml`."""
     return load((root or ROOT) / "reference" / f"{name}.yaml")
