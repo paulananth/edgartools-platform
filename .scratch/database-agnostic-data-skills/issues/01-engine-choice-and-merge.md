@@ -1,6 +1,6 @@
 # Database choice and database-agnostic merge requirements
 
-Status: in progress
+Status: complete — skill changes published for review in PR #1070; not merged.
 
 Operator ruling: fix the skills to allow the selected database and make the
 merge logic database agnostic in the MDM engineering skill. This is a skill
@@ -14,8 +14,8 @@ separate work and must not be claimed from documentation edits.
 - [x] Make MDM engineering own database-agnostic merge computation, storage boundaries and per-engine behavioral qualification; reviewed the shared algorithm, destination guarantees and Company/Person parity requirements — 2026-10-17 20:26 ET.
 - [x] Align SQL-writer with the shared merge contract and complete store migration/registration requirements; reviewed that portable table DDL alone cannot count as initialized or registered — 2026-10-17 20:26 ET.
 - [x] Validate changed skills, internal references and command examples; four skill validators passed, doctor returned `ok: true`, all 146 command examples and links resolved in both the checkout and an isolated skills-only copy; no application tests required for these Markdown-only changes — 2026-10-17 20:26 ET.
-- [ ] Review Standards, Spec and GoF, then create a separate skill PR without merging it.
-- [ ] Learning → skill: name the changed instructions and their lesson.
+- [x] Review Standards, Spec and GoF, then create a separate skill PR without merging it; [PR #1070](https://github.com/paulananth/edgartools-platform/pull/1070) is open, CI pending — 2026-10-17 20:27 ET.
+- [x] Learning → skill: data-platform Setup and data-operations Apply store DDL preserve operator engine choice; mdm-engineering Database-agnostic merge logic owns shared computation, destination enforcement and per-engine proof; SQL-writer routes nonportable behavior to that contract — 2026-10-17 20:27 ET.
 
 ## Standards
 
