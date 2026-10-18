@@ -3,7 +3,7 @@
 Priority: 14, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/rules-skill/issues/15-test-rules-locally.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: open, not started. The design and the facts below were written on
+Status: claimed (Claude, 2026-10-18 ET, branch `claude/t14-rules-test`). The first design below (2026-09-29) predates the configured source chain; the 2026-10-18 design replaces it. The design and the facts below were written on
 2026-09-29; no code was written. Kept as its own ticket (operator, 2026-10-02:
 "agreed").
 Blocked by: nothing (ticket 14 merged, #757)
@@ -106,8 +106,20 @@ proving run as a command), 3 (a command writes the input manifest) and 12
    and after, with examples). Built after sources.
 4. **Skill:** step 10's `record-proof` becomes `rules test`.
 
+## Design (2026-10-18, replaces the one above)
+
+Operator's ruling on ticket 12: "rules test first, fold the rest (Recommended)".
+
+- **One declaration.** A source's chain is its `bookkeeping.targets.mastering` in `source.yaml` (read, combine, prepare, merge steps), the same target the AWS worker runtime runs (ticket 71). No second chain format. Today only SEC Company and SEC Person declare one; each other source gets its target as its first `rules test` run.
+- **`edgar-warehouse rules test --source <name> --capture <manifest> --database env:<VAR> [--sample N] [--out <report>]`** submits the target to Bookkeeping in-process on the given PostgreSQL (refused when it already holds MDM records, unless `--fresh`), drives every step with the production workers and verifiers, runs the merge twice, and writes a counts-only report: records read and set aside by reason, each quality check, bound, waiting and decisions per source, identifiers on two entities, whether the second pass changed nothing, the policy and contract digests, and the capture manifest's sha256. No Docker in the command; no test helper imported.
+- **Recording.** When `RULES_DATABASE_URL` is set, the report is recorded as the version's test run (`Rules.prove`); without it the report file is the evidence, as today.
+- **Acceptance.** OpenFIGI on ticket 80's cohort reproduces `.scratch/onboarding/security-source-order/proving-run.json` count for count; then 13F; then each one-off Proving Run script is marked superseded.
+
 ## Checklist
 
+- [x] Ticket 12's ruling recorded; ticket 16's items 1, 2, 3 and 8 moved here, 5 deferred, 7 struck (2026-10-18 14:00 ET)
+- [x] Found (2026-10-18 14:00 ET): running a declared target needs an input manifest (`{version: 2, steps: {<step>: [units]}}`). `capture_prepare.write_capture_manifest` writes one for any source whose reading keeps each document whole (read, records, merge: SEC Person); SEC Company has its own writer (`company_prepare.write_company_manifest`); no other source has one, and none declares a `mastering` target. Starting a run also resolves an active rules version (`Rules.save`, `prove`, `activate`, `resolve`), so a local test run needs a Rules Database too (a throwaway schema on the given PostgreSQL)
+- [ ] A generic input-manifest writer for a target whose steps read with context and lookups, reduce and combine (what each onboarding's Proving Run script builds by hand today), driven by the target's declaration; or, if the declaration cannot state a step, a ticket for that gap
 - [ ] Advisor, then `/gof-refactor-reviewer` before code.
 - [ ] Pin the GLEIF capture's manifest; copy and pin the SEC sample.
 - [ ] `rules test` for a source; unit tests on a tiny pinned capture.

@@ -13,24 +13,24 @@ given.
 
 ## Checklist
 
-- [ ] 1. Dry run needs code: build `rules check --source <s> --sample <n>`
+- [ ] ~~1. Dry run needs code: build `rules check --source <s> --sample <n>`~~ moved to ticket 14 (`rules test --sample`), operator's ruling on ticket 12 (2026-10-18 14:00 ET)
   (rules-skill ticket 03)
-- [ ] 2. Proving run needs code and Docker: build Preview (rules-skill ticket
+- [ ] ~~2. Proving run needs code and Docker: build Preview (rules-skill ticket~~ moved to ticket 14 (`rules test` runs into a disposable MDM) (2026-10-18 14:00 ET)
   04), or ship `proving_run.py`'s shape as a command. It must stand in for a
   missing reader, and must not hang on store growth (05b)
-- [ ] 3. Digest and input manifest need code: `rules save` prints the digest;
+- [ ] ~~3. Digest and input manifest need code: `rules save` prints the digest;~~ moved to ticket 14 (the test run names the digest and its input manifest) (2026-10-18 14:00 ET)
   a command writes the input manifest. Rules-skill ticket 15 (`rules test`)
   would write both, with items 2 and 12
 - [x] 4. The proof entry's shape is incomplete in the skill (written: `adversarial` is `fixture_sha256` and `violations`, which must be 0; `cohort` holds `files` and a `by_step` sample per step; the bound is cut to six places since switch-on refuses one above the recomputed bound or more than 0.00001 under it; checked against `activation._check_sample` and `_check_proof`; branch `claude/onboarding-gaps`, 2026-10-16 19:46 ET). Say:
   - the lower bound is cut to six places, never rounded (a rounded bound was
     refused);
   - what the adversarial set counts as a violation
-- [ ] 5. Measuring the classification proof needs code: `rules measure`, plus
+- [ ] ~~5. Measuring the classification proof needs code: `rules measure`, plus~~ deferred until a measured matching rule needs it (ticket 12's ruling) (2026-10-18 14:00 ET)
   the sample draw and the labelling-agent steps (Q7, Q12)
 - [ ] 6. Writing and checking the rules files needs code: `files.source`
   round-trip as a command
-- [ ] 7. Profile needs code: `rules profile` (rules-skill ticket 06)
-- [ ] 8. Quality counts need code: part of `rules check`
+- [ ] ~~7. Profile needs code: `rules profile` (rules-skill ticket 06)~~ struck: the data-profiling skill profiles a source (ticket 12's ruling) (2026-10-18 14:00 ET)
+- [ ] ~~8. Quality counts need code: part of `rules check`~~ moved to ticket 14 (the test run counts each quality check) (2026-10-18 14:00 ET)
 - [x] 9. Adding a kind broke pinned tests: fixed by #769 (05a). Add a line to
   the skill that a new kind leaves Company's pins alone (written in kind-neutral words, as the genericity lint requires; a change to the shared part moves them and the answer file's digest, as ticket 75 found; checked against `tests/mdm/policy_layers.company_part`, 2026-10-16 19:46 ET)
 - [x] 10 (part). Fixed in #770: plain words for `token_match@1` and
