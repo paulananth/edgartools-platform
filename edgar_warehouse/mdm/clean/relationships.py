@@ -194,7 +194,7 @@ def _earlier_sighting(periods: list[dict], period: dict) -> bool:
     return True
 
 
-def keep_first_observed(edge: dict, stored: dict | None) -> dict:
+def _keep_first_observed(edge: dict, stored: dict | None) -> dict:
     """A link rebuilt from a record's newest revision keeps the earlier observed
     start its stored body holds (ticket 101): MDM reads only the newest
     revision, so a start first seen in an earlier one is otherwise lost."""
@@ -205,11 +205,17 @@ def keep_first_observed(edge: dict, stored: dict | None) -> dict:
 
 
 def project(
-    claims: dict, state, entities: dict, as_of: str, types: dict | None = None
+    claims: dict, state, entities: dict, as_of: str, types: dict | None = None,
+    *, stored: dict[str, dict] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Each stated link checked against its type (`types`, from the policy;
     `TYPES_V0` for a policy registered without them), folded into one
-    relationship per identity, with its periods."""
+    relationship per identity, with its periods.
+
+    Stored observed starts are reconciled only after temporal checks and
+    ultimate-parent derivation, preserving the Merge Stage's existing order.
+    Prior bodies remain caller-owned; only newly projected edges are changed.
+    """
     types = TYPES_V0 if types is None else types
     edges = {}
     reviews = []
@@ -423,6 +429,8 @@ def project(
     for e in result:
         e["evidence"] = sorted(e["evidence"], key=digest)
     result += _ultimate_parents(grouped, invalid, types, as_of)
+    for edge in result:
+        _keep_first_observed(edge, (stored or {}).get(edge["relationship_id"]))
     return sorted(result, key=lambda e: e["relationship_id"]), reviews
 
 

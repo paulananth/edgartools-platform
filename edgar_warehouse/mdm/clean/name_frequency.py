@@ -32,7 +32,7 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files as rules_files
-from edgar_warehouse.workers import source_combine, source_read, source_readings
+from edgar_warehouse.workers import source_combine, source_readings
 
 from . import adapters, company_prepare, raw_capture
 from . import cascade as cascaded
@@ -164,22 +164,20 @@ def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tupl
     validate_metadata("level1", metadata)
     if metadata["file_content"] != "GLEIF_FULL_PUBLISHED":
         raise Conflict("The Name Census counts a full Golden Copy, never a delta")
-    header, _ = source_readings._index(deepcopy(reading), store, source_readings.INDEX_BYTES, True)
+    opened = source_readings.OpenedExtract(reading, store, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS,
+                                          max_contract_bytes=CONTRACT_BYTES, allow_lookup_receipts=True)
     recipe = rules_files.load(GLEIF_READING)
-    used = store.verified(header["contract"], max_bytes=CONTRACT_BYTES).decode("utf-8")
-    if rules_files.loads(used, str(GLEIF_READING)) != recipe:
+    if opened.contract != recipe:
         raise Conflict("The Golden Copy reading was not made by census-complete-stream.yaml")
-    (artifact,) = header["artifacts"]
+    (artifact,) = opened.artifacts
     if artifact["record_count"] != metadata["record_count"]:
         raise Conflict("The Golden Copy reading and its publication disagree on the record count")
-    entry = {"input": artifact["input"], "context": artifact["context"], "lookups": artifact["lookups"]}
-    lookups, _ = source_read._lookups({"version": 3}, entry, store, recipe)
+    lookups = opened.lookup_sets(0)
     if set(lookups["wanted"]) != wanted:
         raise Conflict("The Golden Copy reading projected another SEC population's names")
     gleif = {"archive_sha256": artifact["input"]["sha256"], "content_date": metadata["content_date"],
              "file_content": metadata["file_content"], "record_count": artifact["record_count"]}
-    return gleif, (chunk["tables"] for _, _, chunk, _ in source_readings.iter_load(
-        reading, store, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS, allow_lookup_receipts=True))
+    return gleif, (chunk["tables"] for _, _, chunk, _ in opened.chunks())
 
 
 def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, gleif_metadata: str,

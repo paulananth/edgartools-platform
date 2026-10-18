@@ -210,3 +210,48 @@ def test_forms_and_tickers_classify_a_filer_as_the_merge_stage_does(tmp_path):
     filers = _cascade_filers(tmp_path, {11: fund, 22: reit, 33: plain},
                              catalog((22, "EXAMPLE REALTY TRUST", "EXRT", "NYSE")))
     assert sorted(f.cik for f in filers) == ["0000000022", "0000000033"]
+
+
+@pytest.mark.parametrize('existing', [False, True])
+@pytest.mark.parametrize('failure', ['corruption', 'cancel'])
+def test_late_partition_failure_publishes_no_census_and_preserves_existing_file(tmp_path, capture,
+                                                                               monkeypatch, existing, failure):
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+
+    _, _, archive, _, wanted = capture
+    store = Artifacts()
+    ref = gleif_reading(tmp_path / 'r', archive, wanted, len(RECORDS))
+    index = store.json(ref)
+    artifact = index['artifacts'][0]
+    first = store.json(artifact['partitions'][0]['receipt'])
+    empty = {'version': 1, 'tables': {k: [] for k in first['tables']}, 'deferred': []}
+    final = store.put(tmp_path.as_uri(), empty)
+    artifact['partitions'] = [
+        {'receipt': store.put(tmp_path.as_uri(), first), 'first_ordinal': 1, 'record_count': 2,
+         'bytes': len(canonical(first).encode())},
+        {'receipt': final, 'first_ordinal': 3, 'record_count': 2, 'bytes': len(canonical(empty).encode())}]
+    ref = store.put(tmp_path.as_uri(), index)
+    target = tmp_path / 'result.json'
+    prior = b'previous verified result\n'
+    if existing:
+        target.write_bytes(prior)
+    seen = []
+    original = Artifacts.verified
+
+    def verified(self, receipt, **bounds):
+        if receipt == final:
+            seen.append('last')
+            if failure == 'cancel':
+                raise KeyboardInterrupt('cancelled during final partition')
+        return original(self, receipt, **bounds)
+
+    monkeypatch.setattr(Artifacts, 'verified', verified)
+    if failure == 'corruption':
+        Path(urlparse(final['uri']).path).write_bytes(b'{}')
+    with pytest.raises(KeyboardInterrupt if failure == 'cancel' else ValueError):
+        census_of(tmp_path, capture, gleif_reading=ref, output=str(target))
+    assert seen == ['last']
+    assert target.read_bytes() == prior if existing else not target.exists()

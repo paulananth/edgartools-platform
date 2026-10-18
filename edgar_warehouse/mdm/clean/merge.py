@@ -547,21 +547,20 @@ class MergeStage:
                 bindings={**scope.bound, **state.bindings},
                 canonical={**{e: scope.root(e) for e in scope.stored}, **state.canonical},
             )
+            old = {
+                (p["object_type"], p["object_id"]): p["body"]
+                for p in scoping.stored_links_and_reviews(conn, scope)
+            }
             edges, edge_reviews = relationships.project(
                 current_claims(list(linked.values()), as_of, state.retired_sources),
                 ends,
                 {**{scope.root(e): scope.stored[scope.root(e)] for e in scope.stored}, **projected},
                 as_of,
                 types=types,
+                stored={key: body for (kind, key), body in old.items() if kind == "relationship"},
             )
             edges = [e for e in edges if scope.owns_link(e)]
             reviews.extend(edge_reviews)
-            old = {
-                (p["object_type"], p["object_id"]): p["body"]
-                for p in scoping.stored_links_and_reviews(conn, scope)
-            }
-            edges = [relationships.keep_first_observed(e, old.get(("relationship", e["relationship_id"])))
-                     for e in edges]
             scope.links = {e["relationship_id"] for e in edges} | {
                 k for t, k in old if t == "relationship"
             }
