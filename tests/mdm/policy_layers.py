@@ -85,6 +85,24 @@ def without_adv_switch_on(policy: dict) -> dict:
     return body
 
 
+def without_p2_p3_deleted(policy: dict) -> dict:
+    """Rebuild priorities ticket 09 (operator, 2026-10-17: "Delete both
+    (Recommended)"): cascade passes P2 (street and postcode) and P3 (street
+    and city) deleted, too few new links to prove. Peeled, they stand again
+    after P1, which they equal but for their name and the parts compared."""
+    body = _copy(policy)
+    rules = body["kinds"]["company"]["rules"]
+    at = next(i for i, r in enumerate(rules) if r["rule_id"] == "sec-gleif-cascade-p1")
+    restored = []
+    for name, parts in (("P2", ["street", "postcode"]), ("P3", ["street", "city"])):
+        rule = _copy(rules[at])
+        rule["rule_id"] = f"sec-gleif-cascade-{name.lower()}"
+        rule["when"][0]["args"].update({"pass": name, "compare": parts})
+        restored.append(rule)
+    rules[at + 1:at + 1] = restored
+    return body
+
+
 def without_custodian(policy: dict) -> dict:
     """Rebuild priorities ticket 75 (operator, 2026-10-14: "Yes, a new ticket
     (Recommended)"): the CUSTODIAN relationship type, an adviser to the
@@ -208,6 +226,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Deleted: "Delete both (Recommended)" (2026-10-17, ticket 09).
+    (without_p2_p3_deleted, "6276a992486dda4bae01330580763ceb707bb8896bb0e45288ab3194c641439c"),
     # Switched on: "Switch on all three (Recommended)" (2026-10-17 08:31 ET).
     (without_adv_switch_on, "a5e9b1133ec597add432e3d3d0fbea1886f9f3baa4424c6c063f02824cc8dba8"),
     # Not yet approved: the operator approves its digest with the proof.

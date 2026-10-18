@@ -130,7 +130,7 @@ def cascaded(pass_="P1", flags=(), sec_street="1 APPLE PARK WAY", via="legal nam
 
 def test_a_cascade_pass_binds_the_pair_the_census_named_in_that_pass():
     assert _passes(_pass(1), *cascaded())
-    assert not _passes(_pass(2), *cascaded())  # the census named P1
+    assert not _passes(_pass(4), *cascaded())  # the census named P1
 
 
 def test_a_cascade_pass_rechecks_the_address_on_the_stage_rows():
