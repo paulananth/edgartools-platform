@@ -121,7 +121,7 @@ def test_the_sheets_say_what_the_rules_say():
     kind = found["company"]
     assert [row[1] for row in kind["Matching rules"][1:]] == [
         "company-cik", "nport-registrant-cik", "sec-gleif-name-jurisdiction", "sec-gleif-name-postal",
-        *(f"sec-gleif-cascade-p{n}" for n in range(1, 8)),
+        *(f"sec-gleif-cascade-p{n}" for n in (1, 4, 5, 6, 7)),
         "iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd", "gleif-issuer-lei"]
     assert "Exactly one Company holds that CIK" in kind["Matching rules"][1][5]
     assert "Exactly one Company holds that CIK" in kind["Matching rules"][2][5]  # nport-registrant-cik
