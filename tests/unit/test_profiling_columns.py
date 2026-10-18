@@ -47,10 +47,22 @@ def alnum(n: int) -> str:
     ("mod 11-10", lambda: with_family(identifiers.mod11_10, digits(9), string.digits)),
     ("mod 37-36", lambda: with_family(identifiers.mod37_36, alnum(9), string.digits + string.ascii_uppercase)),
     ("damm", lambda: with_family(identifiers.damm, digits(9), string.digits)),
+    # FIGI-shaped: eleven letters or digits and a check digit doubled from the left (ticket 107).
+    ("luhn over letter values from the left",
+     lambda: with_family(identifiers.luhn_letter_values_from_left, alnum(11), string.digits)),
 ])
 def test_each_family_is_found_on_valid_values(family, make):
     found = identifiers.check_digits([make() for _ in range(500)])
     assert found["family"] == family and found["pass_rate"] == 1.0
+
+
+def test_an_odd_length_column_keeps_luhn_over_letter_values():
+    # On a value of odd length, doubling from the left doubles what Luhn from the right does: the
+    # two families tie, and the one listed first names the column (a CUSIP-shaped column).
+    values = [with_family(identifiers.luhn_letter_values, alnum(8), string.digits) for _ in range(500)]
+    found = identifiers.check_digits(values)
+    assert found["rates"]["luhn over letter values from the left"] == 1.0
+    assert found["family"] == "luhn over letter values"
 
 
 def test_random_values_pass_only_at_chance_and_name_no_family():

@@ -3,13 +3,13 @@
 # The standard also excludes the prefixes BS, BM, GG, GB, GH, KY and VG, which
 # parts cannot state; the shape lets them through.
 # A change to this file is a new version: its normalizer gets a new name.
-# Its check digit doubles every second character counted from the left, which
-# no declared family does: checked on the 2026-10-15 OpenFIGI capture, that
-# rule passed all 51,623 FIGIs of a sample and the "luhn over letter values"
-# family failed 46,384 (ticket 105). Until a family is added, the shape alone is
-# checked.
+# Its check digit doubles every second character counted from the left
+# ("luhn over letter values from the left", ticket 107). Version 1 checked the
+# shape only; checked on all 1,618,040 distinct FIGIs of the 2026-10-15
+# OpenFIGI capture, the family fails none (the "luhn over letter values" family
+# fails 1,456,578).
 identifier: figi
-version: 1
+version: 2
 description: "Prefix (2 consonants), G, eight consonants or digits, check digit. Upper-cased."
 case: upper
 parts:
@@ -21,3 +21,4 @@ parts:
     characters: [digits, B, C, D, F, G, H, J, K, L, M, N, P, Q, R, S, T, V, W, X, Y, Z]
   - length: 1
     characters: [digits]
+check_digit: luhn over letter values from the left

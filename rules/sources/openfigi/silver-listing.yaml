@@ -117,7 +117,8 @@ load_mode: append
 # Data quality (ticket 105; operator, 2026-10-17: "Flag, land the row"): a
 # listing that fails a check lands, the check's id in its `quality` column.
 # Measured on the 2026-10-15 capture, one delivery per kind asked (872,383
-# CUSIP and 1,312,316 ISIN listings): FIGI shape 0; one name per FIGI 0; one
+# CUSIP and 1,312,316 ISIN listings): FIGI shape and check digit 0 (the check
+# digit since ticket 107, figi.yaml version 2); one name per FIGI 0; one
 # market sector per exchange 11,805, per security type 10,249, per second
 # security type 340 rows (profiling: 11,870, 10,249 and 340); 14,142 rows
 # flagged in all (5,768 and 8,374), none refused. A check of one value per
@@ -126,12 +127,12 @@ load_mode: append
 # "ticker and exchange together" is not a check: 632,078 listings carry a
 # ticker and no exchange code, as OpenFIGI gives them.
 checks:
-- id: figi_shape
+- id: figi_valid
   check: identifier
   column: figi
   type: figi
   on_fail: flag
-  why: A FIGI has the shape rules/identifiers/figi.yaml declares.
+  why: A FIGI has the shape and the check digit rules/identifiers/figi.yaml declares.
 - id: one_name_per_figi
   check: one_value
   column: name

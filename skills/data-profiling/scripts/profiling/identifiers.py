@@ -99,6 +99,19 @@ def luhn_letter_digits(value: str) -> bool:
     return luhn("".join(str(VALUES[ch]) for ch in value))
 
 
+def luhn_letter_values_from_left(value: str) -> bool:
+    """Luhn over letters and digits (A-Z as 10-35), doubling every second character counted from
+    the left and adding the digits of each result; the last character is the check digit (FIGI)."""
+    value = value.upper()
+    if len(value) < 2 or not value.isascii() or not value.isalnum() or not value[-1].isdigit():
+        return False
+    total = 0
+    for i, ch in enumerate(value[:-1]):
+        d = VALUES[ch] * (2 if i % 2 else 1)
+        total += d // 10 + d % 10
+    return (total + int(value[-1])) % 10 == 0
+
+
 def luhn(value: str) -> bool:
     """Luhn mod 10: double every second digit from the right."""
     if len(value) < 2 or not value.isdigit():
@@ -136,6 +149,7 @@ FAMILIES = {
     "luhn": (luhn, 1 / 10),
     "luhn over letter values": (luhn_letter_values, 1 / 10),
     "luhn over letter digits": (luhn_letter_digits, 1 / 10),
+    "luhn over letter values from the left": (luhn_letter_values_from_left, 1 / 10),
     "damm": (damm, 1 / 10),
 }
 CHECKED = 20_000  # distinct values tested per column, chosen with a fixed seed
