@@ -2,7 +2,7 @@
 
 Priority: 74, tier 1, in flight (raised by the operator, 2026-10-14). Map: [Rebuild priorities](../map.md).
 
-Type: task (code). Status: claimed (Claude, 2026-10-14 ET, branch `claude/merge-no-limit`). Blocked by: none. Blocks: ticket 01's ownership Proving Run.
+Type: task (code). Status: done (#960 merged 2026-10-14 12:01 ET; the deferred parts were done by ticket 77, #963). Blocked by: none. Blocks: ticket 01's ownership Proving Run.
 
 ## Why
 

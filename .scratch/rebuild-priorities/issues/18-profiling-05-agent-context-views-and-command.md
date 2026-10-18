@@ -2,6 +2,7 @@
 
 Priority: 18, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/profiling/issues/05-agent-context-views-and-command.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
+Status: done locally; the hosted `mdm migrate` waits for hosting (ticket 68).
 Type: task. Phase: A (MDM) / B (RDM). Blocked by: profiling 03, profiling 04 (02 for RDM). Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
 
 ## Checklist
@@ -29,7 +30,7 @@ Type: task. Phase: A (MDM) / B (RDM). Blocked by: profiling 03, profiling 04 (02
 - [x] `silver.table_context` (phase B, with ticket 06): built in [06](17-profiling-06-silver-writer.md), with `context silver [<table>]` (PG16 test) 2026-10-08 21:38 ET
 - [x] Three-axis review applied: a page with no item that fits is an error, not a page pointing at itself; search pages with `--page`; error commands are whole commands, with search words shell-quoted; search and relationship answers carry `trust` (latest generation, recorded time, policy digest); `--detail full` links carry their stating records (one query); an `--as-at`/`--as-of` entity answer says cross-references and source records are current; the "names no kind" claim names the company table; the view-equals-reader test also compares name and identifiers. Not applied: the Standards "missing subject index" (stage_record.subject is indexed by its UNIQUE constraint, stage_record_subject_key); GoF's dispatch dict and one next-page helper, as the first commit of phase B (unit, PG16 tests: 68 passed) 2026-10-06 13:53 ET
 - [ ] ~~Relationships `--as-at`~~ deferred to a relationship-versioning ticket (map fog): it needs a versioned relationship table or an index into the batch history (added 2026-10-06 13:53 ET); moved to [05b](19-profiling-05b-relationship-as-at.md) (2026-10-08)
-- [ ] `mdm migrate` for 005, 006 and 007 and an MDM image rebuild: not run on deploy; `MDM_DATABASE_URL` not set here and no container runtime (added 2026-10-06 13:53 ET)
+- [ ] ~~`mdm migrate` for 005, 006 and 007~~ moved to ticket 68 (hosting, 2026-10-18 12:25 ET): and an MDM image rebuild: not run on deploy; `MDM_DATABASE_URL` not set here and no container runtime (added 2026-10-06 13:53 ET)
 - [x] CI found the data skill bundle could not import the new module (its wheel lists modules one by one): `edgar_warehouse/context.py` added to `packages/data-skill/pyproject.toml` 2026-10-06 14:15 ET
 - [x] PR, CI, merge: PR #837, all six checks green after the bundle fix; merged on the operator's "Merge" (squash a9aaac91) 2026-10-06 14:32 ET
 

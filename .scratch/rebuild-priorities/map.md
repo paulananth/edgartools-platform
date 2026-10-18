@@ -71,6 +71,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [Point ISSUED_BY at a mastered Company](issues/22-security-mastering-02-issued-by-a-mastered-company.md): by issuer LEI; the issuer rule joins or waits, never creates; 0 duplicates, 41,360 links would resolve (#1022)
 - [An N-PORT link starts at its quarter's data set](issues/100-an-nport-link-starts-at-its-quarter.md): the quarter dates each publication; the link starts there, observed (#1022)
 - [A second N-PORT quarter is a new revision](issues/101-a-second-nport-quarter-is-a-new-revision.md): a quarter is a later revision with its own time; a link keeps its first observed start (#1023, #1026)
+- [An ETF share is issued by its umbrella trust](issues/23-security-mastering-03-etf-share-issued-by-the-trust.md): each filed LEI counts as its GLEIF umbrella's; 540 more Securities linked, 1,967 moved from a fund series to its trust (#1038)
 - [ISIN-only Securities link to their issuer](issues/102-isin-only-securities-link-to-their-issuer.md): by the one issuer LEI an ISIN's holdings state; 25,173 links, equal to a direct count (#1025)
 - [Integration tests share their containers and fixtures](issues/98-integration-tests-share-containers-and-fixtures.md): one PostgreSQL 16 per session for the MDM store's tests; CI integration 310 s to 217 s (#1027)
 
@@ -84,7 +85,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 
 ## Not yet specified
 
-- **Where gold stands in the rebuild.** The agent decision inputs, the unified Company dimension, the dashboards and the promotion criteria (tickets 49–62) were written against the Snowflake gold layer. Once the silver writer (ticket 17) and the context views (ticket 18) land, each needs a decision: re-point it at the rebuild's silver, or retire it.
+- **Where gold stands in the rebuild.** Answered (operator, 2026-10-18 12:25 ET, "Close all, re-raise later (Recommended)"): tickets 49–62 are closed as written for the retired gold layer; product value is re-raised against silver and the context views.
 - **Hosting the rebuild.** Hosted Snowflake Postgres (ticket 68) and the AWS worker runtime (ticket 71) need the operator's destinations. The order of hosting and the recreation proof is not yet set.
 - **Ownership contract follow-ups.** The ownership contract names its effective time but maps no `effective_at`, so its records state no time and the run checks report none; an issuer CIK that is malformed names no Company, so its link waits forever (none in the local copies). Each is a contract change that moves record ids.
 

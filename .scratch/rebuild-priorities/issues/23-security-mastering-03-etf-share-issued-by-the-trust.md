@@ -6,7 +6,7 @@ Priority: 23, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 **Blocked by:** 22: Point ISSUED_BY at a mastered Company.
 
-**Status:** in review (PR open, 2026-10-17)
+**Status:** done (#1038 merged 2026-10-17 08:13 ET)
 
 - [x] `464287200` with issuer `ISHARES TR` is `ISSUED_BY` the iShares Trust Company, not BlackRock: its 3 filed LEIs map to one umbrella, GLEIF's record of the trust (local check; 2026-10-17 07:51 ET)
 - [ ] ~~`922908363` is issued by the Vanguard trust Company~~ not reached by the ruling: its holdings keep 4 LEIs after mapping (3 without the adviser's), so it has no link; never the adviser. One of the 2,852 CUSIPs still filed with several issuers (2026-10-17 07:51 ET)
@@ -26,5 +26,5 @@ Priority: 23, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 - [x] Measure the filed issuer LEIs of the three ETF CUSIPs and of every CUSIP with several (above) (2026-10-16 19:56 ET)
 - [x] The operator's ruling: the issuer is the umbrella trust (map each filed LEI to its GLEIF umbrella) or the filed fund series (the trust read through the sub-fund link): "Umbrella trust (Recommended)" (2026-10-17, answered before 07:42 ET)
 - [x] Configuration to the ruling, tested on invented records through the chain and the Merge Stage; counted on the real quarter: `gleif/subfund-pairs.yaml` (GLEIF's active IS_SUBFUND_OF; 73,664 pairs, no fund with two umbrellas, 55 s) feeds the `umbrella` pair set; `issuers.yaml` counts each filed LEI as its umbrella's. Test: a series and its trust give one issuer, the trust; without the pair, no link. Real 2026q2 (`umbrella_issuer_run.py`, 9 min): 217,100 Securities with ISSUED_BY (216,560 + 540), 1,967 moved from a series to its trust, every link equal to a direct count, 0 extra; the 845 one-issuer CUSIPs the CUSIP contract sets aside (check digit) unchanged from ticket 22; 2,852 still several (2026-10-17 07:51 ET)
-- [ ] PR, CI green, merge on the operator's word
-- [ ] Learning → skill
+- [x] PR, CI green, merge on the operator's word: #1038, all five CI checks green, merged 2026-10-17 08:13 ET (checked 2026-10-18 12:25 ET)
+- [x] Learning → skill: none; configuration only, the umbrella rule lives in `rules/sources/sec.nport.security/issuers.yaml` and the run wiring in ticket 79 (2026-10-18 12:25 ET)

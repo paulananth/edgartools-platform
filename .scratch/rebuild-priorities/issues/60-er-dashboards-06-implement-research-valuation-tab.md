@@ -3,7 +3,7 @@
 Priority: 60, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/er-dashboards/issues/06-implement-research-valuation-tab.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task  
-Status: open  
+Status: closed (2026-10-18 12:25 ET, operator: "Close all, re-raise later (Recommended)"): written for the retired Snowflake gold layer; product value on the rebuild comes from the financials (33–48), then new tickets written against silver and the context views
 Blocked by: er-dashboards 03, er-dashboards 04  
 
 ## Question / work
@@ -12,11 +12,11 @@ Add **Valuation Explore** + **Thesis** panel shell to Company / Research Workspa
 
 ### Acceptance
 
-- [ ] Explore: CIK→ticker→EOD snapshot via ERDP-07 helpers (mock path in CI)
-- [ ] EV / simple multiples using gold DERIVED + mcap
-- [ ] Labels: `source_system=yahoo`, `grade=explore`
-- [ ] Agent View: tab disabled with ADR explanation
-- [ ] Thesis panel: session text fields + evidence chips from available Explore gold (no thesis SoR)
+- [ ] ~~Explore: CIK→ticker→EOD snapshot via ERDP-07 helpers (mock path in CI)~~ closed with the ticket (2026-10-18 12:25 ET)
+- [ ] ~~EV / simple multiples using gold DERIVED + mcap~~ closed with the ticket (2026-10-18 12:25 ET)
+- [ ] ~~Labels: `source_system=yahoo`, `grade=explore`~~ closed with the ticket (2026-10-18 12:25 ET)
+- [ ] ~~Agent View: tab disabled with ADR explanation~~ closed with the ticket (2026-10-18 12:25 ET)
+- [ ] ~~Thesis panel: session text fields + evidence chips from available Explore gold (no thesis SoR)~~ closed with the ticket (2026-10-18 12:25 ET)
 
 ### Out of scope
 
