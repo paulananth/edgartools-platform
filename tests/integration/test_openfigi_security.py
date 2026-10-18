@@ -61,6 +61,8 @@ def listing(figi, ticker, exchange, composite, share_class, sector="Equity"):
 
 
 NOT_FOUND = {"warning": "No identifier found."}
+# Invented FIGIs, named for what they stand for, not valid FIGIs: most hold a vowel or a
+# wrong check digit, so silver flags them `figi_valid`. Only the rows asserted below matter.
 ANSWERS = {
     # A US composite and a German one, one share class: the US composite and its ticker only.
     EQUITY: {"data": [listing("BBGZZ0000US1", "EXA", "US", "BBGZZ0000US1", "BBGZZ00000SC"),

@@ -56,6 +56,15 @@ def test_each_family_is_found_on_valid_values(family, make):
     assert found["family"] == family and found["pass_rate"] == 1.0
 
 
+def test_an_odd_length_column_keeps_luhn_over_letter_values():
+    # On a value of odd length, doubling from the left doubles what Luhn from the right does: the
+    # two families tie, and the one listed first names the column (a CUSIP-shaped column).
+    values = [with_family(identifiers.luhn_letter_values, alnum(8), string.digits) for _ in range(500)]
+    found = identifiers.check_digits(values)
+    assert found["rates"]["luhn over letter values from the left"] == 1.0
+    assert found["family"] == "luhn over letter values"
+
+
 def test_random_values_pass_only_at_chance_and_name_no_family():
     found = identifiers.check_digits([digits(10) for _ in range(5000)])
     assert found["family"] is None

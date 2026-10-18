@@ -166,6 +166,10 @@ def test_a_figi_check_digit_doubles_from_the_left():
     assert figi.normalizer_name == "normalize_identifier@figi-v2"
     # Luhn from the right doubles the other characters of an even-length value: a different rule.
     assert not identifier_types.luhn_letter_values(good)
+    # A letter is never its check digit, in the engine or in profiling.
+    lettered = good[:-1] + "B"
+    assert not identifier_types.luhn_letter_values_from_left(lettered)
+    assert not profiled.luhn_letter_values_from_left(lettered)
 
 
 def test_the_sec_series_id_is_s_and_nine_digits():

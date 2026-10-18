@@ -52,12 +52,14 @@ def luhn_letter_values(value: str) -> bool:
 def luhn_letter_values_from_left(value: str) -> bool:
     """Luhn over each character's value (A-Z as 10-35), doubling every second
     character counted from the left and adding the digits of each result; the
-    last character is the check digit (FIGI's rule)."""
+    last character is the check digit, a digit (FIGI's rule)."""
+    if not value[-1].isdigit():
+        return False
     total = 0
     for i, ch in enumerate(value[:-1]):
         d = VALUES[ch] * (2 if i % 2 else 1)
         total += d // 10 + d % 10
-    return (total + VALUES[value[-1]]) % 10 == 0
+    return (total + int(value[-1])) % 10 == 0
 
 
 def luhn_letter_digits(value: str) -> bool:
