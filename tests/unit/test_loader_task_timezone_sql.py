@@ -8,10 +8,9 @@ was 7-8 hours late. Proven live 2026-09-14 with a one-row file: the same load st
 right instant when the session ``TIMEZONE`` is ``UTC``.
 
 The fix pins ``TIMEZONE = 'UTC'`` on each loading task (an owner's-rights procedure uses
-its caller's session ``TIMEZONE``). ``SNOWFLAKE_RUN_MANIFEST_TASK`` has three definitions
-(Terraform, ``deploy-snowflake-stack.sh`` and ``04_refresh_wrapper.sql``), and whichever
-runs last replaces the task, so every definition must carry the pin or a redeploy brings
-the bug back.
+its caller's session ``TIMEZONE``). ``SNOWFLAKE_RUN_MANIFEST_TASK`` has one definition,
+Terraform's ``snowflake_task.manifest_processor`` (rebuild priorities ticket 66): a second
+``CREATE OR REPLACE`` elsewhere would replace it, pin and schedule included.
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
 NATIVE_PULL_TF = REPO_ROOT / "infra" / "terraform" / "snowflake" / "modules" / "native_pull" / "main.tf"
-DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-snowflake-stack.sh"
 
 
 def _task_definition(text: str, start_pattern: str) -> str:
@@ -75,18 +73,12 @@ def test_manifest_task_terraform_resource_pins_utc():
     assert re.search(r'^\s*timezone\s*=\s*"UTC"\s*$', resource, re.MULTILINE), resource
 
 
-def test_manifest_task_deploy_script_definition_pins_utc():
-    script = DEPLOY_SCRIPT.read_text()
-    create = _task_definition(
-        script, r"CREATE OR REPLACE TASK \$\{db\}\.EDGARTOOLS_GOLD\.SNOWFLAKE_RUN_MANIFEST_TASK"
+def test_manifest_task_has_one_definition():
+    """Only Terraform creates the manifest task: no script or SQL file under infra replaces it."""
+    creates = re.compile(
+        r"CREATE\s+(OR\s+REPLACE\s+)?TASK\s[^;]*?(SNOWFLAKE_RUN_MANIFEST_TASK|manifest_task_name)",
+        re.IGNORECASE,
     )
-    assert "PROCESS_RUN_MANIFEST_STREAM();" in create, "definition boundary is wrong"
-    assert _pins_utc_before_body(create, "'UTC'"), create
-
-
-def test_manifest_task_bootstrap_sql_definition_pins_utc():
-    sql = (BOOTSTRAP / "04_refresh_wrapper.sql").read_text()
-    create = _task_definition(sql, r"'CREATE OR REPLACE TASK ' \|\| \$manifest_task_name")
-    assert "$stream_processor_procedure_name" in create, "definition boundary is wrong"
-    # The task text is built inside a quoted string, so the literal is doubled: ''UTC''.
-    assert _pins_utc_before_body(create, "''UTC''"), create
+    files = [f for pattern in ("*.sql", "*.sh", "*.py") for f in (REPO_ROOT / "infra").rglob(pattern)]
+    assert files
+    assert [str(f.relative_to(REPO_ROOT)) for f in files if creates.search(f.read_text())] == []

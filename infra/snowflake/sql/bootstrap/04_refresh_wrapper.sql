@@ -1,4 +1,7 @@
--- Create the public Snowflake refresh wrapper and triggered manifest-processing task.
+-- Create the public Snowflake refresh wrapper and the manifest-processing procedure.
+-- The task that calls it, SNOWFLAKE_RUN_MANIFEST_TASK, has one definition:
+-- Terraform's snowflake_task.manifest_processor (native_pull module), rebuild
+-- priorities ticket 66.
 --
 -- Required session variables:
 --   set database_name = 'EDGARTOOLS_DEV';
@@ -10,7 +13,6 @@
 --   set source_load_procedure_name = 'LOAD_EXPORTS_FOR_RUN';
 --   set refresh_procedure_name = 'REFRESH_AFTER_LOAD';
 --   set stream_processor_procedure_name = 'PROCESS_RUN_MANIFEST_STREAM';
---   set manifest_task_name = 'SNOWFLAKE_RUN_MANIFEST_TASK';
 
 USE ROLE IDENTIFIER($deployer_role_name);
 USE DATABASE IDENTIFIER($database_name);
@@ -240,23 +242,3 @@ BEGIN
   RETURN OBJECT_CONSTRUCT('status', 'succeeded', 'processed', cnt);
 END;
 $$;
-
--- TIMEZONE = 'UTC' (duckdb-retirement-cutover Ticket 22): the load procedures
--- this task calls COPY Parquet with USE_LOGICAL_TYPE = false, which labels UTC
--- timestamps with the session TIMEZONE (account default America/Los_Angeles).
--- Terraform's snowflake_task.manifest_processor and deploy-snowflake-stack.sh
--- also create this task and carry the same pin.
-BEGIN
-  EXECUTE IMMEDIATE
-    'CREATE OR REPLACE TASK ' || $manifest_task_name || '
-       WAREHOUSE = ' || $refresh_warehouse_name || '
-       TIMEZONE = ''UTC''
-       WHEN SYSTEM$STREAM_HAS_DATA(''' || $database_name || '.' || $source_schema_name || '.' || $manifest_stream_name || ''')
-       AS
-       CALL ' || $database_name || '.' || $gold_schema_name || '.' || $stream_processor_procedure_name || '()';
-END;
-
-BEGIN
-  EXECUTE IMMEDIATE
-    'ALTER TASK ' || $manifest_task_name || ' RESUME';
-END;
