@@ -32,14 +32,25 @@ PLAN_KEYS = frozenset({"units", "input"})
 INPUT_KEYS = frozenset({"contract", "keys", "readings"})
 
 
-def _plan(step: dict) -> None:
-    units = step.get("units", "one")
-    if units != "one" and not (
-            isinstance(units, dict) and len(units) == 1
-            and (("slices" in units and isinstance(units["slices"], dict) and set(units["slices"]) == {"bytes"}
-                  and type(units["slices"]["bytes"]) is int and 1 <= units["slices"]["bytes"] <= 1024**3)
-                 or ("groups" in units and type(units["groups"]) is int and 1 <= units["groups"] <= COMPOSE_SLOTS))):
+SLICE_BYTES = 1024**3
+
+
+def _units(units) -> None:
+    if units == "one":
+        return
+    if not isinstance(units, dict) or len(units) != 1 or not set(units) <= {"slices", "groups"}:
         raise Blocked(f"A step's units are one, slices of at most N bytes, or groups of 1..{COMPOSE_SLOTS} files")
+    if "slices" in units:
+        slices = units["slices"]
+        if (not isinstance(slices, dict) or set(slices) != {"bytes"} or type(slices["bytes"]) is not int
+                or not 1 <= slices["bytes"] <= SLICE_BYTES):
+            raise Blocked(f"A step's slices name their bytes, 1..{SLICE_BYTES}")
+    elif type(units["groups"]) is not int or not 1 <= units["groups"] <= COMPOSE_SLOTS:
+        raise Blocked(f"A step's groups hold 1..{COMPOSE_SLOTS} files (the composed-slot limit)")
+
+
+def _plan(step: dict) -> None:
+    _units(step.get("units", "one"))
     shape = step.get("input", {})
     if not isinstance(shape, dict) or set(shape) - INPUT_KEYS:
         raise Blocked("A step's input names its contract, keys and readings only")
@@ -50,10 +61,10 @@ def _plan(step: dict) -> None:
                             or any(not isinstance(v, str) or not v for v in shape["keys"].values())):
         raise Blocked("A step's keys are nonempty text")
     readings = shape.get("readings", {})
-    if (not isinstance(readings, dict) or any(
-            not re.fullmatch(r"[a-z][a-z0-9_]*", name) or not isinstance(value, dict) or len(value) != 1
-            or not set(value) <= {"all", "step"} or value.get("all", value.get("step")) not in step["requires"]
-            for name, value in readings.items())):
+    if not isinstance(readings, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in readings):
+        raise Blocked("A step's readings are named by identifiers")
+    if any(not isinstance(value, dict) or len(value) != 1 or not set(value) <= {"all", "step"}
+           or value.get("all", value.get("step")) not in step["requires"] for value in readings.values()):
         raise Blocked("A step's readings each name one prerequisite step: {all: <step>} or {step: <step>}")
 
 

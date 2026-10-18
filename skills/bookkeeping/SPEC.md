@@ -126,6 +126,9 @@ needs no writer of its own:
   `dataset`) and `readings` (each name `{all: <step>}`, every unit of a
   prerequisite as one list, or `{step: <step>}`, its one unit).
 
+Today the writer forms `slices` for a `source.read` of captured documents
+and `{all: <step>}` readings for `mdm.prepare`, and refuses the rest;
+`groups` and `{step: <step>}` come with OpenFIGI's target (rebuild ticket 14).
 Both are checked when the section is validated and stripped before the
 engine sees the steps, so a run's worklist rules are unchanged. Adding them
 changes the source's digest, so the Change Journal treats its files as not

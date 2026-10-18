@@ -57,6 +57,23 @@ def _plan(reading: dict, target: str) -> list[dict]:
     return steps
 
 
+def by_name_of(steps: list[dict]) -> dict:
+    return {step["name"]: step for step in steps}
+
+
+def _prepared_shape(source: str, by_name: dict, prepare: dict, keys_of: dict) -> None:
+    """The table and record column the preparation reads are ones the reading it
+    reads declares: one column holding the record."""
+    readings = prepare.get("input", {}).get("readings", {})
+    producer = by_name.get(next(iter(readings.values()), {}).get("all", ""), {})
+    contract = rules_files.load(rules_files.ROOT / "sources" / source
+                                / producer.get("input", {}).get("contract", "source.yaml"))
+    columns = (((contract.get("read") or {}).get("tables") or {}).get(keys_of["table"]) or {}).get("columns") or {}
+    if keys_of["record_column"] not in columns:
+        raise ValueError(f"The preparation's table {keys_of['table']!r} and column {keys_of['record_column']!r} "
+                         "are not declared by the reading it reads")
+
+
 def write_manifest(
     *,
     source: str,
@@ -93,6 +110,7 @@ def write_manifest(
     if set(keys_of) != {"table", "record_column", "dataset"} or keys_of["dataset"] not in (reading.get("mdm") or {}):
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
     dataset = keys_of["dataset"]
+    _prepared_shape(source, by_name_of(steps), prepare[0], keys_of)
     limit = reading["execution"]["max_artifacts"]
     folder = Path(capture).resolve()
     receipts_raw, receipts = raw_capture.receipts(folder)
@@ -128,8 +146,11 @@ def write_manifest(
     root = Path(output).resolve().as_uri()
     inputs = root + "/inputs"
     units: dict[str, list[dict]] = {}
+    by_name = by_name_of(steps)
     for step in steps:
         name, shape = step["name"], step.get("input", {})
+        if step["operation"] != "source.read" and "units" in step:
+            raise ValueError(f"Step {name}: only a read of captured documents forms units today")
         if step["operation"] == "source.read":
             plan = step.get("units", "one")
             if not isinstance(plan, dict) or "slices" not in plan:
@@ -144,9 +165,10 @@ def write_manifest(
                                                             "artifacts": artifacts})))
                 start += len(unit)
         elif step["operation"] == "mdm.prepare":
-            ((slot, named),) = shape.get("readings", {}).items() or (("", {}),)
-            if set(named) != {"all"}:
+            readings = shape.get("readings", {})
+            if len(readings) != 1 or set(next(iter(readings.values()))) != {"all"}:
                 raise ValueError(f"Step {name}: preparation reads every unit of one step: readings {{<name>: {{all: <step>}}}}")
+            ((slot, named),) = readings.items()
             units[name] = [_unit(f"{root}/{name}/manifest.json", {
                 "unit": name, **keys_of, "policy": policy, "consumer": publication["consumer"],
                 "batch_id": publication["batch_id"], "as_of": as_of, "publication_key": publication_key,
@@ -155,14 +177,18 @@ def write_manifest(
                     "slots": {slot: [{"step": named["all"], "key": unit["keys"]["unit"]}
                                      for unit in units[named["all"]]]}}})]
         elif step["operation"] == "mdm.merge":
+            if len(step["requires"]) != 1 or by_name[step["requires"][0]]["operation"] != "mdm.prepare":
+                raise ValueError(f"Step {name}: a merge follows the one preparation step")
             (before,) = step["requires"]
             units[name] = [{"keys": {"batch_id": publication["batch_id"], "consumer": publication["consumer"]},
                             "input": {"from": {"step": before, "key": units[before][0]["keys"]["unit"]}},
                             "output": f"{root}/{name}.json", "cursor": {}}]
-        else:  # journal.record
+        elif step["operation"] == "journal.record":
             units[name] = [_unit(f"{root}/{name}.json", {"unit": name}, store.put(inputs, changed_files.record_input(
                 source=source, feed=reading["bronze"]["family"], processing=processing, forced=force, as_of=as_of,
                 files=[{"key": key, **raw_capture.document(folder, receipts, key)} for key in keys])))]
+        else:
+            raise ValueError(f"Step {name}: the writer does not form units for {step['operation']}")
     manifest = store.put(root, {"version": 2, "steps": units})
     return {"source": source, "source_code": dataset, "target": target, "manifest": manifest,
             "publication": publication, "policy_digest": policy, "scope": scope}
