@@ -84,6 +84,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [FIGI's check-digit family](issues/107-figi-check-digit-family.md): "luhn over letter values from the left"; FIGI version 2 checks it; 0 failures over 1,618,040 captured FIGIs (#1069)
 - [One definition of the manifest task](issues/66-duckdb-retirement-cutover-23-consolidate-snowflake-run-manifest-task-definitions.md): Terraform owns `SNOWFLAKE_RUN_MANIFEST_TASK`; the script and bootstrap copies deleted, held by a test (#1076); the duplicated procedures are ticket 109
 - [dbt and installs run through uv](issues/64-uv-migration-03-audit-dbt-invocation-sites.md): the runbook's dbt commands (#1078) and the dashboard and runbook installs ([65](issues/65-uv-migration-04-fix-examples-dashboard-pip-install-drift.md), #1079)
+- [N-PORT's entity model](issues/30-nport-fund-holdings-07-entity-model-for-fund-complex.md): registrant a Company by CIK, series a Fund by series id and LEI, the instrument a Security by CUSIP or ISIN; questions 26-29 answered or moved to ticket 79's HOLDS part and ticket 71
 
 ## Not yet specified
 

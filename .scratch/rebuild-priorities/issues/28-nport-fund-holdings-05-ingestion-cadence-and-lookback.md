@@ -1,8 +1,7 @@
 
 Priority: 28, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/nport-fund-holdings/issues/05-ingestion-cadence-and-lookback.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 Type: grilling
-Status: open
-
+Status: closed (2026-10-18): cadence answered; the schedule moved to ticket 71
 Blocked by: nport-fund-holdings 01, nport-fund-holdings 02
 
 ## Question
@@ -32,4 +31,10 @@ tradeoff given Ticket 02's ~65M-175M cumulative-row estimate).
 
 ## Answer
 
+Cadence (2026-10-18 13:35 ET): one quarterly public data set at a time (rebuild priorities 100 and 101): a quarter dates each publication, a link starts at its quarter, and each later quarter is a new revision with its own time. Lookback and the schedule of runs belong to the worker runtime: ticket 71 (Bookkeeping schedules a source's runs there). One quarter, 2026q2, is captured locally with the operator's permission.
+
+<details><summary>Earlier notes</summary>
+
 (not yet resolved)
+
+</details>

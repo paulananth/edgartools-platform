@@ -1,8 +1,7 @@
 
 Priority: 30, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/nport-fund-holdings/issues/07-entity-model-for-fund-complex.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 Type: grilling
-Status: open
-
+Status: resolved (2026-10-18), by ticket 79's rulings
 Blocked by: nport-fund-holdings 01, nport-fund-holdings 02
 
 ## Question
@@ -61,4 +60,14 @@ entity at all, or just a foreign-key/attribute on the series?
 
 ## Answer
 
+Answered by ticket 79 (2026-10-18 13:35 ET), each from the approved N-PORT findings and the operator's rulings (`.scratch/onboarding/sec.nport/findings-answers.md`):
+- registrant (trust, one CIK): a Company, joined by CIK (q16, "Registrant yes, issuer later"); 1,947 in the 2026q2 Proving Run (#1001);
+- series (the fund that files holdings): a Fund, kind `fund_structure` with the `fund` profile, joined by series id and LEI (q17, "Series id and LEI join (Recommended)"); 12,937 (#1003); its link to the registrant (IS_SUBFUND_OF) is deferred until a capture states when a series began (operator, 2026-10-16: "Funds now, link later (Recommended)");
+- the fund as a security, and every holding's instrument: a Security, joined by CUSIP or ISIN (q19, q20, q23); 423,562 (#999); an ETF share is issued by its umbrella trust (ticket 23, #1038);
+- share classes and the investment adviser: not mastered from N-PORT (no ruling asked for them; the adviser comes from Form ADV).
+
+<details><summary>Earlier notes</summary>
+
 (not yet resolved)
+
+</details>
