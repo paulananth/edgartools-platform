@@ -63,6 +63,15 @@ def document(cik: int, name: str, *, entity_type="operating", forms=("10-K",), b
             "filings": {"recent": recent, "files": []}}
 
 
+def person(cik: int, name: str, *, forms=("4",)) -> dict:
+    """A reporting owner's submissions document: SEC states no company structure for a
+    person (no SIC, EIN, state of incorporation, fiscal year end or ticker)."""
+    found = document(cik, name, entity_type="other", forms=forms, category="")
+    found.update(sic="", sicDescription="", ein="", stateOfIncorporation="",
+                 stateOfIncorporationDescription="", fiscalYearEnd="", insiderTransactionForIssuerExists=0)
+    return found
+
+
 def catalog(*rows: tuple[int, str, str, str]) -> dict:
     """SEC's exchange ticker catalog: (cik, name, ticker, exchange) rows, in rank order."""
     return {"fields": ["cik", "name", "ticker", "exchange"], "data": [list(row) for row in rows]}

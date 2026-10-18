@@ -625,7 +625,28 @@ contract's `nonblocking_deferred_reasons`.
    approves differs only in those fields (an earlier proving run does
    exactly this; see Examples).
 
-   Write it as a pytest file that uses the MDM fixtures, and it gets
+   **A source that declares a `mastering` target** (`bookkeeping.targets` in
+   its `source.yaml`) and whose reading keeps each document whole runs it
+   with `rules test` instead of a pytest file. That runs the target twice on
+   the disposable local stores, each step as its own login, and writes a
+   counts-only report:
+   ```bash
+   uv run --extra mdm python infra/scripts/local-test-stores.py up <store name>
+   edgar-warehouse rules test --source <name> --capture <capture folder> \
+     --documents <list of document keys> --capture-run <run> --as-of <time> \
+     --stores ~/.local/share/edgartools/local-tests/environments/<store name> \
+     --out <report.json>
+   uv run --extra mdm python infra/scripts/local-test-stores.py stop <store name>
+   ```
+   It refuses a store that already holds MDM records: `local-test-stores.py
+   copy <new name>` gives a fresh one from the baseline. Invented documents
+   need the kind's own shape: a document that carries another kind's
+   structural fields (the ones the classification rule tests) is rightly
+   held back, so an invented capture proves nothing about the kind. Other
+   sources need their input manifest written first (rebuild ticket 14,
+   slice 2).
+
+   Otherwise, write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:
    ```python
    from tests.integration import test_clean_mdm_postgres as core  # its helpers

@@ -44,6 +44,21 @@ def _approve_rule(args):
     return 0
 
 
+def _test(args):
+    """A test run of a source's `mastering` target on local stores (ticket 14)."""
+    from .proving import TestRunError, run
+
+    try:
+        result = run(source=args.source, capture=args.capture, documents=args.documents, capture_run=args.capture_run,
+                     as_of=args.as_of, stores=args.stores, out=args.out, minutes=args.minutes)
+    except TestRunError as error:
+        print(f"Test run stopped: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps({"report": str(args.out), "passed": result["passed"],
+                      "second_pass_changed_nothing": result["second_pass_changed_nothing"]}, indent=2))
+    return 0 if result["passed"] else 1
+
+
 def _handle(args):
     from sqlalchemy import create_engine, text
     from .db import Rules, get_engine, migrate
@@ -225,6 +240,18 @@ def register(subparsers):
                          help="plan: print the catalog the rules describe; publish: make OpenMetadata equal to it")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.set_defaults(handler=_catalog)
+    test = commands.add_parser(
+        "test", help="A source version's test run on local stores, from a capture already made (two passes)")
+    test.add_argument("--source", required=True, help="The source's folder name under rules/sources")
+    test.add_argument("--capture", required=True, type=Path, help="The capture folder (its receipts.jsonl and bronze/)")
+    test.add_argument("--documents", required=True, type=Path, help="A JSON list of the captured documents' keys")
+    test.add_argument("--capture-run", required=True, help="The capture's run id")
+    test.add_argument("--as-of", required=True, help="The publication's as-of time (ISO 8601)")
+    test.add_argument("--stores", required=True, type=Path,
+                      help="The local stores' folder, holding worker.env, verifier.env and governance.env")
+    test.add_argument("--out", required=True, type=Path, help="Where the counts-only report is written")
+    test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
+    test.set_defaults(handler=_test)
     pending = commands.add_parser("pending", help="Versions with a test run and no approval yet: evidence and changes")
     pending.set_defaults(handler=_handle)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):

@@ -3,7 +3,7 @@
 Priority: 14, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/rules-skill/issues/15-test-rules-locally.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: claimed (Claude, 2026-10-18 ET, branch `claude/t14-rules-test`). The first design below (2026-09-29) predates the configured source chain; the 2026-10-18 design replaces it. The design and the facts below were written on
+Status: claimed (Claude, 2026-10-18 ET; slice 1 on branch `claude/t14-rules-test-run`). The first design below (2026-09-29) predates the configured source chain; the 2026-10-18 design replaces it. The design and the facts below were written on
 2026-09-29; no code was written. Kept as its own ticket (operator, 2026-10-02:
 "agreed").
 Blocked by: nothing (ticket 14 merged, #757)
@@ -115,15 +115,30 @@ Operator's ruling on ticket 12: "rules test first, fold the rest (Recommended)".
 - **Recording.** When `RULES_DATABASE_URL` is set, the report is recorded as the version's test run (`Rules.prove`); without it the report file is the evidence, as today.
 - **Acceptance.** OpenFIGI on ticket 80's cohort reproduces `.scratch/onboarding/security-source-order/proving-run.json` count for count; then 13F; then each one-off Proving Run script is marked superseded.
 
+### Slice 1 as built (2026-10-18)
+
+- `rules test --source --capture --documents --capture-run --as-of --stores <folder> --out [--minutes]` runs on the disposable local stores (`local-test-stores.py up <name>`), not on a database address: the stores' duty files give each step's worker, verifier and governance their own login, so each step runs as production runs it, in its own process. The command starts no container.
+- It registers the source's Dataset Contracts and the Mastering Policy under a sandbox authority that names the capture (never an approval), saves, proves and activates a Bookkeeping-only Rules version in the throwaway Rules store, then runs the target twice (the second names every document again, `force`) and writes the counts-only report. Refused when the MDM store already holds records.
+- `passed`: records reached MDM, no identifier sits on two masters, and the second pass changed nothing (every count, and an md5 of every current record's body, equal after both passes).
+- Not yet in the report, against the design: each quality check's counts and the per-contract digests (it has the whole `source.yaml` digest and the policy digest). Slice 2.
+- Code: `edgar_warehouse/rules/proving.py` (named so pytest never collects it). A failed step's message, which can hold a login, goes to `rules-test-errors.log` (mode 600) in the stores folder, never the screen; each command has the run's deadline.
+- Recording the report as the version's test run (`Rules.prove` on the operator's Rules Database) is left to slice 2, with the generic manifest writer.
+
 ## Checklist
 
 - [x] Ticket 12's ruling recorded; ticket 16's items 1, 2, 3 and 8 moved here, 5 deferred, 7 struck (2026-10-18 14:00 ET)
 - [x] Found (2026-10-18 14:00 ET): running a declared target needs an input manifest (`{version: 2, steps: {<step>: [units]}}`). `capture_prepare.write_capture_manifest` writes one for any source whose reading keeps each document whole (read, records, merge: SEC Person); SEC Company has its own writer (`company_prepare.write_company_manifest`); no other source has one, and none declares a `mastering` target. Starting a run also resolves an active rules version (`Rules.save`, `prove`, `activate`, `resolve`), so a local test run needs a Rules Database too (a throwaway schema on the given PostgreSQL)
 - [ ] A generic input-manifest writer for a target whose steps read with context and lookups, reduce and combine (what each onboarding's Proving Run script builds by hand today), driven by the target's declaration; or, if the declaration cannot state a step, a ticket for that gap
-- [ ] Advisor, then `/gof-refactor-reviewer` before code.
+- [x] Advisor (2026-10-18 17:16 ET); `/gof-refactor-reviewer` ran as the review's GoF axis, after the code, not before
 - [ ] Pin the GLEIF capture's manifest; copy and pin the SEC sample.
-- [ ] `rules test` for a source; unit tests on a tiny pinned capture.
+- [x] Slice 1: `rules test` for a source whose reading keeps each document whole (SEC Person), on the local stores; `tests/integration/test_rules_test_run_postgres.py` (2 passed, 66 s, real PG16) (2026-10-18 17:15 ET)
+- [x] Found (2026-10-18 17:12 ET): the first run's invented people were all held back because the shared test helper gives every document a company's structure (SIC, EIN, state of incorporation, fiscal year end), which the Person rule rightly reads as a company. With a person-shaped document (`sec_capture.person`): 3 Person masters bound by CIK, the company-shaped name held back as entity undetermined, second pass unchanged, 29 s
+- [x] Slice 1: `duties()` honours the duty files' `unset` lines (each file unsets nine other logins), so no login leaks in from the caller's shell; `tests/unit/test_rules_test_run.py` (3 passed) (2026-10-18 17:21 ET)
+- [x] Slice 1: three-axis review (2026-10-18 17:23 ET). GoF (also standing in for the pre-code consult, which was skipped): leave it, no duplicate of production code. Standards and Spec: fixed a step's message reaching the screen, no per-command timeout, an undisposed engine, a module name pytest collects, a count-only idempotency check (now an md5 of every current record too), no check that pass 2 did work, an invented digest for a missing receipts file; unit 4 passed, integration 2 passed (66 s)
+- [ ] Slice 1: PR, CI, merge
+- [ ] ~~Recording the report as the version's test run (`Rules.prove`) and the skill's `record-proof` step becoming `rules test` for every source~~ deferred to slice 2: only SEC Person can run `rules test` until the generic manifest writer exists
 - [ ] Run it on GLEIF and SEC for ticket 18's versions; the operator reads
       the evidence.
 - [ ] Merge version test (step 3).
 - [ ] Three-axis review, PR, CI; merge on the operator's word.
+- [ ] Learning → skill: data-onboarding SKILL.md, Proving Run step: a source with a declared `mastering` target runs `rules test`; invented documents need the kind's own shape (`sec_capture.person`)
