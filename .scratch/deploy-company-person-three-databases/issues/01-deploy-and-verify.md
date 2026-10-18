@@ -33,7 +33,7 @@ runtime or remove the original deployment requirements below.
 - [x] Record final state and outstanding deployment requirements per engine; live counts and exact refusals below; temporary PostgreSQL databases and roles independently verified removed — 2026-10-18 07:33 ET.
 - [x] Verify the skill is packaged with its reference and all local links resolve; built wheel contains both instruction files byte-for-byte — 2026-10-18 07:33 ET.
 - [x] Review Standards, Spec and GoF; assessment below, whitespace check and overlap guard pass for the three Markdown files — 2026-10-18 07:35 ET.
-- [ ] Commit the instructions-only change and open its review PR; no merge authorization.
+- [x] Commit the instructions-only change and open review PR [#1073](https://github.com/paulananth/edgartools-platform/pull/1073); no merge authorization; CI results remain on the PR's live checks — 2026-10-18 07:36 ET.
 - [x] Learning → skill: `skills/mdm-engineering/SKILL.md` now routes selected-engine and design work to its instructions-only storage-adapter contract, including GoF evidence/cost review and per-engine qualification; validator, genericity, packaging and live boundary checks verify the change — 2026-10-18 07:35 ET.
 
 ## Authority and evidence
