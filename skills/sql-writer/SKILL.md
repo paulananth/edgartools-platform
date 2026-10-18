@@ -53,7 +53,20 @@ These are not portable, and SQLGlot must not be asked to carry them:
 - `LATERAL`, `unnest(...) WITH ORDINALITY`, advisory locks, `pg_catalog` checks
 - partial indexes, `GIN`, and `plan_cache_mode`
 
-A store migration that is mostly those constructs stays on PostgreSQL until that behavior is rewritten as a SQLAlchemy model or as engine-specific code outside a skill. Copying the `.sql` file into MySQL or SQL Server is not a translation.
+A migration containing these constructs needs engineering before it can run
+on another engine. Keep the operator's selected database and identify each
+missing operation. For MDM, follow
+[database-agnostic merge logic](../mdm-engineering/SKILL.md#database-agnostic-merge-logic):
+move merge computation into the shared Rust/Python engine and implement
+storage/concurrency differences in the selected engine's adapter. Compile
+portable tables from a logical model; qualify grants, constraints and atomic
+operations on that engine. Copying PostgreSQL functions or maintaining a
+second dialect's business merge algorithm is not a translation.
+
+Run compiled DDL through the owning migration or silver-registration path so
+its checksums, registry and restricted grants remain authoritative. A table
+created on its own is not an initialized store or a registered silver table.
+Report the missing implementation until that complete path works.
 
 ## Engines
 
