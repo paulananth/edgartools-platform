@@ -385,7 +385,9 @@ missing, go on and log it.
 - `rules/merge/kinds/<kind>.yaml`. It ranks sources per kind
   (`defaults.sources`: the first one listed wins each field), and its
   comments record which value fills a shared field. Read them before you
-  ask about a shared field.
+  ask about a shared field. A new source of a kind that has others: rank
+  them all with data-profiling's `rank_sources.py` ("Rank several sources")
+  and propose the place it measures, not the end of the list by default.
 - **Configured source extract.** Inspect the source's `read:` block and
   [READING.md](../data-platform/READING.md). Define the records passed to its
   Dataset Contract explicitly. For complete JSON evidence, `value: {path: .}`

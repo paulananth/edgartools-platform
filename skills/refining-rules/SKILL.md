@@ -105,6 +105,11 @@ PR.
    | A check or fix not in REFERENCE.md | New code: log it for a ticket |
    | A new MDM field or kind | The operator's ruling |
 
+   Before a source order changes, measure it: data-profiling's
+   `rank_sources.py` ("Rank several sources") gives each field's coverage,
+   one-value rate and pairwise agreement per source, and an order. Put its
+   numbers beside the change, and count the master records whose value moves.
+
    If you cannot make a change, say why in plain words and leave the rules
    as they are.
 3. Regenerate: `rules mapdoc write --only <source or kind>`. The generated
