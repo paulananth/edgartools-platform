@@ -102,6 +102,13 @@ Use `--merge <name>` for merge rules. It needs `RULES_DATABASE_URL` and
 `RULES_MDM_ACTIVATION_DATABASE_URL` (the MDM governance login). It registers
 the approved version in MDM and records the handoff receipt.
 
+**Which MDM database.** The one the MDM runs read and write: the governance
+login opens it, and its schema is `mdm`, created and upgraded by
+`edgar-warehouse mdm migrate`. Locally that is a disposable PostgreSQL 16 (the
+proving run's). A database that holds only the retired schema `mdm_v2` is not
+it: nothing reads `mdm_v2` any more, so migrate a fresh database rather than
+registering there, and leave the old schema to the operator.
+
 - **Worked:** `rules status --source <name>` shows the version `active`.
 - **Refused:** there is no approval, or no proof. Go back one step.
 

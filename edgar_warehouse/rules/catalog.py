@@ -206,8 +206,14 @@ def plan(root: Path | None = None) -> dict:
     silver_schemas, profiled, profiled_lineage = _profiles(root)
     tables += profiled
     lineage += profiled_lineage
-    for path in sorted((root / "sources").glob("*/source.yaml")):
-        body = files.load_source(path)
+    bodies = [(path, files.load_source(path)) for path in sorted((root / "sources").glob("*/source.yaml"))]
+    # A feed captures one bronze family; a source that declares no feed of its own
+    # reads the files of the feed that captures its family (a second kind from
+    # another source's files).
+    captured = {spec.get("family"): (body.get("source") or path.parent.name, feed)
+                for path, body in bodies
+                for feed, spec in sorted(((body.get("acquisition") or {}).get("feeds") or {}).items())}
+    for path, body in bodies:
         source = body.get("source") or path.parent.name
         mdm = body.get("mdm") or {}
         schemas.append({"name": source, "database": fqn(SERVICE, SOURCES),
@@ -226,6 +232,14 @@ def plan(root: Path | None = None) -> dict:
                     lineage.append({"from": fqn(SERVICE, SOURCES, source, feed),
                                     "to": fqn(SERVICE, SOURCES, source, code), "columns": [],
                                     "description": f"Dataset `{code}` reads the files feed `{feed}` captures."})
+        family = (body.get("bronze") or {}).get("family")
+        if not (body.get("acquisition") or {}).get("feeds") and family in captured:
+            owner, feed = captured[family]
+            for code in sorted(mdm):
+                lineage.append({"from": fqn(SERVICE, SOURCES, owner, feed),
+                                "to": fqn(SERVICE, SOURCES, source, code), "columns": [],
+                                "description": f"Dataset `{code}` reads the {family} files feed `{feed}` "
+                                               f"of `{owner}` captures."})
         for code, entry in sorted(mdm.items()):
             contract = entry.get("contract") or {}
             fills = {kind: {f for f, (sources, _) in by_field.items() if code in sources}

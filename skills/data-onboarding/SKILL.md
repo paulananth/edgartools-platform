@@ -670,6 +670,11 @@ contract's `nonblocking_deferred_reasons`.
      entry per captured file, sorted by `member`. Its sha256 is the
      `batch_hash`. For a bronze capture with a `receipts.jsonl` (one line
      per file: key, sha256, bytes), use the sha256 of that file.
+     The manifest covers every file the test read, not only the feed's own:
+     a file another source captured that the reading joins (a ticker
+     catalog, a census) is listed too, since the counts depend on it. A
+     `receipts.jsonl` that names only the feed's files is then not the
+     manifest: write one that adds the others.
    - **Digest, before saving:**
      `from edgar_warehouse.bookkeeping.clean.config import digest`. Then
      `digest(files.load_source(Path("rules/sources/<source>/source.yaml")))`

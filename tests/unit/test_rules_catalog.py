@@ -48,6 +48,16 @@ def test_lineage_runs_column_by_column_and_leaves_matching_out():
     assert feed["from"].endswith(".submissions") and feed["columns"] == []
 
 
+def test_a_second_kind_from_another_sources_files_has_its_feed_lineage():
+    # Person reads the submissions files the Company source's feed captures, and declares
+    # no feed of its own (platform validation 05c, item 11).
+    plan = catalog.plan()
+    feed = [e for e in plan["lineage"] if e["to"].endswith('"sec.submissions.person.v1"')]
+    assert [e["from"] for e in feed] == ['edgartools-rules.sources."sec.submissions.company".submissions']
+    # A source whose family no feed captures gets no feed lineage.
+    assert not [e for e in plan["lineage"] if e["to"].endswith('"gleif.level1.v1"')]
+
+
 def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path):
     assert catalog.plan() == catalog.plan()
     root = tmp_path / "rules"
