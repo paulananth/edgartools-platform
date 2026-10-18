@@ -5,6 +5,7 @@ mastering. Bookkeeping sees only task envelopes and immutable output receipts.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -44,10 +45,40 @@ def runtime_files() -> list[Path]:
             ARTIFACT_CODEC_FILE, Path(control_contract.__file__)]
 
 
-def _documents(envelope: dict, artifacts):
+def _pieces(envelope: dict, manifest: dict, artifacts, *, publish: bool) -> dict:
+    """Version 4 (ticket 111): one verified reading or combination, read piece by
+    piece, so a step after a combine is one unit known before the run. A large
+    output's pieces are its parts; a small one's rows are inline, so each is
+    written once beside this step's output, named by its hash, and the verifier
+    reads it back by that hash. The worker's own version-1 input, as built."""
+    if set(manifest) != {"version", "contract", "pieces"}:
+        raise ValueError("Version-4 source input names its contract and the reading it reads in pieces")
+    index = artifact_store.json_value(artifacts.verified(reference(manifest["pieces"]),
+                                                         max_bytes=source_readings.INDEX_BYTES))
+    if not isinstance(index, dict) or index.get("version") not in (1, 2) or not isinstance(index.get("artifacts"), list):
+        raise ValueError("Version-4 source input names a reading's index")
+    refs = []
+    for artifact in index["artifacts"]:
+        if index["version"] == 2:
+            refs += [reference(part["receipt"]) for part in artifact["partitions"]]
+            continue
+        data = _encode({"version": 1, "tables": artifact["tables"], "deferred": artifact["deferred"]})
+        ref = {"uri": f"{envelope['output']}.pieces/{hashlib.sha256(data).hexdigest()}.json",
+               "sha256": hashlib.sha256(data).hexdigest()}
+        if publish and artifacts.put_bytes(ref["uri"], data) != ref:
+            raise ValueError("Written piece differs from its bytes")
+        refs.append(ref)
+    if not refs:
+        raise ValueError("Version-4 source input names a reading with no pieces")
+    return {"version": 1, "contract": manifest["contract"], "artifacts": refs}
+
+
+def _documents(envelope: dict, artifacts, *, publish: bool = False):
     if set(envelope["checks"]) != {"source.output"}:
         raise ValueError("source.read verifies source.output only")
     manifest = artifacts.json(envelope["input"])
+    if isinstance(manifest, dict) and manifest.get("version") == 4:
+        manifest = _pieces(envelope, manifest, artifacts, publish=publish)
     if (set(manifest) != {"version", "contract", "artifacts"}
             or type(manifest["version"]) is not int or manifest["version"] not in (1, 2, 3)):
         raise ValueError("Source input names version 1, 2 or 3, contract and artifacts")
@@ -264,7 +295,7 @@ def _output(envelope: dict, artifacts, documents=None, sink=None) -> bytes:
 
 
 def execute(envelope: dict, artifacts) -> dict:
-    documents = _documents(envelope, artifacts)
+    documents = _documents(envelope, artifacts, publish=True)
     read = documents[1].get("read")
     if isinstance(read, dict) and "stream" in read:
         output = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=True,

@@ -3,7 +3,7 @@
 Priority: 16, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/platform-validation/issues/05c-data-onboarding-skill-gaps.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task (skill and tooling)
-Status: open, not started. Found by `05-onboard-person-feed-1.md`; each gap is
+Status: done (#1092 merged 2026-10-18 17:56 ET). Found by `05-onboard-person-feed-1.md`; each gap is
 quoted with the skill's own words in
 `.scratch/onboarding/sec.submissions.person/onboarding-log.md`, "SKILL-GAPs".
 
@@ -65,5 +65,5 @@ given.
   plan person–role–entity links in the same onboarding, including names that
   state a relationship ("a series of", "Trustee UAD", "dba", "ET AL")
 - [x] Three-axis review (2026-10-18 17:48 ET). GoF: leave it. Standards: the `LAYOUT` comment kept beside its table, an engine refusal's words kept, the real root in the missing message, `Rules.save`'s refusal tested (all done). Spec: the round trip described as what it proves (JSON values only), `rules check` added to the skill's `--root` list, the quality output line uses it (all done); rules integration tests 13 passed after the rebase
-- [ ] PR, CI, merge
-- [ ] Learning → skill: data-onboarding "Write" and "Read rules files": check a rules file with `rules check --source <s>`, not Python
+- [x] PR, CI, merge (#1092 merged 2026-10-18 17:56 ET)
+- [x] Learning → skill (#1092): data-onboarding "Write" and "Read rules files": check a rules file with `rules check --source <s>`, not Python
