@@ -173,6 +173,12 @@ Learned the hard way; each is a standing operator rule.
 **Commits, PRs and secrets**
 - One branch per ticket, cut fresh off `origin/main` in its own worktree;
   never continue a ticket on a used or merged branch (PRs are squash-merged).
+- Publish committed task changes, including operational and CI records, in a
+  PR before ending the handoff. Keep the PR in draft while its declared change
+  or validation is unfinished, then mark it ready after the final head passes.
+  Report its URL and checked head. If the original PR already merged, publish
+  residual notes from a fresh closeout branch; a local or pushed commit alone
+  does not complete the review handoff. Preserve unfinished work explicitly.
 - Work only in this repository. Never commit, push or open a PR in another
   repository, even for a task that spans repositories.
 - Write commit messages and PR bodies to a file and pass them with

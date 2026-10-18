@@ -1,6 +1,7 @@
 # Database choice and database-agnostic merge requirements
 
-Status: in progress — fixing PR #1070's generic-skill CI failure; not merged.
+Status: complete — PR #1070's generic-skill CI failure fixed and all six
+checks passed on correction `f84cc19f`; PR merged as `3b39db5a`.
 
 Operator ruling: fix the skills to allow the selected database and make the
 merge logic database agnostic in the MDM engineering skill. This is a skill
@@ -14,11 +15,12 @@ separate work and must not be claimed from documentation edits.
 - [x] Make MDM engineering own database-agnostic merge computation, storage boundaries and per-engine behavioral qualification; reviewed the shared algorithm, destination guarantees and Company/Person parity requirements — 2026-10-17 20:26 ET.
 - [x] Align SQL-writer with the shared merge contract and complete store migration/registration requirements; reviewed that portable table DDL alone cannot count as initialized or registered — 2026-10-17 20:26 ET.
 - [x] Validate changed skills, internal references and command examples; four skill validators passed, doctor returned `ok: true`, all 146 command examples and links resolved in both the checkout and an isolated skills-only copy; no application tests required for these Markdown-only changes — 2026-10-17 20:26 ET.
-- [x] Review Standards, Spec and GoF, then create a separate skill PR without merging it; [PR #1070](https://github.com/paulananth/edgartools-platform/pull/1070) is open, CI pending — 2026-10-17 20:27 ET.
+- [x] Review Standards, Spec and GoF, then create a separate skill PR without merging it; [PR #1070](https://github.com/paulananth/edgartools-platform/pull/1070) was opened with CI pending at that time — 2026-10-17 20:27 ET.
 - [x] Reproduce the CI failure and identify its cause; the existing genericity test fails locally with four named-domain occurrences outside Examples — 2026-10-17 20:34 ET.
 - [x] Keep per-engine qualification generic and move named fixture cohorts into Examples; existing genericity test unchanged and now passes — 2026-10-17 20:35 ET.
 - [x] Run the affected genericity tests, skill validation and doctor; 70 passed with 2 previously passing cases deselected by testmon, four skill validators passed, doctor resolved all 146 examples, and the three-axis review below passed — 2026-10-17 20:35 ET.
-- [ ] Push the correction and verify all checks on the final PR head, with a bounded CI monitor that exits on success, failure, PR closure or deadline.
+- [x] Push the correction and verify all checks on the tested PR head; all six checks passed on `f84cc19f` in [run 39083376239](https://github.com/paulananth/edgartools-platform/actions/runs/39083376239), and the bounded monitor exited on success — 2026-10-17 20:42 ET.
+- [x] Reconcile the original branch with live GitHub: #1070 is merged as `3b39db5a`; the residual commit changes this ticket only and is carried into the publication closeout, preserving later skill/adapter changes on main — 2026-10-18 14:40 ET.
 - [x] Learning → skill: MDM engineering now keeps qualification instructions generic for every affected kind/source and places concrete domain fixture cohorts under Examples; engine choice and shared merge requirements remain intact — 2026-10-17 20:35 ET.
 
 ## CI diagnosis
@@ -29,6 +31,14 @@ test reproduced the same four occurrences in 0.14 seconds. This deterministic
 documentation-lint failure needs no competing runtime hypotheses or temporary
 instrumentation; the existing regression test is the correct feedback loop.
 The previous skill/command validators do not enforce generic-domain wording.
+
+The PR merged at 2026-10-17 20:42 ET while the checklist result was being
+recorded. The later checklist-only commits were left outside a PR. Their
+correction is now included in the fresh
+[publication closeout](../../database-skills-closeout/issues/01-publish-reviewed-records.md).
+No further skill changes are needed for this original contract task. Its
+six checks, including the aggregate CI gate, all passed. Native runtime
+integration and operational source activation remain separately tracked work.
 
 CI-fix review: **Standards** — the existing genericity guard stays unchanged;
 only the skill wording and this ticket change. **Spec** — all three engines
