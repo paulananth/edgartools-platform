@@ -93,7 +93,6 @@ def identifier_root(tmp_path):
     root = tmp_path / "rules"
     path = root / "merge" / "policy.yaml"
     body = files.policy(root)
-    assert not any(e["rule_id"] == IDENTIFIER_RULE for e in body["automatic_rules"])
     kind = root / "merge" / "kinds" / "security.yaml"
     text = kind.read_text()
     contract = body["kinds"]["security"]["identifiers"]["isin"]
@@ -115,7 +114,9 @@ def identifier_root(tmp_path):
                 continue
             kept.append(line)
         path.write_text("\n".join(kept))
-    assert not files.policy(root)["kinds"]["security"]["identifiers"]["isin"].get("verification")
+    after = files.policy(root)
+    assert not after["kinds"]["security"]["identifiers"]["isin"].get("verification")
+    assert not any(e["rule_id"] == IDENTIFIER_RULE for e in after["automatic_rules"])
     report = tmp_path / "proving-run.json"
     report.write_text('{"isins_on_two_securities": 0}')
     return root, report
