@@ -124,10 +124,10 @@ counts look wrong, or **compare** lists drift handled by data-quality:
    - **Pin it:** the capture's `receipts.jsonl` (one line per file: key,
      sha256, bytes) is its manifest. Its sha256 is the `batch_hash`. Check
      each file's sha256 against its line. For a file's path, replace the
-     key's leading `warehouse/bronze/` with `<capture>/bronze/`. When the
-     reading also joins a file another source captured (a ticker catalog,
-     a census), the manifest lists it too (data-onboarding, **test**, "Input
-     manifest").
+     key's leading `warehouse/bronze/` with `<capture>/bronze/`. The
+     manifest lists exactly the files the measurement read (data-onboarding,
+     **test**, "Input manifest"): add a joined file another source captured,
+     and leave out a captured file the reading never opens.
    - **Build the records the checks read.** Run the candidate configured
      `read:` contract on the pinned files, then select the whole table rows or
      the explicit `mdm.prepare.record_column` objects. Preserve source types,

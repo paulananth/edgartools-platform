@@ -58,6 +58,23 @@ def test_a_second_kind_from_another_sources_files_has_its_feed_lineage():
     assert not [e for e in plan["lineage"] if e["to"].endswith('"gleif.level1.v1"')]
 
 
+def test_each_feed_that_captures_the_family_gives_lineage(tmp_path: Path):
+    # Two feeds capturing one family both lead to the source that reads it; a feed that
+    # names no family leads nowhere (an invented second feed on the OpenFIGI source).
+    root = tmp_path / "rules"
+    shutil.copytree(files.ROOT, root)
+    path = root / "sources" / "openfigi" / "source.yaml"
+    body = files.load_source(path)
+    feeds = body["acquisition"]["feeds"]
+    feeds["more_submissions"] = {**feeds["mapping"], "family": "submissions", "datasets": []}
+    feeds["unnamed"] = {k: v for k, v in feeds["mapping"].items() if k != "family"} | {"datasets": []}
+    files.write_source(body, path.parent)
+    plan = catalog.plan(root)
+    sources = sorted(e["from"] for e in plan["lineage"] if e["to"].endswith('"sec.submissions.person.v1"'))
+    assert sources == ['edgartools-rules.sources."sec.submissions.company".submissions',
+                       "edgartools-rules.sources.openfigi.more_submissions"]
+
+
 def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path):
     assert catalog.plan() == catalog.plan()
     root = tmp_path / "rules"
