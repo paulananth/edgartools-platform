@@ -212,7 +212,9 @@ def without_cik_approval(policy: dict) -> dict:
     body["kinds"]["company"]["identifiers"]["cik"]["verification"].update(
         approved_by=None, approved_at=None, reason=None
     )
-    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] != "company-cik"]
+    # Every rule that activates on the CIK contract goes with its approval.
+    body["automatic_rules"] = [r for r in body["automatic_rules"]
+                               if r["rule_id"] not in ("company-cik", "nport-registrant-cik")]
     return body
 
 
