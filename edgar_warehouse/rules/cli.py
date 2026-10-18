@@ -46,7 +46,7 @@ def _approve_rule(args):
 
 def _test(args):
     """A test run of a source's `mastering` target on local stores (ticket 14)."""
-    from .test_run import TestRunError, run
+    from .proving import TestRunError, run
 
     try:
         result = run(source=args.source, capture=args.capture, documents=args.documents, capture_run=args.capture_run,

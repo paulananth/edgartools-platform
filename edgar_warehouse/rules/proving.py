@@ -54,13 +54,16 @@ def duties(stores: Path) -> dict[str, dict[str, str | None]]:
         if not path.is_file():
             raise TestRunError(f"{path} is missing: start the stores with infra/scripts/local-test-stores.py up <name>")
         values = {}
-        for line in path.read_text().splitlines():
-            parts = shlex.split(line)
-            if parts and parts[0] == "unset":
-                values.update(dict.fromkeys(parts[1:]))
-            elif parts and parts[0] == "export":
-                key, _, value = parts[1].partition("=")
-                values[key] = value
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            try:
+                parts = shlex.split(line)
+                if parts and parts[0] == "unset":
+                    values.update(dict.fromkeys(parts[1:]))
+                elif parts and parts[0] == "export":
+                    key, _, value = parts[1].partition("=")
+                    values[key] = value
+            except (ValueError, IndexError):
+                raise TestRunError(f"{path} line {number} is not an export or unset line") from None
         found[duty] = values
     return found
 
@@ -89,7 +92,7 @@ def counts(engine) -> dict:
     source, waiting and open reviews and set-aside records per reason, decisions, and
     identifier values on two masters. Counts only."""
     def grouped(sql):
-        return {str(k): v for k, v in conn.execute(text(sql)).all()}
+        return {str(k): v for k, v in conn.execute(text(sql)).all() if v}
     with engine.connect() as conn:
         return {
             "masters": grouped("SELECT kind, count(*) FROM mdm.master_entity GROUP BY kind"),
@@ -99,6 +102,12 @@ def counts(engine) -> dict:
                                     "WHERE object_type='review' AND body->'open'='true'::jsonb GROUP BY 1"),
             "set_aside": grouped("SELECT coalesce(body->>'reason','(none)'), count(*) FROM mdm.set_aside_record GROUP BY 1"),
             "decisions": grouped("SELECT operation, count(*) FROM mdm.decision GROUP BY 1"),
+            "changes": grouped("SELECT 'batch_change', count(*) FROM mdm.batch_change "
+                               "UNION ALL SELECT 'outbox', count(*) FROM mdm.outbox"),
+            # Every current record's body, hashed: a rewrite moves it even when no count moves.
+            "current_records_md5": conn.scalar(text(
+                "SELECT md5(coalesce(string_agg(object_type || ':' || object_id || ':' || body::text, "
+                "',' ORDER BY object_type, object_id), '')) FROM mdm.current_record")),
             "identifiers_on_two_masters": grouped(
                 "SELECT n, count(*) FROM (SELECT n, v FROM mdm.current_record e, "
                 "jsonb_each(e.body->'identifiers') i(n, vs), jsonb_array_elements_text(vs) v "
@@ -110,29 +119,35 @@ def counts(engine) -> dict:
 class _Commands:
     """The platform's own commands, each run as its duty's login in its own process."""
 
-    def __init__(self, env: dict[str, dict[str, str]], reports: str):
-        self.env, self.reports = env, reports
+    def __init__(self, env: dict[str, dict[str, str | None]], reports: str, *, deadline: float, log: Path):
+        self.env, self.reports, self.deadline, self.log = env, reports, deadline, log
 
     def __call__(self, duty: str, *args: str) -> str:
         environment = {**os.environ, **self.env[duty]}
         environment = {key: value for key, value in environment.items() if value is not None}
         # The platform's command in its own process, on this interpreter: the same code.
         command = [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())"]
-        done = subprocess.run([*command, *args], env=environment, capture_output=True, text=True)
+        try:
+            done = subprocess.run([*command, *args], env=environment, capture_output=True, text=True,
+                                  timeout=max(1.0, self.deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            raise TestRunError(f"{' '.join(args[:3])} did not finish before the deadline") from None
         if done.returncode not in (0, 3):
-            # The first line names the refusal; a traceback may hold values, so no more.
-            first = (done.stderr.strip().splitlines() or ["(no message)"])[-1][:300]
-            raise TestRunError(f"{' '.join(args[:3])} failed: {first}")
+            # Its message can hold a login or an address: it goes to a private file, never the screen.
+            self.log.parent.mkdir(parents=True, exist_ok=True)
+            with os.fdopen(os.open(self.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as out:
+                out.write(f"$ {' '.join(args)}\n{done.stderr}\n")
+            raise TestRunError(f"{' '.join(args[:3])} failed with status {done.returncode}; its message is in {self.log}")
         return done.stdout
 
     def status(self, run_id: str) -> dict:
         return json.loads(self("worker", "bookkeeping", "status", run_id, "--limit", "1000"))
 
-    def drive(self, run_id: str, steps: list[dict], *, deadline: float) -> dict:
+    def drive(self, run_id: str, steps: list[dict]) -> dict:
         """Each step's worker, then its verifier, in step order, until nothing is left."""
         for step in steps:
             profile = step["operation"]
-            while time.monotonic() < deadline:
+            while time.monotonic() < self.deadline:
                 self("worker", "workers", "work", profile, run_id, "--limit", "100")
                 self("verifier", "workers", "verify", profile, run_id, "--reports", self.reports, "--limit", "100")
                 items = [i for i in self.status(run_id)["items"] if i["step"] == step["name"]]
@@ -160,13 +175,16 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         raise TestRunError(f"{source} declares no `{TARGET}` target in its source.yaml")
     mdm = create_engine(env["governance"]["RULES_MDM_ACTIVATION_DATABASE_URL"])
     rules_engine = create_engine(env["governance"]["RULES_DATABASE_URL"])
+    journal_engine = create_engine(env["worker"]["CHANGE_JOURNAL_DATABASE_URL"])
     try:
         with mdm.connect() as conn:
             if conn.scalar(text("SELECT (SELECT count(*) FROM mdm.stage_record) + (SELECT count(*) FROM mdm.current_record)")):
                 raise TestRunError("The MDM store already holds records: test on fresh stores "
                                    "(local-test-stores.py copy <name> restores the empty baseline)")
         receipts = capture / "receipts.jsonl"
-        capture_sha = hashlib.sha256(receipts.read_bytes()).hexdigest() if receipts.is_file() else "0" * 64
+        if not receipts.is_file():
+            raise TestRunError(f"{receipts} is missing: a capture names each of its files in receipts.jsonl")
+        capture_sha = hashlib.sha256(receipts.read_bytes()).hexdigest()
         policy = files.policy()
         with mdm.begin() as conn:  # the sandbox registration: never an approval
             policy_digest = register_policy(conn, policy)
@@ -178,9 +196,9 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         body = {"source": name, "bookkeeping": document["bookkeeping"]}
         manifest_root = env["worker"]["BOOKKEEPING_MANIFEST_ROOT"]
         root = Path(manifest_root.removeprefix("file://")) / name
-        journal = ChangeJournal(create_engine(env["worker"]["CHANGE_JOURNAL_DATABASE_URL"]))
-        commands = _Commands(env, (root / "reports").as_uri())
-        deadline = time.monotonic() + minutes * 60
+        journal = ChangeJournal(journal_engine)
+        commands = _Commands(env, (root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
+                             log=stores / "rules-test-errors.log")
         passes = []
         for number, force in ((1, False), (2, True)):
             began = time.monotonic()
@@ -198,7 +216,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                               "--input-manifest", report["manifest"]["uri"],
                               "--input-sha256", report["manifest"]["sha256"])
             run_id = str(json.loads(output)["run"]["run_id"])
-            final = commands.drive(run_id, target["steps"], deadline=deadline)
+            final = commands.drive(run_id, target["steps"])
             if final["run"]["state"] != "complete":
                 raise TestRunError(f"pass {number} ended {final['run']['state']}, not complete")
             held = counts(mdm)
@@ -224,6 +242,6 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
         return result
     finally:
-        mdm.dispose()
-        rules_engine.dispose()
+        for engine in (mdm, rules_engine, journal_engine):
+            engine.dispose()
 
