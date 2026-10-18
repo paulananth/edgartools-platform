@@ -98,8 +98,15 @@ checks and points to the repository lifecycle script.
    `export EDGAR_RULES_ROOT=<that folder>`. Without it, the bundle reads its
    own read-only copy of the rules.
 
-3. **Container.** This skill starts the container. Select **test** or
-   **production** before the command. Use the Docker context already
+3. **Engine and container.** Use the operator's selected database:
+   PostgreSQL, MySQL or SQL Server Express. Select **test** or **production**
+   separately. A request for all three means three independent targets. Keep
+   that selection through database creation, schema initialization and domain
+   operation; a PostgreSQL-only command is a runtime gap to repair, not a
+   reason to substitute PostgreSQL. Check the selected engine's actual store
+   capabilities with [data-operations](../data-operations/SKILL.md#apply-store-ddl).
+
+   This skill starts the selected container. Use the Docker context already
    configured. Leave `DOCKER_HOST` unset. Do not pass a worktree path, an
    agent name, or an owner label. If that container already exists, start it.
    Do not create a second container with the same name.
@@ -122,8 +129,10 @@ checks and points to the repository lifecycle script.
      postgres:16-alpine
    ```
 
-   The private file sets `POSTGRES_PASSWORD`. MDM, RDM, Rules, Bookkeeping,
-   the Change Journal, and silver use this PostgreSQL container.
+   The private file sets `POSTGRES_PASSWORD`. For a PostgreSQL selection,
+   MDM, RDM, Rules, Bookkeeping, the Change Journal and silver use this
+   container. A MySQL or SQL Server selection uses its own container for
+   those stores, subject to the runtime capability check above.
 
    Start MySQL only when the task names MySQL. Start SQL Server Express only
    when the task names SQL Server. They are separate containers. Express is
@@ -157,12 +166,13 @@ checks and points to the repository lifecycle script.
    finished. You do not remove a **production** container. You do not remove
    its volume. You do not stop it to clear a worktree.
 
-4. **Databases.** On the container you started, create these databases when
-   they are missing: `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`,
+4. **Databases.** On each selected engine's container, create these databases
+   when they are missing: `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`,
    and `silver`. Do not paste the statement or an address into the chat. Do
    not apply the store schemas here.
    [data-operations](../data-operations/SKILL.md) applies that DDL into these
-   databases. The connection variables, never printed, are
+   databases. Each connection must name the selected engine's dialect and
+   that store's database. The connection variables, never printed, are
    `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
    `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
    `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.

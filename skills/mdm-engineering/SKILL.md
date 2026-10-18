@@ -1,6 +1,6 @@
 ---
 name: mdm-engineering
-description: Change the MDM store's code or schema on PostgreSQL, MySQL or SQL Server Express - the Merge Stage, its SQL functions, migrations, lookups and indexes, transactions - and choose the cheapest proof that the change is right. Use before writing or reviewing any change under the MDM code or its migrations, when a mastering run is slow or refuses work, or when deciding which proof a change needs. Silver DDL from a profile is applied by data-operations, not here.
+description: Engineer database-agnostic MDM merge logic and its storage adapters for PostgreSQL, MySQL or SQL Server Express. Use before writing or reviewing MDM code or migrations, adding database support, diagnosing a slow or refused mastering run, or choosing its proof. Data-operations applies silver DDL.
 ---
 
 # MDM Engineering
@@ -12,14 +12,63 @@ description: Change the MDM store's code or schema on PostgreSQL, MySQL or SQL S
 It answers: **is this change to the MDM store lean, fast on the engine it
 runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
-The store runs on PostgreSQL, MySQL, or SQL Server Express. The Merge Stage
-below is the same on all three. A silver table spec is not applied here.
-[data-operations](../data-operations/SKILL.md) applies that DDL. The running
-MDM code is PostgreSQL. A change for MySQL or SQL Server Express follows that
-engine's lookup section. It does not copy the PostgreSQL statements.
+The operator chooses PostgreSQL, MySQL or SQL Server Express. This skill owns
+one Merge Stage contract across those engines and the engineering needed to
+support their storage differences. The current runtime is PostgreSQL-only;
+the shared contract below is a requirement, not evidence of implemented
+MySQL or SQL Server support. A silver table spec is applied by
+[data-operations](../data-operations/SKILL.md).
 
 Each rule below was learned from a failure here. The Examples section names
 where.
+
+## Database-agnostic merge logic
+
+**Compute once in programs; persist through the selected engine.** Configured
+matching, identity replay, source-revision folding, field/profile survivorship,
+classification and relationship/hierarchy computation belong to the shared
+Rust/Python engine. Generic configured computation belongs in Rust through
+Python callers; custom functions, coordination and database clients remain
+Python. Keep one policy interpretation and one merge algorithm for all
+engines. A dialect branch must not change which masters bind, which claims
+win, which links exist or which records wait or are rejected.
+
+Storage adapters own connections, types, SQL compilation, indexed retrieval,
+schema migrations, grants and transaction/concurrency primitives. Use
+[sql-writer](../sql-writer/SKILL.md) for portable models and statements;
+isolate necessary engine-specific storage code behind the same operations.
+Business merge rules do not belong in separate stored-function copies for
+each database. Keep exact integers and decimals, null/empty distinctions,
+timestamp precision, ordering and canonical publication bytes consistent
+across adapters; preserve already-stored bytes and their hashes.
+
+**Prepare in code; validate and commit at the destination.** The selected
+database must authoritatively enforce current-state freshness, uniqueness,
+lease/fence ownership, authorization and atomic writes of proposals, effects,
+history, checkpoints and publication intent. Program prechecks alone cannot
+protect competing writers. Each adapter must provide equivalent transaction
+and rollback behavior using that engine's supported mechanisms. Keep the
+existing restricted function API until its replacement proves the same
+enforcement and grants; removing a PostgreSQL guard is not a portability fix.
+
+When a selected engine is refused, identify the missing storage operation or
+migration and implement it through the shared contract. Reuse the same merge
+logic and versioned policy. Report unsupported operations until qualified;
+changing a skill, deleting a dialect check or creating empty tables does not
+implement the adapter.
+
+### Prove the same behavior on every engine
+
+For database-support work, run the same pinned fixtures, contracts and policies
+for every affected kind and source through real PostgreSQL, MySQL and SQL
+Server test instances with restricted runtime roles. Compare identity decisions, field
+and profile winners, relationship history, waiting/rejected outcomes and
+publication content; normalize independently allocated IDs only through a
+verified identity crosswalk. Exercise exact numeric and temporal boundaries,
+unchanged replay, interrupted recovery, rollback, conflicting concurrent
+writers and stale leases. Verify each engine's migrations, grants and indexed
+lookup plans as well. An engine is supported only after its full caller path
+passes; compilation, connectivity and PostgreSQL-only tests are insufficient.
 
 ## Hard stops
 
@@ -132,8 +181,9 @@ A statement whose key-list size changes enough to pick a bad cached plan uses
   own, and a logged "succeeded" is not a durable write.
 - Write only the rows that changed, set-based, not one row at a time in a
   loop.
-- A function that looks up or writes many keys takes them as one array, not
-  one call per key.
+- A storage operation that looks up or writes many keys takes a bound key
+  collection, not one call per key. Each adapter uses its engine's supported
+  bulk parameter or temporary-table mechanism.
 - A run reads what it started with. Anything the store registers anew while
   the run is part way through (a source's mapping today) is chosen once when
   the run first starts, kept in its frozen scope (`mdm.run.scope`), and read
@@ -147,6 +197,7 @@ A statement whose key-list size changes enough to pick a bad cached plan uses
 | Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI") |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
 | The Merge Stage, matching rules, a Dataset Contract, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
+| A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
 | Speed | Time per batch over a whole feed: flat, not growing with the store |
 
 Say the time of any proof over ten minutes before starting it. Stop its
@@ -156,6 +207,10 @@ containers when it ends, whatever the outcome.
 
 These name this repo's code and the failures each rule came from.
 
+- **Database portability:** use the same pinned Company and Person fixtures
+  and policies on PostgreSQL, MySQL and SQL Server, plus every other affected
+  kind/source, applying the qualification checks above. These are concrete
+  test cohorts, not limits on the shared merge algorithm.
 - **Code:** the Merge Stage is `edgar_warehouse/mdm/clean/merge.py`, and what
   a batch reads is `edgar_warehouse/mdm/clean/scope.py`; the
   input cut is `edgar_warehouse/mdm/clean/limits.py` (1,000 records and

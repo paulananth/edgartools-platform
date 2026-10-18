@@ -33,19 +33,33 @@ This skill applies DDL. Data-profiling writes a logical silver spec and does
 not. MDM engineering writes the MDM migration files and does not apply a
 profile's silver spec.
 
+Use the operator's selected engine for each store: PostgreSQL, MySQL or SQL
+Server Express. Resolve the connection's dialect and verify it matches that
+selection before writing. For an all-three request, track each engine's
+schema and domain state separately. Connectivity alone proves no schema or
+merge capability. Preserve the selected engine when a command refuses it;
+route the missing implementation to its owning engineering work instead of
+substituting PostgreSQL.
+
 Apply these five schemas into databases that
 [data-platform](../data-platform/SKILL.md) already created: `mdm`, `rdm`,
 `bookkeeping`, `change_journal`, and `silver`. This skill does not create
 the databases or the engines. Read each command's `--help` before the
-first use. A missing subcommand is a runtime gap. A command that refuses
-MySQL or SQL Server Express does not get a SQL script pasted into this skill.
-[sql-writer](../sql-writer/SKILL.md) renders the table statement for that
-engine. A PostgreSQL function body is not rendered that way and stays
-unapplied.
+first use. The required initialization path uses the same logical schema
+and supported command interface with a storage adapter for the selected
+engine. [sql-writer](../sql-writer/SKILL.md) compiles portable tables and
+queries; the migration owns installation, grants, checksums and readback.
+MDM's shared merge behavior and storage-adapter requirements belong to
+[MDM engineering](../mdm-engineering/SKILL.md#database-agnostic-merge-logic).
 
-The commands below run on PostgreSQL 16. On MySQL and SQL Server Express they
-refuse. Use sql-writer for the tables, and report every function the library
-cannot render.
+**Current implementation gap:** the five commands below currently implement
+PostgreSQL 16 only. MySQL and SQL Server accept connections but their store
+initialization is missing. This is an implementation defect against the
+selected-engine contract, not a restriction on the operator's database choice.
+Record the exact missing capability and leave that target incomplete until
+its migration, runtime operations and restricted-role checks pass. Creating
+some tables or translating SQL does not establish a working store. Apply
+the same capability check to Rules setup through data-onboarding.
 
 | Schema | Command | Owner connection |
 |---|---|---|
@@ -55,9 +69,11 @@ cannot render.
 | Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate`. The database name is `change_journal`. | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
 | Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` | `SILVER_MIGRATION_DATABASE_URL` |
 
-The runtime role exists, is not a superuser, and is not the migration login.
-Done when each command reports the schema current. `edgar-warehouse doctor`
-shows the stores that answer.
+The runtime role exists, has no administrative privileges, and is not the
+migration login. Done when the selected engine's migration history matches
+the build, required objects and grants read back correctly, and restricted
+runtime operations work. `edgar-warehouse doctor` shows the stores that
+answer; it does not prove complete schemas or database-agnostic merging.
 
 ## Operationalize every domain
 
@@ -66,8 +82,9 @@ source directory under `rules/sources` together with every entity kind that
 source's merge policy names. Walk all of them. Two named kinds are not
 the whole list.
 
-1. **Stores.** Confirm the five schemas in **Apply store DDL** are current on
-   the named engine. A refusal from MySQL or SQL Server Express stays a gap.
+1. **Stores.** Confirm the five schemas in **Apply store DDL** and Rules are
+   current on the selected engine. Route a dialect refusal as missing engine
+   support; retain that target's blocker while independent targets proceed.
 2. **MDM, per domain.** Follow **Configuration promotion** in RUNBOOK.md for
    that source and its merge policy. Read back the active version. A domain
    whose source or policy is still a draft, or whose activation is refused,
@@ -87,9 +104,13 @@ the whole list.
    `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
    then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
    material commentary are the fields the spec already names. The same spec
-   is the DDL for MySQL and for SQL Server Express. `silver register` today
-   emits PostgreSQL only and refuses another dialect. Render that table with
-   [sql-writer](../sql-writer/SKILL.md) and run the compiled statement. A part with no approved spec, or a pipeline silver step
+   is the logical input for MySQL and SQL Server Express as well. `silver
+   register` currently supports PostgreSQL only. The selected engine's
+   registration implementation must compile the spec through
+   [sql-writer](../sql-writer/SKILL.md) and install the table, registry,
+   comments and restricted grants through a recoverable registration path.
+   Report success only after all of them read back correctly. A standalone compiled table
+   leaves registration incomplete. A part with no approved spec, or a pipeline silver step
    with no worker, stays blocked and is reported. `silver land` is the manual
    write until that worker exists
    ([data-onboarding](../data-onboarding/SKILL.md), Two targets).
