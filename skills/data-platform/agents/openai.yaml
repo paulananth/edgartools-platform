@@ -1,4 +1,4 @@
 interface:
   display_name: "Data Platform"
-  short_description: "Install the data skill, then onboard, parse and master a feed"
-  default_prompt: "Use $data-platform to take the feed whose captured files are in <folder> through onboarding, parsing and mastering."
+  short_description: "Guide drafts through qualification to verified operation"
+  default_prompt: "Use $data-platform to explain the source's current state, complete its qualification and deployment steps, and verify its retained delivery."

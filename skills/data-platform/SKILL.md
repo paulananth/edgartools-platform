@@ -1,6 +1,6 @@
 ---
 name: data-platform
-description: The whole data skill, installed as one package. Use it to set up a machine, create the databases, then take a feed from its captured files all the way through - onboarding its rules, parsing it with the configured engine, mastering it into MDM - and to write a custom parsing step only when the engine cannot state something. Start here; it sends you to data-onboarding, refining-rules, bookkeeping or change-journal for each step's detail.
+description: Guide data work from current readiness to verified operation. Use for setup, onboarding, custom parsing, cross-reference readiness, processing captured files, turning drafts into tested and approved releases, activation, deployment or recovery. Coordinates data-onboarding, refining-rules, data-operations, MDM engineering, Bookkeeping and Change Journal.
 ---
 
 # Data Platform
@@ -19,6 +19,21 @@ never approve without a test run; never ask approval of a digest the operator ca
 request to a provider the operator ruled out; never read or print a secret; no value from the data
 in a public repository; never guess an identifier; never invent a command; ask one
 question at a time, with your recommendation.
+
+## Guide the task to completion
+
+For readiness, cross-reference mapping/lookup, missing proof, draft-to-final
+work, deployment or activation, follow [Completion guide](COMPLETION.md) first.
+Explain the observed state per selected engine, give the ordered remaining steps and keep the task's
+checklist current while carrying them out through the owning skills. Return to
+that checklist after each handoff; naming an owner alone does not finish a step.
+
+A request to create qualification evidence starts from the available draft and
+retained inputs. Discover those inputs and generate the proof from the run;
+an existing final release is not a prerequisite for creating one. Reuse genuine
+matching evidence and authorization already given. Present a concrete tested
+version before requesting its approval, and continue independent authorized work
+while a necessary input or approval is pending.
 
 ## Source readiness
 
@@ -56,6 +71,7 @@ AWS acquisition supplies completed deliveries separately.
 
 | Step | Mode | Detail in |
 |---|---|---|
+| Start | Explain current state and complete the remaining steps | [Completion guide](COMPLETION.md) |
 | 0 | Setup, once per machine | this file |
 | 1 | Onboard a new feed or kind | [data-onboarding](../data-onboarding/SKILL.md) |
 | 1b | Change a live feed's rules | [refining-rules](../refining-rules/SKILL.md) |

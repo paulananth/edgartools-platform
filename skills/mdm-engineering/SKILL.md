@@ -1,6 +1,6 @@
 ---
 name: mdm-engineering
-description: Engineer database-agnostic MDM merge logic and its storage adapters for PostgreSQL, MySQL or SQL Server Express. Use before writing or reviewing MDM code or migrations, adding database support, diagnosing a slow or refused mastering run, or choosing its proof. Data-operations applies silver DDL.
+description: Engineer database-agnostic MDM merge logic and its storage adapters for PostgreSQL, MySQL or SQL Server Express. Use before writing or reviewing MDM code or migrations, qualifying native cross-reference lookup, adding database support, diagnosing a slow or refused mastering run, or choosing its proof. Data-operations applies silver DDL.
 ---
 
 # MDM Engineering
@@ -100,6 +100,39 @@ passes; compilation, connectivity and PostgreSQL-only tests are insufficient.
   schema change spread across files.
 - **No table scans.** Every read is by key, through an index, except a
   table that stays a handful of rows. A test shows it.
+
+## Cross-reference completion
+
+MDM owns source-record identity bindings, canonical master redirects and
+lookup-only cross-references. Keep those roles distinct: a cross-reference
+finds records but does not establish sameness. Binding/merging goes through
+approved matching rules or authorized steward decisions, with the kind's
+Identifier Contract enforced.
+RDM owns versioned code-set crosswalks; they do not resolve source records to
+master entities. Use the packaged
+[identity/cross-reference guidance](../data-modeling/SKILL.md#3-identity-or-cross-reference).
+
+Onboarding/refining-rules maps lookup-only namespaces through the Dataset
+Contract's `adapter.cross_references` and, where required, `adapter.cross_reference_formats`,
+separately from `identifiers`. MDM engineering owns their storage, indexed
+retrieval, provenance and per-engine integration; data-operations applies the
+qualified migration. Retain cross-references with the source readings and
+derive their current lookup from that authority, without a second write path.
+
+The native PostgreSQL implementation exposes `mdm.cross_reference` and indexed
+`mdm.cross_reference_lookup(namespace,value)`. A lookup returns the source and
+record, reading/batch provenance, original bound entity and current canonical
+entity. Waiting records can be found with no bound entity. Preserve multiple
+records sharing one lookup value; that equality alone joins nothing.
+
+For each selected engine and affected contract, prove mapping/formatting,
+indexed lookup, waiting/unbound results, canonical lookup after a merge,
+correction/retirement behavior under its publication contract, retained
+provenance, migration/grants and unchanged replay. Verify changes commit with
+the owning MDM readings and identity state. Storing an opaque field or passing
+another engine's tests does not qualify native cross-reference retrieval.
+When inputs carry no cross-references, record the profiling evidence for that
+scope instead of inventing a mapping or silently omitting the check.
 
 ## The Merge Stage: each batch costs only what its records touch
 
