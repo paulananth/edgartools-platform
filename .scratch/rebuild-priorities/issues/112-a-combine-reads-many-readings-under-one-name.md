@@ -16,5 +16,7 @@ GoF consult (2026-10-18): one shared normalizer, `source_readings.receipts(value
 
 - [x] GoF consult (2026-10-18)
 - [x] `source_readings.receipts` and `READINGS`; combine and reduction read a listed name in order as one; `last` refused over a list. `tests/engine/test_combine_reading_lists.py` 5 passed (a reduction over a listed name equals one reading of the rows; a combination joins every listed reading; `last` refused; 0 and 257 refused); named affected engine tests 141 passed, 21 s (2026-10-18 18:17 ET)
-- [ ] Three-axis review, PR, CI, merge
+- [x] Three-axis review (2026-10-18 18:26 ET). GoF: `mdm.prepare` uses the shared `receipts` and `READINGS` instead of its own copy (done). Standards: a reading listed twice is refused (it would count its rows twice), the listed artifacts are gathered once, the row budget across a list and `confirm` over a list are tested (done). Spec: COMBINING.md says `last` is refused for a reduction only (a combination group's `last` takes the last listed reading's row), a positive control for `last` over one reading (done); 8 tests in the file, named affected engine tests 143 passed
+- [ ] ~~A Bookkeeping list slot filling a listed name, end to end~~ deferred to ticket 14 slice 2: by reading the code (`engine.py` fills a list slot with a list of receipts); OpenFIGI's target run by `rules test` is its test
+- [ ] PR, CI, merge
 - [x] Learning → skill: data-platform COMBINING.md, Inputs: a name may list 1..256 readings
