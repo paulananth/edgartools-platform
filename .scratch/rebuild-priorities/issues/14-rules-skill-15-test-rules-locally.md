@@ -135,10 +135,10 @@ Operator's ruling on ticket 12: "rules test first, fold the rest (Recommended)".
 - [x] Found (2026-10-18 17:12 ET): the first run's invented people were all held back because the shared test helper gives every document a company's structure (SIC, EIN, state of incorporation, fiscal year end), which the Person rule rightly reads as a company. With a person-shaped document (`sec_capture.person`): 3 Person masters bound by CIK, the company-shaped name held back as entity undetermined, second pass unchanged, 29 s
 - [x] Slice 1: `duties()` honours the duty files' `unset` lines (each file unsets nine other logins), so no login leaks in from the caller's shell; `tests/unit/test_rules_test_run.py` (3 passed) (2026-10-18 17:21 ET)
 - [x] Slice 1: three-axis review (2026-10-18 17:23 ET). GoF (also standing in for the pre-code consult, which was skipped): leave it, no duplicate of production code. Standards and Spec: fixed a step's message reaching the screen, no per-command timeout, an undisposed engine, a module name pytest collects, a count-only idempotency check (now an md5 of every current record too), no check that pass 2 did work, an invented digest for a missing receipts file; unit 4 passed, integration 2 passed (66 s)
-- [ ] Slice 1: PR, CI, merge
+- [x] Slice 1: PR, CI, merge (#1091 merged 2026-10-18 17:37 ET; the first CI run failed the skill genericity lint, fixed by writing the skill line in kind-neutral words)
 - [ ] ~~Recording the report as the version's test run (`Rules.prove`) and the skill's `record-proof` step becoming `rules test` for every source~~ deferred to slice 2: only SEC Person can run `rules test` until the generic manifest writer exists
 - [ ] Run it on GLEIF and SEC for ticket 18's versions; the operator reads
       the evidence.
 - [ ] Merge version test (step 3).
 - [ ] Three-axis review, PR, CI; merge on the operator's word.
-- [ ] Learning → skill: data-onboarding SKILL.md, Proving Run step: a source with a declared `mastering` target runs `rules test`; invented documents need the kind's own shape (`sec_capture.person`)
+- [x] Learning → skill (slice 1, #1091): data-onboarding SKILL.md, Proving Run step: a source with a declared `mastering` target runs `rules test`; invented documents need the kind's own shape (`sec_capture.person`)
