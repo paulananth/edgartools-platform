@@ -47,6 +47,9 @@ def alnum(n: int) -> str:
     ("mod 11-10", lambda: with_family(identifiers.mod11_10, digits(9), string.digits)),
     ("mod 37-36", lambda: with_family(identifiers.mod37_36, alnum(9), string.digits + string.ascii_uppercase)),
     ("damm", lambda: with_family(identifiers.damm, digits(9), string.digits)),
+    # FIGI-shaped: eleven letters or digits and a check digit doubled from the left (ticket 107).
+    ("luhn over letter values from the left",
+     lambda: with_family(identifiers.luhn_letter_values_from_left, alnum(11), string.digits)),
 ])
 def test_each_family_is_found_on_valid_values(family, make):
     found = identifiers.check_digits([make() for _ in range(500)])

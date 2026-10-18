@@ -49,6 +49,17 @@ def luhn_letter_values(value: str) -> bool:
     return total % 10 == 0
 
 
+def luhn_letter_values_from_left(value: str) -> bool:
+    """Luhn over each character's value (A-Z as 10-35), doubling every second
+    character counted from the left and adding the digits of each result; the
+    last character is the check digit (FIGI's rule)."""
+    total = 0
+    for i, ch in enumerate(value[:-1]):
+        d = VALUES[ch] * (2 if i % 2 else 1)
+        total += d // 10 + d % 10
+    return (total + VALUES[value[-1]]) % 10 == 0
+
+
 def luhn_letter_digits(value: str) -> bool:
     """Luhn over the digits of each character's value (each letter two digits)."""
     return _luhn_digits("".join(str(VALUES[ch]) for ch in value))
@@ -108,6 +119,7 @@ FAMILIES: dict[str, Callable[[str], bool]] = {
     "luhn": luhn,
     "luhn over letter values": luhn_letter_values,
     "luhn over letter digits": luhn_letter_digits,
+    "luhn over letter values from the left": luhn_letter_values_from_left,
     "damm": damm,
 }
 _DIGITS, _LETTERS = frozenset(string.digits), frozenset(string.ascii_uppercase)
@@ -121,6 +133,7 @@ READS = {
     "luhn": _DIGITS,
     "luhn over letter values": _DIGITS | _LETTERS | {"*", "@", "#"},
     "luhn over letter digits": _DIGITS | _LETTERS,
+    "luhn over letter values from the left": _DIGITS | _LETTERS,
     "damm": _DIGITS,
 }
 _CLASSES = {"digits": ("0-9", _DIGITS), "letters": ("A-Z", _LETTERS)}

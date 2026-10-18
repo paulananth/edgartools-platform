@@ -135,6 +135,7 @@ PINNED = {
     ("isin", 1): "563fbaf4640901d001ff271df72a262eed1cf14cc96e0d8905f8bf63a52e2be1",
     ("sec_series_id", 1): "a6d53f1d27f62d67ac1d446d9322b827b8935dd37bc90a95ce4dcdc53fe46c41",
     ("figi", 1): "9a15cdc28dec97a475ea09ae9b1f3b258c58fbccc88e33c9cc28eedacee24fbe",
+    ("figi", 2): "040addeb2f49daa51627620eee853785764bbbd30a2ebade302475a89ae48cc3",
 }
 
 
@@ -153,6 +154,18 @@ def test_a_type_states_its_family_length_and_checksum_reason():
     cusip, isin = identifier_types.TYPES["cusip"], identifier_types.TYPES["isin"]
     assert (cusip.family, cusip.length, cusip.checksum_reason) == ("luhn over letter values", 9, "invalid_cusip_checksum")
     assert isin.length == 12 and isin.family is not None
+
+
+def test_a_figi_check_digit_doubles_from_the_left():
+    # Invented values (ticket 107): the payload's second, fourth, ... characters are doubled.
+    figi = identifier_types.load()["figi"]
+    good = next(f"BBG00000{n:03d}{d}" for n in range(1000) for d in range(10)
+                if identifier_types.luhn_letter_values_from_left(f"BBG00000{n:03d}{d}"))
+    assert figi.refusal(f" {good.lower()} ") == (good, None)
+    assert figi.refusal(good[:-1] + str((int(good[-1]) + 1) % 10))[1] == "invalid_figi_checksum"
+    assert figi.normalizer_name == "normalize_identifier@figi-v2"
+    # Luhn from the right doubles the other characters of an even-length value: a different rule.
+    assert not identifier_types.luhn_letter_values(good)
 
 
 def test_the_sec_series_id_is_s_and_nine_digits():

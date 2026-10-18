@@ -164,7 +164,7 @@ matching rule).
 | `description` | What the identifier is, in plain words. |
 | `parts` | The identifier from left to right: each part a `length` and the `characters` it may hold: `digits`, `letters`, or one character such as `"#"`. |
 | `case` | `upper` (the value is upper-cased) or `as filed`. Outer spaces are always trimmed. |
-| `check_digit` | A family, named as data-profiling names it (a family that cannot read a character the parts allow is refused): `mod 97-10`, `mod 11-2`, `mod 11-10`, `mod 37-36`, `luhn`, `luhn over letter values`, `luhn over letter digits`, `damm`. Leave it out when there is none. |
+| `check_digit` | A family, named as data-profiling names it (a family that cannot read a character the parts allow is refused): `mod 97-10`, `mod 11-2`, `mod 11-10`, `mod 37-36`, `luhn`, `luhn over letter values`, `luhn over letter digits`, `luhn over letter values from the left` (FIGI), `damm`. Leave it out when there is none. |
 | `refuse_one_repeated_character` | `true`: a run of one character (all zeros, all nines) is a stand-in for none, refused even when its check digit holds. |
 | `stand_ins` | Other values written for none, refused as kept (trimmed, and upper-cased when `case` is `upper`). |
 

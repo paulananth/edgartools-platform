@@ -67,7 +67,7 @@ ANSWERS = {
                       listing("BBGZZ0000UN1", "EXA", "UN", "BBGZZ0000US1", "BBGZZ00000SC"),
                       listing("BBGZZ0000GR1", "EXB", "GR", "BBGZZ0000GR1", "BBGZZ00000SC"),
                       listing("BBGZZ0000GY1", "EXB", "GY", "BBGZZ0000GR1", "BBGZZ00000SC")]},
-    BOND: {"data": [listing("BBGZZ000BND1", "EXA 5 01/01/30", "NOT LISTED", None, None, sector="Corp")]},
+    BOND: {"data": [listing("BBGZZ000BND6", "EXA 5 01/01/30", "NOT LISTED", None, None, sector="Corp")]},
     MISSING: NOT_FOUND,
     UNHELD: {"data": [listing("BBGZZ000BND2", "EXC 4 01/01/31", "NOT LISTED", None, None, sector="Corp")]},
     # One listing that is its own US composite: its FIGI as both, one ticker.
@@ -167,7 +167,7 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
     found = {r["provenance"]["record_key"]: r.get("cross_references", {}) for r in records}
     assert found == {
         EQUITY: {"composite_figi": "BBGZZ0000US1", "share_class_figi": "BBGZZ00000SC", "openfigi_ticker": "EXA"},
-        BOND: {"figi": "BBGZZ000BND1", "openfigi_ticker": "EXA 5 01/01/30"},
+        BOND: {"figi": "BBGZZ000BND6", "openfigi_ticker": "EXA 5 01/01/30"},
         UNHELD: {"figi": "BBGZZ000BND2", "openfigi_ticker": "EXC 4 01/01/31"},
         SOLE: {"figi": "BBGZZ0000US2", "composite_figi": "BBGZZ0000US2", "share_class_figi": "BBGZZ0000SC2",
                "openfigi_ticker": "EXD"},
@@ -271,8 +271,10 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
         **{f: (equity, None) for f in ("BBGZZ0000US1", "BBGZZ0000UN1", "BBGZZ0000GR1", "BBGZZ0000GY1")},
         **{f: (None, isin) for f in ("BBGZZ0000US5", "BBGZZ0000LN5")}}
     assert landed[(EQUITY, "BBGZZ0000GR1")]["ticker"] == "EXB"
-    # A FIGI off its declared shape (a vowel among its eight) is flagged and still lands.
-    assert landed[(EQUITY, "BBGZZ0000US1")]["quality"] == ["figi_shape"]
-    assert landed[(BOND, "BBGZZ000BND1")]["quality"] is None
+    # A FIGI off its declared shape (a vowel among its eight) is flagged and still lands;
+    # so is one of the right shape whose check digit is wrong (ticket 107: GR's is 8).
+    assert landed[(EQUITY, "BBGZZ0000US1")]["quality"] == ["figi_valid"]
+    assert "figi_valid" in landed[(EQUITY, "BBGZZ0000GR1")]["quality"]
+    assert landed[(BOND, "BBGZZ000BND6")]["quality"] is None
     # UNHELD waits in MDM, so its listing keeps an empty MDM id.
     assert landed[(UNHELD, "BBGZZ000BND2")]["security_mdm_id_by_cusip"] is None
