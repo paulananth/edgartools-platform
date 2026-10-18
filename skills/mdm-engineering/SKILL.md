@@ -109,7 +109,8 @@ finds records but does not establish sameness. Binding/merging goes through
 approved matching rules or authorized steward decisions, with the kind's
 Identifier Contract enforced.
 RDM owns versioned code-set crosswalks; they do not resolve source records to
-master entities. Use the business definitions in [Context](../../CONTEXT.md).
+master entities. Use the packaged
+[identity/cross-reference guidance](../data-modeling/SKILL.md#3-identity-or-cross-reference).
 
 Onboarding/refining-rules maps lookup-only namespaces through the Dataset
 Contract's `adapter.cross_references` and, where required, `adapter.cross_reference_formats`,

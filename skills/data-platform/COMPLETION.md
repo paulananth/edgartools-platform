@@ -12,6 +12,8 @@ Resolve the requested source/domain, selected engine, environment and intended
 outcome from the task and existing authorization. Inspect the operational
 record, actual running build, native store migrations, Rules registrations,
 worker/verifier capabilities, retained delivery and existing runs/leases.
+For installed execution, run `edgar-warehouse doctor` from that package outside
+the checkout so its shipped references and named commands are checked too.
 Keep each selected engine separate. A command inventory or working connection
 does not establish the native pipeline path.
 
