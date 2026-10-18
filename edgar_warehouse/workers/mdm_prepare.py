@@ -70,9 +70,6 @@ def _lines(rows: list[dict]) -> bytes:
                                allow_nan=False).encode() + b"\n" for r in rows)
 
 
-READINGS = 256  # as many as a composed input lists
-
-
 def _artifacts(envelope: dict, artifacts):
     """Each input file of the unit's readings, whole, in order: one source.read
     output, or a readings list `{"version": 1, "readings": [ref, ...]}` (a
@@ -84,10 +81,9 @@ def _artifacts(envelope: dict, artifacts):
     except artifact_store.Blocked:
         document = {}
     if set(document) == {"version", "readings"}:
-        if (document["version"] != 1 or not isinstance(document["readings"], list)
-                or not 1 <= len(document["readings"]) <= READINGS):
-            raise ValueError(f"mdm.prepare reads a readings list of 1 to {READINGS} readings (version 1)")
-        refs = [reference(ref) for ref in document["readings"]]
+        if document["version"] != 1 or not isinstance(document["readings"], list):
+            raise ValueError("mdm.prepare reads a readings list (version 1)")
+        refs = source_readings.receipts(document["readings"])
     consumed = rows = 0
     for ref in refs:
         used = 0

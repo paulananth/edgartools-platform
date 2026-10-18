@@ -38,8 +38,8 @@ def contract(body, refs):
         if type(plan[name]) is not int or not 1 <= plan[name] <= maximum:
             raise ValueError(f"Reduction {name} must be 1..{maximum}")
     groups = plan["groups"]
-    for ref in refs.values():
-        reference(ref)
+    for value in refs.values():
+        source_readings.receipts(value)
     if (not isinstance(groups, dict) or not 1 <= len(groups) <= 32
             or not all(_name(name) for name in groups)):
         raise ValueError("Reduction requires 1..32 named groups")
@@ -76,7 +76,9 @@ def contract(body, refs):
                 raise ValueError("Member reduction requires member and distinct sample columns")
             if "last" in spec and spec["last"] == spec["member"]:
                 raise ValueError("Member and last columns must differ")
-            if "last" in spec and (len(tables) != 1 or len(sources) != 1):
+            # A name listing several readings (ticket 112) is a union too: no source order.
+            if "last" in spec and (len(tables) != 1 or len(sources) != 1
+                                   or len(source_readings.receipts(refs[sources[0]])) != 1):
                 raise ValueError("Last occurrence requires a single table and a single source; unions lack source order")
             if "last_null" in spec and ("last" not in spec or not isinstance(spec["last_null"], str)):
                 raise ValueError("last_null requires a last column and a text replacement")
@@ -101,23 +103,24 @@ def tables(plan, refs, artifacts):
     groups = plan["groups"]
     engine = ReductionEngine(plan)
     input_bytes = row_count = 0
-    for source, ref in refs.items():
+    for source, value in refs.items():
         selected = [(name, spec) for name, spec in groups.items() if source in _sources(spec)]
-        consumed = 0
-        for _, _, chunk, consumed in source_readings.iter_load(
-                ref, artifacts, max_bytes=plan["max_input_bytes"] - input_bytes,
-                max_rows=plan["max_rows"] - row_count, allow_lookup_receipts=True):
-            if chunk["deferred"]:
-                raise ValueError("Reduction requires resolved deferred records")
-            row_count += sum(len(rows) for rows in chunk["tables"].values())
-            if row_count > plan["max_rows"]:
-                raise ValueError("Reduction exceeds aggregate input row budget")
-            for name, spec in selected:
-                names = _selected_tables(spec)
-                if any(table not in chunk["tables"] for table in names):
-                    raise ValueError("Reduction selects a missing table")
-                for table in names:
-                    engine.push(name, chunk["tables"][table])
-        input_bytes += consumed
+        for ref in source_readings.receipts(value):  # a name's readings, in order, as one
+            consumed = 0
+            for _, _, chunk, consumed in source_readings.iter_load(
+                    ref, artifacts, max_bytes=plan["max_input_bytes"] - input_bytes,
+                    max_rows=plan["max_rows"] - row_count, allow_lookup_receipts=True):
+                if chunk["deferred"]:
+                    raise ValueError("Reduction requires resolved deferred records")
+                row_count += sum(len(rows) for rows in chunk["tables"].values())
+                if row_count > plan["max_rows"]:
+                    raise ValueError("Reduction exceeds aggregate input row budget")
+                for name, spec in selected:
+                    names = _selected_tables(spec)
+                    if any(table not in chunk["tables"] for table in names):
+                        raise ValueError("Reduction selects a missing table")
+                    for table in names:
+                        engine.push(name, chunk["tables"][table])
+            input_bytes += consumed
     # Only successful exhaustion of every supplied reading permits finalization.
     return engine.finish()

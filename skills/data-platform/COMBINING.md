@@ -9,7 +9,13 @@ provider, classification or database dependency.
 
 A standalone input manifest is an object with `version: 1`, a `contract`
 receipt (`uri`, `sha256`), and `readings`: a mapping from logical names to
-source-extract receipts. Each receipt holds a version-1 inline or version-2 partitioned
+source-extract receipts. A name may list 1..256 receipts instead of one: they
+are read in that order as one source extract (ticket 112), so a step fed by
+many units (a Bookkeeping list slot) names one source in the rules, not one per
+unit; the output names every listed receipt and a receipt listed twice is
+refused. A reduction's `last` over a listed name is refused, as over several
+sources; a combination group's `last` takes the last listed reading's row.
+Each receipt holds a version-1 inline or version-2 partitioned
 configured source extract. Partition receipts are authenticated within the same
 aggregate input byte and row budgets as inline source extracts. Contiguous source
 ranges, declared table names and EOF counts are checked before combining.
@@ -96,7 +102,7 @@ at most 1,024 rows. These limits are not an RSS measurement or disk spill.
 (one source-extract name, or an ordered list of 1..8 distinct names, so a set
 too large for one reading unit is read in several and reduced as one; a list
 gives what one reading of all its rows gives, and `last` requires a single
-source),
+source that lists a single reading),
 `table` (one name or an ordered list of 1..8 distinct names), `keys`
 (1..8 distinct text columns), `mode`, `count` (new output
 column), `sample` and `sample_limit` (0..1,000). Text keys are exact; missing,

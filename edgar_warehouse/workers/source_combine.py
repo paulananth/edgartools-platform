@@ -181,17 +181,21 @@ def _documents(envelope, artifacts, sink):
         tables = source_reduction.tables(plan, refs, artifacts)
         return _output(envelope, manifest, refs, tables, sink, max_bytes=plan["max_output_bytes"])
     inputs, size, count = {}, 0, 0
-    for name, ref in refs.items():
-        body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"],
-                                              allow_lookup_receipts=True)
-        size += consumed
-        if size > TOTAL_BYTES:
-            raise ValueError("Combination readings exceed total byte budget")
-        reading, rows = _reading_body(body)
-        count += rows
-        if count > plan["max_rows"]:
-            raise ValueError("Combination exceeds input row budget")
-        inputs[name] = reading
+    for name, value in refs.items():
+        listed = []
+        for ref in source_readings.receipts(value):  # a name's readings, in order, as one
+            body, consumed = source_readings.load(ref, artifacts, max_bytes=INPUT_BYTES, max_rows=plan["max_rows"],
+                                                  allow_lookup_receipts=True)
+            size += consumed
+            if size > TOTAL_BYTES:
+                raise ValueError("Combination readings exceed total byte budget")
+            reading, rows = _reading_body(body)
+            count += rows
+            if count > plan["max_rows"]:
+                raise ValueError("Combination exceeds input row budget")
+            listed.append(reading)
+        inputs[name] = listed[0] if len(listed) == 1 else {
+            **listed[0], "artifacts": [artifact for reading in listed for artifact in reading["artifacts"]]}
     from edgar_warehouse.rules.source_engine import combine_tables
     tables = combine_tables(plan, inputs, canonical)
     return _output(envelope, manifest, refs, tables, sink)

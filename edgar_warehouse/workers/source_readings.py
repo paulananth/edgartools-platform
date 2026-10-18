@@ -33,6 +33,8 @@ LOOKUP_AGGREGATE_BYTES = 16 * 1024**3
 DERIVED_INPUT_BYTES = 16 * 1024**3
 DERIVED_INPUT_ROWS = 100_000_000
 MAX_ARTIFACTS = 512  # documents one reading may hold (`source.read`); byte and row budgets bound the rest
+# Readings one name may list (ticket 112), as many as a composed input lists.
+READINGS = 256
 
 
 def _integer(value, minimum, maximum):
@@ -74,6 +76,19 @@ def index(ref, artifacts) -> dict:
     """A verified reading's index alone, checked as every consumer checks it (no
     lookup receipts, which a consumer must bind into its own output's identity)."""
     return _index(ref, artifacts, INDEX_BYTES, False)[0]
+
+
+def receipts(value) -> list[dict]:
+    """A name's readings (ticket 112): one verified reading's receipt, or an ordered
+    list of 1..READINGS of them, read in that order as one reading. A Bookkeeping
+    list slot fills one name with many units' readings."""
+    found = value if isinstance(value, list) else [value]
+    if not 1 <= len(found) <= READINGS:
+        raise ValueError(f"A name lists 1..{READINGS} readings")
+    refs = [reference(ref) for ref in found]
+    if len({(ref["uri"], ref["sha256"]) for ref in refs}) != len(refs):
+        raise ValueError("A name lists each reading once: a repeat would count its rows twice")
+    return refs
 
 
 def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
@@ -263,7 +278,7 @@ def _derived_sets(specs, declared, artifacts):
         required = {"readings", "table", "column", "max_input_bytes", "max_input_rows",
                     *(("value_column",) if declared[name].get("pairs") else ())}
         if (not isinstance(spec, dict) or set(spec) != required
-                or not isinstance(spec["readings"], list) or not 1 <= len(spec["readings"]) <= 256
+                or not isinstance(spec["readings"], list) or not 1 <= len(spec["readings"]) <= READINGS
                 or not named(spec["table"]) or not named(spec["column"])
                 or ("value_column" in spec and not named(spec["value_column"]))
                 or type(spec["max_input_bytes"]) is not int or not 1 <= spec["max_input_bytes"] <= DERIVED_INPUT_BYTES
