@@ -9,7 +9,11 @@ provider, classification or database dependency.
 
 A standalone input manifest is an object with `version: 1`, a `contract`
 receipt (`uri`, `sha256`), and `readings`: a mapping from logical names to
-source-extract receipts. Each receipt holds a version-1 inline or version-2 partitioned
+source-extract receipts. A name may list 1..256 receipts instead of one: they
+are read in that order as one source extract (ticket 112), so a step fed by
+many units (a Bookkeeping list slot) names one source in the rules, not one per
+unit; the output names every listed receipt, and `last` over a listed name is
+refused, as over several sources. Each receipt holds a version-1 inline or version-2 partitioned
 configured source extract. Partition receipts are authenticated within the same
 aggregate input byte and row budgets as inline source extracts. Contiguous source
 ranges, declared table names and EOF counts are checked before combining.
