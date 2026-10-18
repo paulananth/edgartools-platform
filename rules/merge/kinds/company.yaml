@@ -337,6 +337,10 @@ rules:
 # place of incorporation is flagged, and the proof decides (2026-09-28).
 # Declared, not switched on: each pass needs its own proof and the
 # operator's approval (ticket 20). The two rules above stay until then.
+# P2 (street and postcode) and P3 (street and city) were deleted (ticket 09;
+# operator, 2026-10-17: "Delete both"): too few new links to prove (8 and 22
+# of 52 needed); a pair either matched shares the postcode (P4) or the city
+# (P5). The other passes keep their names.
 - rule_id: sec-gleif-cascade-p1
   version: 2026-09-28.1
   family: name_binding
@@ -354,68 +358,6 @@ rules:
       - street
       - city
       - postcode
-      over_shared: 25
-      refused_flags: []
-      sec_normalizer: normalize_text@sec-legal-form-kept-v1
-      gleif_normalizer: normalize_text@legal-form-kept-v1
-  - primitive: gleif_entity_eligible@1
-    args:
-      categories:
-      - GENERAL
-      entity_statuses:
-      - ACTIVE
-      refused_registration_statuses:
-      - ANNULLED
-      - DUPLICATE
-  - primitive: holds_no_other_lei@1
-    args: {}
-- rule_id: sec-gleif-cascade-p2
-  version: 2026-09-28.1
-  family: name_binding
-  source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: wait
-  when:
-  - primitive: cascade_pass@1
-    args:
-      pass: P2
-      compare:
-      - street
-      - postcode
-      over_shared: 25
-      refused_flags: []
-      sec_normalizer: normalize_text@sec-legal-form-kept-v1
-      gleif_normalizer: normalize_text@legal-form-kept-v1
-  - primitive: gleif_entity_eligible@1
-    args:
-      categories:
-      - GENERAL
-      entity_statuses:
-      - ACTIVE
-      refused_registration_statuses:
-      - ANNULLED
-      - DUPLICATE
-  - primitive: holds_no_other_lei@1
-    args: {}
-- rule_id: sec-gleif-cascade-p3
-  version: 2026-09-28.1
-  family: name_binding
-  source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: wait
-  when:
-  - primitive: cascade_pass@1
-    args:
-      pass: P3
-      compare:
-      - street
-      - city
       over_shared: 25
       refused_flags: []
       sec_normalizer: normalize_text@sec-legal-form-kept-v1

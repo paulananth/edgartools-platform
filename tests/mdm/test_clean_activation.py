@@ -867,7 +867,7 @@ def test_two_cascade_passes_with_one_name_are_refused():
 
     body = copy.deepcopy(POLICY)
     rules = body["kinds"]["company"]["rules"]
-    second = next(r for r in rules if r["rule_id"] == "sec-gleif-cascade-p2")
+    second = next(r for r in rules if r["rule_id"] == "sec-gleif-cascade-p4")
     second["when"][0]["args"]["pass"] = "P1"
     with pytest.raises(Conflict, match="must be unique"):
         check_policy(body)
