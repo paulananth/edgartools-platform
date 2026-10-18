@@ -626,10 +626,10 @@ contract's `nonblocking_deferred_reasons`.
    exactly this; see Examples).
 
    **A source that declares a `mastering` target** (`bookkeeping.targets` in
-   its `source.yaml`) and whose reading keeps each document whole (today SEC
-   Person) runs it with `rules test` instead of a pytest file. That runs the
-   target twice on the disposable local stores, each step as its own login,
-   and writes a counts-only report:
+   its `source.yaml`) and whose reading keeps each document whole runs it
+   with `rules test` instead of a pytest file. That runs the target twice on
+   the disposable local stores, each step as its own login, and writes a
+   counts-only report:
    ```bash
    uv run --extra mdm python infra/scripts/local-test-stores.py up <store name>
    edgar-warehouse rules test --source <name> --capture <capture folder> \
@@ -640,10 +640,11 @@ contract's `nonblocking_deferred_reasons`.
    ```
    It refuses a store that already holds MDM records: `local-test-stores.py
    copy <new name>` gives a fresh one from the baseline. Invented documents
-   need the kind's own shape: a person's SEC document states no SIC, EIN,
-   state of incorporation or fiscal year end (`tests/support/sec_capture.person`),
-   and the Person rule rightly holds back one that does. Other sources need
-   their input manifest written first (rebuild ticket 14, slice 2).
+   need the kind's own shape: a document that carries another kind's
+   structural fields (the ones the classification rule tests) is rightly
+   held back, so an invented capture proves nothing about the kind. Other
+   sources need their input manifest written first (rebuild ticket 14,
+   slice 2).
 
    Otherwise, write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:
