@@ -78,6 +78,9 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [09 Profiler gap: objects keyed by data are read as columns](issues/41-company-financials-09-profiler-reads-object-keys-as-columns.md): the profiler reads an object keyed by data as rows, not columns (#1016)
 - [A run keeps the mappings it started with](issues/103-a-run-keeps-the-mappings-it-started-with.md): a run keeps the mappings it started with (#1037)
 - [Stream a bare JSON array](issues/104-stream-a-bare-json-array.md): a bare top-level JSON array streams one record per element, with its position (#1044)
+- [Silver rows are checked when they land](issues/105-silver-rows-are-checked-when-they-land.md): a silver spec declares identifier, in-set and one-value checks; a failing row lands flagged in `quality`, an `exception` check keeps it out (#1055)
+- [One test helper runs the source chain](issues/106-one-test-helper-runs-the-source-chain.md): `tests/support/source_chain.py` reads, combines and prepares through each worker's verifier (#1054)
+- [FIGI's check-digit family](issues/107-figi-check-digit-family.md): "luhn over letter values from the left"; FIGI version 2 checks it; 0 failures over 1,618,040 captured FIGIs (#1069)
 
 ## Not yet specified
 
