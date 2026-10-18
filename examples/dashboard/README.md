@@ -40,9 +40,9 @@ schema     = "EDGARTOOLS_GOLD"
 ## Setup
 
 ```bash
-python -m venv .venv
+uv venv
 source .venv/bin/activate           # Windows: .venv\Scripts\activate
-pip install -r examples/dashboard/requirements.txt
+uv pip install -r examples/dashboard/requirements.txt
 ```
 
 ## Run
