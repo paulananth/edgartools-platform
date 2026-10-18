@@ -25,7 +25,7 @@ effects. No source approval or activation is implied by fixture qualification.
 - [x] Install the skill adapter persistently on each selected test server; ten owned tables, two fixture batches, six current/history objects, five evidence records and three physically verified publications per engine; populated migration rerun installs nothing — 2026-10-18 08:41 ET.
 - [x] Update skill instructions and CI matrix; wheel contains all six skill resources byte-for-byte and extracted standalone helper runs outside the checkout; skill validator, Ruff and whitespace checks pass — 2026-10-18 08:41 ET.
 - [x] Review final work under Standards, Spec and GoF; evidence and limits below — 2026-10-18 08:41 ET.
-- [ ] Update and push the review PR for the executable adapter; record CI results.
+- [x] Update and push review PR [#1073](https://github.com/paulananth/edgartools-platform/pull/1073) around the executable adapter; commit `bb068c26`; CI and the three-engine matrix are running, with results tracked on the PR checks — 2026-10-18 08:44 ET.
 - [ ] Deploy operational Company and Person configuration on PostgreSQL: existing drafts lack genuine proof/approval and required published reference versions. Fixture results do not supply release authority.
 - [ ] Deploy operational Company and Person pipelines on MySQL: native Rules, Bookkeeping, reference and application Store integration remain unimplemented; this prepared-effect adapter is not that integration.
 - [ ] Deploy operational Company and Person pipelines on SQL Server: native Rules, Bookkeeping, reference and application Store integration remain unimplemented; this prepared-effect adapter is not that integration.
@@ -49,7 +49,7 @@ under the private `~/.local/share/edgartools/test-instances/` directory.
 The persistent results contain two Companies and two Persons computed with
 the existing Rust identity engine, shared Python survivorship and typed
 relationship projection, one resulting relationship, and one unrelated
-opaque object. Each engine stores identical prepared bytes. Three publication
+opaque object. Independent readback confirms identical stored object and publication bytes on all three engines. Temporary proof databases and principals are absent on all three servers. Three publication
 envelopes per engine were written to private local files, independently read
 back, hashed and acknowledged through fenced runtime capabilities. All outbox
 rows are verified. A repeated batch returns its original generation without
