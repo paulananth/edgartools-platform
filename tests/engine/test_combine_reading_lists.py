@@ -16,6 +16,7 @@ def run(store, root, body, readings):
     envelope = combine_case.envelope(store, root, body, readings)
     out = source_combine.execute(envelope, store)
     assert source_combine.verify({**envelope, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.confirm({**envelope, "candidate": out}, store)[0] == {source_combine.CHECK: True}
     return store.json(out)
 
 
@@ -46,6 +47,9 @@ def test_a_combination_over_a_listed_name_joins_every_reading(tmp_path):
 
 def test_last_over_a_listed_name_is_refused(tmp_path):
     store = Artifacts()
+    single = [partitioned(store, tmp_path, [{"rows": [{"key": "a", "holder": "B", "holder2": "x"}]}])]
+    run(store, tmp_path / "one", plan({"rows": member("rows", last="holder2")}), {"main": single})  # one reading: allowed
+
     listed = [partitioned(store, tmp_path, [{"rows": FIRST}]), partitioned(store, tmp_path, [{"rows": SECOND}])]
     spec = member("rows", last="holder2")
 
@@ -60,3 +64,20 @@ def test_a_list_holds_1_to_256_readings(tmp_path, count):
 
     with pytest.raises(ValueError, match="1..256 readings"):
         run(store, tmp_path / "n", plan({"rows": member("rows")}), {"main": [one] * count})
+
+
+def test_a_reading_listed_twice_is_refused(tmp_path):
+    store = Artifacts()
+    one = partitioned(store, tmp_path, [{"rows": FIRST}])
+
+    with pytest.raises(ValueError, match="each reading once"):
+        run(store, tmp_path / "twice", plan({"rows": member("rows")}), {"main": [one, one]})
+
+
+def test_the_row_budget_is_spent_across_a_list(tmp_path):
+    store = Artifacts()
+    listed = [partitioned(store, tmp_path, [{"rows": FIRST}]), partitioned(store, tmp_path, [{"rows": SECOND}])]
+
+    run(store, tmp_path / "fits", plan({"rows": member("rows")}, max_rows=4), {"main": listed})
+    with pytest.raises(ValueError, match="row budget"):
+        run(store, tmp_path / "over", plan({"rows": member("rows")}, max_rows=3), {"main": listed})

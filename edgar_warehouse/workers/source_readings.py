@@ -85,7 +85,10 @@ def receipts(value) -> list[dict]:
     found = value if isinstance(value, list) else [value]
     if not 1 <= len(found) <= READINGS:
         raise ValueError(f"A name lists 1..{READINGS} readings")
-    return [reference(ref) for ref in found]
+    refs = [reference(ref) for ref in found]
+    if len({(ref["uri"], ref["sha256"]) for ref in refs}) != len(refs):
+        raise ValueError("A name lists each reading once: a repeat would count its rows twice")
+    return refs
 
 
 def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
