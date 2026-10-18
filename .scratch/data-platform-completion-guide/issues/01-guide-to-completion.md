@@ -1,6 +1,8 @@
 # Guide data-platform work from current state to completion
 
-Status: skill guidance implemented and locally validated; review PR pending. The operator asked the skill to explain the current
+Status: skill guidance implemented and locally validated; review PR
+[#1077](https://github.com/paulananth/edgartools-platform/pull/1077) is open. CI
+results are tracked on the PR; no merge was requested or performed. The operator asked the skill to explain the current
 state and provide step-by-step guidance through completion, rather than
 returning a generic missing-proof or missing-integration answer.
 
@@ -19,7 +21,7 @@ change.
 - [x] Walk through the eight decision scenarios below; explicitly distinguish manual guidance review from executed runtime qualification — 2026-10-18 12:43 ET.
 - [x] Validate both skills, 25 affected genericity/mapping tests (0.71 seconds), 36 local links/anchors, five actual lifecycle help commands and four exact packaged resources — 2026-10-18 12:43 ET.
 - [x] Review Standards, Spec and GoF against final documentation; no runtime/schema refactor or pattern hierarchy added — 2026-10-18 12:43 ET.
-- [ ] Commit and open the review PR; report CI status without merging.
+- [x] Commit `e8000791`, push the dedicated branch and open review PR [#1077](https://github.com/paulananth/edgartools-platform/pull/1077); CI is pending and its live results remain on the PR checks — 2026-10-18 12:45 ET.
 - [x] Learning → skill: data-platform now follows COMPLETION.md through missing evidence and authorized engineering to verified operation; mdm-engineering owns cross-reference completion and its native per-engine proof — 2026-10-18 12:43 ET.
 
 
