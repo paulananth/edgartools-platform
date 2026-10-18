@@ -525,9 +525,9 @@ export DBT_SNOWFLAKE_WAREHOUSE="EDGARTOOLS_PROD_REFRESH_WH"
 Run dbt against the prod target:
 
 ```bash
-dbt deps
-dbt run --target prod
-dbt test --target prod
+uv run --with dbt-snowflake dbt deps
+uv run --with dbt-snowflake dbt run --target prod
+uv run --with dbt-snowflake dbt test --target prod
 ```
 
 This creates 10 objects in `EDGARTOOLS_PROD.EDGARTOOLS_GOLD`:
@@ -614,7 +614,7 @@ After all steps complete, run these checks:
 ```bash
 # Verify dbt models pass their tests
 cd infra/snowflake/dbt/edgartools_gold
-dbt test --target prod
+uv run --with dbt-snowflake dbt test --target prod
 
 # Verify the warehouse CLI is installed
 edgar-warehouse --help
