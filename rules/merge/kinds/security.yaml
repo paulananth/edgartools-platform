@@ -9,15 +9,18 @@
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
 version: security-2026-10-14.1
 defaults:
-  # The first listed wins each field. N-PORT is listed after 13F until the
-  # operator rules which source's filed words a Security keeps (ticket 84).
+  # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
+  # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
+  # fills the name (name_of_issuer) and no title; N-PORT then 13F fill the
+  # title as filed. Measured (rank_sources.py over the three sources' rows):
+  # OpenFIGI states one name for 99.7% of its 353,491 CUSIPs, N-PORT for 62.4%
+  # of 385,382 and 13F for 59.9% of 29,942.
   sources:
-  - sec.thirteenf.information_table.security.v1
-  - sec.nport.security.v1
-  - sec.nport.security_isin.v1
-  # OpenFIGI fills no field, only lookup-only cross-references (ticket 80).
   - openfigi.security.v1
   - openfigi.security_isin.v1
+  - sec.nport.security.v1
+  - sec.nport.security_isin.v1
+  - sec.thirteenf.information_table.security.v1
   allow_unknown_effective: true
 rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its

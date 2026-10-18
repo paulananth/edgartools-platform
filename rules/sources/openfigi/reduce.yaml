@@ -18,7 +18,9 @@ reduce:
   max_rows: 10000000
   max_input_bytes: 17179869184
   max_state_bytes: 2147483648
-  max_keys: 1000000
+  # Keys are counted over every group: the names group (ticket 84) adds one per
+  # identifier found, about 353,000 for the CUSIPs, past the 1,000,000 before.
+  max_keys: 2000000
   max_members: 4000000
   max_output_rows: 4000000
   max_output_bytes: 2147483648
@@ -28,4 +30,6 @@ reduce:
     answers: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: answers, keys: [id, id_type, found], mode: count, count: answers, sample: null, sample_limit: 0}
     listings: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: listings, keys: [id], mode: members, member: figi_ticker, count: listings, sample: listing_sample, sample_limit: 1}
     share_classes: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: share_classes, keys: [id], mode: members, member: share_class_figi, count: share_classes, sample: share_class_sample, sample_limit: 1}
+    # The names an identifier's listings state, counted the same way (ticket 84).
+    names: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: names, keys: [id], mode: members, member: name, count: names, sample: name_sample, sample_limit: 1}
     us_composites: {source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8], table: us_composites, keys: [id], mode: members, member: figi_ticker, count: us_composites, sample: us_composite_sample, sample_limit: 1}

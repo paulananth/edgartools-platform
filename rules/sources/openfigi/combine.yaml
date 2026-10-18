@@ -13,6 +13,7 @@ combine:
   groups:
     listing: {source: counts, table: listings, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {listings: 1}}
     share_class: {source: counts, table: share_classes, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {share_classes: 1}}
+    name: {source: counts, table: names, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {names: 1}}
     us_composite: {source: counts, table: us_composites, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {us_composites: 1}}
   tables:
     security:
@@ -23,4 +24,5 @@ combine:
       joins:
         listing: {group: listing, key: id, on_missing: skip, replace: false}
         share_class: {group: share_class, key: id, on_missing: skip, replace: false}
+        name: {group: name, key: id, on_missing: skip, replace: false}
         us_composite: {group: us_composite, key: id, on_missing: skip, replace: false}

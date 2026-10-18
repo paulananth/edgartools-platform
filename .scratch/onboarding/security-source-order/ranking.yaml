@@ -1,0 +1,146 @@
+sources:
+  openfigi.security.v1:
+    file: openfigi.jsonl
+    key: id
+  sec.nport.security.v1:
+    file: nport.jsonl
+    key: cusip
+  sec.thirteenf.information_table.security.v1:
+    file: thirteenf.jsonl
+    key: cusip
+normalised: upper case; every run of punctuation or space folded to one space; trimmed
+fields:
+  issuer_name:
+    keys: 405016
+    sources:
+      openfigi.security.v1:
+        keys: 353491
+        coverage: 0.8728
+        one_value_keys: 352496
+        one_value: 0.9972
+      sec.nport.security.v1:
+        keys: 385382
+        coverage: 0.9515
+        one_value_keys: 240272
+        one_value: 0.6235
+      sec.thirteenf.information_table.security.v1:
+        keys: 29942
+        coverage: 0.0739
+        one_value_keys: 17926
+        one_value: 0.5987
+    agreement:
+    - sources:
+      - openfigi.security.v1
+      - sec.nport.security.v1
+      keys_both: 353491
+      agree: 36965
+      agreement: 0.1046
+    - sources:
+      - openfigi.security.v1
+      - sec.thirteenf.information_table.security.v1
+      keys_both: 8994
+      agree: 5752
+      agreement: 0.6395
+    - sources:
+      - sec.nport.security.v1
+      - sec.thirteenf.information_table.security.v1
+      keys_both: 10308
+      agree: 7883
+      agreement: 0.7647
+    recommended:
+    - openfigi.security.v1
+    - sec.nport.security.v1
+    - sec.thirteenf.information_table.security.v1
+    tied: []
+  security_title:
+    keys: 405016
+    sources:
+      openfigi.security.v1:
+        keys: 353487
+        coverage: 0.8728
+        one_value_keys: 353452
+        one_value: 0.9999
+      sec.nport.security.v1:
+        keys: 385382
+        coverage: 0.9515
+        one_value_keys: 223825
+        one_value: 0.5808
+      sec.thirteenf.information_table.security.v1:
+        keys: 29942
+        coverage: 0.0739
+        one_value_keys: 12380
+        one_value: 0.4135
+    agreement:
+    - sources:
+      - openfigi.security.v1
+      - sec.nport.security.v1
+      keys_both: 353487
+      agree: 449
+      agreement: 0.0013
+    - sources:
+      - openfigi.security.v1
+      - sec.thirteenf.information_table.security.v1
+      keys_both: 8994
+      agree: 3183
+      agreement: 0.3539
+    - sources:
+      - sec.nport.security.v1
+      - sec.thirteenf.information_table.security.v1
+      keys_both: 10308
+      agree: 625
+      agreement: 0.0606
+    recommended:
+    - openfigi.security.v1
+    - sec.nport.security.v1
+    - sec.thirteenf.information_table.security.v1
+    tied: []
+  security_description:
+    keys: 405016
+    sources:
+      openfigi.security.v1:
+        keys: 232151
+        coverage: 0.5732
+        one_value_keys: 225338
+        one_value: 0.9707
+      sec.nport.security.v1:
+        keys: 385382
+        coverage: 0.9515
+        one_value_keys: 223825
+        one_value: 0.5808
+      sec.thirteenf.information_table.security.v1:
+        keys: 29942
+        coverage: 0.0739
+        one_value_keys: 12380
+        one_value: 0.4135
+    agreement:
+    - sources:
+      - openfigi.security.v1
+      - sec.nport.security.v1
+      keys_both: 232151
+      agree: 63281
+      agreement: 0.2726
+    - sources:
+      - openfigi.security.v1
+      - sec.thirteenf.information_table.security.v1
+      keys_both: 8935
+      agree: 1
+      agreement: 0.0001
+    - sources:
+      - sec.nport.security.v1
+      - sec.thirteenf.information_table.security.v1
+      keys_both: 10308
+      agree: 625
+      agreement: 0.0606
+    recommended:
+    - openfigi.security.v1
+    - sec.nport.security.v1
+    - sec.thirteenf.information_table.security.v1
+    tied: []
+recommended_defaults: &id001
+- openfigi.security.v1
+- sec.nport.security.v1
+- sec.thirteenf.information_table.security.v1
+rule: 'order by one value, then coverage: the first source wins where it fills a field'
+merge_rules:
+  defaults:
+    sources: *id001
