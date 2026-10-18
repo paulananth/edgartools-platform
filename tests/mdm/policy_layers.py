@@ -41,6 +41,17 @@ FORM_ADV_SOURCES = ("iapd.adv.filings.v1", "iapd.adv.custodians.v1")
 FORM_ADV_RULES = ("iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd")
 
 
+def with_rules_on(policy: dict, kind: str, *rule_ids: str) -> dict:
+    """A copy of the policy with these declared matching rules of one kind switched on, for a
+    test only: each joins `automatic_rules` as a deterministic binding at its declared version."""
+    body = _copy(policy)
+    declared = {r["rule_id"]: r for r in body["kinds"][kind]["rules"]}
+    body["automatic_rules"] = [*body["automatic_rules"], *(
+        {"kind": kind, "family": "binding", "rule_id": rule_id, "rule_version": declared[rule_id]["version"],
+         "verdict": "bind", "activation": "deterministic"} for rule_id in rule_ids)]
+    return body
+
+
 def without_form_adv(policy: dict) -> dict:
     """Profiling ticket 07 (operator, 2026-10-09: the design "Approve as
     proposed (Recommended)"; "custodian must be in mdm"): the Form ADV
