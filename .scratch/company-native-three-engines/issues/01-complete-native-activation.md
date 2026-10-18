@@ -24,6 +24,8 @@ existing exact-version qualification and approval contract.
 - [ ] Repair shared engine operations and existing skill adapter integration for registration, scoped/indexed reads, atomic writes, restricted roles and native verification.
 - [x] Remove the Company-specific source-priority check; 51 survivorship tests and six PostgreSQL Company/run-pinning integration tests pass — 2026-10-18 18:44 ET.
 - [x] Move native policy/dataset registration and frozen mapping reads into the skill adapter; the same real-database test passes on PostgreSQL (1.50 s), MySQL (1.07 s) and SQL Server (2.95 s), including rollback, repeat, concurrent policy registration and read-only mastering-role refusal. This is registry-operation evidence, not native migration or activation proof — 2026-10-18 18:45 ET.
+- [x] Fix the Standards review's exact-key portability finding: retain unbounded Unicode source names and use UTF-8 hash keys on engines with bounded/default-collated text indexes. The same check proves long Unicode, case and accent distinctions on all three engines — 2026-10-18 18:56 ET.
+- [x] Force four simultaneous policy inserts; reproduce and fix MySQL's duplicate-key lock-upgrade deadlock by using a shared current read. The strengthened registry check passes on PostgreSQL (1.44 s), MySQL (1.51 s), SQL Server (2.26 s) — 2026-10-18 18:56 ET.
 - [ ] Repair Rules, Bookkeeping and Change Journal storage operations required by the declared native pipeline; preserve approval, lease/fence, recovery and publication enforcement.
 - [ ] Remove source/entity hardcoding from the common execution path using existing configured operations.
 - [ ] Qualify the same pinned Company configuration and inputs on PostgreSQL, MySQL and SQL Server; verify parity, rollback, concurrency, interrupted resume and unchanged replay.
@@ -58,3 +60,26 @@ source activation. PostgreSQL retains its current migrations and guards.
 Worker runtime pins now include the three canonical adapter implementation
 files. The adapter remains importable as a standalone skill resource and from
 the installed data-skill bundle. No entity/source policy moved into it.
+
+## Checkpoint review
+
+### Standards
+
+The independent review of `1b156a31..59b2c045` found one portability defect:
+bounded/default-collated source keys. The follow-up replaces those keys as
+described above and adds actual-engine regression cases. Other documented
+standards passed for that checkpoint. Follow-up review remains pending.
+
+### Spec
+
+Independent review found no implemented-slice defect or extra pipeline/
+framework, and explicitly classified the overall activation as incomplete.
+The unchecked native integration and activation parts above remain required.
+
+### GoF
+
+The existing Adapter seam remains appropriate. Plain storage functions remove
+vendor casts from the existing governance caller without introducing another
+class hierarchy. Its cost is an explicit dependency on the skill resource;
+installed-resource resolution and worker runtime pins must be qualified with
+the remaining installed-path tests. No pattern is added to merge computation.

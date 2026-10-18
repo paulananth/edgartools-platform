@@ -7,12 +7,13 @@ from dataclasses import replace
 from hashlib import sha256
 import json
 import time
+from threading import Barrier
 from xml.etree import ElementTree
 from collections import Counter
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
-from sqlalchemy import func, select, text, update
+from sqlalchemy import event, func, select, text, update
 from sqlalchemy.schema import CreateSchema
 from sqlalchemy.exc import DBAPIError
 
@@ -96,18 +97,35 @@ def test_native_policy_registration_uses_the_selected_engine_and_transaction(dat
         assert current_reading(conn, "fixture.records")[0] == 2
         assert current_reading(conn, "fixture.records")[1]["schema_version"] == "2"
         assert reading_at(conn, "fixture.records", 1) == initial
+        for n, code in enumerate(("fixture.Café.資料.🧪." + "x" * 300,
+                                  "fixture.café.資料.🧪." + "x" * 300,
+                                  "fixture.Cafe.資料.🧪." + "x" * 300)):
+            distinct = {**contract, "schema_version": str(n + 10)}
+            register_dataset(conn, code, str(uuid4()), distinct)
+            assert current_reading(conn, code)[1]["schema_version"] == str(n + 10)
+        # Database case/accent folding must not have conflated earlier names.
+        assert current_reading(conn, "fixture.Café.資料.🧪." + "x" * 300)[1]["schema_version"] == "10"
     with runtime.connect() as conn:
         assert storage_api.registered_policies(conn) == [policy]
     with pytest.raises(DBAPIError), runtime.begin() as conn:
         register_policy(conn, {**policy, "version": "forbidden-runtime-registration"})
     concurrent = {**policy, "version": "concurrent-registration"}
+    insert_barrier = Barrier(4, timeout=15)
+
+    def overlap_inserts(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("INSERT INTO") and "policy" in statement:
+            insert_barrier.wait()
 
     def register(_):
         with admin.begin() as conn:
             return register_policy(conn, concurrent)
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        digests = list(pool.map(register, range(8)))
+    event.listen(admin, "before_cursor_execute", overlap_inserts)
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            digests = list(pool.map(register, range(4)))
+    finally:
+        event.remove(admin, "before_cursor_execute", overlap_inserts)
     assert len(set(digests)) == 1
     with admin.connect() as conn:
         assert len(storage_api.registered_policies(conn)) == 2

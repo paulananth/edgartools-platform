@@ -81,9 +81,11 @@ def retain_policy(conn, body: dict, digest: str) -> None:
         with conn.begin_nested():
             conn.execute(insert(table).values(digest=digest, body=body))
     except IntegrityError:
-        # A locking read sees the winning insert even under MySQL's default
-        # repeatable-read snapshot. An unrelated integrity error still fails.
-        prior = conn.scalar(select(table.c.body).where(table.c.digest == digest).with_for_update())
+        # A shared locking read sees the winner under MySQL repeatable-read.
+        # Duplicate inserts already hold shared key locks; upgrading those
+        # to exclusive locks would deadlock concurrent identical registrars.
+        # An unrelated integrity error still fails.
+        prior = conn.scalar(select(table.c.body).where(table.c.digest == digest).with_for_update(read=True))
         if prior is None:
             raise
         if canonical(prior) != canonical(body):
@@ -94,11 +96,16 @@ def dataset_reading(conn, code: str, version: int | None = None) -> dict | None:
     """One native mapping by its source key and optionally its frozen version."""
     _, tables = native_registry_model(conn.dialect.name)
     table = tables["dataset_mapping"]
-    statement = select(table.c.mapping_version, table.c.body, table.c.registry_version).where(table.c.source_code == code)
+    identity = table.c.source_code == code if conn.dialect.name == "postgresql" else table.c.source_key == key(code)
+    statement = select(table.c.source_code, table.c.mapping_version, table.c.body, table.c.registry_version).where(identity)
     if version is not None:
         statement = statement.where(table.c.mapping_version == version)
     row = conn.execute(statement.order_by(table.c.mapping_version.desc()).limit(1)).mappings().first()
-    return None if row is None else dict(row)
+    if row is None:
+        return None
+    if row["source_code"] != code:
+        raise AdapterError("Source key digest collision")
+    return {name: value for name, value in row.items() if name != "source_code"}
 
 
 def retain_dataset_reading(conn, code: str, version: int, body: dict, registry: str) -> None:
@@ -109,9 +116,12 @@ def retain_dataset_reading(conn, code: str, version: int, body: dict, registry: 
     """
     counter(version, positive=True)
     _, tables = native_registry_model(conn.dialect.name)
+    values = {"source_code": code, "registry_version": registry, "body": body}
+    if conn.dialect.name != "postgresql":
+        values["source_key"] = key(code)
     if version == 1:
-        conn.execute(insert(tables["dataset"]).values(source_code=code, registry_version=registry, body=body))
-    conn.execute(insert(tables["dataset_mapping"]).values(source_code=code, mapping_version=version, body=body, registry_version=registry))
+        conn.execute(insert(tables["dataset"]).values(**values))
+    conn.execute(insert(tables["dataset_mapping"]).values(**values, mapping_version=version))
 
 
 def canonical(value: Any) -> bytes:
