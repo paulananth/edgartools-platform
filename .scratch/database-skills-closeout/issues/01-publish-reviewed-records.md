@@ -1,6 +1,10 @@
 # Complete database skill publication and account for Codex branches
 
-Status: in progress. The operator asked to complete
+Status: publication checklist complete in
+[PR #1090](https://github.com/paulananth/edgartools-platform/pull/1090).
+The PR stays draft until its final-head checks pass; current readiness is
+held in the PR's check results rather than another post-merge status commit.
+The operator asked to complete
 `codex/database-agnostic-data-skills-20261017` and explain why branches were
 left without committed changes or PRs. This ticket closes the publication gap;
 it does not claim unfinished native database integration is implemented.
@@ -14,7 +18,7 @@ it does not claim unfinished native database integration is implemented.
 - [x] Record every branch disposition below; historical database snapshots are dated and the Company integration/activation checklist remains incomplete — 2026-10-18 14:42 ET.
 - [x] Add the PR handoff requirement under AGENTS.md, Commits/PRs: include operational records, keep unfinished closeout/validation in draft and use a fresh branch after merge; planned and actual overlap guards pass — 2026-10-18 14:42 ET.
 - [x] Review Standards, Spec and GoF; validate all eight changed files are Markdown-only, ten local references resolve, no connection strings are present, and whitespace/overlap checks pass; original #1070 checks and current-main CI are green — 2026-10-18 14:44 ET.
-- [ ] Commit, push and create a PR; verify checks with a bounded watcher that exits on every outcome.
+- [x] Commit and push this closeout, create draft #1090, and verify all nine checks on documentation head `240d44ab` in run `39155588580`; the bounded watcher exited successfully. Keep this final checklist update in the same draft PR and recheck its final head before marking ready — 2026-10-18 14:51 ET.
 - [x] Learning → skill: repository handoff belongs in AGENTS.md, Commits/PRs; a local or pushed operational-note commit alone is not a completed review handoff — 2026-10-18 14:42 ET.
 
 ## Scope
@@ -97,3 +101,9 @@ feature proof is #1070's six successful checks on `f84cc19f`; base main
 `cc399da5` also has nine successful checks in
 [run 39153684808](https://github.com/paulananth/edgartools-platform/actions/runs/39153684808).
 The closeout's own CI result will be retained with its PR before readiness.
+
+All nine checks passed on the initial documentation head `240d44ab` in
+[run 39155588580](https://github.com/paulananth/edgartools-platform/actions/runs/39155588580).
+The final documentation-only completion record remains in that same PR;
+marking it ready is conditional on its final-head checks. Original source
+branches are retained and their records now have this explicit review surface.
