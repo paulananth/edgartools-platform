@@ -244,8 +244,9 @@ rules:
 # An N-PORT registrant joins the one Company that holds its CIK, or creates it
 # (operator, 2026-10-15: "agreed"): SEC's own Company record sets nearly every
 # registrant aside (typed "investment" or "other" with no category), so none
-# would otherwise exist. Declared, not switched on: it activates on the CIK
-# Identifier Contract with this source added, on its Proving Run.
+# would otherwise exist. Switched on (ticket 79; operator, 2026-10-17 21:03 ET:
+# "Switch on all six (Recommended)"): it activates on the CIK Identifier
+# Contract, re-verified with this source on the registrant Proving Run.
 - rule_id: nport-registrant-cik
   version: 2026-10-15.1
   family: binding
@@ -721,13 +722,15 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    # Re-verified with the N-PORT registrant among its sources (ticket 79, operator
+    # 2026-10-17 21:03 ET): the registrant Proving Run
+    # (.scratch/onboarding/sec.nport/registrant-proving-run.json). It was verified
+    # before on ticket 05's Proving Run (3607ae6c...60cc), approved 2026-09-29.
     verification:
-      corpus_sha256: 3607ae6c80216e90d8decbe827c8688ec3c608d232be868d58c8d231585360cc
+      corpus_sha256: e217bf4d46fcef7226fa46eee97dd9d769fba9b669d035ad0fc3984ee342da61
       approved_by: operator
-      approved_at: "2026-09-29T11:27:26Z"
-      reason: "ticket 15: approved policy digest 0d4d5cb0...0702; ticket 05 Proving Run, 6,414
-        of 6,414 Companies by their CIK, 0 controls, no CIK on two Companies, a second pass
-        changed nothing"
+      approved_at: "2026-10-18T01:03:32Z"
+      reason: "ticket 79 part 2, N-PORT 2026q2 registrant Proving Run, approved in the operator's words: Switch on all six (Recommended). 1,947 registrant Companies, read with the 20 SEC Companies that hold the same CIKs, no CIK on two Companies, a second pass changed nothing; the SEC Companies' own run (ticket 05, 3607ae6c...60cc) stands"
     tolerance:
       unit: items
       warm_up_decisions: 10000

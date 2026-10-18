@@ -93,8 +93,8 @@ rules:
 # (Recommended)"): each record is an identifier the platform asked, so it
 # joins the one Security that holds that CUSIP or ISIN and waits otherwise; it
 # never creates a Security. The CUSIP rule is switched on (operator, 2026-10-17
-# 13:12 ET: "Switch on CUSIP rule (Recommended)"); the ISIN rule is declared only,
-# until the ISIN Identifier Contract and N-PORT's ISIN rules are (ticket 79).
+# 13:12 ET: "Switch on CUSIP rule (Recommended)"); the ISIN rule is declared only:
+# the ISIN Identifier Contract is verified (ticket 79), so it waits for its own switch-on.
 - rule_id: openfigi-security-cusip
   version: 2026-10-17.1
   family: binding
@@ -141,15 +141,15 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    # Re-verified with N-PORT among its sources (ticket 79, operator 2026-10-17
+    # 21:03 ET): the part 1 Proving Run, which read 13F first, then N-PORT
+    # (.scratch/onboarding/sec.nport/proving-run.json). It was verified before on
+    # the SEC 13F Proving Run (52cb4469...fc80).
     verification:
-      # The SEC 13F Proving Run's report (.scratch/onboarding/sec.thirteenf.information_table/proving-run.json).
-      corpus_sha256: 52cb44699ee932e8422bb9a6c5390ef52933308b3482e33d7a739bf81fbffc80
+      corpus_sha256: 0832f611736430d882303bd2417244572c1488a4fe95d2de92915591120878ae
       approved_by: operator
-      approved_at: "2026-10-15T10:27:01Z"
-      reason: "SEC 13F Security Proving Run (ticket 79), approved in the operator's words: merge 985 when green agreed for the rest.
-        999 local 13F information tables: 20,311 Securities by their CUSIP, 0 CUSIPs on two
-        Securities, 9,631 records set aside (9,603 check digit fails, 28 not CUSIP-shaped),
-        a second pass changed nothing"
+      approved_at: "2026-10-18T01:03:32Z"
+      reason: "ticket 79 part 1, N-PORT 2026q2 Security Proving Run with 13F first, approved in the operator's words: Switch on all six (Recommended). 423,562 Securities, 393,645 CUSIPs and 380,790 ISINs held, 0 on two Securities, a second pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000
@@ -169,8 +169,12 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    # verification: filled when the operator approves the ISIN Identifier
-    # Contract on its Proving Run (not yet run).
+    # The part 1 Proving Run (.scratch/onboarding/sec.nport/proving-run.json).
+    verification:
+      corpus_sha256: 0832f611736430d882303bd2417244572c1488a4fe95d2de92915591120878ae
+      approved_by: operator
+      approved_at: "2026-10-18T01:03:32Z"
+      reason: "ticket 79 part 1, N-PORT 2026q2 Security Proving Run with 13F first, approved in the operator's words: Switch on all six (Recommended). 423,562 Securities, 393,645 CUSIPs and 380,790 ISINs held, 0 on two Securities, a second pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000

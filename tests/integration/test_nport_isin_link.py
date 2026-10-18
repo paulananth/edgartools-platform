@@ -41,14 +41,8 @@ PAIRS = [["4", ONE], ["5", ONE], ["6", TWO], ["7", TWO], ["8", NONE], ["9", ONE]
 
 
 def policy_body() -> dict:
-    """The CUSIP check's policy, with the ISIN-only Security rule switched on too."""
-    body = cusip.policy_body()
-    rule = next(r for r in body["kinds"]["security"]["rules"] if r["rule_id"] == "nport-isin-security-isin")
-    body["kinds"]["security"]["identifiers"]["isin"].setdefault("verification", {
-        "corpus_sha256": "0" * 64, "approved_by": "check", "approved_at": core.AS_OF, "reason": "check only"})
-    body["automatic_rules"].append({"kind": "security", "family": "binding", "rule_id": rule["rule_id"],
-                                    "rule_version": rule["version"], "verdict": "bind", "activation": "deterministic"})
-    return body
+    """The CUSIP check's policy; the ISIN-only Security rule is on in the live policy (ticket 79)."""
+    return cusip.policy_body()
 
 
 def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[dict]:

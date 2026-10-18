@@ -85,6 +85,22 @@ def without_adv_switch_on(policy: dict) -> dict:
     return body
 
 
+def without_nport_switch_on(policy: dict) -> dict:
+    """Rebuild priorities ticket 79 (operator, 2026-10-17 21:03 ET: "Switch on all
+    six (Recommended)"): `nport-registrant-cik` switched on, its CIK Identifier
+    Contract re-verified on the registrant Proving Run. Peeled, the rule is
+    declared only and the contract keeps ticket 05's verification."""
+    body = _copy(policy)
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] != "nport-registrant-cik"]
+    body["kinds"]["company"]["identifiers"]["cik"]["verification"] = {
+        "corpus_sha256": "3607ae6c80216e90d8decbe827c8688ec3c608d232be868d58c8d231585360cc",
+        "approved_by": "operator", "approved_at": "2026-09-29T11:27:26Z",
+        "reason": "ticket 15: approved policy digest 0d4d5cb0...0702; ticket 05 Proving Run, 6,414 of "
+                  "6,414 Companies by their CIK, 0 controls, no CIK on two Companies, a second pass "
+                  "changed nothing"}
+    return body
+
+
 def without_p2_p3_deleted(policy: dict) -> dict:
     """Rebuild priorities ticket 09 (operator, 2026-10-17: "Delete both
     (Recommended)"): cascade passes P2 (street and postcode) and P3 (street
@@ -196,7 +212,9 @@ def without_cik_approval(policy: dict) -> dict:
     body["kinds"]["company"]["identifiers"]["cik"]["verification"].update(
         approved_by=None, approved_at=None, reason=None
     )
-    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] != "company-cik"]
+    # Every rule that activates on the CIK contract goes with its approval.
+    body["automatic_rules"] = [r for r in body["automatic_rules"]
+                               if r["rule_id"] not in ("company-cik", "nport-registrant-cik")]
     return body
 
 
@@ -226,6 +244,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Switched on: "Switch on all six (Recommended)" (2026-10-17 21:03 ET, ticket 79).
+    (without_nport_switch_on, "d11d8361d90eb9e03c83272e135c9a9179f21bcd7310b7cfd0fbed8174024b31"),
     # Deleted: "Delete both (Recommended)" (2026-10-17, ticket 09).
     (without_p2_p3_deleted, "6276a992486dda4bae01330580763ceb707bb8896bb0e45288ab3194c641439c"),
     # Switched on: "Switch on all three (Recommended)" (2026-10-17 08:31 ET).

@@ -3,7 +3,9 @@
 # (rules/sources/sec.nport.fund). Ruling it rests on (operator, 2026-10-14,
 # N-PORT findings q17): "Series id and LEI join (Recommended)": the Fund is
 # kind fund_structure with the fund profile, joined by its SEC series id and
-# its LEI. Declared, not switched on.
+# its LEI. Switched on (ticket 79; operator, 2026-10-17 21:03 ET: "Switch on
+# all six (Recommended)"), verified on the part 3 Proving Run
+# (.scratch/onboarding/sec.nport/fund-proving-run.json).
 version: fund_structure-2026-10-15.1
 defaults:
   sources:
@@ -56,6 +58,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 792af1f5b4895969fa19675d72fcd78febd9779a3874a145bdae6ff6e0d56e58
+      approved_by: operator
+      approved_at: "2026-10-18T01:03:32Z"
+      reason: "ticket 79 part 3, N-PORT 2026q2 Fund Proving Run, approved in the operator's words: Switch on all six (Recommended). 12,937 Funds, no series id or LEI on two Funds, a second pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000
@@ -71,6 +78,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 792af1f5b4895969fa19675d72fcd78febd9779a3874a145bdae6ff6e0d56e58
+      approved_by: operator
+      approved_at: "2026-10-18T01:03:32Z"
+      reason: "ticket 79 part 3, N-PORT 2026q2 Fund Proving Run, approved in the operator's words: Switch on all six (Recommended). 12,937 Funds, no series id or LEI on two Funds, a second pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000
