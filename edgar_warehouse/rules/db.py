@@ -89,9 +89,7 @@ class Rules:
         if (kind not in ("source", "merge", "pipeline") or not isinstance(name, str) or not isinstance(version, str)
                 or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", version)):
             raise Blocked("A supported document kind, name and version are required")
-        if "acquisition" in body:
-            from edgar_warehouse.rules.acquisition_authority import acquisition
-            acquisition(body)
+        files.check_document(kind, body)
         with self.engine.begin() as conn:
             conn.execute(text("INSERT INTO rules.rule_version(kind,name,version,body,digest) VALUES(:k,:n,:v,:b,:d) ON CONFLICT DO NOTHING"),
                          {"k": kind, "n": name, "v": version, "b": canonical(body), "d": digest(body)})
@@ -249,13 +247,7 @@ class Rules:
 
     def from_files(self, root: Path, version: str) -> list[dict]:
         """The same save lifecycle for every supported authoring document."""
-        result = []
-        for kind, folder, filename in (("source", "sources", "source.yaml"), ("pipeline", "pipelines", "pipeline.yaml")):
-            for path in sorted((root / folder).glob(f"*/{filename}")):
-                result.append(self.save(kind, path.parent.name, version, files.LAYOUT[kind][0](path)))
-        if (root / "merge/policy.yaml").exists():
-            result.append(self.save("merge", "platform", version, files.LAYOUT["merge"][0](root / "merge/policy.yaml")))
-        return result
+        return [self.save(kind, name, version, files.LAYOUT[kind][0](path)) for kind, name, path in files.documents(root)]
 
     def to_files(self, root: Path, version: str) -> list[dict]:
         with self.engine.connect() as conn:

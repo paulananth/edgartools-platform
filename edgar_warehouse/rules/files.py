@@ -476,6 +476,58 @@ def _write_plain(body: dict, path: Path) -> None:
 # of documents uses this table, so a kind whose layout splits (merge into
 # kinds and reference tables; source into source and quality) changes here
 # only.
+def check_document(kind: str, body: dict) -> None:
+    """Refuse a Rules document that cannot be saved as it stands: the one list of
+    checks `rules save` and `rules check` share. Every document reads back exactly
+    as written; a source's Bookkeeping targets and acquisition hold; the merge
+    rules pass `check_policy`."""
+    if loads(dumps(body)) != body:
+        raise RulesFileError("The document does not read back as written")
+    if kind == "source":
+        from edgar_warehouse.bookkeeping.clean.config import validate
+
+        for target in ((body.get("bookkeeping") or {}).get("targets") or {}):
+            validate(body, target)
+        if "acquisition" in body:
+            from edgar_warehouse.rules.acquisition_authority import acquisition
+
+            acquisition(body)
+    elif kind == "merge":
+        from edgar_warehouse.mdm.clean.activation import check_policy
+
+        check_policy(body)
+
+
+def documents(root: Path | None = None) -> list[tuple[str, str, Path]]:
+    """Every document the Rules lifecycle saves: (kind, name, path), as `rules load` reads them."""
+    root = root or ROOT
+    found = [(kind, path.parent.name, path)
+             for kind, folder, filename in (("source", "sources", "source.yaml"), ("pipeline", "pipelines", "pipeline.yaml"))
+             for path in sorted((root / folder).glob(f"*/{filename}"))]
+    if (root / "merge/policy.yaml").exists():
+        found.append(("merge", "platform", root / "merge/policy.yaml"))
+    return found
+
+
+def check(names: list[str] | None = None, root: Path | None = None) -> dict:
+    """Each rules file loaded and checked as `rules save` would, offline: `ok`, or the
+    reason it is refused. Named sources only, when names are given. A loader's message
+    can quote a private YAML line, so a refusal names the error's kind and the file."""
+    results = {}
+    for kind, name, path in documents(root):
+        if names and (kind != "source" or name not in names):
+            continue
+        try:
+            check_document(kind, LAYOUT[kind][0](path))
+            results[f"{kind}:{name}"] = "ok"
+        except Exception as error:  # every refusal is reported, the rest still checked
+            results[f"{kind}:{name}"] = f"refused ({type(error).__name__}): {path}"
+    missing = sorted(set(names or ()) - {key.split(":", 1)[1] for key in results if key.startswith("source:")})
+    for name in missing:
+        results[f"source:{name}"] = "refused (missing): no rules/sources/<name>/source.yaml"
+    return results
+
+
 LAYOUT = {
     "source": (load_source, lambda body, path: write_source(body, path.parent)),
     "pipeline": (load, _write_plain),

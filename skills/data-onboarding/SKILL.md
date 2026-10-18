@@ -145,8 +145,8 @@ Every step says what differs for each target.
   `source`), which refuses YAML that would change a value silently (`yes`,
   `010`, a date). Write a new file with `files.dumps` or
   `files.write_source`. Change an existing file as text instead, since those
-  functions drop its comments, which hold decisions. Either way, reload it
-  with `files.source` to check it.
+  functions drop its comments, which hold decisions. Either way, check it
+  with `edgar-warehouse rules check --source <source>`.
 - **Where you write.** On your own branch, write straight into the repo's
   `rules/`; the PR is the review. To draft without touching the repo (a
   trial, a sandbox), copy `rules/` to a folder and pass that folder:
@@ -475,8 +475,11 @@ starting from its "Defaults".
   `quality.yaml` is written. Then add short YAML comments by hand,
   between keys, wherever a choice needs a reason: an operator's answer, a
   field left out, a surprising path.
-- Check it: `files.source('<source>')` must equal what you passed to
-  `files.dumps`.
+- Check it: `edgar-warehouse rules check --source <source>` loads it as
+  `rules save` would, offline. Each file says `ok`, or `refused` with the
+  error's kind; it checks that the file reads back as written, that each
+  Bookkeeping target and the acquisition hold, and that the merge rules pass.
+  Run it with no `--source` after a change to the merge rules.
 - Write `source`, `bronze`, `execution`, `read` and `mdm` for a configured
   captured-file path. The source worker requires
   `execution: {profile: source.read, workers: 1, max_artifacts: 1}`; workers
@@ -779,7 +782,6 @@ Either way, write it in the log.
 
 | Command | State | What to do | Built by |
 |---|---|---|---|
-| `rules check` | not built | Dry run by hand (**test**) | rules-skill ticket 03 |
 | Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | rules-skill ticket 04 |
 | Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
 | Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a follow-up of profiling ticket 06 |
