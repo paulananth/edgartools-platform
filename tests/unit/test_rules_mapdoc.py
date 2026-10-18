@@ -125,7 +125,7 @@ def test_the_sheets_say_what_the_rules_say():
         "iapd-adv-crd", "iapd-adv-custodian-lei", "iapd-adv-custodian-bd", "gleif-issuer-lei"]
     assert "Exactly one Company holds that CIK" in kind["Matching rules"][1][5]
     assert "Exactly one Company holds that CIK" in kind["Matching rules"][2][5]  # nport-registrant-cik
-    assert "the name alone" in kind["Matching rules"][11][5] and "the country, street" in kind["Matching rules"][5][5]
+    assert "the name alone" in kind["Matching rules"][9][5] and "the country, street" in kind["Matching rules"][5][5]
     assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][3][5]
     assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in kind["Who wins each field"]
