@@ -196,7 +196,7 @@ def test_a_contract_already_verified_keeps_its_stamp(identifier_root):
     # Take the rule off again; a second switch-on on another report leaves the contract's stamp alone.
     path = root / "merge" / "policy.yaml"
     text = path.read_text()
-    path.write_text(text[:text.index(f"# {IDENTIFIER_RULE}: switched on by")])
+    path.write_text(text[:text.rindex(f"# {IDENTIFIER_RULE}: switched on by")])  # this test's own block
     other = report.with_name("other-run.json")
     other.write_text('{"isins_on_two_securities": 0, "run": 2}')
     second = files.approve_identifier_rule(IDENTIFIER_RULE, proof=other, reason="0 on two", by="Operator",

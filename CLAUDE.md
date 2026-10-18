@@ -211,9 +211,8 @@ Learned the hard way; each is a standing operator rule.
   merging is automatic (operator, 2026-10-17: "auto merge and not ask for
   approval"). Watch CI, merge on green, and report the merge.
 - Green means green on today's `main`: a PR whose base moved since its CI ran is
-  brought up to date (`gh pr update-branch`) and waits for CI again before it
-  merges. Two PRs each green alone broke `main` together on 2026-10-18 (#1082
-  assumed a rule off that #1083 switched on, merged two minutes apart).
+  updated (`gh pr update-branch`) and waits for CI again before it merges; two
+  PRs each green alone broke `main` together (2026-10-18).
 - A test states its expected answer; it never compares with a frozen copy of
   retired code. To retire such an oracle, write its answers into the test (or an
   answer file written once while the two still agree), change each answer once
