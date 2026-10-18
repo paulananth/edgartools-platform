@@ -80,3 +80,51 @@ def test_more_pieces_than_the_contract_allows_are_refused(tmp_path, monkeypatch)
 
     with pytest.raises(ValueError, match="bounded artifact count"):
         by_pieces(store, tmp_path / "record", reading)
+
+
+def test_a_combination_is_read_in_pieces(tmp_path):
+    """The case it exists for: the step after a combine (ticket 111)."""
+    from edgar_warehouse.rules import files
+    from tests.engine.test_source_combine import group, join, table
+    from tests.support.source_chain import combine
+
+    store = Artifacts()
+    plan = tmp_path / "combine.yaml"
+    plan.write_text(files.dumps({"execution": {"profile": "source.combine"}, "combine": {
+        "max_rows": 100, "groups": {"same": group("raw", "rows", "id", "id", mode="one")},
+        "tables": {"rows": table("raw", "rows", {"same": join("same", "id")})}}}))
+    combined = combine(store, tmp_path / "combine", plan, {"raw": first_reading(store, tmp_path, 3)})
+
+    _, _, ids = by_pieces(store, tmp_path / "record", combined)
+
+    assert ids == ["id-0", "id-1", "id-2"]
+
+
+def test_a_reading_with_lookup_receipts_is_refused(tmp_path):
+    store = Artifacts()
+    receipt = store.put(tmp_path.as_uri(), {"any": 1})
+    reading = store.put(tmp_path.as_uri(), {"version": 1, "contract": receipt, "artifacts": [
+        {"input": receipt, "lookups": receipt, "tables": {"rows": []}, "deferred": []}]})
+
+    with pytest.raises(ValueError, match="lookup receipts"):
+        by_pieces(store, tmp_path / "record", reading)
+
+
+def test_a_malformed_index_is_refused(tmp_path):
+    store = Artifacts()
+    receipt = store.put(tmp_path.as_uri(), {"any": 1})
+    reading = store.put(tmp_path.as_uri(), {"version": 2, "contract": receipt, "artifacts": [
+        {"partitions": [{"bytes": 1}]}]})
+
+    with pytest.raises(ValueError, match="names each part by its receipt"):
+        by_pieces(store, tmp_path / "record", reading)
+
+
+def test_a_refused_input_writes_no_piece(tmp_path, monkeypatch):
+    store = Artifacts()
+    reading = first_reading(store, tmp_path, 2)
+    monkeypatch.setitem(RECORD["execution"], "workers", 3)  # a contract the worker refuses
+
+    with pytest.raises(ValueError, match="1..2 workers"):
+        by_pieces(store, tmp_path / "record", reading)
+    assert not list((tmp_path / "record").glob("reading.json.pieces/*"))

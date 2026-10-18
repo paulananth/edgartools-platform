@@ -19,6 +19,8 @@ GoF consult (2026-10-18 18:00 ET), of three options: (a) a worker that emits a s
 ## Checklist
 
 - [x] GoF consult: option (b) (2026-10-18 18:00 ET)
-- [x] `source.read` version 4, `edgar_warehouse/workers/source_read.py` `_pieces`; `tests/engine/test_read_pieces.py`, 4 passed. Covers a small reading read from its inline rows, a large one read from its parts with the same rows, a changed inline piece failing the verifier, and more pieces than `max_artifacts` refused. Affected engine and unit tests: 1,187 passed (6 min 24 s locally, over the five-minute limit: a `source.read` change reaches most of the engine suite) (2026-10-18 18:04 ET)
-- [ ] Three-axis review, PR, CI, merge
-- [ ] Learning → skill: the data-platform skill's READING.md says how a step reads a reading in pieces (version 4)
+- [x] `source.read` version 4, `edgar_warehouse/workers/source_read.py` `_pieces` (2026-10-18 18:04 ET)
+- [ ] ~~Run inside Bookkeeping (the composed `pieces` slot resolved by the engine)~~ deferred to ticket 14 slice 2: proved by reading the code only (`engine.py` `_compose` fills a slot with the unit's `{uri, sha256}`); OpenFIGI's target run by `rules test` is its test
+- [x] Three-axis review (2026-10-18 18:08 ET). GoF: reuse the shared index check (`source_readings.index`) instead of a weaker copy (done). Standards and Spec: a reading carrying lookup receipts is refused (its evidence was dropped), each part's entry is checked, inline pieces are written only once the whole input passes its checks, an empty reading's refusal is written down (all done), a combine's own output is tested. `tests/engine/test_read_pieces.py`, 8 passed: a small reading's inline rows, a large reading's parts, a combination, a changed piece failing the verifier, too many pieces, lookup receipts, a malformed index, a refused input writing no piece. Earlier affected-test run: 1,187 passed in 6 min 24 s, over the five-minute limit; named affected files since
+- [ ] PR, CI, merge
+- [x] Learning → skill: the data-platform skill's READING.md says how a step reads a reading in pieces (version 4)

@@ -790,8 +790,10 @@ or a small reading's inline rows, which the worker writes once beside its
 output under their hash for the verifier to read back. Each piece is a
 document `{"version":1,"tables":{...},"deferred":[...]}`, so the contract
 reads a table with `each: tables.<name>`. A reading with more pieces than the
-contract's `max_artifacts` is refused. In a Bookkeeping target the `pieces`
-receipt is a composed slot naming the combine's unit.
+contract's `max_artifacts` is refused, and so is an empty reading (no
+piece) and a reading that carries lookup receipts, whose evidence a piece
+cannot keep. In a Bookkeeping target the `pieces` receipt is a composed slot
+naming the combine's unit.
 
 A consumer must bind lookup evidence into its output identity. The configured
 combiner supports this: its scope hashes the complete source-extract receipts, so
