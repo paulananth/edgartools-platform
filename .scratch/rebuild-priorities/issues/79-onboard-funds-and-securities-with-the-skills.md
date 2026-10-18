@@ -20,7 +20,7 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [x] Part 2, the registrant as a Company: test run, Proving Run (1,947 Companies, 0 CIKs on two, second pass changed nothing), rules approved under the standing words; #1001 merged 2026-10-16 07:55 ET
   - [x] Part 3, the Fund (kind `fund_structure`): test run, Proving Run (12,937 Funds, 0 series ids and 0 LEIs on two, second pass changed nothing), rules approved under the standing words; #1003 merged on the operator's words "merge one by one" 2026-10-16 09:13 ET
   - [ ] ~~IS_SUBFUND_OF from a Fund to its registrant~~ deferred (operator, 2026-10-16: "Funds now, link later (Recommended)"): a profile needs a stated start date and no capture states when a series began; the registrant's CIK stays on each Fund, lookup only
-  - [ ] Switch-on of parts 1-3's matching rules: waits for the operator's word
+  - [x] Switch-on of parts 1-3's six matching rules (`nport-security-cusip`, `nport-security-isin`, `nport-isin-security-isin`, `nport-registrant-cik`, `nport-fund-series`, `nport-fund-lei`): operator, 2026-10-17 21:03 ET, "Switch on all six (Recommended)"; each on its Identifier Contract, verified by its Proving Run report's sha256 (Security `0832f611…`, registrant CIK `e217bf4d…`, Fund `792af1f5…`, each checked against the file); the tests that stamped a contract or switched these rules on for themselves now read the live policy; 813 MDM and N-PORT tests and 263 policy-reading tests pass, `mapdoc check` clean (2026-10-18 12:30 ET)
 - [ ] Securities from 13F: CUSIP and ticker attached to the Security
   - [x] 13F findings approved: operator, "yes approve the 13F findings", 2026-10-14 20:54 ET
   - [x] map: `rules/sources/sec.thirteenf.information_table/` and `rules/merge/kinds/security.yaml` (matching rule `security-cusip`, declared, not switched on); tested on all 999 local files, 20,311 Securities accepted, 9,631 set aside (onboarding log) 2026-10-14 22:31 ET
@@ -41,4 +41,6 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [x] #984, the 13F Security, switched on: CI green, merged by the operator 2026-10-15 06:55 ET
   - [x] the N-PORT parts 1 and 2: #999 and #1001, CI green, merged on the operator's words "merge one by one" 2026-10-16 07:55 ET
   - [x] part 3: #1003, CI green, merged on the operator's words "merge one by one" 2026-10-16 09:13 ET; main's CI green after it
+  - [x] The switch-on's three-axis review (2026-10-18 12:33 ET): Standards found two comments that still named the 13F run alone (fixed); Spec found the registrant CIK reason overstated what the run read (now "read with the 20 SEC Companies that hold the same CIKs"; ticket 05's run stands); GoF: leave the policy layers; one follow-up below. 852 tests pass
+  - [ ] ~~A shared `with_rules_on` test helper~~ deferred to ticket 108 (GoF, 2026-10-18): four test files switch a rule on locally with the same five lines; nothing is broken
 - [ ] Learning → skill
