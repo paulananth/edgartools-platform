@@ -53,9 +53,9 @@ ISIN, ISIN_OTHERS = "ZZ0000000016", ["ZZ0000000024", "ZZ0000000032", "ZZ00000000
                                       "ZZ0000000065", "ZZ0000000073", "ZZ0000000081"]
 
 
-def listing(figi, ticker, exchange, composite, share_class, sector="Equity"):
+def listing(figi, ticker, exchange, composite, share_class, sector="Equity", name="EXAMPLE CORP"):
     kind = "Common Stock" if sector == "Equity" else "Corporate Bond"
-    row = {"figi": figi, "name": "EXAMPLE CORP", "ticker": ticker, "exchCode": exchange, "securityType": kind,
+    row = {"figi": figi, **({"name": name} if name else {}), "ticker": ticker, "exchCode": exchange, "securityType": kind,
            "marketSector": sector, "securityType2": kind, "securityDescription": ticker}
     return row | ({"compositeFIGI": composite} if composite else {}) | ({"shareClassFIGI": share_class} if share_class else {})
 
@@ -71,12 +71,13 @@ ANSWERS = {
                       listing("BBGZZ0000GY1", "EXB", "GY", "BBGZZ0000GR1", "BBGZZ00000SC")]},
     BOND: {"data": [listing("BBGZZ000BND6", "EXA 5 01/01/30", "NOT LISTED", None, None, sector="Corp")]},
     MISSING: NOT_FOUND,
-    UNHELD: {"data": [listing("BBGZZ000BND2", "EXC 4 01/01/31", "NOT LISTED", None, None, sector="Corp")]},
+    # A listing that states no name gives the record none (ticket 84).
+    UNHELD: {"data": [listing("BBGZZ000BND2", "EXC 4 01/01/31", "NOT LISTED", None, None, sector="Corp", name=None)]},
     # One listing that is its own US composite: its FIGI as both, one ticker.
     SOLE: {"data": [listing("BBGZZ0000US2", "EXD", "US", "BBGZZ0000US2", "BBGZZ0000SC2")]},
     # Two US composites (two share classes too): no composite and no ticker.
     DOUBLE: {"data": [listing("BBGZZ0000US3", "EXE", "US", "BBGZZ0000US3", "BBGZZ0000SC3"),
-                      listing("BBGZZ0000US4", "EXF", "US", "BBGZZ0000US4", "BBGZZ0000SC4")]},
+                      listing("BBGZZ0000US4", "EXF", "US", "BBGZZ0000US4", "BBGZZ0000SC4", name="OTHER CORP")]},
     ISIN: {"data": [listing("BBGZZ0000US5", "EXG", "US", "BBGZZ0000US5", "BBGZZ0000SC5"),
                     listing("BBGZZ0000LN5", "EXG", "LN", "BBGZZ0000LN5", "BBGZZ0000SC5")]},
 }
@@ -166,6 +167,9 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
         DOUBLE: {},
     }
     assert refused == {cusip: "not_found_by_openfigi" for cusip in (MISSING, *OTHERS)}
+    # OpenFIGI's name, only where its listings state one (ticket 84): DOUBLE's two names give none.
+    names = {r["provenance"]["record_key"]: r["fields"]["name_of_issuer"].get("value") for r in records}
+    assert names == {EQUITY: "EXAMPLE CORP", BOND: "EXAMPLE CORP", UNHELD: None, SOLE: "EXAMPLE CORP", DOUBLE: None}
 
 
 def bound(database, source_code: str, key: str) -> str | None:
@@ -189,11 +193,15 @@ def test_a_record_joins_the_security_holding_its_cusip_and_never_creates_one(dat
         policy = register_policy(conn, policy_body())
     stage = MergeStage(Store(database.application))
     nport.apply(stage, policy, "13f", [core.source(key=cusip, source_code=THIRTEENF, kind="security",
-                                                   fields={"name_of_issuer": "EXAMPLE CORP"},
+                                                   fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
                                                    identifiers={"cusip": cusip}) for cusip in (EQUITY, BOND)], 1)
     nport.apply(stage, policy, "openfigi", records, 2)
-    securities = {k for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}
+    securities = {k: v for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}
     assert len(securities) == 2
+    # OpenFIGI ranks first for the name, 13F last; OpenFIGI states no title, so the filed one stays (ticket 84).
+    assert [(v["fields"]["name_of_issuer"]["value"], v["fields"]["title_of_class"]["value"])
+            for v in securities.values()] == [
+        ("EXAMPLE CORP", "COM")] * 2
     for cusip in (EQUITY, BOND):
         assert bound(database, CODE, cusip) == bound(database, THIRTEENF, cusip) is not None
     # Waiting: staged and unbound, never a Security of its own.

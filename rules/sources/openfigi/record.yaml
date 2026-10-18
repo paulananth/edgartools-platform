@@ -17,6 +17,8 @@ read:
             fields:
               id: {text: {path: id}}
               found: {value: {path: found}}
+              name:
+                join: {path: name.name_sample, item_path: name, separator: "", max_items: 1, null_if_empty: true}
               share_class_figi:
                 join: {path: share_class.share_class_sample, item_path: share_class_figi, separator: "", max_items: 1, null_if_empty: true}
               composite_figi:

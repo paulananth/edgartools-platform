@@ -119,7 +119,7 @@ for kind, (word, code) in KINDS.items():
     assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
     contract = doc["mdm"][code]["contract"]
     # The cross-references each identifier should get, counted directly from the files by position.
-    expected = {}
+    expected, expected_name = {}, {}
     for n in names:
         for job, answer in zip(json.loads((CAP / kind / n.replace(".json", ".request.json")).read_text()),
                                json.loads((CAP / kind / n).read_text())):
@@ -137,7 +137,10 @@ for kind, (word, code) in KINDS.items():
                 want["figi"], ticker = next(iter(figis.items()))
                 want.setdefault("openfigi_ticker", ticker)
             expected[job["idValue"].upper()] = want if listings else None
-    differences = 0
+            # Ticket 84: OpenFIGI's name where its listings state exactly one.
+            stated = {x["name"] for x in listings if x.get("name")}
+            expected_name[job["idValue"].upper()] = next(iter(stated)) if len(stated) == 1 else None
+    differences = name_differences = 0
     outcome, filled = Counter(), Counter()
     for b in store.json(prepared)["batches"]:
         for rec in map(json.loads, (root / b["input"]["path"]).read_bytes().splitlines()):
@@ -147,6 +150,7 @@ for kind, (word, code) in KINDS.items():
                     "member": b["input"]["path"]})
                 outcome["accepted"] += 1
                 differences += (r.get("cross_references") or {}) != expected.pop(rec["id"])
+                name_differences += (r.get("fields") or {}).get("name_of_issuer", {}).get("value") != expected_name[rec["id"]]
                 for ns in r.get("identifiers") or {}:
                     filled["id:" + ns] += 1
                 for ns in r.get("cross_references") or {}:
@@ -155,7 +159,8 @@ for kind, (word, code) in KINDS.items():
                 outcome[refused.reason] += 1
                 differences += refused.reason == "not_found_by_openfigi" and expected.pop(rec["id"]) is not None
     report["contracts"][code] = {"files": len(names), "outcome": dict(outcome), "filled": dict(filled),
-                                 "differences_from_direct_count": differences, "identifiers_not_prepared": len(expected)}
+                                 "differences_from_direct_count": differences,
+                                 "name_differences_from_direct_count": name_differences, "identifiers_not_prepared": len(expected)}
     stage(f"{word}: record, prepare, contract")
 print(json.dumps(report, indent=1))
 (OUT / "report.json").write_text(json.dumps(report, indent=1))

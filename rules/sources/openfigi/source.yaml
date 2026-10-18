@@ -248,6 +248,30 @@ read:
             path: shareClassFIGI
             null_if:
             - ""
+    # The name each listing states, only from the listings that carry one
+    # (ticket 84): reduce.yaml counts an identifier's names.
+    names:
+      each: data
+      select:
+        test:
+          path: name
+          kind: truthy
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        name:
+          text:
+            path: name
   stream:
     wrapper: null
     container: none
@@ -269,7 +293,7 @@ mdm:
     contract:
       provider: OpenFIGI
       family: openfigi
-      schema_version: openfigi-security-v1
+      schema_version: openfigi-security-v2
       record_key: the CUSIP asked, upper-cased; one record per CUSIP asked
       publication_key: the capture's mapping answer files and the reduce, combine and record
         contracts
@@ -311,18 +335,26 @@ mdm:
                       - not found
                   fields:
                     object:
-                      fields: {}
+                      fields:
+                        # OpenFIGI's own name, the one it states for the
+                        # identifier (ticket 84; operator, 2026-10-18: "Name
+                        # only (Recommended)"); kept only when its listings
+                        # state one name (combine.yaml).
+                        name_of_issuer:
+                          value:
+                            path: name
                   matching:
                     object:
                       fields: {}
           input_fields:
           - id
           - found
+          - name
           - share_class_figi
           - composite_figi
           - listing_figi
           - ticker
-        version: openfigi-security-v1
+        version: openfigi-security-v2
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -342,7 +374,7 @@ mdm:
     contract:
       provider: OpenFIGI
       family: openfigi
-      schema_version: openfigi-security-isin-v1
+      schema_version: openfigi-security-isin-v2
       record_key: the ISIN asked, upper-cased; one record per ISIN asked
       publication_key: the capture's mapping answer files and the reduce, combine and record
         contracts
@@ -384,18 +416,26 @@ mdm:
                       - not found
                   fields:
                     object:
-                      fields: {}
+                      fields:
+                        # OpenFIGI's own name, the one it states for the
+                        # identifier (ticket 84; operator, 2026-10-18: "Name
+                        # only (Recommended)"); kept only when its listings
+                        # state one name (combine.yaml).
+                        name_of_issuer:
+                          value:
+                            path: name
                   matching:
                     object:
                       fields: {}
           input_fields:
           - id
           - found
+          - name
           - share_class_figi
           - composite_figi
           - listing_figi
           - ticker
-        version: openfigi-security-isin-v1
+        version: openfigi-security-isin-v2
         retain_deferred: true
         source_record_provenance: true
         kind: security
