@@ -19,6 +19,12 @@ the shared contract below is a requirement, not evidence of implemented
 MySQL or SQL Server support. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
+The adapter guidance belongs to this skill as instructions only. It adds no
+adapter code, script, library or CLI. When selecting an engine, assessing a
+missing storage operation or reviewing its design, read
+[Storage adapter contract](references/storage-adapters.md). Apply its GoF
+review before recommending a change and again against the resulting work.
+
 Each rule below was learned from a failure here. The Examples section names
 where.
 
@@ -52,8 +58,10 @@ existing restricted function API until its replacement proves the same
 enforcement and grants; removing a PostgreSQL guard is not a portability fix.
 
 When a selected engine is refused, identify the missing storage operation or
-migration and implement it through the shared contract. Reuse the same merge
-logic and versioned policy. Report unsupported operations until qualified;
+migration against the shared contract. Reuse the same merge logic and
+versioned policy. A skill-instructions task changes only the guidance;
+report the missing runtime implementation as an outstanding deployment
+requirement. Report unsupported operations until qualified;
 changing a skill, deleting a dialect check or creating empty tables does not
 implement the adapter.
 
