@@ -5,6 +5,7 @@ mastering. Bookkeeping sees only task envelopes and immutable output receipts.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -44,10 +45,42 @@ def runtime_files() -> list[Path]:
             ARTIFACT_CODEC_FILE, Path(control_contract.__file__)]
 
 
-def _documents(envelope: dict, artifacts):
+def _pieces(envelope: dict, manifest: dict, artifacts) -> tuple[dict, dict]:
+    """Version 4 (ticket 111): one verified reading or combination, read piece by
+    piece, so a step after a combine is one unit known before the run. A large
+    output's pieces are its parts; a small one's rows are inline, so each becomes
+    a file beside this step's output, named by its hash, which the verifier reads
+    back by that hash. The worker's own version-1 input, and the inline pieces'
+    bytes, written only once the whole input has passed its checks."""
+    if set(manifest) != {"version", "contract", "pieces"}:
+        raise ValueError("Version-4 source input names its contract and the reading it reads in pieces")
+    index = source_readings.index(reference(manifest["pieces"]), artifacts)
+    refs, inline = [], {}
+    for artifact in index["artifacts"]:
+        if index["version"] == 2:
+            parts = artifact.get("partitions") if isinstance(artifact, dict) else None
+            if not isinstance(parts, list) or any(not isinstance(part, dict) or "receipt" not in part for part in parts):
+                raise ValueError("A reading's index names each part by its receipt")
+            refs += [reference(part["receipt"]) for part in parts]
+            continue
+        if (not isinstance(artifact, dict) or not isinstance(artifact.get("tables"), dict)
+                or not isinstance(artifact.get("deferred"), list)):
+            raise ValueError("A reading's artifact holds its tables and deferred records")
+        data = _encode({"version": 1, "tables": artifact["tables"], "deferred": artifact["deferred"]})
+        sha = hashlib.sha256(data).hexdigest()
+        ref = {"uri": f"{envelope['output']}.pieces/{sha}.json", "sha256": sha}
+        inline[ref["uri"]] = (ref, data)
+        refs.append(ref)
+    # An empty reading has no piece: refused below, as any input naming no file is.
+    return {"version": 1, "contract": manifest["contract"], "artifacts": refs}, inline
+
+
+def _documents(envelope: dict, artifacts, *, publish: bool = False):
     if set(envelope["checks"]) != {"source.output"}:
         raise ValueError("source.read verifies source.output only")
-    manifest = artifacts.json(envelope["input"])
+    manifest, inline = artifacts.json(envelope["input"]), {}
+    if isinstance(manifest, dict) and manifest.get("version") == 4:
+        manifest, inline = _pieces(envelope, manifest, artifacts)
     if (set(manifest) != {"version", "contract", "artifacts"}
             or type(manifest["version"]) is not int or manifest["version"] not in (1, 2, 3)):
         raise ValueError("Source input names version 1, 2 or 3, contract and artifacts")
@@ -80,6 +113,9 @@ def _documents(envelope: dict, artifacts):
             entry = _entry(manifest, entry)
             if reference(entry)["sha256"] != pin:
                 raise ValueError("Source input differs from approved artifact hash")
+    if publish:  # each inline piece, before the output that names it
+        for ref, data in inline.values():
+            source_readings.publish(artifacts)(ref, data)
     return manifest, contract, execution, inputs
 
 
@@ -264,7 +300,7 @@ def _output(envelope: dict, artifacts, documents=None, sink=None) -> bytes:
 
 
 def execute(envelope: dict, artifacts) -> dict:
-    documents = _documents(envelope, artifacts)
+    documents = _documents(envelope, artifacts, publish=True)
     read = documents[1].get("read")
     if isinstance(read, dict) and "stream" in read:
         output = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=True,

@@ -70,6 +70,12 @@ def _index(ref, artifacts, max_bytes, allow_lookup_receipts):
     return body, size
 
 
+def index(ref, artifacts) -> dict:
+    """A verified reading's index alone, checked as every consumer checks it (no
+    lookup receipts, which a consumer must bind into its own output's identity)."""
+    return _index(ref, artifacts, INDEX_BYTES, False)[0]
+
+
 def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
     """Yield authenticated chunks; exhaustion is required before publication."""
     rows = 0

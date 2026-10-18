@@ -2,7 +2,7 @@
 
 Priority: 73, tier 4, housekeeping (numbered after the map was charted). Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/27-mdm-is-just-mdm-code.md` on 2026-10-13.
 
-Status: open
+Status: open, waits for an ownership decision (2026-10-18 18:04 ET): Grok's branch `grok/data-operations-stores` (no PR, last commit 2026-10-17) changes 11 files that import `edgar_warehouse.mdm.clean`; moving the package breaks that branch, so the operator decides who goes first (CLAUDE.md, overlap).
 Blocked by: none (mastering-to-done 26 merged as #956)
 
 The second half of the operator's "Purge Clean from MDM" (2026-10-13). Each part needs a GoF consult first, and a check that no Codex PR touches the files.

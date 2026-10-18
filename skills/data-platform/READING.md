@@ -776,6 +776,25 @@ even when selection yields no rows. JSON streaming supports these indexed
 sets; XML streaming currently refuses them explicitly. Eager configured reads
 retain their declared-format support.
 
+**A reading read in pieces (version 4).** A step after a combine, whose
+pieces exist only once the combine has run, is still one unit known before
+the run: its input names the verified reading and the contract, nothing else:
+
+```json
+{"version":4,"contract":{"uri":"s3://bucket/record.yaml","sha256":"<hash>"},
+ "pieces":{"uri":"s3://bucket/combined.json","sha256":"<hash>"}}
+```
+
+Each piece is read as its own file with no context: a large reading's parts,
+or a small reading's inline rows, which the worker writes once beside its
+output under their hash for the verifier to read back. Each piece is a
+document `{"version":1,"tables":{...},"deferred":[...]}`, so the contract
+reads a table with `each: tables.<name>`. A reading with more pieces than the
+contract's `max_artifacts` is refused, and so is an empty reading (no
+piece) and a reading that carries lookup receipts, whose evidence a piece
+cannot keep. In a Bookkeeping target the `pieces` receipt is a composed slot
+naming the combine's unit.
+
 A consumer must bind lookup evidence into its output identity. The configured
 combiner supports this: its scope hashes the complete source-extract receipts, so
 identical rows under different lookup receipts remain distinct for downstream
