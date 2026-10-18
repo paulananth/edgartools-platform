@@ -27,8 +27,8 @@ given.
   - what the adversarial set counts as a violation
 - [ ] ~~5. Measuring the classification proof needs code: `rules measure`, plus~~ deferred until a measured matching rule needs it (ticket 12's ruling) (2026-10-18 14:00 ET)
   the sample draw and the labelling-agent steps (Q7, Q12)
-- [ ] 6. Writing and checking the rules files needs code: `files.source`
-  round-trip as a command
+- [x] 6. Writing and checking the rules files needs code: `files.source`
+  round-trip as a command (built: `edgar-warehouse rules check [--source <s>]`, offline. Each file loads (the loader refuses a value YAML would guess; a body built in code must hold JSON values only), each Bookkeeping target and the acquisition hold, and the merge rules pass `check_policy`; a loader's refusal names its kind and the file, never a line of it; an engine refusal keeps its fixed words. `files.check_document` is the one list of checks, and `rules save` / `rules load` now run it too, so they refuse a source with an invalid target or merge rules that fail `check_policy`, which they accepted before. All 13 repository documents pass. data-onboarding's "check it" steps use it, and its not-built `rules check` row (a sample dry run, moved to ticket 14's `rules test`) is gone. GoF consult: one list of checks shared with `Rules.save` (done). `tests/unit/test_rules_check.py` 6 passed, including `Rules.save` refusing before any database work; affected tests 1,777 passed (8 min 53 s locally: the integration folder was included, which should have been left to CI), 2026-10-18 17:44 ET)
 - [ ] ~~7. Profile needs code: `rules profile` (rules-skill ticket 06)~~ struck: the data-profiling skill profiles a source (ticket 12's ruling) (2026-10-18 14:00 ET)
 - [ ] ~~8. Quality counts need code: part of `rules check`~~ moved to ticket 14 (the test run counts each quality check) (2026-10-18 14:00 ET)
 - [x] 9. Adding a kind broke pinned tests: fixed by #769 (05a). Add a line to
@@ -64,3 +64,6 @@ given.
 - [x] 16. Relationships come with MDM (operator, 2026-10-01) (plan-parts already onboards `together` relationships with their master; added under map's Relationships: count each wording that states a relationship and bring it to the operator as a proposed link in the same onboarding, the name kept as written until ruled, 2026-10-16 19:46 ET). The skill must
   plan person–role–entity links in the same onboarding, including names that
   state a relationship ("a series of", "Trustee UAD", "dba", "ET AL")
+- [x] Three-axis review (2026-10-18 17:48 ET). GoF: leave it. Standards: the `LAYOUT` comment kept beside its table, an engine refusal's words kept, the real root in the missing message, `Rules.save`'s refusal tested (all done). Spec: the round trip described as what it proves (JSON values only), `rules check` added to the skill's `--root` list, the quality output line uses it (all done); rules integration tests 13 passed after the rebase
+- [ ] PR, CI, merge
+- [ ] Learning → skill: data-onboarding "Write" and "Read rules files": check a rules file with `rules check --source <s>`, not Python

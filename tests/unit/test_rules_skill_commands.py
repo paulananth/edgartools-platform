@@ -15,7 +15,7 @@ FILES = [
     SKILLS / "refining-rules" / "SKILL.md",
 ]
 # Named with a fallback, and marked "not built" in data-onboarding's table.
-NOT_BUILT = {"check"}
+NOT_BUILT: set[str] = set()
 
 
 def _built():

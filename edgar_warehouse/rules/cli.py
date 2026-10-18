@@ -185,6 +185,14 @@ def _mapdoc(args):
     return 1 if args.action == "check" and any(changed.values()) else 0
 
 
+def _check(args):
+    """Each rules file checked as `rules save` would, offline, so an agent that
+    edited one as text never writes Python to see whether it still holds."""
+    results = files.check(args.source or None, Path(args.root))
+    print(json.dumps(results, indent=2, sort_keys=True))
+    return 0 if all(value == "ok" for value in results.values()) else 1
+
+
 def _catalog(args):
     """The Data Catalog, from the rules files alone: `plan` prints what would
     be published; `publish` makes the OpenMetadata catalog equal to it."""
@@ -252,6 +260,11 @@ def register(subparsers):
     test.add_argument("--out", required=True, type=Path, help="Where the counts-only report is written")
     test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
     test.set_defaults(handler=_test)
+    check = commands.add_parser("check", help="Check each rules file as `rules save` would, offline: "
+                                "it loads, its targets and acquisition hold, the merge rules pass")
+    check.add_argument("--source", action="append", help="Only this source (repeatable); default every file")
+    check.add_argument("--root", default=str(files.ROOT))
+    check.set_defaults(handler=_check)
     pending = commands.add_parser("pending", help="Versions with a test run and no approval yet: evidence and changes")
     pending.set_defaults(handler=_handle)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):
