@@ -85,6 +85,9 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 - [One definition of the manifest task](issues/66-duckdb-retirement-cutover-23-consolidate-snowflake-run-manifest-task-definitions.md): Terraform owns `SNOWFLAKE_RUN_MANIFEST_TASK`; the script and bootstrap copies deleted, held by a test (#1076); the duplicated procedures are ticket 109
 - [dbt and installs run through uv](issues/64-uv-migration-03-audit-dbt-invocation-sites.md): the runbook's dbt commands (#1078) and the dashboard and runbook installs ([65](issues/65-uv-migration-04-fix-examples-dashboard-pip-install-drift.md), #1079)
 - [N-PORT's entity model](issues/30-nport-fund-holdings-07-entity-model-for-fund-complex.md): registrant a Company by CIK, series a Fund by series id and LEI, the instrument a Security by CUSIP or ISIN; questions 26-29 answered or moved to ticket 79's HOLDS part and ticket 71
+- [Profiling ranks several sources](issues/110-profiling-ranks-several-sources.md): `rank_sources.py` measures coverage, one-value rate and pairwise agreement per field and writes the order in the kind file's shape (#1080)
+- [Which filed words a Security keeps](issues/84-security-filed-words.md): OpenFIGI names a Security first, then N-PORT, then 13F; the title keeps the filed words; 3,688 of 3,927 cohort Securities take OpenFIGI's name (#1085)
+- [rules test first](issues/12-mastering-to-done-09-test-check-and-preview-for-onboarding.md): the other onboarding commands fold into `rules test` (ticket 14); `rules profile` dropped
 
 ## Not yet specified
 
