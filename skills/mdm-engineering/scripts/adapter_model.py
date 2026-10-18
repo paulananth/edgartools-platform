@@ -36,6 +36,15 @@ def native_registry_model(dialect: str) -> tuple[MetaData, dict[str, Table]]:
     metadata = MetaData(schema=None if dialect == "mysql" else "mdm")
     body = JSON().with_variant(JSONB(), "postgresql")
     source = UnicodeText().with_variant(LONGTEXT(charset="utf8mb4"), "mysql").with_variant(NVARCHAR(None), "mssql")
+
+    def source_columns():
+        columns = [Column("source_code", source, primary_key=dialect == "postgresql", nullable=False)]
+        if dialect != "postgresql":
+            # Retain unbounded Unicode verbatim; hash its UTF-8 bytes for an
+            # exact, source-leading key independent of database collation.
+            columns.append(Column("source_key", String(64), primary_key=True, nullable=False))
+        return columns
+
     tables = {
         "policy": Table(
             "policy", metadata,
@@ -44,23 +53,18 @@ def native_registry_model(dialect: str) -> tuple[MetaData, dict[str, Table]]:
         ),
         "dataset": Table(
             "dataset", metadata,
-            Column("source_code", source, primary_key=dialect == "postgresql", nullable=False),
+            *source_columns(),
             Column("registry_version", Uuid(as_uuid=False), nullable=False),
             Column("body", body, nullable=False),
         ),
         "dataset_mapping": Table(
             "dataset_mapping", metadata,
-            Column("source_code", source, primary_key=dialect == "postgresql", nullable=False),
+            *source_columns(),
             Column("mapping_version", BigInteger, primary_key=True, autoincrement=False),
             Column("body", body, nullable=False),
             Column("registry_version", Uuid(as_uuid=False), nullable=False),
         ),
     }
-    if dialect != "postgresql":
-        # Unbounded source names are retained verbatim. Their UTF-8 hashes
-        # provide compact exact keys independent of database text collation.
-        for name in ("dataset", "dataset_mapping"):
-            tables[name].append_column(Column("source_key", String(64), primary_key=True, nullable=False))
     return metadata, tables
 
 

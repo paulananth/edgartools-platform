@@ -92,15 +92,20 @@ def retain_policy(conn, body: dict, digest: str) -> None:
             raise AdapterError("Policy digest collision") from None
 
 
-def dataset_reading(conn, code: str, version: int | None = None) -> dict | None:
-    """One native mapping by its source key and optionally its frozen version."""
-    _, tables = native_registry_model(conn.dialect.name)
+def dataset_reading_statement(dialect: str, code: str, version: int | None = None):
+    """The indexed native mapping query, also exposed for plan qualification."""
+    _, tables = native_registry_model(dialect)
     table = tables["dataset_mapping"]
-    identity = table.c.source_code == code if conn.dialect.name == "postgresql" else table.c.source_key == key(code)
+    identity = table.c.source_code == code if dialect == "postgresql" else table.c.source_key == key(code)
     statement = select(table.c.source_code, table.c.mapping_version, table.c.body, table.c.registry_version).where(identity)
     if version is not None:
         statement = statement.where(table.c.mapping_version == version)
-    row = conn.execute(statement.order_by(table.c.mapping_version.desc()).limit(1)).mappings().first()
+    return statement.order_by(table.c.mapping_version.desc()).limit(1)
+
+
+def dataset_reading(conn, code: str, version: int | None = None) -> dict | None:
+    """One native mapping by its source key and optionally its frozen version."""
+    row = conn.execute(dataset_reading_statement(conn.dialect.name, code, version)).mappings().first()
     if row is None:
         return None
     if row["source_code"] != code:

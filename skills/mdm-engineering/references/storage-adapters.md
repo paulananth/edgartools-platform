@@ -62,6 +62,32 @@ no authority to approve or activate a source. Test/report those integrations
 separately; passing this helper does not make a refused application command
 supported.
 
+## Native registry integration
+
+The existing registrar now delegates immutable policy retention and versioned
+dataset mapping reads/writes to this skill's adapter. Governance still checks
+qualification, approval and protected contract parts in the shared engine.
+These helpers use the caller's existing transaction and principal; they do not
+connect as an owner, apply native migrations or activate a source. Frozen runs
+keep their original mapping versions. Worker runtime pins include all three
+adapter implementation files, which ship with the installed engine.
+
+Keep unbounded source names as Unicode text. Where a text index has bounded
+keys or database collation changes equality, index the UTF-8 digest and check
+the retained exact name on readback. Put the source key before the mapping
+version in its index, and prove both latest and frozen-version seeks with the
+actual engine's plan.
+
+Contain a concurrent identical registration with a savepoint, preserving the
+caller transaction. On a duplicate, a shared current read sees the winner
+under repeatable-read isolation. An exclusive lock upgrade can deadlock the
+other duplicate registrars; force overlapping inserts in the regression test.
+An unrelated integrity failure remains a failure.
+
+Registry-operation tests on isolated tables do not qualify a native migration,
+Merge Stage, control protocol or source activation. Complete those remaining
+operations through the owning workflow before reporting engine support.
+
 ## Resolve the selected target
 
 Read the operator's engine and environment separately. An all-three request

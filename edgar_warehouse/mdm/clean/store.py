@@ -42,9 +42,10 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
 
 def storage_adapter():
     """Load the canonical skill-owned adapter in a checkout or installed bundle."""
-    from edgar_warehouse.rules.files import BUNDLED
+    from edgar_warehouse.rules.files import BUNDLE_DATA
 
-    package = "edgar_warehouse.bundle_data.skills" if BUNDLED.is_dir() else "skills"
+    bundled_adapter = BUNDLE_DATA / "skills" / "mdm-engineering" / "scripts" / "database_adapter.py"
+    package = "edgar_warehouse.bundle_data.skills" if bundled_adapter.is_file() else "skills"
     return import_module(f"{package}.mdm-engineering.scripts.database_adapter")
 
 

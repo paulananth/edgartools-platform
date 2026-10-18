@@ -106,6 +106,9 @@ include = [
 
 [tool.hatch.build.targets.wheel.force-include]
 "crates/source-contract/contracts/thirteenf/contract.yaml" = "edgar_warehouse/config/source_contracts/thirteenf.yaml"
+"skills/mdm-engineering/scripts/database_adapter.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/database_adapter.py"
+"skills/mdm-engineering/scripts/adapter_model.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/adapter_model.py"
+"skills/mdm-engineering/scripts/adapter_sql.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/adapter_sql.py"
 
 [tool.pytest.ini_options]
 markers = []

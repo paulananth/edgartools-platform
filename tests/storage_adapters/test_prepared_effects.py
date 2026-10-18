@@ -129,6 +129,8 @@ def test_native_policy_registration_uses_the_selected_engine_and_transaction(dat
     assert len(set(digests)) == 1
     with admin.connect() as conn:
         assert len(storage_api.registered_policies(conn)) == 2
+    for version in (None, 1):
+        assert_index_lookup(admin, storage_api.dataset_reading_statement(admin.dialect.name, "fixture.records", version), "dataset_mapping")
 
 
 def test_generically_persists_all_requested_and_unrelated_types(adapters, storage_api):
@@ -484,19 +486,15 @@ def test_evidence_is_immutable_and_pending_initialization_cannot_write(
     assert count(owner, "batch") == 1 and count(owner, "evidence") == 1
 
 
-def test_lookup_plan_seeks_the_storage_key_on_every_engine(adapters, storage_api):
-    owner, runtime, _ = adapters
-    request = batch(storage_api)
-    runtime.apply(request, runtime.claim(request.scope, "writer"))
-    statement = owner.lookup_statement([(e.type, e.id) for e in request.objects[:2]])
+def assert_index_lookup(engine, statement, name):
+    """Require an actual key seek, never a table or full-index scan."""
     sql = str(
         statement.compile(
-            dialect=owner.engine.dialect, compile_kwargs={"literal_binds": True}
+            dialect=engine.dialect, compile_kwargs={"literal_binds": True}
         )
     )
-    name = owner.tables["current"].name
-    with owner.engine.connect() as conn:
-        if owner.engine.dialect.name == "postgresql":
+    with engine.connect() as conn:
+        if engine.dialect.name == "postgresql":
             conn.execute(text("SET LOCAL enable_seqscan=off"))
             plan = conn.execute(text("EXPLAIN (FORMAT JSON) " + sql)).scalar()[0][
                 "Plan"
@@ -511,7 +509,7 @@ def test_lookup_plan_seeks_the_storage_key_on_every_engine(adapters, storage_api
             assert accesses and all(
                 n["Node Type"] in {"Index Scan", "Index Only Scan"} for n in accesses
             )
-        elif owner.engine.dialect.name == "mysql":
+        elif engine.dialect.name == "mysql":
             plan = json.loads(conn.execute(text("EXPLAIN FORMAT=JSON " + sql)).scalar())
 
             def entries(node):
@@ -544,6 +542,14 @@ def test_lookup_plan_seeks_the_storage_key_on_every_engine(adapters, storage_api
                 "Index Scan" in operation or "Table Scan" in operation
                 for operation in operations
             )
+
+
+def test_lookup_plan_seeks_the_storage_key_on_every_engine(adapters, storage_api):
+    owner, runtime, _ = adapters
+    request = batch(storage_api)
+    runtime.apply(request, runtime.claim(request.scope, "writer"))
+    statement = owner.lookup_statement([(e.type, e.id) for e in request.objects[:2]])
+    assert_index_lookup(owner.engine, statement, owner.tables["current"].name)
 
 
 def test_large_payload_and_chunked_key_lists_preserve_the_complete_request(
