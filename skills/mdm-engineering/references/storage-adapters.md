@@ -55,6 +55,36 @@ exact payload bytes, then `ack_outbox` with the verified hash and fence.
 An overtaken generation is refused; the helper never resolves a newer
 generation at save time and treats it as the preparation's original pin.
 
+For distinct publication bodies, explicitly migrate with `--protocol 2` and
+provide `payloads_json` (consumer name to exact JSON text), or programmatic
+`PreparedBatch.payloads`. Its keys must equal the frozen consumer set. Each
+outbox entry retains that consumer's original bytes and destination-computed
+hash. Omitting the map preserves the version-1 request representation and
+replay identity; the upgraded store still accepts those original requests.
+The top-level payload remains required and is unused for version-2 delivery.
+
+An upgrade appends migration history and preserves populated state. Pending
+state disables old entry points before procedure replacement; mutation guards
+installed first also fence calls already inside a legacy procedure. Their
+current locking read of the migration ledger either drains such a call before
+pending or refuses its write. Do not also acquire the generation gate in the
+migration barrier: that introduces an opposing lock order. Qualify actual
+overlap, partial replacement, resume, old-batch replay and guard readback on
+every selected engine. MySQL procedure replacement temporarily removes its
+EXECUTE grant; final migration restores only the restricted grants.
+
+MySQL's independent table options may compile in a different order in another
+Python process. Normalize only those known equivalent options for stable
+fingerprints. Recognize the exact historical version-1 permutations without
+rewriting their ledger checksums; reject other changes and downgrade attempts.
+
+The existing engine's environment-backed connection helper delegates driver
+selection to this adapter. PostgreSQL retains its configured role selection.
+MySQL and SQL Server authenticate the configured runtime principal directly;
+an owner login is refused rather than impersonated. Close a rejected raw
+connection before raising, because the pool has not adopted that session yet.
+This connection proof does not qualify the native Store's remaining operations.
+
 This prepared-effect API is not a drop-in replacement for the application's
 native Store, Rules, Bookkeeping, reference or source-activation commands.
 It supplies no second matching/identity/survivorship algorithm and accepts

@@ -16,9 +16,10 @@ import hashlib
 import json
 import os
 import re
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from decimal import Decimal
+from itertools import permutations
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from sqlalchemy import (
     String,
     cast,
     create_engine,
+    event,
     inspect,
     insert,
     literal,
@@ -42,10 +44,10 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 
 if __package__:
     from .adapter_model import model, native_registry_model
-    from .adapter_sql import capabilities, commit_guards
+    from .adapter_sql import capabilities, commit_guards, migration_guards
 else:
     from adapter_model import model, native_registry_model
-    from adapter_sql import capabilities, commit_guards
+    from adapter_sql import capabilities, commit_guards, migration_guards
 
 
 class AdapterError(ValueError):
@@ -165,7 +167,7 @@ def counter(value: int, *, positive=False) -> str:
     return str(value)
 
 
-def connect(value: str, selected: str):
+def connect(value: str, selected: str, *, runtime_role: str | None = None):
     url = make_url(value)
     if (
         selected not in {"postgresql", "mysql", "mssql"}
@@ -179,7 +181,33 @@ def connect(value: str, selected: str):
     }
     if "+" not in url.drivername:
         url = url.set(drivername=drivers[selected])
-    return create_engine(url, hide_parameters=True, pool_pre_ping=True)
+    engine = create_engine(url, hide_parameters=True, pool_pre_ping=True)
+    if runtime_role is not None:
+        quoted = engine.dialect.identifier_preparer.quote(runtime_role)
+
+        @event.listens_for(engine, "connect")
+        def select_runtime_principal(dbapi_connection, _):
+            try:
+                with dbapi_connection.cursor() as cursor:
+                    if selected == "postgresql":
+                        cursor.execute(f"SET ROLE {quoted}")
+                    else:
+                        # These stores authenticate the runtime login directly.
+                        # Never emulate SET ROLE with owner-side impersonation.
+                        cursor.execute("SELECT CURRENT_USER()" if selected == "mysql"
+                                       else "SELECT USER_NAME(), ORIGINAL_LOGIN()")
+                        principal = cursor.fetchone()
+                        valid = (principal[0].rsplit("@", 1)[0] == runtime_role if selected == "mysql"
+                                 else principal == (runtime_role, runtime_role))
+                        if not valid:
+                            raise AdapterError("Authenticate as the configured runtime principal")
+                dbapi_connection.commit()
+            except BaseException:
+                # The pool has not adopted this connection yet. In particular,
+                # pymssql must not retain a rejected login's database session.
+                dbapi_connection.close()
+                raise
+    return engine
 
 
 @dataclass(frozen=True)
@@ -216,6 +244,7 @@ class PreparedBatch:
     consumers: tuple[str, ...]
     payload: Any
     evidence: tuple[Effect, ...] = ()
+    payloads: dict[str, Any] | None = None
 
     def intent(self) -> str:
         for value in (self.batch, self.run, self.scope):
@@ -252,6 +281,14 @@ class PreparedBatch:
                 {"consumer": c.encode().hex()} for c in sorted(self.consumers)
             ],
         }
+        if self.payloads is not None:
+            if not isinstance(self.payloads, dict) or set(self.payloads) != set(self.consumers):
+                raise AdapterError("Publication payloads must name exactly the frozen consumers")
+            result["version"] = "2"
+            result["consumers"] = [
+                {"consumer": c.encode().hex(), "payload": document(self.payloads[c]).hex()}
+                for c in sorted(self.consumers)
+            ]
         # The wire document is ASCII; opaque original UTF-8 bodies remain bytes.
         return json.dumps(
             result, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -304,16 +341,20 @@ ERRORS = frozenset(
 class Adapter:
     """One storage interface; the caller supplies all domain decisions."""
 
-    def __init__(self, engine, *, prefix="skill_merge"):
+    def __init__(self, engine, *, prefix="skill_merge", protocol=1):
         if engine.dialect.name not in {"postgresql", "mysql", "mssql"}:
             raise AdapterError("Unsupported selected database engine")
         self.engine = engine
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
+        if type(protocol) is not int or protocol not in (1, 2):
+            raise AdapterError("Unsupported storage protocol")
+        self.protocol = protocol
         self.metadata, self.tables = model(prefix, self.schema)
-        self.routines = capabilities(engine.dialect, self.tables, prefix)
+        self.routines = capabilities(engine.dialect, self.tables, prefix, protocol=protocol)
         self.commit_guards = commit_guards(engine.dialect, self.tables, prefix)
+        self.migration_guards = migration_guards(engine.dialect, self.tables, prefix) if protocol >= 2 else []
 
     def _rpc(self, operation, values):
         name = self.routines[operation][0]
@@ -376,8 +417,8 @@ class Adapter:
             for name, value in result.items()
         }
 
-    def generation(self) -> int:
-        with self.engine.connect() as conn:
+    def generation(self, *, connection=None) -> int:
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
             value = conn.scalar(
                 select(self.tables["gate"].c.generation).where(
                     self.tables["gate"].c.id == 1
@@ -387,9 +428,9 @@ class Adapter:
             raise AdapterError("missing_storage_gate")
         return int(value)
 
-    def checkpoint(self, scope: str) -> int:
+    def checkpoint(self, scope: str, *, connection=None) -> int:
         table = self.tables["checkpoint"]
-        with self.engine.connect() as conn:
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
             value = conn.scalar(
                 select(table.c.position).where(
                     table.c.scope_key == self._bound_key(scope)
@@ -406,7 +447,7 @@ class Adapter:
             )
         return cast(literal(key(value)), String(64))
 
-    def lookup_statement(self, keys):
+    def lookup_statement(self, keys, *, immutable=False):
         if not keys:
             raise AdapterError("A nonempty lookup key collection is required")
 
@@ -419,7 +460,7 @@ class Adapter:
         wanted = (
             union_all(*selections) if len(selections) > 1 else selections[0]
         ).subquery("wanted")
-        table = self.tables["current"]
+        table = self.tables["evidence" if immutable else "current"]
         condition = (table.c.type_key == wanted.c.type_key) & (
             table.c.id_key == wanted.c.id_key
         )
@@ -436,14 +477,25 @@ class Adapter:
         )
         return statement.with_hint(table, hint, dialect_name=self.engine.dialect.name)
 
-    def read(self, keys) -> dict[tuple[str, str], dict]:
+    @staticmethod
+    def _read_record(row) -> dict:
+        body = bytes(row["body"])
+        if hashlib.sha256(body).hexdigest() != row["body_hash"]:
+            raise AdapterError("object_content_hash_mismatch")
+        return {
+            "body": body,
+            "body_hash": row["body_hash"],
+            **{name: int(row[name]) for name in ("version", "generation") if name in row},
+        }
+
+    def read(self, keys, *, immutable=False, connection=None) -> dict[tuple[str, str], dict]:
         unique = list(dict.fromkeys(keys))
         found = {}
         # Divide the complete list below the engine's bound-parameter limit.
         for start in range(0, len(unique), 400):
-            with self.engine.connect() as conn:
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
                 rows = (
-                    conn.execute(self.lookup_statement(unique[start : start + 400]))
+                    conn.execute(self.lookup_statement(unique[start : start + 400], immutable=immutable))
                     .mappings()
                     .all()
                 )
@@ -454,13 +506,40 @@ class Adapter:
                 )
                 if identity not in unique[start : start + 400]:
                     raise AdapterError("object_digest_collision")
-                found[identity] = {
-                    "body": bytes(row["body"]),
-                    "version": int(row["version"]),
-                    "generation": int(row["generation"]),
-                    "body_hash": row["body_hash"],
-                }
+                found[identity] = self._read_record(row)
         return found
+
+    def type_statement(self, type: str, *, after: str | None = None):
+        """One bounded seek of an opaque type's primary-key prefix."""
+        table = self.tables["current"]
+        statement = select(table).where(table.c.type_key == self._bound_key(type))
+        if after is not None:
+            statement = statement.where(table.c.id_key > after)
+        statement = statement.order_by(table.c.id_key).limit(400)
+        if self.engine.dialect.name in {"mysql", "mssql"}:
+            hint = "FORCE INDEX (PRIMARY)" if self.engine.dialect.name == "mysql" else "WITH (FORCESEEK)"
+            statement = statement.with_hint(table, hint, dialect_name=self.engine.dialect.name)
+        return statement
+
+    def iter_type(self, type: str, *, connection=None):
+        """Read a keyed index's opaque entries without a table scan or size cap.
+
+        A native caller gives each lookup key its own opaque type. It must not
+        use a whole entity collection to compute a batch's affected scope.
+        Supply the caller's connection when its reads share a transaction.
+        """
+        after = None
+        while True:
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+                rows = conn.execute(self.type_statement(type, after=after)).mappings().all()
+            for row in rows:
+                identity = (bytes(row["type_bytes"]).decode(), bytes(row["id_bytes"]).decode())
+                if identity[0] != type or key(identity[1]) != row["id_key"]:
+                    raise AdapterError("object_digest_collision")
+                yield identity, self._read_record(row)
+            if len(rows) < 400:
+                return
+            after = rows[-1]["id_key"]
 
     def history(self, type: str, id: str) -> list[dict]:
         table = self.tables["history"]
@@ -968,10 +1047,34 @@ def _verify_capabilities(conn, adapter):
             raise AdapterError("Installed storage commit guard differs from this build")
 
 
-def migrate(
-    engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge"
-) -> dict:
-    adapter = Adapter(engine, prefix=prefix)
+def _verify_migration_guards(conn, adapter, *, install=False):
+    for name, function, ddl, table, body in adapter.migration_guards:
+        values = {"schema": adapter.schema, "name": name, "table": adapter.tables[table].name}
+        if conn.dialect.name == "postgresql":
+            qualified = conn.dialect.identifier_preparer.format_table(adapter.tables[table])
+            values.update(function=name + "_check", qualified=qualified)
+            fn = conn.execute(text("SELECT p.prosrc,p.prosecdef,p.proconfig FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=:schema AND p.proname=:function AND p.pronargs=0"), values).first()
+            if fn is None and install:
+                conn.execute(text(function))
+            elif (fn is None or fn[0] != body or not fn[1]
+                  or not any(config.replace(" ", "") == "search_path=pg_catalog,pg_temp" for config in fn[2] or [])):
+                raise AdapterError("Installed storage migration guard differs from this build")
+            row = conn.execute(text("SELECT t.tgtype,t.tgenabled,t.tgqual,p.proname,n.nspname FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace WHERE t.tgrelid=to_regclass(:qualified) AND t.tgname=:name"), values).first()
+            matches = row is not None and tuple(row) == (23, "O", None, name + "_check", adapter.schema)
+        elif conn.dialect.name == "mysql":
+            row = conn.execute(text("SELECT ACTION_STATEMENT,ACTION_TIMING,EVENT_MANIPULATION FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=:schema AND TRIGGER_NAME=:name AND EVENT_OBJECT_TABLE=:table"), values).first()
+            matches = row is not None and tuple(row) == (body, "BEFORE", name.rsplit("_", 1)[1].upper())
+        else:
+            row = conn.execute(text("SELECT m.definition,m.execute_as_principal_id,t.is_disabled,t.is_instead_of_trigger FROM sys.triggers t JOIN sys.sql_modules m ON m.object_id=t.object_id JOIN sys.objects o ON o.object_id=t.parent_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE s.name=:schema AND t.name=:name AND o.name=:table"), values).first()
+            matches = row is not None and row[0].replace("\r\n", "\n").strip() == ddl.strip() and tuple(row[1:]) == (-2, False, False)
+        if row is None and install:
+            conn.execute(text(ddl))
+        elif not matches:
+            raise AdapterError("Installed storage migration guard differs from this build")
+
+
+def _migration_statements(adapter) -> list[str]:
+    engine = adapter.engine
     statements = [
         str(CreateTable(t).compile(dialect=engine.dialect))
         for t in adapter.metadata.sorted_tables
@@ -987,7 +1090,40 @@ def migrate(
         for _, function, trigger, *_ in adapter.commit_guards
         for sql in (function, trigger)
     ]
-    checksum = hashlib.sha256("\n".join(statements).encode()).hexdigest()
+    statements += [sql for _, function, trigger, *_ in getattr(adapter, "migration_guards", ())
+                   for sql in (function, trigger) if sql is not None]
+    if engine.dialect.name == "mysql":
+        # SQLAlchemy orders these independent options through a set. Python's
+        # hash seed must not change an immutable migration fingerprint.
+        options = ("ENGINE=InnoDB", "CHARSET=ascii", "COLLATE ascii_bin")
+        alternatives = "|".join(re.escape(" ".join(order)) for order in permutations(options))
+        statements = [re.sub(r"(?m)\)(?:" + alternatives + r")$", ")" + " ".join(options), sql)
+                      for sql in statements]
+    return statements
+
+
+def _migration_checksums(adapter) -> frozenset[str]:
+    statements = _migration_statements(adapter)
+    compiled = "\n".join(statements)
+    variants = {compiled}
+    if adapter.protocol == 1 and adapter.engine.dialect.name == "mysql":
+        # Recognize only the exact historical compiler permutations. Retain
+        # the installed ledger checksum verbatim; do not bless arbitrary DDL.
+        options = ("ENGINE=InnoDB", "CHARSET=ascii", "COLLATE ascii_bin")
+        variants.update(compiled.replace(")" + " ".join(options) + "\n",
+                        ")" + " ".join(order) + "\n") for order in permutations(options))
+    return frozenset(hashlib.sha256(sql.encode()).hexdigest() for sql in variants)
+
+
+def migrate(
+    engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1
+) -> dict:
+    if type(protocol) is not int or protocol not in (1, 2):
+        raise AdapterError("Unsupported storage protocol")
+    builds = {version: Adapter(engine, prefix=prefix, protocol=version) for version in range(1, protocol + 1)}
+    checksums = {version: hashlib.sha256("\n".join(_migration_statements(build)).encode()).hexdigest()
+                 for version, build in builds.items()}
+    adapter = builds[protocol]
     ledger = adapter.tables["migration"]
     with (
         engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn,
@@ -1017,23 +1153,37 @@ def migrate(
             ):
                 raise AdapterError("Refusing untracked storage objects")
             ledger.create(conn)
-            conn.execute(
-                insert(ledger).values(version=1, checksum=checksum, complete=0)
-            )
         rows = conn.execute(select(ledger)).mappings().all()
-        if len(rows) != 1 or rows[0]["version"] != 1 or rows[0]["checksum"] != checksum:
+        installed = {int(row["version"]): row for row in rows}
+        if (len(installed) != len(rows) or set(installed) - set(builds)
+                or any(row["checksum"] not in _migration_checksums(builds[version]) for version, row in installed.items())
+                or installed and set(installed) != set(range(1, max(installed) + 1))):
             raise AdapterError("Installed storage migration differs from this build")
-        fresh = not bool(rows[0]["complete"])
-        if fresh:
+        fresh = any(version not in installed or not installed[version]["complete"] for version in builds)
+        if installed and all(row["complete"] for row in installed.values()):
+            _verify_capabilities(conn, builds[max(installed)])
+        for version, build in builds.items():
+            prior = installed.get(version)
+            if prior is not None and prior["complete"]:
+                continue
+            if prior is None:
+                if version >= 2:
+                    _verify_migration_guards(conn, build, install=True)
+                # Publish the pending version and disable old write routines
+                # in one transaction, before any DDL (which may auto-commit).
+                # Otherwise old routines can still write during a half-upgrade.
+                with engine.begin() as barrier:
+                    barrier.execute(update(ledger).values(complete=0))
+                    barrier.execute(insert(ledger).values(version=version, checksum=checksums[version], complete=0))
             adapter.metadata.create_all(conn)
             gate = adapter.tables["gate"]
             if conn.scalar(select(gate.c.id).where(gate.c.id == 1)) is None:
                 conn.execute(insert(gate).values(id=1, generation=0))
-            for name, sql in adapter.routines.values():
+            for name, sql in build.routines.values():
                 if engine.dialect.name == "mysql":
                     conn.exec_driver_sql(f"DROP PROCEDURE IF EXISTS {name}")
                 conn.execute(text(sql))
-            for _, function, trigger, table, trigger_name, _ in adapter.commit_guards:
+            for _, function, trigger, table, trigger_name, _ in build.commit_guards:
                 conn.execute(text(function))
                 conn.execute(
                     text(
@@ -1095,11 +1245,12 @@ def migrate(
             ):
                 raise AdapterError("Storage requires transactional InnoDB tables")
         _verify_capabilities(conn, adapter)
+        _verify_migration_guards(conn, adapter)
         _grants(conn, adapter, runtime_role, runtime_host)
-        conn.execute(update(ledger).where(ledger.c.version == 1).values(complete=1))
+        conn.execute(update(ledger).where(ledger.c.version.in_(builds)).values(complete=1))
     return {
         "initialized": fresh,
-        "migration": 1,
+        "migration": protocol,
         "tables": len(adapter.tables),
         "engine": engine.dialect.name,
     }
@@ -1120,6 +1271,7 @@ def main(argv=None):
     setup = sub.add_parser("migrate")
     setup.add_argument("--runtime-role", required=True)
     setup.add_argument("--runtime-host", default="%")
+    setup.add_argument("--protocol", type=int, choices=(1, 2), default=1)
     principal = sub.add_parser(
         "provision",
         help="Provision a separate test runtime principal; preserve existing passwords",
@@ -1160,6 +1312,7 @@ def main(argv=None):
                 runtime_role=args.runtime_role,
                 runtime_host=args.runtime_host,
                 prefix=args.prefix,
+                protocol=args.protocol,
             )
         else:
             adapter = Adapter(engine, prefix=args.prefix)
@@ -1192,6 +1345,7 @@ def main(argv=None):
                     evidence=effects("evidence"),
                     consumers=tuple(raw["consumers"]),
                     payload=raw.get("payload_json", raw.get("payload")),
+                    payloads=raw.get("payloads_json", raw.get("payloads")),
                 )
                 lease = adapter.claim(batch.scope, args.owner)
                 output = adapter.apply(batch, lease)

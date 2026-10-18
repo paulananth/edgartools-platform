@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 class SQL:
-    def __init__(self, dialect, tables):
+    def __init__(self, dialect, tables, *, protocol=1):
         self.dialect = dialect
         self.name = dialect.name
         self.tables = tables
@@ -17,6 +17,7 @@ class SQL:
             for key, t in tables.items()
         }
         self.schema = next(iter(tables.values())).schema
+        self.protocol = protocol
 
     def v(self, name):
         return ("@v_" if self.name == "mssql" else "v_") + name
@@ -132,10 +133,12 @@ class SQL:
             return "COMMIT; " + selection + "; LEAVE capability;"
         return "COMMIT TRANSACTION; " + selection + "; RETURN;"
 
-    def rows(self, path, *, expected=False, consumer=False):
+    def rows(self, path, *, expected=False, consumer=False, payloads=False):
         """One set-based input relation; all keys and bodies are decoded bytes."""
         source = self.v("intent")
         names = ("consumer",) if consumer else ("type", "id", "body")
+        if consumer and payloads:
+            names += ("payload",)
         if self.name == "postgresql":
             scalar = lambda n: f"(j.value->>'{n}')"
             origin = f"jsonb_array_elements({source}::jsonb->'{path}') AS j(value)"
@@ -199,7 +202,7 @@ class SQL:
         name = f"{quote(self.schema)}.{quote(prefix + '_' + operation)}"
         body = (
             self.guard(
-                f"NOT EXISTS(SELECT 1 FROM {self.names['migration']} m WHERE m.version=1 AND m.complete=1)",
+                f"NOT EXISTS(SELECT 1 FROM {self.names['migration']} m WHERE m.version={self.protocol} AND m.complete=1)",
                 "storage_not_initialized",
             )
             + "\n"
@@ -269,8 +272,8 @@ END""",
         )
 
 
-def capabilities(dialect, tables, prefix):
-    d = SQL(dialect, tables)
+def capabilities(dialect, tables, prefix, *, protocol=1):
+    d = SQL(dialect, tables, protocol=protocol)
     n, v = d.names, d.v
     routines = {}
 
@@ -345,7 +348,12 @@ def capabilities(dialect, tables, prefix):
     f = lambda name: d.field(name, v("intent"))
     incoming = d.rows("objects", expected=True)
     evidence = d.rows("evidence")
-    consumers = d.rows("consumers", consumer=True)
+    consumers = d.rows("consumers", consumer=True, payloads=protocol >= 2)
+    publication_payload = v("payload")
+    consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1)"
+    if protocol >= 2:
+        publication_payload = f"CASE WHEN {f('version')}='2' THEN i.payload_bytes ELSE {v('payload')} END"
+        consumer_refusal += f" OR ({f('version')}='2' AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
     matching = "c.type_key=i.type_key AND c.id_key=i.id_key"
     lease_check = (
         f"NOT EXISTS(SELECT 1 FROM {n['lease']} l WHERE l.scope_key={v('scope_key')} "
@@ -354,7 +362,7 @@ def capabilities(dialect, tables, prefix):
     lines = [
         d.assign("intent", d.field("intent")),
         d.guard(
-            f"{f('version')} IS NULL OR {f('version')}<>'1'",
+            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
             "unsupported_request_version",
         ),
         d.number_guard("fence", positive=True),
@@ -424,7 +432,7 @@ def capabilities(dialect, tables, prefix):
                 "frozen_pins_changed",
             ),
             d.guard(
-                f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1)",
+                consumer_refusal,
                 "invalid_consumers",
             ),
         ]
@@ -491,7 +499,7 @@ def capabilities(dialect, tables, prefix):
             f"UPDATE {n['checkpoint']} SET position={d.integer(f('checkpoint'))} WHERE scope_key={v('scope_key')};",
             f"INSERT INTO {n['checkpoint']}(scope_key,position) SELECT {v('scope_key')},{d.integer(f('checkpoint'))} WHERE NOT EXISTS(SELECT 1 FROM {n['checkpoint']} c WHERE c.scope_key={v('scope_key')});",
             f"UPDATE {n['gate']} SET generation={v('generation')} WHERE id=1;",
-            f"INSERT INTO {n['outbox']}(batch_key,consumer_key,consumer_bytes,payload,payload_hash,fence,verified) SELECT {v('batch_key')},i.consumer_key,i.consumer_bytes,{v('payload')},{d.hash(v('payload'))},0,0 FROM {consumers} i WHERE {v('changed')}=1;",
+            f"INSERT INTO {n['outbox']}(batch_key,consumer_key,consumer_bytes,payload,payload_hash,fence,verified) SELECT {v('batch_key')},i.consumer_key,i.consumer_bytes,{publication_payload},{d.hash(publication_payload)},0,0 FROM {consumers} i WHERE {v('changed')}=1;",
             d.guard(lease_check, "scope_lease_expired_before_save"),
             d.finish(
                 [
@@ -591,6 +599,44 @@ def capabilities(dialect, tables, prefix):
     ]
     save("ack_outbox", lines, variables, {"verified": "int"})
     return routines
+
+
+def migration_guards(dialect, tables, prefix):
+    """Fence already-entered legacy RPCs at their authoritative writes.
+
+    Every mutating RPC holds the gate and writes either the generation gate,
+    a lease or an outbox row. Current locking reads also fence a call whose
+    repeatable-read snapshot predates the migration barrier.
+    """
+    d = SQL(dialect, tables)
+    quote = dialect.identifier_preparer.quote
+    definitions = []
+    for table in ("gate", "lease", "outbox"):
+        name = prefix + "_" + table + "_migration_guard"
+        qualified = f"{quote(d.schema)}.{quote(name)}"
+        if dialect.name == "postgresql":
+            function = qualified + "_check"
+            body = (f"DECLARE ready integer; BEGIN SELECT complete INTO ready FROM {d.names['migration']} "
+                    "ORDER BY version DESC LIMIT 1 FOR SHARE; "
+                    "IF ready IS DISTINCT FROM 1 THEN RAISE EXCEPTION 'storage_not_initialized' USING ERRCODE='P0001'; "
+                    "END IF; RETURN NEW; END")
+            sql = f"CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $guard${body}$guard$;"
+            ddl = f"CREATE TRIGGER {quote(name)} BEFORE INSERT OR UPDATE ON {d.names[table]} FOR EACH ROW EXECUTE FUNCTION {function}();"
+            definitions.append((name, sql, ddl, table, body))
+        elif dialect.name == "mysql":
+            body = (f"BEGIN DECLARE ready BIGINT; SELECT complete INTO ready FROM {d.names['migration']} "
+                    "ORDER BY version DESC LIMIT 1 FOR SHARE; "
+                    "IF ready IS NULL OR ready<>1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='storage_not_initialized'; END IF; END")
+            for event in ("INSERT", "UPDATE"):
+                trigger = name + "_" + event.lower()
+                ddl = f"CREATE TRIGGER {quote(d.schema)}.{quote(trigger)} BEFORE {event} ON {d.names[table]} FOR EACH ROW {body}"
+                definitions.append((trigger, None, ddl, table, body))
+        else:
+            body = (f"BEGIN SET NOCOUNT ON; DECLARE @ready BIGINT; SELECT TOP(1) @ready=complete FROM {d.names['migration']} WITH (UPDLOCK,HOLDLOCK) "
+                    "ORDER BY version DESC; IF @ready IS NULL OR @ready<>1 THROW 50001,'storage_not_initialized',1; END;")
+            ddl = f"CREATE TRIGGER {qualified} ON {d.names[table]} WITH EXECUTE AS OWNER AFTER INSERT,UPDATE AS {body}"
+            definitions.append((name, None, ddl, table, body))
+    return definitions
 
 
 def commit_guards(dialect, tables, prefix):
