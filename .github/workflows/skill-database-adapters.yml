@@ -1,0 +1,39 @@
+name: Skill database adapters
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: skill-database-adapters-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: Skill adapter (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [postgresql, mysql, mssql]
+    env:
+      SKILL_ADAPTER_TEST_ENGINE: ${{ matrix.engine }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+      - name: Install shared merge engine and database clients
+        run: |
+          uv sync --frozen --extra mdm --extra mdm-runtime
+          uv pip install 'PyMySQL[rsa]>=1.1,<2' 'pymssql>=2.3,<3'
+      - name: Qualify the selected engine on a real disposable server
+        run: uv run --no-sync pytest tests/storage_adapters/ -q --tb=short
+      - name: Stop this job's disposable test servers
+        if: always()
+        run: |
+          docker ps -aq --filter 'name=skill-adapter-proof-' | xargs -r docker stop --time 5

@@ -14,16 +14,20 @@ runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
 The operator chooses PostgreSQL, MySQL or SQL Server Express. This skill owns
 one Merge Stage contract across those engines and the engineering needed to
-support their storage differences. The current runtime is PostgreSQL-only;
-the shared contract below is a requirement, not evidence of implemented
-MySQL or SQL Server support. A silver table spec is applied by
+support their storage differences. Its executable adapter persists prepared
+effects without interpreting entity or source policy. The application's
+native store commands remain PostgreSQL-only; the skill adapter does not
+replace their configuration or run-control workflow. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
-The adapter guidance belongs to this skill as instructions only. It adds no
-adapter code, script, library or CLI. When selecting an engine, assessing a
-missing storage operation or reviewing its design, read
-[Storage adapter contract](references/storage-adapters.md). Apply its GoF
-review before recommending a change and again against the resulting work.
+Adapter implementation belongs under this skill's `scripts/`, with
+[database_adapter.py](scripts/database_adapter.py) as its entry point.
+Entity/source names and field policies arrive as data from the shared engine;
+the adapter contains no domain branches or application imports. Read
+[Storage adapter contract and execution](references/storage-adapters.md)
+before provisioning, migrating, applying prepared effects or reviewing the
+boundary. Apply its GoF review before recommending a change and again
+against the resulting work.
 
 Each rule below was learned from a failure here. The Examples section names
 where.
@@ -59,9 +63,10 @@ enforcement and grants; removing a PostgreSQL guard is not a portability fix.
 
 When a selected engine is refused, identify the missing storage operation or
 migration against the shared contract. Reuse the same merge logic and
-versioned policy. A skill-instructions task changes only the guidance;
-report the missing runtime implementation as an outstanding deployment
-requirement. Report unsupported operations until qualified;
+versioned policy. Keep storage implementation in the skill and domain
+computation with its existing owner. Distinguish the helper's prepared-effect
+capabilities from missing application integration, configuration registration
+or run-control operations. Report unsupported operations until qualified;
 changing a skill, deleting a dialect check or creating empty tables does not
 implement the adapter.
 
