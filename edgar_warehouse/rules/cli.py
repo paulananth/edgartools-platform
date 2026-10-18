@@ -26,9 +26,15 @@ def _approve_rule(args):
         print("--rule switches one rule of the platform merge rules on: use --merge platform, without "
               "--version, --evidence or --overrule (a rule short of its bar is not overruled here)", file=sys.stderr)
         return 2
-    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    at = args.at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        entry = files.approve_rule(args.rule, by=args.by, words=args.words, at=at, root=files.writable(args.root))
+        if args.proof:  # an identifier matching rule, on its Proving Run report
+            entry = files.approve_identifier_rule(args.rule, proof=Path(args.proof), reason=args.reason or "",
+                                                  by=args.by, words=args.words, at=at,
+                                                  root=files.writable(args.root))
+        else:
+            entry = files.approve_rule(args.rule, by=args.by, words=args.words, at=at,
+                                       root=files.writable(args.root))
     except ValueError as error:  # the refusal and its reason, not a traceback
         print(f"Not approved: {error}", file=sys.stderr)
         return 1
@@ -241,6 +247,10 @@ def register(subparsers):
             command.add_argument("--evidence", help="The evidence_hash `rules pending` showed for it")
             command.add_argument("--rule", help="Switch one merge rule on, in the files, on its proof")
             command.add_argument("--root", default=str(files.ROOT), help="The rules folder (--rule only)")
+            command.add_argument("--proof", help="An identifier matching rule's Proving Run report (--rule only)")
+            command.add_argument("--reason", help="With --proof: one line of what the Proving Run showed")
+            command.add_argument("--at", help="When the operator gave their words, UTC (YYYY-MM-DDTHH:MM:SSZ); "
+                                              "default now (--rule only)")
         elif operation == "record-proof":
             command.add_argument("--proof-uri", required=True)
             command.add_argument("--proof-sha256", required=True)

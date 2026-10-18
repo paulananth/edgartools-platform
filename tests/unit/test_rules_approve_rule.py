@@ -80,3 +80,146 @@ def test_the_command_switches_one_rule_on(root, capsys):
     wrong = parser.parse_args(["rules", "approve", "--merge", "platform", "--rule", RULE, "--version", "2",
                                "--by", "Operator", "--words", "yes", "--root", str(root)])
     assert wrong.handler(wrong) == 2
+
+
+# Rebuild priorities ticket 16, item 14: an identifier matching rule, switched on by command.
+IDENTIFIER_RULE = "openfigi-security-isin"
+
+
+@pytest.fixture
+def identifier_root(tmp_path):
+    """A copy of the rules with the identifier rule off and the ISIN contract not yet verified."""
+    shutil.copytree(files.ROOT, tmp_path / "rules")
+    root = tmp_path / "rules"
+    path = root / "merge" / "policy.yaml"
+    body = files.policy(root)
+    assert not any(e["rule_id"] == IDENTIFIER_RULE for e in body["automatic_rules"])
+    kind = root / "merge" / "kinds" / "security.yaml"
+    text = kind.read_text()
+    contract = body["kinds"]["security"]["identifiers"]["isin"]
+    if contract.get("verification"):  # take the stamp out, as it stood before ticket 79
+        start = text.index("  isin:\n")
+        block_start = text.index("    verification:\n", start)
+        block_end = text.index("    tolerance:", block_start)
+        kind.write_text(text[:block_start] + text[block_end:])
+        # Every rule that activates on the ISIN contract goes with its verification.
+        rules = {r["rule_id"] for r in body["kinds"]["security"]["rules"]
+                 if any(s.get("args", {}).get("namespace") == "isin" for s in r.get("when") or [])}
+        kept, lines, skip = [], path.read_text().split("\n"), 0
+        for i, line in enumerate(lines):
+            if skip:
+                skip -= 1
+                continue
+            if line.startswith("- kind: security") and any(f"rule_id: {r}" == lines[i + 2].strip() for r in rules):
+                skip = 5
+                continue
+            kept.append(line)
+        path.write_text("\n".join(kept))
+    assert not files.policy(root)["kinds"]["security"]["identifiers"]["isin"].get("verification")
+    report = tmp_path / "proving-run.json"
+    report.write_text('{"isins_on_two_securities": 0}')
+    return root, report
+
+
+def test_an_identifier_rule_is_switched_on_with_its_proving_run(identifier_root):
+    import hashlib
+
+    root, report = identifier_root
+    kind_before = (root / "merge" / "kinds" / "security.yaml").read_text()
+    policy_before = (root / "merge" / "policy.yaml").read_text()
+    entry = files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="12 ISINs, 0 on two Securities",
+                                          by="Operator", words="Switch it on", at=AT, root=root)
+    digest = hashlib.sha256(report.read_bytes()).hexdigest()
+    body = files.policy(root)
+    assert body["automatic_rules"][-1] == {k: entry[k] for k in ("kind", "family", "rule_id", "rule_version",
+                                                                 "verdict", "activation")}
+    assert entry["activation"] == "deterministic" and entry["contract_verified_here"]
+    assert body["kinds"]["security"]["identifiers"]["isin"]["verification"] == {
+        "corpus_sha256": digest, "approved_by": "Operator", "approved_at": AT,
+        "reason": "12 ISINs, 0 on two Securities, approved in their words: Switch it on"}
+    check_policy(body)
+    rule = next(r for r in body["kinds"]["security"]["rules"] if r["rule_id"] == IDENTIFIER_RULE)
+    assert activated(body, "security", rule, "bind")
+    after = (root / "merge" / "policy.yaml").read_text()
+    assert after.startswith(policy_before.rstrip("\n")) and digest in after  # comments kept, report named
+    assert f"# {IDENTIFIER_RULE}: switched on by Operator, 2026-09-29 19:30 ET" in after  # the words' time, in ET
+    kept = [line for line in kind_before.split("\n") if line.lstrip().startswith("#")]
+    assert all(line in (root / "merge" / "kinds" / "security.yaml").read_text() for line in kept)
+    with pytest.raises(files.RulesFileError, match="already switched on"):
+        files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="r", by="Operator", words="again",
+                                      at=AT, root=root)
+
+
+def test_an_identifier_rule_needs_its_report_and_a_contract_verified_once(identifier_root, tmp_path):
+    root, report = identifier_root
+    unchanged = {p: p.read_text() for p in ((root / "merge" / "policy.yaml"),
+                                            (root / "merge" / "kinds" / "security.yaml"))}
+    with pytest.raises(files.RulesFileError, match="not a file"):
+        files.approve_identifier_rule(IDENTIFIER_RULE, proof=tmp_path / "none.json", reason="r", by="Operator",
+                                      words="yes", at=AT, root=root)
+    with pytest.raises(files.RulesFileError, match="does not join on an identifier"):
+        files.approve_identifier_rule("sec-gleif-cascade-p1", proof=report, reason="r", by="Operator", words="yes",
+                                      at=AT, root=root)
+    with pytest.raises(files.RulesFileError, match="exact words"):
+        files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="r", by="Operator", words=" ",
+                                      at=AT, root=root)
+    with pytest.raises(files.RulesFileError, match="declared 0 times"):
+        files.approve_identifier_rule("no-such-rule", proof=report, reason="r", by="Operator", words="yes",
+                                      at=AT, root=root)
+    with pytest.raises(files.RulesFileError, match="--reason"):
+        files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason=" ", by="Operator", words="yes",
+                                      at=AT, root=root)
+    assert {p: p.read_text() for p in unchanged} == unchanged
+
+
+def test_the_command_switches_an_identifier_rule_on(identifier_root, capsys):
+    import argparse
+
+    root, report = identifier_root
+    parser = argparse.ArgumentParser()
+    register(parser.add_subparsers())
+    args = parser.parse_args(["rules", "approve", "--merge", "platform", "--rule", IDENTIFIER_RULE,
+                              "--proof", str(report), "--reason", "0 on two", "--by", "Operator",
+                              "--words", "Switch it on", "--at", "2026-10-18T17:22:00Z", "--root", str(root)])
+    assert args.handler(args) == 0
+    assert "2026-10-18 13:22 ET" in (root / "merge" / "policy.yaml").read_text()
+    assert IDENTIFIER_RULE in capsys.readouterr().out
+    assert files.policy(root)["automatic_rules"][-1]["rule_id"] == IDENTIFIER_RULE
+
+
+def test_a_contract_already_verified_keeps_its_stamp(identifier_root):
+    root, report = identifier_root
+    first = files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="0 on two", by="Operator",
+                                          words="Switch it on", at=AT, root=root)
+    stamp = files.policy(root)["kinds"]["security"]["identifiers"]["isin"]["verification"]
+    # Take the rule off again; a second switch-on on another report leaves the contract's stamp alone.
+    path = root / "merge" / "policy.yaml"
+    text = path.read_text()
+    path.write_text(text[:text.index(f"# {IDENTIFIER_RULE}: switched on by")])
+    other = report.with_name("other-run.json")
+    other.write_text('{"isins_on_two_securities": 0, "run": 2}')
+    second = files.approve_identifier_rule(IDENTIFIER_RULE, proof=other, reason="0 on two", by="Operator",
+                                           words="Again", at=AT, root=root)
+    assert first["contract_verified_here"] and not second["contract_verified_here"]
+    assert files.policy(root)["kinds"]["security"]["identifiers"]["isin"]["verification"] == stamp
+    assert second["proof_sha256"] in path.read_text()
+
+
+def test_a_failed_switch_on_leaves_both_files_as_they_were(identifier_root, monkeypatch):
+    root, report = identifier_root
+    files_before = {p: p.read_text() for p in ((root / "merge" / "policy.yaml"),
+                                               (root / "merge" / "kinds" / "security.yaml"))}
+    real = files.policy
+    calls = []
+
+    def broken(where=None):  # the read-back after writing fails
+        calls.append(where)
+        if len(calls) > 1:
+            raise files.RulesFileError("read back failed")
+        return real(where)
+
+    monkeypatch.setattr(files, "policy", broken)
+    with pytest.raises(files.RulesFileError, match="read back failed"):
+        files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="r", by="Operator", words="yes",
+                                      at=AT, root=root)
+    assert {p: p.read_text() for p in files_before} == files_before
