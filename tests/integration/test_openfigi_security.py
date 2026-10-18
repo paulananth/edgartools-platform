@@ -150,15 +150,8 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
 
 
 def policy_body() -> dict:
-    """The OpenFIGI ISIN rule, switched on here for the test only (the CUSIP rules and N-PORT's
-    ISIN-only rule are on in the live policy, 2026-10-17)."""
-    body = copy.deepcopy(files.policy())
-    for rule_id in ("openfigi-security-isin",):
-        rule = next(r for r in body["kinds"]["security"]["rules"] if r["rule_id"] == rule_id)
-        body["automatic_rules"].append({"kind": "security", "family": "binding", "rule_id": rule_id,
-                                        "rule_version": rule["version"], "verdict": "bind",
-                                        "activation": "deterministic"})
-    return body
+    """The live policy: OpenFIGI's CUSIP and ISIN rules are on (2026-10-17, 2026-10-18)."""
+    return copy.deepcopy(files.policy())
 
 
 def test_each_identifier_carries_only_its_single_levels(tmp_path):

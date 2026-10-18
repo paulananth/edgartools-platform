@@ -93,8 +93,8 @@ rules:
 # (Recommended)"): each record is an identifier the platform asked, so it
 # joins the one Security that holds that CUSIP or ISIN and waits otherwise; it
 # never creates a Security. The CUSIP rule is switched on (operator, 2026-10-17
-# 13:12 ET: "Switch on CUSIP rule (Recommended)"); the ISIN rule is declared only:
-# the ISIN Identifier Contract is verified (ticket 79), so it waits for its own switch-on.
+# 13:12 ET: "Switch on CUSIP rule (Recommended)"), and the ISIN rule (operator,
+# 2026-10-18 13:22 ET: "Switch it on (Recommended)").
 - rule_id: openfigi-security-cusip
   version: 2026-10-17.1
   family: binding
