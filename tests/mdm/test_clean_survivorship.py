@@ -693,6 +693,29 @@ class TestAKindLevelDefault:
         two = self.select({"defaults": {"sources": ["gleif.level1", "sec.company"]}})
         assert one["sic"]["policy_digest"] != two["sic"]["policy_digest"]
 
+    @pytest.mark.parametrize("kind", ["company", "person", "fixture_kind"])
+    def test_source_priority_refusal_follows_the_configured_kind(self, kind):
+        from edgar_warehouse.mdm.clean.merge import check_source_priorities
+        from edgar_warehouse.mdm.clean.store import Conflict
+
+        policy = {"kinds": {kind: {"defaults": {"sources": ["fixture.primary"]}}}}
+        with pytest.raises(Conflict, match="no source priority for: fixture.secondary"):
+            check_source_priorities(policy, [{"kind": kind, "source_code": "fixture.secondary"}])
+
+    def test_source_priority_is_scoped_to_each_kind(self):
+        from edgar_warehouse.mdm.clean.merge import check_source_priorities
+
+        policy = {"kinds": {
+            "first": {"defaults": {"sources": ["fixture.primary"]}},
+            "second": {"defaults": {"sources": ["fixture.secondary"]}},
+            "explicit_fields": {"fields": {}},
+        }}
+        check_source_priorities(policy, [
+            {"kind": "first", "source_code": "fixture.primary"},
+            {"kind": "second", "source_code": "fixture.secondary"},
+            {"kind": "explicit_fields", "source_code": "fixture.other"},
+        ])
+
 
 def test_native_selection_preserves_python_payload_types_and_tie_order():
     """Canonical disagreement differs from Python numeric equality for overrides."""

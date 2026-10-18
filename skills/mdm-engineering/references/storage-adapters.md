@@ -55,12 +55,68 @@ exact payload bytes, then `ack_outbox` with the verified hash and fence.
 An overtaken generation is refused; the helper never resolves a newer
 generation at save time and treats it as the preparation's original pin.
 
+For distinct publication bodies, explicitly migrate with `--protocol 2` and
+provide `payloads_json` (consumer name to exact JSON text), or programmatic
+`PreparedBatch.payloads`. Its keys must equal the frozen consumer set. Each
+outbox entry retains that consumer's original bytes and destination-computed
+hash. Omitting the map preserves the version-1 request representation and
+replay identity; the upgraded store still accepts those original requests.
+The top-level payload remains required and is unused for version-2 delivery.
+
+An upgrade appends migration history and preserves populated state. Pending
+state disables old entry points before procedure replacement; mutation guards
+installed first also fence calls already inside a legacy procedure. Their
+current locking read of the migration ledger either drains such a call before
+pending or refuses its write. Do not also acquire the generation gate in the
+migration barrier: that introduces an opposing lock order. Qualify actual
+overlap, partial replacement, resume, old-batch replay and guard readback on
+every selected engine. MySQL procedure replacement temporarily removes its
+EXECUTE grant; final migration restores only the restricted grants.
+
+MySQL's independent table options may compile in a different order in another
+Python process. Normalize only those known equivalent options for stable
+fingerprints. Recognize the exact historical version-1 permutations without
+rewriting their ledger checksums; reject other changes and downgrade attempts.
+
+The existing engine's environment-backed connection helper delegates driver
+selection to this adapter. PostgreSQL retains its configured role selection.
+MySQL and SQL Server authenticate the configured runtime principal directly;
+an owner login is refused rather than impersonated. Close a rejected raw
+connection before raising, because the pool has not adopted that session yet.
+This connection proof does not qualify the native Store's remaining operations.
+
 This prepared-effect API is not a drop-in replacement for the application's
 native Store, Rules, Bookkeeping, reference or source-activation commands.
 It supplies no second matching/identity/survivorship algorithm and accepts
 no authority to approve or activate a source. Test/report those integrations
 separately; passing this helper does not make a refused application command
 supported.
+
+## Native registry integration
+
+The existing registrar now delegates immutable policy retention and versioned
+dataset mapping reads/writes to this skill's adapter. Governance still checks
+qualification, approval and protected contract parts in the shared engine.
+These helpers use the caller's existing transaction and principal; they do not
+connect as an owner, apply native migrations or activate a source. Frozen runs
+keep their original mapping versions. Worker runtime pins include all three
+adapter implementation files, which ship with the installed engine.
+
+Keep unbounded source names as Unicode text. Where a text index has bounded
+keys or database collation changes equality, index the UTF-8 digest and check
+the retained exact name on readback. Put the source key before the mapping
+version in its index, and prove both latest and frozen-version seeks with the
+actual engine's plan.
+
+Contain a concurrent identical registration with a savepoint, preserving the
+caller transaction. On a duplicate, a shared current read sees the winner
+under repeatable-read isolation. An exclusive lock upgrade can deadlock the
+other duplicate registrars; force overlapping inserts in the regression test.
+An unrelated integrity failure remains a failure.
+
+Registry-operation tests on isolated tables do not qualify a native migration,
+Merge Stage, control protocol or source activation. Complete those remaining
+operations through the owning workflow before reporting engine support.
 
 ## Resolve the selected target
 
