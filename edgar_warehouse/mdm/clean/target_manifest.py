@@ -36,9 +36,6 @@ from .raw_capture import read_bounded
 from .store import digest
 
 DOCUMENTS_BYTES = 1024**2
-# One preparation reads the whole bundle, inside mdm.prepare's 32 MiB of
-# readings; a reading kept whole is about its documents' size.
-BUNDLE_BYTES = 24 * 1024**2
 
 
 @dataclass(frozen=True)
@@ -183,7 +180,8 @@ def write_manifest(
     """The input manifest of `target` for one bundle of captured documents.
 
     `documents` lists the bundle's documents by receipt key (at most the
-    source's `execution.max_artifacts`, and at most 24 MiB). `capture_run` is
+    source's `execution.max_artifacts`; each step's worker bounds what it
+    reads). `capture_run` is
     the caller's approved run ID of the capture. Returns the report: the
     manifest's reference (none when every document was processed already) and
     the publication."""
@@ -236,8 +234,6 @@ def write_manifest(
                 "publication": None, "policy_digest": policy, "scope": scope}
     # Each document equal to its receipt before it is frozen; its size cuts the read units.
     sized = [(key, len(raw_capture.document_bytes(folder, receipts, key))) for key in keys]
-    if sum(size for _, size in sized) > BUNDLE_BYTES:
-        raise ValueError(f"A bundle's documents exceed {BUNDLE_BYTES} bytes; name fewer")
     # The publication is the documents themselves (key and receipt), not the
     # list file's bytes: the same documents are one publication.
     documents_hash = digest([[key, receipts[key], *paired[key]] for key in keys])
