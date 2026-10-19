@@ -114,15 +114,15 @@ document on disk is not proof of runtime readiness.
 
 | Source | Current source-owned mastering target | Missing work or prerequisite |
 | --- | --- | --- |
-| `sec.submissions.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Frequency inputs need a common path. This is the only source declaring acquisition authority. |
-| `sec.submissions.person` | Read, prepare, merge, processed | Separate `prepare-capture`; acquisition authority absent, so normal activation blocks. |
-| `gleif` | Merge only | Complete member read/combine/prepare/processed path and acquisition authority absent; publication validation remains outside it. |
-| `iapd.adv` | None | Monthly context, grouping/joins and complete run wiring; acquisition authority absent. |
-| `sec.ownership` | None | Reading selection, owner preparation, relationship dependencies and processed accounting; acquisition authority absent. |
-| `sec.thirteenf.information_table` | None; separate reading-only pipeline | Source-owned reduce/combine/prepare/merge/processed path; acquisition authority absent. |
-| `sec.nport.registrant` | None | Authenticated filed-registrant lookup producer and complete run; acquisition authority absent. |
-| `sec.nport.fund` | None | Filed/registrant lookup producers and complete run; acquisition authority absent. Existing deferred relationship semantics must not be invented. |
-| `sec.nport.security` | None | Lookup agreement pairs, quarter context, publication identity/revision/time, issuer preparation and processed accounting; acquisition authority absent. |
+| `sec.submissions.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Frequency inputs need a common path. |
+| `sec.submissions.person` | Read, prepare, merge, processed | Separate `prepare-capture`. Reads the files Company's feed captures; switches on without a feed of its own. |
+| `gleif` | Merge only | Complete member read/combine/prepare/processed path; publication validation remains outside it. |
+| `iapd.adv` | None | Monthly context, grouping/joins and complete run wiring. |
+| `sec.ownership` | None | Reading selection, owner preparation, relationship dependencies and processed accounting. |
+| `sec.thirteenf.information_table` | None; separate reading-only pipeline | Source-owned reduce/combine/prepare/merge/processed path. |
+| `sec.nport.registrant` | None | Authenticated filed-registrant lookup producer and complete run. |
+| `sec.nport.fund` | None | Filed/registrant lookup producers and complete run. Existing deferred relationship semantics must not be invented. |
+| `sec.nport.security` | None | Lookup agreement pairs, quarter context, publication identity/revision/time, issuer preparation and processed accounting. |
 
 Configuration evidence: Company `source.yaml:39-115`, Person
 `source.yaml:112-143`, GLEIF `source.yaml:5-17`, ADV `source.yaml:1-20`,
@@ -137,7 +137,7 @@ ownership `source.yaml:1-15`, and N-PORT registrant `source.yaml:30-35`, fund
 | --- | --- | --- |
 | Within a configured run | Bookkeeping validates ordered `requires` and prerequisite unit inputs (`bookkeeping/clean/config.py:50-62,102-107`, `engine.py:170-190`). | Not a universal source/entity readiness check or automatic cross-source dependency producer. |
 | Run submission | Active Rules export, exact input manifest and approved rule digest (`rules/cli.py:121-127`, `bookkeeping/clean/engine.py:125-164`). | An active run target does not establish every source's completeness. |
-| Source activation | A source with MDM contracts declares its acquisition feeds and activates on its test run over captured files and the operator's approval (`rules/db.py`, `Rules.activate`); live acquisition runs also need a real acquisition run's proof (`rules/acquisition_authority.py`, `frozen_authority`). | A source that declares no acquisition cannot register its datasets. Do not bypass the check with disposable-test helpers. |
+| Source activation | A source with MDM contracts declares its acquisition feeds and activates on its test run over captured files and the operator's approval (`rules/db.py`, `Rules.activate`); live acquisition runs also need a real acquisition run's proof (`rules/acquisition_authority.py`, `frozen_authority`). | A source with no feed of its own (it reads files another source's feed captures) switches on its pipes and registers its datasets the same way. Do not bypass the checks with disposable-test helpers. |
 | Before reading bytes | Authenticates configured context and declared lookup receipts (`workers/source_read.py:102-115,309-315`). | Broader Dataset Contract/policy checks happen later, after extraction. |
 | RDM | Published canonical content must match explicit version/hash pins (`rules/files.py:350-376`). | Need consistent run-wide dependency selection and retained artifacts. |
 | Company preparation | Name Frequency must match capture/population; logical census content and catalog hash enter processing identity (`mdm/clean/company_prepare.py:186-208`). | Source-specific setup remains. |

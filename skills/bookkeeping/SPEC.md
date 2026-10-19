@@ -331,8 +331,9 @@ edgar-warehouse bookkeeping leases <UUID>
 ```
 
 Activation of mappings also requires `RULES_MDM_ACTIVATION_DATABASE_URL`.
-Fresh source documents declare acquisition authority in Rules and no longer
-require a legacy registry connection. The explicit `Rules.activate` Python
+A source with a feed of its own declares its acquisition authority in Rules;
+one that reads files another source's feed captures declares none. Neither
+needs a legacy registry connection. The explicit `Rules.activate` Python
 legacy registry argument remains for original-stack handoffs. No real rule
 versions are approved or activated by this implementation task.
 

@@ -192,8 +192,6 @@ class Rules:
                     raise Blocked("MDM handoff requires approval of this Rules version")
                 if mdm_engine is None:
                     raise Blocked("MDM activation requires an explicit destination connection")
-                if kind == "source" and "acquisition" not in body:
-                    raise Blocked("Source MDM activation requires approved acquisition authority")
                 from edgar_warehouse.mdm.clean.store import register_policy, register_dataset, current_reading
                 receipts = {"rules_digest": selected["digest"], "datasets": {}}
                 # First commit the idempotent MDM handoff. If the Rules status
@@ -201,12 +199,16 @@ class Rules:
                 with mdm_engine.begin() as destination:
                     if kind == "merge":
                         receipts["policy_digest"] = register_policy(destination, body)
-                    elif "acquisition" in body:
+                    else:
                         from edgar_warehouse.rules.acquisition_authority import registration_authority
                         selected_export = self.envelope(selected)
                         for code, entry in body["mdm"].items():
                             registration_authority(selected_export, code, entry["contract"])
                             existing = destination.execute(text("SELECT mapping_version,body FROM mdm.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
+                            # A dataset belongs to the source that first registered it.
+                            owner = ((existing or {}).get("body", {}).get("registry_evidence", {}).get("rules") or {}).get("name")
+                            if owner is not None and owner != name:
+                                raise Blocked(f"Dataset {code} belongs to source {owner}, not {name}")
                             if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
                                 register_dataset(destination, code, entry["contract"], rules_authority=selected_export)
                             reading = current_reading(destination, code)
