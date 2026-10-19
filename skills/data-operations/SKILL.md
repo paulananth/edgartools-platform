@@ -5,6 +5,8 @@ description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping
 
 # Data Operations
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 Operate existing sources repeatedly using their configured engines. Maintain the
 source's operational runbook and report verified progress with counts and reasons.
 This skill guides an invoked agent; it does not install a scheduler or stay running
@@ -147,11 +149,10 @@ submits one source.
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
    ```
    Check it offline first with `edgar-warehouse rules check --source <name>`.
-   Then test that version and record the test run with `rules record-proof`
-   before any approval: data-onboarding's **test** step names the version
-   label, runs `rules test` where the source's Bookkeeping section is
-   version 2, and says what to use when it is not. A test that stops is not a
-   proof and is not recorded.
+   Then record that version's proof before any approval: carry the last
+   proof forward when [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)'s
+   "Choose the cheapest proof" allows it, and run no new test. Otherwise data-onboarding's **test** step runs and records one (`rules
+   test --version`). A test that stops is not a proof and is not recorded.
 3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
    the merge policy this source depends on first, then this source:
    ```bash
@@ -160,11 +161,11 @@ submits one source.
    ```
    Enabled means `rules status` shows that version `active`. There is no
    separate enable command.
-4. **Wire the run.** Resolve the feed, then submit only this source and the
-   target from the sequence check:
+4. **Wire the run.** Submit only this source and the target from the
+   sequence check, over files already captured (no feed:
+   [Bookkeeping run](../bookkeeping/RUN.md)):
    ```bash
-   edgar-warehouse plan resolve-feed --source <name> --feed <feed>
-   edgar-warehouse rules run --source <name> --feed <feed> --target <target> \
+   edgar-warehouse rules run --source <name> --target <target> \
      --input-manifest <uri> --input-sha256 <sha256>
    ```
    Work and verify as in [Bookkeeping run](../bookkeeping/RUN.md). The next

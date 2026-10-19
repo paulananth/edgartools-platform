@@ -27,12 +27,14 @@ one (operator, 2026-09-29).
 
    **Worked:** the version you saved is listed. **Not listed:** it has no
    test run. Go back to the skill's **test** mode.
-2. **Explain before you ask.** Tell the operator, in plain words and
-   business terms: what it is (its name, never a digest), what it changes,
-   and what the test run showed. Then ask one question: "Do you approve
-   <name>?" Give your recommendation.
-3. **Wait for their words.** Record only an approval they gave, for that
-   version:
+2. **Explain it.** Tell the operator, in plain words and business terms:
+   what it is (its name, never a digest), what it changes, and what the test
+   run showed.
+3. **Record the approval.** A version whose test run passed is approved
+   under the operator's standing approval (2026-10-15: "Approved the rules
+   always"), with that test run as its evidence: record those words, no
+   question. Ask, and wait for their words, only for a failing run (step 4)
+   or a new kind of decision; switching on (below) always waits for them:
    ```bash
    edgar-warehouse rules approve --source <name> \
      --version <v> --evidence <evidence_hash> \

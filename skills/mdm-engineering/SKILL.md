@@ -5,6 +5,8 @@ description: Engineer database-agnostic MDM merge logic and its storage adapters
 
 # MDM Engineering
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill set. The data skills (data-onboarding,
 > refining-rules, data-quality) change rules as data; this skill is for a
 > change to the MDM engine and store themselves.
@@ -245,6 +247,7 @@ A statement whose key-list size changes enough to pick a bad cached plan uses
 | The Merge Stage, matching rules, a Dataset Contract, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
 | Speed | Time per batch over a whole feed: flat, not growing with the store |
+| A version whose rules moved since its last proof, each change proven by its own merged PR at the level this table names for it | No new run: carry the last proof forward. Write a proof file from the last one: its counts and `batch_hash`, `passed: true`, `digest` set to the new version's digest (`rules record-proof` refuses any other), its acquisition evidence if it had any, and under `evidence` and `note` the run it came from and each change since with its PR. Record it with `rules record-proof --proof-uri --proof-sha256`; `rules pending` then shows that evidence for approval. A change without such a proof gets its own row's proof first |
 
 Say the time of any proof over ten minutes before starting it. Stop its
 containers when it ends, whatever the outcome.

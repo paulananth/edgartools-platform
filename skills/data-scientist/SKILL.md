@@ -5,6 +5,8 @@ description: Use when analyzing a dataset end to end: sourcing, cleaning, explor
 
 # Data Scientist
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 Work through a data problem the way a data scientist would: four stages, in order, each with checks before moving on. Skip stages the task doesn't need, but never skip preparation or exploration before modeling.
 
 ```

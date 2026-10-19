@@ -5,6 +5,8 @@ description: Improve an existing feed or domain's mapping, data quality or match
 
 # Refining Rules
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill, installed as one package with its
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
 > and for the whole flow; this skill holds one step's detail.
@@ -198,11 +200,13 @@ For example: a cascade pass, a name rule, or records waiting for review.
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
 
-### test: re-run on real captured files and record it
+### test: the cheapest proof, then record it
 
-As in data-onboarding **test**: dry run or proving run, then
-`rules save` and `rules record-proof`. Show what changes, record by record,
-from the dry run before and after.
+Prove the change at the level it needs, no more (`mdm-engineering`, "Choose
+the cheapest proof"): a change upstream of MDM compares the changed step's
+output; only a merge, matching or contract change needs a proving run. Then
+`rules save` and record the proof, or carry the last one forward (same
+table, its last row). Show what changes, record by record.
 
 ### approve and switch-on
 

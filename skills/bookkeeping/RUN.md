@@ -38,8 +38,9 @@ verifier, in step order, and finish the run:
 
 ```bash
 edgar-warehouse rules run \
-  --source "$RULES_SOURCE_NAME" --feed "$SOURCE_FEED" --target "$BOOKKEEPING_TARGET" \
+  --source "$RULES_SOURCE_NAME" --target "$BOOKKEEPING_TARGET" \
   --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256"
+# A live acquisition run adds --feed "$SOURCE_FEED" (and needs the acquisition proof).
 edgar-warehouse workers work <profile> "$RUN_ID" --limit 100
 edgar-warehouse workers verify <profile> "$RUN_ID" \
   --reports "$REPORT_ROOT_URI" --limit 100
@@ -50,8 +51,9 @@ edgar-warehouse bookkeeping finalize "$RUN_ID"
 a batch (default 100, at most 1000), then records the run's checks. A crash
 part-way is picked up by running it again.
 
-Feed is bound by the validated frozen worklist, source-input dataset/
-publication identities and the explicit Rules runner `--feed` option. Keep the durable run
+A live acquisition run's feed is bound by the validated frozen worklist,
+source-input dataset/publication identities and the Rules runner's `--feed`;
+a run over captured files names none. Keep the durable run
 id printed on stderr. For explicit platform jobs use their existing
 `--pipeline` selection while retaining the source/feed binding in the plan
 and inputs; never silently replace a source-owned mapping with a platform job.

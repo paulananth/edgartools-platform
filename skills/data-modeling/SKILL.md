@@ -5,6 +5,8 @@ description: Decide where one profiled part of a data set sits in the model - it
 
 # Data modeling
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 The boundary is [REQUIREMENTS.md](REQUIREMENTS.md). This skill decides
 structure, with evidence and the existing language. It does not measure files
 (data-profiling), write a contract (data-onboarding, refining-rules), write a
@@ -181,8 +183,8 @@ time.
    capacity and its dates; the time columns.
 6. **Ask at most one question** when the choice is the operator's: a new kind,
    a new identity namespace, a second type for one fact, or which of two
-   fields is the identity. Give the recommendation. Do not continue in the
-   same turn.
+   fields is the identity. Give the recommendation. Only the part it decides
+   waits; carry on with the parts it does not touch.
 7. **Hand off** (the list above). Do not restate that skill's steps.
 
 ## Reviewing the model itself

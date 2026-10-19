@@ -147,8 +147,10 @@ status supplies neither evidence nor approval.
 Follow [APPROVE](../data-onboarding/APPROVE.md). Show the descriptive version
 name, what changes, the measured results and any remaining deployment limits.
 Use genuine applicable approval already given for the same version and
-evidence. Otherwise ask the one concrete approval question and record the
-operator's actual words through the supported command. A deployment instruction
+evidence; a version whose test run passed is approved under the operator's
+standing approval (APPROVE, step 3). Ask only for a failing run's overrule,
+a new kind of decision or a switch-on, and record the operator's actual
+words through the supported command. A deployment instruction
 does not invent approval for different content or supply a missing test run.
 
 **Done:** the recorded approval names this version and its current proof.

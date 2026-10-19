@@ -5,6 +5,8 @@ description: Turn the defects found while profiling a data set into data quality
 
 # Data Quality
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill set. data-onboarding and refining-rules
 > call it; it writes only `rules/sources/<source>/quality.yaml`.
 
@@ -42,7 +44,7 @@ log it for a ticket.
 
 | Never | Instead |
 |---|---|
-| Decide a check's `on_fail`, or keep a fix, for the operator | Ask one question per check or fix, with its count and two or three examples, and record their exact words |
+| Decide a check's `on_fail`, or keep a fix, outside the table | The table in **decide** settles it under the standing rule approval, with its count; ask one question, with two or three examples, only where the table does not |
 | Write a check or fix the engine does not have | List it as new code, for a ticket (the plan does this for you) |
 | Trust a zero count | A planted record must make each check fire first |
 | Drop or change an invalid row | Mark it; a fix needs evidence and a steward's approval, otherwise it "needs steward" |
@@ -124,9 +126,13 @@ or a planted record does not fire). Read the counts carefully:
 - Profiling's examples (up to three per item, masked for a personal
   column) are in the findings; show two or three when you ask.
 
-### decide: one question per check or fix
+### decide: the table decides; ask only what it cannot
 
-Pick each `on_fail` with the operator, with its count and examples:
+Pick each `on_fail` from the table below, with its count and examples.
+Where the table decides, record it under the operator's standing rule
+approval with those counts (operator, 2026-10-15: "Approved the rules
+always"); ask one question only where it does not, or where a count disagrees
+with profiling's:
 
 | Problem | Check or fix |
 |---|---|

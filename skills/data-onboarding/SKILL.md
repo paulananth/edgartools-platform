@@ -5,6 +5,8 @@ description: Bring a NEW data feed or a NEW domain (a kind with no merge rules y
 
 # Data Onboarding
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill, installed as one package with its
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
 > and for the whole flow; this skill holds one step's detail.
@@ -200,7 +202,9 @@ from a fault found mid-run, or from a re-check that proved nothing new.
   (profiling gives it); the profiler or engine has no open fix pending.
   Fix those first.
 - Run a step again only when its input files, its rules or the engine
-  changed. Log which changed, and re-run only that step, never the steps
+  changed and that change has no proof of its own; otherwise carry the last
+  proof forward ([mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof),
+  "Choose the cheapest proof"). Re-run only that step, never the steps
   before it.
 - Never re-run a step to confirm a result. The first run's report is the
   evidence.
@@ -605,10 +609,11 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
      verdict to a copy of the policy in memory only, and label that pass as
      a test input.
    - Run affected configured-engine and retained equivalence tests:
-     `uv run --no-sync pytest -q <those files>`. Then prove the full installed
-     parse → prepare → merge path on fresh PostgreSQL 16 with separate worker
-     and verifier roles, destination fencing and unchanged replay. Record
-     assertions, identities, quality counts and deferrals, not only row totals.
+     `uv run --no-sync pytest -q <those files>`. Prove the full installed
+     parse → prepare → merge path only when the change needs it
+     ([mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest
+     proof"). Record assertions, identities, quality counts and deferrals,
+     not only row totals.
    - `normalize` runs the quality checks. Each record shows what they did
      under `provenance.quality`, and an `exception` raises
      `UnsupportedRecord("quality_<id>")`. Report the counts
@@ -619,10 +624,10 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
      (`quality.run_checks([quality.profile(records, deferred)], as_of=...)`;
      a Merge Stage run keeps them as `checks` in its report, `mdm.run.report`).
      They never block.
-2. **A proving run, for anything that matches records.** Which proof a
-   change needs, and when the full installed proof is required, is in
-   [mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest
-   proof". For a new domain,
+2. **A proving run, for anything that matches records, and only once.** A
+   source whose last proof can be carried forward runs none. Which proof a change needs, and when the full installed proof is
+   required, is in [mdm-engineering](../mdm-engineering/SKILL.md), "Choose
+   the cheapest proof". For a new domain,
    nothing is switched on yet. So the run registers a **copy** of the
    policy, with the new rules added to `automatic_rules` and each stamped
    `approved_by: proving-run` and `reason: "Proving Run only; not an
@@ -789,8 +794,7 @@ record their exact words.
 
 Activate as in [APPROVE.md](APPROVE.md), "Switch on".
 
-Running the feed is the **bookkeeping** skill's **run** mode, with
-`--source <name> --feed <feed>`. It submits `rules run --target <target>`
+Running it is the **bookkeeping** skill's **run** mode. It submits `rules run --target <target>`
 with an input manifest and its sha256. Run targets in their declared
 dependency order, and report any missing worker as unfinished implementation.
 
@@ -846,18 +850,8 @@ These name today's sources only as examples; nothing above depends on them.
   (`candidate()` stamps the copied policy); ticket 27's
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
   about 25 minutes, a second pass that changes nothing).
-- **Unfinished live pipelines** (the one list; other skills point here). Done
-  2026-10-11: SEC Company main documents equal the older reader on all 76,230
-  captured submissions and GLEIF's three Golden Copy members equal it record for
-  record; both older readers are deleted (#904, #905); the installed proof masters
-  6,414 Companies with 3,052 CIK+LEI bindings through separate workers and
-  verifiers, resumes a killed worker, and a second pass changes nothing (#905,
-  #907). Done 2026-10-12/13: Company and Person preparation run as the
-  `mastering` Bookkeeping target on separate workers and verifiers (#928-#930,
-  #932); a batch that changes nothing queues nothing (#931); every contract
-  maps its fields through its reading, the old mapping deleted (#939). Open:
-  a new run processes every document it names, changed or not (ticket 22,
-  the Change Journal beside Bookkeeping); `mdm.publish` delivers to a local
-  contract sink only, not the required consumers' durable destinations;
-  capture from SEC (`provider.capture`, #933) is qualified offline only, and
-  live acquisition is parked until the AWS rollout (Issue 20, L8; #938).
+- **Unfinished live pipelines** (the one list; other skills point here):
+  `mdm.publish` delivers to a local contract sink only, not the required
+  consumers' durable destinations; live acquisition (`provider.capture`,
+  #933, qualified offline) waits for the worker runtime on AWS (ticket 71).
+  A source's pipes switch on over captured files without it (#1108).

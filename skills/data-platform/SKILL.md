@@ -20,6 +20,26 @@ request to a provider the operator ruled out; never read or print a secret; no v
 in a public repository; never guess an identifier; never invent a command; ask one
 question at a time, with your recommendation.
 
+## The seven wastes
+
+Every skill works lean (operator, 2026-10-19: "make all skills understand 7
+wastes and eliminate any of the waste from each skill"). Before a step, check
+it against the seven, and drop what adds no value:
+
+| Waste | Here | Instead |
+|---|---|---|
+| Transport | Copying captures, stores or files to new places for each check | Read the capture where it is; reuse a store |
+| Inventory | Branches, worktrees, stores, drafts and tickets left open | Finish or close each; stop and remove what a run left |
+| Motion | Searching code for what a skill should say; rebuilding inputs a run already made | Write the answer into the skill once; keep a run's inputs with its report |
+| Waiting | Runs that stop on a deadline too short; questions a ruling already answers | Size the deadline from the measured time; decide what follows from a ruling |
+| Over-processing | A full Proving Run, profile or review for a change its own tests prove | The cheapest proof (`mdm-engineering`); carry a proof forward |
+| Over-production | Building a feature, a target or a check before a source needs it | Build only what the step in hand needs |
+| Defects | Guessed times, unchecked limits, a skill word CI refuses: rework | Read the clock; check bounds first; run the checks the change can affect |
+
+**Carry a proof forward** instead of running it again: when and how is in
+[mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof),
+"Choose the cheapest proof", its last row.
+
 ## Guide the task to completion
 
 For readiness, cross-reference mapping/lookup, missing proof, draft-to-final
@@ -338,15 +358,10 @@ MDM never merges or publishes a batch twice. After a stop, use
 
 ### Examples: current source qualification
 
-Person has a configured complete-JSON read
-block in `sec.submissions.person/source.yaml`. Its installed PostgreSQL 16
-trial proves read → prepare → merge with the actual Person Dataset Contract
-and policy, preserving two fixture records; a separate 1,000-capture comparison
-proves retained outcomes and assertion identities. These are qualification
-results, not operator activation. Company raw columns and filing arrays are
-qualified components. Its catalog and Name Frequency joins are qualified on fixtures. The whole-capture comparison (all 76,230 captured submissions), the active caller replacement (#905) and the installed 6,414 Company proof on Bookkeeping workers (#930) are done. GLEIF's three Golden Copy members equal the older reader record for record, and `gleif_source.py` is deleted (#904). Use only
-pipelines whose every profile resolves with `workers describe`; a declared
-Company acquisition or silver step without a worker remains incomplete.
+Company's last installed proof (6,414 Companies, 3,052 GLEIF bindings, a
+killed worker resumed, a second pass changed nothing; #905, #930) and
+Person's installed trial are the evidence their versions carry forward. Use
+only pipelines whose every profile resolves with `workers describe`.
 
 ## 6. Custom parsing
 

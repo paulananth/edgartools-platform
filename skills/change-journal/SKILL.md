@@ -5,6 +5,8 @@ description: Initialize or migrate the independent Change Journal, plan or valid
 
 # Change Journal
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill, installed as one package with its
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
 > and for the whole flow; this skill holds one step's detail.
@@ -68,6 +70,9 @@ schemas, checksum drift, wrong databases or legacy/business tables must block.
 Import no legacy events, checkpoints or pending delivery; preserve old archives.
 
 ## Plan
+
+Plan and validate only when the journal's code, its schema or an envelope
+version changes; a producer using the journal as it stands needs neither.
 
 Record the requested journal scope: event schema version, producer keys,
 metadata labels, exact envelope/evidence hashes, expected delivery count,
