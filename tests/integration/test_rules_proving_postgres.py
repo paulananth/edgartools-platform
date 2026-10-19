@@ -54,6 +54,10 @@ def test_people_are_mastered_and_a_second_pass_changes_nothing(tmp_path, stores)
     # The second pass named every document again and did the same work.
     assert report["passes"][1]["run_counts"] == first["run_counts"] and first["run_counts"]
     assert json.loads((tmp_path / "report.json").read_text()) == report
+    # What the quality rule did, counted from the prepared records, and each contract's digest.
+    assert isinstance(first["quality"], dict) and report["passes"][1]["quality"] == first["quality"]
+    assert set(report["contract_digests"]) == {"sec.submissions.person.v1"}
+    assert report["batch_hash"] == first["manifest_sha256"]
 
 
 def test_a_store_that_already_holds_records_is_refused(tmp_path, stores):
