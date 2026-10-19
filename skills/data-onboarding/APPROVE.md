@@ -128,7 +128,10 @@ Switching on the pipes and switching on live data are apart (operator,
 approved activates: Bookkeeping then runs its targets over captured files.
 Live acquisition (a run with a feed, the capture worker) also needs an
 acquisition proof: the receipts of a real acquisition run of that source, not
-a test fixture or a copy made by hand.
+a test fixture or a copy made by hand. A recorded proof never changes, so to
+switch live data on later, save the same rules as a new version, record a
+proof holding the test run and the acquisition evidence, then approve and
+activate that version.
 
 Then tell the operator it is in effect. Running a feed is the Bookkeeping
 skill's **run** mode, not this one.

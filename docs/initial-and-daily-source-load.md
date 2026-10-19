@@ -129,7 +129,7 @@ Current committed configuration has nine sources and thirteen Dataset Contracts.
 | --- | --- |
 | Initial Rules | Nine source documents, two pipelines and one merge policy can be saved: twelve versions. They are drafts until the real lifecycle requirements are satisfied. |
 | Initial RDM | Three published version-1 code sets: 309 SEC place codes, 4 place types and 20 ownership transaction codes. Restore their complete labels/crosswalks and verify their existing pins. |
-| MDM registration | Only SEC Company currently declares acquisition authority. Source activation/handoff requires real authority; the other sources cannot be registered merely because their proofs used disposable stores. Ticket 71 tracks part of that work. |
+| MDM registration | A source registers its datasets when its version activates: proven on a test run over captured files and approved (operator, 2026-10-19: the pipes switch on apart from live data). It must declare its acquisition feeds; live acquisition also needs a real acquisition run's proof (ticket 71). |
 | Complete source runs | Company and Person have `mastering` targets; GLEIF has a merge target. Ownership, ADV, 13F and N-PORT lack complete source-owned mastering targets. The 13F reading pipeline only reads. |
 | N-PORT run construction | Quarter context and publication revision/time semantics exist, but their full run builder remains ticket 79's gap. Several declared matching rules are not switched on. |
 | Standalone OpenFIGI enrichment | Captured answers support N-PORT identifier agreement; listing/ticker/exchange onboarding remains ticket 80. |

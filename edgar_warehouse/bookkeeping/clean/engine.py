@@ -32,7 +32,9 @@ def _authority(export: dict, scope: dict, artifacts) -> dict:
     on live data)."""
     from edgar_warehouse.rules.acquisition_authority import frozen_authority, processing_authority
 
-    if scope.get("feed"):
+    if "feed" in scope:
+        if not isinstance(scope["feed"], str) or not scope["feed"]:
+            raise Blocked("A run's feed is a declared feed's name")
         return frozen_authority(export, scope["feed"], artifacts=artifacts)
     return processing_authority(export)
 
@@ -153,9 +155,11 @@ class Bookkeeping:
             selected = _authority(export, scope, self.artifacts)
             if scope.get("source") != export["name"]:
                 raise Blocked("Acquisition run requires exact source/feed binding")
-            if "feed" in selected and not set(selected["configuration"]["required_producers"]) <= {
+            if "feed" in scope and not set(selected["configuration"]["required_producers"]) <= {
                     s["name"] for s in config["steps"]}:
                 raise Blocked("Configured work omits required acquisition producers")
+            if "feed" not in scope and any(s["operation"] == "provider.capture" for s in config["steps"]):
+                raise Blocked("A capture runs only as live acquisition, with its feed")
         # An approval is pinned to the exact immutable body, including its
         # Bookkeeping section. No automatic approval from an earlier version.
         if export["kind"] == "merge" or export["body"].get("mdm") or target == "mdm":
@@ -164,7 +168,7 @@ class Bookkeeping:
                 raise Blocked("MDM configuration requires approval of its exact digest")
         manifest = self.artifacts.json(inputs_ref)
         items = worklist(manifest, config)
-        if scope.get("feed") and not items:
+        if "feed" in scope and not items:
             raise Blocked("An empty acquisition baseline requires explicit verified scope work")
         submission = {"version": 1, "kind": export["kind"], "name": export["name"],
                       "journal": "change-journal-v1", "protocol": PROTOCOL,

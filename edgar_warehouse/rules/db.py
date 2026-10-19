@@ -114,10 +114,11 @@ class Rules:
         makes it proven; a failing one stays a draft with its evidence, which
         the operator may overrule on approval (and a new run may replace). A
         source's acquisition evidence, when the proof carries it, is checked
-        when the run passed; an overrule never covers a source that could not
-        be read (the trigger refuses it at proven). A test run over captured
-        data carries none: it switches on the pipes, not live acquisition
-        (operator, 2026-10-19)."""
+        when the run passed, and an overrule never covers acquisition evidence
+        of a source that could not be read (the trigger refuses it at
+        proven). A test run over captured data carries none: it proves the
+        pipes over what was captured, not live acquisition (operator,
+        2026-10-19)."""
         if type(proof.get("passed")) is not bool:
             raise Blocked("A proof says whether it passed")
         row = self.version(kind, name, version)

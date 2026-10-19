@@ -1069,3 +1069,47 @@ def test_a_claim_of_one_passes_a_unit_another_attempt_holds(databases, tmp_path)
     book.report(first, copy.execute(first, book.artifacts), RUNTIME)
     reported = book.verifier.verifications(rid, "artifact.copy", limit=1)
     assert len(reported) == 1
+
+
+def test_a_source_with_acquisition_runs_captured_data_on_its_test_run_alone(databases, tmp_path):
+    """Operator, 2026-10-19: the pipes switch on apart from live data. A version proven on a
+    test run (no acquisition evidence) and approved runs over captured data; a run with a feed,
+    an empty feed, and a capture step without a feed are refused at submit."""
+    book = Bookkeeping(databases.runtime)
+    body = config()
+    name = f"pipes-{uuid4().hex}"
+    approved_acquisition(body, name, [], None)
+    saved = databases.rules.save("source", name, "1", body)
+    units = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1, "units": [
+        {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
+         "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
+         "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
+    approve(databases.approver, "source", name, "1")
+    databases.rules.activate("source", name, "1")
+    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
+
+    assert book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name})
+    with pytest.raises(Blocked, match="qualify every declared acquisition feed"):
+        book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name, "feed": "fixture"})
+    with pytest.raises(Blocked, match="declared feed's name"):
+        book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name, "feed": ""})
+
+
+def test_a_capture_runs_only_with_its_feed(databases, tmp_path):
+    book = Bookkeeping(databases.runtime)
+    body = config()
+    body["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "provider.capture"
+    name = f"pipes-{uuid4().hex}"
+    approved_acquisition(body, name, [], None)
+    saved = databases.rules.save("source", name, "1", body)
+    units = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1, "units": [
+        {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
+         "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
+         "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
+    approve(databases.approver, "source", name, "1")
+    databases.rules.activate("source", name, "1")
+    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
+    with pytest.raises(Blocked, match="only as live acquisition"):
+        book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name})
