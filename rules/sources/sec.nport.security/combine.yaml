@@ -22,6 +22,10 @@ combine:
     # states the same (operator, 2026-10-16: "By issuer LEI (Recommended)");
     # `one` never chooses.
     cusip_issuer: {source: issuers, table: cusip_issuers, key: cusip, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
+    # The earliest filing date of the CUSIP's holdings that name an issuer
+    # (ticket 113): the ISSUED_BY link's start.
+    cusip_filed: {source: issuers, table: cusip_filed, key: cusip, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    isin_filed: {source: issuers, table: isin_filed, key: isin, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_name: {source: securities, table: isin_names, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_title: {source: securities, table: isin_titles, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     isin_lei: {source: securities, table: isin_leis, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
@@ -39,6 +43,7 @@ combine:
         lei: {group: cusip_lei, key: cusip, on_missing: skip, replace: false}
         isin: {group: cusip_isin, key: cusip, on_missing: skip, replace: false}
         issuer: {group: cusip_issuer, key: cusip, on_missing: skip, replace: false}
+        filed: {group: cusip_filed, key: cusip, on_missing: skip, replace: false}
     security_isin:
       source: securities
       table: isins
@@ -49,3 +54,4 @@ combine:
         title: {group: isin_title, key: isin, on_missing: skip, replace: false}
         lei: {group: isin_lei, key: isin, on_missing: skip, replace: false}
         issuer: {group: isin_issuer, key: isin, on_missing: skip, replace: false}
+        filed: {group: isin_filed, key: isin, on_missing: skip, replace: false}

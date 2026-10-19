@@ -31,12 +31,12 @@ from tests.support.rules_authority import register_dataset
 CODE = "sec.nport.security_isin.v1"
 LEI, OTHER = cusip.LEI, "9999000000EXAMPLE024"  # invented; OTHER is LEI-shaped only
 ONE, TWO, NONE = "ZZ0000000016", "ZZ0000000024", "ZZ0000000032"  # invented, check digits valid
-HOLDINGS = [["4", "Example Corp", LEI, "Note"], ["5", "Example Corp", LEI, "Note"],
-            ["6", "Example Corp", LEI, "Bond"], ["7", "Example Corp", OTHER, "Bond"],
-            ["8", "Other Inc", "", "Bond"]]
+HOLDINGS = [["A-1", "4", "Example Corp", LEI, "Note"], ["A-2", "5", "Example Corp", LEI, "Note"],
+            ["A-1", "6", "Example Corp", LEI, "Bond"], ["A-1", "7", "Example Corp", OTHER, "Bond"],
+            ["A-1", "8", "Other Inc", "", "Bond"]]
 # A holding with a usable CUSIP stays out of the ISIN's issuers: were it read
 # there, ONE would hold two LEIs and lose its link.
-WITH_CUSIP = ["9", "Example Corp", OTHER, "Note", "ZZ0000013"]
+WITH_CUSIP = ["A-1", "9", "Example Corp", OTHER, "Note", "ZZ0000013"]
 PAIRS = [["4", ONE], ["5", ONE], ["6", TWO], ["7", TWO], ["8", NONE], ["9", ONE]]
 
 
@@ -52,9 +52,11 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[d
     with zipfile.ZipFile(body, "w") as z:
         z.writestr("FUND_REPORTED_HOLDING.tsv", "\n".join("\t".join(r) for r in [
             cusip.COLUMNS, *([*h, ""] for h in HOLDINGS), WITH_CUSIP]) + "\n")
+        z.writestr("SUBMISSION.tsv", "ACCESSION_NUMBER\tFILING_DATE\n"
+                   + "".join(f"{a}\t{d}\n" for a, d in cusip.FILINGS.items()))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2, lookups={"isin": PAIRS})
-    issuers = cusip.read(store, root / "issuers", "issuers.yaml", raw, None, lookups={"isin": PAIRS, "umbrella": list(umbrella)})
+    issuers = cusip.issuers(store, root, raw, PAIRS, cusip.Q2, umbrella)
     securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
@@ -63,7 +65,7 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[d
                              {"securities": securities, "attached": attached, "issuers": reduced})
     prepared = chain.prepare(store, root / "mdm", combined, {
         "table": "security_isin", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
-        "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00", "effective_column": "period"})
+        "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00"})
     return chain.records(store, root / "mdm", prepared, CODE, files.source(cusip.NAME)["mdm"][CODE]["contract"])
 
 
@@ -88,7 +90,8 @@ def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
             "SELECT body->'periods' FROM mdm.current_record WHERE object_type='relationship' "
             "AND body->>'type'='ISSUED_BY'")).all()]
     (only,) = periods
-    assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.Q2, "observed")]
+    # ONE's holdings were filed 5 June and 28 May: the link starts at the earlier (ticket 113).
+    assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.MAY28, "stated")]
 
 
 def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):

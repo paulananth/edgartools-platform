@@ -22,6 +22,27 @@ reduce:
       count: issuers
       sample: issuer_sample
       sample_limit: 1
+    # The earliest filing date of each CUSIP's holdings that name an issuer
+    # LEI (dates are YYYY-MM-DD, so the lexically first is the earliest): an
+    # ISSUED_BY link starts there (ticket 113).
+    cusip_filed:
+      source: issuers
+      table: security_issuer
+      keys: [cusip]
+      mode: members
+      member: filed
+      count: filings
+      sample: filed_sample
+      sample_limit: 1
+    isin_filed:
+      source: issuers
+      table: isin_issuer
+      keys: [isin]
+      mode: members
+      member: filed
+      count: filings
+      sample: filed_sample
+      sample_limit: 1
     isin_issuers:
       source: issuers
       table: isin_issuer
