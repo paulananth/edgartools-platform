@@ -146,8 +146,12 @@ submits one source.
    ```bash
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
    ```
-   Record the test run with `rules record-proof` before any approval. The
-   version label and proof file are data-onboarding's **test** step.
+   Check it offline first with `edgar-warehouse rules check --source <name>`.
+   Then test that version and record the test run with `rules record-proof`
+   before any approval: data-onboarding's **test** step names the version
+   label, runs `rules test` where the source's reading keeps each document
+   whole, and says what to use when it does not. A test that stops is not a
+   proof and is not recorded.
 3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
    the merge policy this source depends on first, then this source:
    ```bash
