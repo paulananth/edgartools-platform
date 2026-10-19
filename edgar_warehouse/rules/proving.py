@@ -173,7 +173,13 @@ class _Commands:
                     raise TestRunError(f"step {step['name']} is waiting: a unit failed its checks")
             else:
                 raise TestRunError(f"step {step['name']} did not finish before the deadline")
-        return json.loads(self("worker", "bookkeeping", "finalize", run_id))
+        # Finalize delivers at most --limit of the run's Change Journal events a call: repeat it while
+        # events wait and each call delivers some, so a run of more units than one call completes.
+        final, waiting = json.loads(self("worker", "bookkeeping", "finalize", run_id, "--limit", "1000")), None
+        while final["run"]["state"] != "complete" and 0 < final["pending_deliveries"] != waiting:
+            waiting = final["pending_deliveries"]
+            final = json.loads(self("worker", "bookkeeping", "finalize", run_id, "--limit", "1000"))
+        return final
 
 
 def recording(source: str, version: str, document: dict, sandbox: str):

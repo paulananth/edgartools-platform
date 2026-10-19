@@ -1,4 +1,6 @@
 """`rules test` reads each duty's login from the local stores' env files (ticket 14)."""
+import json
+
 import pytest
 
 from edgar_warehouse.rules import proving
@@ -65,3 +67,35 @@ def test_the_named_target_is_the_one_tested(tmp_path, monkeypatch):
     with pytest.raises(proving.TestRunError, match="declares no `mastering_isin` target"):
         proving.run(source="example", capture=tmp_path, documents=tmp_path / "d.json", capture_run="r",
                      as_of="2026-10-18T00:00:00Z", stores=tmp_path, out=tmp_path / "out.json", target="mastering_isin")
+
+
+def test_finalize_repeats_while_journal_events_wait():
+    answers = iter([{"run": {"state": "waiting"}, "pending_deliveries": 1500},
+                    {"run": {"state": "waiting"}, "pending_deliveries": 500},
+                    {"run": {"state": "complete"}, "pending_deliveries": 0}])
+    calls = []
+
+    class Commands(proving._Commands):
+        def __init__(self):
+            pass
+
+        def __call__(self, duty, *args):
+            calls.append(args)
+            return json.dumps(next(answers))
+
+    assert Commands().drive("run-1", [])["run"]["state"] == "complete"
+    assert len(calls) == 3 and all(args[-2:] == ("--limit", "1000") for args in calls)
+
+
+def test_finalize_stops_when_a_call_delivers_nothing():
+    calls = []
+
+    class Commands(proving._Commands):
+        def __init__(self):
+            pass
+
+        def __call__(self, duty, *args):
+            calls.append(args)
+            return json.dumps({"run": {"state": "waiting"}, "pending_deliveries": 7})
+
+    assert Commands().drive("run-1", [])["run"]["state"] == "waiting" and len(calls) == 2
