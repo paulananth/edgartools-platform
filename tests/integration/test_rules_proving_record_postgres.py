@@ -20,7 +20,8 @@ def report(document, passed=True):
     return {"test_run": f"{PERSON}, target mastering, on a local capture", "rules_digest": digest(document),
             "batch_hash": "a" * 64, "passed": passed, "passes": [{"records_in_mdm": 3}, {"records_in_mdm": 3}],
             "second_pass_changed_nothing": passed, "capture": {"capture_run": "c"}, "policy_digest": "b" * 64,
-            "contract_digests": {"sec.submissions.person.v1": "c" * 64}, "target": "mastering"}
+            "contract_digests": {"sec.submissions.person.v1": "c" * 64}, "target": "mastering",
+            "run_inputs": {"facts": {}, "files": {}}}
 
 
 @pytest.fixture
