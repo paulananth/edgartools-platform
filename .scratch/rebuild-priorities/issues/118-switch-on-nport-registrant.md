@@ -12,6 +12,6 @@ Type: task (configuration only). Status: in progress (Claude, 2026-10-19). Block
 - [x] A step may read with another source's rules file (`<source>/<file>.yaml`, generic): the fund reads the registrant's readings for each filing's date and registrant CIK; that file's digest joins the processing identity (2026-10-19 12:56 ET). GoF consult: one naming rule, no new structure
 - [x] The fund's `mastering` target declared (configuration): the registrant's two readings, its filings with both pair sets, each series (`reduce.yaml`), LEI pairs, the latest filing (`combine.yaml`), one record each (`record.yaml`, new), prepare, merge, processed; the sequence names `mastering` (2026-10-19 12:56 ET)
 - [x] Fund `rules test`, two passes on a fresh store (2026-10-19 12:56 ET; 2 min 28 s): passed, the second pass changed nothing; 12,937 Funds and 7 waiting for an LEI that fails its check digit (12,944 series, the profile's), no identifier on two masters
-- [ ] Fund: save, record, approve, activate in the `company-on` store; `rules run` over the quarter
+- [x] Fund: saved as `fund-2026-10-19.pipes-on`, its test run recorded, approved under the standing approval, active in the `company-on` store after the registrant; `rules run` (no feed) over the quarter (2026-10-19 12:57 ET): complete in 80 s, every step verified
 - [ ] Three-axis review, PR, CI, merge
 - [ ] Learning → skill
