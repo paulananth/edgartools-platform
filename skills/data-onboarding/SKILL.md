@@ -651,9 +651,11 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    structural fields (the ones the classification rule tests) is rightly
    held back, so an invented capture proves nothing about the kind. A
    version-1 section is refused: declare each step's units and input first.
-   The writer forms units today for a read of captured documents (byte
-   slices), `mdm.prepare`, `mdm.merge` and `journal.record`; a target with
-   any other step is refused until it can form that step's units. The same
+   The writer forms units for a read of captured documents (slices, groups
+   or each file, with per-document context, a companion file and same-file
+   lookups), a read of a combine's pieces, `source.combine`, `mdm.prepare`,
+   `mdm.merge` and `journal.record` ([bookkeeping SPEC](../bookkeeping/SPEC.md));
+   a target with any other step is refused. The same
    manifest for a real run comes from `edgar-warehouse mdm prepare-capture
    --source <name> --target <target>`.
 

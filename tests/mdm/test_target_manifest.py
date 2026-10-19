@@ -63,7 +63,13 @@ def test_the_engine_sees_version_one_steps():
     ({"units": {"slices": {"bytes": 0}}}, "slices name their bytes"),
     ({"units": {"groups": 17}}, "groups hold 1..16"),
     ({"units": {"every": 2}}, "units are one"),
-    ({"input": {"other": 1}}, "contract, keys and readings only"),
+    ({"input": {"other": 1}}, "lookups and pieces only"),
+    ({"units": {"each": "folder"}}, "each file"),
+    ({"input": {"files": "../x"}}, "pattern over the bundle"),
+    ({"input": {"beside": {"path": "{stem}.json", "sha256": "request_sha256"}}}, "template path"),
+    ({"input": {"context": {"batch": "{stem}"}}}, "templates over"),
+    ({"input": {"lookups": {"asked": {"from": "nothing"}}}}, "same file's unit"),
+    ({"input": {"pieces": {"step": "nothing"}}}, "pieces name one prerequisite"),
     ({"input": {"readings": {"read": {"all": "nothing"}}}}, "one prerequisite step"),
 ])
 def test_a_plan_the_engine_cannot_run_is_refused(plan, words):

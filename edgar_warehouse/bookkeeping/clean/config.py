@@ -29,7 +29,10 @@ def _integer(value, low, high, name):
 # and what each unit's input names (`input`), which the input-manifest writer
 # reads. They are checked here and stripped, so the engine sees version-1 steps.
 PLAN_KEYS = frozenset({"units", "input"})
-INPUT_KEYS = frozenset({"contract", "keys", "readings"})
+INPUT_KEYS = frozenset({"contract", "keys", "readings", "files", "beside", "context", "lookups", "pieces"})
+LOOKUP_KEYS = frozenset({"from", "table", "column", "value_column", "max_input_bytes", "max_input_rows"})
+# A per-document template names the document's folder, its name before the first dot, and its file name.
+TEMPLATE = r"(?:[^{}]|\{(?:dir|base|name)\})*"
 
 
 SLICE_BYTES = 1024**3
@@ -38,8 +41,13 @@ SLICE_BYTES = 1024**3
 def _units(units) -> None:
     if units == "one":
         return
-    if not isinstance(units, dict) or len(units) != 1 or not set(units) <= {"slices", "groups"}:
-        raise Blocked(f"A step's units are one, slices of at most N bytes, or groups of 1..{COMPOSE_SLOTS} files")
+    if not isinstance(units, dict) or len(units) != 1 or not set(units) <= {"slices", "groups", "each"}:
+        raise Blocked(f"A step's units are one, slices of at most N bytes, groups of 1..{COMPOSE_SLOTS} files, "
+                      "or each file")
+    if "each" in units:
+        if units["each"] != "file":
+            raise Blocked("A step's units are each file: {each: file}")
+        return
     if "slices" in units:
         slices = units["slices"]
         if (not isinstance(slices, dict) or set(slices) != {"bytes"} or type(slices["bytes"]) is not int
@@ -53,7 +61,8 @@ def _plan(step: dict) -> None:
     _units(step.get("units", "one"))
     shape = step.get("input", {})
     if not isinstance(shape, dict) or set(shape) - INPUT_KEYS:
-        raise Blocked("A step's input names its contract, keys and readings only")
+        raise Blocked("A step's input names its contract, keys, readings, files, beside, context, lookups "
+                      "and pieces only")
     if "contract" in shape and (not isinstance(shape["contract"], str)
                                 or not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
         raise Blocked("A step's contract is a rules file in the source's folder")
@@ -66,6 +75,30 @@ def _plan(step: dict) -> None:
     if any(not isinstance(value, dict) or len(value) != 1 or not set(value) <= {"all", "step"}
            or value.get("all", value.get("step")) not in step["requires"] for value in readings.values()):
         raise Blocked("A step's readings each name one prerequisite step: {all: <step>} or {step: <step>}")
+    if "files" in shape and (not isinstance(shape["files"], str) or not shape["files"] or ".." in shape["files"]):
+        raise Blocked("A step's files are a pattern over the bundle's documents")
+    beside = shape.get("beside", {"path": "", "sha256": "sha256"})
+    if (not isinstance(beside, dict) or set(beside) != {"path", "sha256"} or not isinstance(beside["path"], str)
+            or not re.fullmatch(TEMPLATE, beside["path"]) or ".." in beside["path"]
+            or not isinstance(beside["sha256"], str) or not re.fullmatch(r"[a-z][a-z0-9_]*", beside["sha256"])):
+        raise Blocked("A step's beside names a template path and the receipt field holding its sha256")
+    context = shape.get("context", {})
+    if (not isinstance(context, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in context)
+            or any(isinstance(v, str) and not re.fullmatch(TEMPLATE, v) for v in context.values())
+            or any(not isinstance(v, (str, int, bool)) for v in context.values())):
+        raise Blocked("A step's context names values: text templates over {dir}, {base} and {name}, or literals")
+    lookups = shape.get("lookups", {})
+    if (not isinstance(lookups, dict) or len(lookups) > COMPOSE_SLOTS - 1
+            or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in lookups)
+            or any(not isinstance(v, dict) or set(v) != LOOKUP_KEYS or v["from"] not in step["requires"]
+                   or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows"))
+                   for v in lookups.values())):
+        raise Blocked("A step's lookups each read the same file's unit of one prerequisite: "
+                      "from, table, column, value_column and their bounds")
+    pieces = shape.get("pieces")
+    if pieces is not None and (not isinstance(pieces, dict) or set(pieces) != {"step"}
+                               or pieces["step"] not in step["requires"]):
+        raise Blocked("A step's pieces name one prerequisite step: {step: <step>}")
 
 
 def validate(document: dict, target: str) -> dict:

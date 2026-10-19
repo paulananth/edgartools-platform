@@ -119,16 +119,31 @@ needs no writer of its own:
 
 - `units`: `one` (the default), `{slices: {bytes: N}}` (the bundle's
   documents cut into units of at most N bytes, each at most the reading's
-  `max_artifacts`), or `{groups: N}` (groups of at most N files, N at most 16,
-  the composed-slot limit);
+  `max_artifacts`), `{groups: N}` (groups of at most N files, N at most 16,
+  the composed-slot limit), or `{each: file}` (one unit per document, keyed
+  by its pair key, below);
 - `input`: `contract` (a rules file in the source's folder, default
   `source.yaml`), `keys` (for `mdm.prepare`: `table`, `record_column`,
   `dataset`) and `readings` (each name `{all: <step>}`, every unit of a
-  prerequisite as one list, or `{step: <step>}`, its one unit).
+  prerequisite as one list, or `{step: <step>}`, its one unit); for a read:
+  - `files`: a pattern over the bundle's document keys (default every one);
+  - `beside: {path, sha256}`: read each document's companion instead, at
+    the path the template gives, equal to the sha256 the document's receipt
+    holds in that field (a request beside its answer), so the pair is
+    selected and processed as one;
+  - `context`: values per document; text is a template over `{dir}` (the
+    key's folder), `{base}` (its name before the first dot) and `{name}`;
+  - `lookups`: `{<set>: {from, table, column, value_column, max_input_bytes,
+    max_input_rows}}`, a pair set read from the unit of `from` (an `{each:
+    file}` step) with the same pair key, `{dir}/{base}`; a read with lookups
+    is cut into groups or each file, one composed slot per document;
+  - `pieces: {step: <combine step>}`: one unit reading that step's verified
+    output piece by piece (read version 4).
 
-Today the writer forms `slices` for a `source.read` of captured documents
-and `{all: <step>}` readings for `mdm.prepare`, and refuses the rest;
-`groups` and `{step: <step>}` come with OpenFIGI's target (rebuild ticket 14).
+The writer forms these for `source.read` and `source.combine` (one unit:
+the contract over its readings), and the publication steps `mdm.prepare`,
+`mdm.merge` and `journal.record`. A receipt names its document by `key`
+(the bronze layout) or by `file` (a path inside the capture folder).
 Both are checked when the section is validated and stripped before the
 engine sees the steps, so a run's worklist rules are unchanged. Adding them
 changes the source's digest, so the Change Journal treats its files as not

@@ -8,9 +8,10 @@ the capture's receipts, names only those the Change Journal does not record
 as processed under this source's rules (ticket 22; `force` names every one),
 and freezes every unit's input. Each step by its operation:
 
-- `source.read`: the bundle's documents, cut by `units` (`slices` of at most N
-  bytes, each at most the reading's `max_artifacts` documents), read with
-  the step's `contract` (default `source.yaml`);
+- `source.read`: the bundle's documents, cut by `units` and read with the
+  step's `contract` (default `source.yaml`), or a combine's pieces
+  (`read_units`);
+- `source.combine`: one unit, the step's contract over the readings it names;
 - `mdm.prepare`: the readings its `input.readings` names, as one publication,
   with its `input.keys` (`table`, `record_column`, `dataset`);
 - `mdm.merge`: the preparation's manifest through the Merge Stage;
@@ -29,7 +30,7 @@ from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import validate
 from edgar_warehouse.rules import files as rules_files
-from . import changed_files, raw_capture
+from . import changed_files, raw_capture, read_units
 from .evidence import instant
 from .raw_capture import read_bounded
 from .store import digest
@@ -48,6 +49,7 @@ class _Run:
     reading: dict
     folder: Path
     receipts: dict
+    rows: dict
     keys: list
     sized: list
     limit: int
@@ -63,8 +65,7 @@ class _Run:
     inputs: str
 
 
-def _unit(output: str, keys: dict, source: dict) -> dict:
-    return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
+_unit = read_units.unit
 
 
 def _plan(reading: dict, target: str) -> list[dict]:
@@ -103,18 +104,27 @@ def _prepared_shape(by_name: dict, prepare: dict, keys_of: dict, contracts: dict
 
 
 def _read(step: dict, run: _Run, units: dict) -> list[dict]:
-    """The bundle's documents cut into slices of bytes, each read with the step's contract."""
-    name, plan = step["name"], step.get("units", "one")
-    if not isinstance(plan, dict) or "slices" not in plan:
-        raise ValueError(f"Step {name}: a read of captured documents is cut into slices of bytes")
-    contract = run.store.put(run.inputs, run.contracts[_contract(step)])
-    found, start = [], 0
-    for unit in raw_capture.slices(run.sized, plan["slices"]["bytes"], run.limit):
-        artifacts = [raw_capture.document(run.folder, run.receipts, key) for key in unit]
-        found.append(_unit(f"{run.root}/{name}/{start}.reading.json", {"unit": f"{name}-{start}"},
-                           run.store.put(run.inputs, {"version": 1, "contract": contract, "artifacts": artifacts})))
-        start += len(unit)
-    return found
+    """The step's documents cut into units, each read with the step's contract (`read_units`)."""
+    return read_units.form(step, run, units)
+
+
+def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
+    """One unit: the step's contract over the readings it names, each a list of units or one unit."""
+    name, shape = step["name"], step.get("input", {})
+    readings, slots = shape.get("readings", {}), {}
+    if not readings:
+        raise ValueError(f"Step {name}: a combine names its readings")
+    for slot, named in readings.items():
+        if "all" in named:
+            slots[slot] = [{"step": named["all"], "key": u["keys"]["unit"]} for u in units[named["all"]]]
+        elif len(units[named["step"]]) != 1:
+            raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
+        else:
+            slots[slot] = {"step": named["step"], "key": units[named["step"]][0]["keys"]["unit"]}
+    contract = run.store.put(run.inputs, run.contracts[shape.get("contract", "source.yaml")])
+    return [_unit(f"{run.root}/{name}/combined.json", {"unit": name}, {"compose": {
+        "document": {"version": 1, "contract": contract, "readings": {slot: {"slot": slot} for slot in slots}},
+        "slots": slots}})]
 
 
 def _prepare(step: dict, run: _Run, units: dict) -> list[dict]:
@@ -152,7 +162,7 @@ def _record(step: dict, run: _Run, units: dict) -> list[dict]:
 
 
 # Each operation's units, from the step, the run and the units of the steps before it.
-FORMS = {"source.read": _read, "mdm.prepare": _prepare, "mdm.merge": _merge, "journal.record": _record}
+FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepare, "mdm.merge": _merge, "journal.record": _record}
 OPERATIONS = tuple(FORMS)
 
 
@@ -193,7 +203,7 @@ def write_manifest(
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
     for step in steps:
         if step["operation"] != "source.read" and "units" in step:
-            raise ValueError(f"Step {step['name']}: only a read of captured documents forms units today")
+            raise ValueError(f"Step {step['name']}: only a read of captured documents forms units")
     dataset = keys_of["dataset"]
     # Each contract the steps read with, loaded once: what is frozen is what the ids digest.
     contracts = {name: rules_files.load(rules_files.ROOT / "sources" / source / name)
@@ -204,6 +214,7 @@ def write_manifest(
     limit = reading["execution"]["max_artifacts"]
     folder = Path(capture).resolve()
     receipts_raw, receipts = raw_capture.receipts(folder)
+    rows = raw_capture.rows(receipts_raw)
     keys = json.loads(read_bounded(Path(documents).resolve(), DOCUMENTS_BYTES))
     if (not isinstance(keys, list) or not 1 <= len(keys) <= limit
             or len(set(keys)) != len(keys) or any(not isinstance(key, str) for key in keys)):
@@ -234,7 +245,7 @@ def write_manifest(
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset}/{bundle}", "batch_id": f"{source}:{bundle}"}
     root = Path(output).resolve().as_uri()
-    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, keys=keys, sized=sized, limit=limit,
+    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, keys=keys, sized=sized, limit=limit,
                keys_of=keys_of, policy=policy, processing=processing, force=force, publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
                inputs=root + "/inputs")
     units: dict[str, list[dict]] = {}
