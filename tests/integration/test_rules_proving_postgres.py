@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from edgar_warehouse.rules import proving
+from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from tests.support.sec_capture import document, key, person, write_capture
 from tests.unit.test_local_test_stores import local
 
@@ -70,3 +71,19 @@ def test_a_store_that_already_holds_records_is_refused(tmp_path, stores):
 def test_a_source_whose_section_states_no_plan_stops_the_test(tmp_path, stores):
     with pytest.raises(proving.TestRunError, match="must be version 2"):
         run(tmp_path, stores, source="sec.submissions.company")
+
+
+def test_a_run_is_recorded_as_the_version_it_names(tmp_path, stores, databases, monkeypatch):
+    from edgar_warehouse.rules import files
+    from edgar_warehouse.rules.db import Rules
+
+    operator = Rules(databases.rules.engine)
+    operator.save("source", "sec.submissions.person", "person-test-run", files.source("sec.submissions.person"))
+    monkeypatch.setenv("RULES_DATABASE_URL", databases.rules.engine.url.render_as_string(hide_password=False))
+
+    report = run(tmp_path, stores, version="person-test-run")
+
+    assert report["recorded"] == {"version": "person-test-run"}
+    row = operator.version("source", "sec.submissions.person", "person-test-run")
+    assert row["status"] == "proven" and row["proof"]["batch_hash"] == report["batch_hash"]
+    assert row["proof"]["evidence"]["target"] == "mastering"
