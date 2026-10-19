@@ -132,13 +132,23 @@ needs no writer of its own:
     holds in that field (a request beside its answer), so the pair is
     selected and processed as one;
   - `context`: values per document; text is a template over `{dir}` (the
-    key's folder), `{base}` (its name before the first dot) and `{name}`;
+    key's folder), `{base}` (its name before the first dot) and `{name}`, or
+    `{fact: <name>}`, a run fact;
   - `lookups`: `{<set>: {from, table, column, value_column, max_input_bytes,
     max_input_rows}}`, a pair set read from the unit of `from` (an `{each:
     file}` step) with the same pair key, `{dir}/{base}`; a read with lookups
-    is cut into groups or each file, one composed slot per document;
+    is cut into groups or each file, one composed slot per document. Or
+    every set `{file: <name>}`, given whole by a run file;
+  - `references: {<reference>: {file: <name>}}`: a reference the contract
+    leaves empty (an approved scope), filled from a run file;
   - `pieces: {step: <combine step>}`: one unit reading that step's verified
     output piece by piece (read version 4).
+
+A target may declare its run's own inputs, `run: {facts: [names], files:
+[names]}`: facts the operator gives (`--fact name=value`, a JSON value or
+text) and JSON files from outside the capture (`--file name=path`), for
+`rules test` and `mdm prepare-capture` alike. A run that gives other ones is
+refused; each file's and each fact's digest joins the processing identity and the run's ids.
 
 The writer forms these for `source.read` and `source.combine` (one unit:
 the contract over its readings), and the publication steps `mdm.prepare`,

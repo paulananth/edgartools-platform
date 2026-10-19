@@ -47,12 +47,14 @@ def _approve_rule(args):
 def _test(args):
     """A test run of one of a source's targets on local stores (ticket 14)."""
     from .proving import TestRunError, run
+    from edgar_warehouse.mdm.clean.target_manifest import run_arguments
 
     try:
+        facts, run_files = run_arguments(args.fact, args.file)
         result = run(source=args.source, capture=args.capture, documents=args.documents, capture_run=args.capture_run,
                      as_of=args.as_of, stores=args.stores, out=args.out, minutes=args.minutes,
-                     target=args.target, version=args.version)
-    except TestRunError as error:
+                     target=args.target, version=args.version, facts=facts, run_files=run_files)
+    except (TestRunError, ValueError) as error:
         print(f"Test run stopped: {error}", file=sys.stderr)
         return 1
     print(json.dumps({"report": str(args.out), "passed": result["passed"], "recorded": result.get("recorded"),
@@ -261,6 +263,8 @@ def register(subparsers):
     test.add_argument("--out", required=True, type=Path, help="Where the counts-only report is written")
     test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
     test.add_argument("--target", default="mastering", help="The source's Bookkeeping target (default mastering)")
+    test.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
+    test.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
     test.add_argument("--version", help="Record the run as this saved version's test run, in the Rules Database "
                       "RULES_DATABASE_URL names (the version must be the rules on disk)")
     test.set_defaults(handler=_test)
