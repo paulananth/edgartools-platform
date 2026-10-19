@@ -5,6 +5,8 @@ description: Turn the defects found while profiling a data set into data quality
 
 # Data Quality
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill set. data-onboarding and refining-rules
 > call it; it writes only `rules/sources/<source>/quality.yaml`.
 

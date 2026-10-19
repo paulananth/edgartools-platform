@@ -5,6 +5,8 @@ description: Render SQL for the database named by a connection. Use SQLAlchemy o
 
 # SQL writer
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 This skill renders SQL. It does not store SQL. A skill that needs a statement
 for PostgreSQL, MySQL, or SQL Server Express calls this skill. The statement
 is compiled for the connection's dialect and then run. It is not copied into

@@ -5,6 +5,8 @@ description: Profile ANY data set and record the silver fields it needs - every 
 
 # Data Profiling
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 > Part of the **data-platform** skill set. This skill only reads data and
 > writes findings. It never changes a store, a rule or a source.
 

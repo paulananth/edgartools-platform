@@ -5,6 +5,8 @@ description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping
 
 # Data Operations
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 Operate existing sources repeatedly using their configured engines. Maintain the
 source's operational runbook and report verified progress with counts and reasons.
 This skill guides an invoked agent; it does not install a scheduler or stay running

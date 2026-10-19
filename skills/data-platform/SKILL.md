@@ -20,6 +20,29 @@ request to a provider the operator ruled out; never read or print a secret; no v
 in a public repository; never guess an identifier; never invent a command; ask one
 question at a time, with your recommendation.
 
+## The seven wastes
+
+Every skill works lean (operator, 2026-10-19: "make all skills understand 7
+wastes and eliminate any of the waste from each skill"). Before a step, check
+it against the seven, and drop what adds no value:
+
+| Waste | Here | Instead |
+|---|---|---|
+| Transport | Copying captures, stores or files to new places for each check | Read the capture where it is; reuse a store |
+| Inventory | Branches, worktrees, stores, drafts and tickets left open | Finish or close each; stop and remove what a run left |
+| Motion | Searching code for what a skill should say; rebuilding inputs a run already made | Write the answer into the skill once; keep a run's inputs with its report |
+| Waiting | Runs that stop on a deadline too short; questions a ruling already answers | Size the deadline from the measured time; decide what follows from a ruling |
+| Over-processing | A full Proving Run, profile or review for a change its own tests prove | The cheapest proof (`mdm-engineering`); carry a proof forward |
+| Over-production | Building a feature, a target or a check before a source needs it | Build only what the step in hand needs |
+| Defects | Guessed times, unchecked limits, a skill word CI refuses: rework | Read the clock; check bounds first; run the checks the change can affect |
+
+**Carry a proof forward.** A version's proof records the rules it ran. When
+the rules changed since, and each change was proven by its own merged PR at
+the level the change needs (`mdm-engineering`, "Choose the cheapest proof"),
+record the last proof against the new version with those changes and their
+PRs named as its evidence (`rules record-proof`). Run again only when a
+change has no such proof.
+
 ## Guide the task to completion
 
 For readiness, cross-reference mapping/lookup, missing proof, draft-to-final

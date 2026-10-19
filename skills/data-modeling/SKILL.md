@@ -5,6 +5,8 @@ description: Decide where one profiled part of a data set sits in the model - it
 
 # Data modeling
 
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
 The boundary is [REQUIREMENTS.md](REQUIREMENTS.md). This skill decides
 structure, with evidence and the existing language. It does not measure files
 (data-profiling), write a contract (data-onboarding, refining-rules), write a
