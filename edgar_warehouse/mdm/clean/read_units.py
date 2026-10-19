@@ -22,7 +22,13 @@ from __future__ import annotations
 import fnmatch
 import posixpath
 
+from edgar_warehouse.workers.source_readings import RECEIPT_BYTES
+
 from . import raw_capture
+from .store import canonical
+
+CONTRACT_BYTES = 1024**2  # the worker reads a contract within 1 MiB
+CONTEXT_TYPES = {"integer": int, "text": str, "boolean": bool}
 
 
 def unit(output: str, keys: dict, source: dict) -> dict:
@@ -91,14 +97,45 @@ def _document(step: dict, run, key: str) -> dict:
     return raw_capture.verified(run.folder, companion, dict(run.companions[key])[companion])[0]
 
 
+def _check_run_inputs(name: str, shape: dict, body: dict, run) -> None:
+    """A run's facts and files fit the contract they fill, checked before any unit is written."""
+    read = body.get("read") or {}
+    for ref in shape.get("references", {}):
+        if read.get("references", {}).get(ref) != {}:
+            raise ValueError(f"Step {name}: reference {ref} is not one the contract declares empty")
+    for value_name, template in shape.get("context", {}).items():
+        if isinstance(template, dict):
+            kind = CONTEXT_TYPES.get((read.get("context") or {}).get(value_name, {}).get("type"))
+            fact = run.facts[template["fact"]]
+            if kind is None or not isinstance(fact, kind) or kind is int and isinstance(fact, bool):
+                raise ValueError(f"Step {name}: fact {template['fact']} is not the contract's {value_name}")
+    files = {set_name: value["file"] for set_name, value in shape.get("lookups", {}).items() if "file" in value}
+    declared = read.get("lookup_sets") or {}
+    if files and set(files) != set(declared):
+        raise ValueError(f"Step {name}: its lookup sets are the contract's {sorted(declared)}")
+    for set_name, file_name in files.items():
+        spec, values = declared[set_name], run.run_files[file_name]
+        pairs = bool(spec.get("pairs"))
+        if (not isinstance(values, list) or len(values) > spec["max_values"]
+                or any(not (isinstance(v, list) and len(v) == 2 and all(isinstance(x, str) for x in v))
+                       if pairs else not isinstance(v, str) for v in values)
+                or len(canonical(values).encode()) > min(spec["max_bytes"], RECEIPT_BYTES)):
+            raise ValueError(f"Step {name}: run file {file_name} is not lookup set {set_name} "
+                             f"({'pairs' if pairs else 'values'} of text, within its bounds)")
+
+
 def form(step: dict, run, units: dict) -> list[dict]:
     """The units of one `source.read` step."""
     name, shape = step["name"], step.get("input", {})
     body = run.contracts[contract_of(step)]
-    if shape.get("references"):  # a reference the contract leaves empty, filled from a run file
+    _check_run_inputs(name, shape, body, run)
+    if shape.get("references"):  # a reference the contract declares empty, filled from a run file
         body = {**body, "read": {**body["read"], "references": {
             **body["read"].get("references", {}),
             **{ref: run.run_files[value["file"]] for ref, value in shape["references"].items()}}}}
+        if len(canonical(body).encode()) > CONTRACT_BYTES:
+            raise ValueError(f"Step {name}: the contract with its references filled is over 1 MiB; "
+                             "give a large set as a lookup set instead")
     contract = run.store.put(run.inputs, body)
     if "pieces" in shape:
         if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":

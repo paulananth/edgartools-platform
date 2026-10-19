@@ -214,7 +214,8 @@ def record(rules, result: dict, *, source: str, version: str) -> dict:
     """The report as the version's test run (`Rules.prove`): passing or not, with its counts."""
     proof = {"digest": result["rules_digest"], "batch_hash": result["batch_hash"], "passed": result["passed"],
              "evidence": {key: result[key] for key in ("passes", "second_pass_changed_nothing", "capture",
-                                                       "policy_digest", "contract_digests", "target")},
+                                                       "policy_digest", "contract_digests", "target",
+                                                       "run_inputs")},
              "note": result["test_run"]}
     from edgar_warehouse.control_contract import Blocked
 
@@ -315,6 +316,9 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
             "batch_hash": passes[0]["manifest_sha256"],
             "policy_digest": policy_digest,
             "contract_digests": {code: digest(entry["contract"]) for code, entry in (document.get("mdm") or {}).items()},
+            # The run's own inputs: each fact, and each file by its sha256.
+            "run_inputs": {"facts": dict(facts or {}), "files": {
+                name: hashlib.sha256(Path(path).read_bytes()).hexdigest() for name, path in (run_files or {}).items()}},
             "capture": {"receipts_sha256": capture_sha, "documents_sha256": hashlib.sha256(documents.read_bytes()).hexdigest(),
                         "capture_run": capture_run},
             "passes": passes,

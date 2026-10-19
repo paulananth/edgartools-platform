@@ -148,7 +148,7 @@ A target may declare its run's own inputs, `run: {facts: [names], files:
 [names]}`: facts the operator gives (`--fact name=value`, a JSON value or
 text) and JSON files from outside the capture (`--file name=path`), for
 `rules test` and `mdm prepare-capture` alike. A run that gives other ones is
-refused; each file's digest joins the processing identity and the run's ids.
+refused; each file's and each fact's digest joins the processing identity and the run's ids.
 
 The writer forms these for `source.read` and `source.combine` (one unit:
 the contract over its readings), and the publication steps `mdm.prepare`,

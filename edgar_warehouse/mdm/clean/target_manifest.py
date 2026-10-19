@@ -222,8 +222,14 @@ def write_manifest(
     facts, run_files = dict(facts or {}), dict(run_files or {})
     if set(facts) != set(declared["facts"]) or set(run_files) != set(declared["files"]):
         raise ValueError(f"The target's run takes facts {declared['facts']} and files {declared['files']}")
-    loaded = {name: json.loads(read_bounded(Path(path).resolve(), RUN_FILE_BYTES)) for name, path in run_files.items()}
-    shared = [{"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())]
+    loaded = {}
+    for name, path in run_files.items():
+        try:
+            loaded[name] = json.loads(read_bounded(Path(path).resolve(), RUN_FILE_BYTES))
+        except (OSError, ValueError) as error:  # missing, a folder, too large, or not JSON
+            raise ValueError(f"Run file {name} ({path}) is not a readable JSON file: {error}") from None
+    shared = [*({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),
+              *({"name": f"fact:{name}", "sha256": digest(value)} for name, value in sorted(facts.items()))]
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]
     if len(prepare) != 1:
         raise ValueError("A target prepares one publication: exactly one mdm.prepare step")
@@ -273,7 +279,7 @@ def write_manifest(
     # other rules or another time is a new consumer, not a reused batch key.
     # A contract is digested whole, so an edit to its steps' units is one too.
     bundle = digest([publication_key, revision, as_of, contracts, reading["mdm"], policy,
-                     *([facts, shared] if facts or shared else [])])
+                     *([shared] if shared else [])])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset}/{bundle}", "batch_id": f"{source}:{bundle}"}
     root = Path(output).resolve().as_uri()

@@ -204,3 +204,33 @@ def test_run_arguments_read_a_fact_as_json_else_text():
     assert run_arguments(["n=3", "label=x"], ["scope=/s.json"]) == ({"n": 3, "label": "x"}, {"scope": "/s.json"})
     with pytest.raises(ValueError, match="each name once"):
         run_arguments(["n=3", "n=4"], None)
+
+
+def test_a_run_file_that_is_not_json_is_refused(tmp_path):
+    (tmp_path / "bad.json").parent.mkdir(exist_ok=True)
+    (tmp_path / "bad.json").write_text("not json")
+    with pytest.raises(ValueError, match="Run file approved_scope"):
+        gleif_bundle(tmp_path, run_files={"approved_scope": str(tmp_path / "bad.json"),
+                                          "nport_issuers": str(tmp_path / "bad.json")})
+
+
+def test_a_fact_of_another_type_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="fact publication_count"):
+        gleif_bundle(tmp_path, facts={"publication_count": "abc"})
+
+
+def test_a_lookup_set_file_of_another_shape_is_refused(tmp_path):
+    (tmp_path / "issuers2.json").write_text(json.dumps({"not": "a list"}))
+    (tmp_path / "s2.json").write_text(json.dumps({"ZZ00000000000000000A00": {"selected": True}}))
+    with pytest.raises(ValueError, match="is not lookup set nport_issuers"):
+        gleif_bundle(tmp_path, run_files={"approved_scope": str(tmp_path / "s2.json"),
+                                          "nport_issuers": str(tmp_path / "issuers2.json")})
+
+
+def test_a_reference_the_contract_does_not_declare_empty_is_refused(tmp_path, monkeypatch):
+    body = copy.deepcopy(files.source("gleif"))
+    read = body["bookkeeping"]["targets"]["mastering"]["steps"][0]["input"]
+    read["references"] = {"approved_scoep": {"file": "approved_scope"}}
+    monkeypatch.setattr(files, "source", lambda name, *a, **k: body)
+    with pytest.raises(ValueError, match="reference approved_scoep"):
+        gleif_bundle(tmp_path)

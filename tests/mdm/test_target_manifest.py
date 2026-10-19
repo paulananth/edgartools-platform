@@ -63,7 +63,7 @@ def test_the_engine_sees_version_one_steps():
     ({"units": {"slices": {"bytes": 0}}}, "slices name their bytes"),
     ({"units": {"groups": 17}}, "groups hold 1..16"),
     ({"units": {"every": 2}}, "units are one"),
-    ({"input": {"other": 1}}, "lookups and pieces only"),
+    ({"input": {"other": 1}}, "pieces and references only"),
     ({"units": {"each": "folder"}}, "each file"),
     ({"input": {"files": "../x"}}, "pattern over the bundle"),
     ({"input": {"beside": {"path": "{stem}.json", "sha256": "request_sha256"}}}, "template path"),
