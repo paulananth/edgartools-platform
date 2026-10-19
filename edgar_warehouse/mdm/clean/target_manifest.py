@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -37,7 +38,31 @@ DOCUMENTS_BYTES = 1024**2
 # One preparation reads the whole bundle, inside mdm.prepare's 32 MiB of
 # readings; a reading kept whole is about its documents' size.
 BUNDLE_BYTES = 24 * 1024**2
-OPERATIONS = ("source.read", "mdm.prepare", "mdm.merge", "journal.record")
+
+
+@dataclass(frozen=True)
+class _Run:
+    """What every step's units are formed from: the checked bundle and the publication."""
+
+    source: str
+    reading: dict
+    folder: Path
+    receipts: dict
+    keys: list
+    sized: list
+    limit: int
+    keys_of: dict
+    policy: str
+    processing: str
+    force: bool
+    as_of: str
+    revision: int
+    publication: dict
+    contracts: dict
+    by_name: dict
+    store: Artifacts
+    root: str
+    inputs: str
 
 
 def _unit(output: str, keys: dict, source: dict) -> dict:
@@ -61,17 +86,70 @@ def by_name_of(steps: list[dict]) -> dict:
     return {step["name"]: step for step in steps}
 
 
-def _prepared_shape(source: str, by_name: dict, prepare: dict, keys_of: dict) -> None:
+def _contract(step: dict) -> str:
+    return step.get("input", {}).get("contract", "source.yaml")
+
+
+def _prepared_shape(by_name: dict, prepare: dict, keys_of: dict, contracts: dict) -> None:
     """The table and record column the preparation reads are ones the reading it
     reads declares: one column holding the record."""
     readings = prepare.get("input", {}).get("readings", {})
     producer = by_name.get(next(iter(readings.values()), {}).get("all", ""), {})
-    contract = rules_files.load(rules_files.ROOT / "sources" / source
-                                / producer.get("input", {}).get("contract", "source.yaml"))
+    contract = contracts.get(_contract(producer), {})
     columns = (((contract.get("read") or {}).get("tables") or {}).get(keys_of["table"]) or {}).get("columns") or {}
     if keys_of["record_column"] not in columns:
         raise ValueError(f"The preparation's table {keys_of['table']!r} and column {keys_of['record_column']!r} "
                          "are not declared by the reading it reads")
+
+
+def _read(step: dict, run: _Run, units: dict) -> list[dict]:
+    name, plan = step["name"], step.get("units", "one")
+    if not isinstance(plan, dict) or "slices" not in plan:
+        raise ValueError(f"Step {name}: a read of captured documents is cut into slices of bytes")
+    contract = run.store.put(run.inputs, run.contracts[_contract(step)])
+    found, start = [], 0
+    for unit in raw_capture.slices(run.sized, plan["slices"]["bytes"], run.limit):
+        artifacts = [raw_capture.document(run.folder, run.receipts, key) for key in unit]
+        found.append(_unit(f"{run.root}/{name}/{start}.reading.json", {"unit": f"{name}-{start}"},
+                           run.store.put(run.inputs, {"version": 1, "contract": contract, "artifacts": artifacts})))
+        start += len(unit)
+    return found
+
+
+def _prepare(step: dict, run: _Run, units: dict) -> list[dict]:
+    name, readings = step["name"], step.get("input", {}).get("readings", {})
+    if len(readings) != 1 or set(next(iter(readings.values()))) != {"all"}:
+        raise ValueError(f"Step {name}: preparation reads every unit of one step: readings {{<name>: {{all: <step>}}}}")
+    ((slot, named),) = readings.items()
+    publication = run.publication
+    return [_unit(f"{run.root}/{name}/manifest.json", {
+        "unit": name, **run.keys_of, "policy": run.policy, "consumer": publication["consumer"],
+        "batch_id": publication["batch_id"], "as_of": run.as_of, "publication_key": publication["publication_key"],
+        "revision": str(run.revision)}, {"compose": {
+            "document": {"version": 1, "readings": {"slot": slot}},
+            "slots": {slot: [{"step": named["all"], "key": unit["keys"]["unit"]} for unit in units[named["all"]]]}}})]
+
+
+def _merge(step: dict, run: _Run, units: dict) -> list[dict]:
+    if len(step["requires"]) != 1 or run.by_name[step["requires"][0]]["operation"] != "mdm.prepare":
+        raise ValueError(f"Step {step['name']}: a merge follows the one preparation step")
+    (before,) = step["requires"]
+    return [{"keys": {"batch_id": run.publication["batch_id"], "consumer": run.publication["consumer"]},
+             "input": {"from": {"step": before, "key": units[before][0]["keys"]["unit"]}},
+             "output": f"{run.root}/{step['name']}.json", "cursor": {}}]
+
+
+def _record(step: dict, run: _Run, units: dict) -> list[dict]:
+    return [_unit(f"{run.root}/{step['name']}.json", {"unit": step["name"]}, run.store.put(
+        run.inputs, changed_files.record_input(
+            source=run.source, feed=run.reading["bronze"]["family"], processing=run.processing, forced=run.force,
+            as_of=run.as_of, files=[{"key": key, **raw_capture.document(run.folder, run.receipts, key)}
+                                    for key in run.keys])))]
+
+
+# Each operation's units, from the step, the run and the units of the steps before it.
+FORMS = {"source.read": _read, "mdm.prepare": _prepare, "mdm.merge": _merge, "journal.record": _record}
+OPERATIONS = tuple(FORMS)
 
 
 def write_manifest(
@@ -109,8 +187,15 @@ def write_manifest(
     keys_of = prepare[0].get("input", {}).get("keys", {})
     if set(keys_of) != {"table", "record_column", "dataset"} or keys_of["dataset"] not in (reading.get("mdm") or {}):
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
+    for step in steps:
+        if step["operation"] != "source.read" and "units" in step:
+            raise ValueError(f"Step {step['name']}: only a read of captured documents forms units today")
     dataset = keys_of["dataset"]
-    _prepared_shape(source, by_name_of(steps), prepare[0], keys_of)
+    # Each contract the steps read with, loaded once: what is frozen is what the ids digest.
+    contracts = {name: rules_files.load(rules_files.ROOT / "sources" / source / name)
+                 for name in sorted({_contract(step) for step in steps if step["operation"] == "source.read"})}
+    by_name = by_name_of(steps)
+    _prepared_shape(by_name, prepare[0], keys_of, contracts)
     limit = reading["execution"]["max_artifacts"]
     folder = Path(capture).resolve()
     receipts_raw, receipts = raw_capture.receipts(folder)
@@ -136,59 +221,20 @@ def write_manifest(
     # list file's bytes: the same documents are one publication.
     documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = f"{capture_run}:{source}:{documents_hash}"
-    # The consumer and batch ids name what shapes the records (the reading, the
-    # contract with its quality rule, the policy): a rerun under other rules or
-    # another time is a new consumer, not a reused batch key. The steps do not.
-    bundle = digest([publication_key, revision, as_of, reading["read"], reading["mdm"], policy])
+    # The consumer and batch ids name what shapes the records (every contract
+    # the steps read with, the Dataset Contracts, the policy): a rerun under
+    # other rules or another time is a new consumer, not a reused batch key.
+    bundle = digest([publication_key, revision, as_of, contracts, reading["mdm"], policy])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset}/{bundle}", "batch_id": f"{source}:{bundle}"}
-    store = Artifacts()
     root = Path(output).resolve().as_uri()
-    inputs = root + "/inputs"
+    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, keys=keys, sized=sized, limit=limit,
+               keys_of=keys_of, policy=policy, processing=processing, force=force, as_of=as_of, revision=revision,
+               publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
+               inputs=root + "/inputs")
     units: dict[str, list[dict]] = {}
-    by_name = by_name_of(steps)
     for step in steps:
-        name, shape = step["name"], step.get("input", {})
-        if step["operation"] != "source.read" and "units" in step:
-            raise ValueError(f"Step {name}: only a read of captured documents forms units today")
-        if step["operation"] == "source.read":
-            plan = step.get("units", "one")
-            if not isinstance(plan, dict) or "slices" not in plan:
-                raise ValueError(f"Step {name}: a read of captured documents is cut into slices of bytes")
-            contract = store.put(inputs, rules_files.load(
-                rules_files.ROOT / "sources" / source / shape.get("contract", "source.yaml")))
-            units[name], start = [], 0
-            for unit in raw_capture.slices(sized, plan["slices"]["bytes"], limit):
-                artifacts = [raw_capture.document(folder, receipts, key) for key in unit]
-                units[name].append(_unit(f"{root}/{name}/{start}.reading.json", {"unit": f"{name}-{start}"},
-                                         store.put(inputs, {"version": 1, "contract": contract,
-                                                            "artifacts": artifacts})))
-                start += len(unit)
-        elif step["operation"] == "mdm.prepare":
-            readings = shape.get("readings", {})
-            if len(readings) != 1 or set(next(iter(readings.values()))) != {"all"}:
-                raise ValueError(f"Step {name}: preparation reads every unit of one step: readings {{<name>: {{all: <step>}}}}")
-            ((slot, named),) = readings.items()
-            units[name] = [_unit(f"{root}/{name}/manifest.json", {
-                "unit": name, **keys_of, "policy": policy, "consumer": publication["consumer"],
-                "batch_id": publication["batch_id"], "as_of": as_of, "publication_key": publication_key,
-                "revision": str(revision)}, {"compose": {
-                    "document": {"version": 1, "readings": {"slot": slot}},
-                    "slots": {slot: [{"step": named["all"], "key": unit["keys"]["unit"]}
-                                     for unit in units[named["all"]]]}}})]
-        elif step["operation"] == "mdm.merge":
-            if len(step["requires"]) != 1 or by_name[step["requires"][0]]["operation"] != "mdm.prepare":
-                raise ValueError(f"Step {name}: a merge follows the one preparation step")
-            (before,) = step["requires"]
-            units[name] = [{"keys": {"batch_id": publication["batch_id"], "consumer": publication["consumer"]},
-                            "input": {"from": {"step": before, "key": units[before][0]["keys"]["unit"]}},
-                            "output": f"{root}/{name}.json", "cursor": {}}]
-        elif step["operation"] == "journal.record":
-            units[name] = [_unit(f"{root}/{name}.json", {"unit": name}, store.put(inputs, changed_files.record_input(
-                source=source, feed=reading["bronze"]["family"], processing=processing, forced=force, as_of=as_of,
-                files=[{"key": key, **raw_capture.document(folder, receipts, key)} for key in keys])))]
-        else:
-            raise ValueError(f"Step {name}: the writer does not form units for {step['operation']}")
-    manifest = store.put(root, {"version": 2, "steps": units})
+        units[step["name"]] = FORMS[step["operation"]](step, run, units)
+    manifest = run.store.put(root, {"version": 2, "steps": units})
     return {"source": source, "source_code": dataset, "target": target, "manifest": manifest,
             "publication": publication, "policy_digest": policy, "scope": scope}
