@@ -29,7 +29,13 @@ def _integer(value, low, high, name):
 # and what each unit's input names (`input`), which the input-manifest writer
 # reads. They are checked here and stripped, so the engine sees version-1 steps.
 PLAN_KEYS = frozenset({"units", "input"})
-INPUT_KEYS = frozenset({"contract", "keys", "readings", "files", "beside", "context", "lookups", "pieces"})
+INPUT_KEYS = frozenset({"contract", "keys", "readings", "files", "beside", "context", "lookups", "pieces",
+                        "references"})
+# A run's own inputs (ticket 114): facts the operator gives (`--fact name=value`) and files
+# from outside the capture (`--file name=path`); a step names them as `{fact: <name>}` in its
+# context, `{file: <name>}` for a lookup set or a contract reference.
+RUN_KEYS = frozenset({"facts", "files"})
+NAME = r"[a-z][a-z0-9_]*"
 LOOKUP_KEYS = frozenset({"from", "table", "column", "value_column", "max_input_bytes", "max_input_rows"})
 # A per-document template names the document's folder, its name before the first dot, and its file name.
 TEMPLATE = r"(?:[^{}]|\{(?:dir|base|name)\})*"
@@ -55,6 +61,22 @@ def _units(units) -> None:
             raise Blocked(f"A step's slices name their bytes, 1..{SLICE_BYTES}")
     elif type(units["groups"]) is not int or not 1 <= units["groups"] <= COMPOSE_SLOTS:
         raise Blocked(f"A step's groups hold 1..{COMPOSE_SLOTS} files (the composed-slot limit)")
+
+
+def _named(value, kind: str) -> bool:
+    """`{fact: <name>}` or `{file: <name>}`: a run input by name."""
+    return isinstance(value, dict) and set(value) == {kind} and isinstance(value[kind], str) and bool(re.fullmatch(NAME, value[kind]))
+
+
+def run_inputs(selected: dict) -> dict:
+    """A target's declared run inputs: `{facts: [names], files: [names]}`."""
+    declared = selected.get("run", {})
+    if (not isinstance(declared, dict) or set(declared) - RUN_KEYS
+            or any(not isinstance(declared.get(k, []), list) or len(set(declared.get(k, []))) != len(declared.get(k, []))
+                   or any(not isinstance(n, str) or not re.fullmatch(NAME, n) for n in declared.get(k, []))
+                   for k in RUN_KEYS)):
+        raise Blocked("A target's run names its facts and files: {facts: [names], files: [names]}")
+    return {k: list(declared.get(k, [])) for k in sorted(RUN_KEYS)}
 
 
 def _plan(step: dict) -> None:
@@ -85,17 +107,26 @@ def _plan(step: dict) -> None:
     context = shape.get("context", {})
     if (not isinstance(context, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in context)
             or any(isinstance(v, str) and not re.fullmatch(TEMPLATE, v) for v in context.values())
-            or any(not isinstance(v, (str, int, bool)) for v in context.values())):
-        raise Blocked("A step's context names values: text templates over {dir}, {base} and {name}, or literals")
+            or any(not isinstance(v, (str, int, bool)) and not _named(v, "fact") for v in context.values())):
+        raise Blocked("A step's context names values: text templates over {dir}, {base} and {name}, "
+                      "literals, or a run fact {fact: <name>}")
     lookups = shape.get("lookups", {})
     if (not isinstance(lookups, dict) or len(lookups) > COMPOSE_SLOTS - 1
             or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in lookups)
-            or any(not isinstance(v, dict) or set(v) != LOOKUP_KEYS or v["from"] not in step["requires"]
-                   or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows"))
+            or any(not _named(v, "file") and (
+                       not isinstance(v, dict) or set(v) != LOOKUP_KEYS or v["from"] not in step["requires"]
+                       or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows")))
                    for v in lookups.values())):
-        raise Blocked("A step's lookups each read the same file's unit of one prerequisite: "
-                      "from, table, column, value_column and their bounds")
-    if lookups and not (isinstance(step.get("units"), dict) and set(step["units"]) <= {"groups", "each"}):
+        raise Blocked("A step's lookups each read the same file's unit of one prerequisite (from, table, "
+                      "column, value_column and their bounds), or a run file {file: <name>}")
+    if any(_named(v, "file") for v in lookups.values()) and not all(_named(v, "file") for v in lookups.values()):
+        raise Blocked("A step's lookups are all run files, or all read from a prerequisite")
+    references = shape.get("references", {})
+    if (not isinstance(references, dict) or any(not re.fullmatch(NAME, name) for name in references)
+            or any(not _named(v, "file") for v in references.values())):
+        raise Blocked("A step's references each name a run file: {<reference>: {file: <name>}}")
+    if (lookups and not all(_named(v, "file") for v in lookups.values())
+            and not (isinstance(step.get("units"), dict) and set(step["units"]) <= {"groups", "each"})):
         raise Blocked("A read with lookups is cut into groups or each file (a composed slot per file)")
     pieces = shape.get("pieces")
     if pieces is not None and (not isinstance(pieces, dict) or set(pieces) != {"step"}
@@ -113,8 +144,10 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("Unsupported bookkeeping configuration")
         planned = body["version"] == 2
         selected = body["targets"][target]
-        if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks"}:
+        if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks"} - (
+                {"run"} if planned else set()):
             raise Blocked("Unknown target option")
+        declared = run_inputs(selected) if planned else {"facts": [], "files": []}
         if type(selected.get("allow_zero_work", False)) is not bool:
             raise Blocked("allow_zero_work must be boolean")
         duration = _integer(selected.get("lease_seconds", 120), 2, 86400, "lease_seconds")
@@ -131,6 +164,12 @@ def validate(document: dict, target: str) -> dict:
         if planned:
             for step in steps:
                 _plan(step)
+                shape = step.get("input", {})
+                named = [*(v for v in shape.get("context", {}).values() if _named(v, "fact"))]
+                files_named = [v["file"] for v in [*shape.get("lookups", {}).values(), *shape.get("references", {}).values()]
+                               if _named(v, "file")]
+                if any(v["fact"] not in declared["facts"] for v in named) or any(f not in declared["files"] for f in files_named):
+                    raise Blocked(f"Step {step['name']}: a fact or file it names is not in the target's run")
             steps = [{k: v for k, v in step.items() if k not in PLAN_KEYS} for step in steps]
         seen = set()
         for step in steps:
@@ -168,7 +207,8 @@ def validate(document: dict, target: str) -> dict:
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
                 or any(c not in RUN_CHECKS for c in checks)):
             raise Blocked("A target requires supported final checks")
-        return {**selected, "steps": steps, "lease_seconds": duration, "heartbeat_seconds": heartbeat,
+        return {**{k: v for k, v in selected.items() if k != "run"}, "steps": steps, "lease_seconds": duration,
+                "heartbeat_seconds": heartbeat,
                 "retry": {"attempts": attempts, "base_ms": base, "cap_ms": cap}}
     except Blocked:
         raise

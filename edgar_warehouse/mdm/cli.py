@@ -48,6 +48,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     capture.add_argument("--output", required=True)
     capture.add_argument("--as-of", required=True)
     capture.add_argument("--revision", type=int, required=True)
+    capture.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
+    capture.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
     capture.add_argument("--all", action="store_true", help="Name every document, processed or not (a forced run); "
                      "by default only documents the Change Journal does not record as processed under these rules")
     capture.set_defaults(handler=_logged_handler("prepare-capture", _clean("prepare_capture")))

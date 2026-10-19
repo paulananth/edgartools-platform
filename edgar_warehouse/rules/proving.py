@@ -226,7 +226,8 @@ def record(rules, result: dict, *, source: str, version: str) -> dict:
 
 
 def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of: str, stores: Path,
-        out: Path, minutes: float = 60, target: str = TARGET, version: str | None = None) -> dict:
+        out: Path, minutes: float = 60, target: str = TARGET, version: str | None = None,
+        facts: dict | None = None, run_files: dict | None = None) -> dict:
     """Two runs of one of the source's targets (default `mastering`) on the capture; the report, written to `out`."""
     from edgar_warehouse.change_journal.store import ChangeJournal
     from edgar_warehouse.mdm.clean.store import register_dataset, register_policy
@@ -281,7 +282,8 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
             try:
                 report = write_manifest(source=source, target=target, capture=str(capture), documents=str(documents),
                                         capture_run=capture_run, output=str(root / f"pass-{number}"),
-                                        as_of=as_of, revision=0, force=force, journal=journal)
+                                        as_of=as_of, revision=0, force=force, journal=journal,
+                                        facts=facts, run_files=run_files)
             except ValueError as error:  # the declaration or the bundle refused: a stop, not a traceback
                 raise TestRunError(str(error)) from error
             if report["manifest"] is None:

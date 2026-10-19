@@ -30,8 +30,10 @@ def unit(output: str, keys: dict, source: dict) -> dict:
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
 
-def fill(template, key: str):
-    """A template filled for one document; a literal stays as it is."""
+def fill(template, key: str, facts: dict | None = None):
+    """A template filled for one document; a run fact (`{fact: <name>}`) its value; a literal as it is."""
+    if isinstance(template, dict):
+        return (facts or {})[template["fact"]]
     if not isinstance(template, str):
         return template
     folder, name = posixpath.split(key)
@@ -92,7 +94,12 @@ def _document(step: dict, run, key: str) -> dict:
 def form(step: dict, run, units: dict) -> list[dict]:
     """The units of one `source.read` step."""
     name, shape = step["name"], step.get("input", {})
-    contract = run.store.put(run.inputs, run.contracts[contract_of(step)])
+    body = run.contracts[contract_of(step)]
+    if shape.get("references"):  # a reference the contract leaves empty, filled from a run file
+        body = {**body, "read": {**body["read"], "references": {
+            **body["read"].get("references", {}),
+            **{ref: run.run_files[value["file"]] for ref, value in shape["references"].items()}}}}
+    contract = run.store.put(run.inputs, body)
     if "pieces" in shape:
         if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":
             raise ValueError(f"Step {name}: pieces are read from a source.combine step")
@@ -104,7 +111,8 @@ def form(step: dict, run, units: dict) -> list[dict]:
     if not keys:
         raise ValueError(f"Step {name}: no document of the bundle matches {shape.get('files', '*')!r}")
     lookups = shape.get("lookups", {})
-    for value in lookups.values():
+    from_files = bool(lookups) and all("file" in value for value in lookups.values())
+    for value in ([] if from_files else lookups.values()):
         if run.by_name[value["from"]].get("units") != {"each": "file"}:
             raise ValueError(f"Step {name}: a lookup reads the same file's unit of a step whose units are each file")
     found = []
@@ -115,8 +123,11 @@ def form(step: dict, run, units: dict) -> list[dict]:
             artifact = {"input": source}
             if "context" in shape or lookups:  # a lookup needs a context receipt, empty values when none is declared
                 artifact["context"] = run.store.put(run.inputs, {"version": 1, "input": source, "values": {
-                    value_name: fill(template, key) for value_name, template in shape.get("context", {}).items()}})
-            if lookups:
+                    value_name: fill(template, key, run.facts) for value_name, template in shape.get("context", {}).items()}})
+            if from_files:  # each set given whole by a run file
+                artifact["lookups"] = run.store.put(run.inputs, {"version": 1, "input": source, "sets": {
+                    set_name: run.run_files[value["file"]] for set_name, value in lookups.items()}})
+            elif lookups:
                 slot = f"file_{position}"
                 artifact["lookups"] = {"slot": slot}
                 slots[slot] = {"compose": {
