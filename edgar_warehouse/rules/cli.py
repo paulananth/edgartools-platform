@@ -146,8 +146,8 @@ def _handle(args):
                             raise Blocked("Submission requires an exact input manifest URI and hash")
                         ref = rules.resolve(kind, name, root=os.environ["BOOKKEEPING_MANIFEST_ROOT"], artifacts=book.artifacts)
                         run_id = book.start(rules_ref=ref, inputs_ref={"uri": args.input_manifest, "sha256": args.input_sha256},
-                                            target=args.target, scope={"kind": kind, "name": name, "source": name,
-                                                                     "target": args.target,
+                                            target=args.target, scope={"kind": kind, "name": name, "target": args.target,
+                                                                     **({"source": name} if kind == "source" else {}),
                                                                      **({"feed": args.feed} if args.feed else {})})
                         print(f"Bookkeeping run: {run_id}", file=sys.stderr, flush=True)
                         result = book.status(run_id)
