@@ -151,6 +151,29 @@ and waiting relationships. Counts and destination readback establish completion;
 CLI exit zero alone does not. Required destination publication is included when
 the selected target declares it; no omitted stage is silently treated as done.
 
+## Test and clear a source run
+
+A test proves **Install and enable one source** on the **test** instance from
+[data-platform setup](../data-platform/SKILL.md#0-setup). It uses that
+instance's private connection file. It does not use a production container.
+
+Run one source through install, enable and its wired `rules run`. The test
+passes only when `edgar-warehouse bookkeeping status <run_id>` shows
+`run.state` `complete` and every declared unit verified. Record the source,
+feed, target, version and run id in the source runbook. Counts only.
+
+Clear the test only after that run is finished, or when the operator asks to
+abandon it. Read `edgar-warehouse bookkeeping leases <run_id> --limit 100`
+first. A live lease held by another run is not yours to clear: stop and
+report it.
+
+Clear-out removes the **test** container and its volume, the volume name
+being the container name plus `-data`, as data-platform setup allows. Then
+create the missing databases again and apply store DDL. The next test
+installs and enables the source on that empty test instance. Captured files
+stay. A production container, its volume and its data stay. Stopping a
+container to clear a worktree is not this clear-out.
+
 ## Keep the source runbook current
 
 Maintain the following operational record, updating observations in ET:
