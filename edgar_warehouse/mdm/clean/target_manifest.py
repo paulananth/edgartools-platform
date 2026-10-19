@@ -219,6 +219,10 @@ def write_manifest(
     steps = plan(reading, target)
     # Each contract the steps read with, loaded once: what is frozen is what the ids digest.
     # A contract is a file of the source's folder, or `<source>/<file>`: another source's reading.
+    for name in {_contract(step) for step in steps}:
+        other = name.split("/", 1)[0] if "/" in name else None
+        if other == source or other is not None and not (rules_files.ROOT / "sources" / name).is_file():
+            raise ValueError(f"Contract {name} names another source's existing rules file, or a file of this source")
     contracts = {name: rules_files.load(rules_files.ROOT / "sources" / (name if "/" in name else f"{source}/{name}"))
                  for name in sorted({_contract(step) for step in steps
                                      if step["operation"] == "source.read" or "contract" in step.get("input", {})})}
