@@ -72,9 +72,11 @@ def declared(monkeypatch):
     return body
 
 
-def capture(root):
-    """The invented CUSIP files, each answer's receipt naming its request's sha256."""
-    names = figi.capture(root, "cusip")
+def capture(root, rewrite=True):
+    """The invented CUSIP files, each answer's receipt naming its request's sha256 (`rewrite=False`:
+    the receipts only, for the files as they are)."""
+    names = figi.capture(root, "cusip") if rewrite else sorted(
+        p.name for p in (root / "id_cusip").glob("*.json") if not p.name.endswith(".request.json"))
     with (root / "receipts.jsonl").open("w") as out:
         for name in names:
             answer, request = root / "id_cusip" / name, root / "id_cusip" / name.replace(".json", ".request.json")
@@ -82,6 +84,14 @@ def capture(root):
                                   "bytes": answer.stat().st_size, "status": 200,
                                   "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest()}) + "\n")
     return [f"id_cusip/{name}" for name in names]
+
+
+def comparable(record):
+    """A record less its publication (each chain names its own) and where its files were written."""
+    record = {k: v for k, v in record.items() if k not in ("assertion_id", "revision", "publication_key")}
+    return {**record, "provenance": {k: v for k, v in record["provenance"].items()
+                                     if not any(word in k for word in ("sha256", "uri", "member", "artifact", "batch",
+                                                                       "consumer", "publication"))}}
 
 
 def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch):
@@ -120,8 +130,8 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     found = chain.records(book.artifacts, tmp_path / "bundle" / "prepare",
                           {"uri": prepared.as_uri(), "sha256": hashlib.sha256(prepared.read_bytes()).hexdigest()},
                           figi.CODE, body["mdm"][figi.CODE]["contract"], refused=refused, key="id")
-    assert ({r["provenance"]["record_key"]: r.get("cross_references", {}) for r in found}
-            == {r["provenance"]["record_key"]: r.get("cross_references", {}) for r in by_hand})
+    assert {r["provenance"]["record_key"]: comparable(r) for r in found} == {
+        r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand
     assert len(found) == len(by_hand) == 5 and len(refused) == 8  # five found, eight OpenFIGI did not find
     assert state["counts"] == {"verified": 15}  # 8 requests, 3 answers groups, reduce, combine, record, prepare

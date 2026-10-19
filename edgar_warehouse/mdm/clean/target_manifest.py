@@ -50,6 +50,7 @@ class _Run:
     folder: Path
     receipts: dict
     rows: dict
+    companions: dict
     keys: list
     sized: list
     limit: int
@@ -65,7 +66,6 @@ class _Run:
     inputs: str
 
 
-_unit = read_units.unit
 
 
 def _plan(reading: dict, target: str) -> list[dict]:
@@ -85,8 +85,7 @@ def by_name_of(steps: list[dict]) -> dict:
     return {step["name"]: step for step in steps}
 
 
-def _contract(step: dict) -> str:
-    return step.get("input", {}).get("contract", "source.yaml")
+_contract = read_units.contract_of
 
 
 def _prepared_shape(by_name: dict, prepare: dict, keys_of: dict, contracts: dict) -> None:
@@ -121,8 +120,8 @@ def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
             raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
         else:
             slots[slot] = {"step": named["step"], "key": units[named["step"]][0]["keys"]["unit"]}
-    contract = run.store.put(run.inputs, run.contracts[shape.get("contract", "source.yaml")])
-    return [_unit(f"{run.root}/{name}/combined.json", {"unit": name}, {"compose": {
+    contract = run.store.put(run.inputs, run.contracts[_contract(step)])
+    return [read_units.unit(f"{run.root}/{name}/combined.json", {"unit": name}, {"compose": {
         "document": {"version": 1, "contract": contract, "readings": {slot: {"slot": slot} for slot in slots}},
         "slots": slots}})]
 
@@ -134,7 +133,7 @@ def _prepare(step: dict, run: _Run, units: dict) -> list[dict]:
         raise ValueError(f"Step {name}: preparation reads every unit of one step: readings {{<name>: {{all: <step>}}}}")
     ((slot, named),) = readings.items()
     publication = run.publication
-    return [_unit(f"{run.root}/{name}/manifest.json", {
+    return [read_units.unit(f"{run.root}/{name}/manifest.json", {
         "unit": name, **run.keys_of, "policy": run.policy, "consumer": publication["consumer"],
         "batch_id": publication["batch_id"], "as_of": publication["as_of"],
         "publication_key": publication["publication_key"], "revision": str(publication["revision"])}, {"compose": {
@@ -154,11 +153,13 @@ def _merge(step: dict, run: _Run, units: dict) -> list[dict]:
 
 def _record(step: dict, run: _Run, units: dict) -> list[dict]:
     """One unit: each document the run processed, for the Change Journal."""
-    return [_unit(f"{run.root}/{step['name']}.json", {"unit": step["name"]}, run.store.put(
+    return [read_units.unit(f"{run.root}/{step['name']}.json", {"unit": step["name"]}, run.store.put(
         run.inputs, changed_files.record_input(
             source=run.source, feed=run.reading["bronze"]["family"], processing=run.processing, forced=run.force,
-            as_of=run.publication["as_of"], files=[{"key": key, **raw_capture.document(run.folder, run.receipts, key)}
-                                    for key in run.keys])))]
+            as_of=run.publication["as_of"], files=[
+                *({"key": key, **raw_capture.document(run.folder, run.receipts, key)} for key in run.keys),
+                *({"key": other, **raw_capture.verified(run.folder, other, sha256)[0]}
+                  for key in run.keys for other, sha256 in run.companions[key])])))]
 
 
 # Each operation's units, from the step, the run and the units of the steps before it.
@@ -203,7 +204,7 @@ def write_manifest(
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
     for step in steps:
         if step["operation"] != "source.read" and "units" in step:
-            raise ValueError(f"Step {step['name']}: only a read of captured documents forms units")
+            raise ValueError(f"Step {step['name']}: only a read declares its units")
     dataset = keys_of["dataset"]
     # Each contract the steps read with, loaded once: what is frozen is what the ids digest.
     contracts = {name: rules_files.load(rules_files.ROOT / "sources" / source / name)
@@ -220,10 +221,14 @@ def write_manifest(
             or len(set(keys)) != len(keys) or any(not isinstance(key, str) for key in keys)):
         raise ValueError(f"A bundle names 1..{limit} distinct documents")
     keys = sorted(keys)  # a bundle is its documents, in key order, however they are listed
+    # A document and the companions read beside it are selected as one: kept when any of them is not processed.
+    paired = {key: read_units.companions(steps, rows, key) for key in keys}
     files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
+    files += [pair for key in keys for pair in paired[key]]
     policy = digest(rules_files.policy())
     processing = changed_files.identity(changed_files.source_rules(source), policy)
-    listed, keys = len(keys), changed_files.select(source, processing, files, force=force, ledger=journal)
+    fresh = set(changed_files.select(source, processing, files, force=force, ledger=journal))
+    listed, keys = len(keys), [key for key in keys if key in fresh or any(o in fresh for o, _ in paired[key])]
     scope = {"documents": len(keys), "listed": listed, "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
              "capture_run_id": capture_run, "processing_identity": processing, "forced": force}
     if not keys:  # every document is processed already: no run
@@ -235,7 +240,7 @@ def write_manifest(
         raise ValueError(f"A bundle's documents exceed {BUNDLE_BYTES} bytes; name fewer")
     # The publication is the documents themselves (key and receipt), not the
     # list file's bytes: the same documents are one publication.
-    documents_hash = digest([[key, receipts[key]] for key in keys])
+    documents_hash = digest([[key, receipts[key], *paired[key]] for key in keys])
     publication_key = f"{capture_run}:{source}:{documents_hash}"
     # The consumer and batch ids name what shapes the records (every contract
     # the steps read with, the Dataset Contracts, the policy): a rerun under
@@ -245,7 +250,7 @@ def write_manifest(
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset}/{bundle}", "batch_id": f"{source}:{bundle}"}
     root = Path(output).resolve().as_uri()
-    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, keys=keys, sized=sized, limit=limit,
+    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, companions=paired, keys=keys, sized=sized, limit=limit,
                keys_of=keys_of, policy=policy, processing=processing, force=force, publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
                inputs=root + "/inputs")
     units: dict[str, list[dict]] = {}

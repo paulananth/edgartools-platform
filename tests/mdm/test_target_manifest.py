@@ -99,7 +99,7 @@ def test_units_on_a_step_that_reads_no_captured_documents_are_refused(tmp_path, 
     body["bookkeeping"]["targets"]["mastering"]["steps"][1]["units"] = {"groups": 4}
     monkeypatch.setattr(files, "source", lambda name, root=None: body)
 
-    with pytest.raises(ValueError, match="only a read of captured documents forms units"):
+    with pytest.raises(ValueError, match="only a read declares its units"):
         write_manifest(target="mastering", **options(tmp_path))
 
 

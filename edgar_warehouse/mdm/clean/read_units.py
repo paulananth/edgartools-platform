@@ -26,6 +26,7 @@ from . import raw_capture
 
 
 def unit(output: str, keys: dict, source: dict) -> dict:
+    """A manifest unit: its keys (with its output as `destination`), its input and its output."""
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
 
@@ -37,7 +38,13 @@ def fill(template, key: str):
     return template.replace("{dir}", folder).replace("{base}", name.split(".", 1)[0]).replace("{name}", name)
 
 
+def contract_of(step: dict) -> str:
+    """The rules file a step reads with: its `input.contract`, default `source.yaml`."""
+    return step.get("input", {}).get("contract", "source.yaml")
+
+
 def pair(key: str) -> str:
+    """A document's pair key, `{dir}/{base}`: an answer and its request share it."""
     return fill("{dir}/{base}", key)
 
 
@@ -60,25 +67,35 @@ def _cut(step: dict, run, keys: list[str]) -> list[tuple[str, str, list[str]]]:
     return found
 
 
+def companions(steps: list[dict], rows: dict, key: str) -> list[tuple[str, str]]:
+    """The companion files a document's steps read beside it, each with the sha256 its receipt holds."""
+    found = {}
+    for step in steps:
+        beside = step.get("input", {}).get("beside")
+        if beside is not None:
+            sha256 = rows[key].get(beside["sha256"])
+            if not isinstance(sha256, str):
+                raise raw_capture.Conflict(f"Step {step['name']}: the receipt of {key} holds no {beside['sha256']}")
+            found[fill(beside["path"], key)] = sha256
+    return sorted(found.items())
+
+
 def _document(step: dict, run, key: str) -> dict:
     """What one document is read as: itself, or its companion."""
     beside = step.get("input", {}).get("beside")
     if beside is None:
         return raw_capture.document(run.folder, run.receipts, key)
     companion = fill(beside["path"], key)
-    sha256 = run.rows[key].get(beside["sha256"])
-    if not isinstance(sha256, str):
-        raise ValueError(f"Step {step['name']}: the receipt of {key} holds no {beside['sha256']}")
-    return raw_capture.verified(run.folder, companion, sha256)[0]
+    return raw_capture.verified(run.folder, companion, dict(run.companions[key])[companion])[0]
 
 
 def form(step: dict, run, units: dict) -> list[dict]:
     """The units of one `source.read` step."""
     name, shape = step["name"], step.get("input", {})
-    contract = run.store.put(run.inputs, run.contracts[shape.get("contract", "source.yaml")])
+    contract = run.store.put(run.inputs, run.contracts[contract_of(step)])
     if "pieces" in shape:
-        if step.get("units", "one") != "one":
-            raise ValueError(f"Step {name}: a read of pieces is one unit")
+        if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":
+            raise ValueError(f"Step {name}: pieces are read from a source.combine step")
         (before,) = units[shape["pieces"]["step"]]
         return [unit(f"{run.root}/{name}/reading.json", {"unit": name}, {"compose": {
             "document": {"version": 4, "contract": contract, "pieces": {"slot": "pieces"}},
@@ -90,17 +107,15 @@ def form(step: dict, run, units: dict) -> list[dict]:
     for value in lookups.values():
         if run.by_name[value["from"]].get("units") != {"each": "file"}:
             raise ValueError(f"Step {name}: a lookup reads the same file's unit of a step whose units are each file")
-    if lookups and "groups" not in step.get("units", {}) and step.get("units") != {"each": "file"}:
-        raise ValueError(f"Step {name}: a read with lookups is cut into groups or each file (a slot per file)")
     found = []
     for key_of_unit, label, documents in _cut(step, run, keys):
         artifacts, slots = [], {}
         for position, key in enumerate(documents):
             source = _document(step, run, key)
             artifact = {"input": source}
-            if "context" in shape:
+            if "context" in shape or lookups:  # a lookup needs a context receipt, empty values when none is declared
                 artifact["context"] = run.store.put(run.inputs, {"version": 1, "input": source, "values": {
-                    value_name: fill(template, key) for value_name, template in shape["context"].items()}})
+                    value_name: fill(template, key) for value_name, template in shape.get("context", {}).items()}})
             if lookups:
                 slot = f"file_{position}"
                 artifact["lookups"] = {"slot": slot}
@@ -112,10 +127,7 @@ def form(step: dict, run, units: dict) -> list[dict]:
                     "slots": {set_name: {"step": value["from"], "key": pair(key)}
                               for set_name, value in lookups.items()}}}
             artifacts.append(artifact)
-        # As raw_capture.read_unit: lookups make a version-3 request, a context version 2.
-        version = 3 if lookups else 2 if "context" in shape else 1
-        document = {"version": version, "contract": contract,
-                    "artifacts": artifacts if version > 1 else [a["input"] for a in artifacts]}
+        document = raw_capture.request(contract, artifacts)
         output = f"{run.root}/{name}/{label}.reading.json"
         source = {"compose": {"document": document, "slots": slots}} if slots else run.store.put(run.inputs, document)
         found.append(unit(output, {"unit": key_of_unit}, source))

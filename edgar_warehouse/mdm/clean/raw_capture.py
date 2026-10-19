@@ -91,14 +91,18 @@ def cik(key: str) -> int:
     return int(key.split("/cik=", 1)[1].split("/", 1)[0])
 
 
-def read_unit(store, folder: Path, name: str, contract: dict, artifacts: list) -> tuple[dict, dict]:
-    """One `source.read` unit, executed then verified: its task and its reading's reference.
-    Artifacts that carry lookups go as a version-3 request, those that all carry a context as
-    version 2, others as version 1."""
+def request(contract: dict, artifacts: list) -> dict:
+    """A `source.read` request: artifacts that carry lookups go as version 3, those that all
+    carry a context as version 2, others as version 1 (their inputs only)."""
     version = 3 if all("lookups" in a for a in artifacts) else 2 if all("context" in a for a in artifacts) else 1
-    request = store.put(folder.as_uri(), {"version": version, "contract": store.put(folder.as_uri(), contract),
-                                          "artifacts": artifacts if version > 1 else [a["input"] for a in artifacts]})
-    task = {"input": request, "output": (folder / f"{name}.reading.json").as_uri(), "checks": ["source.output"]}
+    return {"version": version, "contract": contract,
+            "artifacts": artifacts if version > 1 else [a["input"] for a in artifacts]}
+
+
+def read_unit(store, folder: Path, name: str, contract: dict, artifacts: list) -> tuple[dict, dict]:
+    """One `source.read` unit, executed then verified: its task and its reading's reference."""
+    request_ref = store.put(folder.as_uri(), request(store.put(folder.as_uri(), contract), artifacts))
+    task = {"input": request_ref, "output": (folder / f"{name}.reading.json").as_uri(), "checks": ["source.output"]}
     candidate = source_read.execute(task, store)
     if source_read.verify({**task, "candidate": candidate}, store) != ({"source.output": True}, []):
         raise ValueError("Configured reading verification failed")

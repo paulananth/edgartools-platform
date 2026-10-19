@@ -77,8 +77,8 @@ def _plan(step: dict) -> None:
         raise Blocked("A step's readings each name one prerequisite step: {all: <step>} or {step: <step>}")
     if "files" in shape and (not isinstance(shape["files"], str) or not shape["files"] or ".." in shape["files"]):
         raise Blocked("A step's files are a pattern over the bundle's documents")
-    beside = shape.get("beside", {"path": "", "sha256": "sha256"})
-    if (not isinstance(beside, dict) or set(beside) != {"path", "sha256"} or not isinstance(beside["path"], str)
+    beside = shape.get("beside")
+    if beside is not None and (not isinstance(beside, dict) or set(beside) != {"path", "sha256"} or not isinstance(beside["path"], str)
             or not re.fullmatch(TEMPLATE, beside["path"]) or ".." in beside["path"]
             or not isinstance(beside["sha256"], str) or not re.fullmatch(r"[a-z][a-z0-9_]*", beside["sha256"])):
         raise Blocked("A step's beside names a template path and the receipt field holding its sha256")
@@ -95,10 +95,14 @@ def _plan(step: dict) -> None:
                    for v in lookups.values())):
         raise Blocked("A step's lookups each read the same file's unit of one prerequisite: "
                       "from, table, column, value_column and their bounds")
+    if lookups and not (isinstance(step.get("units"), dict) and set(step["units"]) <= {"groups", "each"}):
+        raise Blocked("A read with lookups is cut into groups or each file (a composed slot per file)")
     pieces = shape.get("pieces")
     if pieces is not None and (not isinstance(pieces, dict) or set(pieces) != {"step"}
                                or pieces["step"] not in step["requires"]):
         raise Blocked("A step's pieces name one prerequisite step: {step: <step>}")
+    if pieces is not None and step.get("units", "one") != "one":
+        raise Blocked("A read of pieces is one unit")
 
 
 def validate(document: dict, target: str) -> dict:
