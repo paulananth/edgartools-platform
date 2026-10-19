@@ -123,7 +123,9 @@ needs no writer of its own:
   the composed-slot limit), or `{each: file}` (one unit per document, keyed
   by its pair key, below);
 - `input`: `contract` (a rules file in the source's folder, default
-  `source.yaml`), `keys` (for `mdm.prepare`: `table`, `record_column`,
+  `source.yaml`, or `<source>/<file>`: another source's rules file, whose
+  digest then joins what each file is processed under as
+  `contract:<source>/<file>`), `keys` (for `mdm.prepare`: `table`, `record_column`,
   `dataset`) and `readings` (each name `{all: <step>}`, every unit of a
   prerequisite as one list, or `{step: <step>}`, its one unit); for a read:
   - `files`: a pattern over the bundle's document keys (default every one);

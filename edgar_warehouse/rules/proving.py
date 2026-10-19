@@ -105,14 +105,22 @@ def counts(engine) -> dict:
             "changes": grouped("SELECT 'batch_change', count(*) FROM mdm.batch_change "
                                "UNION ALL SELECT 'outbox', count(*) FROM mdm.outbox"),
             # Every current record's body, hashed: a rewrite moves it even when no count moves.
+            # Every current record's body, and every current Company row (Companies are kept in
+            # mdm.company, not mdm.current_record), hashed: a rewrite moves it even when no count moves.
             "current_records_md5": conn.scalar(text(
-                "SELECT md5(coalesce(string_agg(object_type || ':' || object_id || ':' || body::text, "
-                "',' ORDER BY object_type, object_id), '')) FROM mdm.current_record")),
+                "SELECT md5(coalesce((SELECT string_agg(object_type || ':' || object_id || ':' || body::text, "
+                "',' ORDER BY object_type, object_id) FROM mdm.current_record), '') || '|' || "
+                "coalesce((SELECT string_agg(c::text, ',' ORDER BY c.entity_id) FROM mdm.company c "
+                "WHERE c.to_generation IS NULL), ''))")),
             "identifiers_on_two_masters": grouped(
-                "SELECT n, count(*) FROM (SELECT n, v FROM mdm.current_record e, "
+                "SELECT n, count(*) FROM (SELECT n, v FROM ("
+                "SELECT e.object_id::text AS owner, n, v FROM mdm.current_record e, "
                 "jsonb_each(e.body->'identifiers') i(n, vs), jsonb_array_elements_text(vs) v "
                 "WHERE e.object_type='entity' AND coalesce(e.body->>'status','') <> 'alias' "
-                "GROUP BY n, v HAVING count(DISTINCT e.object_id) > 1) t GROUP BY n"),
+                "UNION ALL SELECT c.entity_id::text, n, v FROM mdm.company c, "
+                "jsonb_each(c.identifiers) i(n, vs), jsonb_array_elements_text(vs) v "
+                "WHERE c.to_generation IS NULL AND c.status <> 'alias') u "
+                "GROUP BY n, v HAVING count(DISTINCT owner) > 1) t GROUP BY n"),
         }
 
 

@@ -1,0 +1,19 @@
+# Switch on the N-PORT registrant and fund over the captured quarter
+
+Priority: 118 (operator, 2026-10-19: "Can you turn on company mastering one source at a time sec, geilf, and the rest"; the N-PORT registrant follows SEC Company). Map: [Rebuild priorities](../map.md).
+
+Type: task (configuration only). Status: in progress (Claude, 2026-10-19). Blocked by: #1113 (a source with no feed of its own activates) for the switch-on.
+
+## Checklist
+
+- [x] A `mastering` target declared (configuration only): the filing dates (`submissions.yaml`), the registrant rows with them (a lookup from that reading), each CIK (`reduce.yaml`), its latest filing (`combine.yaml`), one record each (`record.yaml`, new: the row as the record), prepare, merge, processed; `rules/source-sequence.yaml` names `mastering`; a `receipts.jsonl` beside the captured 2026 Q2 data set (2026-10-19 12:50 ET)
+- [x] `rules test`, two passes on a fresh store (2026-10-19 12:50 ET; 1 min 37 s): passed, the second pass changed nothing; 1,947 registrant Companies (the profile's 1,947 CIKs, ticket 79 part 2), no open review, no identifier on two masters
+- [x] Saved as `registrant-2026-10-19.pipes-on`, its test run recorded as its proof, approved under the standing approval, active in the `company-on` store after Person (activated with #1113's code); `rules run` (no feed) over the quarter (2026-10-19 12:51 ET): complete in 42 s, every step verified; MDM holds 2,433 Companies (486 SEC, 1,947 registrants; none joined, the bundle holds operating companies), no identifier on two masters
+- [x] A step may read with another source's rules file (`<source>/<file>.yaml`, generic): the fund reads the registrant's readings for each filing's date and registrant CIK; that file's digest joins the processing identity (2026-10-19 12:56 ET). GoF consult: one naming rule, no new structure
+- [x] The fund's `mastering` target declared (configuration): the registrant's two readings, its filings with both pair sets, each series (`reduce.yaml`), LEI pairs, the latest filing (`combine.yaml`), one record each (`record.yaml`, new), prepare, merge, processed; the sequence names `mastering` (2026-10-19 12:56 ET)
+- [x] Fund `rules test`, two passes on a fresh store (2026-10-19 12:56 ET; 2 min 28 s): passed, the second pass changed nothing; 12,937 Funds and 7 waiting for an LEI that fails its check digit (12,944 series, the profile's), no identifier on two masters
+- [x] Fund: saved as `fund-2026-10-19.pipes-on`, its test run recorded, approved under the standing approval, active in the `company-on` store after the registrant; `rules run` (no feed) over the quarter (2026-10-19 12:57 ET): complete in 80 s, every step verified
+- [x] Found (Spec review, 2026-10-19 13:06 ET): a test run's checks "second pass changed nothing" and "no identifier on two masters" read only `mdm.current_record`, but Companies are kept in `mdm.company`, so for a Company source both checked nothing (the registrant's first test hashed an empty set). Fixed in `rules/proving.py` (`counts`): both now read the current Company rows too. Rerun of the registrant test (2026-10-19 13:06 ET): passed, the same Company hash on both passes, no identifier on two masters; on the `company-on` store the 2,433 Companies hold no identifier twice. Earlier Company claims that rested on these checks hold on today's store; the 2026-10-14 installed proof counted Companies with its own queries
+- [x] Three-axis review (2026-10-19 13:06 ET): GoF: leave it. Standards: another source's file named clearly (a missing source or the source's own folder refused), tests for the path (refused paths, loading from the other folder, the identity moving with that file). Spec: the gap above; Bookkeeping SPEC documents `<source>/<file>`; the readings' header comments name the record step and the steps after it. Tests: `tests/mdm/test_read_units.py` and `test_target_manifest.py` 49 passed
+- [ ] PR, CI, merge
+- [ ] Learning → skill

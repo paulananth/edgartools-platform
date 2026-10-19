@@ -30,11 +30,11 @@ sources:
     requires: []
     after: [gleif]
   sec.nport.registrant:
-    target: null
+    target: mastering
     requires: []
     after: [sec.submissions.company]
   sec.nport.fund:
-    target: null
+    target: mastering
     requires: []
     after: [sec.nport.registrant]
   sec.nport.security:

@@ -241,7 +241,8 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
                    "--defer", "gleif", cwd=root)
     assert delayed.returncode == 3, delayed.stderr
     report = json.loads(delayed.stdout)
-    assert report["order"] == ["sec.submissions.company", "sec.submissions.person"]
+    assert report["order"] == ["sec.submissions.company", "sec.nport.registrant", "sec.submissions.person",
+                               "sec.nport.fund"]
     assert report["sources"]["gleif"]["status"] == "deferred"
     assert report["runtime_readiness"] == "not_checked"
 

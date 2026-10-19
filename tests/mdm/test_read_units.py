@@ -234,3 +234,52 @@ def test_a_reference_the_contract_does_not_declare_empty_is_refused(tmp_path, mo
     monkeypatch.setattr(files, "source", lambda name, *a, **k: body)
     with pytest.raises(ValueError, match="reference approved_scoep"):
         gleif_bundle(tmp_path)
+
+
+def fund_bundle(tmp_path, change=None):
+    """N-PORT fund's declared target over an invented one-file capture."""
+    import hashlib
+    capture = tmp_path / "capture"
+    capture.mkdir(parents=True)
+    (capture / "q.zip").write_bytes(b"invented")
+    (capture / "receipts.jsonl").write_text(json.dumps(
+        {"bytes": 8, "key": "q.zip", "sha256": hashlib.sha256(b"invented").hexdigest()}) + "\n")
+    (tmp_path / "documents.json").write_text(json.dumps(["q.zip"]))
+    return write_manifest(source="sec.nport.fund", target="mastering", capture=str(capture),
+                          documents=str(tmp_path / "documents.json"), capture_run="c", output=str(tmp_path / "bundle"),
+                          as_of="2026-10-19T00:00:00Z", revision=0, journal=MemoryJournal())
+
+
+def test_a_step_reads_with_another_sources_rules_file(tmp_path):
+    store = Artifacts()
+    steps = store.json(fund_bundle(tmp_path)["manifest"])["steps"]
+    (submissions,) = steps["submissions"]
+    contract = store.json(store.json(submissions["input"])["contract"])
+    assert contract == files.load(files.ROOT / "sources" / "sec.nport.registrant" / "submissions.yaml")
+
+
+def test_another_sources_file_joins_the_processing_identity(tmp_path, monkeypatch):
+    first = fund_bundle(tmp_path / "a")["scope"]["processing_identity"]
+    load = files.load
+    monkeypatch.setattr(files, "load", lambda path, *a, **k: {**load(path, *a, **k), "note": "changed"}
+                        if str(path).endswith("sec.nport.registrant/submissions.yaml") else load(path, *a, **k))
+    assert fund_bundle(tmp_path / "b")["scope"]["processing_identity"] != first
+
+
+@pytest.mark.parametrize("name", ["../x.yaml", "a/../b.yaml", "/x.yaml", "a/b/c.yaml"])
+def test_a_contract_path_outside_the_rules_is_refused(name):
+    from edgar_warehouse.bookkeeping.clean.config import Blocked, validate
+    body = copy.deepcopy(files.source("sec.nport.fund"))
+    body["bookkeeping"]["targets"]["mastering"]["steps"][0]["input"]["contract"] = name
+    with pytest.raises(Blocked, match="rules file"):
+        validate(body, "mastering")
+
+
+@pytest.mark.parametrize("name", ["nosuch/x.yaml", "sec.nport.fund/source.yaml"])
+def test_a_missing_source_or_the_sources_own_folder_is_refused(tmp_path, monkeypatch, name):
+    body = copy.deepcopy(files.source("sec.nport.fund"))
+    body["bookkeeping"]["targets"]["mastering"]["steps"][0]["input"]["contract"] = name
+    source = files.source
+    monkeypatch.setattr(files, "source", lambda n, *a, **k: body if n == "sec.nport.fund" else source(n, *a, **k))
+    with pytest.raises(ValueError, match="another source's existing rules file"):
+        fund_bundle(tmp_path)
