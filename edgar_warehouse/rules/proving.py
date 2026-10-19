@@ -14,9 +14,9 @@ Contracts and the Mastering Policy registered in MDM under a sandbox authority
 that names the capture. Neither is an approval: the operator approves the real
 version on this report (APPROVE.md).
 
-This first version takes sources whose reading keeps each captured document
-whole (`capture_prepare`); other sources need their target's input manifest
-declared first (ticket 14, the generic writer).
+The target's input manifest comes from the source's own declaration
+(`target_manifest`, Bookkeeping section version 2): a source whose section
+states no units and input is refused there.
 """
 
 from __future__ import annotations
@@ -164,8 +164,8 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         out: Path, minutes: float = 60) -> dict:
     """Two runs of the source's `mastering` target on the capture; the report, written to `out`."""
     from edgar_warehouse.change_journal.store import ChangeJournal
-    from edgar_warehouse.mdm.clean.capture_prepare import write_capture_manifest
     from edgar_warehouse.mdm.clean.store import register_dataset, register_policy
+    from edgar_warehouse.mdm.clean.target_manifest import write_manifest
     from edgar_warehouse.rules.db import Rules
 
     env = duties(stores)
@@ -202,9 +202,12 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         passes = []
         for number, force in ((1, False), (2, True)):
             began = time.monotonic()
-            report = write_capture_manifest(source=source, capture=str(capture), documents=str(documents),
-                                            capture_run=capture_run, output=str(root / f"pass-{number}"),
-                                            as_of=as_of, revision=0, force=force, journal=journal)
+            try:
+                report = write_manifest(source=source, target=TARGET, capture=str(capture), documents=str(documents),
+                                        capture_run=capture_run, output=str(root / f"pass-{number}"),
+                                        as_of=as_of, revision=0, force=force, journal=journal)
+            except ValueError as error:  # the declaration or the bundle refused: a stop, not a traceback
+                raise TestRunError(str(error)) from error
             if report["manifest"] is None:
                 raise TestRunError("Every document is recorded as processed already: nothing to test")
             if number == 1:

@@ -227,7 +227,7 @@ def write_company_manifest(
                 "scope": {"selected_records": 0, "listed": listed, "processing_identity": processing,
                           "forced": force, "capture_run_id": capture_run}}
     # The publication is the documents themselves (key and receipt), not the list file's
-    # bytes, as for any source (`capture_prepare`): the same documents are one publication.
+    # bytes, as for any source (`target_manifest`): the same documents are one publication.
     documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
                        f":name_census:{census_hash}")

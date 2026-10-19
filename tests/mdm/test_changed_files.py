@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import changed_files
-from edgar_warehouse.mdm.clean.capture_prepare import write_capture_manifest
+from edgar_warehouse.mdm.clean.target_manifest import write_manifest
 from edgar_warehouse.workers import journal_record
 from tests.mdm.test_clean_company_preparation import capture as company_capture  # noqa: F401
 from tests.mdm.test_clean_company_preparation import census_capture, documents as company_documents, prepare
@@ -25,9 +25,9 @@ def person(tmp_path, found, journal, *, name="b", force=False):
     folder, _ = write_capture(tmp_path / f"capture-{name}", found)
     listed = tmp_path / f"{name}.json"
     listed.write_text(json.dumps([key(cik) for cik in found]))
-    return write_capture_manifest(source=SOURCE, capture=str(folder), documents=str(listed), capture_run="capture-1",
-                                  output=str(tmp_path / name), as_of="2026-10-01T00:00:00Z", revision=0,
-                                  force=force, journal=journal)
+    return write_manifest(source=SOURCE, target="mastering", capture=str(folder), documents=str(listed),
+                          capture_run="capture-1", output=str(tmp_path / name), as_of="2026-10-01T00:00:00Z",
+                          revision=0, force=force, journal=journal)
 
 
 def record(report, journal):
