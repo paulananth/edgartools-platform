@@ -21,7 +21,9 @@ Use [RUNBOOK.md](RUNBOOK.md) for delivery, file-change, capacity and recovery
 decisions. Discover actual command capabilities with `edgar-warehouse doctor` and
 CLI help. Report missing enforcement or unsupported stages as runtime gaps;
 instructions cannot make them available. An offline sequence check is not a
-runtime readiness certificate. Recover retained progress before making a new run.
+runtime readiness certificate. To install, enable and run one source, then
+clear a finished test, follow **Install and enable one source**. Recover
+retained progress before making a new run.
 
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
@@ -122,6 +124,56 @@ the blocker. The recurring loop below then loads that domain's entities from a
 finished delivery. This section does not download, does not invent a command,
 and does not mark a blocked domain complete.
 
+## Install and enable one source
+
+Use this when the task is to load and master one Rules source before the next.
+The order and the run target come from `rules/source-sequence.yaml`. `after`
+is preferred order only. `requires` is a real input dependency. One invocation
+submits one source.
+
+1. **Check the wiring.** Select that source alone:
+   ```bash
+   edgar-warehouse rules sequence check --source <name>
+   ```
+   Exit 0 and status `configured` means its `target` is a declared Bookkeeping
+   target whose steps have workers. Exit 3 with `source_target_not_configured`
+   means the source is not wired: report that and stop. Do not invent a target
+   or submit a different source to stand in for it. A successful check does
+   not install, approve or start a run. Detail is in
+   `docs/specs/source-sequencing.md` in the repository.
+2. **Install that source only.** Save its document into the Rules database.
+   `rules load` saves every file under a root; do not use it here.
+   ```bash
+   edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
+   ```
+   Check it offline first with `edgar-warehouse rules check --source <name>`.
+   Then test that version and record the test run with `rules record-proof`
+   before any approval: data-onboarding's **test** step names the version
+   label, runs `rules test` where the source's reading keeps each document
+   whole, and says what to use when it does not. A test that stops is not a
+   proof and is not recorded.
+3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
+   the merge policy this source depends on first, then this source:
+   ```bash
+   edgar-warehouse rules activate --source <name> --version <v>
+   edgar-warehouse rules status --source <name>
+   ```
+   Enabled means `rules status` shows that version `active`. There is no
+   separate enable command.
+4. **Wire the run.** Resolve the feed, then submit only this source and the
+   target from the sequence check:
+   ```bash
+   edgar-warehouse plan resolve-feed --source <name> --feed <feed>
+   edgar-warehouse rules run --source <name> --feed <feed> --target <target> \
+     --input-manifest <uri> --input-sha256 <sha256>
+   ```
+   Work and verify as in [Bookkeeping run](../bookkeeping/RUN.md). The next
+   source waits until `edgar-warehouse bookkeeping status <run_id>` shows
+   `run.state` `complete` and every declared unit verified.
+
+A test of this path, and how to clear that test, is
+[Test and clear a source run](RUNBOOK.md#test-and-clear-a-source-run).
+
 ## Operate the recurring loop
 
 1. **Inventory and readiness.** Account for the entire declared delivery and its
@@ -145,8 +197,10 @@ and does not mark a blocked domain complete.
 4. **Submit or resume.** Use [Bookkeeping run](../bookkeeping/RUN.md) and
    [recovery](../bookkeeping/RECOVERY.md) for the existing task protocol. Keep the
    source-owned steps, original input/rule/reference/runtime pins and authoritative
-   leases. Run declared local prerequisites only through supported approved paths;
-   a preferred source order is not a dependency. Missing common-command support
+   leases. Run declared local prerequisites only through supported approved paths.
+   A preferred `after` order does not pull another source into this run. When
+   the task is one source at a time, follow **Install and enable one source**
+   and finish that run before the next source. Missing common-command support
    remains a blocker, not permission to invent source-specific orchestration.
 5. **Work and verify.** Use separate worker and verifier duties. Adjust dispatch
    between invocations within supported limits as capacity changes. Changing a

@@ -67,7 +67,9 @@ an implementation gap before calling a source ready.
 For recurring loads, backlog/resource sizing, renamed files, run monitoring and
 operational handoff, use [data-operations](../data-operations/SKILL.md). It
 coordinates this flow and the existing Bookkeeping/Change Journal skills;
-AWS acquisition supplies completed deliveries separately.
+AWS acquisition supplies completed deliveries separately. To install, enable
+and run one source, then clear a finished test, follow
+[Install and enable one source](../data-operations/SKILL.md#install-and-enable-one-source).
 
 | Step | Mode | Detail in |
 |---|---|---|
