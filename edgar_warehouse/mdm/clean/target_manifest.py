@@ -217,6 +217,11 @@ def write_manifest(
     if target not in ((reading.get("bookkeeping") or {}).get("targets") or {}):
         raise ValueError(f"The source declares no `{target}` target")
     steps = plan(reading, target)
+    # Each contract the steps read with, loaded once: what is frozen is what the ids digest.
+    # A contract is a file of the source's folder, or `<source>/<file>`: another source's reading.
+    contracts = {name: rules_files.load(rules_files.ROOT / "sources" / (name if "/" in name else f"{source}/{name}"))
+                 for name in sorted({_contract(step) for step in steps
+                                     if step["operation"] == "source.read" or "contract" in step.get("input", {})})}
     # The run's own inputs, exactly as the target declares them (`run`): facts and files.
     declared = run_inputs(reading["bookkeeping"]["targets"][target])
     facts, run_files = dict(facts or {}), dict(run_files or {})
@@ -228,7 +233,10 @@ def write_manifest(
             loaded[name] = json.loads(read_bounded(Path(path).resolve(), RUN_FILE_BYTES))
         except (OSError, ValueError) as error:  # missing, a folder, too large, or not JSON
             raise ValueError(f"Run file {name} ({path}) is not a readable JSON file: {error}") from None
-    shared = [*({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),
+    # Another source's reading a step runs with is part of what a file is processed under.
+    shared = [*({"name": f"contract:{name}", "sha256": digest(body)} for name, body in sorted(contracts.items())
+                if "/" in name),
+              *({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),
               *({"name": f"fact:{name}", "sha256": digest(value)} for name, value in sorted(facts.items()))]
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]
     if len(prepare) != 1:
@@ -240,10 +248,6 @@ def write_manifest(
         if step["operation"] != "source.read" and "units" in step:
             raise ValueError(f"Step {step['name']}: only a read declares its units")
     dataset = keys_of["dataset"]
-    # Each contract the steps read with, loaded once: what is frozen is what the ids digest.
-    contracts = {name: rules_files.load(rules_files.ROOT / "sources" / source / name)
-                 for name in sorted({_contract(step) for step in steps
-                                     if step["operation"] == "source.read" or "contract" in step.get("input", {})})}
     by_name = by_name_of(steps)
     _prepared_shape(by_name, prepare[0], keys_of, contracts)
     limit = reading["execution"]["max_artifacts"]

@@ -86,8 +86,8 @@ def _plan(step: dict) -> None:
         raise Blocked("A step's input names its contract, keys, readings, files, beside, context, lookups, "
                       "pieces and references only")
     if "contract" in shape and (not isinstance(shape["contract"], str)
-                                or not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
-        raise Blocked("A step's contract is a rules file in the source's folder")
+                                or not re.fullmatch(r"(?:[a-z0-9][a-z0-9_.-]*/)?[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
+        raise Blocked("A step's contract is a rules file in the source's folder, or <source>/<file> in another's")
     if "keys" in shape and (not isinstance(shape["keys"], dict)
                             or any(not isinstance(v, str) or not v for v in shape["keys"].values())):
         raise Blocked("A step's keys are nonempty text")

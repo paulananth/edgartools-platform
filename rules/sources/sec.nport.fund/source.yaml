@@ -21,6 +21,97 @@
 source: sec.nport.fund
 bronze:
   family: sec.nport-datasets
+# The quarter's fund series through the Merge Stage (ticket 118). The registrant's
+# own readings give each filing its date and its registrant's CIK (`<source>/<file>`
+# names another source's rules file); a bundle is the quarter's data set.
+bookkeeping:
+  version: 2
+  targets:
+    mastering:
+      steps:
+        - name: submissions
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: sec.nport.registrant/submissions.yaml}
+        - name: registrants
+          operation: source.read
+          requires: [submissions]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: sec.nport.registrant/source.yaml
+            lookups:
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                      max_input_bytes: 67108864, max_input_rows: 1000000}
+        - name: filings
+          operation: source.read
+          requires: [submissions, registrants]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            lookups:
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                      max_input_bytes: 67108864, max_input_rows: 1000000}
+              registrant: {from: registrants, table: filing, column: accession, value_column: cik,
+                           max_input_bytes: 268435456, max_input_rows: 1000000}
+        - name: series
+          operation: source.combine
+          requires: [filings]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {filings: {all: filings}}}
+        - name: pairs
+          operation: source.combine
+          requires: [series]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: lei-pairs.yaml, readings: {series: {step: series}}}
+        - name: combine
+          operation: source.combine
+          requires: [series, pairs, filings]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine.yaml, readings: {series: {step: series}, pairs: {step: pairs}, filings: {all: filings}}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: fund, record_column: record, dataset: sec.nport.fund.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 execution:
   profile: source.read
   workers: 1
