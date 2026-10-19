@@ -149,8 +149,8 @@ submits one source.
    Check it offline first with `edgar-warehouse rules check --source <name>`.
    Then test that version and record the test run with `rules record-proof`
    before any approval: data-onboarding's **test** step names the version
-   label, runs `rules test` where the source's reading keeps each document
-   whole, and says what to use when it does not. A test that stops is not a
+   label, runs `rules test` where the source's Bookkeeping section is
+   version 2, and says what to use when it is not. A test that stops is not a
    proof and is not recorded.
 3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
    the merge policy this source depends on first, then this source:
