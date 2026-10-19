@@ -8,6 +8,6 @@ Type: task (configuration only). Status: in progress (Claude, 2026-10-19). Block
 
 - [x] A `mastering` target declared (configuration only): the filing dates (`submissions.yaml`), the registrant rows with them (a lookup from that reading), each CIK (`reduce.yaml`), its latest filing (`combine.yaml`), one record each (`record.yaml`, new: the row as the record), prepare, merge, processed; `rules/source-sequence.yaml` names `mastering`; a `receipts.jsonl` beside the captured 2026 Q2 data set (2026-10-19 12:50 ET)
 - [x] `rules test`, two passes on a fresh store (2026-10-19 12:50 ET; 1 min 37 s): passed, the second pass changed nothing; 1,947 registrant Companies (the profile's 1,947 CIKs, ticket 79 part 2), no open review, no identifier on two masters
-- [ ] Save, record the test run, approve under the standing approval, activate in the `company-on` store; `rules run` over the quarter
+- [x] Saved as `registrant-2026-10-19.pipes-on`, its test run recorded as its proof, approved under the standing approval, active in the `company-on` store after Person (activated with #1113's code); `rules run` (no feed) over the quarter (2026-10-19 12:51 ET): complete in 42 s, every step verified; MDM holds 2,433 Companies (486 SEC, 1,947 registrants; none joined, the bundle holds operating companies), no identifier on two masters
 - [ ] Three-axis review, PR, CI, merge
 - [ ] Learning → skill
