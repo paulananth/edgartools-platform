@@ -1,0 +1,75 @@
+{
+ "capture": {
+  "capture_run": "openfigi-2026q2",
+  "documents_sha256": "a5567e5d66e66572873df5a37bc21d88fefff81f7a15ec1def2521d3a7c33401",
+  "receipts_sha256": "1ffea89824cc6b813c4f1c6c422d7ea611ce25034a938627e59c10135da6997b"
+ },
+ "passed": true,
+ "passes": [
+  {
+   "mdm": {
+    "changes": {
+     "batch_change": 4000,
+     "outbox": 12
+    },
+    "current_records_md5": "07edaaa7877d00bc5a284dd2053b01c5",
+    "decisions": {},
+    "identifiers_on_two_masters": {},
+    "masters": {},
+    "open_reviews": {
+     "binding_required": 3900,
+     "not_found_by_openfigi": 100
+    },
+    "set_aside": {
+     "not_found_by_openfigi": 100
+    },
+    "stage_records": {
+     "openfigi.security_isin.v1": 3900
+    },
+    "waiting": {
+     "not_found_by_openfigi": 100
+    }
+   },
+   "records_in_mdm": 4000,
+   "run_counts": {
+    "verified": 49
+   },
+   "seconds": 109.9
+  },
+  {
+   "mdm": {
+    "changes": {
+     "batch_change": 4000,
+     "outbox": 12
+    },
+    "current_records_md5": "07edaaa7877d00bc5a284dd2053b01c5",
+    "decisions": {},
+    "identifiers_on_two_masters": {},
+    "masters": {},
+    "open_reviews": {
+     "binding_required": 3900,
+     "not_found_by_openfigi": 100
+    },
+    "set_aside": {
+     "not_found_by_openfigi": 100
+    },
+    "stage_records": {
+     "openfigi.security_isin.v1": 3900
+    },
+    "waiting": {
+     "not_found_by_openfigi": 100
+    }
+   },
+   "records_in_mdm": 4000,
+   "run_counts": {
+    "verified": 49
+   },
+   "seconds": 107.2
+  }
+ ],
+ "policy_digest": "a7400ae521a57487b591e4561ef4fdc772b177c2bb3d61fb2e13728847fb8aeb",
+ "rules_digest": "ef30496ce21947262df74762816440cfa35117c4b31aedc48cdf8bfaddfbd626",
+ "second_pass_changed_nothing": true,
+ "source": "openfigi",
+ "test_run": "openfigi, target mastering_isin, on a local capture"
+}

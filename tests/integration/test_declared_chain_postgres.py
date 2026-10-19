@@ -10,6 +10,8 @@ import hashlib
 import json
 from uuid import uuid4
 
+import pytest
+
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.mdm.clean.target_manifest import write_manifest
@@ -22,68 +24,33 @@ from tests.support.bookkeeping_protocol import drive
 from tests.support.memory_journal import MemoryJournal
 
 WORKERS = {"source.read": source_read, "source.combine": source_combine, "mdm.prepare": mdm_prepare}
-LEASE = {"key": "{unit}", "leases": ["artifact:{destination}"]}
-ASKED = {"from": "requests", "table": "asked", "column": "key", "value_column": "id",
-         "max_input_bytes": 1048576, "max_input_rows": 1000}
-STEPS = [
-    {"name": "requests", "operation": "source.read", "requires": [], **LEASE,
-     "checks": ["input.hash", "output.receipt", "source.output"], "units": {"each": "file"},
-     "input": {"contract": "requests.yaml", "beside": {"path": "{dir}/{base}.request.json", "sha256": "request_sha256"},
-               "context": {"batch": "{dir}/{base}"}}},
-    {"name": "answers", "operation": "source.read", "requires": ["requests"], **LEASE,
-     "checks": ["input.hash", "output.receipt", "source.output"], "units": {"groups": 3},
-     "input": {"context": {"batch": "{dir}/{base}", "id_type": "cusip"}, "lookups": {"asked": ASKED}}},
-    {"name": "reduce", "operation": "source.combine", "requires": ["answers"], **LEASE,
-     "checks": ["input.hash", "output.receipt", "source.combined"],
-     "input": {"contract": "reduce.yaml", "readings": {"answers": {"all": "answers"}}}},
-    {"name": "combine", "operation": "source.combine", "requires": ["reduce"], **LEASE,
-     "checks": ["input.hash", "output.receipt", "source.combined"],
-     "input": {"contract": "combine.yaml", "readings": {"counts": {"step": "reduce"}}}},
-    {"name": "record", "operation": "source.read", "requires": ["combine"], **LEASE,
-     "checks": ["input.hash", "output.receipt", "source.output"],
-     "input": {"contract": "record.yaml", "pieces": {"step": "combine"}}},
-    {"name": "prepare", "operation": "mdm.prepare", "requires": ["record"], **LEASE,
-     "checks": ["input.hash", "output.receipt", "mdm.prepared"],
-     "input": {"keys": {"table": "security", "record_column": "record", "dataset": figi.CODE},
-               "readings": {"record": {"all": "record"}}}},
-    {"name": "merge", "operation": "mdm.merge", "requires": ["prepare"], "key": "{batch_id}",
-     "leases": ["mdm:consumer:{consumer}"], "checks": ["input.hash", "output.receipt", "mdm.committed"]},
-    {"name": "processed", "operation": "journal.record", "requires": ["merge"], **LEASE,
-     "checks": ["input.hash", "output.receipt", "journal.recorded"]},
-]
+TARGET = "mastering_cusip"
 
 
-def declared(monkeypatch):
-    """OpenFIGI's rules with this target declared, and reduce.yaml naming every answers reading once."""
+def declared(monkeypatch, groups=3, target=TARGET):
+    """OpenFIGI's rules as declared, with answers in groups of `groups` files so the invented eight
+    files make several units."""
     body = copy.deepcopy(files.source("openfigi"))
-    body["bookkeeping"] = {"version": 2, "targets": {"mastering_cusip": {
-        "steps": copy.deepcopy(STEPS), "checks": ["manifest.hash", "work.accounting", "journal.delivered"]}}}
-    source, load = files.source, files.load
+    steps = body["bookkeeping"]["targets"][target]["steps"]
+    next(step for step in steps if step["name"] == "answers")["units"] = {"groups": groups}
+    source = files.source
     monkeypatch.setattr(files, "source", lambda name, root=None: body if name == "openfigi" else source(name, root))
-
-    def reduce_once(path, *args, **kwargs):
-        found = load(path, *args, **kwargs)
-        if path.name == "reduce.yaml" and path.parent.name == "openfigi":
-            found = copy.deepcopy(found)
-            for group in found["reduce"]["groups"].values():
-                group["source"] = ["answers"]
-        return found
-    monkeypatch.setattr(files, "load", reduce_once)
     return body
 
 
-def capture(root, rewrite=True):
-    """The invented CUSIP files, each answer's receipt naming its request's sha256 (`rewrite=False`:
+def capture(root, rewrite=True, word="cusip"):
+    """One kind's invented files, each answer's receipt naming its request's sha256 (`rewrite=False`:
     the receipts only, for the files as they are)."""
-    names = figi.capture(root, "cusip") if rewrite else sorted(
-        p.name for p in (root / "id_cusip").glob("*.json") if not p.name.endswith(".request.json"))
+    kind = figi.KINDS[word][0]
+    names = figi.capture(root, word) if rewrite else sorted(
+        p.name for p in (root / kind).glob("*.json") if not p.name.endswith(".request.json"))
     with (root / "receipts.jsonl").open("w") as out:
         for name in names:
-            answer, request = root / "id_cusip" / name, root / "id_cusip" / name.replace(".json", ".request.json")
-            out.write(json.dumps({"file": f"id_cusip/{name}", "sha256": hashlib.sha256(answer.read_bytes()).hexdigest(),
+            answer, request = root / kind / name, root / kind / name.replace(".json", ".request.json")
+            out.write(json.dumps({"file": f"{kind}/{name}", "sha256": hashlib.sha256(answer.read_bytes()).hexdigest(),
                                   "bytes": answer.stat().st_size, "status": 200,
                                   "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest()}) + "\n")
-    return [f"id_cusip/{name}" for name in names]
+    return [f"{kind}/{name}" for name in names]
 
 
 def comparable(record):
@@ -94,23 +61,27 @@ def comparable(record):
                                                                        "consumer", "publication"))}}
 
 
-def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch):
-    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand")
-    body = declared(monkeypatch)
-    keys = capture(tmp_path / "capture")
+@pytest.mark.parametrize("word, target, found_count, refused_count", [
+    ("cusip", "mastering_cusip", 5, 8), ("isin", "mastering_isin", 1, 7)])
+def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch, word, target,
+                                                                found_count, refused_count):
+    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand", word)
+    body = declared(monkeypatch, target=target)
+    code = figi.KINDS[word][2]
+    keys = capture(tmp_path / "capture", word=word)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps(keys))
-    report = write_manifest(source="openfigi", target="mastering_cusip", capture=str(tmp_path / "capture"),
+    report = write_manifest(source="openfigi", target=target, capture=str(tmp_path / "capture"),
                             documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
                             as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal())
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
-    target = copy.deepcopy(body["bookkeeping"]["targets"]["mastering_cusip"])
-    target["steps"] = target["steps"][:-2]  # no MDM here: the merge and the journal are Person's tests'
+    declared_target = copy.deepcopy(body["bookkeeping"]["targets"][target])
+    declared_target["steps"] = declared_target["steps"][:-2]  # no MDM here: the merge and the journal are Person's tests'
     name = f"figi-{uuid4().hex}"
-    rules_body = {"source": name, "bookkeeping": {"version": 2, "targets": {"mastering_cusip": target}}}
+    rules_body = {"source": name, "bookkeeping": {"version": 2, "targets": {target: declared_target}}}
     steps = book.artifacts.json(report["manifest"])["steps"]
     assert {step: len(units) for step, units in steps.items()} == {
         "requests": 8, "answers": 3, "reduce": 1, "combine": 1, "record": 1, "prepare": 1, "merge": 1, "processed": 1}
@@ -120,7 +91,7 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
     databases.rules.activate("source", name, "1")
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
-    rid = book.start(rules_ref=rules, inputs_ref=manifest, target="mastering_cusip", scope={"test": name})
+    rid = book.start(rules_ref=rules, inputs_ref=manifest, target=target, scope={"test": name})
 
     state = drive(book, rid, databases.ledger, workers=WORKERS)
 
@@ -129,9 +100,9 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     refused: dict[str, str] = {}
     found = chain.records(book.artifacts, tmp_path / "bundle" / "prepare",
                           {"uri": prepared.as_uri(), "sha256": hashlib.sha256(prepared.read_bytes()).hexdigest()},
-                          figi.CODE, body["mdm"][figi.CODE]["contract"], refused=refused, key="id")
+                          code, body["mdm"][code]["contract"], refused=refused, key="id")
     assert {r["provenance"]["record_key"]: comparable(r) for r in found} == {
         r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand
-    assert len(found) == len(by_hand) == 5 and len(refused) == 8  # five found, eight OpenFIGI did not find
+    assert len(found) == len(by_hand) == found_count and len(refused) == refused_count
     assert state["counts"] == {"verified": 15}  # 8 requests, 3 answers groups, reduce, combine, record, prepare

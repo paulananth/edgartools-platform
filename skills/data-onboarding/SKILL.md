@@ -630,8 +630,9 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    approves differs only in those fields (an earlier proving run does
    exactly this; see Examples).
 
-   **A source that declares a `mastering` target** in a Bookkeeping section
-   of version 2 (each step's `units` and `input`, in its `source.yaml`; see
+   **A source that declares a target** (`mastering`, unless `--target`
+   names another, such as one target per kind of identifier asked) in a
+   Bookkeeping section of version 2 (each step's `units` and `input`, in its `source.yaml`; see
    [bookkeeping SPEC](../bookkeeping/SPEC.md)) runs it with `rules test`
    instead of a pytest file. The input manifest is written from that
    declaration, so the reading may be one table or several. That runs the target twice on
@@ -642,7 +643,7 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    edgar-warehouse rules test --source <name> --capture <capture folder> \
      --documents <list of document keys> --capture-run <run> --as-of <time> \
      --stores ~/.local/share/edgartools/local-tests/environments/<store name> \
-     --out <report.json>
+     --out <report.json> [--target <target>]
    uv run --extra mdm python infra/scripts/local-test-stores.py stop <store name>
    ```
    It refuses a store that already holds MDM records: `local-test-stores.py

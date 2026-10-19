@@ -1,0 +1,4 @@
+{"what": "Prepared records of the declared targets' first pass (rules test --target, 2026-10-18), counted by declared_filled.py as openfigi_run.py counts them; the kept capture's first 40 answer files of each kind. Counts only.",
+ "openfigi.security.v1": {"outcome": {"accepted": 3197, "not_found_by_openfigi": 803}, "filled": {"id:cusip": 3197, "xref:composite_figi": 303, "xref:figi": 2923, "xref:openfigi_ticker": 3171, "xref:share_class_figi": 321}},
+ "openfigi.security_isin.v1": {"outcome": {"accepted": 3900, "not_found_by_openfigi": 100}, "filled": {"id:isin": 3900, "xref:composite_figi": 1025, "xref:figi": 2317, "xref:openfigi_ticker": 3342, "xref:share_class_figi": 1599}},
+ "configured_chain_same_files": "openfigi_run.py CAPTURE OUT 40 gives the same outcome and filled counts for both contracts, with 0 differences from a direct count"}

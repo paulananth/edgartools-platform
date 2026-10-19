@@ -9,6 +9,7 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import read_units
 from edgar_warehouse.mdm.clean.store import Conflict
 from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.rules import files
 from tests.integration import test_declared_chain_postgres as chain
 from tests.support.memory_journal import MemoryJournal
 
@@ -23,7 +24,7 @@ def test_a_template_names_the_folder_the_base_and_the_name():
 def write(tmp_path, monkeypatch, change=None, tamper=None):
     body = chain.declared(monkeypatch)
     if change:
-        change(body["bookkeeping"]["targets"]["mastering_cusip"]["steps"])
+        change(body["bookkeeping"]["targets"][chain.TARGET]["steps"])
     keys = chain.capture(tmp_path / "capture")
     if tamper:
         tamper(tmp_path / "capture")
@@ -92,9 +93,10 @@ def test_one_step_reading_names_a_step_of_one_unit(tmp_path, monkeypatch):
 
 
 def test_the_declaration_is_not_changed_by_writing(tmp_path, monkeypatch):
-    before = copy.deepcopy(chain.STEPS)
+    body = chain.declared(monkeypatch)
+    before = copy.deepcopy(body)
     write(tmp_path, monkeypatch)
-    assert chain.STEPS == before
+    assert files.source("openfigi") == before
 
 
 def test_a_changed_request_beside_an_unchanged_answer_is_named_again(tmp_path, monkeypatch):

@@ -1,6 +1,6 @@
 """A rules version's test run, on this machine, from files already captured (ticket 14).
 
-`rules test` runs a source's declared `mastering` target the way production runs
+`rules test` runs one declared target of a source (`--target`, default `mastering`) as production runs
 it: `rules run` submits it to Bookkeeping, each step's worker and verifier run as
 their own processes with their own logins, and `bookkeeping finalize` closes the
 run. It runs on the disposable local stores (`infra/scripts/local-test-stores.py
@@ -161,8 +161,8 @@ class _Commands:
 
 
 def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of: str, stores: Path,
-        out: Path, minutes: float = 60) -> dict:
-    """Two runs of the source's `mastering` target on the capture; the report, written to `out`."""
+        out: Path, minutes: float = 60, target: str = TARGET) -> dict:
+    """Two runs of one of the source's targets (default `mastering`) on the capture; the report, written to `out`."""
     from edgar_warehouse.change_journal.store import ChangeJournal
     from edgar_warehouse.mdm.clean.store import register_dataset, register_policy
     from edgar_warehouse.mdm.clean.target_manifest import write_manifest
@@ -170,9 +170,9 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
 
     env = duties(stores)
     document = files.source(source)
-    target = ((document.get("bookkeeping") or {}).get("targets") or {}).get(TARGET)
-    if target is None:
-        raise TestRunError(f"{source} declares no `{TARGET}` target in its source.yaml")
+    declared = ((document.get("bookkeeping") or {}).get("targets") or {}).get(target)
+    if declared is None:
+        raise TestRunError(f"{source} declares no `{target}` target in its source.yaml")
     mdm = create_engine(env["governance"]["RULES_MDM_ACTIVATION_DATABASE_URL"])
     rules_engine = create_engine(env["governance"]["RULES_DATABASE_URL"])
     journal_engine = create_engine(env["worker"]["CHANGE_JOURNAL_DATABASE_URL"])
@@ -203,7 +203,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         for number, force in ((1, False), (2, True)):
             began = time.monotonic()
             try:
-                report = write_manifest(source=source, target=TARGET, capture=str(capture), documents=str(documents),
+                report = write_manifest(source=source, target=target, capture=str(capture), documents=str(documents),
                                         capture_run=capture_run, output=str(root / f"pass-{number}"),
                                         as_of=as_of, revision=0, force=force, journal=journal)
             except ValueError as error:  # the declaration or the bundle refused: a stop, not a traceback
@@ -215,11 +215,11 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                 rules.prove("source", name, version, {"digest": saved["digest"], "passed": True,
                                                      "batch_hash": report["manifest"]["sha256"]})
                 rules.activate("source", name, version)
-            output = commands("worker", "rules", "run", "--source", name, "--target", TARGET,
+            output = commands("worker", "rules", "run", "--source", name, "--target", target,
                               "--input-manifest", report["manifest"]["uri"],
                               "--input-sha256", report["manifest"]["sha256"])
             run_id = str(json.loads(output)["run"]["run_id"])
-            final = commands.drive(run_id, target["steps"])
+            final = commands.drive(run_id, declared["steps"])
             if final["run"]["state"] != "complete":
                 raise TestRunError(f"pass {number} ended {final['run']['state']}, not complete")
             held = counts(mdm)
@@ -228,7 +228,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                            "records_in_mdm": sum(sum(held[part].values()) for part in ("stage_records", "set_aside")),
                            "seconds": round(time.monotonic() - began, 1)})
         result = {
-            "test_run": f"{source}, target {TARGET}, on a local capture",
+            "test_run": f"{source}, target {target}, on a local capture",
             "source": source,
             "rules_digest": digest(document),
             "policy_digest": policy_digest,

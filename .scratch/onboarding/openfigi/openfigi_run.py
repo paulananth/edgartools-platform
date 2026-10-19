@@ -100,7 +100,7 @@ by_kind = {word: dict(done[i * 8:(i + 1) * 8]) for i, (_, (word, _)) in enumerat
 stage(f"read {sum(len(v) for v in names_of.values())} files, 16 readings in parallel")
 for kind, (word, code) in KINDS.items():
     names, readings = names_of[kind], by_kind[word]
-    counts = combine(OUT / word / "reduce", files.load(FOLDER / "reduce.yaml"), readings)
+    counts = combine(OUT / word / "reduce", files.load(FOLDER / "reduce.yaml"), {"answers": list(readings.values())})
     combined = combine(OUT / word / "combine", files.load(FOLDER / "combine.yaml"), {"counts": counts})
     stage(f"{word}: reduce, combine")
     index = store.json(combined)
