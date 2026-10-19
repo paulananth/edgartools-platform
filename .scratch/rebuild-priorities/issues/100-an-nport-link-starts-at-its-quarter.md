@@ -24,3 +24,4 @@ The N-PORT Security publication states the quarter's data set period as its effe
 - [ ] The N-PORT run wiring passes `period` in the holdings reading's context and `effective_column: period` to `mdm.prepare`: no platform command builds the N-PORT run yet; recorded on ticket 79 (its run wiring part)
 - [x] In ticket 22's PR #1022, merged by the operator 2026-10-16 18:27 ET
 - [x] Learning → skill: data-onboarding "Count the links MDM accepts" (#1018); a link's observed start comes from its publication's effective time 2026-10-16 17:53 ET
+- [ ] ~~The N-PORT run wiring passes `period` in the holdings reading's context and `effective_column: period` to `mdm.prepare`~~ superseded by ticket 113 (operator, 2026-10-19: the quarter "if at all it should be captured in silver not on mdm"; an ISSUED_BY link "if issued by already exist do not overight if not use the filing date or quarter date or inception date")

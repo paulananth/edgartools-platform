@@ -45,3 +45,4 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [x] The switch-on: #1075, CI green after its two test fixes (the CIK approval layer, the answer file's policy digest), merged on green 2026-10-18 12:48 ET
   - [ ] ~~A shared `with_rules_on` test helper~~ deferred to ticket 108 (GoF, 2026-10-18): four test files switch a rule on locally with the same five lines; nothing is broken
 - [ ] Learning → skill
+- [ ] The N-PORT run wiring follows ticket 113 (operator, 2026-10-19): the quarter stays in silver, not MDM; an ISSUED_BY link starts at its filing date, else the quarter date, and a link that exists keeps its start
