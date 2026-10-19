@@ -44,7 +44,7 @@ TYPES_V0 = {
 }
 # The keys a type may carry, and the ultimate-parent algorithms this code runs.
 _TYPE_KEYS = {"from", "to", "from_profile", "to_profile", "capacities", "hierarchy", "cycles", "one_parent",
-              "ultimate_parent", "ultimate_type", "ends_parent_links"}
+              "ultimate_parent", "ultimate_type", "ends_parent_links", "keeps_start"}
 # The type a derived ultimate parent is written as when its hierarchy names
 # none: what every policy before profiling ticket 04b wrote.
 CALCULATED_V0 = "CALCULATED_ULTIMATE_PARENT"
@@ -93,6 +93,8 @@ def check_types(section: dict) -> None:
             raise Conflict(f"Relationship type {name}: ultimate_type names a declared type, beside ultimate_parent")
         if "ends_parent_links" in spec and (spec["ends_parent_links"] is not True or spec.get("hierarchy")):
             raise Conflict(f"Relationship type {name}: ends_parent_links is true, on a link that is no parent")
+        if "keeps_start" in spec and (spec["keeps_start"] is not True or spec.get("hierarchy")):
+            raise Conflict(f"Relationship type {name}: keeps_start is true, on a link that is no parent")
 
 
 MIN = datetime.min.replace(tzinfo=UTC)
@@ -181,26 +183,35 @@ def fold_sightings(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
     return periods, contradictions
 
 
-def _earlier_sighting(periods: list[dict], period: dict) -> bool:
+def _earlier_sighting(periods: list[dict], period: dict, *, any_basis: bool = False) -> bool:
     """Fold an observed `period` into the same observed period of `periods`
-    (equal but for its start), keeping the earlier start; False if none."""
-    rest = {k: v for k, v in period.items() if k != "valid_from"}
-    same = next((p for p in periods if p.get("valid_from_basis") == "observed"
-                 and {k: v for k, v in p.items() if k != "valid_from"} == rest), None)
+    (equal but for its start), keeping the earlier start; False if none.
+    `any_basis` (a type that `keeps_start`) folds stated and observed alike,
+    the earlier start keeping its own basis."""
+    start = {"valid_from", "valid_from_basis"} if any_basis else {"valid_from"}
+    rest = {k: v for k, v in period.items() if k not in start}
+    same = next((p for p in periods if (any_basis or p.get("valid_from_basis") == "observed")
+                 and {k: v for k, v in p.items() if k not in start} == rest), None)
     if same is None:
         return False
     if instant(period["valid_from"]) < instant(same["valid_from"]):
-        same["valid_from"] = period["valid_from"]
+        same.update({k: period[k] for k in start if k in period})
     return True
 
 
-def _keep_first_observed(edge: dict, stored: dict | None) -> dict:
+def _keeps_start(edge: dict, types: dict) -> bool:
+    return bool(types.get(edge["type"], {}).get("keeps_start"))
+
+
+def _keep_first_observed(edge: dict, stored: dict | None, types: dict) -> dict:
     """A link rebuilt from a record's newest revision keeps the earlier observed
     start its stored body holds (ticket 101): MDM reads only the newest
-    revision, so a start first seen in an earlier one is otherwise lost."""
+    revision, so a start first seen in an earlier one is otherwise lost. A type
+    that `keeps_start` keeps its earlier start whatever its basis (ticket 113)."""
+    keeps = _keeps_start(edge, types)
     for period in (stored or {}).get("periods", []):
-        if period.get("valid_from_basis") == "observed":
-            _earlier_sighting(edge["periods"], period)
+        if keeps or period.get("valid_from_basis") == "observed":
+            _earlier_sighting(edge["periods"], period, any_basis=keeps)
     return edge
 
 
@@ -332,10 +343,10 @@ def project(
                     {"on": sighting, "basis": reported.get("basis", "observed"),
                      "held": reported.get("held", True), "title": reported.get("title"),
                      "assertion_id": record["assertion_id"], "subject": subject})
-            elif period.get("valid_from_basis") == "observed":
+            elif period.get("valid_from_basis") == "observed" or spec.get("keeps_start"):
                 # A start first seen is the earliest sighting, not one period
                 # per publication that repeats the link.
-                if not _earlier_sighting(value["periods"], period):
+                if not _earlier_sighting(value["periods"], period, any_basis=bool(spec.get("keeps_start"))):
                     value["periods"].append(period)
             elif period not in value["periods"]:
                 value["periods"].append(period)
@@ -430,7 +441,7 @@ def project(
         e["evidence"] = sorted(e["evidence"], key=digest)
     result += _ultimate_parents(grouped, invalid, types, as_of)
     for edge in result:
-        _keep_first_observed(edge, (stored or {}).get(edge["relationship_id"]))
+        _keep_first_observed(edge, (stored or {}).get(edge["relationship_id"]), types)
     return sorted(result, key=lambda e: e["relationship_id"]), reviews
 
 
