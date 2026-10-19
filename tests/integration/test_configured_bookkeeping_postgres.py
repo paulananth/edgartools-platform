@@ -1113,3 +1113,31 @@ def test_a_capture_runs_only_with_its_feed(databases, tmp_path):
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
     with pytest.raises(Blocked, match="only as live acquisition"):
         book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name})
+
+
+def test_rules_run_submits_a_source_with_acquisition_over_captured_files(databases, tmp_path, monkeypatch, capsys):
+    """`rules run` with no `--feed` binds the run to its source, so a switched-on source that
+    declares acquisition runs over captured files (ticket 114; the first real run found it unbound)."""
+    from edgar_warehouse.cli import main
+    book = Bookkeeping(databases.runtime)
+    body = config()
+    name = f"pipes-{uuid4().hex}"
+    approved_acquisition(body, name, [], None)
+    saved = databases.rules.save("source", name, "1", body)
+    inputs = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1, "units": [
+        {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
+         "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
+         "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
+    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+    approve(databases.approver, "source", name, "1")
+    databases.rules.activate("source", name, "1")
+    for key, value in {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
+                       "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
+                       "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
+                       "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    assert main(["rules", "run", "--source", name, "--target", "silver",
+                 "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
+    submitted = json.loads(capsys.readouterr().out)
+    assert submitted["run"]["submission"]["scope"] == {"kind": "source", "name": name, "source": name, "target": "silver"}
