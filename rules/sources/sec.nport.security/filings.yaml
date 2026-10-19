@@ -3,7 +3,8 @@
 # operator, 2026-10-19: an ISSUED_BY link starts at "the filing date or
 # quarter date or inception date"). SEC writes the date as DD-MON-YYYY
 # (every one of the 2026 Q2 data set's 14,416 filings); the set holds it as a
-# calendar date, YYYY-MM-DD, so the earliest is the lexically first.
+# calendar date, YYYY-MM-DD, so the earliest is the lexically first; a date of
+# any other shape is none, and its holdings take the quarter's date.
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:
   format: json
@@ -15,8 +16,13 @@ read:
         accession: {text: {path: ACCESSION_NUMBER}}
         filed:
           concat:
-          # The year: what follows the last hyphen.
-          - text: {path: FILING_DATE, transforms: [{regex_replace: {pattern: '^.*-', with: ''}}], null_if: [""]}
+          # The year: the four digits after the last hyphen; anything else is no date.
+          - text:
+              path: FILING_DATE
+              transforms:
+              - {regex_replace: {pattern: '^.*-', with: ''}}
+              - {regex_replace: {pattern: '^(.*[^0-9].*|.{0,3}|.{5,})$', with: ''}}
+              null_if: [""]
           - const: {value: "-"}
           # The month: the three letters between the hyphens, as its number.
           - text:
@@ -40,8 +46,13 @@ read:
               - {regex_replace: {pattern: '^(.*[^0-9].*|.{0,1}|.{3,})$', with: ''}}
               null_if: [""]
           - const: {value: "-"}
-          # The day: what comes before the first hyphen.
-          - text: {path: FILING_DATE, transforms: [{regex_replace: {pattern: '-.*$', with: ''}}], null_if: [""]}
+          # The day: the two digits before the first hyphen; anything else is no date.
+          - text:
+              path: FILING_DATE
+              transforms:
+              - {regex_replace: {pattern: '-.*$', with: ''}}
+              - {regex_replace: {pattern: '^(.*[^0-9].*|.{0,1}|.{3,})$', with: ''}}
+              null_if: [""]
   stream:
     framing: delimited
     delimited: {format: tsv, encoding: utf-8}

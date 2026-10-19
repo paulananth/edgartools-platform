@@ -190,10 +190,17 @@ def test_a_holding_with_no_filing_date_starts_at_the_quarter(database, tmp_path)
     assert starts(database) == [(Q2, "stated")]
 
 
+def test_a_filing_date_of_another_shape_is_none(tmp_path):
+    store = Artifacts()
+    filings = {"A-1": "5-JUN-2026", "A-2": "28-May-26"}
+    raw = store.put_bytes((tmp_path / "capture.zip").as_uri(), capture(tmp_path, HOLDINGS, filings).read_bytes())
+    assert filed_pairs(store, tmp_path, raw) == []
+
+
 def test_an_issuer_reading_with_no_quarter_is_refused(tmp_path):
     store = Artifacts()
     raw = store.put_bytes((tmp_path / "capture.zip").as_uri(), capture(tmp_path, HOLDINGS).read_bytes())
-    with pytest.raises(Exception, match="context"):
+    with pytest.raises(Exception, match="context keys differ from the declared fields"):
         issuers(store, tmp_path, raw, [], None)
 
 
