@@ -127,7 +127,8 @@ needs no writer of its own:
   digest then joins what each file is processed under as
   `contract:<source>/<file>`), `keys` (for `mdm.prepare`: `table`, `record_column`,
   `dataset`) and `readings` (each name `{all: <step>}`, every unit of a
-  prerequisite as one list, or `{step: <step>}`, its one unit); for a read:
+  prerequisite as one list, `{step: <step>}`, its one unit, or, for a
+  combine, `{run: {source, target, step}}`: another run's step, below); for a read:
   - `files`: a pattern over the bundle's document keys (default every one);
   - `beside: {path, sha256}`: read each document's companion instead, at
     the path the template gives, equal to the sha256 the document's receipt
@@ -139,12 +140,30 @@ needs no writer of its own:
   - `lookups`: `{<set>: {from, table, column, value_column, max_input_bytes,
     max_input_rows}}`, a pair set read from the unit of `from` (an `{each:
     file}` step) with the same pair key, `{dir}/{base}`; a read with lookups
-    is cut into groups or each file, one composed slot per document. Or
-    every set `{file: <name>}`, given whole by a run file;
+    is cut into groups or each file, one composed slot per document. A set
+    may name `run: {source, target, step}` in place of `from`: another run's
+    step, read whole. Or every set `{file: <name>}`, given whole by a run file;
   - `references: {<reference>: {file: <name>}}`: a reference the contract
     leaves empty (an approved scope), filled from a run file;
   - `pieces: {step: <combine step>}`: one unit reading that step's verified
     output piece by piece (read version 4).
+
+**Another run's step** (ticket 120). A reading or a lookup that names `{run:
+{source, target, step}}` reads the verified units of that step in the
+complete runs of that source's target, of the reading run's own kind: when
+the manifest is written, they become the slot's list (1..256 units; an output
+two units share, the same files read twice, is listed once), and the sorted
+digests of their outputs join what each file is processed under as
+`run:<source>/<target>/<step>`. When a unit is filled, Bookkeeping checks
+that its run is complete and not compacted, that the step declares that
+source, target and step, and reverifies the unit against that run's own
+frozen configuration; anything else blocks the unit. The producing target
+runs first. A target that only reads, for another run to read, prepares no
+publication (no `mdm.prepare`). The target is part of what each file is
+processed under, so two targets over the same files (a source's two Dataset
+Contracts) each process them. Open (ticket 121): which of a target's runs a
+reading takes once a second capture exists, and keeping the producing runs'
+units past compaction.
 
 A target may declare its run's own inputs, `run: {facts: [names], files:
 [names]}`: facts the operator gives (`--fact name=value`, a JSON value or

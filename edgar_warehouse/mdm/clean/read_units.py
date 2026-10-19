@@ -56,6 +56,11 @@ def run_label(selector: dict) -> str:
     return f"{selector['source']}/{selector['target']}/{selector['step']}"
 
 
+def run_units(run, selector: dict) -> list[dict]:
+    """That step's verified units, as the slot's list of `{run, step, key}`."""
+    return [{k: u[k] for k in ("run", "step", "key")} for u in run.others[run_label(selector)]]
+
+
 def pair(key: str) -> str:
     """A document's pair key, `{dir}/{base}`: an answer and its request share it."""
     return fill("{dir}/{base}", key)
@@ -179,7 +184,7 @@ def form(step: dict, run, units: dict) -> list[dict]:
                         set_name: {"readings": {"slot": set_name} if "run" in value else [{"slot": set_name}],
                                    **{k: v for k, v in value.items() if k not in ("from", "run")}}
                         for set_name, value in lookups.items()}},
-                    "slots": {set_name: [{k: u[k] for k in ("run", "step", "key")} for u in run.others[run_label(value["run"])]]
+                    "slots": {set_name: run_units(run, value["run"])
                               if "run" in value else {"step": value["from"], "key": pair(key)}
                               for set_name, value in lookups.items()}}}
             artifacts.append(artifact)

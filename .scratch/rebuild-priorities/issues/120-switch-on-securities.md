@@ -43,10 +43,11 @@ Type: task. Status: in progress (Claude, 2026-10-19). Blocked by: none.
 - [x] A combine's reading, or a read's lookup set, may name `{run: {source, target, step}}`: the manifest writer lists the verified units of that target's complete runs (`Bookkeeping.verified_units`: an output held twice, the same files read again, listed once; group keys repeat across runs, so never "latest per key"), and their outputs join the processing identity (2026-10-19 17:56 ET). Tests: `tests/mdm/test_target_manifest.py` (slots, identity moves, 0 and 257 refused, a lookup read whole, bad selectors refused), the Postgres listing test
 - [x] A target that only reads (no `mdm.prepare`), for another run to read; two preparations refused (2026-10-19 17:56 ET); tests in `test_target_manifest.py`
 - [x] `rules test` finds another run in its own stores' Bookkeeping, not the shell's (2026-10-19 17:56 ET)
-- [ ] OpenFIGI targets that read the answers for Securities (CUSIP, ISIN)
-- [ ] Securities' `mastering` target, declared from the hand-chained runs
-- [ ] `rules/source-sequence.yaml`: OpenFIGI's answer targets, then Securities
+- [x] OpenFIGI targets that read the answers for Securities (`answers_cusip`, `answers_isin`: requests, answers in groups of 16, processed; no publication) and GLEIF's `umbrellas` (the sub-fund pairs) (2026-10-19 18:15 ET); first runs in \`sec-test\` complete (umbrellas 59 s; CUSIP answers run 1, 545 units, 10 min)
+- [x] Securities' `mastering` and `mastering_isin` targets (one per Dataset Contract, the same 18 steps; rules files allow no anchors), with `record.yaml`, and `figi-found.yaml` taking one name (2026-10-19 18:15 ET); the Spec review found the wiring equal to the hand chain
+- [x] `rules/source-sequence.yaml`: Securities' `mastering` after N-PORT fund; the comments name the targets that run first, since the inventory holds one target per source (2026-10-19 18:15 ET)
 - [ ] `rules test` on Securities, recorded; approval under the standing approval; activation in `company-on`
 - [ ] Runs in `company-on`: OpenFIGI's answers (CUSIP, ISIN), then Securities; counts; no identifier on two masters
-- [ ] Three-axis review; PR, CI, merge
+- [x] Three-axis review (2026-10-19 18:15 ET). GoF: one shared helper for another run's slot list (taken); a table of reading shapes noted, not taken (five shapes, three modules; next shape decides). Standards: Bookkeeping now checks, when it fills the slot, that the other run is complete and not compacted and is the source, target and step the step declares (tests per case: unknown run, not verified, not complete, corrupt, undeclared, another step, each matched to its reason); the identity takes the outputs' digests only, in a fixed order; the operation check precedes the repeat skip; engines disposed. Spec: the target joins the processing identity, or \`mastering_isin\` would find the quarter already processed (test); Bookkeeping SPEC and data-onboarding say how another run is read. Over time (a second capture, the 256 list, compaction): ticket 121
+- [ ] PR, CI, merge
 - [ ] Learning → skill

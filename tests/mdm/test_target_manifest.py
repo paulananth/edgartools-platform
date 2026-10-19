@@ -253,3 +253,16 @@ def test_a_lookup_set_reads_another_runs_step_whole(tmp_path, monkeypatch):
         (lookup,) = each["input"]["compose"]["slots"].values()
         assert lookup["compose"]["slots"] == {"umbrella": [{k: runs.units[0][k] for k in ("run", "step", "key")}]}
         assert lookup["compose"]["document"]["sets"]["umbrella"]["readings"] == {"slot": "umbrella"}
+
+
+def test_two_targets_over_the_same_files_each_process_them(tmp_path, monkeypatch):
+    """Ticket 120: a source's two Dataset Contracts read the same files through two targets; the target
+    is part of the processing identity, so recording one never marks the files done for the other."""
+    body = files.source(SOURCE)
+    body["bookkeeping"]["targets"]["mastering_again"] = body["bookkeeping"]["targets"]["mastering"]
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    first = write_manifest(target="mastering", **options(tmp_path / "a"))
+    second = write_manifest(target="mastering_again", **options(tmp_path / "b"))
+
+    assert first["scope"]["processing_identity"] != second["scope"]["processing_identity"]
+    assert first["publication"]["batch_id"] != second["publication"]["batch_id"]

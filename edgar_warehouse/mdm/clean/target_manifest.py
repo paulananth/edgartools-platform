@@ -119,7 +119,7 @@ def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
         if "all" in named:
             slots[slot] = [{"step": named["all"], "key": u["keys"]["unit"]} for u in units[named["all"]]]
         elif "run" in named:
-            slots[slot] = [{k: u[k] for k in ("run", "step", "key")} for u in run.others[read_units.run_label(named["run"])]]
+            slots[slot] = read_units.run_units(run, named["run"])
         elif len(units[named["step"]]) != 1:
             raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
         else:
@@ -173,25 +173,32 @@ OPERATIONS = tuple(FORMS)
 
 def _other_runs(steps: list[dict], bookkeeping) -> dict:
     """Ticket 120: each other run's step a combine or a lookup reads, as the verified units of its complete runs."""
-    others = {}
-    for step in steps:
-        shape = step.get("input", {})
-        for kind, named in [*(("reading", v) for v in shape.get("readings", {}).values()),
-                            *(("lookup", v) for v in shape.get("lookups", {}).values())]:
-            if "run" not in named or read_units.run_label(named["run"]) in others:
-                continue
-            if step["operation"] != ("source.combine" if kind == "reading" else "source.read"):
-                raise ValueError(f"Step {step['name']}: a combine's reading or a read's lookup reads another run's step")
-            if bookkeeping is None:
-                from edgar_warehouse.bookkeeping.clean.database import get_engine
-                from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-                bookkeeping = Bookkeeping(get_engine())
-            found = bookkeeping.verified_units(**named["run"])
-            if not 1 <= len(found) <= COMPOSE_LIST:
-                raise ValueError(f"Step {step['name']}: {read_units.run_label(named['run'])} has {len(found)} verified units in "
-                                 f"complete runs; a reading takes 1..{COMPOSE_LIST}")
-            others[read_units.run_label(named["run"])] = found
-    return others
+    others, opened = {}, None
+    try:
+        for step in steps:
+            shape = step.get("input", {})
+            for kind, named in [*(("reading", v) for v in shape.get("readings", {}).values()),
+                                *(("lookup", v) for v in shape.get("lookups", {}).values())]:
+                if "run" not in named:
+                    continue
+                if step["operation"] != ("source.combine" if kind == "reading" else "source.read"):
+                    raise ValueError(f"Step {step['name']}: a combine's reading or a read's lookup reads another run's step")
+                label = read_units.run_label(named["run"])
+                if label in others:
+                    continue
+                if bookkeeping is None:
+                    from edgar_warehouse.bookkeeping.clean.database import get_engine
+                    from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
+                    bookkeeping = opened = Bookkeeping(get_engine())
+                found = bookkeeping.verified_units(**named["run"])
+                if not 1 <= len(found) <= COMPOSE_LIST:
+                    raise ValueError(f"Step {step['name']}: {label} has {len(found)} verified units in complete runs; "
+                                     f"a reading takes 1..{COMPOSE_LIST}")
+                others[label] = found
+        return others
+    finally:
+        if opened is not None:
+            opened.engine.dispose()
 
 
 def run_arguments(facts: list[str] | None, run_files: list[str] | None) -> tuple[dict, dict]:
@@ -268,7 +275,10 @@ def write_manifest(
     others = _other_runs(steps, bookkeeping)
     # Another source's reading a step runs with is part of what a file is processed under, and so is
     # every other run's output a combine reads.
-    shared = [*({"name": f"run:{label}", "sha256": digest(units)} for label, units in sorted(others.items())),
+    # The target too: two targets over the same files (a source's two Dataset Contracts) each process them.
+    shared = [{"name": f"target:{target}", "sha256": digest(target)},
+              *({"name": f"run:{label}", "sha256": digest(sorted(u["sha256"] for u in units))}
+                for label, units in sorted(others.items())),
               *({"name": f"contract:{name}", "sha256": digest(body)} for name, body in sorted(contracts.items())
                 if "/" in name),
               *({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),

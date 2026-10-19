@@ -663,7 +663,9 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    The writer forms units for a read of captured documents (slices, groups
    or each file, with per-document context, a companion file and same-file
    lookups), a read of a combine's pieces, `source.combine`, `mdm.prepare`,
-   `mdm.merge` and `journal.record` ([bookkeeping SPEC](../bookkeeping/SPEC.md));
+   `mdm.merge` and `journal.record`, and a reading or lookup of another
+   source's finished runs, `{run: {source, target, step}}`, which run first
+   ([bookkeeping SPEC](../bookkeeping/SPEC.md));
    a target with any other step is refused. The same
    manifest for a real run comes from `edgar-warehouse mdm prepare-capture
    --source <name> --target <target>`, with the same `--fact` and `--file`.

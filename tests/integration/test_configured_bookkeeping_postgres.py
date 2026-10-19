@@ -428,9 +428,10 @@ def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(d
     assert executions == ["parsed0", "parsed1", "parsed2"]
 
 
-def fan_in_submission(databases, tmp_path, first=None):
+def fan_in_submission(databases, tmp_path, first=None, declared=None):
     """A gathering step whose one input is a document composed from many verified outputs (to-do 20c).
-    `first`: the slot `first` names this unit instead (another run's, ticket 120)."""
+    `first`: the slot `first` names this unit instead (another run's, ticket 120), which the gathering
+    step declares as `declared` ({source, target, step})."""
     book, _, manifest, executions = staged_submission(databases, tmp_path)
     gathered = []
 
@@ -461,6 +462,9 @@ def fan_in_submission(databases, tmp_path, first=None):
         step.update(name=name, requires=requires)
     steps[1]["operation"] = "fixture.transform"
     steps[2]["operation"] = "fixture.gather"
+    if declared:
+        body["bookkeeping"]["version"] = 2
+        steps[2]["input"] = {"readings": {"one": {"run": declared}}}
     output = (tmp_path / "gather" / "all").as_uri()
     compose = {"document": {"version": 1, "one": {"slot": "first"}, "all": {"slot": "parts"}, "inner": {"slot": "nested"}},
                "slots": {"first": first or {"step": "a_transform", "key": "parsed1"},
@@ -511,30 +515,42 @@ def test_a_composed_input_with_a_corrupt_slot_blocks_without_execution(databases
     assert book.status(rid)["run"]["state"] == "blocked" and gathered == []
 
 
+def earlier_run(databases, tmp_path, *, complete=True):
+    """A finished fan-in run whose `a_transform` units another run reads, with its selector."""
+    book, rid, _, _, _ = fan_in_submission(databases, tmp_path / "earlier")
+    if complete:
+        drive(book, rid, databases.ledger, workers=book.workers)
+    return book, rid, {"source": book.status(rid)["run"]["submission"]["name"], "target": "silver", "step": "a_transform"}
+
+
 def test_a_slot_reads_another_runs_verified_unit(databases, tmp_path):
     """Ticket 120: a slot may name a unit of another run; only its verified, reverified receipt fills it."""
-    earlier, done, _, _, _ = fan_in_submission(databases, tmp_path / "earlier")
-    drive(earlier, done, databases.ledger, workers=earlier.workers)
+    earlier, done, selector = earlier_run(databases, tmp_path)
     receipt = next(i["receipt"] for i in earlier.status(done)["items"] if i["unit_key"] == "parsed1")
     book, rid, output, _, gathered = fan_in_submission(
-        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"})
+        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"}, declared=selector)
     state = drive(book, rid, databases.ledger, workers=book.workers)
     assert state["run"]["state"] == "complete"
     (document,) = gathered
     assert book.artifacts.json(document)["one"] == {k: receipt[k] for k in ("uri", "sha256")}
 
 
-@pytest.mark.parametrize("case", ["unknown_run", "not_verified", "corrupt"])
-def test_a_slot_naming_another_run_blocks_unless_verified(databases, tmp_path, case):
-    earlier, done, _, _, _ = fan_in_submission(databases, tmp_path / "earlier")
-    if case != "not_verified":
-        drive(earlier, done, databases.ledger, workers=earlier.workers)
+@pytest.mark.parametrize("case", ["unknown_run", "not_verified", "not_complete", "corrupt", "undeclared",
+                                  "other_step"])
+def test_a_slot_naming_another_run_blocks_unless_declared_complete_and_verified(databases, tmp_path, case):
+    earlier, done, selector = earlier_run(databases, tmp_path, complete=case not in ("not_verified", "not_complete"))
+    if case == "not_complete":  # every unit verified but the last: the run is not complete
+        drive(earlier, done, databases.ledger, workers=earlier.workers, limit=5)
     named = {"run": str(uuid4()) if case == "unknown_run" else done, "step": "a_transform", "key": "parsed1"}
     if case == "corrupt":
         receipt = next(i["receipt"] for i in earlier.status(done)["items"] if i["unit_key"] == "parsed1")
         Path(receipt["uri"].removeprefix("file://")).write_bytes(b"corrupt")
-    book, rid, _, _, gathered = fan_in_submission(databases, tmp_path / "later", first=named)
-    with pytest.raises(Blocked):
+    declared = {"undeclared": None, "other_step": {**selector, "step": "z_capture"}}.get(case, selector)
+    book, rid, _, _, gathered = fan_in_submission(databases, tmp_path / "later", first=named, declared=declared)
+    reason = {"unknown_run": "lacks verified completion", "not_verified": "lacks verified completion",
+              "not_complete": "complete, uncompacted", "undeclared": "its step declares",
+              "other_step": "its step declares"}.get(case)
+    with pytest.raises(Blocked, match=reason):
         drive(book, rid, databases.ledger, workers=book.workers)
     assert gathered == []
 

@@ -246,13 +246,30 @@ class Bookkeeping:
         if not found:
             raise Blocked("Prerequisite input lacks verified completion")
         if "run" in dependency:
+            declared = self._other_runs_declared(item, context)
             context = self._context(found[0])
+            other = context["run"]
+            submission = other["submission"]
+            if other["state"] != "complete" or other["compacted_at"] is not None:
+                raise Blocked("Another run's unit is read only from a complete, uncompacted run")
+            if (submission["kind"], submission["name"], submission["target"], dependency["step"]) not in declared:
+                raise Blocked("Another run's unit is read only from the source, target and step its step declares")
         upstream = self._resolve_item(found[0], context=context)
         self._verify_item(upstream, context)
         receipt = upstream["receipt"]
         resolved = reference({"uri": receipt["uri"], "sha256": receipt["sha256"]})
         self.artifacts.verified(resolved)
         return resolved
+
+    def _other_runs_declared(self, item: dict, context: dict) -> set:
+        """The other runs' steps the item's step declares (`{run: {source, target, step}}` readings and
+        lookups), each `(kind, source, target, step)`: a run reads runs of its own kind."""
+        submission = context["run"]["submission"]
+        body = self.artifacts.json(submission["rules"])["body"]
+        step = next(s for s in body["bookkeeping"]["targets"][submission["target"]]["steps"] if s["name"] == item["step"])
+        shape = step.get("input", {})
+        return {(submission["kind"], v["run"]["source"], v["run"]["target"], v["run"]["step"])
+                for v in [*shape.get("readings", {}).values(), *shape.get("lookups", {}).values()] if "run" in v}
 
     def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict) -> dict:
         """Fill a composed document's slots with verified receipts; the same receipts give the same bytes.
@@ -588,7 +605,7 @@ class Bookkeeping:
                 FROM bookkeeping.work_item w JOIN bookkeeping.pipeline_run r ON r.run_id=w.run_id
                 WHERE r.state='complete' AND r.submission->>'kind'=:kind AND r.submission->>'name'=:source
                   AND r.submission->>'target'=:target AND w.step=:step AND w.state='verified'
-                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id""", source=source, target=target, step=step, kind=kind)
+                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id, w.unit_key""", source=source, target=target, step=step, kind=kind)
         return [{k: unit[k] for k in ("run", "step", "key", "sha256")}
                 for unit in sorted(found, key=lambda unit: (unit["completed_at"], unit["run"], unit["key"]))]
 

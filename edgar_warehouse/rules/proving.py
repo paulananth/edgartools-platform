@@ -263,6 +263,8 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
     mdm = create_engine(env["governance"]["RULES_MDM_ACTIVATION_DATABASE_URL"])
     rules_engine = create_engine(env["governance"]["RULES_DATABASE_URL"])
     journal_engine = create_engine(env["worker"]["CHANGE_JOURNAL_DATABASE_URL"])
+    # Another run a step reads (ticket 120) is one in the test's own stores.
+    bookkeeping = Bookkeeping(create_engine(env["worker"]["BOOKKEEPING_DATABASE_URL"]))
     try:
         with mdm.connect() as conn:
             if conn.scalar(text("SELECT (SELECT count(*) FROM mdm.stage_record) + (SELECT count(*) FROM mdm.current_record)")):
@@ -284,8 +286,6 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         manifest_root = env["worker"]["BOOKKEEPING_MANIFEST_ROOT"]
         root = Path(manifest_root.removeprefix("file://")) / name
         journal = ChangeJournal(journal_engine)
-        # Another run a step reads (ticket 120) is one in the test's own stores.
-        bookkeeping = Bookkeeping(create_engine(env["worker"]["BOOKKEEPING_DATABASE_URL"]))
         commands = _Commands(env, (root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                              log=stores / "rules-test-errors.log")
         passes = []
@@ -347,6 +347,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
             out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
         return result
     finally:
-        for engine in (mdm, rules_engine, journal_engine, *([recorder.engine] if recorder else [])):
+        for engine in (mdm, rules_engine, journal_engine, bookkeeping.engine,
+                       *([recorder.engine] if recorder else [])):
             engine.dispose()
 
