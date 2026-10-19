@@ -192,8 +192,6 @@ class Rules:
                     raise Blocked("MDM handoff requires approval of this Rules version")
                 if mdm_engine is None:
                     raise Blocked("MDM activation requires an explicit destination connection")
-                if kind == "source" and "acquisition" not in body:
-                    raise Blocked("Source MDM activation requires approved acquisition authority")
                 from edgar_warehouse.mdm.clean.store import register_policy, register_dataset, current_reading
                 receipts = {"rules_digest": selected["digest"], "datasets": {}}
                 # First commit the idempotent MDM handoff. If the Rules status
@@ -201,7 +199,7 @@ class Rules:
                 with mdm_engine.begin() as destination:
                     if kind == "merge":
                         receipts["policy_digest"] = register_policy(destination, body)
-                    elif "acquisition" in body:
+                    else:
                         from edgar_warehouse.rules.acquisition_authority import registration_authority
                         selected_export = self.envelope(selected)
                         for code, entry in body["mdm"].items():

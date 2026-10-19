@@ -168,12 +168,16 @@ def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
 
 
 def registration_authority(export: dict, code: str, contract: dict) -> dict:
-    feeds = acquisition(export["body"])
-    declared = [
-        (feed, value) for feed, value in feeds.items() if code in value["datasets"]
-    ]
-    if len(declared) != 1 or declared[0][1]["family"] != contract["family"]:
-        raise Blocked("Dataset requires exactly one approved feed with matching family")
+    # A source that declares acquisition names each dataset in one feed of its family.
+    # One that declares none (it reads files another source's feed captures) registers
+    # its datasets on its pipes alone (operator, 2026-10-19).
+    if "acquisition" in export["body"]:
+        feeds = acquisition(export["body"])
+        declared = [
+            (feed, value) for feed, value in feeds.items() if code in value["datasets"]
+        ]
+        if len(declared) != 1 or declared[0][1]["family"] != contract["family"]:
+            raise Blocked("Dataset requires exactly one approved feed with matching family")
     # A dataset is registered when its pipes switch on: the processing
     # authority, not its live acquisition's.
     frozen = processing_authority(export)
