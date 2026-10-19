@@ -140,8 +140,7 @@ master file is reference data plus a master attribute that holds its codes.
   is derived.
 - **Dates:** each period has `valid_from` and `valid_to`; say what each comes
   from (stated, first seen, last seen). Prefer a date the source states for
-  each record (a filing date) over the delivery's date (a quarter), which
-  is only a fallback. If a link's start must never move later, whatever a
+  each record over the delivery's date, which is only a fallback. If a link's start must never move later, whatever a
   later delivery states, declare the type with `keeps_start`: an earlier
   start, even one backfilled, still moves it back.
 - **Events that end links:** if the data holds a succession (one entity
