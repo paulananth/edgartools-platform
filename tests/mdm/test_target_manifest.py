@@ -133,5 +133,19 @@ def test_an_edit_to_a_declared_contract_is_a_new_consumer(tmp_path, monkeypatch)
     second = write_manifest(target="mastering", **options(tmp_path / "b"))
 
     assert second["publication"]["consumer"] != first["publication"]["consumer"]
+    assert second["publication"]["batch_id"] != first["publication"]["batch_id"]
     frozen = Artifacts().json(Artifacts().json(steps_of(second)["read"][0]["input"])["contract"])
     assert frozen["note"] == "edited"  # the ids digest the contract that is frozen
+
+
+def test_a_second_declared_contract_is_digested_too(tmp_path, monkeypatch):
+    body = files.source(SOURCE)
+    body["bookkeeping"]["targets"]["mastering"]["steps"][1]["input"]["contract"] = "quality.yaml"
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    first = write_manifest(target="mastering", **options(tmp_path / "a"))
+    load = files.load
+    monkeypatch.setattr(files, "load", lambda path, *a, **k: (
+        {**load(path, *a, **k), "note": "edited"} if path.name == "quality.yaml" else load(path, *a, **k)))
+    second = write_manifest(target="mastering", **options(tmp_path / "b"))
+
+    assert second["publication"]["batch_id"] != first["publication"]["batch_id"]
