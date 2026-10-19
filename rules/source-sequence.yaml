@@ -9,8 +9,8 @@ sources:
     requires: []
     after: []
   gleif:
-    # This target currently merges prepared records; it is not the full path.
-    target: mdm
+    # Level 1 from a captured Golden Copy through the Merge Stage (ticket 114).
+    target: mastering
     requires: []
     after: [sec.submissions.company]
   sec.submissions.person:

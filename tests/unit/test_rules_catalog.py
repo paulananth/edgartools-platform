@@ -54,8 +54,10 @@ def test_a_second_kind_from_another_sources_files_has_its_feed_lineage():
     plan = catalog.plan()
     feed = [e for e in plan["lineage"] if e["to"].endswith('"sec.submissions.person.v1"')]
     assert [e["from"] for e in feed] == ['edgartools-rules.sources."sec.submissions.company".submissions']
-    # A source whose family no feed captures gets no feed lineage.
-    assert not [e for e in plan["lineage"] if e["to"].endswith('"gleif.level1.v1"')]
+    # A source whose family no feed captures gets no feed lineage; GLEIF's own feed leads to it.
+    assert not [e for e in plan["lineage"] if e["to"].endswith('"iapd.adv.filings.v1"')]
+    assert [e["from"] for e in plan["lineage"] if e["to"].endswith('"gleif.level1.v1"')] == [
+        "edgartools-rules.sources.gleif.golden_copy"]
 
 
 def test_each_feed_that_captures_the_family_gives_lineage(tmp_path: Path):

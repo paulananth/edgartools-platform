@@ -165,9 +165,15 @@ submits one source.
    sequence check, over files already captured (no feed:
    [Bookkeeping run](../bookkeeping/RUN.md)):
    ```bash
+   edgar-warehouse mdm prepare-capture --source <name> --target <target> \
+     --capture <capture folder> --documents <keys.json> --capture-run <run> \
+     --as-of <time> --revision 0 --output <bundle folder> \
+     [--fact <name>=<value> ...] [--file <name>=<path> ...]
    edgar-warehouse rules run --source <name> --target <target> \
      --input-manifest <uri> --input-sha256 <sha256>
    ```
+   The first writes the bundle's input manifest from the target's declaration;
+   give each fact and file the target's `run` names.
    Work and verify as in [Bookkeeping run](../bookkeeping/RUN.md). The next
    source waits until `edgar-warehouse bookkeeping status <run_id>` shows
    `run.state` `complete` and every declared unit verified.

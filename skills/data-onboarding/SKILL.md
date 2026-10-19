@@ -648,9 +648,12 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    edgar-warehouse rules test --source <name> --capture <capture folder> \
      --documents <list of document keys> --capture-run <run> --as-of <time> \
      --stores ~/.local/share/edgartools/local-tests/environments/<store name> \
-     --out <report.json> [--target <target>]
+     --out <report.json> [--target <target>] \
+     [--fact <name>=<value> ...] [--file <name>=<path> ...]
    uv run --extra mdm python infra/scripts/local-test-stores.py stop <store name>
    ```
+   A target that declares `run` takes each fact and file it names, and only
+   those (a count, an approved scope; [bookkeeping SPEC](../bookkeeping/SPEC.md)).
    It refuses a store that already holds MDM records: `local-test-stores.py
    copy <new name>` gives a fresh one from the baseline. Invented documents
    need the kind's own shape: a document that carries another kind's
@@ -663,7 +666,7 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    `mdm.merge` and `journal.record` ([bookkeeping SPEC](../bookkeeping/SPEC.md));
    a target with any other step is refused. The same
    manifest for a real run comes from `edgar-warehouse mdm prepare-capture
-   --source <name> --target <target>`.
+   --source <name> --target <target>`, with the same `--fact` and `--file`.
 
    Otherwise, write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:

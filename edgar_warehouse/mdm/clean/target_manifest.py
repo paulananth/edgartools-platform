@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.config import validate
+from edgar_warehouse.bookkeeping.clean.config import run_inputs, validate
 from edgar_warehouse.rules import files as rules_files
 from . import changed_files, raw_capture, read_units
 from .evidence import instant
@@ -36,6 +36,7 @@ from .raw_capture import read_bounded
 from .store import digest
 
 DOCUMENTS_BYTES = 1024**2
+RUN_FILE_BYTES = 256 * 1024**2  # a run file is JSON: a scope, a lookup set
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,8 @@ class _Run:
     store: Artifacts
     root: str
     inputs: str
+    facts: dict
+    run_files: dict
 
 
 
@@ -164,6 +167,25 @@ FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepa
 OPERATIONS = tuple(FORMS)
 
 
+def run_arguments(facts: list[str] | None, run_files: list[str] | None) -> tuple[dict, dict]:
+    """`--fact name=value` (a JSON value, else text) and `--file name=path`, as two maps."""
+    def pairs(items):
+        found = {}
+        for item in items or []:
+            name, sep, value = item.partition("=")
+            if not sep or not name or name in found:
+                raise ValueError(f"A run input is name=value, each name once: {item!r}")
+            found[name] = value
+        return found
+    parsed = {}
+    for name, value in pairs(facts).items():
+        try:
+            parsed[name] = json.loads(value)
+        except json.JSONDecodeError:
+            parsed[name] = value
+    return parsed, pairs(run_files)
+
+
 def write_manifest(
     *,
     source: str,
@@ -176,6 +198,8 @@ def write_manifest(
     revision: int,
     force: bool = False,
     journal=None,
+    facts: dict | None = None,
+    run_files: dict | None = None,
 ) -> dict:
     """The input manifest of `target` for one bundle of captured documents.
 
@@ -193,6 +217,19 @@ def write_manifest(
     if target not in ((reading.get("bookkeeping") or {}).get("targets") or {}):
         raise ValueError(f"The source declares no `{target}` target")
     steps = plan(reading, target)
+    # The run's own inputs, exactly as the target declares them (`run`): facts and files.
+    declared = run_inputs(reading["bookkeeping"]["targets"][target])
+    facts, run_files = dict(facts or {}), dict(run_files or {})
+    if set(facts) != set(declared["facts"]) or set(run_files) != set(declared["files"]):
+        raise ValueError(f"The target's run takes facts {declared['facts']} and files {declared['files']}")
+    loaded = {}
+    for name, path in run_files.items():
+        try:
+            loaded[name] = json.loads(read_bounded(Path(path).resolve(), RUN_FILE_BYTES))
+        except (OSError, ValueError) as error:  # missing, a folder, too large, or not JSON
+            raise ValueError(f"Run file {name} ({path}) is not a readable JSON file: {error}") from None
+    shared = [*({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),
+              *({"name": f"fact:{name}", "sha256": digest(value)} for name, value in sorted(facts.items()))]
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]
     if len(prepare) != 1:
         raise ValueError("A target prepares one publication: exactly one mdm.prepare step")
@@ -223,7 +260,7 @@ def write_manifest(
     files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
     files += [pair for key in keys for pair in paired[key]]
     policy = digest(rules_files.policy())
-    processing = changed_files.identity(changed_files.source_rules(source), policy)
+    processing = changed_files.identity(changed_files.source_rules(source), policy, shared)
     fresh = set(changed_files.select(source, processing, files, force=force, ledger=journal))
     listed, keys = len(keys), [key for key in keys if key in fresh or any(o in fresh for o, _ in paired[key])]
     scope = {"documents": len(keys), "listed": listed, "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
@@ -241,13 +278,14 @@ def write_manifest(
     # the steps read with, the Dataset Contracts, the policy): a rerun under
     # other rules or another time is a new consumer, not a reused batch key.
     # A contract is digested whole, so an edit to its steps' units is one too.
-    bundle = digest([publication_key, revision, as_of, contracts, reading["mdm"], policy])
+    bundle = digest([publication_key, revision, as_of, contracts, reading["mdm"], policy,
+                     *([shared] if shared else [])])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset}/{bundle}", "batch_id": f"{source}:{bundle}"}
     root = Path(output).resolve().as_uri()
     run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, companions=paired, keys=keys, sized=sized, limit=limit,
                keys_of=keys_of, policy=policy, processing=processing, force=force, publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
-               inputs=root + "/inputs")
+               inputs=root + "/inputs", facts=facts, run_files=loaded)
     units: dict[str, list[dict]] = {}
     for step in steps:
         units[step["name"]] = FORMS[step["operation"]](step, run, units)

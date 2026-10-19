@@ -31,9 +31,12 @@ def prepare_clean_company(args) -> int:
 
 
 def prepare_capture(args) -> int:
-    from .target_manifest import write_manifest
+    from .target_manifest import run_arguments, write_manifest
 
+    facts, run_files = run_arguments(args.fact, args.file)
     report = write_manifest(
+        facts=facts,
+        run_files=run_files,
         source=args.source,
         target=args.target,
         capture=args.capture,
