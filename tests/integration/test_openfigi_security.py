@@ -132,7 +132,7 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
             for artifact in store.json(reading)["artifacts"]:
                 for part in artifact["partitions"]:
                     listings += store.json(part["receipt"])["tables"]["listings"]
-    counts = chain.combine(store, root / "reduce", FOLDER / "reduce.yaml", readings)
+    counts = chain.combine(store, root / "reduce", FOLDER / "reduce.yaml", {"answers": list(readings.values())})
     combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml", {"counts": counts})
     piece_root = root / "record"
     piece_root.mkdir(parents=True, exist_ok=True)

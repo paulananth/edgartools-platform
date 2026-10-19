@@ -45,12 +45,13 @@ def _approve_rule(args):
 
 
 def _test(args):
-    """A test run of a source's `mastering` target on local stores (ticket 14)."""
+    """A test run of one of a source's targets on local stores (ticket 14)."""
     from .proving import TestRunError, run
 
     try:
         result = run(source=args.source, capture=args.capture, documents=args.documents, capture_run=args.capture_run,
-                     as_of=args.as_of, stores=args.stores, out=args.out, minutes=args.minutes)
+                     as_of=args.as_of, stores=args.stores, out=args.out, minutes=args.minutes,
+                     target=args.target)
     except TestRunError as error:
         print(f"Test run stopped: {error}", file=sys.stderr)
         return 1
@@ -259,6 +260,7 @@ def register(subparsers):
                       help="The local stores' folder, holding worker.env, verifier.env and governance.env")
     test.add_argument("--out", required=True, type=Path, help="Where the counts-only report is written")
     test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
+    test.add_argument("--target", default="mastering", help="The source's Bookkeeping target (default mastering)")
     test.set_defaults(handler=_test)
     check = commands.add_parser("check", help="Check each rules file as `rules save` would, offline: "
                                 "it loads, its targets and acquisition hold, the merge rules pass")

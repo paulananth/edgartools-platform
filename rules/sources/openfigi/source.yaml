@@ -288,6 +288,157 @@ read:
     max_partitions: 1024
     max_spool_bytes: 4294967296
     max_output_rows: 10000000
+bookkeeping:
+  # One target per kind asked (ticket 14): a bundle names one kind's answer
+  # files, each with its request beside it.
+  version: 2
+  targets:
+    mastering_cusip:
+      steps:
+        # Each request file alone, read beside its answer (its sha256 is in the
+        # answer's receipt), so each answer's pair set comes from its own request.
+        - name: requests
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: requests.yaml
+            files: "id_cusip/*"
+            beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
+            context: {batch: "{dir}/{base}"}
+        # The answers, 16 files a unit (one composed slot each), each tied to the
+        # identifier it was asked for by position, through its request's pairs.
+        - name: answers
+          operation: source.read
+          requires: [requests]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {groups: 16}
+          input:
+            files: "id_cusip/*"
+            context: {batch: "{dir}/{base}", id_type: cusip}
+            lookups:
+              asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
+        - name: reduce
+          operation: source.combine
+          requires: [answers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine.yaml, readings: {counts: {step: reduce}}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: security, record_column: record, dataset: openfigi.security.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
+    mastering_isin:
+      steps:
+        # Each request file alone, read beside its answer (its sha256 is in the
+        # answer's receipt), so each answer's pair set comes from its own request.
+        - name: requests
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: requests.yaml
+            files: "id_isin/*"
+            beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
+            context: {batch: "{dir}/{base}"}
+        # The answers, 16 files a unit (one composed slot each), each tied to the
+        # identifier it was asked for by position, through its request's pairs.
+        - name: answers
+          operation: source.read
+          requires: [requests]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {groups: 16}
+          input:
+            files: "id_isin/*"
+            context: {batch: "{dir}/{base}", id_type: isin}
+            lookups:
+              asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
+        - name: reduce
+          operation: source.combine
+          requires: [answers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine.yaml, readings: {counts: {step: reduce}}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: security, record_column: record, dataset: openfigi.security_isin.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 mdm:
   openfigi.security.v1:
     contract:
