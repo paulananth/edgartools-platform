@@ -33,8 +33,9 @@ def bundle(tmp_path, documents=PEOPLE):
     folder, _ = write_capture(tmp_path / "capture", documents)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(cik) for cik in documents]))
-    return write_manifest(target="mastering", journal=MemoryJournal(), source=SOURCE, capture=str(folder), documents=str(listed), capture_run="capture-1",
-                                  output=str(tmp_path / "bundle"), as_of="2026-10-01T00:00:00Z", revision=0)
+    return write_manifest(target="mastering", journal=MemoryJournal(), source=SOURCE, capture=str(folder),
+                          documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
+                          as_of="2026-10-01T00:00:00Z", revision=0)
 
 
 def run_without_merge(databases, tmp_path, book, report):
@@ -58,8 +59,8 @@ def run_without_merge(databases, tmp_path, book, report):
 
 
 def test_the_target_hands_mdm_every_document_whole_as_one_publication(databases, tmp_path, monkeypatch):
-    body = files.source(SOURCE)  # every document its own reading, read in fan-in
-    body["bookkeeping"]["targets"]["mastering"]["steps"][0]["units"] = {"slices": {"bytes": 1}}
+    body = files.source(SOURCE)
+    body["bookkeeping"]["targets"]["mastering"]["steps"][0]["units"] = {"slices": {"bytes": 1}}  # every document its own reading, read in fan-in
     monkeypatch.setattr(files, "source", lambda name, root=None: body)
     report = bundle(tmp_path)
     book = Bookkeeping(databases.runtime)
@@ -98,8 +99,9 @@ def test_a_document_that_differs_from_its_receipt_is_refused(tmp_path):
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(1001)]))
     with pytest.raises(Exception, match="differs from its receipt"):
-        write_manifest(target="mastering", journal=MemoryJournal(), source=SOURCE, capture=str(folder), documents=str(listed), capture_run="c",
-                               output=str(tmp_path / "b"), as_of="2026-10-01T00:00:00Z", revision=0)
+        write_manifest(target="mastering", journal=MemoryJournal(), source=SOURCE, capture=str(folder),
+                       documents=str(listed), capture_run="c", output=str(tmp_path / "b"),
+                       as_of="2026-10-01T00:00:00Z", revision=0)
 
 
 def test_the_same_documents_are_one_publication_however_they_are_listed(tmp_path):
@@ -108,9 +110,9 @@ def test_the_same_documents_are_one_publication_however_they_are_listed(tmp_path
     for name, order, indent in (("a", list(PEOPLE), None), ("b", list(reversed(list(PEOPLE))), 2)):
         listed = tmp_path / f"{name}.json"
         listed.write_text(json.dumps([key(cik) for cik in order], indent=indent))
-        report = write_manifest(target="mastering", journal=MemoryJournal(), source=SOURCE, capture=str(folder), documents=str(listed),
-                                        capture_run="capture-1", output=str(tmp_path / name),
-                                        as_of="2026-10-01T00:00:00Z", revision=0)
+        report = write_manifest(target="mastering", journal=MemoryJournal(), source=SOURCE, capture=str(folder),
+                                documents=str(listed), capture_run="capture-1", output=str(tmp_path / name),
+                                as_of="2026-10-01T00:00:00Z", revision=0)
         steps = json.loads((tmp_path / name / f"{report['manifest']['sha256']}.json").read_bytes())["steps"]
         read = [json.loads(Path(unit["input"]["uri"].removeprefix("file://")).read_bytes())["artifacts"]
                 for unit in steps["read"]]
@@ -120,5 +122,6 @@ def test_the_same_documents_are_one_publication_however_they_are_listed(tmp_path
 
 def test_a_source_not_under_the_rules_is_refused(tmp_path):
     with pytest.raises(ValueError, match="No source named"):
-        write_manifest(target="mastering", journal=MemoryJournal(), source="../merge", capture=str(tmp_path), documents=str(tmp_path / "d.json"),
-                               capture_run="c", output=str(tmp_path / "b"), as_of="2026-10-01T00:00:00Z", revision=0)
+        write_manifest(target="mastering", journal=MemoryJournal(), source="../merge", capture=str(tmp_path),
+                       documents=str(tmp_path / "d.json"), capture_run="c", output=str(tmp_path / "b"),
+                       as_of="2026-10-01T00:00:00Z", revision=0)

@@ -61,3 +61,8 @@ def test_a_store_that_already_holds_records_is_refused(tmp_path, stores):
 
     with pytest.raises(proving.TestRunError, match="already holds records"):
         run(tmp_path, stores, out=tmp_path / "again.json")
+
+
+def test_a_source_whose_section_states_no_plan_stops_the_test(tmp_path, stores):
+    with pytest.raises(proving.TestRunError, match="must be version 2"):
+        run(tmp_path, stores, source="sec.submissions.company")

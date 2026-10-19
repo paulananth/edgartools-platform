@@ -202,9 +202,12 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         passes = []
         for number, force in ((1, False), (2, True)):
             began = time.monotonic()
-            report = write_manifest(source=source, target=TARGET, capture=str(capture), documents=str(documents),
-                                    capture_run=capture_run, output=str(root / f"pass-{number}"),
-                                    as_of=as_of, revision=0, force=force, journal=journal)
+            try:
+                report = write_manifest(source=source, target=TARGET, capture=str(capture), documents=str(documents),
+                                        capture_run=capture_run, output=str(root / f"pass-{number}"),
+                                        as_of=as_of, revision=0, force=force, journal=journal)
+            except ValueError as error:  # the declaration or the bundle refused: a stop, not a traceback
+                raise TestRunError(str(error)) from error
             if report["manifest"] is None:
                 raise TestRunError("Every document is recorded as processed already: nothing to test")
             if number == 1:

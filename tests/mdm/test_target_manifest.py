@@ -1,6 +1,5 @@
 """One writer builds a declared target's input manifest (ticket 14, slice 2), from
-the source's Bookkeeping section version 2. Slice 2a proved it builds exactly
-what SEC Person's own writer built; slice 2b deleted that writer."""
+the source's Bookkeeping section version 2."""
 import json
 
 import pytest
