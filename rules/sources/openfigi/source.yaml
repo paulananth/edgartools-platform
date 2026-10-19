@@ -15,8 +15,8 @@
 # position to the identifier); this reading streams each answer file, one
 # answer a record (`wrapper: null`, ticket 104), its position the context
 # `answer`, so its listings name their identifier. Then, once per kind asked
-# (the CUSIPs for the first contract, the ISINs for the second), over that
-# kind's 8 readings: reduce.yaml gives each identifier's answer and counts its
+# (the CUSIPs for the first contract, the ISINs for the second; one target
+# each, below), over every answers reading of that kind: reduce.yaml gives each identifier's answer and counts its
 # listings, share classes and US composites, streamed; combine.yaml joins the
 # levels that are single onto each answer; record.yaml
 # makes one flat record per identifier, which mdm.prepare reads (table

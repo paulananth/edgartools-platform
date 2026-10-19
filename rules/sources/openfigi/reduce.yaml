@@ -6,15 +6,15 @@
 # "<FIGI> <ticker>" (`figi_ticker`): a FIGI has one ticker (profiled), so the
 # count is the FIGIs', and the one member carries both (`last` would need a
 # single reading; a FIGI never holds a space, so record.yaml splits at the
-# first one). Run once per kind asked (CUSIP, ISIN) over every answers reading
-# of that kind, all named `answers` (a reading lists up to 256 receipts). Pin canonical
-# JSON of this file as the source.combine contract.
+# first one). Run once per kind asked (CUSIP, ISIN) over every answers
+# reading of that kind, all named `answers` (up to 256 readings). Pin
+# canonical JSON of this file as the source.combine contract.
 execution:
   profile: source.combine
 reduce:
   # Measured (2026-10-15 capture): 387,607 ISINs asked at most, 2,184,699
   # listings in all, at most 301 for one identifier; an ISIN reading projects
-  # about 700 MB (5.4 GB for the 8), and 4 groups give about 1.6M rows.
+  # about 700 MB a reading of 512 files (5.4 GB for a kind), and 4 groups give about 1.6M rows.
   max_rows: 10000000
   max_input_bytes: 17179869184
   max_state_bytes: 2147483648
