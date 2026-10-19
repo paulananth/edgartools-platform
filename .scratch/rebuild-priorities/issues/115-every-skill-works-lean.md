@@ -14,6 +14,15 @@ Type: task (skills). Status: in progress (Claude, 2026-10-19). Blocked by: none.
 - [x] mdm-engineering "Choose the cheapest proof" gains that row; data-onboarding's "run a step again" rule carries a proven change's proof forward (2026-10-19 08:25 ET)
 - [x] Every other skill points to the seven wastes under its title (12 skills) (2026-10-19 08:25 ET)
 - [x] data-onboarding: the stale "Unfinished live pipelines" history cut to what is open (2026-10-19 08:25 ET)
-- [ ] Each skill read for its own waste (stale history, repeated rules, steps with no value), cut in place: bookkeeping, change-journal, data-engineering-fundamentals, data-modeling, data-onboarding, data-operations, data-platform, data-profiling, data-quality, data-scientist, mdm-engineering, refining-rules, sql-writer
+- [x] Each skill read for its own waste and cut in place (2026-10-19 08:28 ET):
+  - bookkeeping: plan and validate skipped for an active, unchanged target (over-processing); a feed only for live acquisition; a history note cut
+  - change-journal: plan and validate only when the journal or an envelope version changes
+  - data-operations: a proof carried forward instead of a new test; a run over captured files names no feed
+  - refining-rules: test is the cheapest proof, recorded forward when it covers the change (it said "re-run")
+  - data-quality: the on_fail table decides under the standing rule approval; a question only where it cannot (it asked one per check: waiting)
+  - data-modeling: an open question holds only the part it decides (it stopped the turn: waiting)
+  - data-onboarding: the full installed proof only when the change needs it; no proving run when the last proof covers the source; stale pipeline history cut
+  - data-platform: stale qualification history cut to the evidence versions carry forward
+  - mdm-engineering, data-profiling, sql-writer, data-scientist, data-engineering-fundamentals: read; no waste beyond the pointer (data-profiling already profiles once; its narration section is the operator's)
 - [ ] PR, CI, merge
 - [ ] Learning → skill: this ticket is the skill change

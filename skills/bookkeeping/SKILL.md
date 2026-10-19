@@ -69,7 +69,8 @@ $bookkeeping migrate
 ```
 
 These are **skill arguments**, not warehouse CLI commands. Plan, validate and
-run require both source and feed. Init and migrate operate on the whole
+run name the source; they name a feed only for live acquisition (a run over
+files already captured names none). Init and migrate operate on the whole
 fresh control store, so they do not take source or feed. Preserve values already
 provided in the conversation; ask for missing source or feed only when a
 feed-scoped mode needs them. Additional inputs are a target/stage range,
@@ -79,9 +80,9 @@ settles them; ask only when the choice changes the intended work.
 
 Resolve `source` to an existing Rules document, accepting a provider name only
 when the repository identifies its source document unambiguously. Resolve
-`feed` only from an active `acquisition.feeds` declaration; a source whose
-document declares no active feed has none to run, whatever MDM contracts it
-holds. Read documents through `edgar_warehouse.rules.files`.
+`feed` only from an active `acquisition.feeds` declaration, and only for live
+acquisition: a run over captured files names no feed and needs only the
+version's test-run proof and approval (operator, 2026-10-19). Read documents through `edgar_warehouse.rules.files`.
 
 Resolve the binding deterministically before every feed-scoped mode:
 
@@ -168,6 +169,10 @@ Neither control-store mode silently provisions a destination or executes work.
 
 ## Plan mode
 
+Skip plan and validate for a target whose active Rules version and worker
+profiles are unchanged since its last verified run: run it. Plan and validate
+only what changed.
+
 Read the selected feed's captured manifests, existing stage code and control
 configuration. Preserve source mapping/policy and stage order. Prepare the
 intended `bookkeeping` section and a version 2 manifest: every configured step
@@ -224,7 +229,7 @@ evaluator, and does not grant a person's MDM approval.
 
 ## Run mode
 
-(Named "deploy" before 2026-09-30.) Read [RUN.md](RUN.md). Apply the validated configuration and submit or
+Read [RUN.md](RUN.md). Apply the validated configuration and submit or
 resume its bounded run in the selected environment. Verify that the plan,
 validation evidence and frozen inputs still match the requested source/feed.
 Use the existing Rules lifecycle for approval and frozen configuration. Submit

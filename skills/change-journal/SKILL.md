@@ -71,6 +71,9 @@ Import no legacy events, checkpoints or pending delivery; preserve old archives.
 
 ## Plan
 
+Plan and validate only when the journal's code, its schema or an envelope
+version changes; a producer using the journal as it stands needs neither.
+
 Record the requested journal scope: event schema version, producer keys,
 metadata labels, exact envelope/evidence hashes, expected delivery count,
 restricted journal connection and the owner of each local delivery intent.

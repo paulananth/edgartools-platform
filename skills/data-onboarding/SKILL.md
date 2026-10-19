@@ -609,10 +609,11 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
      verdict to a copy of the policy in memory only, and label that pass as
      a test input.
    - Run affected configured-engine and retained equivalence tests:
-     `uv run --no-sync pytest -q <those files>`. Then prove the full installed
-     parse → prepare → merge path on fresh PostgreSQL 16 with separate worker
-     and verifier roles, destination fencing and unchanged replay. Record
-     assertions, identities, quality counts and deferrals, not only row totals.
+     `uv run --no-sync pytest -q <those files>`. Prove the full installed
+     parse → prepare → merge path only when the change needs it
+     ([mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest
+     proof"). Record assertions, identities, quality counts and deferrals,
+     not only row totals.
    - `normalize` runs the quality checks. Each record shows what they did
      under `provenance.quality`, and an `exception` raises
      `UnsupportedRecord("quality_<id>")`. Report the counts
@@ -623,10 +624,13 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
      (`quality.run_checks([quality.profile(records, deferred)], as_of=...)`;
      a Merge Stage run keeps them as `checks` in its report, `mdm.run.report`).
      They never block.
-2. **A proving run, for anything that matches records.** Which proof a
-   change needs, and when the full installed proof is required, is in
-   [mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest
-   proof". For a new domain,
+2. **A proving run, for anything that matches records, and only once.** A
+   source whose last proof still covers it (every change since proven by its
+   own merged PR) runs none: record that proof forward with those changes
+   named ([the seven wastes](../data-platform/SKILL.md#the-seven-wastes)).
+   Which proof a change needs, and when the full installed proof is
+   required, is in [mdm-engineering](../mdm-engineering/SKILL.md), "Choose
+   the cheapest proof". For a new domain,
    nothing is switched on yet. So the run registers a **copy** of the
    policy, with the new rules added to `automatic_rules` and each stamped
    `approved_by: proving-run` and `reason: "Proving Run only; not an

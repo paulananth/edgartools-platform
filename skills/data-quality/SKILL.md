@@ -126,9 +126,13 @@ or a planted record does not fire). Read the counts carefully:
 - Profiling's examples (up to three per item, masked for a personal
   column) are in the findings; show two or three when you ask.
 
-### decide: one question per check or fix
+### decide: the table decides; ask only what it cannot
 
-Pick each `on_fail` with the operator, with its count and examples:
+Pick each `on_fail` from the table below, with its count and examples.
+Where the table decides, record it under the operator's standing rule
+approval with those counts (operator, 2026-10-15: "Approved the rules
+always"); ask one question only where it does not, or where a count disagrees
+with profiling's:
 
 | Problem | Check or fix |
 |---|---|

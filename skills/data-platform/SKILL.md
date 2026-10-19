@@ -361,15 +361,10 @@ MDM never merges or publishes a batch twice. After a stop, use
 
 ### Examples: current source qualification
 
-Person has a configured complete-JSON read
-block in `sec.submissions.person/source.yaml`. Its installed PostgreSQL 16
-trial proves read → prepare → merge with the actual Person Dataset Contract
-and policy, preserving two fixture records; a separate 1,000-capture comparison
-proves retained outcomes and assertion identities. These are qualification
-results, not operator activation. Company raw columns and filing arrays are
-qualified components. Its catalog and Name Frequency joins are qualified on fixtures. The whole-capture comparison (all 76,230 captured submissions), the active caller replacement (#905) and the installed 6,414 Company proof on Bookkeeping workers (#930) are done. GLEIF's three Golden Copy members equal the older reader record for record, and `gleif_source.py` is deleted (#904). Use only
-pipelines whose every profile resolves with `workers describe`; a declared
-Company acquisition or silver step without a worker remains incomplete.
+Company's last installed proof (6,414 Companies, 3,052 GLEIF bindings, a
+killed worker resumed, a second pass changed nothing; #905, #930) and
+Person's installed trial are the evidence their versions carry forward. Use
+only pipelines whose every profile resolves with `workers describe`.
 
 ## 6. Custom parsing
 

@@ -200,11 +200,14 @@ For example: a cascade pass, a name rule, or records waiting for review.
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
 
-### test: re-run on real captured files and record it
+### test: the cheapest proof, then record it
 
-As in data-onboarding **test**: dry run or proving run, then
-`rules save` and `rules record-proof`. Show what changes, record by record,
-from the dry run before and after.
+Prove the change at the level it needs, no more (`mdm-engineering`, "Choose
+the cheapest proof"): a change upstream of MDM compares the changed step's
+output; only a merge, matching or contract change needs a proving run. Then
+`rules save` and record the proof: the last proof carried forward with this
+change and its evidence named, when that covers it (data-platform, "The
+seven wastes"). Show what changes, record by record.
 
 ### approve and switch-on
 
