@@ -742,9 +742,9 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    own terminal). The run is checked before it starts: the saved version must
    be the rules on disk. Its proof is the report's counts, and its
    `batch_hash` the first pass's input manifest. A source that declares
-   `acquisition` is refused there: its passing proof needs its capture run's
-   acquisition evidence, which a test never makes, so record it with
-   `record-proof` once that evidence exists.
+   `acquisition` records its test run the same way: the run switches on its
+   pipes over files already captured. Its live acquisition is switched on
+   apart, with a real acquisition run's evidence (`record-proof`).
 
    The merge rules are one document, `platform`, saved whole from
    `rules/merge/policy.yaml` (the kind files beside it come too):

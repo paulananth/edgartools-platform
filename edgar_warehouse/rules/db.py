@@ -113,14 +113,16 @@ class Rules:
         """Record a test run of this version, passing or not. A passing one
         makes it proven; a failing one stays a draft with its evidence, which
         the operator may overrule on approval (and a new run may replace). A
-        source's acquisition evidence is checked when the run passed; an
-        overrule never covers a source that could not be read (the trigger
-        refuses it at proven)."""
+        source's acquisition evidence, when the proof carries it, is checked
+        when the run passed; an overrule never covers a source that could not
+        be read (the trigger refuses it at proven). A test run over captured
+        data carries none: it switches on the pipes, not live acquisition
+        (operator, 2026-10-19)."""
         if type(proof.get("passed")) is not bool:
             raise Blocked("A proof says whether it passed")
         row = self.version(kind, name, version)
         body = json.loads(row["body"])
-        if "acquisition" in body and proof["passed"]:
+        if "acquisition" in body and "acquisition" in proof and proof["passed"]:
             from edgar_warehouse.rules.acquisition_authority import validation_proof
             validation_proof(body, proof, artifacts=Artifacts())
         with self.engine.begin() as conn:
@@ -179,7 +181,7 @@ class Rules:
             if selected["status"] != "proven":
                 raise Blocked("Only a proven version can activate")
             body = json.loads(selected["body"])
-            if "acquisition" in body:
+            if "acquisition" in body and "acquisition" in selected["proof"]:
                 from edgar_warehouse.rules.acquisition_authority import validation_proof
                 validation_proof(body, selected["proof"], artifacts=Artifacts())
             requires_handoff = kind == "merge" or (kind == "source" and "mdm" in body)

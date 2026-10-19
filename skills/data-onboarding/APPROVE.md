@@ -123,10 +123,12 @@ operator's to drop.
 - **Worked:** `rules status --source <name>` shows the version `active`.
 - **Refused:** there is no approval, or no proof. Go back one step.
 
-A source version is activated only with an acquisition proof: the receipts
-of a real acquisition run of that source, not a test fixture or a copy made
-by hand. A merge version and a source's mapping can be approved and proved
-on captured files first; switching the source itself on waits for that run.
+Switching on the pipes and switching on live data are apart (operator,
+2026-10-19). A source version proven on its test run over captured files and
+approved activates: Bookkeeping then runs its targets over captured files.
+Live acquisition (a run with a feed, the capture worker) also needs an
+acquisition proof: the receipts of a real acquisition run of that source, not
+a test fixture or a copy made by hand.
 
 Then tell the operator it is in effect. Running a feed is the Bookkeeping
 skill's **run** mode, not this one.
