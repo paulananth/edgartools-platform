@@ -14,8 +14,10 @@
 # FUND_REPORTED_INFO.tsv once, one row per filing; reduce.yaml lists each
 # series (a filing naming no series, 729 in 2026q2, is not read: its
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
-# (by date, then accession) and its LEI when one to one (lei-pairs.yaml);
-# mdm.prepare reads table `fund`.
+# (by date, then accession) and its LEI when one to one (lei-pairs.yaml, its own
+# step before the combine);
+# record.yaml makes each `fund` row one record; mdm.prepare,
+# the merge and the processed record follow (the `mastering` target below).
 # Left out: the report's financial figures (FUND_REPORTED_INFO's other
 # columns), detail of a report, not of the Fund.
 source: sec.nport.fund

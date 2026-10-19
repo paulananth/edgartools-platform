@@ -12,7 +12,8 @@
 # its date); this reading streams REGISTRANT.tsv once, one row per filing,
 # with its date; reduce.yaml lists each CIK; combine.yaml keeps each CIK's
 # latest filing whole (by date, then accession), so a name and an address
-# never mix two filings; mdm.prepare reads table `registrant`.
+# never mix two filings; record.yaml makes each `registrant` row one record; mdm.prepare,
+# the merge and the processed record follow (the `mastering` target below).
 # Left out: the phone number (personal, profiling). An LEI of all zeros is a
 # stand-in for none (4 registrants, profiling) and is blank here.
 source: sec.nport.registrant
