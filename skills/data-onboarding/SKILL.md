@@ -202,10 +202,10 @@ from a fault found mid-run, or from a re-check that proved nothing new.
   (profiling gives it); the profiler or engine has no open fix pending.
   Fix those first.
 - Run a step again only when its input files, its rules or the engine
-  changed and that change has no proof of its own. A change proven by its
-  own merged PR carries the last proof forward ([data-platform
-  SKILL.md](../data-platform/SKILL.md#the-seven-wastes)); otherwise re-run
-  only that step, never the steps before it.
+  changed and that change has no proof of its own; otherwise carry the last
+  proof forward ([mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof),
+  "Choose the cheapest proof"). Re-run only that step, never the steps
+  before it.
 - Never re-run a step to confirm a result. The first run's report is the
   evidence.
 - A Proving Run is not repeated after approval when the approved rules
@@ -625,10 +625,7 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
      a Merge Stage run keeps them as `checks` in its report, `mdm.run.report`).
      They never block.
 2. **A proving run, for anything that matches records, and only once.** A
-   source whose last proof still covers it (every change since proven by its
-   own merged PR) runs none: record that proof forward with those changes
-   named ([the seven wastes](../data-platform/SKILL.md#the-seven-wastes)).
-   Which proof a change needs, and when the full installed proof is
+   source whose last proof can be carried forward runs none. Which proof a change needs, and when the full installed proof is
    required, is in [mdm-engineering](../mdm-engineering/SKILL.md), "Choose
    the cheapest proof". For a new domain,
    nothing is switched on yet. So the run registers a **copy** of the
@@ -797,8 +794,7 @@ record their exact words.
 
 Activate as in [APPROVE.md](APPROVE.md), "Switch on".
 
-Running the feed is the **bookkeeping** skill's **run** mode, with
-`--source <name> --feed <feed>`. It submits `rules run --target <target>`
+Running it is the **bookkeeping** skill's **run** mode. It submits `rules run --target <target>`
 with an input manifest and its sha256. Run targets in their declared
 dependency order, and report any missing worker as unfinished implementation.
 

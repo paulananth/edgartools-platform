@@ -5,8 +5,6 @@ description: Use when someone asks about pipelines, ETL, data lakes and warehous
 
 # Data engineering fundamentals
 
-Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
-
 Teach a non-engineer the ideas in DataCamp's "Understanding Data Engineering," chapters 1–3, so they can work with a data engineer. The course is conceptual. Answer from this file only.
 
 ## Role definition

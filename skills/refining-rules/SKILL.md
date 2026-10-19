@@ -205,9 +205,8 @@ For example: a cascade pass, a name rule, or records waiting for review.
 Prove the change at the level it needs, no more (`mdm-engineering`, "Choose
 the cheapest proof"): a change upstream of MDM compares the changed step's
 output; only a merge, matching or contract change needs a proving run. Then
-`rules save` and record the proof: the last proof carried forward with this
-change and its evidence named, when that covers it (data-platform, "The
-seven wastes"). Show what changes, record by record.
+`rules save` and record the proof, or carry the last one forward (same
+table, its last row). Show what changes, record by record.
 
 ### approve and switch-on
 

@@ -149,11 +149,9 @@ submits one source.
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
    ```
    Check it offline first with `edgar-warehouse rules check --source <name>`.
-   Then record that version's proof before any approval. When the source's
-   last proof still covers it (every change since proven by its own merged
-   PR), record that proof forward with those changes named ([the seven
-   wastes](../data-platform/SKILL.md#the-seven-wastes)); run no new test.
-   Otherwise data-onboarding's **test** step runs and records one (`rules
+   Then record that version's proof before any approval: carry the last
+   proof forward when [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)'s
+   "Choose the cheapest proof" allows it, and run no new test. Otherwise data-onboarding's **test** step runs and records one (`rules
    test --version`). A test that stops is not a proof and is not recorded.
 3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
    the merge policy this source depends on first, then this source:
@@ -164,8 +162,8 @@ submits one source.
    Enabled means `rules status` shows that version `active`. There is no
    separate enable command.
 4. **Wire the run.** Submit only this source and the target from the
-   sequence check, over files already captured; name no feed (a feed is for
-   live acquisition, which is switched on apart):
+   sequence check, over files already captured (no feed:
+   [Bookkeeping run](../bookkeeping/RUN.md)):
    ```bash
    edgar-warehouse rules run --source <name> --target <target> \
      --input-manifest <uri> --input-sha256 <sha256>

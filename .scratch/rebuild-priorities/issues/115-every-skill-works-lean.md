@@ -24,5 +24,6 @@ Type: task (skills). Status: in progress (Claude, 2026-10-19). Blocked by: none.
   - data-onboarding: the full installed proof only when the change needs it; no proving run when the last proof covers the source; stale pipeline history cut
   - data-platform: stale qualification history cut to the evidence versions carry forward
   - mdm-engineering, data-profiling, sql-writer, data-scientist, data-engineering-fundamentals: read; no waste beyond the pointer (data-profiling already profiles once; its narration section is the operator's)
-- [ ] PR, CI, merge
+- [x] Three-axis review (2026-10-19 08:30 ET): GoF: "carry a proof forward" was stated five times and already drifting (now one owner, mdm-engineering's last proof row, the others link to it); bookkeeping and RUN.md still required a feed (now feed only for live acquisition). Standards and Spec: how a carried proof is recorded (`record-proof` checks the digest: a new proof file, written out in the owner row); the standing rule approval had reached only data-quality (APPROVE.md and COMPLETION.md now record a passing version under it; overrules, new kinds and switch-on still ask); data-quality's hard stops contradicted its new section (fixed); data-engineering-fundamentals answers from its own file only (pointer removed). Merges after #1108, whose feed-less runs these skills describe
+- [ ] PR, CI, merge (after #1108)
 - [ ] Learning → skill: this ticket is the skill change

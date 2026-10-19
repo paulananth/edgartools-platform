@@ -44,7 +44,7 @@ log it for a ticket.
 
 | Never | Instead |
 |---|---|
-| Decide a check's `on_fail`, or keep a fix, for the operator | Ask one question per check or fix, with its count and two or three examples, and record their exact words |
+| Decide a check's `on_fail`, or keep a fix, outside the table | The table in **decide** settles it under the standing rule approval, with its count; ask one question, with two or three examples, only where the table does not |
 | Write a check or fix the engine does not have | List it as new code, for a ticket (the plan does this for you) |
 | Trust a zero count | A planted record must make each check fire first |
 | Drop or change an invalid row | Mark it; a fix needs evidence and a steward's approval, otherwise it "needs steward" |

@@ -59,9 +59,9 @@ Run `edgar-warehouse doctor` first; it checks that every command here exists.
 ## Invocation and required inputs
 
 ```text
-$bookkeeping plan --source <source> --feed <feed>
-$bookkeeping validate --source <source> --feed <feed>
-$bookkeeping run --source <source> --feed <feed>
+$bookkeeping plan --source <source> [--feed <feed>]
+$bookkeeping validate --source <source> [--feed <feed>]
+$bookkeeping run --source <source> [--feed <feed>]
 $bookkeeping status <run-id>
 $bookkeeping recover <run-id>
 $bookkeeping init
@@ -82,9 +82,9 @@ Resolve `source` to an existing Rules document, accepting a provider name only
 when the repository identifies its source document unambiguously. Resolve
 `feed` only from an active `acquisition.feeds` declaration, and only for live
 acquisition: a run over captured files names no feed and needs only the
-version's test-run proof and approval (operator, 2026-10-19). Read documents through `edgar_warehouse.rules.files`.
+version's test-run proof and approval. Read documents through `edgar_warehouse.rules.files`.
 
-Resolve the binding deterministically before every feed-scoped mode:
+For live acquisition only, resolve the feed binding deterministically first:
 
 ```bash
 edgar-warehouse plan resolve-feed --source <source> --feed <feed>
@@ -97,8 +97,8 @@ verify those against captured source manifests in the chosen mode.
 Keep source, feed, resolved document/datasets and target in the plan and
 validation evidence. Bind the selected feed in frozen worklist control keys
 and verify input artifacts belong to those datasets/publications. The runtime
-uses `--source <resolved-rules-name>`, `--target` and an explicit `--feed`
-binding on Rules submission for acquisition documents.
+uses `--source <resolved-rules-name>` and `--target`, and an explicit `--feed`
+only for a live acquisition run.
 Recover a run only after its retained manifest proves the same source/feed.
 
 Confirm live commands with `edgar-warehouse bookkeeping --help` and
