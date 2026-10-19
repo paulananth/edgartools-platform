@@ -142,3 +142,14 @@ def test_pieces_are_read_from_a_combine(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="pieces are read from a source.combine step"):
         write(tmp_path, monkeypatch, from_answers)
+
+
+def test_a_bundle_larger_than_its_readings_is_not_refused_for_its_bytes(tmp_path, monkeypatch):
+    def large(capture):  # one answer file padded past 24 MiB, as a real ISIN bundle is
+        path = capture / "id_cusip" / "00000.json"
+        answers = json.loads(path.read_text())
+        path.write_text(json.dumps(answers) + " " * (25 * 1024**2))
+        chain.capture(capture, rewrite=False)
+
+    report = write(tmp_path, monkeypatch, tamper=large)
+    assert report["manifest"] is not None and report["scope"]["documents"] == 8

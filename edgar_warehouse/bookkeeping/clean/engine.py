@@ -588,6 +588,14 @@ class Bookkeeping:
                         evidence=[event["payload"]["receipt"]["evidence"],
                                   {"uri": f"bookkeeping-outbox:///{event['event_id']}", "sha256": digest(event["payload"])}])
 
+    def deliver_all(self, journal, run_id: str, *, limit: int = 100) -> int:
+        """Every undelivered event of the run, `limit` a batch; each batch commits on its own, so a
+        crash part-way is picked up by calling it again."""
+        delivered = 0
+        while found := self.deliver(journal, run_id, limit=limit):
+            delivered += found
+        return delivered
+
     def deliver(self, journal, run_id: str, *, limit: int = 100) -> int:
         if not 1 <= limit <= 1000:
             raise ValueError("delivery limit must be 1..1000")

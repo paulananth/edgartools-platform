@@ -279,6 +279,16 @@ def test_full_completion_and_duplicate_delivery(databases, tmp_path):
     assert drive(book, rid, databases.ledger)["counts"] == {"verified": 3}
 
 
+def test_every_event_is_delivered_however_small_the_batch(databases, tmp_path):
+    book, rid, _, _ = submit(databases, tmp_path)
+    for key in ("0", "1", "2"):
+        complete(book, rid, key)
+
+    assert book.deliver_all(databases.ledger, rid, limit=1) == 3
+    assert book.status(rid)["pending_deliveries"] == 0
+    assert book.finalize(rid)["run"]["state"] == "complete"
+
+
 def test_out_of_order_and_stage_prerequisites(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, body=config(2))
     assert book.claim(rid, "s1", "0", sleep=lambda _: None) is None

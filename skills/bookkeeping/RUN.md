@@ -46,6 +46,10 @@ edgar-warehouse workers verify <profile> "$RUN_ID" \
 edgar-warehouse bookkeeping finalize "$RUN_ID"
 ```
 
+`finalize` delivers every one of the run's Change Journal events, `--limit`
+a batch (default 100, at most 1000), then records the run's checks. A crash
+part-way is picked up by running it again.
+
 Feed is bound by the validated frozen worklist, source-input dataset/
 publication identities and the explicit Rules runner `--feed` option. Keep the durable run
 id printed on stderr. For explicit platform jobs use their existing
