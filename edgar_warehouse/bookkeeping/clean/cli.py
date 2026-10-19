@@ -76,11 +76,11 @@ def _handle(args):
                 result = {"failed": True}
             elif operation == "admit":
                 result = book.admit(_document(args.verification), {"uri": args.report, "sha256": args.sha256})
-            else:  # finalize: deliver control's events, then record the run's checks
+            else:  # finalize: deliver every control event, `--limit` a batch, then record the run's checks
                 from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
                 ledger = journal_engine()
                 try:
-                    book.deliver(ChangeJournal(ledger), args.run_id, limit=args.limit)
+                    book.deliver_all(ChangeJournal(ledger), args.run_id, limit=args.limit)
                 finally:
                     ledger.dispose()
                 result = book.finalize(args.run_id)

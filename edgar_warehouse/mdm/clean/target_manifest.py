@@ -181,10 +181,9 @@ def write_manifest(
 
     `documents` lists the bundle's documents by receipt key (at most the
     source's `execution.max_artifacts`; each step's worker bounds what it
-    reads). `capture_run` is
-    the caller's approved run ID of the capture. Returns the report: the
-    manifest's reference (none when every document was processed already) and
-    the publication."""
+    reads). `capture_run` is the caller's approved run ID of the capture.
+    Returns the report: the manifest's reference (none when every document was
+    processed already) and the publication."""
     if type(revision) is not int or revision < 0:
         raise ValueError("Require a nonnegative explicit publication revision")
     instant(as_of)
