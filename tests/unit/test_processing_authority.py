@@ -43,3 +43,27 @@ def test_a_dataset_registers_on_the_processing_authority():
 def test_neither_runs_without_the_operators_approval():
     with pytest.raises(Blocked, match="approval of the exact Rules version"):
         _authority(export(approved=False), {"source": "fixture"}, None)
+
+
+def test_a_source_with_no_feed_of_its_own_registers_its_datasets():
+    body = {"source": "fixture", "bronze": {"family": "fixture"}, "mdm": {"fixture.v1": {"contract": CONTRACT}}}
+    content = digest(body)
+    bare = {"kind": "source", "name": "fixture", "version": "1", "status": "active", "body": body, "digest": content,
+            "proof": {"passed": True, "digest": content},
+            "approval": {"digest": content, "by": "Operator", "at": "2026-10-19T12:00:00Z"}}
+    assert registration_authority(bare, "fixture.v1", CONTRACT)["source_family"] == "fixture"
+
+
+def test_a_source_whose_feeds_miss_a_dataset_is_refused():
+    with pytest.raises(Blocked, match="exactly one approved feed"):
+        registration_authority(export(), "other.v1", CONTRACT)
+
+
+def test_a_source_with_no_feed_names_the_family_it_reads():
+    body = {"source": "fixture", "bronze": {"family": "other"}, "mdm": {"fixture.v1": {"contract": CONTRACT}}}
+    content = digest(body)
+    bare = {"kind": "source", "name": "fixture", "version": "1", "status": "active", "body": body, "digest": content,
+            "proof": {"passed": True, "digest": content},
+            "approval": {"digest": content, "by": "Operator", "at": "2026-10-19T12:00:00Z"}}
+    with pytest.raises(Blocked, match="names the family its source reads"):
+        registration_authority(bare, "fixture.v1", CONTRACT)

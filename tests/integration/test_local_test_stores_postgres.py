@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+
+from edgar_warehouse.control_contract import Blocked
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
@@ -18,6 +20,7 @@ from tests.unit.test_local_test_stores import local
 def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidence(tmp_path):
     """The generated connections really run work; silver is never created."""
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.rules import files
     from edgar_warehouse.rules.db import Rules
     from edgar_warehouse.workers import PROFILES
     from tests.integration.test_configured_bookkeeping_postgres import config
@@ -83,6 +86,30 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         rules.approve("merge", "platform", "invented", evidence=pending["evidence_hash"],
                       by="invented operator", words="Approved invented fixture")
         rules.activate("merge", "platform", "invented", mdm_engine=engine("mdm", "mdm_governance"))
+        # A source that declares no feed of its own (it reads files another source's feed
+        # captures) switches on its pipes and registers its datasets (operator, 2026-10-19).
+        person = files.source("sec.submissions.person")
+        assert "acquisition" not in person
+        saved = rules.save("source", "sec.submissions.person", "invented", person)
+        rules.prove("source", "sec.submissions.person", "invented",
+                    {"digest": saved["digest"], "batch_hash": "b" * 64, "passed": True})
+        waiting = next(p for p in rules.pending() if p["name"] == "sec.submissions.person")
+        rules.approve("source", "sec.submissions.person", "invented", evidence=waiting["evidence_hash"],
+                      by="invented operator", words="Approved invented fixture")
+        rules.activate("source", "sec.submissions.person", "invented", mdm_engine=engine("mdm", "mdm_governance"))
+        with engine("mdm", "mdm_governance").connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM mdm.dataset_mapping WHERE source_code=:c"),
+                               {"c": "sec.submissions.person.v1"}) == 1
+        # Another source cannot register over a dataset Person owns.
+        other = {**person, "source": "invented.other"}
+        saved = rules.save("source", "invented.other", "invented", other)
+        rules.prove("source", "invented.other", "invented",
+                    {"digest": saved["digest"], "batch_hash": "c" * 64, "passed": True})
+        waiting = next(p for p in rules.pending() if p["name"] == "invented.other")
+        rules.approve("source", "invented.other", "invented", evidence=waiting["evidence_hash"],
+                      by="invented operator", words="Approved invented fixture")
+        with pytest.raises(Blocked, match="belongs to source sec.submissions.person"):
+            rules.activate("source", "invented.other", "invented", mdm_engine=engine("mdm", "mdm_governance"))
         for login in ("mdm_runtime", "mdm_verifier", "mdm_governance"):
             reader = engine("mdm", login)
             with reader.connect() as conn:
