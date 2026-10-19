@@ -125,7 +125,12 @@ def acquisition(document: dict) -> dict:
     return feeds
 
 
-def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
+def processing_authority(export: dict) -> dict:
+    """A proven, approved source version processing data already captured: its
+    test run holds and the operator approved this exact digest. Switching on its
+    live acquisition is separate (`frozen_authority`; operator, 2026-10-19:
+    "decouple actual turning on to live data to test and turn on the pipes
+    using already captured data")."""
     if (
         export.get("kind") != "source"
         or export.get("status") not in {"active", "proven"}
@@ -135,26 +140,31 @@ def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
         raise Blocked("A frozen proven Rules source envelope is required")
     proof, approval = export.get("proof") or {}, export.get("approval") or {}
     if not proof_holds(export):
-        raise Blocked("Acquisition requires verified Rules proof")
-    validation_proof(export["body"], proof, artifacts=artifacts)
+        raise Blocked("Processing requires verified Rules proof")
     if (
         approval.get("digest") != export["digest"]
         or not approval.get("by")
         or not approval.get("at")
     ):
-        raise Blocked("Acquisition requires approval of the exact Rules version")
-    feeds = acquisition(export["body"])
-    if feed not in feeds:
-        raise Blocked("Feed is absent from frozen acquisition authority")
+        raise Blocked("Processing requires approval of the exact Rules version")
     return {
         "name": export["name"],
         "version": export["version"],
         "digest": export["digest"],
-        "feed": feed,
-        "configuration": feeds[feed],
         "proof": proof,
         "approval": approval,
     }
+
+
+def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
+    """Live acquisition of `feed`: the processing authority and the proof of a
+    real acquisition run of every declared feed."""
+    authority = processing_authority(export)
+    validation_proof(export["body"], authority["proof"], artifacts=artifacts)
+    feeds = acquisition(export["body"])
+    if feed not in feeds:
+        raise Blocked("Feed is absent from frozen acquisition authority")
+    return {**authority, "feed": feed, "configuration": feeds[feed]}
 
 
 def registration_authority(export: dict, code: str, contract: dict) -> dict:
@@ -164,7 +174,9 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
     ]
     if len(declared) != 1 or declared[0][1]["family"] != contract["family"]:
         raise Blocked("Dataset requires exactly one approved feed with matching family")
-    frozen = frozen_authority(export, declared[0][0])
+    # A dataset is registered when its pipes switch on: the processing
+    # authority, not its live acquisition's.
+    frozen = processing_authority(export)
     if export["body"].get("mdm", {}).get(code, {}).get("contract") != contract:
         raise Blocked(
             "Dataset contract differs from the frozen approved Rules document"

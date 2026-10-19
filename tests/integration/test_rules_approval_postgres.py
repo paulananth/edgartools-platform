@@ -215,3 +215,26 @@ def test_a_source_that_could_not_be_read_is_kept_but_never_overruled(pg, populat
     with pytest.raises(DBAPIError, match="acquisition"):
         approve(agent, "source", name, "1", by="Operator", overrule="read what there is")
     assert agent.version("source", name, "1")["approved_by"] is None
+
+
+def test_a_source_with_acquisition_switches_on_its_pipes_on_a_test_run(pg, populated):
+    """Proven on a test run over captured data, approved and activated with no
+    acquisition evidence (operator, 2026-10-19); live acquisition still needs it."""
+    from edgar_warehouse.rules.acquisition_authority import frozen_authority, processing_authority
+
+    agent = pg["agent"]
+    name = f"pipes-{uuid4().hex[:8]}"
+    body = {"source": name, "acquisition": {"version": 1, "feeds": {"fixture": {
+        "family": "fixture", "datasets": ["fixture.v1"], "scope": ["fixture"],
+        "capabilities": {"capture": "provider.capture", "fetch": "http.conditional"},
+        "completeness": {"format": "json", "required": [], "allow_empty": True, "max_bytes": 1024},
+        "required_producers": ["capture"], "url_prefixes": ["https://fixture.invalid/"]}}}}
+    saved = agent.save("source", name, "1", body)
+    agent.prove("source", name, "1", proof(saved, note="two passes over the captured files"))
+    assert agent.version("source", name, "1")["status"] == "proven"
+    approve(pg["approver"], "source", name, "1", by="Operator", words="Approved")
+    agent.activate("source", name, "1")
+    export = Rules.envelope(agent.version("source", name, "1"))
+    assert export["status"] == "active" and processing_authority(export)["digest"] == saved["digest"]
+    with pytest.raises(Blocked, match="qualify every declared acquisition feed"):
+        frozen_authority(export, "fixture")

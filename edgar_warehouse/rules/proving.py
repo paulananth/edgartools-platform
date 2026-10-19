@@ -178,8 +178,9 @@ class _Commands:
 
 def recording(source: str, version: str, document: dict, sandbox: str):
     """The operator's Rules Database to record this test run in, checked before the run: the saved
-    version is the rules on disk, and the source declares no acquisition (whose proof comes from its
-    capture run, never from a test)."""
+    version is the rules on disk. A source that declares acquisition records its test run too: it
+    switches on the pipes over captured data, and its live acquisition is proved apart (operator,
+    2026-10-19)."""
     from sqlalchemy.engine import make_url
     from sqlalchemy.exc import ArgumentError
 
@@ -206,9 +207,6 @@ def recording(source: str, version: str, document: dict, sandbox: str):
         raise TestRunError(f"{source} has no saved version {version}: save it first (`rules save`)") from error
     if saved["digest"] != digest(document):
         raise TestRunError(f"Version {version} is not the rules on disk: save the files tested, or test that version")
-    if "acquisition" in json.loads(saved["body"]):
-        raise TestRunError(f"{source} declares acquisition: record its test run with its capture run's acquisition "
-                           "proof (`rules record-proof`)")
     return rules
 
 

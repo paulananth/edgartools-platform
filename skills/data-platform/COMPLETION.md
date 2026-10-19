@@ -110,16 +110,15 @@ Use the documented qualification registration; test authority remains test-only.
 
 Write the private proof JSON from the run's measured results. The owning test
 mode defines `digest`, `batch_hash`, `passed`, `evidence` and `note`; compute the
-hashes and retain retrievable report references. For a source declaring
-acquisition, also retain every declared feed's genuine manifest, expected and
-verified producer counts and successful checks under its acquisition contract.
-Unit tests, adapter fixtures and invented records qualify implementation only.
+hashes and retain retrievable report references. A test run over
+files already captured switches on the source's pipes; its live acquisition is
+switched on apart, with a version whose proof also holds every declared feed's
+genuine manifest, expected and verified producer counts and successful checks
+(operator, 2026-10-19). Unit tests, adapter fixtures and invented records
+qualify implementation only.
 
 **Done:** the exact version has a genuine passing proof, or a recorded failing
-result with its failed checks and repair action. Missing acquisition evidence
-also blocks recording a passing proof for a source that declares acquisition.
-Retain successful local mapping/merge qualification separately until that source
-proof can be completed; activation remains open.
+result with its failed checks and repair action.
 
 ## 6. Record the proof and explain what is ready
 

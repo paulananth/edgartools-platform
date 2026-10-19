@@ -63,13 +63,16 @@ def test_a_version_that_is_not_the_rules_on_disk_is_refused_before_the_run(opera
         proving.recording(PERSON, version, document, sandbox="postgresql://elsewhere/rules")
 
 
-def test_a_source_with_acquisition_is_recorded_with_its_capture_proof_instead(operator_rules):
+def test_a_source_with_acquisition_records_its_test_run_too(operator_rules):
+    # Its pipes switch on over captured data; its live acquisition is proved apart (operator, 2026-10-19).
     version = label()
     document = files.source("openfigi")
     operator_rules.save("source", "openfigi", version, document)
 
-    with pytest.raises(proving.TestRunError, match="declares acquisition"):
-        proving.recording("openfigi", version, document, sandbox="postgresql://elsewhere/rules")
+    rules = proving.recording("openfigi", version, document, sandbox="postgresql://elsewhere/rules")
+    proving.record(rules, report(document), source="openfigi", version=version)
+
+    assert operator_rules.version("source", "openfigi", version)["status"] == "proven"
 
 
 def test_the_sandbox_and_an_unsaved_version_are_refused(operator_rules, monkeypatch):

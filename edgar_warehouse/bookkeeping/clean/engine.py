@@ -25,6 +25,20 @@ PROTOCOL = 1
 SCAN = 1000
 
 
+def _authority(export: dict, scope: dict, artifacts) -> dict:
+    """A run with a feed acquires live data: the acquisition authority. A run
+    without one processes data already captured: the processing authority
+    (operator, 2026-10-19: switching on the pipes is decoupled from switching
+    on live data)."""
+    from edgar_warehouse.rules.acquisition_authority import frozen_authority, processing_authority
+
+    if "feed" in scope:
+        if not isinstance(scope["feed"], str) or not scope["feed"]:
+            raise Blocked("A run's feed is a declared feed's name")
+        return frozen_authority(export, scope["feed"], artifacts=artifacts)
+    return processing_authority(export)
+
+
 @dataclass(frozen=True)
 class Claim:
     run_id: str
@@ -75,8 +89,7 @@ class Bookkeeping:
                     submission["kind"], submission["name"], submission["rule_version"]):
                 raise Blocked("Rules reference disagrees with submission")
             if "acquisition" in export["body"]:
-                from edgar_warehouse.rules.acquisition_authority import frozen_authority
-                frozen_authority(export, submission["scope"].get("feed"), artifacts=self.artifacts)
+                _authority(export, submission["scope"], self.artifacts)
             config = validate(export["body"], submission["target"])
             if submission.get("profiles") != {step["name"]: step["operation"] for step in config["steps"]}:
                 raise Blocked("Frozen worker profiles differ from the Rules export")
@@ -139,12 +152,14 @@ class Bookkeeping:
         if scope.get("feed") and "acquisition" not in export["body"]:
             raise Blocked("Retired acquisition feed cannot be submitted")
         if "acquisition" in export["body"]:
-            from edgar_warehouse.rules.acquisition_authority import frozen_authority
-            selected = frozen_authority(export, scope.get("feed"), artifacts=self.artifacts)
+            selected = _authority(export, scope, self.artifacts)
             if scope.get("source") != export["name"]:
                 raise Blocked("Acquisition run requires exact source/feed binding")
-            if not set(selected["configuration"]["required_producers"]) <= {s["name"] for s in config["steps"]}:
+            if "feed" in scope and not set(selected["configuration"]["required_producers"]) <= {
+                    s["name"] for s in config["steps"]}:
                 raise Blocked("Configured work omits required acquisition producers")
+            if "feed" not in scope and any(s["operation"] == "provider.capture" for s in config["steps"]):
+                raise Blocked("A capture runs only as live acquisition, with its feed")
         # An approval is pinned to the exact immutable body, including its
         # Bookkeeping section. No automatic approval from an earlier version.
         if export["kind"] == "merge" or export["body"].get("mdm") or target == "mdm":
@@ -153,7 +168,7 @@ class Bookkeeping:
                 raise Blocked("MDM configuration requires approval of its exact digest")
         manifest = self.artifacts.json(inputs_ref)
         items = worklist(manifest, config)
-        if "acquisition" in export["body"] and not items:
+        if "feed" in scope and not items:
             raise Blocked("An empty acquisition baseline requires explicit verified scope work")
         submission = {"version": 1, "kind": export["kind"], "name": export["name"],
                       "journal": "change-journal-v1", "protocol": PROTOCOL,
