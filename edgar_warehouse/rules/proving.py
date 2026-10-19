@@ -238,6 +238,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         out: Path, minutes: float = 60, target: str = TARGET, version: str | None = None,
         facts: dict | None = None, run_files: dict | None = None) -> dict:
     """Two runs of one of the source's targets (default `mastering`) on the capture; the report, written to `out`."""
+    from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
     from edgar_warehouse.change_journal.store import ChangeJournal
     from edgar_warehouse.mdm.clean.store import register_dataset, register_policy
     from edgar_warehouse.mdm.clean.target_manifest import write_manifest
@@ -283,6 +284,8 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         manifest_root = env["worker"]["BOOKKEEPING_MANIFEST_ROOT"]
         root = Path(manifest_root.removeprefix("file://")) / name
         journal = ChangeJournal(journal_engine)
+        # Another run a step reads (ticket 120) is one in the test's own stores.
+        bookkeeping = Bookkeeping(create_engine(env["worker"]["BOOKKEEPING_DATABASE_URL"]))
         commands = _Commands(env, (root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                              log=stores / "rules-test-errors.log")
         passes = []
@@ -292,7 +295,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                 report = write_manifest(source=source, target=target, capture=str(capture), documents=str(documents),
                                         capture_run=capture_run, output=str(root / f"pass-{number}"),
                                         as_of=as_of, revision=0, force=force, journal=journal,
-                                        facts=facts, run_files=run_files)
+                                        facts=facts, run_files=run_files, bookkeeping=bookkeeping)
             except ValueError as error:  # the declaration or the bundle refused: a stop, not a traceback
                 raise TestRunError(str(error)) from error
             if report["manifest"] is None:

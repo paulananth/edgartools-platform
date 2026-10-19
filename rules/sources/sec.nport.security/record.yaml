@@ -1,0 +1,18 @@
+# Each Security row of combine.yaml's output as one record (`record`), read
+# over the combine's pieces, for mdm.prepare (`record_column: record`): the
+# CUSIP Securities (`security`) and the Securities of holdings with no usable
+# CUSIP (`security_isin`), each row as its Dataset Contract reads it
+# (ticket 120).
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 16777216, max_records: 1000000}
+  tables:
+    security:
+      each: tables.security
+      columns:
+        record: {value: {path: .}}
+    security_isin:
+      each: tables.security_isin
+      columns:
+        record: {value: {path: .}}

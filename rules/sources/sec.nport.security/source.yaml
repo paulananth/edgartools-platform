@@ -428,3 +428,325 @@ mdm:
           valid_from: filed.0.filed
           time_format: date
           scope: SEC N-PORT issuer
+bookkeeping:
+  version: 2
+  # One quarter's data set (the zip), its period a run fact (ticket 113), one
+  # target per Dataset Contract: the CUSIP Securities (`mastering`) and the
+  # Securities of holdings with no usable CUSIP (`mastering_isin`), each the
+  # same chain (rules files allow no anchors). Two inputs come from other runs
+  # (ticket 120; operator, 2026-10-19: "Read another run (Recommended)"): the
+  # umbrella pair set from GLEIF's `umbrellas` runs, and OpenFIGI's answers
+  # from its `answers_cusip` and `answers_isin` runs, so those run first.
+  targets:
+    mastering:
+      run:
+        facts: [period]
+      steps:
+        - name: submissions
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: filings.yaml}
+        - name: identifiers
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: identifiers.yaml}
+        - name: holdings
+          operation: source.read
+          requires: [identifiers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            context: {period: {fact: period}}
+            lookups:
+              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
+                     max_input_bytes: 268435456, max_input_rows: 10000000}
+        - name: issuers
+          operation: source.read
+          requires: [identifiers, submissions]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: issuers.yaml
+            context: {period: {fact: period}}
+            lookups:
+              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
+                     max_input_bytes: 268435456, max_input_rows: 10000000}
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                     max_input_bytes: 67108864, max_input_rows: 1000000}
+              umbrella: {run: {source: gleif, target: umbrellas, step: pairs}, table: subfund, column: fund,
+                         value_column: umbrella, max_input_bytes: 67108864, max_input_rows: 1000000}
+        - name: reduce
+          operation: source.combine
+          requires: [holdings]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {holdings: {step: holdings}}}
+        - name: issuer_reduce
+          operation: source.combine
+          requires: [issuers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: issuer-reduce.yaml, readings: {issuers: {step: issuers}}}
+        - name: pairs
+          operation: source.combine
+          requires: [reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine-pairs.yaml, readings: {securities: {step: reduce}}}
+        - name: cusips_found
+          operation: source.combine
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: figi-found.yaml
+            readings: {answers: {run: {source: openfigi, target: answers_cusip, step: answers}}}
+        - name: isins_found
+          operation: source.combine
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: figi-found.yaml
+            readings: {answers: {run: {source: openfigi, target: answers_isin, step: answers}}}
+        - name: figi_pairs
+          operation: source.combine
+          requires: [pairs, cusips_found, isins_found]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: figi-pairs.yaml
+            readings: {pairs: {step: pairs}, cusips: {step: cusips_found}, isins: {step: isins_found}}
+        - name: agree
+          operation: source.read
+          requires: [figi_pairs]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: figi-agree.yaml, pieces: {step: figi_pairs}}
+        - name: offers
+          operation: source.combine
+          requires: [agree]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: figi-offers.yaml, readings: {agreed: {step: agree}}}
+        - name: attach
+          operation: source.combine
+          requires: [agree, offers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: figi-attach.yaml, readings: {agreed: {step: agree}, offers: {step: offers}}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce, attach, issuer_reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: combine.yaml
+            readings: {securities: {step: reduce}, attached: {step: attach}, issuers: {step: issuer_reduce}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: security, record_column: record, dataset: sec.nport.security.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
+    mastering_isin:
+      run:
+        facts: [period]
+      steps:
+        - name: submissions
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: filings.yaml}
+        - name: identifiers
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: identifiers.yaml}
+        - name: holdings
+          operation: source.read
+          requires: [identifiers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            context: {period: {fact: period}}
+            lookups:
+              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
+                     max_input_bytes: 268435456, max_input_rows: 10000000}
+        - name: issuers
+          operation: source.read
+          requires: [identifiers, submissions]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: issuers.yaml
+            context: {period: {fact: period}}
+            lookups:
+              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
+                     max_input_bytes: 268435456, max_input_rows: 10000000}
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                     max_input_bytes: 67108864, max_input_rows: 1000000}
+              umbrella: {run: {source: gleif, target: umbrellas, step: pairs}, table: subfund, column: fund,
+                         value_column: umbrella, max_input_bytes: 67108864, max_input_rows: 1000000}
+        - name: reduce
+          operation: source.combine
+          requires: [holdings]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {holdings: {step: holdings}}}
+        - name: issuer_reduce
+          operation: source.combine
+          requires: [issuers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: issuer-reduce.yaml, readings: {issuers: {step: issuers}}}
+        - name: pairs
+          operation: source.combine
+          requires: [reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine-pairs.yaml, readings: {securities: {step: reduce}}}
+        - name: cusips_found
+          operation: source.combine
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: figi-found.yaml
+            readings: {answers: {run: {source: openfigi, target: answers_cusip, step: answers}}}
+        - name: isins_found
+          operation: source.combine
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: figi-found.yaml
+            readings: {answers: {run: {source: openfigi, target: answers_isin, step: answers}}}
+        - name: figi_pairs
+          operation: source.combine
+          requires: [pairs, cusips_found, isins_found]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: figi-pairs.yaml
+            readings: {pairs: {step: pairs}, cusips: {step: cusips_found}, isins: {step: isins_found}}
+        - name: agree
+          operation: source.read
+          requires: [figi_pairs]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: figi-agree.yaml, pieces: {step: figi_pairs}}
+        - name: offers
+          operation: source.combine
+          requires: [agree]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: figi-offers.yaml, readings: {agreed: {step: agree}}}
+        - name: attach
+          operation: source.combine
+          requires: [agree, offers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: figi-attach.yaml, readings: {agreed: {step: agree}, offers: {step: offers}}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce, attach, issuer_reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: combine.yaml
+            readings: {securities: {step: reduce}, attached: {step: attach}, issuers: {step: issuer_reduce}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: security_isin, record_column: record, dataset: sec.nport.security_isin.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]

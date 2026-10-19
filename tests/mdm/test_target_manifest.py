@@ -155,3 +155,101 @@ def test_a_second_declared_contract_is_digested_too(tmp_path, monkeypatch):
     second = write_manifest(target="mastering", **options(tmp_path / "b"))
 
     assert second["publication"]["batch_id"] != first["publication"]["batch_id"]
+
+
+class Runs:
+    """Bookkeeping's verified units of another run's step (ticket 120), as given."""
+    def __init__(self, units):
+        self.units, self.asked = units, []
+
+    def verified_units(self, **selector):
+        self.asked.append(selector)
+        return self.units
+
+
+OTHER = {"source": "openfigi", "target": "answers_cusip", "step": "answers"}
+
+
+def reading_another_run(monkeypatch, selector=OTHER):
+    """Person's target with a combine that reads another source's run (ticket 120)."""
+    body = files.source(SOURCE)
+    body["bookkeeping"]["targets"]["mastering"]["steps"].insert(1, {
+        "name": "others", "operation": "source.combine", "requires": [], "key": "{unit}",
+        "leases": ["artifact:{destination}"], "checks": ["input.hash", "output.receipt", "source.combined"],
+        "input": {"contract": "source.yaml", "readings": {"answers": {"run": selector}}}})
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+
+
+def unit(run, key, sha):
+    return {"run": run, "step": "answers", "key": key, "sha256": sha * 64}
+
+
+def test_a_combine_reads_the_verified_units_of_another_runs_step(tmp_path, monkeypatch):
+    reading_another_run(monkeypatch)
+    runs = Runs([unit("11111111-1111-1111-1111-111111111111", "answers-0", "a"),
+                 unit("22222222-2222-2222-2222-222222222222", "answers-0", "b")])
+    first = write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path / "a"))
+
+    assert runs.asked == [OTHER]
+    assert steps_of(first)["others"][0]["input"]["compose"]["slots"] == {"answers": [
+        {k: u[k] for k in ("run", "step", "key")} for u in runs.units]}
+    runs.units = runs.units[:1]
+    second = write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path / "b"))
+    assert second["scope"]["processing_identity"] != first["scope"]["processing_identity"]  # its outputs are its identity
+    assert second["publication"]["batch_id"] != first["publication"]["batch_id"]
+
+
+@pytest.mark.parametrize("count", [0, 257])
+def test_another_run_with_no_or_too_many_verified_units_is_refused(tmp_path, monkeypatch, count):
+    reading_another_run(monkeypatch)
+    runs = Runs([unit("11111111-1111-1111-1111-111111111111", f"answers-{n}", "a") for n in range(count)])
+    with pytest.raises(ValueError, match=f"has {count} verified units"):
+        write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path))
+
+
+@pytest.mark.parametrize("selector", [{"source": "openfigi", "target": "answers_cusip"},
+                                      {**OTHER, "step": "Answers"}, {**OTHER, "extra": "x"}])
+def test_a_reading_of_another_run_names_source_target_and_step(monkeypatch, selector):
+    reading_another_run(monkeypatch, selector)
+    with pytest.raises(Blocked, match="another run's step"):
+        validate(files.source(SOURCE), "mastering")
+
+
+def test_a_target_that_only_reads_has_no_publication_steps(tmp_path, monkeypatch):
+    """Ticket 120: a target with no preparation reads and records its files, for another run to read."""
+    body = files.source(SOURCE)
+    steps = body["bookkeeping"]["targets"]["mastering"]["steps"]
+    body["bookkeeping"]["targets"]["mastering"]["steps"] = [steps[0], {**steps[-1], "requires": [steps[0]["name"]]}]
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    report = write_manifest(target="mastering", **options(tmp_path))
+
+    assert {name: len(units) for name, units in steps_of(report).items()} == {"read": 1, "processed": 1}
+    assert report["source_code"] is None
+
+
+def test_two_preparations_are_refused(tmp_path, monkeypatch):
+    body = files.source(SOURCE)
+    steps = body["bookkeeping"]["targets"]["mastering"]["steps"]
+    steps.insert(2, {**steps[1], "name": "records_again"})
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    with pytest.raises(ValueError, match="at most one mdm.prepare"):
+        write_manifest(target="mastering", **options(tmp_path))
+
+
+def test_a_lookup_set_reads_another_runs_step_whole(tmp_path, monkeypatch):
+    """Ticket 120: every file's lookup set is the other run's verified units, read whole."""
+    body = files.source(SOURCE)
+    read = body["bookkeeping"]["targets"]["mastering"]["steps"][0]
+    read["units"] = {"each": "file"}
+    read["input"] = {**read.get("input", {}), "lookups": {"umbrella": {
+        "run": OTHER, "table": "pairs", "column": "fund", "value_column": "umbrella",
+        "max_input_bytes": 1024, "max_input_rows": 10}}}
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    runs = Runs([unit("11111111-1111-1111-1111-111111111111", "answers-0", "a")])
+    steps = steps_of(write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path)))
+
+    assert len(steps["read"]) == len(DOCUMENTS)
+    for each in steps["read"]:
+        (lookup,) = each["input"]["compose"]["slots"].values()
+        assert lookup["compose"]["slots"] == {"umbrella": [{k: runs.units[0][k] for k in ("run", "step", "key")}]}
+        assert lookup["compose"]["document"]["sets"]["umbrella"]["readings"] == {"slot": "umbrella"}

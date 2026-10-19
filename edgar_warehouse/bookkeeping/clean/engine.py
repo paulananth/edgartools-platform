@@ -237,13 +237,16 @@ class Bookkeeping:
         return {"run": run, "config": config, "manifest": manifest}
 
     def _receipt(self, item: dict, dependency: dict, context: dict) -> dict:
-        """One prerequisite unit's verified output, after reverifying its chain."""
+        """One prerequisite unit's verified output, after reverifying its chain. A unit of another run
+        (ticket 120) is reverified against that run's own frozen configuration."""
         with self.engine.connect() as conn:
             found = _rows(conn, """SELECT * FROM bookkeeping.work_item
                 WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k AND state='verified'""",
-                r=str(item["run_id"]), s=dependency["step"], k=dependency["key"])
+                r=dependency.get("run", str(item["run_id"])), s=dependency["step"], k=dependency["key"])
         if not found:
             raise Blocked("Prerequisite input lacks verified completion")
+        if "run" in dependency:
+            context = self._context(found[0])
         upstream = self._resolve_item(found[0], context=context)
         self._verify_item(upstream, context)
         receipt = upstream["receipt"]
@@ -255,7 +258,7 @@ class Bookkeeping:
         """Fill a composed document's slots with verified receipts; the same receipts give the same bytes.
         `seen` holds each unit's receipt once per fill: a unit named in several slots is verified once."""
         def receipt(dependency):
-            unit = (dependency["step"], dependency["key"])
+            unit = (dependency.get("run"), dependency["step"], dependency["key"])
             if unit not in seen:
                 seen[unit] = self._receipt(item, dependency, context)
             return seen[unit]
@@ -574,6 +577,20 @@ class Bookkeeping:
                 submission->>'kind' AS kind,submission->>'name' AS name,submission->>'target' AS target
                 FROM bookkeeping.pipeline_run WHERE CAST(:s AS text) IS NULL OR state=:s
                 ORDER BY created_at DESC,run_id LIMIT :n""", s=state, n=limit)
+
+    def verified_units(self, *, source: str, target: str, step: str, kind: str = "source") -> list[dict]:
+        """Ticket 120: the verified units of `step` in the complete runs of `source`'s `target`, each
+        `{run, step, key, sha256}`, in run and key order. A reading is deterministic, so the same files
+        read twice give the same output: an output held by several units is listed once."""
+        with self.engine.connect() as conn:
+            found = _rows(conn, """SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,
+                    w.unit_key AS key, w.receipt->>'sha256' AS sha256, r.completed_at
+                FROM bookkeeping.work_item w JOIN bookkeeping.pipeline_run r ON r.run_id=w.run_id
+                WHERE r.state='complete' AND r.submission->>'kind'=:kind AND r.submission->>'name'=:source
+                  AND r.submission->>'target'=:target AND w.step=:step AND w.state='verified'
+                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id""", source=source, target=target, step=step, kind=kind)
+        return [{k: unit[k] for k in ("run", "step", "key", "sha256")}
+                for unit in sorted(found, key=lambda unit: (unit["completed_at"], unit["run"], unit["key"]))]
 
     def finalize(self, run_id: str) -> dict:
         run, config, _, _ = self._frozen(run_id)

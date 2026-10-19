@@ -428,8 +428,9 @@ def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(d
     assert executions == ["parsed0", "parsed1", "parsed2"]
 
 
-def fan_in_submission(databases, tmp_path):
-    """A gathering step whose one input is a document composed from many verified outputs (to-do 20c)."""
+def fan_in_submission(databases, tmp_path, first=None):
+    """A gathering step whose one input is a document composed from many verified outputs (to-do 20c).
+    `first`: the slot `first` names this unit instead (another run's, ticket 120)."""
     book, _, manifest, executions = staged_submission(databases, tmp_path)
     gathered = []
 
@@ -462,7 +463,7 @@ def fan_in_submission(databases, tmp_path):
     steps[2]["operation"] = "fixture.gather"
     output = (tmp_path / "gather" / "all").as_uri()
     compose = {"document": {"version": 1, "one": {"slot": "first"}, "all": {"slot": "parts"}, "inner": {"slot": "nested"}},
-               "slots": {"first": {"step": "a_transform", "key": "parsed1"},
+               "slots": {"first": first or {"step": "a_transform", "key": "parsed1"},
                          "parts": [{"step": "a_transform", "key": f"parsed{n}"} for n in (2, 0)],
                          "nested": {"compose": {"document": {"raw": {"slot": "raw"}},
                                                 "slots": {"raw": {"step": "z_capture", "key": "raw1"}}}}}}
@@ -508,6 +509,53 @@ def test_a_composed_input_with_a_corrupt_slot_blocks_without_execution(databases
     with pytest.raises(Blocked):
         drive(book, rid, databases.ledger, workers=book.workers)
     assert book.status(rid)["run"]["state"] == "blocked" and gathered == []
+
+
+def test_a_slot_reads_another_runs_verified_unit(databases, tmp_path):
+    """Ticket 120: a slot may name a unit of another run; only its verified, reverified receipt fills it."""
+    earlier, done, _, _, _ = fan_in_submission(databases, tmp_path / "earlier")
+    drive(earlier, done, databases.ledger, workers=earlier.workers)
+    receipt = next(i["receipt"] for i in earlier.status(done)["items"] if i["unit_key"] == "parsed1")
+    book, rid, output, _, gathered = fan_in_submission(
+        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"})
+    state = drive(book, rid, databases.ledger, workers=book.workers)
+    assert state["run"]["state"] == "complete"
+    (document,) = gathered
+    assert book.artifacts.json(document)["one"] == {k: receipt[k] for k in ("uri", "sha256")}
+
+
+@pytest.mark.parametrize("case", ["unknown_run", "not_verified", "corrupt"])
+def test_a_slot_naming_another_run_blocks_unless_verified(databases, tmp_path, case):
+    earlier, done, _, _, _ = fan_in_submission(databases, tmp_path / "earlier")
+    if case != "not_verified":
+        drive(earlier, done, databases.ledger, workers=earlier.workers)
+    named = {"run": str(uuid4()) if case == "unknown_run" else done, "step": "a_transform", "key": "parsed1"}
+    if case == "corrupt":
+        receipt = next(i["receipt"] for i in earlier.status(done)["items"] if i["unit_key"] == "parsed1")
+        Path(receipt["uri"].removeprefix("file://")).write_bytes(b"corrupt")
+    book, rid, _, _, gathered = fan_in_submission(databases, tmp_path / "later", first=named)
+    with pytest.raises(Blocked):
+        drive(book, rid, databases.ledger, workers=book.workers)
+    assert gathered == []
+
+
+def test_a_slot_naming_another_run_is_shaped(databases, tmp_path):
+    with pytest.raises(Blocked, match="existing unit"):
+        fan_in_submission(databases, tmp_path, first={"run": "not-a-run", "step": "a_transform", "key": "parsed1"})
+
+
+def test_another_runs_verified_units_are_its_complete_runs_outputs_once(databases, tmp_path):
+    """Ticket 120: a reading of another run's step lists its complete runs' verified units; the same
+    output read twice is listed once; a run not complete lists nothing."""
+    book, rid, _, _, _ = fan_in_submission(databases, tmp_path / "first")
+    name = book.status(rid)["run"]["submission"]["name"]
+    assert book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline") == []
+    drive(book, rid, databases.ledger, workers=book.workers)
+    found = book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
+    outputs = {i["receipt"]["sha256"] for i in book.status(rid)["items"] if i["step"] == "a_transform"}
+    assert len(outputs) == 2  # parsed0 and parsed2 read the same input: one output
+    assert sorted(u["sha256"] for u in found) == sorted(outputs) and {u["run"] for u in found} == {rid}
+    assert book.verified_units(source=name, target="silver", step="a_transform") == []  # a source's runs only
 
 
 def test_independent_concurrency_and_shared_contention(databases, tmp_path):

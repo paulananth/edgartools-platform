@@ -1,8 +1,9 @@
-# One identifier kind's OpenFIGI answers as one table (ticket 80): the 8
-# readings of figi-answers.yaml for that kind (`answers_1` .. `answers_8`, at
-# most 512 files each) put together, so figi-pairs.yaml takes each kind under
-# one name (a combination takes at most 8 names). Run once for CUSIPs and once
-# for ISINs. Pin canonical JSON of this file as the source.combine contract.
+# One identifier kind's OpenFIGI answers as one table (ticket 80): every
+# reading of figi-answers.yaml for that kind (`answers`), the verified units
+# of OpenFIGI's `answers_cusip` or `answers_isin` runs (ticket 120; each unit
+# 16 files, at most 256 units), put together so figi-pairs.yaml takes each kind
+# under one name. Run once for CUSIPs and once for ISINs. Pin canonical JSON of
+# this file as the source.combine contract.
 execution:
   profile: source.combine
 combine:
@@ -11,7 +12,7 @@ combine:
   groups: {}
   tables:
     found:
-      source: [answers_1, answers_2, answers_3, answers_4, answers_5, answers_6, answers_7, answers_8]
+      source: [answers]
       table: found
       checks: {}
       where: {}
