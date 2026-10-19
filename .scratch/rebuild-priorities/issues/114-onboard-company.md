@@ -34,5 +34,6 @@ Type: task. Status: in progress (Claude, 2026-10-19). Then GLEIF and the rest, o
 - [x] `rules run --target mastering`, no feed, on a bundle of 512 captured Companies (cm27-raw bundle 1-1) (2026-10-19 11:53 ET): every step's units verified by separate verifier logins (main 6, keys, catalog, census, combine 6, records, merge, processed), run `complete`, 65 s; MDM holds 486 Company masters bound by CIK, 26 held back `classification_deferred` with open reviews, no identifier value held by two masters (no duplicate Company)
 - [x] Slice 1 three-axis review (2026-10-19 08:21 ET): GoF "leave it" (one readability edit taken); Standards: a run with no feed could hold a capture step, an empty feed counted as none, no test through `Bookkeeping.start` (all fixed, 2 tests); Spec: stale "activation needs an acquisition proof" in COMPLETION.md and two docs (rewritten), how live data is switched on later (APPROVE.md: a new version). 188 passed
 - [x] Slice 1 PR, CI, merge (#1108 merged 2026-10-19 08:30 ET)
+- [x] The `rules run` fix: PR #1110 merged 2026-10-19 08:51 ET; its reviews (GoF: leave it; Standards: name a source only for a source document; Spec: the carried proofs' exact account) landed after the merge, so they follow in a second PR
 - [ ] Tickets 02, 71 and 14 updated
 - [ ] Learning → skill
