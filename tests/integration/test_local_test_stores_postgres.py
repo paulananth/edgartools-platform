@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+
+from edgar_warehouse.control_contract import Blocked
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
@@ -98,6 +100,16 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         with engine("mdm", "mdm_governance").connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM mdm.dataset_mapping WHERE source_code=:c"),
                                {"c": "sec.submissions.person.v1"}) == 1
+        # Another source cannot register over a dataset Person owns.
+        other = {**person, "source": "invented.other"}
+        saved = rules.save("source", "invented.other", "invented", other)
+        rules.prove("source", "invented.other", "invented",
+                    {"digest": saved["digest"], "batch_hash": "c" * 64, "passed": True})
+        waiting = next(p for p in rules.pending() if p["name"] == "invented.other")
+        rules.approve("source", "invented.other", "invented", evidence=waiting["evidence_hash"],
+                      by="invented operator", words="Approved invented fixture")
+        with pytest.raises(Blocked, match="belongs to source sec.submissions.person"):
+            rules.activate("source", "invented.other", "invented", mdm_engine=engine("mdm", "mdm_governance"))
         for login in ("mdm_runtime", "mdm_verifier", "mdm_governance"):
             reader = engine("mdm", login)
             with reader.connect() as conn:

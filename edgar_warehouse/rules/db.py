@@ -205,6 +205,10 @@ class Rules:
                         for code, entry in body["mdm"].items():
                             registration_authority(selected_export, code, entry["contract"])
                             existing = destination.execute(text("SELECT mapping_version,body FROM mdm.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
+                            # A dataset belongs to the source that first registered it.
+                            owner = ((existing or {}).get("body", {}).get("registry_evidence", {}).get("rules") or {}).get("name")
+                            if owner is not None and owner != name:
+                                raise Blocked(f"Dataset {code} belongs to source {owner}, not {name}")
                             if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
                                 register_dataset(destination, code, entry["contract"], rules_authority=selected_export)
                             reading = current_reading(destination, code)

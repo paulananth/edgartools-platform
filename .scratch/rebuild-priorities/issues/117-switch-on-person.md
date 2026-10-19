@@ -15,5 +15,6 @@ This finishes the decoupling ticket 114 made (slice 1, #1108) under the operator
 
 - [x] A source with no feed of its own activates and registers its datasets on its pipes alone (`registration_authority` checks a feed only when the source declares acquisition; `Rules.activate` no longer refuses it) (2026-10-19 12:39 ET). GoF consult: one condition moved, no new structure. Test: `tests/integration/test_local_test_stores_postgres.py` activates Person's real document into a store's MDM and finds its dataset registered (6 passed with `tests/unit/test_processing_authority.py`)
 - [ ] Save, record the 2026-10-14 proof carried forward (#1095 named), approve under the standing approval, activate in the `company-on` store; `rules run` on a captured bundle
-- [ ] Three-axis review, PR, CI, merge
+- [x] Three-axis review (2026-10-19 12:43 ET): GoF: leave it. Spec: stale lines in `docs/specs/source-readiness.md` and Bookkeeping SPEC rewritten; both registration cases tested; this change linked to the generic ruling. Standards: a source with no feed of its own must name the family it reads (`bronze.family`) for each dataset; a dataset belongs to the source that first registered it, and another source's activation is refused; scope: every source with no feed of its own switches on the same way (gleif, iapd.adv, sec.ownership, sec.thirteenf.information_table, sec.nport.*), as the ruling covers "the rest" (each still needs its run target and its own switch-on). Tests: 7 unit, 2 integration passed
+- [ ] PR, CI, merge
 - [ ] Learning → skill

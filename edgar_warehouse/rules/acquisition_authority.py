@@ -178,6 +178,8 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
         ]
         if len(declared) != 1 or declared[0][1]["family"] != contract["family"]:
             raise Blocked("Dataset requires exactly one approved feed with matching family")
+    elif contract["family"] != (export["body"].get("bronze") or {}).get("family"):
+        raise Blocked("Dataset of a source with no feed of its own names the family its source reads (bronze.family)")
     # A dataset is registered when its pipes switch on: the processing
     # authority, not its live acquisition's.
     frozen = processing_authority(export)
