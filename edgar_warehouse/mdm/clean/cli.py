@@ -31,10 +31,11 @@ def prepare_clean_company(args) -> int:
 
 
 def prepare_capture(args) -> int:
-    from .capture_prepare import write_capture_manifest
+    from .target_manifest import write_manifest
 
-    report = write_capture_manifest(
+    report = write_manifest(
         source=args.source,
+        target=args.target,
         capture=args.capture,
         documents=args.documents,
         capture_run=args.capture_run,

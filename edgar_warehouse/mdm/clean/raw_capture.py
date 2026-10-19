@@ -2,8 +2,8 @@
 
 A capture is a folder with `receipts.jsonl` (each captured object's key and
 sha256) and the objects under `bronze/`, keyed as `warehouse/bronze/...`. Name
-Frequency, Company preparation and a captured source's manifest
-(`capture_prepare`) read its documents only through here: a
+Frequency, Company preparation and a declared target's manifest
+(`target_manifest`) read its documents only through here: a
 document is read only when its bytes equal its receipt, and each `source.read`
 unit is executed, then verified, before anything uses its output.
 """

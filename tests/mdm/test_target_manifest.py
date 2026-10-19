@@ -1,12 +1,12 @@
-"""One writer builds a declared target's input manifest (ticket 14, slice 2): for
-SEC Person it builds exactly what that source's own writer built."""
+"""One writer builds a declared target's input manifest (ticket 14, slice 2), from
+the source's Bookkeeping section version 2. Slice 2a proved it builds exactly
+what SEC Person's own writer built; slice 2b deleted that writer."""
 import json
 
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, validate
-from edgar_warehouse.mdm.clean.capture_prepare import write_capture_manifest
 from edgar_warehouse.mdm.clean.target_manifest import write_manifest
 from edgar_warehouse.rules import files
 from tests.support.memory_journal import MemoryJournal
@@ -26,12 +26,32 @@ def options(tmp_path, **changes):
             "journal": MemoryJournal(), **changes}
 
 
-def test_the_declared_writer_builds_what_the_sources_own_writer_built(tmp_path):
-    own = write_capture_manifest(**options(tmp_path))
-    declared = write_manifest(target="mastering", **options(tmp_path))
+def captured(tmp_path):
+    """Each document's reference in the capture, in key order."""
+    return [(tmp_path / "capture" / "bronze" / key(cik).removeprefix("warehouse/bronze/")).as_uri()
+            for cik in sorted(DOCUMENTS, key=key)]
 
-    assert declared == own
-    assert set(Artifacts().json(own["manifest"])["steps"]) == {"read", "records", "merge", "processed"}
+
+def steps_of(report):
+    return Artifacts().json(report["manifest"])["steps"]
+
+
+def test_the_declared_writer_builds_persons_mastering_manifest(tmp_path):
+    report = write_manifest(target="mastering", **options(tmp_path))
+    steps = steps_of(report)
+
+    assert {name: len(units) for name, units in steps.items()} == {"read": 1, "records": 1, "merge": 1, "processed": 1}
+    read = Artifacts().json(steps["read"][0]["input"])
+    assert [a["uri"] for a in read["artifacts"]] == captured(tmp_path)
+    assert Artifacts().json(read["contract"]) == files.load(files.ROOT / "sources" / SOURCE / "source.yaml")
+    records = steps["records"][0]
+    assert {k: records["keys"][k] for k in ("table", "record_column", "dataset", "revision")} == {
+        "table": "submissions", "record_column": "record", "dataset": "sec.submissions.person.v1", "revision": "0"}
+    assert records["input"]["compose"]["slots"] == {"read": [{"step": "read", "key": "read-0"}]}
+    assert steps["merge"][0]["input"] == {"from": {"step": "records", "key": "records"}}
+    assert steps["merge"][0]["keys"] == {"batch_id": report["publication"]["batch_id"],
+                                         "consumer": report["publication"]["consumer"]}
+    assert len(Artifacts().json(steps["processed"][0]["input"])["files"]) == len(DOCUMENTS)
 
 
 def test_the_engine_sees_version_one_steps():
@@ -87,15 +107,17 @@ def test_a_record_column_the_reading_does_not_declare_is_refused(tmp_path, monke
         write_manifest(target="mastering", **options(tmp_path))
 
 
-def test_both_writers_cut_the_same_read_units(tmp_path, monkeypatch):
-    from edgar_warehouse.mdm.clean import capture_prepare
-
+def test_the_declared_slices_cut_the_read_units(tmp_path, monkeypatch):
     body = files.source(SOURCE)
     body["bookkeeping"]["targets"]["mastering"]["steps"][0]["units"] = {"slices": {"bytes": 2000}}
-    monkeypatch.setattr(capture_prepare, "READ_BYTES", 2000)
-    own = write_capture_manifest(**options(tmp_path))
     monkeypatch.setattr(files, "source", lambda name, root=None: body)
-    declared = write_manifest(target="mastering", **options(tmp_path))
+    steps = steps_of(write_manifest(target="mastering", **options(tmp_path)))
 
-    assert declared == own
-    assert len(Artifacts().json(own["manifest"])["steps"]["read"]) > 1
+    read = [[a["uri"] for a in Artifacts().json(unit["input"])["artifacts"]] for unit in steps["read"]]
+    assert len(read) > 1 and sum(read, []) == captured(tmp_path)
+    assert [u["keys"]["unit"] for u in steps["read"]] == [s["key"] for s in steps["records"][0]["input"]["compose"]["slots"]["read"]]
+
+
+def test_a_source_whose_section_states_no_plan_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="must be version 2"):  # SEC Company keeps its own writer for now
+        write_manifest(target="mastering", **options(tmp_path, source="sec.submissions.company"))

@@ -38,9 +38,10 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
                      "by default only documents the Change Journal does not record as processed under these rules")
     prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
 
-    capture = mdm_sub.add_parser("prepare-capture", help="Write a source's mastering target input manifest for one "
-                                 "bundle of captured documents, each read whole (e.g. sec.submissions.person)")
-    capture.add_argument("--source", required=True, help="The source under rules/sources/ (its reading keeps each document whole)")
+    capture = mdm_sub.add_parser("prepare-capture", help="Write a declared target's input manifest for one bundle of "
+                                 "captured documents, from the source's Bookkeeping section (version 2)")
+    capture.add_argument("--source", required=True, help="The source under rules/sources/")
+    capture.add_argument("--target", default="mastering", help="The source's Bookkeeping target (default mastering)")
     capture.add_argument("--capture", required=True, help="A capture folder: receipts.jsonl and bronze/")
     capture.add_argument("--documents", required=True, help="JSON file: this bundle's documents by receipt key (at most 512)")
     capture.add_argument("--capture-run", required=True, help="Approved capture run ID")
