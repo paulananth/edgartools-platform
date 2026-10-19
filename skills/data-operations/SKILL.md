@@ -140,7 +140,7 @@ submits one source.
    means the source is not wired: report that and stop. Do not invent a target
    or submit a different source to stand in for it. A successful check does
    not install, approve or start a run. Detail is in
-   [source sequencing](../../docs/specs/source-sequencing.md).
+   `docs/specs/source-sequencing.md` in the repository.
 2. **Install that source only.** Save its document into the Rules database.
    `rules load` saves every file under a root; do not use it here.
    ```bash
