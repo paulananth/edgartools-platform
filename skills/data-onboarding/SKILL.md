@@ -735,6 +735,17 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    - a one-line `note`.
 
    A failing run is recorded too; it can be replaced until it is approved.
+
+   **A source tested with `rules test`** records its run itself: save the
+   version first, then add `--version <v>` to the `rules test` command, with
+   `RULES_DATABASE_URL` naming the operator's Rules Database (set in their
+   own terminal). The run is checked before it starts: the saved version must
+   be the rules on disk. Its proof is the report's counts, and its
+   `batch_hash` the first pass's input manifest. A source that declares
+   `acquisition` is refused there: its passing proof needs its capture run's
+   acquisition evidence, which a test never makes, so record it with
+   `record-proof` once that evidence exists.
+
    The merge rules are one document, `platform`, saved whole from
    `rules/merge/policy.yaml` (the kind files beside it come too):
    ```bash

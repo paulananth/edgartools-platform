@@ -51,11 +51,11 @@ def _test(args):
     try:
         result = run(source=args.source, capture=args.capture, documents=args.documents, capture_run=args.capture_run,
                      as_of=args.as_of, stores=args.stores, out=args.out, minutes=args.minutes,
-                     target=args.target)
+                     target=args.target, version=args.version)
     except TestRunError as error:
         print(f"Test run stopped: {error}", file=sys.stderr)
         return 1
-    print(json.dumps({"report": str(args.out), "passed": result["passed"],
+    print(json.dumps({"report": str(args.out), "passed": result["passed"], "recorded": result.get("recorded"),
                       "second_pass_changed_nothing": result["second_pass_changed_nothing"]}, indent=2))
     return 0 if result["passed"] else 1
 
@@ -261,6 +261,8 @@ def register(subparsers):
     test.add_argument("--out", required=True, type=Path, help="Where the counts-only report is written")
     test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
     test.add_argument("--target", default="mastering", help="The source's Bookkeeping target (default mastering)")
+    test.add_argument("--version", help="Record the run as this saved version's test run, in the Rules Database "
+                      "RULES_DATABASE_URL names (the version must be the rules on disk)")
     test.set_defaults(handler=_test)
     check = commands.add_parser("check", help="Check each rules file as `rules save` would, offline: "
                                 "it loads, its targets and acquisition hold, the merge rules pass")

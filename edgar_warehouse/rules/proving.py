@@ -116,6 +116,22 @@ def counts(engine) -> dict:
         }
 
 
+def quality(folder: Path, mdm) -> dict:
+    """What the data quality rule did to one pass's prepared records, per fix, flag, withheld value
+    and exception: the Merge Stage's own reader (`batch_input`) and its count (`quality.counts`)."""
+    from edgar_warehouse.mdm.clean.execution import batch_input
+    from edgar_warehouse.mdm.clean.quality import counts as quality_counts
+    from edgar_warehouse.mdm.clean.store import Store
+
+    manifest = json.loads((folder / "manifest.json").read_text())
+    assertions, deferred = [], []
+    for batch in manifest["batches"]:
+        found = batch_input(batch, folder, Store(mdm), policy_digest=manifest["policy_digest"])
+        assertions += found["assertions"]
+        deferred += found["deferred"]
+    return quality_counts(assertions, deferred)
+
+
 class _Commands:
     """The platform's own commands, each run as its duty's login in its own process."""
 
@@ -160,8 +176,59 @@ class _Commands:
         return json.loads(self("worker", "bookkeeping", "finalize", run_id))
 
 
+def recording(source: str, version: str, document: dict, sandbox: str):
+    """The operator's Rules Database to record this test run in, checked before the run: the saved
+    version is the rules on disk, and the source declares no acquisition (whose proof comes from its
+    capture run, never from a test)."""
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.exc import ArgumentError
+
+    from edgar_warehouse.control_contract import Blocked
+
+    from .db import Rules
+
+    url = os.environ.get("RULES_DATABASE_URL")
+    if not url:
+        raise TestRunError("Set RULES_DATABASE_URL to the operator's Rules Database in your own terminal to record")
+    def place(address):
+        try:
+            found = make_url(address)
+        except ArgumentError:
+            return address
+        return found.host, found.port, found.database
+
+    if place(url) == place(sandbox):
+        raise TestRunError("The local stores' Rules Database is the test's sandbox; record into the operator's")
+    rules = Rules(create_engine(url))
+    try:
+        saved = rules.version("source", source, version)
+    except Blocked as error:
+        raise TestRunError(f"{source} has no saved version {version}: save it first (`rules save`)") from error
+    if saved["digest"] != digest(document):
+        raise TestRunError(f"Version {version} is not the rules on disk: save the files tested, or test that version")
+    if "acquisition" in json.loads(saved["body"]):
+        raise TestRunError(f"{source} declares acquisition: record its test run with its capture run's acquisition "
+                           "proof (`rules record-proof`)")
+    return rules
+
+
+def record(rules, result: dict, *, source: str, version: str) -> dict:
+    """The report as the version's test run (`Rules.prove`): passing or not, with its counts."""
+    proof = {"digest": result["rules_digest"], "batch_hash": result["batch_hash"], "passed": result["passed"],
+             "evidence": {key: result[key] for key in ("passes", "second_pass_changed_nothing", "capture",
+                                                       "policy_digest", "contract_digests", "target")},
+             "note": result["test_run"]}
+    from edgar_warehouse.control_contract import Blocked
+
+    try:
+        rules.prove("source", source, version, proof)
+    except Blocked as error:
+        raise TestRunError(f"The test run was not recorded: {error}") from error
+    return proof
+
+
 def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of: str, stores: Path,
-        out: Path, minutes: float = 60, target: str = TARGET) -> dict:
+        out: Path, minutes: float = 60, target: str = TARGET, version: str | None = None) -> dict:
     """Two runs of one of the source's targets (default `mastering`) on the capture; the report, written to `out`."""
     from edgar_warehouse.change_journal.store import ChangeJournal
     from edgar_warehouse.mdm.clean.store import register_dataset, register_policy
@@ -173,6 +240,17 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
     declared = ((document.get("bookkeeping") or {}).get("targets") or {}).get(target)
     if declared is None:
         raise TestRunError(f"{source} declares no `{target}` target in its source.yaml")
+    from edgar_warehouse.mdm.clean.target_manifest import plan
+
+    try:
+        plan(document, target)  # the declaration the writer will read, refused before any store is touched
+    except ValueError as error:
+        raise TestRunError(str(error)) from error
+    prepare = next((step for step in declared["steps"] if step["operation"] == "mdm.prepare"), None)
+    code = ((prepare or {}).get("input") or {}).get("keys", {}).get("dataset")
+    if code not in (document.get("mdm") or {}):
+        raise TestRunError(f"Target {target} prepares none of {source}'s Dataset Contracts")
+    recorder = recording(source, version, document, env["governance"]["RULES_DATABASE_URL"]) if version else None
     mdm = create_engine(env["governance"]["RULES_MDM_ACTIVATION_DATABASE_URL"])
     rules_engine = create_engine(env["governance"]["RULES_DATABASE_URL"])
     journal_engine = create_engine(env["worker"]["CHANGE_JOURNAL_DATABASE_URL"])
@@ -192,7 +270,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                 register_dataset(conn, code, entry["contract"],
                                  rules_authority=sandbox_authority(source, code, entry["contract"], capture_sha))
         rules = Rules(rules_engine)
-        name, version = f"rules-test.{source}.{uuid4().hex[:8]}", "1"
+        name, sandbox_version = f"rules-test.{source}.{uuid4().hex[:8]}", "1"
         body = {"source": name, "bookkeeping": document["bookkeeping"]}
         manifest_root = env["worker"]["BOOKKEEPING_MANIFEST_ROOT"]
         root = Path(manifest_root.removeprefix("file://")) / name
@@ -211,10 +289,10 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
             if report["manifest"] is None:
                 raise TestRunError("Every document is recorded as processed already: nothing to test")
             if number == 1:
-                saved = rules.save("source", name, version, body)
-                rules.prove("source", name, version, {"digest": saved["digest"], "passed": True,
-                                                     "batch_hash": report["manifest"]["sha256"]})
-                rules.activate("source", name, version)
+                saved = rules.save("source", name, sandbox_version, body)
+                rules.prove("source", name, sandbox_version, {"digest": saved["digest"], "passed": True,
+                                                             "batch_hash": report["manifest"]["sha256"]})
+                rules.activate("source", name, sandbox_version)
             output = commands("worker", "rules", "run", "--source", name, "--target", target,
                               "--input-manifest", report["manifest"]["uri"],
                               "--input-sha256", report["manifest"]["sha256"])
@@ -226,12 +304,17 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
             passes.append({"run_counts": final.get("counts"), "mdm": held,
                            # A held-back record is set aside and has a review: count it once.
                            "records_in_mdm": sum(sum(held[part].values()) for part in ("stage_records", "set_aside")),
+                           "manifest_sha256": report["manifest"]["sha256"],
+                           "quality": quality(root / f"pass-{number}" / prepare["name"], mdm),
                            "seconds": round(time.monotonic() - began, 1)})
         result = {
             "test_run": f"{source}, target {target}, on a local capture",
+            "target": target,
             "source": source,
             "rules_digest": digest(document),
+            "batch_hash": passes[0]["manifest_sha256"],
             "policy_digest": policy_digest,
+            "contract_digests": {code: digest(entry["contract"]) for code, entry in (document.get("mdm") or {}).items()},
             "capture": {"receipts_sha256": capture_sha, "documents_sha256": hashlib.sha256(documents.read_bytes()).hexdigest(),
                         "capture_run": capture_run},
             "passes": passes,
@@ -242,9 +325,13 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                       and not any(passes[0]["mdm"]["identifiers_on_two_masters"].values()),
         }
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
+        out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")  # the evidence first, recorded or not
+        if recorder is not None:
+            record(recorder, result, source=source, version=version)
+            result["recorded"] = {"version": version}
+            out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
         return result
     finally:
-        for engine in (mdm, rules_engine, journal_engine):
+        for engine in (mdm, rules_engine, journal_engine, *([recorder.engine] if recorder else [])):
             engine.dispose()
 

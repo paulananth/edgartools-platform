@@ -68,7 +68,7 @@ class _Run:
 
 
 
-def _plan(reading: dict, target: str) -> list[dict]:
+def plan(reading: dict, target: str) -> list[dict]:
     """The target's steps as written, each checked by Bookkeeping's own rules."""
     body = reading.get("bookkeeping") or {}
     if body.get("version") != 2:
@@ -195,7 +195,7 @@ def write_manifest(
     reading = rules_files.source(source)
     if target not in ((reading.get("bookkeeping") or {}).get("targets") or {}):
         raise ValueError(f"The source declares no `{target}` target")
-    steps = _plan(reading, target)
+    steps = plan(reading, target)
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]
     if len(prepare) != 1:
         raise ValueError("A target prepares one publication: exactly one mdm.prepare step")
