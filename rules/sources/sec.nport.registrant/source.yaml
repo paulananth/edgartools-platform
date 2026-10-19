@@ -18,6 +18,76 @@
 source: sec.nport.registrant
 bronze:
   family: sec.nport-datasets
+# The quarter's registrants through the Merge Stage (ticket 118): the filing
+# dates, the registrant rows with them, each CIK, its latest filing, one record
+# each. A bundle is the quarter's data set (one file).
+bookkeeping:
+  version: 2
+  targets:
+    mastering:
+      steps:
+        - name: submissions
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: submissions.yaml}
+        - name: filings
+          operation: source.read
+          requires: [submissions]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            lookups:
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                      max_input_bytes: 67108864, max_input_rows: 1000000}
+        - name: ciks
+          operation: source.combine
+          requires: [filings]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {filings: {all: filings}}}
+        - name: combine
+          operation: source.combine
+          requires: [ciks, filings]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine.yaml, readings: {ciks: {step: ciks}, filings: {all: filings}}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: registrant, record_column: record, dataset: sec.nport.registrant.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 execution:
   profile: source.read
   workers: 1
