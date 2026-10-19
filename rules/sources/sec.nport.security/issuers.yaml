@@ -19,6 +19,13 @@ read:
   lookup_sets:
     isin: {max_values: 10000000, max_bytes: 268435456, max_value_bytes: 64, pairs: true}
     umbrella: {max_values: 1000000, max_bytes: 67108864, max_value_bytes: 64, pairs: true}
+    # Each filing's date by its accession number (filings.yaml, ticket 113).
+    filed: {max_values: 1000000, max_bytes: 67108864, max_value_bytes: 64, pairs: true}
+  # The quarter's data set period, supplied by the run: a holding whose filing
+  # has no date takes the quarter's date (operator, 2026-10-19: "use the
+  # filing date or quarter date or inception date"; ticket 113).
+  context:
+    period: {type: text}
   tables:
     security_issuer:
       each: .
@@ -55,6 +62,14 @@ read:
             path: ISSUER_CUSIP
             default: ""
             transforms: [{case: upper}]
+        # The holding's filing date (YYYY-MM-DD), else the quarter's: an
+        # ISSUED_BY link starts at the earliest (ticket 113).
+        filed:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: "null"}
+            - transform: {value: {context: {name: period}}, transforms: [{regex_replace: {pattern: 'T.*$', with: ''}}]}
         issuer_lei:
           coalesce:
             skip: "null"
@@ -99,6 +114,14 @@ read:
           else: {value: {path: NO_SUCH_COLUMN}}
       columns:
         isin: {member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
+        # The holding's filing date (YYYY-MM-DD), else the quarter's: an
+        # ISSUED_BY link starts at the earliest (ticket 113).
+        filed:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: "null"}
+            - transform: {value: {context: {name: period}}, transforms: [{regex_replace: {pattern: 'T.*$', with: ''}}]}
         issuer_lei:
           coalesce:
             skip: "null"

@@ -21,6 +21,6 @@ The N-PORT Security publication states the quarter's data set period as its effe
 - [x] On the real quarter (ticket 22's Companies-only proof): every prepared batch dated 2026-06-30; 41,360 links would resolve with their issuer's Company (counted, not loaded) 2026-10-16 15:20 ET
 - [x] Noted: the ISIN contract's publications are dated the same way (`period` is on both holding tables; its record key stays the ISIN, and it has no links yet: ticket 102) 2026-10-16 17:53 ET
 - [x] Noted: `period` is a declared context field, so a holdings reading without it is refused (`invalid_context`); the earlier scratch runs (`security_test_run.py`, `security_figi_read.py`, `issuer_proving_run*.py`) need `period` to run again 2026-10-16 17:53 ET
-- [ ] The N-PORT run wiring passes `period` in the holdings reading's context and `effective_column: period` to `mdm.prepare`: no platform command builds the N-PORT run yet; recorded on ticket 79 (its run wiring part)
+- [ ] ~~The N-PORT run wiring passes `period` in the holdings reading's context and `effective_column: period` to `mdm.prepare`~~ superseded by ticket 113 (operator, 2026-10-19: the quarter "if at all it should be captured in silver not on mdm"; an ISSUED_BY link "if issued by already exist do not overight if not use the filing date or quarter date or inception date")
 - [x] In ticket 22's PR #1022, merged by the operator 2026-10-16 18:27 ET
 - [x] Learning → skill: data-onboarding "Count the links MDM accepts" (#1018); a link's observed start comes from its publication's effective time 2026-10-16 17:53 ET

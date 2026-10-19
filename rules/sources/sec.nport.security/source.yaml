@@ -42,8 +42,9 @@ read:
       max_value_bytes: 64
       pairs: true
   # The quarter's data set period (an instant with its zone), supplied by the
-  # run: it dates each publication, so a link starts, as observed, at the
-  # first quarter that names it (ticket 100).
+  # run: a column of the holdings for silver; it dates no publication in MDM
+  # (operator, 2026-10-19: "if at all it should be captured in silver not on
+  # mdm"; ticket 113).
   context:
     period: {type: text}
   tables:
@@ -250,8 +251,8 @@ mdm:
       schema_version: sec-nport-security-v1
       record_key: the CUSIP, upper-cased; one record per CUSIP over the quarter
       publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
-      effective_time: the quarter's data set period the run supplies (`period`); a link
-        starts, as observed, at the first quarter that names it
+      effective_time: the run's as-of time; the quarter dates nothing in MDM, and a link
+        starts at the earliest filing date (else the quarter's date) of the holdings that name its issuer
       semantics: patch
       completeness: the Securities one quarter's holdings name; no retirement by absence
       nonblocking_deferred_reasons:
@@ -309,6 +310,7 @@ mdm:
           - lei
           - isin
           - issuer
+          - filed
         version: sec-nport-security-v1
         retain_deferred: true
         source_record_provenance: true
@@ -331,12 +333,13 @@ mdm:
           each: issuer
           target_key: [item.issuer_lei]
           target_source: gleif.level1.v1
-          # The holdings state no date of their own, so `item.valid_from` is
-          # always empty: MDM starts the link when it first sees it, the
-          # quarter's period that dates each publication (ticket 100; the run
-          # passes `period` in the context and `effective_column: period` to
-          # mdm.prepare).
-          valid_from: item.valid_from
+          # The link starts at the earliest filing date of the CUSIP's holdings
+          # that name the issuer, a holding with none counting the quarter's
+          # date (ticket 113; operator, 2026-10-19: "use the
+          # filing date or quarter date or inception date"), and a link that
+          # exists keeps its start (ISSUED_BY `keeps_start`).
+          valid_from: filed.0.filed
+          time_format: date
           scope: SEC N-PORT issuer
   sec.nport.security_isin.v1:
     contract:
@@ -345,8 +348,8 @@ mdm:
       schema_version: sec-nport-security-isin-v1
       record_key: the ISIN, upper-cased; one record per ISIN of a holding with no usable CUSIP
       publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
-      effective_time: the quarter's data set period the run supplies (`period`); a link
-        starts, as observed, at the first quarter that names it
+      effective_time: the run's as-of time; the quarter dates nothing in MDM, and a link
+        starts at the earliest filing date (else the quarter's date) of the holdings that name its issuer
       semantics: patch
       completeness: the Securities one quarter's holdings name; no retirement by absence
       nonblocking_deferred_reasons:
@@ -401,6 +404,7 @@ mdm:
           - title
           - lei
           - issuer
+          - filed
         version: sec-nport-security-isin-v1
         retain_deferred: true
         source_record_provenance: true
@@ -414,12 +418,13 @@ mdm:
           isin: isin
         # As the CUSIP contract's (ticket 102): the link names GLEIF's record of
         # the one LEI the ISIN's holdings state, waits until that record is
-        # mastered, and starts at the quarter's period that dates each
-        # publication.
+        # mastered, and starts at the earliest filing date (else the quarter's
+        # date) of the ISIN's holdings that name it (ticket 113).
         relationships:
         - type: ISSUED_BY
           each: issuer
           target_key: [item.issuer_lei]
           target_source: gleif.level1.v1
-          valid_from: item.valid_from
+          valid_from: filed.0.filed
+          time_format: date
           scope: SEC N-PORT issuer

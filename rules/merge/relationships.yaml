@@ -14,6 +14,10 @@
 #                     mastered) or review (they are, and a steward is told)
 #   one_parent: true  for a hierarchy: one parent at a time per scope; two
 #                     overlapping parents are both held back for a steward
+#   keeps_start: true a link that exists keeps its start: a later record's later
+#                     start does not move it, an earlier one (a backfilled
+#                     period) moves it back, stated or observed alike; never
+#                     on a hierarchy
 #   ultimate_parent   for a hierarchy: derive each record's ultimate parent with
 #                     this algorithm: accounting-chain-v2 keeps its history, a
 #                     period for each stretch its chain held (v1, the run date
@@ -32,7 +36,7 @@
 #
 # Before this file the same table was held in code; a policy registered without
 # this section still uses it (relationships.TYPES_V0), so the two must agree.
-version: relationship-types-v4
+version: relationship-types-v5
 types:
   # Consolidation (GLEIF's relationship file names; IFRS 10 / ASC 810).
   IS_DIRECTLY_CONSOLIDATED_BY:
@@ -73,9 +77,13 @@ types:
   HOLDS:
     from: [company, fund_structure, person]
     to: [security]
+  # A Security keeps the start its issuer link first got (ticket 113;
+  # operator, 2026-10-19: "if issued by already exist do not overight"; a
+  # backfill: "Keep the earlier date (Recommended)").
   ISSUED_BY:
     from: [security]
     to: [company, fund_structure, government, international_organization]
+    keeps_start: true
   # Custody (Form ADV Schedule D 5.K(3)). The name, operator 2026-10-09
   # 10:38 ET: "CUSTODIAN (Recommended)". Left out at 14:56 ET, when the Merge
   # Stage refused a connected group over 10,000 records (one custodian is named

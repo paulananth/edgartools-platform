@@ -68,7 +68,9 @@ def test_the_rules_file_names_every_type_as_its_source_does():
     # Every type the old table had either keeps its name and rules, or is gone.
     for name, spec in BEFORE.items():
         if name in types and name not in ("IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"):
-            assert types[name] == spec, name
+            # ISSUED_BY keeps its start since ticket 113 (2026-10-19); its rules are otherwise the same.
+            found = {k: v for k, v in types[name].items() if not (name == "ISSUED_BY" and k == "keeps_start")}
+            assert found == spec, name
     # The direct parent derives its ultimate parent as the stated type's name.
     assert types["IS_DIRECTLY_CONSOLIDATED_BY"]["ultimate_type"] == "IS_ULTIMATELY_CONSOLIDATED_BY"
 

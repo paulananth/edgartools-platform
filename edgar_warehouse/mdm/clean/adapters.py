@@ -112,6 +112,10 @@ def value(row: dict, path: str):
         return row
     result: Any = row
     for part in path.split("."):
+        # A number names a list's item (`filed.0.filed`: a reduction's first sample).
+        if isinstance(result, list) and part.isdigit():
+            result = result[int(part)] if int(part) < len(result) else None
+            continue
         if not isinstance(result, dict):
             return None
         result = result.get(part)

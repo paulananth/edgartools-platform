@@ -1,0 +1,72 @@
+# Each filing's date (SUBMISSION.tsv, one row per filing), read once, streamed,
+# to build the pair set that gives each holding its filing's date (ticket 113;
+# operator, 2026-10-19: an ISSUED_BY link starts at "the filing date or
+# quarter date or inception date"). SEC writes the date as DD-MON-YYYY
+# (every one of the 2026 Q2 data set's 14,416 filings); the set holds it as a
+# calendar date, YYYY-MM-DD, so the earliest is the lexically first; a date of
+# any other shape is none, and its holdings take the quarter's date.
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 1}
+  tables:
+    filed:
+      each: .
+      columns:
+        accession: {text: {path: ACCESSION_NUMBER}}
+        filed:
+          concat:
+          # The year: the four digits after the last hyphen; anything else is no date.
+          - text:
+              path: FILING_DATE
+              transforms:
+              - {regex_replace: {pattern: '^.*-', with: ''}}
+              - {regex_replace: {pattern: '^(.*[^0-9].*|.{0,3}|.{5,})$', with: ''}}
+              null_if: [""]
+          - const: {value: "-"}
+          # The month: the three letters between the hyphens, as its number.
+          - text:
+              path: FILING_DATE
+              transforms:
+              - {case: upper}
+              - {regex_replace: {pattern: '^[^-]*-|-[^-]*$', with: ''}}
+              - {replace: {from: JAN, to: "01"}}
+              - {replace: {from: FEB, to: "02"}}
+              - {replace: {from: MAR, to: "03"}}
+              - {replace: {from: APR, to: "04"}}
+              - {replace: {from: MAY, to: "05"}}
+              - {replace: {from: JUN, to: "06"}}
+              - {replace: {from: JUL, to: "07"}}
+              - {replace: {from: AUG, to: "08"}}
+              - {replace: {from: SEP, to: "09"}}
+              - {replace: {from: OCT, to: "10"}}
+              - {replace: {from: NOV, to: "11"}}
+              - {replace: {from: DEC, to: "12"}}
+              # Anything that is not now a month number is no date.
+              - {regex_replace: {pattern: '^(.*[^0-9].*|.{0,1}|.{3,})$', with: ''}}
+              null_if: [""]
+          - const: {value: "-"}
+          # The day: the two digits before the first hyphen; anything else is no date.
+          - text:
+              path: FILING_DATE
+              transforms:
+              - {regex_replace: {pattern: '-.*$', with: ''}}
+              - {regex_replace: {pattern: '^(.*[^0-9].*|.{0,1}|.{3,})$', with: ''}}
+              null_if: [""]
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: SUBMISSION.tsv
+    # Measured (2026 Q2): 14,416 filings.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000

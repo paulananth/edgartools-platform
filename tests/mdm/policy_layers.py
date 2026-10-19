@@ -130,6 +130,17 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
+def without_issued_by_keeps_start(policy: dict) -> dict:
+    """Rebuild priorities ticket 113 (operator, 2026-10-19: "if issued by
+    already exist do not overight"; a backfill: "Keep the earlier date
+    (Recommended)"): ISSUED_BY keeps its start. Peeled, the policy is the one
+    before."""
+    body = _copy(policy)
+    body["relationships"]["types"]["ISSUED_BY"].pop("keeps_start")
+    body["relationships"]["version"] = "relationship-types-v4"
+    return body
+
+
 def without_custodian(policy: dict) -> dict:
     """Rebuild priorities ticket 75 (operator, 2026-10-14: "Yes, a new ticket
     (Recommended)"): the CUSTODIAN relationship type, an adviser to the
@@ -255,6 +266,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Recorded under the standing rule on its tests (2026-10-19, ticket 113).
+    (without_issued_by_keeps_start, "eacd7b763ae928188f339f7fb8c9e57f4bdb0c8132f804f8fd2355dc29f92909"),
     # Switched on: "Switch on all six (Recommended)" (2026-10-17 21:03 ET, ticket 79).
     (without_nport_switch_on, "d11d8361d90eb9e03c83272e135c9a9179f21bcd7310b7cfd0fbed8174024b31"),
     # Deleted: "Delete both (Recommended)" (2026-10-17, ticket 09).
