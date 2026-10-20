@@ -166,6 +166,21 @@ that row before MDM (decided)**, so no ISIN reaches MDM twice.
 only for now (Recommended)"). Before proposing it, count the ISIN-only
 Securities that share a share-class FIGI with a CUSIP Security.
 
+## Every Security uniquely identifiable
+
+Operator, 2026-10-20 08:24 ET: "Securities and funds must be uniquely
+identifiable". A Security exists only for an identifier issued for it; a
+fund's own label never makes one. 2026 Q2 N-PORT, 5,347,869 holdings:
+
+| A holding identified by | Holdings | Becomes |
+|---|---|---|
+| CUSIP | 3,546,715 (66.3%) | a Security (live) |
+| ISIN, no CUSIP | 812,952 (15.2%) | a Security (live) |
+| SEDOL, CINS or LoanX in the "other" field | 7,718 | a Security, each by its verified Identifier Contract (decided: "SEDOL, CINS, LoanX (Recommended)"; ticket 125) |
+| A Bloomberg ID or FIGI in the "other" field | 10,415 | a cross-reference only; never joins |
+| A ticker only | 59,409 (mostly futures, forwards, options) | no Security: a ticker is not unique |
+| The fund's own ID only | 909,030 (17%; loans 652,058, forwards, swaps) | **not a Security** (decided: "Not Securities (Recommended)"): a contract between two parties stays a holding under its fund |
+
 ## Share classes
 
 - **A security's share class is a field, not a record** (operator,
