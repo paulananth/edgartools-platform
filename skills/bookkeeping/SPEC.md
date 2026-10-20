@@ -161,9 +161,17 @@ frozen configuration; anything else blocks the unit. The producing target
 runs first. A target that only reads, for another run to read, prepares no
 publication (no `mdm.prepare`). The target is part of what each file is
 processed under, so two targets over the same files (a source's two Dataset
-Contracts) each process them. Open (ticket 121): which of a target's runs a
-reading takes once a second capture exists, and keeping the producing runs'
-units past compaction.
+Contracts) each process them.
+
+**Which runs, over time** (ticket 121; operator, 2026-10-20: "All runs of
+latest capture (Recommended)"). A manifest written from a capture names it
+(`capture`, the capture's run id); the run's submission keeps it. A reading
+takes only the runs of the capture the newest complete run was written from,
+so an identifier never comes back from two captures; runs that name no
+capture (written before ticket 121) count as one capture. A run another run
+names in a slot is not compacted while that run is not complete (migration
+007); once it completes, compaction treats it as usual, and a later reading
+of a compacted capture finds no units and is refused.
 
 A target may declare its run's own inputs, `run: {facts: [names], files:
 [names]}`: facts the operator gives (`--fact name=value`, a JSON value or

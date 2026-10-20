@@ -341,6 +341,7 @@ def write_manifest(
     units: dict[str, list[dict]] = {}
     for step in steps:
         units[step["name"]] = FORMS[step["operation"]](step, run, units)
-    manifest = run.store.put(root, {"version": 2, "steps": units})
+    # The capture it was written from (ticket 121): a reading of this run takes the newest capture's runs.
+    manifest = run.store.put(root, {"version": 2, "steps": units, "capture": capture_run})
     return {"source": source, "source_code": dataset, "target": target, "manifest": manifest,
             "publication": publication, "policy_digest": policy, "scope": scope}

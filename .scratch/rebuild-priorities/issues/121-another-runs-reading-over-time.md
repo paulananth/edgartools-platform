@@ -43,5 +43,7 @@ or the latest unit per identifier), and how a producing run's units are kept
 
 - [x] Decide the rule (operator, 2026-10-20 08:31 ET): "Latest run, kept while read (Recommended)": a reading takes the newest complete run of the named target only, and that run is not compacted while a reading run names it
 - [x] Corrected (2026-10-20 08:32 ET): one capture's answers come in several runs (2026 Q2: 8 per kind), so "latest run" would read an eighth of them; asked again: "All runs of latest capture (Recommended)": every complete run made from the newest capture of the named target, pinned while read (Bookkeeping's compaction already skips a pinned run)
-- [ ] Implement, with a test per case (second capture, forced rerun, compaction, over 256)
+- [x] Implement (2026-10-20 08:53 ET): a manifest names its capture (`target_manifest.py`); the submission keeps it; `verified_units` takes the newest capture's runs; migration 007 keeps a run another live run reads from compaction. Tests: newest capture only, a capture named as text only, kept while read then compacted (`test_configured_bookkeeping_postgres.py`, 65 passed), the manifest's capture (`test_target_manifest.py`, 30 passed), `rules test` end to end (9 passed), the wheel and generated work (7 passed). A forced rerun of the newest capture: same outputs, listed once by sha256 (ticket 120's test)
+- [ ] ~~Over 256 units in one capture~~ stays refused with its count ("a reading takes 1..256"); one capture's OpenFIGI answers are 240 and 243 units. Raise only when a capture needs it
+- [ ] Existing stores take migration 007 by `bookkeeping migrate` (a function replaced; no table change) before the next Securities run
 - [ ] Learning → skill

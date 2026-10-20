@@ -51,6 +51,8 @@ def test_the_declared_writer_builds_persons_mastering_manifest(tmp_path):
     assert steps["merge"][0]["keys"] == {"batch_id": report["publication"]["batch_id"],
                                          "consumer": report["publication"]["consumer"]}
     assert len(Artifacts().json(steps["processed"][0]["input"])["files"]) == len(DOCUMENTS)
+    # The capture it was written from (ticket 121): a reading of this run takes the newest capture's runs.
+    assert Artifacts().json(report["manifest"])["capture"] == "capture-1"
 
 
 def test_the_engine_sees_version_one_steps():

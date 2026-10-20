@@ -174,6 +174,7 @@ class Bookkeeping:
                       "journal": "change-journal-v1", "protocol": PROTOCOL,
                       "rule_version": export["version"], "rules": rules_ref, "inputs": inputs_ref,
                       "target": target, "scope": scope, "worklist_hash": digest(items),
+                      **({"capture": manifest["capture"]} if "capture" in manifest else {}),
                       # Each step's worker profile, frozen: the database admits
                       # only that profile's roles to the step's work (to-do 20b).
                       "profiles": {step["name"]: step["operation"] for step in config["steps"]}}
@@ -598,13 +599,21 @@ class Bookkeeping:
     def verified_units(self, *, source: str, target: str, step: str, kind: str = "source") -> list[dict]:
         """Ticket 120: the verified units of `step` in the complete runs of `source`'s `target`, each
         `{run, step, key, sha256}`, in run and key order. A reading is deterministic, so the same files
-        read twice give the same output: an output held by several units is listed once."""
+        read twice give the same output: an output held by several units is listed once.
+
+        Ticket 121 (operator, 2026-10-20: "All runs of latest capture (Recommended)"): only the runs
+        of the capture the newest complete run was written from, so an identifier never comes back
+        from two captures. Runs that name no capture (written before ticket 121) are one capture."""
         with self.engine.connect() as conn:
-            found = _rows(conn, """SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,
+            found = _rows(conn, """WITH runs AS (SELECT run_id, submission->'capture' AS capture, completed_at
+                    FROM bookkeeping.pipeline_run WHERE state='complete' AND compacted_at IS NULL
+                      AND submission->>'kind'=:kind AND submission->>'name'=:source AND submission->>'target'=:target),
+                  newest AS (SELECT capture FROM runs ORDER BY completed_at DESC, run_id DESC LIMIT 1)
+                SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,
                     w.unit_key AS key, w.receipt->>'sha256' AS sha256, r.completed_at
-                FROM bookkeeping.work_item w JOIN bookkeeping.pipeline_run r ON r.run_id=w.run_id
-                WHERE r.state='complete' AND r.submission->>'kind'=:kind AND r.submission->>'name'=:source
-                  AND r.submission->>'target'=:target AND w.step=:step AND w.state='verified'
+                FROM bookkeeping.work_item w JOIN runs r ON r.run_id=w.run_id
+                WHERE r.capture IS NOT DISTINCT FROM (SELECT capture FROM newest)
+                  AND w.step=:step AND w.state='verified'
                 ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id, w.unit_key""", source=source, target=target, step=step, kind=kind)
         return [{k: unit[k] for k in ("run", "step", "key", "sha256")}
                 for unit in sorted(found, key=lambda unit: (unit["completed_at"], unit["run"], unit["key"]))]

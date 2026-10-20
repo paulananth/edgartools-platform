@@ -304,7 +304,11 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
         raise Blocked("Unsupported input manifest")
     if manifest["version"] == 1 and set(manifest) == {"version", "units"}:
         stages = {step["name"]: manifest["units"] for step in config["steps"]}
-    elif manifest["version"] == 2 and set(manifest) == {"version", "steps"}:
+    elif manifest["version"] == 2 and set(manifest) - {"capture"} == {"version", "steps"}:
+        # A manifest written from a capture names it (ticket 121), so a reading of this run's
+        # output can take the newest capture's runs only.
+        if "capture" in manifest and (not isinstance(manifest["capture"], str) or not manifest["capture"]):
+            raise Blocked("A manifest's capture is the capture's run id, as text")
         stages = manifest["steps"]
         if not isinstance(stages, dict) or set(stages) != {s["name"] for s in config["steps"]}:
             raise Blocked("Manifest must declare exactly the configured steps")
