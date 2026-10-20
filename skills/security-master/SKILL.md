@@ -16,8 +16,9 @@ and what must never happen to it?**
 ## Status of each rule
 
 Rules marked **live** are in `rules/` and proved. Rules marked **decided** are
-ruled and being built (ticket 120); do not describe them to anyone as
-running until the ticket ticks them.
+ruled and built in `rules/` (ticket 120) but not yet proved or switched on; do
+not describe them to anyone as running until the ticket ticks its test run
+and switch-on.
 
 ## Hard stops
 
@@ -39,9 +40,9 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 
 | Source | Dataset | Creates a Security? | Gives |
 |---|---|---|---|
-| SEC N-PORT | `sec.nport.security.v1` | Yes (live) | CUSIP, ISIN (FIGI-agreed), issuer name as filed, title of class, issuer LEI, "issued by" link |
+| SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, ISIN (FIGI-agreed), issuer name as filed, title of class, issuer LEI, "issued by" link |
 | SEC 13F | `sec.thirteenf.information_table.security.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
-| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v1` (ISIN) | Never: joins or waits (live) | All ten OpenFIGI fields (decided; today name, FIGIs, ticker) |
+| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v1` (ISIN) | Never: joins or waits (live) | All ten OpenFIGI fields and every listing (decided) |
 
 The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
 (operator, 2026-10-18: "make openfigi priority 1 and 13f last"; ticket 84).
@@ -53,13 +54,16 @@ The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
   CUSIP, else its ISIN (operator, 2026-10-20: "One master record ... why
   can't one run captures all attributes and builds the cross reference").
   The key has no fixed format; CUSIP and ISIN are each checked as
-  identifiers. Live today: two N-PORT datasets, one keyed by CUSIP, one by
-  ISIN.
+  identifiers, so a bad check digit is held back under its own identifier's
+  reason. One dataset, `sec.nport.security.v2`, replaces the two v1 datasets
+  (a new record key is a new dataset); one target, `mastering`.
 - **Identifiers (match):** `cusip` and `isin`, each verified by its check
   digit (`rules/identifiers/`).
-- **Cross-references (lookup only):** listing FIGI, composite FIGI,
-  share-class FIGI, ticker. `mdm.cross_reference_lookup` finds a Security by
-  them; no rule matches on them.
+- **Cross-references (lookup only):** the only listing's FIGI, the composite
+  FIGI and ticker (the US composite's, else the ISIN country's composite's),
+  the share-class FIGI. `mdm.cross_reference_lookup` finds a Security by them.
+  Every listing's FIGI is also found through `mdm.detail_version` (its key,
+  indexed). No rule matches on any of them.
 
 ## How a Security is merged (live)
 
@@ -78,9 +82,8 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | Rule | Source | Joins by | No Security holds it | Switched on |
 |---|---|---|---|---|
 | `security-cusip` | 13F | CUSIP | creates one | 2026-10-15 ("merge 985 when green agreed for the rest") |
-| `nport-security-cusip` | N-PORT (CUSIP) | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)") |
-| `nport-security-isin` | N-PORT (CUSIP) | the FIGI-agreed ISIN it carries | creates one | same |
-| `nport-isin-security-isin` | N-PORT (ISIN-only) | ISIN | creates one | same |
+| `nport-security-cusip` | N-PORT | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)"); v2 version 2026-10-20.1 decided |
+| `nport-security-isin` | N-PORT | its ISIN (FIGI-agreed on a CUSIP's record; the key of an ISIN-only one) | creates one | same; it replaces `nport-isin-security-isin` (retired with `sec.nport.security_isin.v1`) |
 | `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | **waits** | 2026-10-17 13:12 ET ("Switch on CUSIP rule (Recommended)") |
 | `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | **waits** | 2026-10-18 13:22 ET ("Switch it on (Recommended)") |
 
@@ -121,9 +124,8 @@ it; the priority decides only where several give it. For each field
    `defaults.sources`:
    1. `openfigi.security.v1`
    2. `openfigi.security_isin.v1`
-   3. `sec.nport.security.v1`
-   4. `sec.nport.security_isin.v1`
-   5. `sec.thirteenf.information_table.security.v1`
+   3. `sec.nport.security.v2`
+   4. `sec.thirteenf.information_table.security.v1`
 
    (operator, 2026-10-18, ticket 84: "make openfigi priority 1 and 13f
    last", then "Name only (Recommended)").
@@ -143,11 +145,11 @@ states one name for 99.7% of its 353,491 CUSIPs. OpenFIGI gives no title, so
 N-PORT, then 13F, fill the title of class. A Security OpenFIGI did not find
 takes N-PORT's filed name, else 13F's.
 
-**Decided, not yet built:** the one N-PORT dataset replaces
-`sec.nport.security_isin.v1` in this list and in the matching rules. A change
-to this list or to a rule moves the Mastering Policy's digest, so it needs its
-test run and the operator's approval of the new digest (data-onboarding,
-"a merge-rule change moves pinned digests").
+**Decided, built, not yet proved:** the one N-PORT dataset replaced the two
+in this list and in the matching rules. A change to this list or to a rule
+moves the Mastering Policy's digest, so it needs its test run and the
+operator's approval of the new digest (data-onboarding, "a merge-rule change
+moves pinned digests").
 
 ### 3. Held back
 
@@ -160,11 +162,18 @@ FIGI, and neither is offered twice: the CUSIP is offered one ISIN and the
 ISIN one CUSIP (`figi-agree.yaml`, `figi-offers.yaml`, `figi-attach.yaml`).
 
 **An ISIN-only holding whose ISIN is already on a CUSIP's row is folded into
-that row before MDM (decided)**, so no ISIN reaches MDM twice.
+that row before MDM (decided)**, so no ISIN reaches MDM twice: `combine.yaml`
+marks the row `folded_into` the CUSIP and `record.yaml` leaves it out;
+`fold.yaml` keys the folded holdings' filed facts by that CUSIP, and the
+CUSIP's record takes them where its own holdings state none. Not yet: an
+earlier filing date of a folded holding does not move the "issued by" start
+earlier, and its different LEI does not unsettle the issuer (the engine has no
+"earliest of" yet; ticket 127).
 
 **Share-class FIGI does not join records** (operator, 2026-10-20: "Lookup
 only for now (Recommended)"). Before proposing it, count the ISIN-only
-Securities that share a share-class FIGI with a CUSIP Security.
+Securities that share a share-class FIGI with a CUSIP Security: 116 of
+35,310 (2026 Q2).
 
 ## Every Security uniquely identifiable
 
@@ -211,16 +220,21 @@ security description.
 on (operator, 2026-10-20: "Use the primary exchange listing", then "US, else
 the ISIN's country"). OpenFIGI marks no primary listing, so:
 
-1. the one listing with exchange code `US`;
-2. else the composite listing of the country in the ISIN's first two letters,
-   from the RDM code set country → OpenFIGI composite exchange code (approved
-   by the operator before use);
+1. the one US composite (exchange code `US`, its own composite) decides,
+   a blank value too;
+2. only without one, the composite listing of the country in the ISIN's
+   first two letters, from the RDM code set `openfigi-country-composite`
+   version 1 (11 countries, approved 2026-10-20: "Only the 11 countries seen
+   (Recommended)"), embedded in the answers reading as `read.references` and
+   held equal to the published set by a test;
 3. else blank: the listings table still holds every value.
 
-Measured on 2026 Q2 (733,538 found Securities): 30,722 have several
-listings; 11,680 disagree on name or share-class FIGI; 8,928 of those have one
-US listing, 2,706 none, 46 two. A Security OpenFIGI did not find (5%) keeps
-its N-PORT and 13F fields only.
+Measured on 2026 Q2 (733,538 found Securities): 11,727 disagree on a
+security-level field; the US composite settles 8,951, the country step 690,
+and 2,086 stay blank. OpenFIGI's exchange-code list (1,109 codes) names no
+countries, and for 25 of 36 countries tried the home composite never appears
+in the answers, which is why the code set holds 11. A Security OpenFIGI did
+not find (5%) keeps its N-PORT and 13F fields only.
 
 ## The listings detail table (decided)
 

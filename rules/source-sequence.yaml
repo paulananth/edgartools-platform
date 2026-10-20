@@ -37,12 +37,18 @@ sources:
     target: mastering
     requires: []
     after: [sec.nport.registrant]
+  # Its runs read GLEIF's `umbrellas` runs and OpenFIGI's `answers_cusip` and
+  # `answers_isin` runs (ticket 120): those targets run first, over their own
+  # captures. This
+  # inventory names one target per source, so those targets are named here.
   sec.nport.security:
-    target: null
+    target: mastering
     requires: []
     after: [sec.nport.fund]
-  # OpenFIGI (ticket 80): its records join the Securities N-PORT gives and
-  # wait otherwise, so it runs after them; it has no run target yet.
+  # OpenFIGI (ticket 80): its `mastering_cusip` and `mastering_isin` records
+  # join the Securities N-PORT gives and wait otherwise, so they run after
+  # them; its `answers_cusip` and `answers_isin` targets run before Securities
+  # (ticket 120). Its mastering is not switched on yet.
   openfigi:
     target: null
     requires: []

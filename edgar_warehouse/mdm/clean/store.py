@@ -73,6 +73,8 @@ MIGRATIONS: tuple[str, ...] = (
     "019_merge_stage_no_limit.sql",
     "020_merge_record_by_record.sql",
     "021_identifier_index_no_pending_list.sql",
+    "022_detail_version.sql",
+    "023_stage_details.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -281,6 +283,28 @@ def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
         raise ValueError(f"A format for no cross-reference: {sorted(set(formats) - set(names))}")
 
 
+def _check_details(adapter: dict) -> None:
+    """Detail lists (ticket 120): `detail_keys` maps each list the reading's
+    `details` column gives to the field that keys its rows. A master's body
+    carries them, and mdm.detail_version keeps every row; a Company is kept in
+    mdm.company's columns instead, so a contract that may give Companies states
+    none."""
+    from .activation import NAMESPACE
+
+    keys = adapter.get("detail_keys")
+    if keys is None:
+        return
+    if not isinstance(keys, dict) or not keys or any(
+            not isinstance(name, str) or not NAMESPACE.fullmatch(name) or not isinstance(key, str) or not key
+            for name, key in keys.items()):
+        raise ValueError("detail_keys maps each detail list, lower-case words, to the field that keys its rows")
+    if "kind" not in adapter or adapter["kind"] == "company":
+        raise ValueError("Detail lists are kept for a stated kind other than company (mdm.company holds no lists)")
+    columns = ((adapter.get("reading") or {}).get("read", {}).get("tables", {}).get("mapped", {}).get("columns", {}))
+    if "details" not in columns:
+        raise ValueError("A contract with detail_keys states its rows in the reading's details column")
+
+
 def register_dataset(
     conn: Connection,
     code: str,
@@ -317,6 +341,7 @@ def register_dataset(
     from .adapters import FORMATS
 
     _check_cross_references(adapter, _bound_namespaces(conn))
+    _check_details(adapter)
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),

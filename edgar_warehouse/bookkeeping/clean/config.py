@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from string import Formatter
+from uuid import UUID
 
 
 from edgar_warehouse.control_contract import Blocked, canonical, digest, reference
@@ -94,9 +95,11 @@ def _plan(step: dict) -> None:
     readings = shape.get("readings", {})
     if not isinstance(readings, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in readings):
         raise Blocked("A step's readings are named by identifiers")
-    if any(not isinstance(value, dict) or len(value) != 1 or not set(value) <= {"all", "step"}
-           or value.get("all", value.get("step")) not in step["requires"] for value in readings.values()):
-        raise Blocked("A step's readings each name one prerequisite step: {all: <step>} or {step: <step>}")
+    if any(not isinstance(value, dict) or len(value) != 1 or not (
+               set(value) <= {"all", "step"} and value.get("all", value.get("step")) in step["requires"]
+               or set(value) == {"run"} and _other_run(value["run"])) for value in readings.values()):
+        raise Blocked("A step's readings each name one prerequisite step, {all: <step>} or {step: <step>}, "
+                      "or another run's step: {run: {source, target, step}}")
     if "files" in shape and (not isinstance(shape["files"], str) or not shape["files"] or ".." in shape["files"]):
         raise Blocked("A step's files are a pattern over the bundle's documents")
     beside = shape.get("beside")
@@ -114,11 +117,14 @@ def _plan(step: dict) -> None:
     if (not isinstance(lookups, dict) or len(lookups) > COMPOSE_SLOTS - 1
             or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in lookups)
             or any(not _named(v, "file") and (
-                       not isinstance(v, dict) or set(v) != LOOKUP_KEYS or v["from"] not in step["requires"]
+                       not isinstance(v, dict)
+                       or not (set(v) == LOOKUP_KEYS and v["from"] in step["requires"]
+                               or set(v) == LOOKUP_KEYS - {"from"} | {"run"} and _other_run(v["run"]))
                        or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows")))
                    for v in lookups.values())):
         raise Blocked("A step's lookups each read the same file's unit of one prerequisite (from, table, "
-                      "column, value_column and their bounds), or a run file {file: <name>}")
+                      "column, value_column and their bounds), another run's step instead of `from` "
+                      "({run: {source, target, step}}), or a run file {file: <name>}")
     if any(_named(v, "file") for v in lookups.values()) and not all(_named(v, "file") for v in lookups.values()):
         raise Blocked("A step's lookups are all run files, or all read from a prerequisite")
     references = shape.get("references", {})
@@ -225,11 +231,29 @@ COMPOSE_DEPTH = 2
 
 
 def _dependency(dependency, step: dict, identities: set):
+    if isinstance(dependency, dict) and set(dependency) == {"run", "step", "key"}:
+        # Another run's unit (ticket 120): Bookkeeping fills it only from that run's verified output.
+        if not all(isinstance(dependency[k], str) and dependency[k] for k in ("step", "key")) or not _run_id(dependency["run"]):
+            raise Blocked("Input must name an existing unit in a preceding prerequisite or another run")
+        return
     if (not isinstance(dependency, dict) or set(dependency) != {"step", "key"}
             or not isinstance(dependency["step"], str) or not isinstance(dependency["key"], str)
             or dependency["step"] not in step["requires"]
             or (dependency["step"], dependency["key"]) not in identities):
         raise Blocked("Input must name an existing unit in a preceding prerequisite")
+
+
+def _other_run(value) -> bool:
+    """`{source, target, step}`: a step of another source's target, read from its complete runs (ticket 120)."""
+    return (isinstance(value, dict) and set(value) == {"source", "target", "step"}
+            and all(isinstance(v, str) and re.fullmatch(IDENTIFIER, v) for v in value.values()))
+
+
+def _run_id(value) -> bool:
+    try:
+        return isinstance(value, str) and str(UUID(value)) == value
+    except ValueError:
+        return False
 
 
 def slot_names(document) -> list[str]:
@@ -280,7 +304,11 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
         raise Blocked("Unsupported input manifest")
     if manifest["version"] == 1 and set(manifest) == {"version", "units"}:
         stages = {step["name"]: manifest["units"] for step in config["steps"]}
-    elif manifest["version"] == 2 and set(manifest) == {"version", "steps"}:
+    elif manifest["version"] == 2 and set(manifest) - {"capture"} == {"version", "steps"}:
+        # A manifest written from a capture names it (ticket 121), so a reading of this run's
+        # output can take the newest capture's runs only.
+        if "capture" in manifest and (not isinstance(manifest["capture"], str) or not manifest["capture"]):
+            raise Blocked("A manifest's capture is the capture's run id, as text")
         stages = manifest["steps"]
         if not isinstance(stages, dict) or set(stages) != {s["name"] for s in config["steps"]}:
             raise Blocked("Manifest must declare exactly the configured steps")

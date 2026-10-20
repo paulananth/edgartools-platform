@@ -174,6 +174,7 @@ class Bookkeeping:
                       "journal": "change-journal-v1", "protocol": PROTOCOL,
                       "rule_version": export["version"], "rules": rules_ref, "inputs": inputs_ref,
                       "target": target, "scope": scope, "worklist_hash": digest(items),
+                      **({"capture": manifest["capture"]} if "capture" in manifest else {}),
                       # Each step's worker profile, frozen: the database admits
                       # only that profile's roles to the step's work (to-do 20b).
                       "profiles": {step["name"]: step["operation"] for step in config["steps"]}}
@@ -237,13 +238,23 @@ class Bookkeeping:
         return {"run": run, "config": config, "manifest": manifest}
 
     def _receipt(self, item: dict, dependency: dict, context: dict) -> dict:
-        """One prerequisite unit's verified output, after reverifying its chain."""
+        """One prerequisite unit's verified output, after reverifying its chain. A unit of another run
+        (ticket 120) is reverified against that run's own frozen configuration."""
         with self.engine.connect() as conn:
             found = _rows(conn, """SELECT * FROM bookkeeping.work_item
                 WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k AND state='verified'""",
-                r=str(item["run_id"]), s=dependency["step"], k=dependency["key"])
+                r=dependency.get("run", str(item["run_id"])), s=dependency["step"], k=dependency["key"])
         if not found:
             raise Blocked("Prerequisite input lacks verified completion")
+        if "run" in dependency:
+            declared = self._other_runs_declared(item, context)
+            context = self._context(found[0])
+            other = context["run"]
+            submission = other["submission"]
+            if other["state"] != "complete" or other["compacted_at"] is not None:
+                raise Blocked("Another run's unit is read only from a complete, uncompacted run")
+            if (submission["kind"], submission["name"], submission["target"], dependency["step"]) not in declared:
+                raise Blocked("Another run's unit is read only from the source, target and step its step declares")
         upstream = self._resolve_item(found[0], context=context)
         self._verify_item(upstream, context)
         receipt = upstream["receipt"]
@@ -251,11 +262,21 @@ class Bookkeeping:
         self.artifacts.verified(resolved)
         return resolved
 
+    def _other_runs_declared(self, item: dict, context: dict) -> set:
+        """The other runs' steps the item's step declares (`{run: {source, target, step}}` readings and
+        lookups), each `(kind, source, target, step)`: a run reads runs of its own kind."""
+        submission = context["run"]["submission"]
+        body = self.artifacts.json(submission["rules"])["body"]
+        step = next(s for s in body["bookkeeping"]["targets"][submission["target"]]["steps"] if s["name"] == item["step"])
+        shape = step.get("input", {})
+        return {(submission["kind"], v["run"]["source"], v["run"]["target"], v["run"]["step"])
+                for v in [*shape.get("readings", {}).values(), *shape.get("lookups", {}).values()] if "run" in v}
+
     def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict) -> dict:
         """Fill a composed document's slots with verified receipts; the same receipts give the same bytes.
         `seen` holds each unit's receipt once per fill: a unit named in several slots is verified once."""
         def receipt(dependency):
-            unit = (dependency["step"], dependency["key"])
+            unit = (dependency.get("run"), dependency["step"], dependency["key"])
             if unit not in seen:
                 seen[unit] = self._receipt(item, dependency, context)
             return seen[unit]
@@ -574,6 +595,43 @@ class Bookkeeping:
                 submission->>'kind' AS kind,submission->>'name' AS name,submission->>'target' AS target
                 FROM bookkeeping.pipeline_run WHERE CAST(:s AS text) IS NULL OR state=:s
                 ORDER BY created_at DESC,run_id LIMIT :n""", s=state, n=limit)
+
+    def verified_units(self, *, source: str, target: str, step: str, kind: str = "source") -> list[dict]:
+        """Ticket 120: the verified units of `step` in the complete runs of `source`'s `target`, each
+        `{run, step, key, sha256}`, in run and key order. A reading is deterministic, so the same files
+        read twice give the same output: an output held by several units is listed once.
+
+        Ticket 121 (operator, 2026-10-20: "All runs of latest capture (Recommended)"): only the runs
+        of the capture the newest complete run was written from, so an identifier never comes back
+        from two captures. Runs that name no capture (written before ticket 121) are one capture.
+        The newest capture is the one whose first run started last, so a later rerun of an older
+        capture never stands in for it. It is refused while any of its runs is still running or
+        waiting (a blocked run is abandoned and left out), and when any of its runs is compacted."""
+        captures = """WITH runs AS (SELECT run_id, state, submission->'capture' AS capture, created_at,
+                    completed_at, compacted_at FROM bookkeeping.pipeline_run WHERE submission->>'kind'=:kind
+                      AND submission->>'name'=:source AND submission->>'target'=:target),
+                  newest AS (SELECT capture FROM runs GROUP BY capture ORDER BY min(created_at) DESC,
+                    min(run_id::text) DESC LIMIT 1)"""
+        named = {"source": source, "target": target, "kind": kind}
+        with self.engine.connect() as conn:
+            open_, compacted = conn.execute(text(captures + """
+                SELECT count(*) FILTER (WHERE state IN ('running','waiting')),
+                       count(*) FILTER (WHERE state='complete' AND compacted_at IS NOT NULL)
+                FROM runs WHERE capture IS NOT DISTINCT FROM (SELECT capture FROM newest)"""), named).one()
+            if open_:
+                raise Blocked(f"The newest capture of {source}/{target} has {open_} runs not finished; finish them first")
+            if compacted:
+                raise Blocked(f"The newest capture of {source}/{target} has {compacted} compacted runs; "
+                              "run that target again over a capture")
+            found = _rows(conn, captures + """
+                SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,
+                    w.unit_key AS key, w.receipt->>'sha256' AS sha256, r.completed_at
+                FROM bookkeeping.work_item w JOIN runs r ON r.run_id=w.run_id
+                WHERE r.state='complete' AND r.capture IS NOT DISTINCT FROM (SELECT capture FROM newest)
+                  AND w.step=:step AND w.state='verified'
+                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id, w.unit_key""", step=step, **named)
+        return [{k: unit[k] for k in ("run", "step", "key", "sha256")}
+                for unit in sorted(found, key=lambda unit: (unit["completed_at"], unit["run"], unit["key"]))]
 
     def finalize(self, run_id: str) -> dict:
         run, config, _, _ = self._frozen(run_id)

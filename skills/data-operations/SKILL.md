@@ -181,6 +181,51 @@ submits one source.
 A test of this path, and how to clear that test, is
 [Test and clear a source run](RUNBOOK.md#test-and-clear-a-source-run).
 
+### Submit and drive one run
+
+What a run needs, in order, learned on the Securities runs (ticket 120):
+
+1. **Prepare.** `mdm prepare-capture` needs every one of `--capture`,
+   `--documents`, `--capture-run`, `--as-of`, `--revision` and `--output`,
+   plus each fact and file the target's `run` names. It lists only the
+   documents the Change Journal does not record as processed under these
+   rules; `--all` forces every one. It prints the manifest's `uri` and
+   `sha256`.
+2. **Submit.** `rules run` with that manifest only submits: it freezes the
+   active rules version, the manifest and each step's worker profile, and
+   returns the run id. Nothing works yet.
+3. **Drive each step in its declared order.** For each step:
+   - Workers (`workers work <operation> <run> --limit N`) can run in
+     parallel: a unit is leased, so two workers never take the same one.
+   - Use **one verifier** (`workers verify ... --reports <folder>`).
+     Verifying takes no lease, so two verifiers can both verify the same
+     unit, and the second is refused.
+   - Repeat until `bookkeeping status <run>` shows every unit of the step
+     `verified`. A unit `waiting` failed its checks: stop and read its error.
+4. **Finalize.** `bookkeeping finalize <run>` checks the whole run again and
+   marks it `complete`. On a large run this is not instant (Securities, 2026
+   Q2: 16 minutes).
+
+While a run is live:
+- **Do not change worker code** (`edgar_warehouse/workers/*`). A run pins its
+  worker runtime, and a changed one stops it with "Pinned worker runtime
+  changed; start a new run". Change code between runs.
+- **Size the lease to the slowest claim or report, not to the work.** A step
+  that reads another run's output rechecks that run's history on every claim
+  and report (Securities: 73 s each against 20 s of work), so the default
+  120 s lease expired ("Stale lease"). The target sets `lease_seconds` and
+  `heartbeat_seconds`.
+- **A laptop run needs power.** Sleep on a flat battery stops the workers,
+  the leases expire and the units run again; `caffeinate` cannot prevent it.
+- **Read a failed call's database error, not its last line.** The control
+  call reports the `(psycopg2.errors.X)` line; SQLAlchemy's last line is only
+  a link.
+
+A step may read the verified output of another source's complete runs
+(`{run: {source, target, step}}`, [Bookkeeping SPEC](../bookkeeping/SPEC.md)).
+Run that source's target first; `rules/source-sequence.yaml`'s comments name
+it.
+
 ## Operate the recurring loop
 
 1. **Inventory and readiness.** Account for the entire declared delivery and its

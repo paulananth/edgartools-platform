@@ -51,6 +51,16 @@ def contract_of(step: dict) -> str:
     return step.get("input", {}).get("contract", "source.yaml")
 
 
+def run_label(selector: dict) -> str:
+    """Another run's step a reading or a lookup names (ticket 120): `<source>/<target>/<step>`."""
+    return f"{selector['source']}/{selector['target']}/{selector['step']}"
+
+
+def run_units(run, selector: dict) -> list[dict]:
+    """That step's verified units, as the slot's list of `{run, step, key}`."""
+    return [{k: u[k] for k in ("run", "step", "key")} for u in run.others[run_label(selector)]]
+
+
 def pair(key: str) -> str:
     """A document's pair key, `{dir}/{base}`: an answer and its request share it."""
     return fill("{dir}/{base}", key)
@@ -150,6 +160,8 @@ def form(step: dict, run, units: dict) -> list[dict]:
     lookups = shape.get("lookups", {})
     from_files = bool(lookups) and all("file" in value for value in lookups.values())
     for value in ([] if from_files else lookups.values()):
+        if "run" in value:  # another run's step, read whole (ticket 120)
+            continue
         if run.by_name[value["from"]].get("units") != {"each": "file"}:
             raise ValueError(f"Step {name}: a lookup reads the same file's unit of a step whose units are each file")
     found = []
@@ -169,10 +181,11 @@ def form(step: dict, run, units: dict) -> list[dict]:
                 artifact["lookups"] = {"slot": slot}
                 slots[slot] = {"compose": {
                     "document": {"version": 2, "input": source, "sets": {
-                        set_name: {"readings": [{"slot": set_name}],
-                                   **{k: v for k, v in value.items() if k != "from"}}
+                        set_name: {"readings": {"slot": set_name} if "run" in value else [{"slot": set_name}],
+                                   **{k: v for k, v in value.items() if k not in ("from", "run")}}
                         for set_name, value in lookups.items()}},
-                    "slots": {set_name: {"step": value["from"], "key": pair(key)}
+                    "slots": {set_name: run_units(run, value["run"])
+                              if "run" in value else {"step": value["from"], "key": pair(key)}
                               for set_name, value in lookups.items()}}}
             artifacts.append(artifact)
         document = raw_capture.request(contract, artifacts)

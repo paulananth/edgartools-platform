@@ -32,7 +32,7 @@ from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 
-NAME, CODE, GLEIF, ADV = "sec.nport.security", "sec.nport.security.v1", "gleif.level1.v1", "iapd.adv.custodians.v1"
+NAME, CODE, GLEIF, ADV = "sec.nport.security", "sec.nport.security.v2", "gleif.level1.v1", "iapd.adv.custodians.v1"
 FOLDER = files.ROOT / "sources" / NAME
 LEI = "9999000000EXAMPLE016"  # invented, check digits valid
 COLUMNS = ["ACCESSION_NUMBER", "HOLDING_ID", "ISSUER_NAME", "ISSUER_LEI", "ISSUER_TITLE", "ISSUER_CUSIP"]
@@ -70,6 +70,15 @@ def combine(store, root, contract_file, readings):
     return chain.combine(store, root, FOLDER / contract_file, readings)
 
 
+def recorded(store, root, combined):
+    """record.yaml over the combine's pieces (ticket 120): each Security row as its
+    record, a row folded into a CUSIP's Security left out."""
+    root.mkdir(parents=True, exist_ok=True)
+    pieces = [store.put(root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
+    return chain.read(store, root, files.load(FOLDER / "record.yaml"), [
+        {"input": p, "context": store.put(root.as_uri(), {"version": 1, "input": p, "values": {}})} for p in pieces], 2)
+
+
 def filed_pairs(store, root, raw) -> list[list[str]]:
     """Each filing's accession and date (filings.yaml), the issuer reading's `filed` set."""
     reading = read(store, root / "filings", "filings.yaml", raw, None)
@@ -99,10 +108,11 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuer_reading})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
         {"input": raw, "tables": {"attached": []}, "deferred": []}]})
+    folded = combine(store, root / "fold", "fold.yaml", {"securities": securities, "attached": attached, "issuers": reduced})
     combined = combine(store, root / "combine", "combine.yaml",
-                       {"securities": securities, "attached": attached, "issuers": reduced})
-    prepared = chain.prepare(store, root / "mdm", combined, {
-        "table": "security", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
+                       {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
+    prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined), {
+        "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",
         # The quarter dates nothing in MDM (ticket 113); quarters that follow
         # one another are revisions of one publication (ticket 101).

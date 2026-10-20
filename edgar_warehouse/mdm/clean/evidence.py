@@ -48,6 +48,7 @@ def assertion(
     mapping_version: int = 1,
     identifiers: dict[str, str] | None = None,
     cross_references: dict[str, str] | None = None,
+    details: dict[str, list[dict]] | None = None,
     profiles: list[dict] | None = None,
     relationships: list[dict] | None = None,
     provenance: dict | None = None,
@@ -97,7 +98,7 @@ def assertion(
     }
     # Optional parts have one canonical form when unused: absent, so a new
     # optional part never moves an assertion id already written (that would
-    # orphan the decisions citing it). Two follow the rule:
+    # orphan the decisions citing it). These follow the rule:
     # - cross-references (profiling ticket 03): lookup-only ids, never read by
     #   matching or binding, which read `identifiers` alone;
     # - the reading number: a body that says 1 and a body that says nothing
@@ -105,6 +106,10 @@ def assertion(
     #   hashes differently and sits beside its predecessor.
     if cross_references:
         body["cross_references"] = dict(sorted(cross_references.items()))
+    # - detail lists (ticket 120): a record's rows of a configured list (a
+    #   Security's listings), each keyed, in key order.
+    if details:
+        body["details"] = {name: sorted(rows, key=lambda row: row["key"]) for name, rows in sorted(details.items())}
     if mapping_version > 1:
         body["mapping_version"] = mapping_version
     body["assertion_id"] = digest(body)
@@ -131,6 +136,7 @@ def validate_assertion(body: dict) -> None:
             )
         },
         cross_references=body.get("cross_references"),
+        details=body.get("details"),
         # Incoming only: `merge.py` validates what a batch carries, never a
         # stored row, so an assertion written before mapping versions existed
         # is not re-hashed. Absent means the first reading.

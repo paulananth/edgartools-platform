@@ -34,6 +34,29 @@ execution: {profile: source.read, workers: 1, max_artifacts: 1}
 bookkeeping:
   version: 2
   targets:
+    # Each fund and the umbrella trust it is a sub-fund of (subfund-pairs.yaml),
+    # read from the publication's relationship file (ticket 120): nothing is
+    # mastered; the Securities chain reads this step's verified units as its
+    # `umbrella` pair set (ticket 23), so it runs first.
+    umbrellas:
+      steps:
+        - name: pairs
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: subfund-pairs.yaml
+            files: "*rr-golden-copy*"
+        - name: processed
+          operation: journal.record
+          requires: [pairs]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
     # The Level 1 records of one Golden Copy publication through the Merge Stage
     # (ticket 114). The run gives the publication's record count, the approved
     # scope (the LEIs mastered: {LEI: {selected: true}}) and the LEIs N-PORT

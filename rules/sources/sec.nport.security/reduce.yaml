@@ -19,6 +19,18 @@ reduce:
   max_output_rows: 10000000
   max_output_bytes: 4294967296
   groups:
+    # Every Security once, by its one key (ticket 120): a CUSIP's holdings and an
+    # ISIN-only holding's, one table for combine.yaml's one `security` table, with
+    # which kind its key is (`key_kind`: cusip or isin).
+    keys:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key, period]
+      mode: members
+      member: key_kind
+      count: kinds
+      sample: kind_sample
+      sample_limit: 1
     cusips:
       source: holdings
       table: security_cusip

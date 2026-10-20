@@ -70,6 +70,34 @@ read:
       type: text
     answer:
       type: integer
+  # The RDM code set openfigi-country-composite, version 1 (ticket 120; operator,
+  # 2026-10-20: "Only the 11 countries seen (Recommended)"), as published in
+  # rules/reference/published/openfigi-country-composite/1: an ISIN country's
+  # OpenFIGI composite exchange code. A test holds this table equal to it.
+  references:
+    country_composite:
+      AU:
+        exchange: AU
+      BR:
+        exchange: BZ
+      CA:
+        exchange: CN
+      CH:
+        exchange: SW
+      CN:
+        exchange: CH
+      DE:
+        exchange: GR
+      ES:
+        exchange: SM
+      IN:
+        exchange: IN
+      JP:
+        exchange: JP
+      KR:
+        exchange: KS
+      MX:
+        exchange: MM
   lookup_sets:
     asked:
       max_values: 51200
@@ -272,6 +300,306 @@ read:
         name:
           text:
             path: name
+    # Each listing as a Security's detail row and its security-level fields, and
+    # whether it is the US composite or the ISIN country's composite (ticket
+    # 120): combine.yaml gathers an identifier's rows and the primary listing's
+    # fields from here, so `listings` (silver-listing.yaml) stays as it is.
+    details:
+      each: data
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        detail:
+          object:
+            omit_nulls: true
+            fields:
+              figi:
+                text:
+                  path: figi
+                  null_if:
+                  - ""
+              exchange:
+                text:
+                  path: exchCode
+                  null_if:
+                  - ""
+              ticker:
+                text:
+                  path: ticker
+                  null_if:
+                  - ""
+              composite_figi:
+                text:
+                  path: compositeFIGI
+                  null_if:
+                  - ""
+              description:
+                text:
+                  path: securityDescription
+                  null_if:
+                  - ""
+        level:
+          object:
+            omit_nulls: true
+            fields:
+              name:
+                text:
+                  path: name
+                  null_if:
+                  - ""
+              security_type:
+                text:
+                  path: securityType
+                  null_if:
+                  - ""
+              security_type2:
+                text:
+                  path: securityType2
+                  null_if:
+                  - ""
+              market_sector:
+                text:
+                  path: marketSector
+                  null_if:
+                  - ""
+              share_class_figi:
+                text:
+                  path: shareClassFIGI
+                  null_if:
+                  - ""
+        us:
+          choose:
+            condition:
+              equal:
+                left:
+                  text:
+                    path: exchCode
+                right:
+                  const:
+                    value: US
+            then:
+              equal:
+                left:
+                  text:
+                    path: figi
+                right:
+                  text:
+                    path: compositeFIGI
+            else:
+              value:
+                path: NO_SUCH_FIELD
+        home:
+          choose:
+            condition:
+              equal:
+                left:
+                  context:
+                    name: id_type
+                right:
+                  const:
+                    value: isin
+            then:
+              choose:
+                condition:
+                  equal:
+                    left:
+                      text:
+                        path: exchCode
+                    right:
+                      lookup:
+                        reference: country_composite
+                        column: exchange
+                        on_missing: "null"
+                        key:
+                          transform:
+                            transforms:
+                            - slice:
+                                start: 0
+                                end: 2
+                            value:
+                              member_value:
+                                lookup: asked
+                                key:
+                                  concat:
+                                  - context:
+                                      name: batch
+                                  - const:
+                                      value: ':'
+                                  - context:
+                                      name: answer
+                                on_many: error
+                then:
+                  equal:
+                    left:
+                      text:
+                        path: figi
+                    right:
+                      text:
+                        path: compositeFIGI
+                else:
+                  value:
+                    path: NO_SUCH_FIELD
+            else:
+              value:
+                path: NO_SUCH_FIELD
+    # The ISIN country's composite listings, counted by reduce.yaml: the
+    # country step of the primary listing takes one only.
+    home_composites:
+      each: data
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                context:
+                  name: id_type
+              right:
+                const:
+                  value: isin
+          then:
+            choose:
+              condition:
+                equal:
+                  left:
+                    text:
+                      path: exchCode
+                  right:
+                    lookup:
+                      reference: country_composite
+                      column: exchange
+                      on_missing: "null"
+                      key:
+                        transform:
+                          transforms:
+                          - slice:
+                              start: 0
+                              end: 2
+                          value:
+                            member_value:
+                              lookup: asked
+                              key:
+                                concat:
+                                - context:
+                                    name: batch
+                                - const:
+                                    value: ':'
+                                - context:
+                                    name: answer
+                              on_many: error
+              then:
+                equal:
+                  left:
+                    text:
+                      path: figi
+                  right:
+                    text:
+                      path: compositeFIGI
+              else:
+                value:
+                  path: NO_SUCH_FIELD
+          else:
+            value:
+              path: NO_SUCH_FIELD
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        figi_ticker:
+          concat:
+          - text:
+              path: figi
+          - const:
+              value: ' '
+          - text:
+              path: ticker
+    # The security type each listing states, counted by reduce.yaml (ticket 120).
+    security_types:
+      each: data
+      select:
+        test:
+          path: securityType
+          kind: truthy
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        security_type:
+          text:
+            path: securityType
+    # The security type2 each listing states, counted by reduce.yaml (ticket 120).
+    security_types2:
+      each: data
+      select:
+        test:
+          path: securityType2
+          kind: truthy
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        security_type2:
+          text:
+            path: securityType2
+    # The market sector each listing states, counted by reduce.yaml (ticket 120).
+    market_sectors:
+      each: data
+      select:
+        test:
+          path: marketSector
+          kind: truthy
+      columns:
+        id:
+          member_value:
+            lookup: asked
+            key:
+              concat:
+              - context:
+                  name: batch
+              - const:
+                  value: ':'
+              - context:
+                  name: answer
+            on_many: error
+        market_sector:
+          text:
+            path: marketSector
   stream:
     wrapper: null
     container: none
@@ -332,11 +660,11 @@ bookkeeping:
           input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
         - name: combine
           operation: source.combine
-          requires: [reduce]
+          requires: [reduce, answers]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {counts: {step: reduce}}}
+          input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -405,11 +733,11 @@ bookkeeping:
           input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
         - name: combine
           operation: source.combine
-          requires: [reduce]
+          requires: [reduce, answers]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {counts: {step: reduce}}}
+          input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -435,6 +763,82 @@ bookkeeping:
         - name: processed
           operation: journal.record
           requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
+    # OpenFIGI's answers as the Securities chain reads them (ticket 120): each
+    # answer tied to the identifier asked by its request, the FIGIs of its
+    # listings (sec.nport.security/figi-answers.yaml). Nothing is mastered:
+    # Securities' runs read this step's verified units, so it runs first.
+    answers_cusip:
+      steps:
+        - name: requests
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: sec.nport.security/figi-requests.yaml
+            files: "id_cusip/*"
+            beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
+            context: {batch: "{dir}/{base}"}
+        - name: answers
+          operation: source.read
+          requires: [requests]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {groups: 16}
+          input:
+            contract: sec.nport.security/figi-answers.yaml
+            files: "id_cusip/*"
+            context: {batch: "{dir}/{base}"}
+            lookups:
+              asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
+        - name: processed
+          operation: journal.record
+          requires: [answers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
+    # OpenFIGI's answers as the Securities chain reads them (ticket 120): each
+    # answer tied to the identifier asked by its request, the FIGIs of its
+    # listings (sec.nport.security/figi-answers.yaml). Nothing is mastered:
+    # Securities' runs read this step's verified units, so it runs first.
+    answers_isin:
+      steps:
+        - name: requests
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: sec.nport.security/figi-requests.yaml
+            files: "id_isin/*"
+            beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
+            context: {batch: "{dir}/{base}"}
+        - name: answers
+          operation: source.read
+          requires: [requests]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {groups: 16}
+          input:
+            contract: sec.nport.security/figi-answers.yaml
+            files: "id_isin/*"
+            context: {batch: "{dir}/{base}"}
+            lookups:
+              asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
+        - name: processed
+          operation: journal.record
+          requires: [answers]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]
@@ -494,9 +898,32 @@ mdm:
                         name_of_issuer:
                           value:
                             path: name
+                        # The other security-level fields (ticket 120; operator,
+                        # 2026-10-20: "all fields from open figi must be in the
+                        # security master"): the one value the listings state, else
+                        # the primary listing's (record.yaml).
+                        security_type:
+                          value:
+                            path: security_type
+                        security_type2:
+                          value:
+                            path: security_type2
+                        market_sector:
+                          value:
+                            path: market_sector
+                        share_class_figi:
+                          value:
+                            path: share_class_figi
                   matching:
                     object:
                       fields: {}
+                  # Every listing, one detail row per FIGI (ticket 120).
+                  details:
+                    object:
+                      fields:
+                        listings:
+                          value:
+                            path: listings
           input_fields:
           - id
           - found
@@ -505,7 +932,11 @@ mdm:
           - composite_figi
           - listing_figi
           - ticker
-        version: openfigi-security-v2
+          - security_type
+          - security_type2
+          - market_sector
+          - listings
+        version: openfigi-security-v3
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -516,6 +947,8 @@ mdm:
           cusip: id
         identifier_formats:
           cusip: cusip
+        detail_keys:
+          listings: figi
         cross_references:
           figi: listing_figi
           composite_figi: composite_figi
@@ -575,9 +1008,32 @@ mdm:
                         name_of_issuer:
                           value:
                             path: name
+                        # The other security-level fields (ticket 120; operator,
+                        # 2026-10-20: "all fields from open figi must be in the
+                        # security master"): the one value the listings state, else
+                        # the primary listing's (record.yaml).
+                        security_type:
+                          value:
+                            path: security_type
+                        security_type2:
+                          value:
+                            path: security_type2
+                        market_sector:
+                          value:
+                            path: market_sector
+                        share_class_figi:
+                          value:
+                            path: share_class_figi
                   matching:
                     object:
                       fields: {}
+                  # Every listing, one detail row per FIGI (ticket 120).
+                  details:
+                    object:
+                      fields:
+                        listings:
+                          value:
+                            path: listings
           input_fields:
           - id
           - found
@@ -586,7 +1042,11 @@ mdm:
           - composite_figi
           - listing_figi
           - ticker
-        version: openfigi-security-isin-v2
+          - security_type
+          - security_type2
+          - market_sector
+          - listings
+        version: openfigi-security-isin-v3
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -597,6 +1057,8 @@ mdm:
           isin: id
         identifier_formats:
           isin: isin
+        detail_keys:
+          listings: figi
         cross_references:
           figi: listing_figi
           composite_figi: composite_figi

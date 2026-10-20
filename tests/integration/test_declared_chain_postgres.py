@@ -62,7 +62,7 @@ def comparable(record):
 
 
 @pytest.mark.parametrize("word, target, found_count, refused_count", [
-    ("cusip", "mastering_cusip", 5, 8), ("isin", "mastering_isin", 1, 7)])
+    ("cusip", "mastering_cusip", 5, 8), ("isin", "mastering_isin", 2, 7)])
 def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch, word, target,
                                                                 found_count, refused_count):
     by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand", word)

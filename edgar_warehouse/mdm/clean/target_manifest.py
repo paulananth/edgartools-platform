@@ -13,7 +13,8 @@ and freezes every unit's input. Each step by its operation:
   (`read_units`);
 - `source.combine`: one unit, the step's contract over the readings it names;
 - `mdm.prepare`: the readings its `input.readings` names, as one publication,
-  with its `input.keys` (`table`, `record_column`, `dataset`);
+  with its `input.keys` (`table`, `record_column`, `dataset`); a target that
+  only reads, for another run to read, has none;
 - `mdm.merge`: the preparation's manifest through the Merge Stage;
 - `journal.record`: each document the run processed, once its merge is verified.
 
@@ -28,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.config import run_inputs, validate
+from edgar_warehouse.bookkeeping.clean.config import COMPOSE_LIST, run_inputs, validate
 from edgar_warehouse.rules import files as rules_files
 from . import changed_files, raw_capture, read_units
 from .evidence import instant
@@ -64,6 +65,7 @@ class _Run:
     inputs: str
     facts: dict
     run_files: dict
+    others: dict
 
 
 
@@ -116,6 +118,8 @@ def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
     for slot, named in readings.items():
         if "all" in named:
             slots[slot] = [{"step": named["all"], "key": u["keys"]["unit"]} for u in units[named["all"]]]
+        elif "run" in named:
+            slots[slot] = read_units.run_units(run, named["run"])
         elif len(units[named["step"]]) != 1:
             raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
         else:
@@ -167,6 +171,36 @@ FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepa
 OPERATIONS = tuple(FORMS)
 
 
+def _other_runs(steps: list[dict], bookkeeping) -> dict:
+    """Ticket 120: each other run's step a combine or a lookup reads, as the verified units of its complete runs."""
+    others, opened = {}, None
+    try:
+        for step in steps:
+            shape = step.get("input", {})
+            for kind, named in [*(("reading", v) for v in shape.get("readings", {}).values()),
+                                *(("lookup", v) for v in shape.get("lookups", {}).values())]:
+                if "run" not in named:
+                    continue
+                if step["operation"] != ("source.combine" if kind == "reading" else "source.read"):
+                    raise ValueError(f"Step {step['name']}: a combine's reading or a read's lookup reads another run's step")
+                label = read_units.run_label(named["run"])
+                if label in others:
+                    continue
+                if bookkeeping is None:
+                    from edgar_warehouse.bookkeeping.clean.database import get_engine
+                    from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
+                    bookkeeping = opened = Bookkeeping(get_engine())
+                found = bookkeeping.verified_units(**named["run"])
+                if not 1 <= len(found) <= COMPOSE_LIST:
+                    raise ValueError(f"Step {step['name']}: {label} has {len(found)} verified units in complete runs; "
+                                     f"a reading takes 1..{COMPOSE_LIST}")
+                others[label] = found
+        return others
+    finally:
+        if opened is not None:
+            opened.engine.dispose()
+
+
 def run_arguments(facts: list[str] | None, run_files: list[str] | None) -> tuple[dict, dict]:
     """`--fact name=value` (a JSON value, else text) and `--file name=path`, as two maps."""
     def pairs(items):
@@ -200,6 +234,7 @@ def write_manifest(
     journal=None,
     facts: dict | None = None,
     run_files: dict | None = None,
+    bookkeeping=None,
 ) -> dict:
     """The input manifest of `target` for one bundle of captured documents.
 
@@ -237,23 +272,32 @@ def write_manifest(
             loaded[name] = json.loads(read_bounded(Path(path).resolve(), RUN_FILE_BYTES))
         except (OSError, ValueError) as error:  # missing, a folder, too large, or not JSON
             raise ValueError(f"Run file {name} ({path}) is not a readable JSON file: {error}") from None
-    # Another source's reading a step runs with is part of what a file is processed under.
-    shared = [*({"name": f"contract:{name}", "sha256": digest(body)} for name, body in sorted(contracts.items())
+    others = _other_runs(steps, bookkeeping)
+    # Another source's reading a step runs with is part of what a file is processed under, and so is
+    # every other run's output a combine reads.
+    # The target too: two targets over the same files (a source's two Dataset Contracts) each process them.
+    shared = [{"name": f"target:{target}", "sha256": digest(target)},
+              *({"name": f"run:{label}", "sha256": digest(sorted(u["sha256"] for u in units))}
+                for label, units in sorted(others.items())),
+              *({"name": f"contract:{name}", "sha256": digest(body)} for name, body in sorted(contracts.items())
                 if "/" in name),
               *({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),
               *({"name": f"fact:{name}", "sha256": digest(value)} for name, value in sorted(facts.items()))]
+    # A target prepares one publication, or none: a target that only reads, for another run to read (ticket 120).
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]
-    if len(prepare) != 1:
-        raise ValueError("A target prepares one publication: exactly one mdm.prepare step")
-    keys_of = prepare[0].get("input", {}).get("keys", {})
-    if set(keys_of) != {"table", "record_column", "dataset"} or keys_of["dataset"] not in (reading.get("mdm") or {}):
+    if len(prepare) > 1:
+        raise ValueError("A target prepares one publication: at most one mdm.prepare step")
+    keys_of = prepare[0].get("input", {}).get("keys", {}) if prepare else {}
+    if prepare and (set(keys_of) != {"table", "record_column", "dataset"}
+                    or keys_of["dataset"] not in (reading.get("mdm") or {})):
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
     for step in steps:
         if step["operation"] != "source.read" and "units" in step:
             raise ValueError(f"Step {step['name']}: only a read declares its units")
-    dataset = keys_of["dataset"]
+    dataset = keys_of.get("dataset")
     by_name = by_name_of(steps)
-    _prepared_shape(by_name, prepare[0], keys_of, contracts)
+    if prepare:
+        _prepared_shape(by_name, prepare[0], keys_of, contracts)
     limit = reading["execution"]["max_artifacts"]
     folder = Path(capture).resolve()
     receipts_raw, receipts = raw_capture.receipts(folder)
@@ -289,14 +333,15 @@ def write_manifest(
     bundle = digest([publication_key, revision, as_of, contracts, reading["mdm"], policy,
                      *([shared] if shared else [])])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
-                   "consumer": f"{dataset}/{bundle}", "batch_id": f"{source}:{bundle}"}
+                   "consumer": f"{dataset or source}/{bundle}", "batch_id": f"{source}:{bundle}"}
     root = Path(output).resolve().as_uri()
     run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, companions=paired, keys=keys, sized=sized, limit=limit,
                keys_of=keys_of, policy=policy, processing=processing, force=force, publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
-               inputs=root + "/inputs", facts=facts, run_files=loaded)
+               inputs=root + "/inputs", facts=facts, run_files=loaded, others=others)
     units: dict[str, list[dict]] = {}
     for step in steps:
         units[step["name"]] = FORMS[step["operation"]](step, run, units)
-    manifest = run.store.put(root, {"version": 2, "steps": units})
+    # The capture it was written from (ticket 121): a reading of this run takes the newest capture's runs.
+    manifest = run.store.put(root, {"version": 2, "steps": units, "capture": capture_run})
     return {"source": source, "source_code": dataset, "target": target, "manifest": manifest,
             "publication": publication, "policy_digest": policy, "scope": scope}

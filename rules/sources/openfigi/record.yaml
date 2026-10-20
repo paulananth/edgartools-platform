@@ -1,7 +1,12 @@
 # One flat record per identifier asked (ticket 80), read over combine.yaml's
 # pieces, for mdm.prepare (`record_column: record`): a cross-reference is read
 # from a path of the record, so each single value is taken out of its sample
-# here. The ticker is the US composite's, else the only listing's. Run once per
+# here. The ticker and composite FIGI are the US composite's, else the ISIN
+# country's composite's, else (the ticker) the only listing's. A
+# security-level field is the one value the listings state, else the US
+# composite's, else the ISIN country's composite's (operator, 2026-10-20:
+# "Use the primary exchange listing", "US, else the ISIN's country"), else
+# none; every listing is kept (`listings`, ticket 120). Run once per
 # kind asked; mdm.prepare reads its table `security` with that kind's contract.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
@@ -18,12 +23,86 @@ read:
               id: {text: {path: id}}
               found: {value: {path: found}}
               name:
-                join: {path: name.name_sample, item_path: name, separator: "", max_items: 1, null_if_empty: true}
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {join: {path: name.name_sample, item_path: name, separator: "", max_items: 1, null_if_empty: true}}
+                  # The one US composite decides, a blank too; only without one, the country's.
+                  - choose:
+                      condition: {test: {path: us_composite, kind: present}}
+                      then: {value: {path: us_level.name}}
+                      else:
+                        choose:
+                          condition: {test: {path: home_composite, kind: present}}
+                          then: {value: {path: home_level.name}}
+                          else: {value: {path: NO_SUCH_FIELD}}
               share_class_figi:
-                join: {path: share_class.share_class_sample, item_path: share_class_figi, separator: "", max_items: 1, null_if_empty: true}
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {join: {path: share_class.share_class_sample, item_path: share_class_figi, separator: "", max_items: 1, null_if_empty: true}}
+                  # The one US composite decides, a blank too; only without one, the country's.
+                  - choose:
+                      condition: {test: {path: us_composite, kind: present}}
+                      then: {value: {path: us_level.share_class_figi}}
+                      else:
+                        choose:
+                          condition: {test: {path: home_composite, kind: present}}
+                          then: {value: {path: home_level.share_class_figi}}
+                          else: {value: {path: NO_SUCH_FIELD}}
+              security_type:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {join: {path: security_type.security_type_sample, item_path: security_type, separator: "", max_items: 1, null_if_empty: true}}
+                  # The one US composite decides, a blank too; only without one, the country's.
+                  - choose:
+                      condition: {test: {path: us_composite, kind: present}}
+                      then: {value: {path: us_level.security_type}}
+                      else:
+                        choose:
+                          condition: {test: {path: home_composite, kind: present}}
+                          then: {value: {path: home_level.security_type}}
+                          else: {value: {path: NO_SUCH_FIELD}}
+              security_type2:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {join: {path: security_type2.security_type2_sample, item_path: security_type2, separator: "", max_items: 1, null_if_empty: true}}
+                  # The one US composite decides, a blank too; only without one, the country's.
+                  - choose:
+                      condition: {test: {path: us_composite, kind: present}}
+                      then: {value: {path: us_level.security_type2}}
+                      else:
+                        choose:
+                          condition: {test: {path: home_composite, kind: present}}
+                          then: {value: {path: home_level.security_type2}}
+                          else: {value: {path: NO_SUCH_FIELD}}
+              market_sector:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {join: {path: market_sector.market_sector_sample, item_path: market_sector, separator: "", max_items: 1, null_if_empty: true}}
+                  # The one US composite decides, a blank too; only without one, the country's.
+                  - choose:
+                      condition: {test: {path: us_composite, kind: present}}
+                      then: {value: {path: us_level.market_sector}}
+                      else:
+                        choose:
+                          condition: {test: {path: home_composite, kind: present}}
+                          then: {value: {path: home_level.market_sector}}
+                          else: {value: {path: NO_SUCH_FIELD}}
+              # Every listing, keyed by its FIGI in the Security's detail rows (ticket 120).
+              listings: {value: {path: listings}}
+              # The US composite's, else the ISIN country's composite's (ticket 120).
               composite_figi:
                 transform:
-                  value: {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                  value:
+                    coalesce:
+                      skip: "null"
+                      values:
+                      - {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                      - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                   transforms: [{regex_replace: {pattern: " .*", with: ""}}]
               listing_figi:
                 transform:
@@ -36,5 +115,6 @@ read:
                       skip: "null"
                       values:
                       - {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                      - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                   transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}]

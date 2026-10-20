@@ -403,6 +403,7 @@ def normalize(
         fields=fields,
         identifiers=identifiers,
         cross_references=cross_references,
+        details=_details(row, mapping),
         profiles=profiles,
         relationships=relationships,
         schema_version=contract["schema_version"],
@@ -412,6 +413,35 @@ def normalize(
         mapping_version=mapping_version,
         provenance=provenance,
     )
+
+
+def _details(row: dict, mapping: dict) -> dict[str, list[dict]]:
+    """A record's detail lists (ticket 120): the reading's `details` column, an
+    object of lists, each row an object keyed by the field `detail_keys` names
+    (a Security's listings, keyed by FIGI). A row without its key, a key held
+    twice, or a field named `key` or `sources` sets the record aside; an empty
+    list is left out."""
+    keys = mapping.get("detail_keys")
+    if not keys:
+        return {}
+    found = _configured_values(row, mapping, "details")
+    details = {}
+    for name, key in keys.items():
+        rows = found.get(name) or []
+        if not isinstance(rows, list) or any(not isinstance(item, dict) for item in rows):
+            raise UnsupportedRecord("invalid_detail_shape")
+        # `key` and `sources` are the row's own words in MDM: a source field named so is refused.
+        if any("sources" in item or (key != "key" and "key" in item) for item in rows):
+            raise UnsupportedRecord("reserved_detail_field")
+        keyed = [{"key": item.get(key), **{k: v for k, v in item.items() if k != key and v is not None}}
+                 for item in rows]
+        if any(not isinstance(item["key"], str) or not item["key"] for item in keyed):
+            raise UnsupportedRecord("missing_detail_key")
+        if len({item["key"] for item in keyed}) != len(keyed):
+            raise UnsupportedRecord("duplicate_detail_key")
+        if keyed:
+            details[name] = keyed
+    return details
 
 
 def _as_list(node) -> list:

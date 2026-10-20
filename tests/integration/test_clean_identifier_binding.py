@@ -58,7 +58,8 @@ LEI_CONTRACT = {
 RULES = (CIK_MINT, CIK_JOIN, LEI_RULE)
 
 
-def matching_policy(database, *, active=True):
+def matching_policy(database, *, active=True, kind="company"):
+    """`kind`: the same policy for another kind's masters (a Security's, ticket 120)."""
     body = {
         "version": "identifier-binding-test",
         "required_consumers": ["export", "graph"],
@@ -87,6 +88,8 @@ def matching_policy(database, *, active=True):
             }
             for rule in RULES
         ]
+    if kind != "company":
+        body = json.loads(json.dumps(body).replace('"company', f'"{kind}'))
     with database.admin.begin() as conn:
         return register_policy(conn, copy.deepcopy(body))
 

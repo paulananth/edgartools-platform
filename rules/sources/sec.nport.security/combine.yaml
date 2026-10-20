@@ -1,11 +1,13 @@
-# One row per usable CUSIP (table `security`) and one per ISIN of a holding
-# with no usable CUSIP (table `security_isin`), each joined with its filed
+# One row per Security (table `security`, ticket 120), keyed by its usable
+# CUSIP, else the ISIN of a holding with no usable CUSIP, joined with its filed
 # name, title and issuer LEI; a CUSIP also with the one ISIN FIGI agrees on
 # (ticket 79, part 1; ticket 80); and each, CUSIP (ticket 22) or ISIN (ticket
-# 102), with its issuer's LEI when it is filed with exactly one. Inputs: the
-# reduction's output (`securities`), figi-attach.yaml's output (`attached`)
-# and issuer-reduce.yaml's output (`issuers`). Pin canonical JSON of this file
-# as the source.combine contract.
+# 102), with its issuer's LEI when it is filed with exactly one. An ISIN-only
+# row whose ISIN FIGI attaches to a CUSIP is marked `folded_into` that CUSIP;
+# record.yaml leaves it out, and the CUSIP's row takes its facts (`folded_*`,
+# from fold.yaml) where its own holdings state none. Inputs: the reduction's output (`securities`),
+# figi-attach.yaml's output (`attached`), issuer-reduce.yaml's output
+# (`issuers`) and fold.yaml's (`folded`). Pin canonical JSON of this file as the source.combine contract.
 execution:
   profile: source.combine
 combine:
@@ -31,27 +33,47 @@ combine:
     isin_lei: {source: securities, table: isin_leis, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     # As `cusip_issuer`, for an ISIN-only Security (ticket 102).
     isin_issuer: {source: issuers, table: isin_issuers, key: isin, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
+    # The CUSIP an ISIN is attached to, where OpenFIGI agrees one to one (as
+    # `cusip_isin`, from the ISIN's side): an ISIN-only holding of that ISIN is
+    # the CUSIP's Security, folded into its row (ticket 120), so no ISIN reaches
+    # MDM twice.
+    isin_cusip: {source: attached, table: attached, key: isin, value: cusip, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {cusip_offers: 1, isin_offers: 1}}
+    # fold.yaml's ISIN-only facts, keyed by the CUSIP their ISIN is attached to
+    # (one to one, so `one` never chooses).
+    folded_name: {source: folded, table: names, key: cusip, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    folded_title: {source: folded, table: titles, key: cusip, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    folded_lei: {source: folded, table: leis, key: cusip, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    folded_issuer: {source: folded, table: issuers, key: cusip, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
+    folded_filed: {source: folded, table: filed, key: cusip, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
   tables:
+    # One row per Security (ticket 120; operator, 2026-10-20: "One master
+    # record"), keyed by its CUSIP, else its ISIN (reduce.yaml's `keys`). The
+    # CUSIP's facts and the ISIN-only holding's facts join by that one key: a key
+    # is one or the other, never both, so a row takes only its own kind's.
     security:
       source: securities
-      table: cusips
+      table: keys
       checks: {}
       where: {}
       joins:
-        name: {group: cusip_name, key: cusip, on_missing: skip, replace: false}
-        title: {group: cusip_title, key: cusip, on_missing: skip, replace: false}
-        lei: {group: cusip_lei, key: cusip, on_missing: skip, replace: false}
-        isin: {group: cusip_isin, key: cusip, on_missing: skip, replace: false}
-        issuer: {group: cusip_issuer, key: cusip, on_missing: skip, replace: false}
-        filed: {group: cusip_filed, key: cusip, on_missing: skip, replace: false}
-    security_isin:
-      source: securities
-      table: isins
-      checks: {}
-      where: {}
-      joins:
-        name: {group: isin_name, key: isin, on_missing: skip, replace: false}
-        title: {group: isin_title, key: isin, on_missing: skip, replace: false}
-        lei: {group: isin_lei, key: isin, on_missing: skip, replace: false}
-        issuer: {group: isin_issuer, key: isin, on_missing: skip, replace: false}
-        filed: {group: isin_filed, key: isin, on_missing: skip, replace: false}
+        name: {group: cusip_name, key: key, on_missing: skip, replace: false}
+        title: {group: cusip_title, key: key, on_missing: skip, replace: false}
+        lei: {group: cusip_lei, key: key, on_missing: skip, replace: false}
+        isin: {group: cusip_isin, key: key, on_missing: skip, replace: false}
+        issuer: {group: cusip_issuer, key: key, on_missing: skip, replace: false}
+        filed: {group: cusip_filed, key: key, on_missing: skip, replace: false}
+        isin_name: {group: isin_name, key: key, on_missing: skip, replace: false}
+        isin_title: {group: isin_title, key: key, on_missing: skip, replace: false}
+        isin_lei: {group: isin_lei, key: key, on_missing: skip, replace: false}
+        isin_issuer: {group: isin_issuer, key: key, on_missing: skip, replace: false}
+        isin_filed: {group: isin_filed, key: key, on_missing: skip, replace: false}
+        folded_into: {group: isin_cusip, key: key, on_missing: skip, replace: false}
+        # The facts of the ISIN-only holdings folded into this CUSIP's row
+        # (fold.yaml, keyed by the CUSIP): record.yaml takes them where the
+        # CUSIP's own holdings state none, so a folded holding's issuer LEI and
+        # filing date are kept.
+        folded_name: {group: folded_name, key: key, on_missing: skip, replace: false}
+        folded_title: {group: folded_title, key: key, on_missing: skip, replace: false}
+        folded_lei: {group: folded_lei, key: key, on_missing: skip, replace: false}
+        folded_issuer: {group: folded_issuer, key: key, on_missing: skip, replace: false}
+        folded_filed: {group: folded_filed, key: key, on_missing: skip, replace: false}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 
@@ -17,8 +18,16 @@ def call(*arguments: str, document: dict | None = None):
     done = subprocess.run(command, input=None if document is None else json.dumps(document),
                           capture_output=True, text=True, timeout=300)
     if done.returncode != 0:
-        raise ControlError(done.stderr.strip().splitlines()[-1] if done.stderr.strip() else f"exit {done.returncode}")
+        raise ControlError(_reason(done.stderr) or f"exit {done.returncode}")
     return json.loads(done.stdout)
+
+
+def _reason(stderr: str) -> str:
+    """The failure's own line: a database error's message (`(psycopg2.errors.X) ...`), not the SQL, its
+    parameters (they can hold data values) or SQLAlchemy's closing link; else the last line."""
+    lines = [line.strip() for line in stderr.strip().splitlines() if line.strip()]
+    database = [line for line in lines if re.search(r"\(psycopg2?\.errors\.", line)]
+    return (database[-1] if database else lines[-1]) if lines else ""
 
 
 def report_document(verification: dict, checks: dict, proofs: list, runtime: str) -> dict:

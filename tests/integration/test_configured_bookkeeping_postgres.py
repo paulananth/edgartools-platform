@@ -428,8 +428,11 @@ def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(d
     assert executions == ["parsed0", "parsed1", "parsed2"]
 
 
-def fan_in_submission(databases, tmp_path):
-    """A gathering step whose one input is a document composed from many verified outputs (to-do 20c)."""
+def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=None, pipeline=None):
+    """A gathering step whose one input is a document composed from many verified outputs (to-do 20c).
+    `first`: the slot `first` names this unit instead (another run's, ticket 120), which the gathering
+    step declares as `declared` ({source, target, step}). `capture`: the capture the manifest was
+    written from (ticket 121); `pipeline`: an active pipeline's name, so two runs are one target's."""
     book, _, manifest, executions = staged_submission(databases, tmp_path)
     gathered = []
 
@@ -460,20 +463,30 @@ def fan_in_submission(databases, tmp_path):
         step.update(name=name, requires=requires)
     steps[1]["operation"] = "fixture.transform"
     steps[2]["operation"] = "fixture.gather"
+    if declared:
+        body["bookkeeping"]["version"] = 2
+        steps[2]["input"] = {"readings": {"one": {"run": declared}}}
     output = (tmp_path / "gather" / "all").as_uri()
     compose = {"document": {"version": 1, "one": {"slot": "first"}, "all": {"slot": "parts"}, "inner": {"slot": "nested"}},
-               "slots": {"first": {"step": "a_transform", "key": "parsed1"},
+               "slots": {"first": first or {"step": "a_transform", "key": "parsed1"},
                          "parts": [{"step": "a_transform", "key": f"parsed{n}"} for n in (2, 0)],
                          "nested": {"compose": {"document": {"raw": {"slot": "raw"}},
                                                 "slots": {"raw": {"step": "z_capture", "key": "raw1"}}}}}}
     manifest["steps"]["b_gather"] = [{"keys": {"id": "all", "destination": output}, "input": {"compose": compose},
                                       "output": output, "cursor": {"key": "all"}}]
     del manifest["steps"]["b_finish"]
+    if capture:
+        manifest["capture"] = capture
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", manifest)
-    name = "fan-in-" + uuid4().hex
-    saved = databases.rules.save("pipeline", name, "1", body)
-    databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    databases.rules.activate("pipeline", name, "1")
+    name = pipeline or "fan-in-" + uuid4().hex
+    try:  # a second run of an active pipeline submits under it again
+        active = bool(pipeline) and databases.rules.version("pipeline", name, "1")["status"] == "active"
+    except Blocked:
+        active = False
+    if not active:
+        saved = databases.rules.save("pipeline", name, "1", body)
+        databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
+        databases.rules.activate("pipeline", name, "1")
     rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
     book.workers = {**book.workers, "fixture.gather": Gather}
@@ -508,6 +521,117 @@ def test_a_composed_input_with_a_corrupt_slot_blocks_without_execution(databases
     with pytest.raises(Blocked):
         drive(book, rid, databases.ledger, workers=book.workers)
     assert book.status(rid)["run"]["state"] == "blocked" and gathered == []
+
+
+def earlier_run(databases, tmp_path, *, complete=True):
+    """A finished fan-in run whose `a_transform` units another run reads, with its selector."""
+    book, rid, _, _, _ = fan_in_submission(databases, tmp_path / "earlier")
+    if complete:
+        drive(book, rid, databases.ledger, workers=book.workers)
+    return book, rid, {"source": book.status(rid)["run"]["submission"]["name"], "target": "silver", "step": "a_transform"}
+
+
+def test_a_slot_reads_another_runs_verified_unit(databases, tmp_path):
+    """Ticket 120: a slot may name a unit of another run; only its verified, reverified receipt fills it."""
+    earlier, done, selector = earlier_run(databases, tmp_path)
+    receipt = next(i["receipt"] for i in earlier.status(done)["items"] if i["unit_key"] == "parsed1")
+    book, rid, output, _, gathered = fan_in_submission(
+        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"}, declared=selector)
+    state = drive(book, rid, databases.ledger, workers=book.workers)
+    assert state["run"]["state"] == "complete"
+    (document,) = gathered
+    assert book.artifacts.json(document)["one"] == {k: receipt[k] for k in ("uri", "sha256")}
+
+
+@pytest.mark.parametrize("case", ["unknown_run", "not_verified", "not_complete", "corrupt", "undeclared",
+                                  "other_step"])
+def test_a_slot_naming_another_run_blocks_unless_declared_complete_and_verified(databases, tmp_path, case):
+    earlier, done, selector = earlier_run(databases, tmp_path, complete=case not in ("not_verified", "not_complete"))
+    if case == "not_complete":  # every unit verified but the last: the run is not complete
+        drive(earlier, done, databases.ledger, workers=earlier.workers, limit=5)
+    named = {"run": str(uuid4()) if case == "unknown_run" else done, "step": "a_transform", "key": "parsed1"}
+    if case == "corrupt":
+        receipt = next(i["receipt"] for i in earlier.status(done)["items"] if i["unit_key"] == "parsed1")
+        Path(receipt["uri"].removeprefix("file://")).write_bytes(b"corrupt")
+    declared = {"undeclared": None, "other_step": {**selector, "step": "z_capture"}}.get(case, selector)
+    book, rid, _, _, gathered = fan_in_submission(databases, tmp_path / "later", first=named, declared=declared)
+    reason = {"unknown_run": "lacks verified completion", "not_verified": "lacks verified completion",
+              "not_complete": "complete, uncompacted", "undeclared": "its step declares",
+              "other_step": "its step declares"}.get(case)
+    with pytest.raises(Blocked, match=reason):
+        drive(book, rid, databases.ledger, workers=book.workers)
+    assert gathered == []
+
+
+def test_a_slot_naming_another_run_is_shaped(databases, tmp_path):
+    with pytest.raises(Blocked, match="existing unit"):
+        fan_in_submission(databases, tmp_path, first={"run": "not-a-run", "step": "a_transform", "key": "parsed1"})
+
+
+def test_another_runs_verified_units_are_its_complete_runs_outputs_once(databases, tmp_path):
+    """Ticket 120: a reading of another run's step lists its complete runs' verified units; the same
+    output read twice is listed once; a run not finished is refused."""
+    book, rid, _, _, _ = fan_in_submission(databases, tmp_path / "first")
+    name = book.status(rid)["run"]["submission"]["name"]
+    with pytest.raises(Blocked, match="not finished"):  # its one run is still running (ticket 121)
+        book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
+    drive(book, rid, databases.ledger, workers=book.workers)
+    found = book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
+    outputs = {i["receipt"]["sha256"] for i in book.status(rid)["items"] if i["step"] == "a_transform"}
+    assert len(outputs) == 2  # parsed0 and parsed2 read the same input: one output
+    assert sorted(u["sha256"] for u in found) == sorted(outputs) and {u["run"] for u in found} == {rid}
+    assert book.verified_units(source=name, target="silver", step="a_transform") == []  # a source's runs only
+
+
+def test_a_reading_takes_the_runs_of_the_newest_capture_only(databases, tmp_path):
+    """Ticket 121 (operator, 2026-10-20: "All runs of latest capture (Recommended)"): runs of an
+    older capture are not read, so the same identifier never comes back from two captures."""
+    name = "fan-in-" + uuid4().hex
+    older, first, _, _, _ = fan_in_submission(databases, tmp_path / "older", capture="capture-1", pipeline=name)
+    drive(older, first, databases.ledger, workers=older.workers)
+    newer, second, _, _, _ = fan_in_submission(databases, tmp_path / "newer", capture="capture-2", pipeline=name)
+    with pytest.raises(Blocked, match="1 runs not finished"):  # the newest capture is still running
+        newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
+    drive(newer, second, databases.ledger, workers=newer.workers)
+    assert newer.status(second)["run"]["submission"]["capture"] == "capture-2"
+    found = newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
+    assert found and {u["run"] for u in found} == {second}
+    # A later rerun of the older capture does not make it the newest.
+    rerun, third, _, _, _ = fan_in_submission(databases, tmp_path / "rerun", capture="capture-1", pipeline=name)
+    drive(rerun, third, databases.ledger, workers=rerun.workers)
+    assert {u["run"] for u in rerun.verified_units(source=name, target="silver", step="a_transform",
+                                                   kind="pipeline")} == {second}
+    # The newest capture's run compacted: refused, never the older capture in its place.
+    with databases.admin.begin() as conn:
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '31 days' "
+                          "WHERE run_id=CAST(:r AS uuid)"), {"r": second})
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '40 days' "
+                          "WHERE run_id=CAST(:r AS uuid)"), {"r": first})
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET pinned=true WHERE run_id IN (CAST(:r AS uuid), CAST(:t AS uuid))"),
+                     {"r": first, "t": third})
+        assert conn.scalar(text("SELECT bookkeeping.compact(30)")) == 1
+    with pytest.raises(Blocked, match="1 compacted runs"):
+        newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
+
+
+def test_a_manifest_names_its_capture_as_text_only(databases, tmp_path):
+    with pytest.raises(Blocked, match="capture"):
+        fan_in_submission(databases, tmp_path, capture={"run": "capture-1"})
+
+
+def test_a_run_another_live_run_reads_is_not_compacted(databases, tmp_path):
+    """Ticket 121: a producing run is kept while a run that names its units is not complete."""
+    earlier, done, selector = earlier_run(databases, tmp_path)
+    book, rid, _, _, _ = fan_in_submission(
+        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"}, declared=selector)
+    with databases.admin.begin() as conn:
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '31 days' "
+                          "WHERE run_id=CAST(:r AS uuid)"), {"r": done})
+        assert conn.scalar(text("SELECT bookkeeping.compact(30)")) == 0
+    drive(book, rid, databases.ledger, workers=book.workers)
+    with databases.admin.begin() as conn:
+        assert conn.scalar(text("SELECT bookkeeping.compact(30)")) == 1  # read and done: compacted as usual
+    assert earlier.status(done)["run"]["compacted_at"] is not None
 
 
 def test_independent_concurrency_and_shared_contention(databases, tmp_path):
