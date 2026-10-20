@@ -348,6 +348,27 @@ def test_the_sql_fold_equals_current_claims_with_profiles(database):
     assert snapshot == current_claims(readings, EVER, set())[readings[0]["subject"]]
 
 
+def test_the_sql_fold_equals_current_claims_with_details(database):
+    """Ticket 120: the snapshot carries the latest reading's detail lists, and none
+    when that reading has none, as current_claims does."""
+    readings = [
+        assertion(source_code="fixture.primary", record_key="det", publication_key=f"p{n}", revision=n,
+                  effective_at=None, kind="security", fields={"name": "Example"}, details=details)
+        for n, details in ((1, {"listings": [{"key": "F1", "ticker": "AAA"}]}),
+                           (2, {"listings": [{"key": "F2", "ticker": "AAB"}]}),
+                           (3, {}))
+    ]
+    snapshots, snapshot = [], None
+    with database.admin.connect() as conn:
+        for a in readings:
+            snapshot = conn.scalar(text("SELECT mdm.stage_fold(CAST(:prev AS jsonb), CAST(:a AS jsonb))"),
+                                   {"prev": None if snapshot is None else json.dumps(snapshot), "a": json.dumps(a)})
+            snapshots.append(snapshot)
+    for n, found in enumerate(snapshots, start=1):
+        assert found == current_claims(readings[:n], EVER, set())[readings[0]["subject"]]
+    assert [s.get("details") for s in snapshots] == [readings[0]["details"], readings[1]["details"], None]
+
+
 def test_the_runtime_role_cannot_write_the_stage(database):
     core.apply(database, 1, assertions=[reading("ro", 1, {"name": "Acme"})])
     with (

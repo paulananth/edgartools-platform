@@ -74,6 +74,7 @@ MIGRATIONS: tuple[str, ...] = (
     "020_merge_record_by_record.sql",
     "021_identifier_index_no_pending_list.sql",
     "022_detail_version.sql",
+    "023_stage_details.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond

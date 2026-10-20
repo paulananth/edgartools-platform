@@ -115,7 +115,8 @@ def current_claims(
             "kind": kind,
             "fields": claims,
             "identifiers": ids,
-            "details": details,
+            # Absent when empty, as on the assertion and the Stage snapshot.
+            **({"details": details} if details else {}),
             "profiles": profiles,
             "profile_fields": profile_fields,
             "relationships": relationships,
