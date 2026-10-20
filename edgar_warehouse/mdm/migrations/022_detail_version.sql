@@ -41,10 +41,20 @@ COMMENT ON COLUMN mdm.detail_version.valid_to IS 'Recording time it was changed 
 COMMENT ON COLUMN mdm.detail_version.batch_id IS 'The batch that recorded this state (mdm.batch).';
 COMMENT ON COLUMN mdm.detail_version.body IS 'The row as recorded: its fields and the sources that gave its key.';
 
--- One master's detail rows as committed by one batch: each row as for a
--- relationship (unchanged: nothing; the same generation: replaced; else the
--- open row closed and a new one opened), and each open row the body no longer
--- carries ended.
+-- A master body's detail rows, one per list and key.
+CREATE FUNCTION mdm.detail_rows(projected jsonb) RETURNS TABLE (detail text, key text, body jsonb)
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'pg_catalog', 'mdm'
+    AS $$
+    SELECT d.key, r.value ->> 'key', r.value
+      FROM jsonb_each(coalesce(projected -> 'details', '{}'::jsonb)) d, jsonb_array_elements(d.value) r
+$$;
+
+-- One master's detail rows as committed by one batch, set by set: a row
+-- unchanged is left; a row this generation already opened takes the new body;
+-- an open row changed or gone is closed (gone: ended, its history kept; one
+-- this same generation opened is removed, since that generation never held
+-- it); a key with no open row is opened, from when its last state closed.
 CREATE FUNCTION mdm.record_detail_versions(entity text, projected jsonb, source_batch text) RETURNS void
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'mdm'
@@ -52,50 +62,39 @@ CREATE FUNCTION mdm.record_detail_versions(entity text, projected jsonb, source_
 DECLARE
     generation_number bigint;
     recorded_at timestamptz;
-    starts_at timestamptz;
-    item record;
-    previous mdm.detail_version%ROWTYPE;
 BEGIN
     SELECT generation, created_at INTO generation_number, recorded_at FROM mdm.batch WHERE batch_id = source_batch;
     IF generation_number IS NULL THEN RAISE EXCEPTION 'Detail projection has no committed batch'; END IF;
-    FOR item IN
-        SELECT d.key AS detail, r.value ->> 'key' AS key, r.value AS body
-          FROM jsonb_each(coalesce(projected -> 'details', '{}'::jsonb)) d,
-               jsonb_array_elements(d.value) r
-    LOOP
-        SELECT * INTO previous FROM mdm.detail_version
-          WHERE entity_id = entity AND detail = item.detail AND key = item.key AND to_generation IS NULL FOR UPDATE;
-        IF previous.entity_id IS NOT NULL AND previous.body = item.body THEN CONTINUE; END IF;
-        IF previous.entity_id IS NOT NULL AND previous.from_generation = generation_number THEN
-            UPDATE mdm.detail_version SET body = item.body, batch_id = source_batch
-             WHERE entity_id = entity AND detail = item.detail AND key = item.key AND from_generation = generation_number;
-            CONTINUE;
-        END IF;
-        IF previous.entity_id IS NOT NULL AND previous.from_generation > generation_number THEN
-            RAISE EXCEPTION 'Detail % % of % recorded out of generation order', item.detail, item.key, entity;
-        END IF;
-        starts_at := greatest(recorded_at, coalesce(previous.valid_from + interval '1 microsecond', recorded_at));
-        IF previous.entity_id IS NOT NULL THEN
-            UPDATE mdm.detail_version SET valid_to = starts_at, to_generation = generation_number
-             WHERE entity_id = entity AND detail = item.detail AND key = item.key AND to_generation IS NULL;
-        END IF;
-        INSERT INTO mdm.detail_version (entity_id, detail, key, from_generation, valid_from, batch_id, body)
-        VALUES (entity, item.detail, item.key, generation_number, starts_at, source_batch, item.body);
-    END LOOP;
-    -- A row the body no longer carries is ended, its history kept; one opened by
-    -- this same generation is removed, since that generation never held it.
+    PERFORM 1 FROM mdm.detail_version WHERE entity_id = entity AND to_generation IS NULL FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM mdm.detail_version WHERE entity_id = entity AND to_generation IS NULL
+                AND from_generation > generation_number) THEN
+        RAISE EXCEPTION 'Details of % recorded out of generation order', entity;
+    END IF;
+    UPDATE mdm.detail_version v SET body = d.body, batch_id = source_batch
+      FROM mdm.detail_rows(projected) d
+     WHERE v.entity_id = entity AND v.detail = d.detail AND v.key = d.key AND v.to_generation IS NULL
+       AND v.from_generation = generation_number AND v.body <> d.body;
     DELETE FROM mdm.detail_version v
      WHERE v.entity_id = entity AND v.to_generation IS NULL AND v.from_generation = generation_number
-       AND NOT coalesce(projected -> 'details' -> v.detail, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('key', v.key));
+       AND NOT EXISTS (SELECT 1 FROM mdm.detail_rows(projected) d WHERE d.detail = v.detail AND d.key = v.key);
     UPDATE mdm.detail_version v
        SET valid_to = greatest(recorded_at, v.valid_from + interval '1 microsecond'), to_generation = generation_number
      WHERE v.entity_id = entity AND v.to_generation IS NULL AND v.from_generation < generation_number
-       AND NOT coalesce(projected -> 'details' -> v.detail, '[]'::jsonb) @> jsonb_build_array(jsonb_build_object('key', v.key));
+       AND NOT EXISTS (SELECT 1 FROM mdm.detail_rows(projected) d
+                        WHERE d.detail = v.detail AND d.key = v.key AND d.body = v.body);
+    INSERT INTO mdm.detail_version (entity_id, detail, key, from_generation, valid_from, batch_id, body)
+    SELECT entity, d.detail, d.key, generation_number,
+           coalesce((SELECT max(c.valid_to) FROM mdm.detail_version c WHERE c.entity_id = entity
+                      AND c.detail = d.detail AND c.key = d.key AND c.to_generation = generation_number), recorded_at),
+           source_batch, d.body
+      FROM mdm.detail_rows(projected) d
+     WHERE NOT EXISTS (SELECT 1 FROM mdm.detail_version v WHERE v.entity_id = entity AND v.detail = d.detail
+                        AND v.key = d.key AND v.to_generation IS NULL);
 END;
 $$;
 
 COMMENT ON FUNCTION mdm.record_detail_versions(text, jsonb, text) IS
-    'Record one master''s detail rows committed by one batch in mdm.detail_version: each row nothing when unchanged, replaced within its generation, else closed and reopened; each open row the body no longer carries ended.';
+    'Record one master''s detail rows committed by one batch in mdm.detail_version, set by set: unchanged left, replaced within its generation, else closed and reopened; an open row the body no longer carries ended.';
 
 CREATE FUNCTION mdm.keep_detail_versions() RETURNS trigger
     LANGUAGE plpgsql
@@ -114,8 +113,9 @@ COMMENT ON FUNCTION mdm.keep_detail_versions() IS
 CREATE TRIGGER keep_detail_versions_insert AFTER INSERT ON mdm.current_record
     FOR EACH ROW WHEN (NEW.object_type = 'entity' AND NEW.body ? 'details')
     EXECUTE FUNCTION mdm.keep_detail_versions();
+-- An update fires only when the details changed: a field change leaves them alone.
 CREATE TRIGGER keep_detail_versions_update AFTER UPDATE ON mdm.current_record
-    FOR EACH ROW WHEN (NEW.object_type = 'entity' AND (NEW.body ? 'details' OR OLD.body ? 'details'))
+    FOR EACH ROW WHEN (NEW.object_type = 'entity' AND OLD.body -> 'details' IS DISTINCT FROM NEW.body -> 'details')
     EXECUTE FUNCTION mdm.keep_detail_versions();
 
 -- Readers of mdm.current_record read this table too; copy only SELECT.

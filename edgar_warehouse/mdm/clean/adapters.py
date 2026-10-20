@@ -418,8 +418,9 @@ def normalize(
 def _details(row: dict, mapping: dict) -> dict[str, list[dict]]:
     """A record's detail lists (ticket 120): the reading's `details` column, an
     object of lists, each row an object keyed by the field `detail_keys` names
-    (a Security's listings, keyed by FIGI). A row without its key, or a key
-    held twice, sets the record aside; an empty list is left out."""
+    (a Security's listings, keyed by FIGI). A row without its key, a key held
+    twice, or a field named `key` or `sources` sets the record aside; an empty
+    list is left out."""
     keys = mapping.get("detail_keys")
     if not keys:
         return {}
@@ -429,6 +430,9 @@ def _details(row: dict, mapping: dict) -> dict[str, list[dict]]:
         rows = found.get(name) or []
         if not isinstance(rows, list) or any(not isinstance(item, dict) for item in rows):
             raise UnsupportedRecord("invalid_detail_shape")
+        # `key` and `sources` are the row's own words in MDM: a source field named so is refused.
+        if any("sources" in item or (key != "key" and "key" in item) for item in rows):
+            raise UnsupportedRecord("reserved_detail_field")
         keyed = [{"key": item.get(key), **{k: v for k, v in item.items() if k != key and v is not None}}
                  for item in rows]
         if any(not isinstance(item["key"], str) or not item["key"] for item in keyed):

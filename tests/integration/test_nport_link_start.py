@@ -108,8 +108,9 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuer_reading})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
         {"input": raw, "tables": {"attached": []}, "deferred": []}]})
+    folded = combine(store, root / "fold", "fold.yaml", {"securities": securities, "attached": attached, "issuers": reduced})
     combined = combine(store, root / "combine", "combine.yaml",
-                       {"securities": securities, "attached": attached, "issuers": reduced})
+                       {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
     prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",

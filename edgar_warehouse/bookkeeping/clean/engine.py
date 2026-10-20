@@ -603,10 +603,22 @@ class Bookkeeping:
 
         Ticket 121 (operator, 2026-10-20: "All runs of latest capture (Recommended)"): only the runs
         of the capture the newest complete run was written from, so an identifier never comes back
-        from two captures. Runs that name no capture (written before ticket 121) are one capture."""
+        from two captures. Runs that name no capture (written before ticket 121) are one capture.
+        The newest capture is chosen over every complete run, compacted or not, and a capture
+        with any run compacted is refused: an older capture never stands in for it."""
         with self.engine.connect() as conn:
-            found = _rows(conn, """WITH runs AS (SELECT run_id, submission->'capture' AS capture, completed_at
-                    FROM bookkeeping.pipeline_run WHERE state='complete' AND compacted_at IS NULL
+            compacted = conn.scalar(text("""WITH runs AS (SELECT submission->'capture' AS capture, completed_at, run_id,
+                    compacted_at FROM bookkeeping.pipeline_run WHERE state='complete' AND submission->>'kind'=:kind
+                      AND submission->>'name'=:source AND submission->>'target'=:target),
+                  newest AS (SELECT capture FROM runs ORDER BY completed_at DESC, run_id DESC LIMIT 1)
+                SELECT count(*) FROM runs WHERE compacted_at IS NOT NULL
+                  AND capture IS NOT DISTINCT FROM (SELECT capture FROM newest)"""),
+                {"source": source, "target": target, "kind": kind})
+            if compacted:
+                raise Blocked(f"The newest capture of {source}/{target} has {compacted} compacted runs; "
+                              "run that target again over a capture")
+            found = _rows(conn, """WITH runs AS (SELECT run_id, submission->'capture' AS capture, completed_at,
+                    compacted_at FROM bookkeeping.pipeline_run WHERE state='complete'
                       AND submission->>'kind'=:kind AND submission->>'name'=:source AND submission->>'target'=:target),
                   newest AS (SELECT capture FROM runs ORDER BY completed_at DESC, run_id DESC LIMIT 1)
                 SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,

@@ -7,13 +7,16 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bookkeeping AS $$
 DECLARE r uuid; total bigint := 0; refs jsonb;
 BEGIN
   IF days<30 THEN RAISE EXCEPTION 'Retention must be at least 30 days'; END IF;
-  FOR r IN SELECT run_id FROM bookkeeping.pipeline_run p WHERE state='complete' AND NOT pinned
+  -- The runs live runs name, gathered once: only live runs' work is read, then
+  -- each candidate is compared by equality.
+  FOR r IN WITH read AS (SELECT DISTINCT jsonb_path_query(w.unit->'input', '$.**.run') #>> '{}' AS run_id
+             FROM bookkeeping.pipeline_run l JOIN bookkeeping.work_item w ON w.run_id=l.run_id
+             WHERE l.state<>'complete')
+    SELECT p.run_id FROM bookkeeping.pipeline_run p WHERE state='complete' AND NOT pinned
     AND completed_at<clock_timestamp()-make_interval(days=>days) AND compacted_at IS NULL
     AND NOT EXISTS(SELECT 1 FROM bookkeeping.journal_outbox j WHERE j.run_id=p.run_id AND delivered_at IS NULL)
-    AND NOT EXISTS(SELECT 1 FROM bookkeeping.work_item w JOIN bookkeeping.pipeline_run l ON l.run_id=w.run_id
-      WHERE l.state<>'complete' AND w.run_id<>p.run_id
-        AND jsonb_path_exists(w.unit->'input', '$.**.run ? (@ == $r)', jsonb_build_object('r', p.run_id::text)))
-    FOR UPDATE LOOP
+    AND NOT EXISTS(SELECT 1 FROM read WHERE read.run_id=p.run_id::text)
+    FOR UPDATE OF p LOOP
     SELECT jsonb_agg(jsonb_build_object('step',step,'key',unit_key,'receipt',receipt) ORDER BY step,ordinal)
       INTO refs FROM bookkeeping.work_item WHERE run_id=r;
     UPDATE bookkeeping.pipeline_run SET summary=summary||jsonb_build_object('receipts',coalesce(refs,'[]'::jsonb)),

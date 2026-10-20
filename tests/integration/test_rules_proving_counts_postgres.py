@@ -24,6 +24,13 @@ def test_the_streamed_hash_is_the_one_string_hash(database):
                                              ("entity", "e-1", '{"name": "A", "identifiers": {"cusip": ["X"]}}')]:
             conn.execute(text("INSERT INTO mdm.current_record (object_type, object_id, body, batch_id) "
                               "VALUES (:t, :i, CAST(:b AS jsonb), 'batch-1')"), {"t": object_type, "i": object_id, "b": body})
+        # Two current Companies and an ended one: the Company part joins only the current, by entity id.
+        for entity, ended in (("00000000-0000-0000-0000-000000000002", None), ("00000000-0000-0000-0000-000000000001", None),
+                              ("00000000-0000-0000-0000-000000000003", 2)):
+            conn.execute(text("INSERT INTO mdm.company (entity_id, from_generation, to_generation, valid_from, valid_to, "
+                              "batch_id, status, identifiers, name, body) VALUES (CAST(:e AS uuid), 1, :t, now(), "
+                              "CASE WHEN :t IS NULL THEN NULL ELSE now() + interval '1 day' END, 'batch-1', 'accepted', "
+                              "'{}'::jsonb, 'Example', '{}'::jsonb)"), {"e": entity, "t": ended})
     with database.admin.connect() as conn:
         expected = conn.scalar(ONE_STRING)
 

@@ -46,14 +46,15 @@ def policy_body() -> dict:
     return cusip.policy_body()
 
 
-def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached: list[dict] = ()) -> list[dict]:
+def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached: list[dict] = (),
+                     with_cusip: list[str] = WITH_CUSIP) -> list[dict]:
     """`attached`: the pairs FIGI agrees on, as figi-attach.yaml gives them."""
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
     body = io.BytesIO()
     with zipfile.ZipFile(body, "w") as z:
         z.writestr("FUND_REPORTED_HOLDING.tsv", "\n".join("\t".join(r) for r in [
-            cusip.COLUMNS, *([*h, ""] for h in HOLDINGS), WITH_CUSIP]) + "\n")
+            cusip.COLUMNS, *([*h, ""] for h in HOLDINGS), with_cusip]) + "\n")
         z.writestr("SUBMISSION.tsv", "ACCESSION_NUMBER\tFILING_DATE\n"
                    + "".join(f"{a}\t{d}\n" for a, d in cusip.FILINGS.items()))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
@@ -63,8 +64,10 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached:
     reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
         {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
+    folded = cusip.combine(store, root / "fold", "fold.yaml",
+                           {"securities": securities, "attached": attached, "issuers": reduced})
     combined = cusip.combine(store, root / "combine", "combine.yaml",
-                             {"securities": securities, "attached": attached, "issuers": reduced})
+                             {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
     prepared = chain.prepare(store, root / "mdm", cusip.recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00"})
@@ -116,3 +119,13 @@ def test_an_isin_only_holding_of_an_attached_isin_is_its_cusips_security(tmp_pat
     assert set(records) == {TWO, NONE, CUSIP}
     assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": ONE}
     assert records[TWO]["identifiers"] == {"isin": TWO}
+
+
+def test_a_folded_holdings_issuer_fills_the_cusips_when_its_own_name_none(tmp_path):
+    """Standards review: the CUSIP's own holding names no issuer LEI; the ISIN-only
+    holdings folded into it (ONE, filed with LEI) give its ISSUED_BY link."""
+    pair = {"cusip": CUSIP, "isin": ONE, "cusip_offers": 1, "isin_offers": 1}
+    no_lei = ["A-1", "9", "Example Corp", "", "Note", CUSIP]
+    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, attached=[pair], with_cusip=no_lei)}
+    targets = [l["target_subject"] for l in records[CUSIP].get("relationships") or [] if l["type"] == "ISSUED_BY"]
+    assert targets == [subject_key(cusip.GLEIF, LEI)]

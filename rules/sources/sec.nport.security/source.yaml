@@ -507,15 +507,26 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input: {contract: figi-attach.yaml, readings: {agreed: {step: agree}, offers: {step: offers}}}
-        - name: combine
+        # The ISIN-only holdings' facts keyed by the CUSIP their ISIN is attached to
+        # (ticket 120), for combine.yaml's folded rows.
+        - name: fold
           operation: source.combine
           requires: [reduce, attach, issuer_reduce]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input:
-            contract: combine.yaml
+            contract: fold.yaml
             readings: {securities: {step: reduce}, attached: {step: attach}, issuers: {step: issuer_reduce}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce, attach, issuer_reduce, fold]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: combine.yaml
+            readings: {securities: {step: reduce}, attached: {step: attach}, issuers: {step: issuer_reduce}, folded: {step: fold}}
         - name: record
           operation: source.read
           requires: [combine]

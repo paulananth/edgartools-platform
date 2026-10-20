@@ -51,8 +51,10 @@ def test_a_contract_gives_its_rows_keyed_and_leaves_out_empty_values():
 @pytest.mark.parametrize("listings, reason", [
     ({"a": {"exchange": "US"}}, "missing_detail_key"),
     ({"a": {"figi": "F1"}, "b": {"figi": "F1"}}, "duplicate_detail_key"),
+    ({"a": {"figi": "F1", "key": "X"}}, "reserved_detail_field"),
+    ({"a": {"figi": "F1", "sources": "X"}}, "reserved_detail_field"),
 ])
-def test_a_row_without_its_key_or_a_key_held_twice_sets_the_record_aside(listings, reason):
+def test_a_row_without_its_key_a_key_held_twice_or_a_reserved_field_sets_the_record_aside(listings, reason):
     with pytest.raises(UnsupportedRecord) as refused:
         normalize(row(**listings), source_code="fixture.primary", publication=PUBLICATION, contract=contract())
     assert refused.value.reason == reason

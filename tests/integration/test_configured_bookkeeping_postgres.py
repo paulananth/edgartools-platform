@@ -595,6 +595,16 @@ def test_a_reading_takes_the_runs_of_the_newest_capture_only(databases, tmp_path
     assert newer.status(second)["run"]["submission"]["capture"] == "capture-2"
     found = newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
     assert found and {u["run"] for u in found} == {second}
+    # The newest capture's run compacted: refused, never the older capture in its place.
+    with databases.admin.begin() as conn:
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '31 days' "
+                          "WHERE run_id=CAST(:r AS uuid)"), {"r": second})
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '40 days' "
+                          "WHERE run_id=CAST(:r AS uuid)"), {"r": first})
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET pinned=true WHERE run_id=CAST(:r AS uuid)"), {"r": first})
+        assert conn.scalar(text("SELECT bookkeeping.compact(30)")) == 1
+    with pytest.raises(Blocked, match="1 compacted runs"):
+        newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
 
 
 def test_a_manifest_names_its_capture_as_text_only(databases, tmp_path):

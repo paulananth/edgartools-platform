@@ -22,9 +22,9 @@ def securities(database):
     return {k: v for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}
 
 
-def record(key, source_code="fixture.primary", revision=1, details=None):
+def record(key, source_code="fixture.primary", revision=1, details=None, name=None):
     return core.source(key=key, source_code=source_code, revision=revision, kind="security",
-                       fields={"name": f"Security {key}"}, identifiers={"cik": "0000320193"}, details=details)
+                       fields={"name": name or f"Security {key}"}, identifiers={"cik": "0000320193"}, details=details)
 
 
 def row(key, place, ticker):
@@ -80,3 +80,17 @@ def test_a_master_whose_records_carry_no_rows_has_no_details(database):
     (security,) = securities(database).values()
 
     assert "details" not in security and versions(database) == []
+
+
+def test_a_field_change_leaves_the_detail_rows_alone(database):
+    """Standards review: the trigger fires only when the details change."""
+    policy = matching_policy(database, kind="security")
+    listings = {"listings": [row("F1", "US", "AAA")]}
+    load(database, policy, "b1", record("a", details=listings))
+    before = versions(database)
+    load(database, policy, "b2", record("a", revision=2, details=listings, name="Renamed"), checkpoint=2)
+    (security,) = securities(database).values()
+
+    assert security["fields"]["name"]["value"] == "Renamed"
+    assert versions(database) == before
+
