@@ -166,6 +166,18 @@ that row before MDM (decided)**, so no ISIN reaches MDM twice.
 only for now (Recommended)"). Before proposing it, count the ISIN-only
 Securities that share a share-class FIGI with a CUSIP Security.
 
+## Share classes
+
+- **A security's share class is a field, not a record** (operator,
+  2026-10-20: "Field on the Security (Recommended)"). The share-class FIGI is
+  a field and a cross-reference on each Security; it finds every Security of
+  one class. No Share Class kind. Measured on 2026 Q2: 35,590 of 733,538 found
+  identifiers (4.9%, mostly equities) carry one, in 26,509 classes; 25 classes
+  span three or more identifiers.
+- **A fund's share classes (Class A, Class I) are not Securities.** They
+  belong to the fund series, not here. Operator, 2026-10-20: "Profile first
+  (Recommended)" (ticket 124).
+
 ## Every OpenFIGI field (decided)
 
 Operator, 2026-10-20: "all fields from open figi must be in the security
