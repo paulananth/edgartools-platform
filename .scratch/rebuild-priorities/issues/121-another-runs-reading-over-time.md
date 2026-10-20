@@ -41,6 +41,6 @@ or the latest unit per identifier), and how a producing run's units are kept
 
 ## Checklist
 
-- [ ] Decide the rule (operator)
+- [x] Decide the rule (operator, 2026-10-20 08:31 ET): "Latest run, kept while read (Recommended)": a reading takes the newest complete run of the named target only, and that run is not compacted while a reading run names it
 - [ ] Implement, with a test per case (second capture, forced rerun, compaction, over 256)
 - [ ] Learning → skill
