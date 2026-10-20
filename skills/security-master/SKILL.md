@@ -61,14 +61,98 @@ The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
   share-class FIGI, ticker. `mdm.cross_reference_lookup` finds a Security by
   them; no rule matches on them.
 
-## Matching (live, `rules/merge/kinds/security.yaml`)
+## How a Security is merged (live)
 
-1. A record joins the one Security holding its CUSIP, or creates one (13F,
-   N-PORT).
-2. An N-PORT record also joins by the ISIN it carries; its CUSIP and ISIN
-   pointing at two Securities goes to review, never binds.
-3. An ISIN-only record joins the Security holding its ISIN, or creates one.
-4. OpenFIGI records join by CUSIP or ISIN and wait otherwise.
+The rules are `rules/merge/kinds/security.yaml` (version
+`security-2026-10-14.1`), one file of the Mastering Policy
+(`rules/merge/policy.yaml`). A record passes three stages in the Merge Stage.
+
+### 1. Matching: which Security a record joins
+
+Each source has its own matching rules. All are identifier rules: the record's
+identifier is held by exactly one Security (`identifier_match@1`,
+`identifier_cardinality@1`), so they are deterministic and switch on when
+their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
+`activation: deterministic`).
+
+| Rule | Source | Joins by | No Security holds it | Switched on |
+|---|---|---|---|---|
+| `security-cusip` | 13F | CUSIP | creates one | 2026-10-15 ("merge 985 when green agreed for the rest") |
+| `nport-security-cusip` | N-PORT (CUSIP) | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)") |
+| `nport-security-isin` | N-PORT (CUSIP) | the FIGI-agreed ISIN it carries | creates one | same |
+| `nport-isin-security-isin` | N-PORT (ISIN-only) | ISIN | creates one | same |
+| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | **waits** | 2026-10-17 13:12 ET ("Switch on CUSIP rule (Recommended)") |
+| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | **waits** | 2026-10-18 13:22 ET ("Switch it on (Recommended)") |
+
+- **Records that may create go first** in a batch, so a record that may only
+  join (OpenFIGI) finds the Security created in the same batch. One identifier
+  value creates one Security per batch.
+- **A record never binds when its identifiers disagree.** It opens a review
+  instead, with one of these reasons:
+  - `ambiguous_identifier`: one value held by two Securities;
+  - `conflicting_identifiers`: its CUSIP and ISIN point at two Securities;
+  - `incompatible_identifier_kind`: the value is held by a master of another kind;
+  - `suspended_identifier`: the Security holding it is in review.
+- **Each identifier's contract** (`identifiers.cusip`, `identifiers.isin`):
+  - **Claim:** a value belongs to one Security (`forward: 1`); a Security may
+    hold several values (`reverse: null`).
+  - **Compatibility:** the holder must be a Security (`kind_equal@1`).
+  - **Verification:** verified on ticket 79's Proving Run: 423,562 Securities,
+    0 identifiers on two, a second pass changed nothing.
+  - **Tolerance:** after 10,000 decisions, more than 5 violations per 10,000
+    switch the rule off automatically, and its records go to review until a
+    newly verified contract is registered (`docs/specs/mdm/policy-language.md`).
+- **Which identifiers join** (`identifiers.<name>.sources`):
+  - CUSIP joins from 13F, N-PORT and OpenFIGI;
+  - ISIN joins from both N-PORT datasets and OpenFIGI's ISIN records.
+  - FIGI and ticker are in neither list: they never join.
+
+### 2. Survivorship: which value the Security shows
+
+Every field any source supplies reaches the Security (a kind-level
+`defaults` rule, operator 2026-09-24): a field only one source gives comes from
+it; the priority decides only where several give it. For each field
+(`edgar_warehouse/mdm/clean/survivorship.py`, ranked by the engine's
+`survivorship::rank`):
+
+1. **A steward's override wins.** A source that disagrees with it opens an
+   `override_source_disagreement` review. Two overrides at once are refused.
+2. **Otherwise the highest-priority source wins**, in the order of
+   `defaults.sources`:
+   1. `openfigi.security.v1`
+   2. `openfigi.security_isin.v1`
+   3. `sec.nport.security.v1`
+   4. `sec.nport.security_isin.v1`
+   5. `sec.thirteenf.information_table.security.v1`
+
+   (operator, 2026-10-18, ticket 84: "make openfigi priority 1 and 13f
+   last", then "Name only (Recommended)").
+3. **Within one source, the latest effective time wins.** Ties go to the
+   source code, then the record key, then the assertion, so the result is
+   always the same.
+4. A record with no effective time still counts (`allow_unknown_effective:
+   true`).
+5. A source not in the list never fills a field. A source may blank a field
+   ("clear") only when the rule names it in `clear_sources`. Securities name
+   none, so a clear opens an `unauthorized_clear` review.
+6. **The losing values that differ are kept beside the winner** as its
+   `conflicts`. Nothing a source said is lost.
+
+What this gives today, measured (ticket 84): OpenFIGI fills the name: it
+states one name for 99.7% of its 353,491 CUSIPs. OpenFIGI gives no title, so
+N-PORT, then 13F, fill the title of class. A Security OpenFIGI did not find
+takes N-PORT's filed name, else 13F's.
+
+**Decided, not yet built:** the one N-PORT dataset replaces
+`sec.nport.security_isin.v1` in this list and in the matching rules. A change
+to this list or to a rule moves the Mastering Policy's digest, so it needs its
+test run and the operator's approval of the new digest (data-onboarding,
+"a merge-rule change moves pinned digests").
+
+### 3. Held back
+
+A record a contract sets aside never reaches matching. It waits with an open
+review ("Held back, never dropped", below).
 
 **An ISIN goes with a CUSIP only when OpenFIGI agrees** (operator,
 2026-10-15: "Use FIGI to add pairs too"): the filed CUSIP and ISIN share a
