@@ -11,9 +11,11 @@ Type: task. Status: open. Blocked by: ticket 120 (the one Securities target).
 - Holdings, 5,347,869: CUSIP 3,546,715; ISIN without CUSIP 812,952; a ticker
   only 59,409 (futures 14,711, forwards 14,125, options 10,605, loans 10,183,
   equities 5,530); only another identifier 928,791, of which the fund's own
-  label 909,030 (loans 652,058, forwards 121,403, swaps 65,522) and a
-  standard identifier 20,129 (Bloomberg 10,411, LoanX 4,616, SEDOL 1,876,
-  CINS 1,226, FIGI 4, other labels 1,996); no identifier 2.
+  label 909,030 (loans 652,058, forwards 121,403, swaps 65,522), a label
+  "client" 1,628 (the fund's own too), and a standard identifier 18,133
+  (Bloomberg 10,411, LoanX 4,616, SEDOL 1,876, CINS 1,226, FIGI 4); no
+  identifier 2. (First reported to the operator as 20,129 standard
+  identifiers: a sum error, corrected the same day.)
 - Funds: 14,416 filings, 12,944 series; 729 filings with no series id (held
   back, `missing_record_identity`); 16 LEIs filed on two or more series; one
   series filed with two LEIs.
