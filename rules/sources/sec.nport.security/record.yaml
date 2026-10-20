@@ -2,8 +2,9 @@
 # over the combine's pieces, for mdm.prepare (`record_column: record`): the
 # CUSIP Securities (`security`) and the Securities of holdings with no usable
 # CUSIP (`security_isin`), each row as its Dataset Contract reads it
-# (ticket 120).
-execution: {profile: source.read, workers: 1, max_artifacts: 1}
+# (ticket 120). The combine's output comes in pieces of at most 8 MiB, one
+# artifact each (2026 Q2: more than one), as figi-agree.yaml reads them.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
   limits: {max_bytes: 16777216, max_records: 1000000}

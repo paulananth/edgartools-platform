@@ -439,6 +439,11 @@ bookkeeping:
   # from its `answers_cusip` and `answers_isin` runs, so those run first.
   targets:
     mastering:
+      # Claiming and reporting a FIGI step recheck the chain behind ~480 OpenFIGI
+      # answer units, 73 s each (measured 2026-10-19): longer than the default
+      # 120 s lease (ticket 120).
+      lease_seconds: 900
+      heartbeat_seconds: 60
       run:
         facts: [period]
       steps:
@@ -595,6 +600,11 @@ bookkeeping:
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
     mastering_isin:
+      # Claiming and reporting a FIGI step recheck the chain behind ~480 OpenFIGI
+      # answer units, 73 s each (measured 2026-10-19): longer than the default
+      # 120 s lease (ticket 120).
+      lease_seconds: 900
+      heartbeat_seconds: 60
       run:
         facts: [period]
       steps:

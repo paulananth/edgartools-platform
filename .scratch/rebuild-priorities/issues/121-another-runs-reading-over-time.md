@@ -25,6 +25,11 @@ time:
   30 days. The producing runs' units then disappear; their files are already
   recorded processed, so nothing reruns them, and Securities' manifest finds
   no units.
+- **Rechecking cost:** a claim or report of a step that reads another run
+  rechecks that run's whole chain: 73 s for \`figi_pairs\` (~480 answer units,
+  16 request files each). Securities set a 900 s lease for it; a reading of
+  more units needs the recheck bounded (each other-run unit's verification
+  kept once, not redone per claim and report).
 - **The listing query** filters runs by submission name and target, with no
   index on them (`pipeline_run` is small; recheck at scale).
 
