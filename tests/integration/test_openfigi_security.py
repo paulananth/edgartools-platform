@@ -220,7 +220,7 @@ def test_an_isin_record_carries_its_levels_and_joins_the_security_holding_it(dat
     records, refused = prepared_records(tmp_path, "isin")
     assert {r["provenance"]["record_key"]: r["cross_references"] for r in records} == {
         ISIN: {"composite_figi": "BBGZZ0000US5", "share_class_figi": "BBGZZ0000SC5", "openfigi_ticker": "EXG"},
-        HOME: {"share_class_figi": "BBGZZ0000SC6"}}
+        HOME: {"share_class_figi": "BBGZZ0000SC6", "composite_figi": "BBGZZ0000JP6", "openfigi_ticker": "EXH"}}
     assert refused == {isin: "not_found_by_openfigi" for isin in ISIN_OTHERS}
     core.register_reading(database, NPORT_ISIN, core.contract_body())
     with database.admin.begin() as conn:

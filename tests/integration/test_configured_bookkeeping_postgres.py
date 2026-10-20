@@ -570,10 +570,11 @@ def test_a_slot_naming_another_run_is_shaped(databases, tmp_path):
 
 def test_another_runs_verified_units_are_its_complete_runs_outputs_once(databases, tmp_path):
     """Ticket 120: a reading of another run's step lists its complete runs' verified units; the same
-    output read twice is listed once; a run not complete lists nothing."""
+    output read twice is listed once; a run not finished is refused."""
     book, rid, _, _, _ = fan_in_submission(databases, tmp_path / "first")
     name = book.status(rid)["run"]["submission"]["name"]
-    assert book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline") == []
+    with pytest.raises(Blocked, match="not finished"):  # its one run is still running (ticket 121)
+        book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
     drive(book, rid, databases.ledger, workers=book.workers)
     found = book.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
     outputs = {i["receipt"]["sha256"] for i in book.status(rid)["items"] if i["step"] == "a_transform"}
@@ -589,19 +590,25 @@ def test_a_reading_takes_the_runs_of_the_newest_capture_only(databases, tmp_path
     older, first, _, _, _ = fan_in_submission(databases, tmp_path / "older", capture="capture-1", pipeline=name)
     drive(older, first, databases.ledger, workers=older.workers)
     newer, second, _, _, _ = fan_in_submission(databases, tmp_path / "newer", capture="capture-2", pipeline=name)
-    assert {u["run"] for u in newer.verified_units(source=name, target="silver", step="a_transform",
-                                                   kind="pipeline")} == {first}  # the newer is not complete
+    with pytest.raises(Blocked, match="1 runs not finished"):  # the newest capture is still running
+        newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
     drive(newer, second, databases.ledger, workers=newer.workers)
     assert newer.status(second)["run"]["submission"]["capture"] == "capture-2"
     found = newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")
     assert found and {u["run"] for u in found} == {second}
+    # A later rerun of the older capture does not make it the newest.
+    rerun, third, _, _, _ = fan_in_submission(databases, tmp_path / "rerun", capture="capture-1", pipeline=name)
+    drive(rerun, third, databases.ledger, workers=rerun.workers)
+    assert {u["run"] for u in rerun.verified_units(source=name, target="silver", step="a_transform",
+                                                   kind="pipeline")} == {second}
     # The newest capture's run compacted: refused, never the older capture in its place.
     with databases.admin.begin() as conn:
         conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '31 days' "
                           "WHERE run_id=CAST(:r AS uuid)"), {"r": second})
         conn.execute(text("UPDATE bookkeeping.pipeline_run SET completed_at=clock_timestamp()-interval '40 days' "
                           "WHERE run_id=CAST(:r AS uuid)"), {"r": first})
-        conn.execute(text("UPDATE bookkeeping.pipeline_run SET pinned=true WHERE run_id=CAST(:r AS uuid)"), {"r": first})
+        conn.execute(text("UPDATE bookkeeping.pipeline_run SET pinned=true WHERE run_id IN (CAST(:r AS uuid), CAST(:t AS uuid))"),
+                     {"r": first, "t": third})
         assert conn.scalar(text("SELECT bookkeeping.compact(30)")) == 1
     with pytest.raises(Blocked, match="1 compacted runs"):
         newer.verified_units(source=name, target="silver", step="a_transform", kind="pipeline")

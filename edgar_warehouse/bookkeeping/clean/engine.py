@@ -604,29 +604,32 @@ class Bookkeeping:
         Ticket 121 (operator, 2026-10-20: "All runs of latest capture (Recommended)"): only the runs
         of the capture the newest complete run was written from, so an identifier never comes back
         from two captures. Runs that name no capture (written before ticket 121) are one capture.
-        The newest capture is chosen over every complete run, compacted or not, and a capture
-        with any run compacted is refused: an older capture never stands in for it."""
-        with self.engine.connect() as conn:
-            compacted = conn.scalar(text("""WITH runs AS (SELECT submission->'capture' AS capture, completed_at, run_id,
-                    compacted_at FROM bookkeeping.pipeline_run WHERE state='complete' AND submission->>'kind'=:kind
+        The newest capture is the one whose first run started last, so a later rerun of an older
+        capture never stands in for it. It is refused while any of its runs is still running or
+        waiting (a blocked run is abandoned and left out), and when any of its runs is compacted."""
+        captures = """WITH runs AS (SELECT run_id, state, submission->'capture' AS capture, created_at,
+                    completed_at, compacted_at FROM bookkeeping.pipeline_run WHERE submission->>'kind'=:kind
                       AND submission->>'name'=:source AND submission->>'target'=:target),
-                  newest AS (SELECT capture FROM runs ORDER BY completed_at DESC, run_id DESC LIMIT 1)
-                SELECT count(*) FROM runs WHERE compacted_at IS NOT NULL
-                  AND capture IS NOT DISTINCT FROM (SELECT capture FROM newest)"""),
-                {"source": source, "target": target, "kind": kind})
+                  newest AS (SELECT capture FROM runs GROUP BY capture ORDER BY min(created_at) DESC,
+                    min(run_id::text) DESC LIMIT 1)"""
+        named = {"source": source, "target": target, "kind": kind}
+        with self.engine.connect() as conn:
+            open_, compacted = conn.execute(text(captures + """
+                SELECT count(*) FILTER (WHERE state IN ('running','waiting')),
+                       count(*) FILTER (WHERE state='complete' AND compacted_at IS NOT NULL)
+                FROM runs WHERE capture IS NOT DISTINCT FROM (SELECT capture FROM newest)"""), named).one()
+            if open_:
+                raise Blocked(f"The newest capture of {source}/{target} has {open_} runs not finished; finish them first")
             if compacted:
                 raise Blocked(f"The newest capture of {source}/{target} has {compacted} compacted runs; "
                               "run that target again over a capture")
-            found = _rows(conn, """WITH runs AS (SELECT run_id, submission->'capture' AS capture, completed_at,
-                    compacted_at FROM bookkeeping.pipeline_run WHERE state='complete'
-                      AND submission->>'kind'=:kind AND submission->>'name'=:source AND submission->>'target'=:target),
-                  newest AS (SELECT capture FROM runs ORDER BY completed_at DESC, run_id DESC LIMIT 1)
+            found = _rows(conn, captures + """
                 SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,
                     w.unit_key AS key, w.receipt->>'sha256' AS sha256, r.completed_at
                 FROM bookkeeping.work_item w JOIN runs r ON r.run_id=w.run_id
-                WHERE r.capture IS NOT DISTINCT FROM (SELECT capture FROM newest)
+                WHERE r.state='complete' AND r.capture IS NOT DISTINCT FROM (SELECT capture FROM newest)
                   AND w.step=:step AND w.state='verified'
-                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id, w.unit_key""", source=source, target=target, step=step, kind=kind)
+                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id, w.unit_key""", step=step, **named)
         return [{k: unit[k] for k in ("run", "step", "key", "sha256")}
                 for unit in sorted(found, key=lambda unit: (unit["completed_at"], unit["run"], unit["key"]))]
 
