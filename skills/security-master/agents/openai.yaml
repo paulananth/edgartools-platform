@@ -1,0 +1,4 @@
+interface:
+  display_name: "Security Master"
+  short_description: "The rules for a Security in MDM: sources, keys, fields, listings, matching"
+  default_prompt: "Use $security-master before changing how Securities are read, keyed, matched or filled."
