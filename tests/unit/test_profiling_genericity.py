@@ -17,6 +17,10 @@ EXEMPT = {
     # cabinet", "company data") is a metaphor, not this repo's sources.
     "data-engineering-fundamentals",
     "data-scientist",
+    # Documents how this platform actually masters Securities: naming its sources is its
+    # purpose (operator, 2026-10-20: "Security master must document how the actual
+    # security mastering is done so exempt").
+    "security-master",
 }
 SCOPE = tuple(
     f"skills/{d.name}" for d in sorted((ROOT / "skills").iterdir()) if d.is_dir() and d.name not in EXEMPT
