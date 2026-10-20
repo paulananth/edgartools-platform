@@ -4,8 +4,11 @@
 # (Recommended)", "US composite (Recommended)"): `listing` when the identifier
 # has one listing, `share_class` when one share class, `us_composite` when one
 # US composite. Each group holds at most one row per identifier, so `one`
-# never chooses. Run once per kind asked. Pin canonical JSON of this file as
-# the source.combine contract.
+# never chooses. Ticket 120: also every listing (`listings`, read from the
+# answers themselves, `answers`), the fields the listings agree on, and the
+# primary listing's fields (the US composite's, else the ISIN country's).
+# Run once per kind asked. Pin canonical JSON of this file as the
+# source.combine contract.
 execution:
   profile: source.combine
 combine:
@@ -15,6 +18,18 @@ combine:
     share_class: {source: counts, table: share_classes, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {share_classes: 1}}
     name: {source: counts, table: names, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {names: 1}}
     us_composite: {source: counts, table: us_composites, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {us_composites: 1}}
+    # Ticket 120: a field the listings agree on; the ISIN country's one composite.
+    security_type: {source: counts, table: security_types, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {security_types: 1}}
+    security_type2: {source: counts, table: security_types2, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {security_types2: 1}}
+    market_sector: {source: counts, table: market_sectors, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {market_sectors: 1}}
+    home_composite: {source: counts, table: home_composites, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {home_composites: 1}}
+    # Every listing of the identifier, as its detail row, by FIGI (operator,
+    # 2026-10-20: "Detail rows set in config (Recommended)").
+    listing_rows: {source: answers, table: details, key: id, value: detail, mode: collect, order_by: [], distinct: true, skip_null_values: true, checks: {}, where: {}}
+    # The US composite's and the ISIN country's composite's security-level
+    # fields: record.yaml takes them only where reduce.yaml counted exactly one.
+    us_level: {source: answers, table: details, key: id, value: level, mode: first, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {us: true}}
+    home_level: {source: answers, table: details, key: id, value: level, mode: first, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {home: true}}
   tables:
     security:
       source: counts
@@ -26,3 +41,10 @@ combine:
         share_class: {group: share_class, key: id, on_missing: skip, replace: false}
         name: {group: name, key: id, on_missing: skip, replace: false}
         us_composite: {group: us_composite, key: id, on_missing: skip, replace: false}
+        security_type: {group: security_type, key: id, on_missing: skip, replace: false}
+        security_type2: {group: security_type2, key: id, on_missing: skip, replace: false}
+        market_sector: {group: market_sector, key: id, on_missing: skip, replace: false}
+        home_composite: {group: home_composite, key: id, on_missing: skip, replace: false}
+        listings: {group: listing_rows, key: id, on_missing: skip, replace: false}
+        us_level: {group: us_level, key: id, on_missing: skip, replace: false}
+        home_level: {group: home_level, key: id, on_missing: skip, replace: false}

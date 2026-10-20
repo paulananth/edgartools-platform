@@ -20,9 +20,11 @@ reduce:
   max_state_bytes: 2147483648
   # Keys are counted over every group: the names group (ticket 84) adds one per
   # identifier found, about 353,000 for the CUSIPs, past the 1,000,000 before.
-  max_keys: 2000000
-  max_members: 4000000
-  max_output_rows: 4000000
+  # Ticket 120 adds four groups of about 360,000 identifiers each (types,
+  # sectors, country composites): about 3.9M keys and members in all.
+  max_keys: 6000000
+  max_members: 8000000
+  max_output_rows: 8000000
   max_output_bytes: 2147483648
   groups:
     # Each identifier's answer, one row each (an identifier is asked once):
@@ -33,3 +35,10 @@ reduce:
     # The names an identifier's listings state, counted the same way (ticket 84).
     names: {source: [answers], table: names, keys: [id], mode: members, member: name, count: names, sample: name_sample, sample_limit: 1}
     us_composites: {source: [answers], table: us_composites, keys: [id], mode: members, member: figi_ticker, count: us_composites, sample: us_composite_sample, sample_limit: 1}
+    # The values a security-level field takes over an identifier's listings, and its
+    # ISIN country's composite listings (ticket 120): combine.yaml keeps a value
+    # only where there is exactly one.
+    security_types: {source: [answers], table: security_types, keys: [id], mode: members, member: security_type, count: security_types, sample: security_type_sample, sample_limit: 1}
+    security_types2: {source: [answers], table: security_types2, keys: [id], mode: members, member: security_type2, count: security_types2, sample: security_type2_sample, sample_limit: 1}
+    market_sectors: {source: [answers], table: market_sectors, keys: [id], mode: members, member: market_sector, count: market_sectors, sample: market_sector_sample, sample_limit: 1}
+    home_composites: {source: [answers], table: home_composites, keys: [id], mode: members, member: figi_ticker, count: home_composites, sample: home_composite_sample, sample_limit: 1}

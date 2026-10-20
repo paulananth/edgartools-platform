@@ -48,6 +48,8 @@ NPORT_ISIN = "sec.nport.security_isin.v1"
 EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE = "ZZ0000013", "ZZ0000021", "ZZ0000039", "ZZ0000047", "ZZ0000120", "ZZ0000138"
 # More asked and never found, one to a file, so each of the 8 readings has a file.
 OTHERS = ["ZZ0000054", "ZZ0000062", "ZZ0000070", "ZZ0000088", "ZZ0000096", "ZZ0000104", "ZZ0000112"]
+# A Japanese ISIN with no US listing: its Japanese composite is its primary listing (ticket 120).
+HOME = "JP0000000091"
 ISIN, ISIN_OTHERS = "ZZ0000000016", ["ZZ0000000024", "ZZ0000000032", "ZZ0000000040", "ZZ0000000057",
                                       "ZZ0000000065", "ZZ0000000073", "ZZ0000000081"]
 
@@ -79,9 +81,12 @@ ANSWERS = {
                       listing("BBGZZ0000US4", "EXF", "US", "BBGZZ0000US4", "BBGZZ0000SC4", name="OTHER CORP")]},
     ISIN: {"data": [listing("BBGZZ0000US5", "EXG", "US", "BBGZZ0000US5", "BBGZZ0000SC5"),
                     listing("BBGZZ0000LN5", "EXG", "LN", "BBGZZ0000LN5", "BBGZZ0000SC5")]},
+    # Its Japanese and German composites state different names: Japan's, from its ISIN, is primary.
+    HOME: {"data": [listing("BBGZZ0000JP6", "EXH", "JP", "BBGZZ0000JP6", "BBGZZ0000SC6", name="HOME CORP"),
+                    listing("BBGZZ0000GR6", "EXI", "GR", "BBGZZ0000GR6", "BBGZZ0000SC6", name="OTHER CORP")]},
 }
 KINDS = {"cusip": ("id_cusip", [[EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE], *[[o] for o in OTHERS]], CODE),
-         "isin": ("id_isin", [[ISIN], *[[o] for o in ISIN_OTHERS]], ISIN_CODE)}
+         "isin": ("id_isin", [[ISIN, HOME], *[[o] for o in ISIN_OTHERS]], ISIN_CODE)}
 
 
 def capture(root: Path, word: str) -> list[str]:
@@ -133,7 +138,8 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
                 for part in artifact["partitions"]:
                     listings += store.json(part["receipt"])["tables"]["listings"]
     counts = chain.combine(store, root / "reduce", FOLDER / "reduce.yaml", {"answers": list(readings.values())})
-    combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml", {"counts": counts})
+    combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
+                             {"counts": counts, "answers": list(readings.values())})
     piece_root = root / "record"
     piece_root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
@@ -213,7 +219,8 @@ def test_a_record_joins_the_security_holding_its_cusip_and_never_creates_one(dat
 def test_an_isin_record_carries_its_levels_and_joins_the_security_holding_it(database, tmp_path):
     records, refused = prepared_records(tmp_path, "isin")
     assert {r["provenance"]["record_key"]: r["cross_references"] for r in records} == {
-        ISIN: {"composite_figi": "BBGZZ0000US5", "share_class_figi": "BBGZZ0000SC5", "openfigi_ticker": "EXG"}}
+        ISIN: {"composite_figi": "BBGZZ0000US5", "share_class_figi": "BBGZZ0000SC5", "openfigi_ticker": "EXG"},
+        HOME: {"share_class_figi": "BBGZZ0000SC6"}}
     assert refused == {isin: "not_found_by_openfigi" for isin in ISIN_OTHERS}
     core.register_reading(database, NPORT_ISIN, core.contract_body())
     with database.admin.begin() as conn:
@@ -223,7 +230,7 @@ def test_an_isin_record_carries_its_levels_and_joins_the_security_holding_it(dat
     nport.apply(stage, policy, "nport", [core.source(key=ISIN, source_code=NPORT_ISIN, kind="security",
                                                      fields={"name_of_issuer": "EXAMPLE CORP"},
                                                      identifiers={"isin": ISIN})], 1)
-    nport.apply(stage, policy, "openfigi", records, 2)
+    nport.apply(stage, policy, "openfigi", [r for r in records if r["provenance"]["record_key"] == ISIN], 2)
     assert bound(database, ISIN_CODE, ISIN) == bound(database, NPORT_ISIN, ISIN) is not None
     assert len({k for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}) == 1
 
@@ -254,14 +261,14 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
         spec = spec_file(FOLDER / "silver-listing.yaml", None)
         assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
         sink, ids = PostgresSink(runtime), MdmIds(database.application)
-        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == 11
+        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == 13
         again = land(sink, spec["table"], copy.deepcopy(rows), ids)  # the same delivery changes nothing
         assert (again["inserted"], again["changed"]) == (0, 0)
         with runtime.connect() as conn:
             landed = {(r["id"], r["figi"]): r for r in conn.execute(text(
                 "SELECT * FROM silver.openfigi_listing")).mappings()}
-    # The answers' 9 CUSIP and 2 ISIN listings, each once; unfound identifiers give none.
-    assert len(landed) == len(rows) == 11
+    # The answers' 9 CUSIP and 4 ISIN listings, each once; unfound identifiers give none.
+    assert len(landed) == len(rows) == 13
     equity, isin = bound(database, CODE, EQUITY), bound(database, ISIN_CODE, ISIN)
     assert equity == bound(database, THIRTEENF, "13F-ROW-1") is not None
     assert isin == bound(database, NPORT_ISIN, "NPORT-ROW-1") is not None
@@ -277,3 +284,42 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
     assert landed[(BOND, "BBGZZ000BND6")]["quality"] is None
     # UNHELD waits in MDM, so its listing keeps an empty MDM id.
     assert landed[(UNHELD, "BBGZZ000BND2")]["security_mdm_id_by_cusip"] is None
+
+
+def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_listing_is_a_detail_row(tmp_path):
+    """Ticket 120 (operator, 2026-10-20: "all fields from open figi must be in the security
+    master", "Use the primary exchange listing", "US, else the ISIN's country", "Detail rows
+    set in config"): a field the listings agree on; else the one US composite's; else the
+    ISIN country's composite's (rules/reference/published/openfigi-country-composite); else none.
+    Every listing is a detail row keyed by its FIGI."""
+    records, _ = prepared_records(tmp_path / "cusip")
+    by_key = {r["provenance"]["record_key"]: r for r in records}
+    equity = by_key[EQUITY]
+    assert {k: equity["fields"][k]["value"] for k in ("name_of_issuer", "security_type", "security_type2",
+                                                       "market_sector", "share_class_figi")} == {
+        "name_of_issuer": "EXAMPLE CORP", "security_type": "Common Stock", "security_type2": "Common Stock",
+        "market_sector": "Equity", "share_class_figi": "BBGZZ00000SC"}
+    assert [(r["key"], r["exchange"], r["ticker"]) for r in equity["details"]["listings"]] == [
+        ("BBGZZ0000GR1", "GR", "EXB"), ("BBGZZ0000GY1", "GY", "EXB"), ("BBGZZ0000UN1", "UN", "EXA"),
+        ("BBGZZ0000US1", "US", "EXA")]
+    assert equity["details"]["listings"][3] == {"key": "BBGZZ0000US1", "exchange": "US", "ticker": "EXA",
+                                                "composite_figi": "BBGZZ0000US1", "description": "EXA"}
+    # Two US composites and two names: no primary listing, so no name; the type they share stays.
+    double = by_key[DOUBLE]
+    assert double["fields"]["name_of_issuer"].get("value") is None
+    assert double["fields"]["security_type"]["value"] == "Common Stock"
+    assert len(double["details"]["listings"]) == 2
+
+    isin_records, _ = prepared_records(tmp_path / "isin", "isin")
+    home = {r["provenance"]["record_key"]: r for r in isin_records}[HOME]
+    # No US listing; the names differ; Japan's composite, from the ISIN's country, gives the name.
+    assert home["fields"]["name_of_issuer"]["value"] == "HOME CORP"
+    assert [r["key"] for r in home["details"]["listings"]] == ["BBGZZ0000GR6", "BBGZZ0000JP6"]
+
+
+def test_the_country_table_in_the_reading_is_the_published_code_set():
+    """The reading embeds RDM's openfigi-country-composite version 1, row for row."""
+    published = Path(files.ROOT / "reference" / "published" / "openfigi-country-composite" / "1" / "canonical.jsonl")
+    codes = {row["code"]: row["crosswalk"][0][2] for row in map(json.loads, published.read_text().splitlines())}
+    embedded = files.source("openfigi")["read"]["references"]["country_composite"]
+    assert {code: row["exchange"] for code, row in embedded.items()} == codes and len(codes) == 11
