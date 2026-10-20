@@ -47,6 +47,7 @@ writes each capability once and compiles it for the engine.
 - [ ] Slice 2: Change Journal
 - [ ] Slice 3: Bookkeeping
 - [ ] Slice 4: MDM (the Company tables first)
+- [ ] Carry ticket 120's merge changes, which land first (operator, 2026-10-20 17:42 ET: "Ship 120 first (Recommended)"): the detail-list selection in `survivorship.select_details` and its use in `merge.py`, MDM migration 022 (`mdm.detail_version`, its triggers and `detail_rows()`), Bookkeeping migration 007 (a run another live run reads is not compacted) and `verified_units`' newest capture; their tests (`tests/mdm/test_clean_details.py`, `tests/integration/test_clean_detail_rows_postgres.py`, `test_configured_bookkeeping_postgres.py`) pass on every engine
 - [ ] Slice 5: RDM and Silver
 - [ ] Company switched on in a MySQL store and a SQL Server store from the same rules and captured inputs as `company-on`; the three hold the same Companies
 - [ ] Learning → skill
