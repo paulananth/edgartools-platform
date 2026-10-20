@@ -87,6 +87,23 @@ def sandbox_authority(source: str, code: str, contract: dict, capture_sha256: st
             "approval": {"digest": content, "by": "rules-test sandbox", "at": "1970-01-01T00:00:00Z"}}
 
 
+def _records_md5(engine) -> str:
+    """The md5 of every current record, then '|', then every current Company row, each list
+    comma-joined in key order: hashed row by row, since one string of them all was killed by the
+    store's memory limit at 383,612 Securities (ticket 120)."""
+    md5 = hashlib.md5()
+    parts = ("SELECT object_type || ':' || object_id || ':' || body::text FROM mdm.current_record "
+             "ORDER BY object_type, object_id",
+             "SELECT c::text FROM mdm.company c WHERE c.to_generation IS NULL ORDER BY c.entity_id")
+    with engine.connect().execution_options(stream_results=True, yield_per=5000) as conn:
+        for number, sql in enumerate(parts):
+            if number:
+                md5.update(b"|")
+            for index, (row,) in enumerate(conn.execute(text(sql))):
+                md5.update((b"," if index else b"") + row.encode())
+    return md5.hexdigest()
+
+
 def counts(engine) -> dict:
     """What MDM holds, as the Proving Runs count it: masters per kind, staged records per
     source, waiting and open reviews and set-aside records per reason, decisions, and
@@ -104,14 +121,9 @@ def counts(engine) -> dict:
             "decisions": grouped("SELECT operation, count(*) FROM mdm.decision GROUP BY 1"),
             "changes": grouped("SELECT 'batch_change', count(*) FROM mdm.batch_change "
                                "UNION ALL SELECT 'outbox', count(*) FROM mdm.outbox"),
-            # Every current record's body, hashed: a rewrite moves it even when no count moves.
             # Every current record's body, and every current Company row (Companies are kept in
             # mdm.company, not mdm.current_record), hashed: a rewrite moves it even when no count moves.
-            "current_records_md5": conn.scalar(text(
-                "SELECT md5(coalesce((SELECT string_agg(object_type || ':' || object_id || ':' || body::text, "
-                "',' ORDER BY object_type, object_id) FROM mdm.current_record), '') || '|' || "
-                "coalesce((SELECT string_agg(c::text, ',' ORDER BY c.entity_id) FROM mdm.company c "
-                "WHERE c.to_generation IS NULL), ''))")),
+            "current_records_md5": _records_md5(engine),
             "identifiers_on_two_masters": grouped(
                 "SELECT n, count(*) FROM (SELECT n, v FROM ("
                 "SELECT e.object_id::text AS owner, n, v FROM mdm.current_record e, "

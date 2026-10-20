@@ -42,5 +42,6 @@ or the latest unit per identifier), and how a producing run's units are kept
 ## Checklist
 
 - [x] Decide the rule (operator, 2026-10-20 08:31 ET): "Latest run, kept while read (Recommended)": a reading takes the newest complete run of the named target only, and that run is not compacted while a reading run names it
+- [x] Corrected (2026-10-20 08:32 ET): one capture's answers come in several runs (2026 Q2: 8 per kind), so "latest run" would read an eighth of them; asked again: "All runs of latest capture (Recommended)": every complete run made from the newest capture of the named target, pinned while read (Bookkeeping's compaction already skips a pinned run)
 - [ ] Implement, with a test per case (second capture, forced rerun, compaction, over 256)
 - [ ] Learning → skill
