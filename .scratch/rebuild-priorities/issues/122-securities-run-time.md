@@ -39,6 +39,28 @@ Each step had exactly one unit and one attempt.
    follow; `combine`'s report in pass 2 ran over 5 minutes.
 3. **The merge writes records one by one.** 36 minutes for 383,612 records.
 
+## Work against checks (measured, pass 2, 2026-10-20 06:33–07:47 ET)
+
+A sample every 2 s of the run's processes over the last steps of pass 2
+(`combine`, `record`, `prepare`, `merge`, `processed`, the run's end): 74
+minutes, of which **10.5 minutes were the steps' own work**.
+
+| Step | Claim | Work | Report | Verify |
+|---|---|---|---|---|
+| combine (with attach's tail) | 2.4 m | 3.3 m | 2.8 m | 13.1 m |
+| record | 2.6 m | 0.8 m | 2.5 m | 5.3 m |
+| prepare | 2.3 m | 0.5 m | 2.2 m | 5.0 m |
+| merge | 2.4 m | 5.9 m | 2.2 m | 4.6 m |
+| End of run (`finalize`) | | | | 15.8 m |
+
+- Each step pays about 2.4 min to claim, 2.4 min to report and 5 min to
+  verify, whatever its work: Bookkeeping rechecking the history behind
+  OpenFIGI's answers each time. That is **48 of the 74 minutes**.
+- The **16 minutes at the end** are `bookkeeping finalize`, which checks the
+  whole run again the same way.
+- pass 2's merge took 5.9 min against pass 1's 36 min, since pass 2 changes
+  nothing; the first load's merge is real work.
+
 ## Not a cause: pass 2's sleep
 
 Pass 2 took longer because the Mac's battery reached 1% and it went into
@@ -48,16 +70,15 @@ need the Mac on power.
 
 ## Ideas to test (none decided)
 
-- [ ] Measure the split between work and Bookkeeping's checks for every step,
-      not only `figi_pairs` (a process sample every 2 s during pass 2:
-      `combine`, `record`, `prepare`, `merge`)
-- [ ] Recheck another run's units once per run, not on every claim and report
-      (ticket 121, "Rechecking cost"); expected saving up to ~2–4 min a step
-      over ten steps
+- [x] Measure the split between work and Bookkeeping's checks (2026-10-20 07:55 ET): sampled over pass 2's last steps, above; checks are 48 of 74 minutes, `finalize` 16
+- [ ] Recheck another run's units once per run, not on every claim, report,
+      verify and finalize (ticket 121, "Rechecking cost"); measured cost about
+      10 min a step over the ten steps that read OpenFIGI's answers, plus
+      `finalize`'s 16 min: roughly 1.5 to 2 hours of the run
 - [ ] Split the quarter into several units at the reading steps (`holdings`,
       `issuers`), so parallel workers share the work
 - [ ] Merge in sets of records rather than one by one, within the
       `mdm-engineering` skill's rules (the Merge Stage record by record is a
       rule today: change it only with the operator)
-- [ ] Find what the 16 minutes after `processed` are
+- [x] Find what the 16 minutes after `processed` are (2026-10-20 07:55 ET): `bookkeeping finalize`, sampled
 - [ ] Learning → skill

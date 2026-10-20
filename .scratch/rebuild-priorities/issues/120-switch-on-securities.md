@@ -54,5 +54,14 @@ Type: task. Status: in progress (Claude, 2026-10-19). Blocked by: none.
 - [x] Found (2026-10-19 22:43 ET): editing worker code while runs are live makes them refuse ("Pinned worker runtime changed; start a new run", correct): \`company-on\`'s ISIN run 5 is run again as a new run
 - [x] Found by the second test run (2026-10-20 02:33 ET): the record read refused the combine's 22 pieces (\`record.yaml\` allowed one, as Funds' one-piece output did); \`max_artifacts: 512\`, as figi-agree.yaml reads pieces
 - [x] Test run, pass 1 (2026-10-20 02:33 ET): the whole 2026 Q2 quarter, all 18 steps verified in 2 h 20 min (00:01–02:21 ET): 383,612 Security masters (equal to the 383,612 CUSIPs OpenFIGI was asked), 1,770 held back with open reviews (1,769 \`invalid_cusip_checksum\`, 1 \`invalid_cusip\`), no identifier on two masters. The test's 150-minute limit covers both passes and stopped pass 2 early; pass 2 is driven to completion and compared with pass 1's counts
+- [x] Pass 2 driven to completion and compared (2026-10-20 07:50 ET): every count and the hash of every current record equal pass 1's (the one-string hash query was killed by the container's memory limit; the same hash streamed); proof recorded, approved under the standing approval, `securities-2026-10-19.long-lease` active in `company-on`
+- [x] Ruling (operator, 2026-10-20 08:05 ET), asked why the ISIN Securities load separately: "One master record since all data will be available when security mastering runs why can't one run captures all attributes and builds the cross reference". The `company-on` CUSIP run was stopped at its second step, before anything reached MDM
+- [ ] One Dataset Contract, one target: each Security's record key is its CUSIP, else its ISIN (`record_key` path, no key format; CUSIP and ISIN checked as identifiers, so a bad check digit is still held back)
+- [ ] The combine folds an ISIN-only holding into the CUSIP row that already carries its ISIN, so no ISIN reaches MDM twice
+- [ ] The FIGI answers' listing, composite and share-class FIGI and ticker carried through to the Security as cross-references
+- [ ] ~~`mastering_isin`, the `security_isin` contract~~ superseded by the one target: removed from Securities
+- [ ] ~~OpenFIGI's `mastering_cusip`, `mastering_isin` targets~~ superseded: the Security carries OpenFIGI's identifiers itself; marked superseded in the sequence
+- [ ] `proving.counts` hashes the current records without one huge string (the memory limit killed it at 383,612 records)
+- [ ] `rules test` on the one target, both passes within its deadline, recorded; approved under the standing approval; active in `company-on`; the run there; counts; no identifier on two masters
 - [ ] PR, CI, merge
 - [ ] Learning → skill
