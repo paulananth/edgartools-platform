@@ -24,7 +24,7 @@ from .activation import check_policy
 from .evidence import instant, validate_assertion, validate_deferred
 from .identity import replay
 from .store import Conflict, Store, canonical, digest, rows, storage_adapter
-from .survivorship import PROFILE_IDENTITY, current_claims, select_fields
+from .survivorship import PROFILE_IDENTITY, current_claims, select_details, select_fields
 
 
 def _disposition(reason: str) -> dict:
@@ -494,6 +494,9 @@ class MergeStage:
                     },
                     "subjects": members,
                 }
+                # Only when a member has any: every other master's body is unchanged.
+                if details := select_details(identity["kind"], members, claims, policy):
+                    body["details"] = details
                 if entity_id in flagged:
                     # Only when set: every other Company's body is unchanged.
                     body["quarantined"] = True
@@ -503,6 +506,7 @@ class MergeStage:
                     # remains available through its retained generation.
                     body["fields"] = {}
                     body["profiles"] = []
+                    body.pop("details", None)
                 projected[entity_id] = body
                 reviews.extend(
                     {**r, "entity_id": entity_id} for r in conflicts + field_reviews

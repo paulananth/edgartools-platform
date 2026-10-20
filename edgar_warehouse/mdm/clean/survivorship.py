@@ -31,6 +31,7 @@ def current_claims(
     for subject, versions in groups.items():
         claims: dict[str, dict] = {}
         ids = {}
+        details: dict = {}
         profiles = []
         profile_fields: dict[str, dict] = {}
         relationships = []
@@ -70,6 +71,7 @@ def current_claims(
             # Identifier/profile/edge collections are explicit snapshot fields;
             # adapters must materialize them, including on patch datasets.
             ids = a["identifiers"]
+            details = a.get("details", {})
             profiles = a["profiles"]
             continuing = {}
             for profile in profiles:
@@ -113,6 +115,7 @@ def current_claims(
             "kind": kind,
             "fields": claims,
             "identifiers": ids,
+            "details": details,
             "profiles": profiles,
             "profile_fields": profile_fields,
             "relationships": relationships,
@@ -236,6 +239,31 @@ def select_fields(
         p["fields"] = values
         reviews.extend({**r, "profile_id": p["profile_id"]} for r in problems)
     return fields, sorted(profiles.values(), key=lambda p: p["profile_id"]), reviews
+
+
+def select_details(kind: str, subjects: list[str], claims: dict, policy: dict) -> dict[str, list[dict]]:
+    """A master's detail lists (ticket 120): per list, one row per key over every
+    member's rows (operator, 2026-10-20: "One set, joined by FIGI"). The source
+    first in the kind's `defaults.sources` gives the row; each row names every
+    source that gave its key. A source the order does not name comes after,
+    by source code, so the result never depends on arrival."""
+    order = (_defaults_for(policy, kind) or {}).get("sources", [])
+    rank = {source: n for n, source in enumerate(order)}
+    rows: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for subject in subjects:
+        record = claims.get(subject)
+        for name, items in ((record or {}).get("details") or {}).items():
+            for item in items:
+                source = record["source_meta"]["source_code"]
+                rows[name][item["key"]].append(((rank.get(source, len(order)), source, subject), item))
+    selected = {}
+    for name, keyed in sorted(rows.items()):
+        selected[name] = []
+        for key, given in sorted(keyed.items()):
+            given.sort(key=lambda pair: pair[0])
+            sources = sorted({place[1] for place, _ in given})
+            selected[name].append({**given[0][1], "sources": sources})
+    return selected
 
 
 def _rules_for(policy: dict, kind: str) -> dict:
