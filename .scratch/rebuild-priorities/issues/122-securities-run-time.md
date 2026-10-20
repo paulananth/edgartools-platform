@@ -6,7 +6,7 @@ of time taken", then "convert this to a document that we can visit later for
 optimization").
 
 Type: task. Status: open (to revisit). Blocked by: none. Related:
-[121](121-reading-another-run-over-time.md) (rechecking cost, the 256-unit list).
+[121](121-another-runs-reading-over-time.md) (rechecking cost, the 256-unit list).
 
 ## The profile (2026-10-20, measured)
 
