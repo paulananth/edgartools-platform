@@ -283,7 +283,10 @@ automatic_rules:
   activation: deterministic
 # nport-security-cusip, nport-security-isin, nport-isin-security-isin,
 # nport-registrant-cik, nport-fund-series, nport-fund-lei: switched on by operator,
-# 2026-10-17 21:03 ET, in their words: Switch on all six (Recommended). They
+# 2026-10-17 21:03 ET, in their words: Switch on all six (Recommended). Ticket 120
+# (operator, 2026-10-20: "One master record"): the two Security rules read
+# sec.nport.security.v2 (version 2026-10-20.1), and nport-isin-security-isin is
+# retired with sec.nport.security_isin.v1. They
 # activate on their verified Identifier Contracts: the Security's cusip and isin
 # (kinds/security.yaml, the part 1 Proving Run), the Company's cik
 # (kinds/company.yaml, the registrant Proving Run) and the Fund's sec_series_id
@@ -291,19 +294,13 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: nport-security-cusip
-  rule_version: 2026-10-15.1
+  rule_version: 2026-10-20.1
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: nport-security-isin
-  rule_version: 2026-10-15.1
-  verdict: bind
-  activation: deterministic
-- kind: security
-  family: binding
-  rule_id: nport-isin-security-isin
-  rule_version: 2026-10-15.1
+  rule_version: 2026-10-20.1
   verdict: bind
   activation: deterministic
 - kind: company

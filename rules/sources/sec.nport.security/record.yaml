@@ -1,9 +1,11 @@
 # Each Security row of combine.yaml's output as one record (`record`), read
-# over the combine's pieces, for mdm.prepare (`record_column: record`): the
-# CUSIP Securities (`security`) and the Securities of holdings with no usable
-# CUSIP (`security_isin`), each row as its Dataset Contract reads it
-# (ticket 120). The combine's output comes in pieces of at most 8 MiB, one
-# artifact each (2026 Q2: more than one), as figi-agree.yaml reads them.
+# over the combine's pieces, for mdm.prepare (`record_column: record`), as the
+# Dataset Contract sec.nport.security.v2 reads it (ticket 120; operator,
+# 2026-10-20: "One master record"): its key; its CUSIP when the key is one;
+# its ISIN (the key, or the one FIGI agrees on for a CUSIP); and its filed
+# facts, the CUSIP's or the ISIN-only holding's. A row folded into a CUSIP's
+# Security is left out. The combine's output comes in pieces of at most 8 MiB,
+# one artifact each (2026 Q2: more than one), as figi-agree.yaml reads them.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
@@ -11,9 +13,52 @@ read:
   tables:
     security:
       each: tables.security
+      # A row folded into a CUSIP's Security is that Security's, already a row.
+      select: {test: {path: folded_into, kind: missing}}
       columns:
-        record: {value: {path: .}}
-    security_isin:
-      each: tables.security_isin
-      columns:
-        record: {value: {path: .}}
+        record:
+          object:
+            omit_nulls: true
+            fields:
+              key: {text: {path: key}}
+              period: {value: {path: period}}
+              cusip:
+                choose:
+                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: isin}}}}
+                  then: {value: {path: NO_SUCH_FIELD}}
+                  else: {text: {path: key}}
+              isin:
+                choose:
+                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: isin}}}}
+                  then: {text: {path: key}}
+                  else: {value: {path: isin}}
+              name:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: name}}
+                  - {value: {path: isin_name}}
+              title:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: title}}
+                  - {value: {path: isin_title}}
+              lei:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: lei}}
+                  - {value: {path: isin_lei}}
+              issuer:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: issuer}}
+                  - {value: {path: isin_issuer}}
+              filed:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: filed}}
+                  - {value: {path: isin_filed}}

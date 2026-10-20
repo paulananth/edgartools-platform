@@ -39,7 +39,7 @@ sources:
     after: [sec.nport.registrant]
   # Its runs read GLEIF's `umbrellas` runs and OpenFIGI's `answers_cusip` and
   # `answers_isin` runs (ticket 120): those targets run first, over their own
-  # captures; `mastering_isin` follows `mastering` over the same quarter. This
+  # captures. This
   # inventory names one target per source, so those targets are named here.
   sec.nport.security:
     target: mastering

@@ -28,15 +28,16 @@ from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 
-CODE = "sec.nport.security_isin.v1"
+CODE = "sec.nport.security.v2"  # ISIN-only Securities share it (ticket 120)
 LEI, OTHER = cusip.LEI, "9999000000EXAMPLE024"  # invented; OTHER is LEI-shaped only
 ONE, TWO, NONE = "ZZ0000000016", "ZZ0000000024", "ZZ0000000032"  # invented, check digits valid
 HOLDINGS = [["A-1", "4", "Example Corp", LEI, "Note"], ["A-2", "5", "Example Corp", LEI, "Note"],
             ["A-1", "6", "Example Corp", LEI, "Bond"], ["A-1", "7", "Example Corp", OTHER, "Bond"],
             ["A-1", "8", "Other Inc", "", "Bond"]]
 # A holding with a usable CUSIP stays out of the ISIN's issuers: were it read
-# there, ONE would hold two LEIs and lose its link.
-WITH_CUSIP = ["A-1", "9", "Example Corp", OTHER, "Note", "ZZ0000013"]
+# there, ONE would hold two LEIs and lose its link. It is its CUSIP's Security.
+CUSIP = "ZZ0000013"
+WITH_CUSIP = ["A-1", "9", "Example Corp", OTHER, "Note", CUSIP]
 PAIRS = [["4", ONE], ["5", ONE], ["6", TWO], ["7", TWO], ["8", NONE], ["9", ONE]]
 
 
@@ -45,7 +46,8 @@ def policy_body() -> dict:
     return cusip.policy_body()
 
 
-def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[dict]:
+def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached: list[dict] = ()) -> list[dict]:
+    """`attached`: the pairs FIGI agrees on, as figi-attach.yaml gives them."""
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
     body = io.BytesIO()
@@ -60,11 +62,11 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[d
     securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": []}, "deferred": []}]})
+        {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
     combined = cusip.combine(store, root / "combine", "combine.yaml",
                              {"securities": securities, "attached": attached, "issuers": reduced})
-    prepared = chain.prepare(store, root / "mdm", combined, {
-        "table": "security_isin", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
+    prepared = chain.prepare(store, root / "mdm", cusip.recorded(store, root / "record", combined), {
+        "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00"})
     return chain.records(store, root / "mdm", prepared, CODE, files.source(cusip.NAME)["mdm"][CODE]["contract"])
 
@@ -72,7 +74,8 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = ()) -> list[d
 def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
     records = prepared_records(tmp_path)
     links = {r["provenance"]["record_key"]: [l for l in r.get("relationships") or [] if l["type"] == "ISSUED_BY"] for r in records}
-    assert {k: len(v) for k, v in links.items()} == {ONE: 1, TWO: 0, NONE: 0}
+    # The CUSIP's own Security comes from the same run (ticket 120), linked to its one LEI.
+    assert {k: len(v) for k, v in links.items()} == {ONE: 1, TWO: 0, NONE: 0, CUSIP: 1}
     for code in (cusip.ADV, cusip.GLEIF):
         core.register_reading(database, code, core.contract_body())
     with database.admin.begin() as conn:
@@ -100,4 +103,16 @@ def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):
     records = prepared_records(tmp_path, umbrella=([OTHER, LEI],))
     targets = {r["provenance"]["record_key"]: [l["target_subject"] for l in r.get("relationships") or []
                                                if l["type"] == "ISSUED_BY"] for r in records}
-    assert targets == {ONE: [subject_key(cusip.GLEIF, LEI)], TWO: [subject_key(cusip.GLEIF, LEI)], NONE: []}
+    assert targets == {ONE: [subject_key(cusip.GLEIF, LEI)], TWO: [subject_key(cusip.GLEIF, LEI)], NONE: [],
+                       CUSIP: [subject_key(cusip.GLEIF, LEI)]}  # its issuer, a sub-fund, counts as the umbrella
+
+
+def test_an_isin_only_holding_of_an_attached_isin_is_its_cusips_security(tmp_path):
+    """Ticket 120 (operator, 2026-10-20: "One master record"): FIGI attaches ONE to the
+    CUSIP one to one, so ONE's ISIN-only holdings are the CUSIP's Security: no record of
+    their own, and the CUSIP's record carries ONE, so no ISIN reaches MDM twice."""
+    pair = {"cusip": CUSIP, "isin": ONE, "cusip_offers": 1, "isin_offers": 1}
+    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, attached=[pair])}
+    assert set(records) == {TWO, NONE, CUSIP}
+    assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": ONE}
+    assert records[TWO]["identifiers"] == {"isin": TWO}

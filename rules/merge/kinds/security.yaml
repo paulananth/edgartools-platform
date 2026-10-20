@@ -18,8 +18,7 @@ defaults:
   sources:
   - openfigi.security.v1
   - openfigi.security_isin.v1
-  - sec.nport.security.v1
-  - sec.nport.security_isin.v1
+  - sec.nport.security.v2
   - sec.thirteenf.information_table.security.v1
   allow_unknown_effective: true
 rules:
@@ -42,9 +41,9 @@ rules:
     args:
       namespace: cusip
 - rule_id: nport-security-cusip
-  version: 2026-10-15.1
+  version: 2026-10-20.1
   family: binding
-  source: sec.nport.security.v1
+  source: sec.nport.security.v2
   applies_to_verdict: security
   emits:
   - bind
@@ -60,27 +59,14 @@ rules:
 # agrees the CUSIP and ISIN are one security and neither is offered twice
 # (operator, 2026-10-15: "Use FIGI to add pairs too";
 # rules/sources/sec.nport.security/figi-agree.yaml, combine.yaml). Its CUSIP
-# and ISIN pointing at two Securities defers to review, never binds.
+# and ISIN pointing at two Securities defers to review, never binds. A Security
+# filed with no usable CUSIP, keyed by its ISIN in the same Dataset Contract
+# (ticket 120; operator, 2026-10-20: "One master record"), joins by it too, or
+# is created: this rule replaces nport-isin-security-isin.
 - rule_id: nport-security-isin
-  version: 2026-10-15.1
+  version: 2026-10-20.1
   family: binding
-  source: sec.nport.security.v1
-  applies_to_verdict: security
-  emits:
-  - bind
-  on_no_match: mint
-  when:
-  - primitive: identifier_match@1
-    args:
-      namespace: isin
-  - primitive: identifier_cardinality@1
-    args:
-      namespace: isin
-# A Security filed with no usable CUSIP joins by its ISIN, or is created.
-- rule_id: nport-isin-security-isin
-  version: 2026-10-15.1
-  family: binding
-  source: sec.nport.security_isin.v1
+  source: sec.nport.security.v2
   applies_to_verdict: security
   emits:
   - bind
@@ -133,7 +119,7 @@ identifiers:
     authority: CUSIP Global Services (ANSI X9.6)
     sources:
     - sec.thirteenf.information_table.security.v1
-    - sec.nport.security.v1
+    - sec.nport.security.v2
     - openfigi.security.v1
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
     # verified, upper-cased.
@@ -160,8 +146,7 @@ identifiers:
   isin:
     authority: ISIN (ISO 6166), issued by each country's numbering agency
     sources:
-    - sec.nport.security.v1
-    - sec.nport.security_isin.v1
+    - sec.nport.security.v2
     - openfigi.security_isin.v1
     # rules/identifiers/isin.yaml (ticket 81): 12 characters, the check digit
     # verified, upper-cased.
