@@ -15,8 +15,9 @@ RDM and Silver must not import MDM's entity catalog to decide their own storage
 behavior. Cross-store lookups use an explicit narrow interface; SQL syntax,
 locking, constraints and grants stay at the selected storage boundary. Current
 MDM `evidence.py` kind/profile constants and `activation.py` kind-specific bars,
-RDM's imports of MDM's kind catalog, Silver's explicit `PostgresSink` caller and
-PostgreSQL-specific master-ID lookup are observed gaps, not completed support.
+and Silver's PostgreSQL-specific master-ID lookup remain observed gaps. RDM's
+kind-catalog dependency and Silver's explicit PostgreSQL sink selection were
+removed in the current checkpoints.
 
 | Store | Normal operations and current boundary | Required work |
 | --- | --- | --- |
@@ -25,7 +26,7 @@ PostgreSQL-specific master-ID lookup are observed gaps, not completed support.
 | Bookkeeping | `bookkeeping/clean/engine.py`: start/frozen run, claim/heartbeat, worker envelope/report/fail, independent verifier claim/admit, finish/resource checkpoint/generated children, wait/resume/block, checks/finalize, status/discovery, latest-capture output selection and Journal delivery. Read and completion boundaries are qualified separately. | Migrate remaining writes, profile roles, exact unbounded key storage/indexes, leases/fencing, recovery/outbox, generated scope and destination authority. `clean/database.py` still refuses non-PostgreSQL initialization. Do not remove that refusal before the entire workflow passes. |
 | MDM | `mdm/clean/store.py`: policy/dataset registration, mapping versions and protected changes, batch save, outbox claim/publication verification and run status. `Store` and migration still refuse non-PostgreSQL. `merge.py` owns the normal proposal/assessment/save path. Skill-owned `database_adapter.py` supplies typed registry reads and selected-engine helper storage; pending drafts contain further native extraction. | Integrate preserved drafts after overlap review; complete normal batch transaction with scope/index validation, identity/history/relationships/survivorship and unchanged replay. Keep lease guard and business effects in the same destination transaction. Qualify normal workers, not only adapter helpers. |
 | RDM | `rdm/store.py`: canonical code versions, hierarchy paths, draft/describe/approve/publish/retire/verify, immutable artifacts, lists/diffs. The normal caller now selects PostgreSQL or MySQL typed storage, with destination publication locks and immutable history. | Shared native preparation and normal migration/grant/lifecycle cases pass on both engines. Finish search edge cases and plans, then independent installed qualification; see the checkpoint below. |
-| Silver | `silver_writer/database.py`: checksummed registry migration and table registration. `sink.py` supplies spec/read/write/link-key/ID-refresh methods through `Sink`, with `PostgresSink` selected explicitly by `cli.py`. Current sink uses PostgreSQL COPY, temporary tables, casts, advisory/table locking and conflict handling. | Reuse the sink boundary; shared native row/type/quality/load decisions and selected-destination atomic registration, append/upsert/snapshot delivery and ID refresh. Preserve exact types, all-or-nothing failure and repeated-delivery counts. Qualify registration and existing populated tables; an empty create-all is insufficient. |
+| Silver | `silver_writer/database.py`: checksummed registry migration and table registration. `relational.py` supplies one typed `DatabaseSink` to the normal CLI; the legacy sink name is a compatibility alias. PostgreSQL retains its registered physical tables; MySQL owner registration creates typed target/staging tables, with DML-only runtime access and a narrow registry-lock procedure. | Reuse the sink boundary; shared native row/type/quality/load decisions and selected-destination atomic registration, append/upsert/snapshot delivery and ID refresh. Preserve exact types, all-or-nothing failure and repeated-delivery counts. Qualify registration and existing populated tables; an empty create-all is insufficient. |
 
 ## Operation placement
 
@@ -53,8 +54,34 @@ search cases pass; eight native scoring cases agree with the PostgreSQL
 reference. Search is not fully qualified: short/stop-word candidate behavior,
 negative-only queries, compound tokens, multilingual ordering and actual search
 plans remain. The data wheel explicitly includes both new neutral modules;
-independent installed proof remains pending. No retained operational store,
+the five-wheel import/ownership proof passed at e6c09467 in 168.26 seconds. No retained operational store,
 source onboarding, configuration activation or cutover was changed.
+
+### Silver implementation checkpoint, 2026-10-21
+
+One typed sink now performs append/upsert/snapshot and derived ID/quality updates
+on both selected engines. Tests preserve unchanged replay, atomic refusal,
+source timestamps, concurrent deliveries, populated migration reruns, CLI/context
+and actual key-index plans. MySQL hashes exact keys (binary keys as hex, floating
+zero normalized), with original-key predicates. Shared native JSON normalization
+preserves numeric equality and raw decimal text; no Python float conversion
+precedes storage. Transport keeps Unicode, large integers, microseconds and
+binary values in the tested logical types.
+
+MySQL's owner creates permanent typed staging per immutable spec. The runtime
+has DML rights, no registry/migration writes and no temporary-table creation
+privilege; it cannot shadow registration authority. Its transaction locks the
+registered table's catalog row and cleans staging in the same commit. Interrupted
+implicit DDL is recovered only for the exact spec's empty matching tables and
+unique key. Strict session conversion is required before a delivery.
+
+The current checkpoint passes 21 shared cases per engine and eight additional
+MySQL recovery/permission cases, plus 143 affected PostgreSQL/unit/architecture
+and 11 Rust cases. Full Silver completion is still open: MySQL calendar-interval
+text, configured partition indexes, remaining transport edges/native preparation,
+independently installed normal caller and the real selected-engine MDM-ID caller.
+Quality and configured link tests use the existing narrow ID callback; that does
+not qualify the remaining PostgreSQL-only MdmIds SQL. No operational data changed.
 
 - Rust owns deterministic preparation: canonical content/hashes, checks, source
   mapping/combination, work planning, match/merge/survivorship and hierarchy/load

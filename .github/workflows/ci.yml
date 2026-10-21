@@ -161,6 +161,12 @@ jobs:
       - name: Qualify MySQL reference migration recovery
         if: matrix.engine == 'mysql'
         run: uv run --no-sync pytest tests/reference_mysql/ -q --tb=short
+      - name: Qualify Silver through its normal caller
+        if: matrix.engine != 'mssql'
+        run: uv run --no-sync pytest tests/silver_storage/ -q --tb=short
+      - name: Qualify MySQL Silver migration recovery
+        if: matrix.engine == 'mysql'
+        run: uv run --no-sync pytest tests/silver_mysql/ -q --tb=short
       - name: Stop this job's disposable test servers
         if: always()
         run: |

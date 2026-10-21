@@ -21,8 +21,11 @@ LOCK = 730706  # the advisory lock that serialises migrating and registering
 def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     """Apply the numbered migrations not yet installed, then let the runtime role
     read the registry and nothing else; each registered table grants its own rows."""
+    if engine.dialect.name == "mysql":
+        from .mysql import migrate as selected_migrate
+        return selected_migrate(engine, runtime_role=runtime_role, existing_only=existing_only)
     if engine.dialect.name != "postgresql":
-        raise Blocked("Silver requires PostgreSQL 16")
+        raise Blocked("Silver currently supports PostgreSQL and MySQL; other engines are deferred")
     paths = sorted(MIGRATIONS.glob("[0-9]*.sql"))
     with engine.begin() as conn:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
@@ -65,6 +68,9 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
     """Create the table a spec describes, with a comment on it and every column,
     and record the spec. The same spec again changes nothing; a changed spec for
     a registered table is refused: register it as a new table."""
+    if engine.dialect.name == "mysql":
+        from .mysql import register as selected_register
+        return selected_register(engine, spec, runtime_role=runtime_role)
     spec = specs.check(spec)
     digest = spec_digest(spec)
     name = spec["table"]
