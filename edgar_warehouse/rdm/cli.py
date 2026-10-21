@@ -9,24 +9,24 @@ RDM_DATABASE_URL (the restricted runtime login, for everything else).
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 
 def _handle(args):
-    from sqlalchemy import create_engine
+    from edgar_warehouse.database_connections import engine_from_env
 
     from .database import migrate
     from .store import RDM
 
     if args.rdm_command in {"init", "migrate"}:
-        owner = create_engine(os.environ["RDM_MIGRATION_DATABASE_URL"])
+        owner = engine_from_env("RDM_MIGRATION_DATABASE_URL")
         try:
-            result = migrate(owner, runtime_role=args.runtime_role, existing_only=args.rdm_command == "migrate")
+            result = migrate(owner, runtime_role=args.runtime_role, existing_only=args.rdm_command == "migrate",
+                             database_name=owner.url.database)
         finally:
             owner.dispose()
     else:
-        engine = create_engine(os.environ["RDM_DATABASE_URL"])
+        engine = engine_from_env("RDM_DATABASE_URL")
         rdm = RDM(engine)
         try:
             if args.rdm_command == "import-reference":

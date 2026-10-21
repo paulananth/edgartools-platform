@@ -9,13 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
+from edgar_warehouse.database_connections import storage_adapter
 
 
 class Conflict(ValueError):
@@ -38,15 +38,6 @@ def digest(value: Any) -> str:
 
 def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings()]
-
-
-def storage_adapter():
-    """Load the canonical skill-owned adapter in a checkout or installed bundle."""
-    from edgar_warehouse.rules.files import BUNDLE_DATA
-
-    bundled_adapter = BUNDLE_DATA / "skills" / "mdm-engineering" / "scripts" / "database_adapter.py"
-    package = "edgar_warehouse.bundle_data.skills" if bundled_adapter.is_file() else "skills"
-    return import_module(f"{package}.mdm-engineering.scripts.database_adapter")
 
 
 # The schema's first file, then each later file once, in order, by checksum.

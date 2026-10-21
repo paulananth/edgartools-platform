@@ -155,6 +155,12 @@ jobs:
           uv pip install 'PyMySQL[rsa]>=1.1,<2' 'pymssql>=2.3,<3'
       - name: Qualify the selected engine on a real disposable server
         run: uv run --no-sync pytest tests/storage_adapters/ -q --tb=short
+      - name: Qualify reference storage through its normal caller
+        if: matrix.engine != 'mssql'
+        run: uv run --no-sync pytest tests/reference_storage/ -q --tb=short
+      - name: Qualify MySQL reference migration recovery
+        if: matrix.engine == 'mysql'
+        run: uv run --no-sync pytest tests/reference_mysql/ -q --tb=short
       - name: Stop this job's disposable test servers
         if: always()
         run: |

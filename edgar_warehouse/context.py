@@ -88,11 +88,11 @@ STORES = {
 
 def store_for(subject: str) -> Store:
     """A master kind or `relationship` is MDM's, `silver` is the silver schema's; any other subject is a code set."""
-    from edgar_warehouse.mdm.clean.evidence import KINDS
+    from edgar_warehouse.rules.files import context_subjects
 
     if subject == "silver":
         return STORES["SILVER"]
-    return STORES["MDM" if subject in KINDS or subject == "relationship" else "RDM"]
+    return STORES["MDM" if subject in context_subjects() else "RDM"]
 
 
 def _handle(args: argparse.Namespace) -> int:
@@ -124,23 +124,27 @@ def _engine(store: Store = STORES["MDM"], subject: str | None = None):
 
     from sqlalchemy import event
 
-    from edgar_warehouse.mdm.clean.connections import engine_from_env
+    from edgar_warehouse.database_connections import engine_from_env
 
     if not os.environ.get(store.variable):
         if store.name == "RDM" and subject:  # a misspelled kind lands here too
-            from edgar_warehouse.mdm.clean.evidence import KINDS
+            from edgar_warehouse.rules.files import context_subjects
 
-            raise ContextError(f"{subject!r} is not a master kind ({', '.join(sorted(KINDS))}) or 'relationship'; "
+            kinds = context_subjects() - {"relationship"}
+
+            raise ContextError(f"{subject!r} is not a master kind ({', '.join(sorted(kinds))}) or 'relationship'; "
                                f"as a code set it is read from RDM, and {store.variable} is not set.",
                                f"Set {store.variable} to a login that may read RDM, or name a kind.")
         raise ContextError(f"{store.variable} is not set.",
                            f"Set {store.variable} to a login that may read {store.name}, then run the command again.")
-    engine = engine_from_env(store.variable, restricted=store.application_role)
+    engine = engine_from_env(store.variable,
+        runtime_role=os.environ.get("MDM_APPLICATION_ROLE", "application") if store.application_role else None)
 
     @event.listens_for(engine, "connect")
     def read_only(dbapi_connection, _):
         with dbapi_connection.cursor() as cursor:
-            cursor.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+            cursor.execute("SET SESSION TRANSACTION READ ONLY" if engine.dialect.name == "mysql"
+                           else "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
         dbapi_connection.commit()
 
     return engine

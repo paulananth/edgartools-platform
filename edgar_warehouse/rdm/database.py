@@ -14,15 +14,19 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 CONTENT = ("code", "code_label", "level", "crosswalk_row", "code_set_usage", "code_set_hint")
 
 
-def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
+def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_name: str | None = None) -> dict:
     """Apply the numbered migrations not yet installed, then grant the runtime
     role what drafting, recording an approval and publishing need, and no more."""
+    if engine.dialect.name == "mysql":
+        from .mysql_migration import migrate as migrate_mysql
+
+        return migrate_mysql(engine, runtime_role=runtime_role, existing_only=existing_only, database_name=database_name)
     if engine.dialect.name != "postgresql":
-        raise Blocked("RDM requires PostgreSQL 16")
+        raise Blocked("RDM currently supports PostgreSQL and MySQL; other engines are deferred")
     paths = sorted(MIGRATIONS.glob("[0-9]*.sql"))
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
-        if (conn.scalar(text("SELECT current_database()")) != "rdm"
+        if (conn.scalar(text("SELECT current_database()")) != (database_name or "rdm")
                 or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16):
             raise Blocked("RDM migration requires its own rdm database on PostgreSQL 16")
         role = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolbypassrls FROM pg_roles WHERE rolname=:r"),

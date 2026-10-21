@@ -215,7 +215,8 @@ print(json.dumps({{"shipped": shipped, "modules": modules}}))
     twice = [path for path, count in Counter(found["shipped"]).items() if count > 1]
     assert twice == []
     assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.clean.merge",
-            "edgar_warehouse.rules.cli"} <= set(found["modules"])
+            "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
+            "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration"} <= set(found["modules"])
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
 
 

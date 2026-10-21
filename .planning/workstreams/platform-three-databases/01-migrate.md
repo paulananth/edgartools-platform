@@ -10,6 +10,39 @@ completion of database portability. Hosted targets remain Snowflake Postgres and
 Databricks Postgres; AWS Postgres and new provider requests are outside scope.
 Approval, activation and merge remain separate operator gates.
 
+## Current priority (operator, 2026-10-21)
+
+"complete mdm, rdm and silver no entity names or any hard coding everything
+must be decoupled and config driven focus on postgress and mysql first park
+mssql for last"
+
+The immediate completion gate is the normal MDM, RDM and Silver callers on
+PostgreSQL and MySQL. Entity names, identifiers, fields, profiles, source
+priorities, relationships and matching/selection policy belong in configuration;
+shared engine code implements generic operations. Database selection comes from
+the connection configuration. SQL dialect syntax and database integrity checks
+remain storage concerns, with one shared business implementation. Existing
+approved behavior and ticket 120's detail/history/compaction changes must survive.
+
+SQL Server qualification follows this two-engine gate. Remaining Rules and
+Bookkeeping work is deferred unless a demonstrated dependency blocks one of
+these three stores. Masters' onboarding and activation remain later gates.
+
+- [x] Preserve unfinished Bookkeeping corruption-blocking work separately — named Git stash, including untracked migration and tests; 2026-10-21 18:17 ET.
+- [ ] Audit entity-specific engine branches and cross-store dependencies; move policy into configuration without changing approved outcomes.
+- [ ] Complete RDM's normal version, approval, publication, history and context paths on PostgreSQL and MySQL; qualify populated migrations, runtime rights, concurrent changes and pinned artifacts.
+- [x] Implement the shared RDM version caller, native canonical/hierarchy/summary/order preparation and MySQL owner migration — 34 shared cases passed on PostgreSQL and MySQL, plus seven MySQL metadata/recovery cases (41 total on MySQL); 16 legacy PostgreSQL RDM cases, including a populated upgrade, also passed after the latest search extension (8.20 seconds); 2026-10-21 19:01 ET.
+- [x] Remove RDM's imports of MDM's entity catalog; use the existing configured context definitions and neutral connection/type modules — normal CLI and read-only context cases passed on both engines, including non-default session timezone; 2026-10-21 18:57 ET.
+- [x] Correct the reviewed migration-authority and interruption gaps — table/column metadata rights refused, exact-checksum empty-marker recovery, runtime writes revoked before trigger replacement, and populated failure/retry with an already-open runtime connection passed on MySQL; PostgreSQL/MySQL approval waits for an admitted draft edit; 2026-10-21 18:57 ET.
+- [ ] Finish RDM search parity beyond the common-query checkpoint: short/stop words, negative-only queries, punctuation/compound tokens, multilingual synonym order and actual candidate index plans. Common search cases and eight native scoring cases passed per engine; this is not complete search parity.
+- [ ] Verify the current RDM changes outside the checkout through the installed five-wheel bundle; both new neutral modules must ship in the data wheel.
+- [ ] Complete Silver's normal registration, append/upsert/snapshot, quality and master-link refresh paths on PostgreSQL and MySQL; qualify exact types, rollback, replay and populated upgrades.
+- [ ] Complete MDM's normal configuration, indexed scope/matching, atomic merge, history, relationships, detail lists and publication paths on PostgreSQL and MySQL; qualify competing writers, stale work, recovery and unchanged replay.
+- [ ] Qualify the installed configured callers on both engines with invented kinds and source names, demonstrating that new entity configuration needs no engine edits.
+- [ ] SQL Server last: run the same normal callers and qualification after the PostgreSQL/MySQL completion gate.
+
+## Full work checklist
+
 - [x] Inspect live branches, existing migration tickets and current main; create a fresh isolated branch/worktree — git state and worktree inventory, origin/main 275a9d22; 2026-10-20 19:53 ET.
 - [x] Preserve and inventory both migration drafts — 77 files fingerprinted privately, originals preserved; 50 MDM/skill paths held as pending imports so the Journal/Bookkeeping slice has no overlap — 2026-10-20 20:19 ET.
 - [x] Replace Bookkeeping inspection SQL with selected-engine typed reads and move run-check/capture decisions into shared Rust — six real-engine read cases passed on each selected engine, seven Rust cases, 65 normal PostgreSQL control cases; 2026-10-20 20:19 ET.

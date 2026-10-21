@@ -2,6 +2,7 @@
 pub mod bookkeeping;
 #[cfg(feature = "python")]
 mod opaque;
+pub mod reference;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::value::{to_raw_value, RawValue};
 use sha2::{Digest, Sha256};
@@ -352,6 +353,10 @@ mod python {
         m.add_function(wrap_pyfunction!(prepare_run_checks, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_completion, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_resume, m)?)?;
+        m.add_function(wrap_pyfunction!(prepare_reference_version, m)?)?;
+        m.add_function(wrap_pyfunction!(order_reference_rows, m)?)?;
+        m.add_function(wrap_pyfunction!(compile_reference_query, m)?)?;
+        m.add_function(wrap_pyfunction!(prepare_reference_search, m)?)?;
         m.add_function(wrap_pyfunction!(completion_storage_contract, m)?)?;
         m.add_function(wrap_pyfunction!(select_latest_capture, m)?)?;
         m.add_function(wrap_pyfunction!(select_verified_units, m)?)?;
@@ -371,6 +376,25 @@ mod python {
     #[pyfunction]
     fn prepare_run_resume(py: Python<'_>, raw: String) -> PyResult<String> {
         py.allow_threads(|| super::bookkeeping::prepare_run_resume(&raw))
+            .map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
+    fn prepare_reference_version(py: Python<'_>, raw: String) -> PyResult<String> {
+        py.allow_threads(|| super::reference::prepare_reference_version(&raw))
+            .map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
+    fn order_reference_rows(py: Python<'_>, raw: String) -> PyResult<String> {
+        py.allow_threads(|| super::reference::order_reference_rows(&raw))
+            .map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
+    fn compile_reference_query(py: Python<'_>, words: String) -> String {
+        py.allow_threads(|| super::reference::compile_reference_query(&words))
+    }
+    #[pyfunction]
+    fn prepare_reference_search(py: Python<'_>, raw: String) -> PyResult<String> {
+        py.allow_threads(|| super::reference::prepare_reference_search(&raw))
             .map_err(PyValueError::new_err)
     }
     #[pyfunction]

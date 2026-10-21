@@ -5,6 +5,9 @@
 # an edit is a reviewed PR, not a new policy version. A new kind or a new
 # relationship type needs its line here; a test fails until it has one.
 version: context-definitions-v1
+reference_search:
+  synonym_weight: 0.9
+  position_weight: 0.1
 kinds:
   company: >-
     One legal company or other legal person, known by its identifiers. A
