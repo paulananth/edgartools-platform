@@ -783,6 +783,11 @@ wheels = [
 ]
 
 [[package]]
+name = "edgartools-control-core"
+version = "0.1.0"
+source = { directory = "crates/control-contract" }
+
+[[package]]
 name = "edgartools-platform"
 version = "0.1.0"
 source = { editable = "." }
@@ -807,6 +812,7 @@ dashboard = [
     { name = "streamlit" },
 ]
 engine = [
+    { name = "edgartools-control-core" },
     { name = "source-contract" },
 ]
 market = [
@@ -816,6 +822,7 @@ market = [
 ]
 mdm = [
     { name = "boto3" },
+    { name = "edgartools-control-core" },
     { name = "fastapi" },
     { name = "ijson" },
     { name = "jellyfish" },
@@ -831,6 +838,7 @@ mdm = [
 ]
 mdm-runtime = [
     { name = "boto3" },
+    { name = "edgartools-control-core" },
     { name = "ijson" },
     { name = "jellyfish" },
     { name = "lxml" },
@@ -862,6 +870,9 @@ requires-dist = [
     { name = "boto3", marker = "extra == 's3'", specifier = ">=1.42.91" },
     { name = "click", specifier = ">=8.1" },
     { name = "edgartools", specifier = ">=5.29.0" },
+    { name = "edgartools-control-core", marker = "extra == 'engine'", directory = "crates/control-contract" },
+    { name = "edgartools-control-core", marker = "extra == 'mdm'", directory = "crates/control-contract" },
+    { name = "edgartools-control-core", marker = "extra == 'mdm-runtime'", directory = "crates/control-contract" },
     { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "fastapi", marker = "extra == 'mdm'", specifier = ">=0.111.0" },
     { name = "fredapi", marker = "extra == 'market'", specifier = ">=0.5.2" },

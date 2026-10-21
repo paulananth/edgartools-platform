@@ -103,7 +103,9 @@ jobs:
       - uses: astral-sh/setup-uv@v4
 
       - name: Run Rust acceptance tests
-        run: cargo test --locked --manifest-path crates/source-contract/Cargo.toml
+        run: |
+          cargo test --locked --manifest-path crates/source-contract/Cargo.toml
+          cargo test --locked --manifest-path crates/control-contract/Cargo.toml
 
       - name: Install dependencies with the engine
         run: uv sync --frozen --extra mdm --extra engine

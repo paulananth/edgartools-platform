@@ -201,15 +201,14 @@ def test_no_legacy_or_mdm_connection_fallback(monkeypatch):
 def test_canonical_unicode_timezone_and_direct_noncanonical_rejection(databases):
     value = event(scope={"unicode": "café 🧭", "quoted": '"line\nkey'})
     first = databases.ledger.append(value)
+    import edgar_control
+    import json
+    from edgar_warehouse.change_journal.storage import transport_row
     with databases.ledger.engine.begin() as conn:
         conn.execute(text("SET LOCAL TIME ZONE 'America/New_York'"))
-        assert (
-            conn.scalar(
-                text("SELECT journal.get(:p,:k)"),
-                {"p": value["producer"], "k": value["event_key"]},
-            )
-            == first
-        )
+        stored = conn.execute(text("SELECT * FROM journal.event_records WHERE producer=:p AND event_key=:k"),
+                              {"p":value["producer"],"k":value["event_key"]}).mappings().one()
+        assert json.loads(edgar_control.prepare_journal_receipt(canonical(transport_row(stored)))) == first
     import json
 
     body = json.dumps(event(), indent=2, ensure_ascii=False)
@@ -346,20 +345,16 @@ def test_found_names_only_the_recorded_keys_of_its_producer_by_the_index(databas
     assert databases.ledger.found("fixture", []) == set()
     with pytest.raises(ValueError):
         databases.ledger.found("fixture", ["k"] * (FOUND_LIMIT + 1))
-    # The installed function's own bound is the one Python names.
-    with databases.ledger.engine.connect() as conn:
-        assert conn.scalar(text("SELECT journal.found('fixture',CAST(:k AS text[]))"), {"k": ["k"] * FOUND_LIMIT}) == []
-    with databases.ledger.engine.connect() as conn, pytest.raises(DBAPIError, match="at most"):
-        conn.scalar(text("SELECT journal.found('fixture',CAST(:k AS text[]))"), {"k": ["k"] * (FOUND_LIMIT + 1)})
+    # The bound now belongs to the native preparation shared by all engines.
+    assert databases.ledger.found("fixture", ["k"] * FOUND_LIMIT) == set()
+    import edgar_control
+    with pytest.raises(ValueError, match="at most"):
+        edgar_control.prepare_journal_read(canonical({"operation":"found","producer":"fixture","keys":["k"]*(FOUND_LIMIT+1)}))
+    from edgar_warehouse.change_journal.storage import find_keys_statement
     with databases.ledger_admin.begin() as conn:
-        # The plan of the function's own query, read from the installed function (not a copy).
-        import re
-        body = conn.scalar(text("SELECT prosrc FROM pg_proc WHERE proname='found' AND pronamespace='journal'::regnamespace"))
-        query = re.search(r"SELECT coalesce.*?;", body, re.S).group(0).rstrip(";").replace(" INTO result", "")
-        query = re.sub(r"\bunnest\(k\)", "unnest(CAST(:k AS text[]))", re.sub(r"=p\b", "=:p", query))
+        # Explain the same statement the live transport executes, rather than a copy.
+        query = find_keys_statement(databases.ledger.engine,"fixture",keys)
+        compiled = query.compile(dialect=conn.dialect, compile_kwargs={"render_postcompile":True})
         conn.exec_driver_sql("SET LOCAL enable_seqscan = off")
-        plan = "\n".join(conn.execute(text("EXPLAIN " + query), {"k": keys, "p": "fixture"}).scalars())
-        assert "Seq Scan on event" not in plan and "event_producer_event_key_key" in plan, plan
-        settings = conn.scalar(text("SELECT proconfig FROM pg_proc WHERE proname='found' "
-                                    "AND pronamespace='journal'::regnamespace"))
-        assert "plan_cache_mode=force_custom_plan" in settings
+        plan = "\n".join(conn.exec_driver_sql("EXPLAIN " + str(compiled),compiled.params).scalars())
+        assert "Seq Scan on event" not in plan and "event_key_unique" in plan, plan

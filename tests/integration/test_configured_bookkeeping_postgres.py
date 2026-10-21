@@ -161,20 +161,31 @@ def test_exact_five_tables_restricted_runtime_and_migrations(databases):
             conn.execute(text(sql))
 
 
-def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(databases, monkeypatch, capsys):
+def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(monkeypatch, capsys):
     from edgar_warehouse.cli import main
 
-    monkeypatch.setenv(
-        "BOOKKEEPING_MIGRATION_DATABASE_URL",
-        databases.admin.url.render_as_string(hide_password=False),
-    )
-    assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
-    assert "001_control.sql" in capsys.readouterr().out
-    assert main(["bookkeeping", "migrate", "--runtime-role", "bk_control"]) == 0
-    assert "001_control.sql" in capsys.readouterr().out
-    with databases.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM bookkeeping.pipeline_run")) == 0
-        assert conn.scalar(text("SELECT count(*) FROM bookkeeping.work_item")) == 0
+    # This test asserts emptiness, so it owns an empty store. Selective runs
+    # may schedule it after tests that populate the module-scoped store.
+    with pg16.server() as server:
+        setup = create_engine(server.url(driver="postgresql"))
+        owner = None
+        try:
+            with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.exec_driver_sql("CREATE DATABASE bookkeeping")
+                conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE")
+            owner = create_engine(server.url("bookkeeping", driver="postgresql"))
+            monkeypatch.setenv("BOOKKEEPING_MIGRATION_DATABASE_URL", owner.url.render_as_string(hide_password=False))
+            assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
+            assert "001_control.sql" in capsys.readouterr().out
+            assert main(["bookkeeping", "migrate", "--runtime-role", "bk_control"]) == 0
+            assert "001_control.sql" in capsys.readouterr().out
+            with owner.connect() as conn:
+                assert conn.scalar(text("SELECT count(*) FROM bookkeeping.pipeline_run")) == 0
+                assert conn.scalar(text("SELECT count(*) FROM bookkeeping.work_item")) == 0
+        finally:
+            if owner is not None:
+                owner.dispose()
+            setup.dispose()
 
 
 def test_pipeline_rules_and_approval_authority(databases, tmp_path):

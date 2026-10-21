@@ -29,6 +29,8 @@ def control_python(tmp_path_factory):
     for package in ("bookkeeping", "change-journal"):
         subprocess.run(["uv", "build", "--wheel", str(ROOT / "packages" / package), "--out-dir", str(root / "dist")],
                        capture_output=True, text=True, check=True)
+    subprocess.run(["uv", "build", "--wheel", str(ROOT / "crates/control-contract"), "--out-dir", str(root / "dist")],
+                   capture_output=True, text=True, check=True)
     subprocess.run(["uv", "venv", "--python", sys.executable, str(root / "venv")], capture_output=True, text=True, check=True)
     python = root / "venv" / "bin" / "python"
     subprocess.run(["uv", "pip", "install", "--python", str(python), *map(str, (root / "dist").glob("*.whl"))],

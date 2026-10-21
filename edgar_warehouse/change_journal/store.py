@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
-import re
-from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.control_contract import canonical, reference
@@ -24,9 +22,11 @@ class JournalConflict(ValueError):
 
 
 def get_engine(url: str | None = None):
-    return create_engine(
-        url or os.environ["CHANGE_JOURNAL_DATABASE_URL"], pool_pre_ping=True
-    )
+    target = make_url(url or os.environ["CHANGE_JOURNAL_DATABASE_URL"])
+    defaults = {"postgresql":"postgresql+psycopg2", "mysql":"mysql+pymysql", "mssql":"mssql+pymssql"}
+    if target.drivername in defaults:
+        target = target.set(drivername=defaults[target.drivername])
+    return create_engine(target, pool_pre_ping=True, hide_parameters=True)
 
 
 def envelope(
@@ -58,57 +58,10 @@ def envelope(
 
 
 def validate(value: dict) -> None:
-    keys = {
-        "version",
-        "producer",
-        "event_key",
-        "run_id",
-        "source",
-        "feed",
-        "event_type",
-        "occurred_at",
-        "scope",
-        "evidence",
-    }
-    if (
-        not isinstance(value, dict)
-        or set(value) != keys
-        or type(value["version"]) is not int
-        or value["version"] != 1
-    ):
-        raise ValueError("Unsupported Change Journal envelope")
-    for key in ("producer", "source", "feed", "event_type"):
-        if not isinstance(value[key], str) or not re.fullmatch(
-            r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}", value[key]
-        ):
-            raise ValueError(f"Invalid journal {key}")
-    if (
-        not isinstance(value["event_key"], str)
-        or not 1 <= len(value["event_key"]) <= 2048
-    ):
-        raise ValueError("An original event key is required")
-    if str(UUID(value["run_id"])) != value["run_id"]:
-        raise ValueError("Journal root run_id must be a canonical UUID")
-    stamp = datetime.fromisoformat(value["occurred_at"])
-    if stamp.tzinfo is None or stamp.utcoffset() != UTC.utcoffset(stamp):
-        raise ValueError("Journal timestamp must have UTC timezone")
-    if (
-        not isinstance(value["scope"], dict)
-        or len(value["scope"]) > 32
-        or any(
-            not isinstance(k, str) or not k or not isinstance(v, str) or not v
-            for k, v in value["scope"].items()
-        )
-    ):
-        raise ValueError("Journal scopes contain identifiers only")
-    if (
-        not isinstance(value["evidence"], list)
-        or not 1 <= len(value["evidence"]) <= 100
-    ):
-        raise ValueError("Journal events require bounded evidence references")
-    for ref in value["evidence"]:
-        reference(ref)
-    canonical(value)
+    """The shared native contract validates every producer, independent of storage."""
+    import edgar_control
+    import json
+    edgar_control.prepare_journal_event(json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 
 class ChangeJournal:
@@ -116,93 +69,58 @@ class ChangeJournal:
         self.engine = engine
 
     def append(self, value: dict) -> dict:
-        validate(value)
-        body = canonical(value)
-        sha = hashlib.sha256(body.encode()).hexdigest()
+        import edgar_control
+        import json
+        from . import storage
+        prepared = json.loads(edgar_control.prepare_journal_event(json.dumps(value,ensure_ascii=False,allow_nan=False,separators=(",", ":"))))
         try:
-            with self.engine.begin() as conn:
-                receipt = conn.scalar(
-                    text("SELECT journal.append(:b,:h)"), {"b": body, "h": sha}
-                )
+            storage.record_event(self.engine, prepared["body"], prepared["canonical_hash"])
         except DBAPIError as exc:
-            if getattr(exc.orig, "pgcode", None) == "23505":
-                raise JournalConflict(
-                    "Producer event key already names different content"
-                ) from exc
+            # Classify only the storage interface's explicit key/content conflict.
+            if "journal_content_conflict" in str(exc.orig):
+                raise JournalConflict("Producer event key already names different content") from None
             raise
-        # Separate read transaction reconciles durable receipt before a producer
-        # acknowledges its local delivery intent. Lost acknowledgements retry.
-        return self.verify(receipt, expected=value)
+        receipt = self.get(prepared["producer"], prepared["event_key"])
+        if receipt is None:
+            raise JournalConflict("Journal durable read-back mismatch")
+        edgar_control.check_journal_receipt(canonical(receipt), prepared["body"])
+        return receipt
 
     def get(self, producer: str, event_key: str) -> dict | None:
-        with self.engine.connect() as conn:
-            return conn.scalar(
-                text("SELECT journal.get(:p,:k)"), {"p": producer, "k": event_key}
-            )
+        import edgar_control
+        import json
+        from . import storage
+        stored = storage.get_event(self.engine, producer, event_key)
+        return json.loads(edgar_control.prepare_journal_receipt(canonical(stored))) if stored else None
 
     def found(self, producer: str, event_keys: list[str]) -> set[str]:
-        """Which of these event keys the producer has recorded: one indexed
-        lookup per key, at most FOUND_LIMIT keys a call."""
-        if not isinstance(event_keys, list) or len(event_keys) > FOUND_LIMIT or any(
-            type(key) is not str for key in event_keys
-        ):
-            raise ValueError(f"Journal lookup requires at most {FOUND_LIMIT} text keys")
-        if not event_keys:
-            return set()
-        with self.engine.connect() as conn:
-            return set(
-                conn.scalar(
-                    text("SELECT journal.found(:p,CAST(:k AS text[]))"),
-                    {"p": producer, "k": event_keys},
-                )
-            )
+        from . import storage
+        import edgar_control
+        edgar_control.prepare_journal_read(canonical({"operation":"found", "producer":producer, "keys":event_keys}))
+        return storage.found_events(self.engine, producer, event_keys)
 
-    def list(
-        self,
-        *,
-        source: str | None = None,
-        feed: str | None = None,
-        run_id: str | None = None,
-        limit: int = 100,
-        after: int = 0,
-    ) -> list[dict]:
-        if (
-            type(limit) is not int
-            or not 1 <= limit <= 1000
-            or type(after) is not int
-            or after < 0
-        ):
-            raise ValueError(
-                "Journal inspection requires limit 1..1000 and nonnegative after"
-            )
-        with self.engine.connect() as conn:
-            return conn.scalar(
-                text("SELECT journal.list_events(:s,:f,CAST(:r AS uuid),:n,:a)"),
-                {"s": source, "f": feed, "r": run_id, "n": limit, "a": after},
-            )
+    def list(self, *, source: str | None = None, feed: str | None = None,
+             run_id: str | None = None, limit: int = 100, after: int = 0) -> list[dict]:
+        import edgar_control
+        import json
+        from . import storage
+        prepared = json.loads(edgar_control.prepare_journal_read(canonical({"operation":"list", "limit":limit,"after":after,"run_id":run_id})))
+        records = storage.list_events(self.engine, source=source, feed=feed, run_id=prepared["run_id"], limit=limit, after=after)
+        return [json.loads(edgar_control.prepare_journal_receipt(canonical(row))) for row in records]
 
     def verify(self, receipt: dict, *, expected: dict | None = None) -> dict:
-        if not isinstance(receipt, dict) or set(receipt) != {
-            "id",
-            "canonical_hash",
-            "recorded_at",
-            "event",
-        }:
-            raise ValueError("Malformed Change Journal receipt")
-        event = receipt["event"]
-        validate(event)
-        sha = hashlib.sha256(canonical(event).encode()).hexdigest()
-        if receipt["canonical_hash"] != sha or (
-            expected is not None and event != expected
-        ):
-            raise JournalConflict("Journal receipt content or hash mismatch")
-        stored = self.get(event["producer"], event["event_key"])
-        if stored != receipt:
-            raise JournalConflict("Journal durable read-back mismatch")
+        import edgar_control
+        import json
+        try:
+            prepared = json.loads(edgar_control.check_journal_receipt(canonical(receipt), canonical(expected) if expected is not None else None))
+            stored = self.get(prepared["producer"], prepared["event_key"])
+            edgar_control.confirm_journal_receipt(canonical(receipt), canonical(stored))
+        except ValueError as error:
+            if "mismatch" in str(error):
+                raise JournalConflict(str(error)) from None
+            raise
         return receipt
 
     def status(self, *, source: str | None = None, feed: str | None = None) -> dict:
-        with self.engine.connect() as conn:
-            return conn.scalar(
-                text("SELECT journal.status(:s,:f)"), {"s": source, "f": feed}
-            )
+        from . import storage
+        return storage.event_status(self.engine, source=source, feed=feed)

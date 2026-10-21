@@ -40,6 +40,7 @@ WHEELS = {
     "edgartools-bookkeeping": "packages/bookkeeping",
     "edgartools-change-journal": "packages/change-journal",
     "source-contract": "crates/source-contract",
+    "edgartools-control-core": "crates/control-contract",
 }
 DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
 

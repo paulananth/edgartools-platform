@@ -1,0 +1,151 @@
+# Complete platform database portability before master configuration
+
+Operator, 2026-10-20: "yes take ownership but work on that last after migrating everything to work with all three databases".
+
+Scope: one common implementation across PostgreSQL, MySQL and SQL Server for
+Rules, Change Journal, Bookkeeping, MDM, RDM, Silver and their installed callers,
+workers and health checks. Preserve the existing migration worktrees and retained
+data. Configuration of Company, Person, Security and their relationships follows
+completion of database portability. Hosted targets remain Snowflake Postgres and
+Databricks Postgres; AWS Postgres and new provider requests are outside scope.
+Approval, activation and merge remain separate operator gates.
+
+- [x] Inspect live branches, existing migration tickets and current main; create a fresh isolated branch/worktree — git state and worktree inventory, origin/main 275a9d22; 2026-10-20 19:53 ET.
+- [x] Preserve and inventory both migration drafts — 77 files fingerprinted privately, originals preserved; 50 MDM/skill paths held as pending imports so the Journal/Bookkeeping slice has no overlap — 2026-10-20 20:19 ET.
+- [x] Replace Bookkeeping inspection SQL with selected-engine typed reads and move run-check/capture decisions into shared Rust — six real-engine read cases passed on each selected engine, seven Rust cases, 65 normal PostgreSQL control cases; 2026-10-20 20:19 ET.
+- [x] Qualify the populated metadata-index upgrade and repeated migration — old frozen run preserved exactly through the normal typed caller; one affected integration case passed; 2026-10-20 20:19 ET.
+- [x] Qualify native-prepared completion storage on all three engines — 15 completion cases per engine, including forged state/metadata, changed observations, concurrent retries, and rollback after a destination trigger fails; 2026-10-21 06:19 ET.
+- [x] Resolve the bounded slice's Standards, Spec and GoF findings — exact resource/work lookups retain actual index seeks, capture selection/output and frozen run/work share consistent observations, both prepared-state directions are checked, migration 009 contains frozen SQL; reviewers found no remaining material correction issue and 31 combined cases passed per engine; 2026-10-21 06:19 ET.
+- [x] Requalify the normal PostgreSQL caller and populated upgrade after the review corrections — 66 affected integration cases passed in 69.46 seconds; 2026-10-21 06:19 ET.
+- [x] Inventory normal caller operations, existing drafts and remaining capability gaps across all six stores — source inspection recorded in OPERATIONS.md, with unsupported normal migration/caller paths distinguished from helper qualification; 2026-10-21 06:27 ET.
+- [x] Record operation placement and GoF evidence; retain one Rust computation and database-authoritative writes — OPERATIONS.md and independent Standards/Spec/GoF reviews; existing facades retained, no new hierarchy; 2026-10-21 06:27 ET.
+- [ ] Complete and qualify Rules on all three engines, including immutable versions, evidence, approval and activation authorization.
+- [x] Integrate and qualify Change Journal on all three engines, preserving its independent package and existing evidence — nine selected-engine cases per engine (SQL Server's authorization case covers six elevation grants), 14 PostgreSQL normal/independent-package cases, and final installed proof on all three retained targets with one event before/after and identical retry receipt; Standards/Spec/GoF corrections resolved; 2026-10-21 06:30 ET.
+- [ ] Complete and qualify Bookkeeping on all three engines, including leases, fences, transitions, recovery and destination guards.
+- [ ] Complete and qualify the normal MDM caller on all three engines, including identity, history, indexed reads, publication and unchanged replay.
+- [ ] Complete and qualify RDM on all three engines, including immutable code versions and current activation.
+- [ ] Complete and qualify Silver on all three engines, including registration, idempotent deliveries and reference refresh.
+- [ ] Qualify installation, configured workers, migration commands, health checks and retained-data upgrades on the selected engines.
+- [ ] Audit opaque JSON value fidelity and exact-key index plans in the remaining stores; preserve large integers, Unicode, nulls and original key distinctions.
+- [ ] Review Standards, Spec and GoF; record active and historical database code separately.
+- [ ] Build and freeze complete Company, Person, Security and relationship configuration using existing approved captured-input findings.
+- [ ] Run each onboarding part's required test and one proving run after configuration freeze; verify uniqueness, held-back records, links, holdings and unchanged replay.
+- [ ] Qualify documented Snowflake Postgres and Databricks Postgres procedures, or record exact unsupported capabilities.
+- [ ] Obtain any required approvals and activation instructions for the qualified configuration.
+- [ ] Learning → skill: record reusable guidance in its owning skill on a separate branch/PR, or none.
+
+## Existing work
+
+Journal and Bookkeeping drafts remain in `control-journal-portability-20261020`;
+shared MDM Rust extraction and adapter drafts remain in
+`mysql-mastering-merging-20261019`. Journal's ticket reports selected-engine
+installed-caller qualification; Bookkeeping and full MDM caller qualification
+are incomplete. Their reported results are evidence to inspect, not proof
+that this consolidated branch contains or has qualified the implementation.
+
+
+## Bounded operation: control reads and run observations
+
+Standards: fresh dedicated branch; original worktrees and test contents preserved.
+The guard passes after keeping the unrelated MDM and shared-skill imports in
+private pending copies. Tests use separate testmon files and bounded invocations;
+fixture-created databases and principals are cleaned up. No provider request,
+source onboarding test, source execution, approval or activation occurred.
+
+Spec: the normal Bookkeeping inspection caller uses SQLAlchemy statements on
+all engines. Rust owns run-check decisions, newest-capture grouping and verified
+output deduplication. A later rerun of an older capture never makes it newest;
+unfinished or compacted newest runs are refused. This proves read operations and
+shared decisions only. Non-PostgreSQL migration, profile grants, work transitions
+and destination guards remain missing and their existing refusals remain.
+
+GoF: recent changes to frozen reads and latest-capture behavior (275a9d22,
+68baf111 and 0bb78d53) justify collecting storage syntax behind the existing
+Bookkeeping facade. Reuse SQLAlchemy and the shared control Rust library; no
+new class hierarchy. The concrete adapter liability is value fidelity and the
+write-interface gap. Real-engine checks exposed MySQL numeric rounding,
+SQL Server scalar JSON projection and default collation comparisons; tests
+now cover exact large integers, null/empty distinctions, Unicode, long scalar
+values, case, accents and trailing spaces.
+
+Seven-waste review: transport stays scoped to one run or configured document;
+only selected verified-unit identities are read after capture selection. Native
+deduplication transfers duplicate identities before folding them; no speed claim
+is made. The new document index prevents metadata table scans. One native
+implementation replaces the old Python checks and SQL capture-selection logic;
+SQL retains indexed retrieval and lookup addressing. Existing write authority
+is preserved. Private pending drafts avoid competing edits; disposable proofs
+leave no control rows in retained targets.
+
+The first setup/read integration step took about 18 minutes. The longest
+normal-caller test invocation was 53.80 seconds. Cross-engine read/Journal
+cohorts completed in 3.75 seconds (MySQL) and 9.53 seconds (SQL Server);
+PostgreSQL's final six read cases completed in 2.27 seconds. Journal's eight
+selected cases also passed on PostgreSQL. Independent installed Journal
+qualification subsequently passed on each retained selected test instance:
+one invented event before and after, the same receipt on retry, and no domain
+package installed. No source execution was performed.
+
+## Completion storage and consistent observations
+
+The destination locks the run and rechecks actual work, verified work, pending
+delivery and unsealed expansion counts before saving Rust-prepared state,
+checks and summary. A forged completion or waiting state, duplicate/type-invalid
+metadata, changed counters, compacted run or ungranted principal is refused.
+Identical retries preserve the original completion time; a late destination
+failure rolls back the update and the same intent can succeed after repair.
+SQL Server counters use COUNT_BIG. Normal claims and other writes still use the
+existing PostgreSQL capabilities; MySQL/SQL Server initialization is still
+explicitly refused until the full workflow and grants are qualified.
+
+Standards: migration 009 is frozen SQL rather than generated again from mutable
+runtime/native code. Its populated-upgrade test changes the generator after
+installation and verifies migration replay is unchanged. Exact binary residual
+comparisons preserve original keys while indexed equality retains seeks.
+Real query plans cover capture metadata, resource checkpoints and work identity.
+
+Spec: capture metadata, Rust selection and chunked output reads use one
+consistent observation set. Frozen run/work reads do likewise. PostgreSQL and
+MySQL use repeatable-read snapshots; SQL Server uses a serializable read set.
+A concurrent compaction test returns the original coherent output and the next
+call refuses the compacted run. Readers never return partial compacted output.
+
+GoF: independent review recommends retaining the facade and typed boundary;
+the corrections require no additional class hierarchy. Both review axes found
+their original findings resolved on reinspection.
+
+Latest selected-engine cohort: 31 passed on each engine (eight read cases,
+15 completion cases, eight Journal cases), in 2.40, 5.01 and 6.04 seconds for
+PostgreSQL, MySQL and SQL Server respectively. The 66-case normal PostgreSQL
+caller/upgrade cohort passed in 69.46 seconds. Installed Bookkeeping and
+independent Journal checks passed six cases before the final frozen-SQL change;
+the final installed cohort also passed six cases in 71.93 seconds. All artifacts contain invented
+fixtures or counts and outcomes only.
+
+Live origin/main advanced to 52f7919b with Security skill/evidence changes;
+those four changed paths do not overlap this control slice. Master configuration
+remains last, and the new Security evidence will be reread before that work.
+
+## Independent Journal closeout
+
+Frozen native SQL payloads now live under `change_journal/migrations/native/`.
+Their exact statement bytes preserve the already-applied native checksums;
+later code changes cannot regenerate historical payloads. The independent wheel
+ships all three payloads, verified by the installed-package manifest test.
+Shared native read preparation normalizes accepted UUID filter spellings before
+storage lookup; uppercase and undashed identifiers find the same saved event.
+
+SQL Server owner migration inspects the runtime login's effective server,
+database, principal, role, schema and object permissions before writing. Tests
+grant direct CONTROL SERVER, impersonation of dbo, db_ddladmin membership,
+schema ALTER, procedure ALTER and readback-view ALTER one at a time; each is
+refused, its grant is repaired, and the original durable receipt still verifies.
+The inspection requires permission to impersonate the selected runtime login;
+it does not silently substitute a weaker database-only check.
+
+The final independent build qualified all retained selected test targets with
+exactly one invented event before and after, no domain/source packages, and
+the same receipt on retry. The original retained proof event and credentials
+were reused. No source records, provider requests or source executions were
+added. The review/qualification continuation took approximately 18 minutes;
+every individual local test invocation remained below five minutes.
