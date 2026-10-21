@@ -23,9 +23,15 @@ def event(**changes):
     return envelope(**values)
 
 
+@pytest.fixture(scope="module")
+def journal_database(database_factory):
+    with database_factory() as value:
+        yield value
+
+
 @pytest.fixture
-def journal(database):
-    owner,runtime,role=database
+def journal(journal_database):
+    owner,runtime,role=journal_database
     checksums=migrate(owner,runtime_role=role,database_name=owner.url.database)
     assert migrate(owner,runtime_role=role,database_name=owner.url.database,existing_only=True)==checksums
     return owner,runtime,role,ChangeJournal(runtime)
@@ -157,8 +163,8 @@ def test_populated_migration_drift_interruption_and_recovery(journal):
     assert journal.verify(receipt)==receipt
 
 
-def test_postgres_populated_original_store_upgrades_without_rewriting_receipts(database):
-    owner,runtime,role=database
+def test_postgres_populated_original_store_upgrades_without_rewriting_receipts(journal_database):
+    owner,runtime,role=journal_database
     if owner.dialect.name!="postgresql":
         # Other engines have no earlier native Journal schema. Their populated
         # native upgrade/recovery path is exercised above on the same retained rows.
@@ -169,7 +175,7 @@ def test_postgres_populated_original_store_upgrades_without_rewriting_receipts(d
     from edgar_warehouse.control_contract import canonical
     with owner.begin() as conn:
         # This is a disposable proof database owned exclusively by this fixture.
-        conn.exec_driver_sql("DROP SCHEMA journal CASCADE")
+        conn.exec_driver_sql("DROP SCHEMA IF EXISTS journal CASCADE")
         checksums={}
         for path in sorted((Path(migrations.__file__).parent/"migrations").glob("*.sql")):
             source=path.read_text();conn.execute(text(source));checksums[path.name]=hashlib.sha256(source.encode()).hexdigest()

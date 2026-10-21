@@ -554,11 +554,15 @@ class Bookkeeping:
             raise Blocked(str(exc)) from exc
 
     def resume(self, run_id: str) -> dict:
-        run, config, _, _ = self._frozen(run_id)
-        if run["compacted_at"]:
-            raise Blocked("Compacted runs are audit-only; start a new run")
+        import edgar_control
+        from .run_storage import record_run_resume
+        try:
+            wire = edgar_control.prepare_run_resume(canonical(storage.resume_observations(self.engine, run_id)))
+        except ValueError as error:
+            raise Blocked(str(error)) from None
+        _, config, _, _ = self._frozen(run_id)
         self._verify_completed(run_id, config)
-        self._call("SELECT bookkeeping.resume_run(CAST(:r AS uuid))", r=run_id)
+        record_run_resume(self.engine, wire)
         return self.status(run_id)
 
     def status(self, run_id: str, *, limit: int = 100) -> dict:

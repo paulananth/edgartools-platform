@@ -22,10 +22,16 @@ Approval, activation and merge remain separate operator gates.
 - [ ] Complete and qualify Rules on all three engines, including immutable versions, evidence, approval and activation authorization.
 - [x] Integrate and qualify Change Journal on all three engines, preserving its independent package and existing evidence — nine selected-engine cases per engine (SQL Server's authorization case covers six elevation grants), 14 PostgreSQL normal/independent-package cases, and final installed proof on all three retained targets with one event before/after and identical retry receipt; Standards/Spec/GoF corrections resolved; 2026-10-21 06:30 ET.
 - [ ] Complete and qualify Bookkeeping on all three engines, including leases, fences, transitions, recovery and destination guards.
+- [x] Migrate run resumption through a native-prepared, destination-checked capability, preserving compaction refusal, stale-observation checks and unchanged retries — 14 resume cases passed per engine, exact checks/completion tokens reject changed checks and a later completion, including SQL Server 100-nanosecond precision; 66 normal PostgreSQL caller/upgrade cases passed, frozen migration 010 shipped by the independent wheel; 2026-10-21 07:03 ET.
+- [x] Remove the selected-engine test-order dependency by giving Journal its own disposable database; preserve its refusal of business tables and qualify the whole affected adapter folder — 74 cases passed per engine; PostgreSQL historical upgrade also reproduced failing alone and then passed alone after fixture correction; 2026-10-21 07:03 ET.
 - [ ] Complete and qualify the normal MDM caller on all three engines, including identity, history, indexed reads, publication and unchanged replay.
 - [ ] Complete and qualify RDM on all three engines, including immutable code versions and current activation.
 - [ ] Complete and qualify Silver on all three engines, including registration, idempotent deliveries and reference refresh.
 - [ ] Qualify installation, configured workers, migration commands, health checks and retained-data upgrades on the selected engines.
+- [x] Qualify the committed five-wheel bundle installation at its Git revision — five selected package/import/independence cases passed in 177.72 seconds, all sources pinned to the same ref with no duplicate shipped files; separate installation skill PR #1120; 2026-10-21 06:47 ET.
+- [x] Inspect checkpoint CI for draft PR #1121 and skill PR #1120 — #1120 all checks green; #1121 reached terminal failure with one engine regression and 1,083 engine cases passed, all other job groups green; initial monitoring stopped on the terminal result before its deadline; 2026-10-21 07:03 ET.
+- [x] Fix the reproduced CI combination regression for escaped lone-surrogate metadata; retain native equality, exact Python code-point behavior and strict durable UTF-8 publication — exact failing case reproduced locally; 13 combination/Unicode checks and 65 affected contract/image/Unicode checks passed after the fix; independent Standards/Spec/GoF review found no remaining issue; 2026-10-21 07:03 ET.
+- [ ] Inspect the next revision's complete CI for #1121; monitor for at most 20 minutes from push, stop on any terminal result or PR closure, and record pending checks at the deadline.
 - [ ] Audit opaque JSON value fidelity and exact-key index plans in the remaining stores; preserve large integers, Unicode, nulls and original key distinctions.
 - [ ] Review Standards, Spec and GoF; record active and historical database code separately.
 - [ ] Build and freeze complete Company, Person, Security and relationship configuration using existing approved captured-input findings.
@@ -149,3 +155,38 @@ the same receipt on retry. The original retained proof event and credentials
 were reused. No source records, provider requests or source executions were
 added. The review/qualification continuation took approximately 18 minutes;
 every individual local test invocation remained below five minutes.
+
+## Run resumption and CI correction
+
+Resumption now uses a shared native preparation and one destination enforcement
+sequence for every selected engine. It clears checks/completion only after a
+locked comparison of state and exact stored values. Opaque timestamp tokens
+retain the destination's full precision, including SQL Server's 100-nanosecond
+values that Python datetime cannot represent. The desired state already present
+is a harmless unchanged retry; a changed check or newer completion is stale.
+Work items, receipts, summaries, leases and checkpoints are preserved.
+Migration 010 is frozen SQL; the old PostgreSQL resume function is retired.
+
+The whole affected adapter folder exposed Journal's shared-database test-order
+dependency. The test factory now provisions a separate disposable Journal store
+and principal with the same cleanup; production refusal of non-Journal tables
+remains intact. All 74 cases passed on PostgreSQL and MySQL in 27.67/38.55 seconds
+and on SQL Server in a final isolated-log run in 92.26 seconds. Its historical
+PostgreSQL upgrade case also passes alone. The six-case independent control
+wheel/architecture cohort passed after the resume change in 95.13 seconds.
+
+Checkpoint CI found one source combination regression (1,083 other engine cases
+passed): an escaped lone-surrogate metadata value reached the new UTF-8-only
+native boundary before an unused column was dropped. The exact case reproduced
+locally. A native opaque-value encoder now retains Python string code points for
+equality, while normal UTF-8 canonicalization remains unchanged and hashing or
+publication of invalid UTF-8 remains refused. Thirteen combination/Unicode cases,
+65 affected contract/image/Unicode cases and nine native cases pass. Source
+combination history (3a75cfd1, 610a35e8) already uses the same surrogatepass
+transport for opaque metadata. Independent reviews found the correction sound;
+the existing serialization boundary is retained without a new hierarchy.
+
+This resumption/review/CI correction pass took approximately 30 minutes. The
+longest local invocation remained the five-wheel installation at 177.72 seconds.
+The PRs remain draft; skill PR #1120 has green CI. The next #1121 revision must
+pass full CI before readiness is claimed. No merge or activation is authorized.

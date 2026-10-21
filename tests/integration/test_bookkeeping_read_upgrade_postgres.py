@@ -42,18 +42,22 @@ def test_populated_run_metadata_gets_an_index_without_changing_frozen_content(mo
             saved = migrate(owner, runtime_role="read_proof_runtime", existing_only=True)
             assert "008_run_document_index.sql" in saved
             assert "009_native_run_checks.sql" in saved
+            assert "010_native_run_resume.sql" in saved
             # Historical migration bytes must not depend on the current native
             # contract or routine generator when a future capability changes.
             from edgar_warehouse.bookkeeping.clean import run_storage
             def changed_generator(_):
                 raise AssertionError("Applied migration regenerated from mutable code")
             monkeypatch.setattr(run_storage, "statements", changed_generator)
+            monkeypatch.setattr(run_storage, "resume_statements", changed_generator)
             assert migrate(owner, runtime_role="read_proof_runtime", existing_only=True) == saved
             assert Bookkeeping(runtime)._run(rid) == before
             with owner.begin() as conn:
                 stored = conn.scalar(text("SELECT document_hash FROM bookkeeping.pipeline_run WHERE run_id=CAST(:r AS uuid)"), {"r": rid})
                 assert bytes(stored).hex() == edgar_control.hash_text("source:invented.source:reading")
                 assert conn.scalar(text("SELECT COUNT(*) FROM bookkeeping.work_item")) == 0
+                assert conn.scalar(text("SELECT to_regprocedure('bookkeeping.resume_run(uuid)')")) is None
+                assert conn.scalar(text("SELECT to_regprocedure('bookkeeping.resume_run_prepared(text)')")) is not None
         finally:
             if runtime is not None:
                 runtime.dispose()

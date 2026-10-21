@@ -20,12 +20,12 @@ from edgar_warehouse.control_contract import canonical
 from tests.storage_adapters.test_bookkeeping_reads import control_tables, add_run, add_work
 
 
-def execution_grant(owner, role, verb):
+def execution_grant(owner, role, verb, capability="record_run_checks"):
     kind = owner.dialect.name
     principal = f"'{role}'@'%'" if kind == "mysql" else owner.dialect.identifier_preparer.quote(role)
-    target = {"postgresql": "FUNCTION bookkeeping.record_run_checks(text)",
-              "mysql": "PROCEDURE bookkeeping_record_run_checks",
-              "mssql": "OBJECT::bookkeeping.record_run_checks"}[kind]
+    target = {"postgresql": f"FUNCTION bookkeeping.{capability}(text)",
+              "mysql": f"PROCEDURE bookkeeping_{capability}",
+              "mssql": f"OBJECT::bookkeeping.{capability}"}[kind]
     return f"{verb} EXECUTE ON {target} {'FROM' if verb == 'REVOKE' else 'TO'} {principal}"
 
 

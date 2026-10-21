@@ -1,6 +1,6 @@
 """The data skill installed whole, from a git ref, with no checkout (mastering to-do 21).
 
-The four wheels (the bundle, Bookkeeping, the Change Journal and the engine)
+The five wheels (the bundle, Bookkeeping, the Change Journal and the native source/control libraries)
 are installed from this repository's committed HEAD by URL with the
 `uv tool install` command the data-platform skill's Setup writes, the way an
 agent with no checkout installs them. Every command

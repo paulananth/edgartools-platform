@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -136,8 +137,8 @@ def server_connection():
                 )
 
 
-@pytest.fixture(scope="session")
-def database(server_connection):
+@contextmanager
+def _isolated_database(server_connection):
     selected, url = server_connection.engine, server_connection.url
     owner = api.connect(url, selected)
     suffix = uuid4().hex[:12]
@@ -199,6 +200,18 @@ def database(server_connection):
                     conn.execute(text(statement))
         finally:
             owner.dispose()
+
+
+@pytest.fixture(scope="session")
+def database_factory(server_connection):
+    """Create an isolated store with its own restricted principal and cleanup."""
+    return lambda: _isolated_database(server_connection)
+
+
+@pytest.fixture(scope="session")
+def database(database_factory):
+    with database_factory() as value:
+        yield value
 
 
 @pytest.fixture

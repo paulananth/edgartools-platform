@@ -1,5 +1,7 @@
 //! Workload-independent control calculations. No database or provider dependencies.
 pub mod bookkeeping;
+#[cfg(feature = "python")]
+mod opaque;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::value::{to_raw_value, RawValue};
 use sha2::{Digest, Sha256};
@@ -289,6 +291,10 @@ mod python {
             .map_err(PyValueError::new_err)
     }
     #[pyfunction]
+    fn canonicalize_opaque(py: Python<'_>, value: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        super::opaque::canonicalize(py, &value)
+    }
+    #[pyfunction]
     fn prepare_journal_event(py: Python<'_>, raw: String) -> PyResult<String> {
         py.allow_threads(|| super::prepare_journal_event(&raw))
             .map_err(PyValueError::new_err)
@@ -334,6 +340,7 @@ mod python {
     #[pymodule]
     fn edgar_control(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(canonicalize, m)?)?;
+        m.add_function(wrap_pyfunction!(canonicalize_opaque, m)?)?;
         m.add_function(wrap_pyfunction!(hash_text, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_journal_event, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_journal_receipt, m)?)?;
@@ -344,6 +351,7 @@ mod python {
         m.add_function(wrap_pyfunction!(check_reference, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_checks, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_completion, m)?)?;
+        m.add_function(wrap_pyfunction!(prepare_run_resume, m)?)?;
         m.add_function(wrap_pyfunction!(completion_storage_contract, m)?)?;
         m.add_function(wrap_pyfunction!(select_latest_capture, m)?)?;
         m.add_function(wrap_pyfunction!(select_verified_units, m)?)?;
@@ -358,6 +366,11 @@ mod python {
     #[pyfunction]
     fn prepare_run_completion(py: Python<'_>, raw: String) -> PyResult<String> {
         py.allow_threads(|| super::bookkeeping::prepare_run_completion(&raw))
+            .map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
+    fn prepare_run_resume(py: Python<'_>, raw: String) -> PyResult<String> {
+        py.allow_threads(|| super::bookkeeping::prepare_run_resume(&raw))
             .map_err(PyValueError::new_err)
     }
     #[pyfunction]

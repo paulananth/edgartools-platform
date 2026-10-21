@@ -226,6 +226,23 @@ def completion_observations(engine, run_id):
     return dict(found)
 
 
+def resume_observations(engine, run_id):
+    """Read exact storage tokens for the fields resumption may overwrite."""
+    from .run_storage import _StorageSQL
+    syntax = _StorageSQL(engine.dialect.name)
+    run = tables(engine.dialect.name)["pipeline_run"].alias("p")
+    statement = select(run.c.run_id, run.c.state, case((run.c.compacted_at.is_not(None), True), else_=False).label("compacted"),
+        literal_column(syntax.text_value("p.checks"), UnicodeText()).label("checks_token"),
+        literal_column(syntax.stamp_token("p.completed_at"), UnicodeText()).label("completion_token")
+    ).select_from(run).where(run.c.run_id == run_id)
+    with engine.connect() as conn:
+        found = conn.execute(statement).mappings().first()
+    if found is None:
+        from edgar_warehouse.control_contract import Blocked
+        raise Blocked("Unknown control run")
+    return dict(found)
+
+
 def pending_events(engine, run_id, limit):
     table = tables(engine.dialect.name)["journal_outbox"]
     statement = select(table).where(table.c.run_id == run_id, table.c.delivered_at.is_(None)

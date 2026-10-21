@@ -15,6 +15,34 @@ const SUMMARY: [(&str, &str); 3] = [
 ];
 
 #[derive(Deserialize)]
+struct Resume {
+    run_id: uuid::Uuid,
+    state: String,
+    compacted: bool,
+    checks_token: String,
+    completion_token: String,
+}
+
+pub fn prepare_run_resume(raw: &str) -> Result<String, String> {
+    let input: Resume = serde_json::from_str(raw).map_err(|_| "Invalid resume observations")?;
+    if input.compacted {
+        return Err("Compacted runs are audit-only; start a new run".into());
+    }
+    if !["running", "waiting", "blocked", "complete"].contains(&input.state.as_str()) {
+        return Err("Invalid resume state".into());
+    }
+    let wire = BTreeMap::from([
+        ("run_id", input.run_id.to_string()),
+        ("expected_state", input.state),
+        ("expected_checks", hex_bytes(input.checks_token.as_bytes())),
+        ("expected_completion", input.completion_token),
+        ("state", "running".into()),
+        ("checks", hex_bytes(b"{}")),
+    ]);
+    serde_json::to_string(&wire).map_err(|_| "Cannot prepare run resume".into())
+}
+
+#[derive(Deserialize)]
 struct RunChecks {
     checks: Vec<String>,
     expected: u64,
@@ -286,6 +314,22 @@ pub fn select_verified_units(raw: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resume_preparation_preserves_observed_state_and_refuses_compaction() {
+        for state in ["running", "waiting", "blocked", "complete"] {
+            let raw = format!(
+                r#"{{"run_id":"00000000-0000-0000-0000-000000000001","state":"{state}","compacted":false,"checks_token":"{{}}","completion_token":""}}"#
+            );
+            let wire: BTreeMap<String, String> =
+                serde_json::from_str(&prepare_run_resume(&raw).unwrap()).unwrap();
+            assert_eq!(wire["expected_state"], state);
+            assert_eq!(wire["state"], "running");
+            assert_eq!(wire["checks"], "7b7d");
+            assert!(prepare_run_resume(&raw.replace("false", "true")).is_err());
+            assert!(prepare_run_resume(&raw.replace(state, "invented-state")).is_err());
+        }
+    }
 
     #[test]
     fn completion_checks_require_accounting_and_deliveries() {

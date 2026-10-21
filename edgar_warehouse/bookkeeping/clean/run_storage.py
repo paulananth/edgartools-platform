@@ -82,7 +82,7 @@ def statements(engine):
     for part in contract["summary"]:
         if part["counter"] not in counters:
             raise Blocked("Unsupported control summary contract")
-        pieces.extend([sql.literal(part["prefix"]), sql.number_text(v(part["counter"]))])
+        pieces.extend([sql.literal(part["prefix"]), sql.text_value(v(part["counter"]))])
     pieces.append(sql.literal(contract["suffix"]))
     body.append(sql.guard(f"{v('summary')} IS NULL OR NOT ({sql.equal(v('summary'), sql.concat(pieces))})",
                           "invalid_control_summary"))
@@ -95,11 +95,59 @@ def statements(engine):
     return sql.wrap("\n".join(body), declarations)
 
 
+def resume_statements(engine):
+    """Resume one uncompacted run using the same locked storage boundary."""
+    sql = _StorageSQL(engine.dialect.name)
+    v = sql.variable
+    run = engine.dialect.identifier_preparer.format_table(tables(engine.dialect.name)["pipeline_run"])
+    declarations = {"raw_run": "text", "run_id": "uuid", "state": "text", "expected_state": "text",
+                    "checks": "text", "observed_state": "text", "observed_checks": "text",
+                    "observed_completed": "text", "expected_checks": "text", "expected_completion": "text", "compacted": "int"}
+    body = [sql.assign("raw_run", sql.field("run_id")),
+            sql.guard(sql.bad_uuid(v("raw_run")), "invalid_control_run"),
+            sql.assign("run_id", sql.uuid(v("raw_run"))),
+            sql.assign("state", sql.field("state")),
+            sql.assign("expected_state", sql.field("expected_state")),
+            sql.assign("expected_checks", sql.decode(sql.field("expected_checks"))),
+            sql.assign("expected_completion", sql.field("expected_completion")),
+            sql.assign("checks", sql.decode(sql.field("checks"))),
+            sql.guard(f"{v('state')} IS NULL OR NOT ({sql.equal(v('state'), sql.literal('running'))}) "
+                      f"OR {v('checks')} IS NULL OR NOT ({sql.equal(v('checks'), sql.literal('{}'))}) "
+                      f"OR {v('expected_checks')} IS NULL OR {v('expected_completion')} IS NULL "
+                      f"OR {v('expected_state')} IS NULL OR NOT ({sql.one_of(v('expected_state'), ['running', 'waiting', 'blocked', 'complete'])})",
+                      "invalid_control_resume"),
+            sql.read([("observed_state", "p.state"),
+                      ("observed_checks", sql.text_value("p.checks")),
+                      ("observed_completed", sql.stamp_token("p.completed_at")),
+                      ("compacted", "CASE WHEN p.compacted_at IS NULL THEN 0 ELSE 1 END")],
+                     f"{run} p", f"p.run_id={v('run_id')}", lock=True),
+            sql.guard(f"{v('observed_state')} IS NULL", "unknown_control_run"),
+            sql.guard(f"{v('compacted')}<>0", "compacted_control_run"),
+            sql.guard(f"NOT ({sql.equal(v('observed_state'), v('expected_state'))} AND "
+                      f"{sql.equal(v('observed_checks'), v('expected_checks'))} AND "
+                      f"{sql.equal(v('observed_completed'), v('expected_completion'))}) AND NOT ("
+                      f"{sql.equal(v('observed_state'), v('state'))} AND "
+                      f"{sql.equal(v('observed_checks'), v('checks'))} AND {v('observed_completed')}='')",
+                      "control_observations_changed")]
+    same = f"p.state={v('state')} AND {sql.same_json('p.checks', v('checks'))} AND p.completed_at IS NULL"
+    body.append(sql.update(run, f"state={v('state')},checks={sql.document(v('checks'))},completed_at=NULL",
+                           f"p.run_id={v('run_id')} AND NOT ({same})"))
+    return sql.wrap("\n".join(body), declarations, name="resume_run_prepared")
+
+
+def record_run_resume(engine, wire):
+    return _record(engine, wire, "resume_run_prepared")
+
+
 def record_run_checks(engine, wire):
+    return _record(engine, wire, "record_run_checks")
+
+
+def _record(engine, wire, operation):
     dialect = engine.dialect.name
-    query = {"postgresql": "SELECT bookkeeping.record_run_checks(:w)",
-             "mysql": "CALL bookkeeping_record_run_checks(:w)",
-             "mssql": "EXEC bookkeeping.record_run_checks @p_wire=:w"}[dialect]
+    query = {"postgresql": f"SELECT bookkeeping.{operation}(:w)",
+             "mysql": f"CALL bookkeeping_{operation}(:w)",
+             "mssql": f"EXEC bookkeeping.{operation} @p_wire=:w"}[dialect]
     try:
         if dialect == "postgresql":
             with engine.begin() as conn:
@@ -115,7 +163,7 @@ def record_run_checks(engine, wire):
                       else number in {1205, 1213, 3572} if dialect == "mysql"
                       else number in {1205, 1222})
         if "control_observations_changed" in str(error.orig) or contention:
-            raise StaleObservation("Control observations changed; refresh before completion") from None
+            raise StaleObservation("Control observations changed; refresh before transition") from None
         raise
 
 
@@ -172,9 +220,19 @@ class _StorageSQL:
     def document(self, value):
         return f"CAST({value} AS jsonb)" if self.dialect == "postgresql" else value
 
-    def number_text(self, value):
+    def text_value(self, value):
         kind = {"postgresql": "text", "mysql": "CHAR", "mssql": "NVARCHAR(MAX)"}[self.dialect]
         return f"CAST({value} AS {kind})"
+
+    def stamp_token(self, value):
+        """An opaque exact stored timestamp address, including sub-microsecond bits."""
+        if self.dialect == "postgresql":
+            token = f"encode(timestamptz_send({value}),'hex')"
+        elif self.dialect == "mysql":
+            token = f"DATE_FORMAT({value},'%Y-%m-%d %H:%i:%s.%f')"
+        else:
+            token = f"CONVERT(VARCHAR(64),CONVERT(VARBINARY(16),{value}),2)"
+        return f"COALESCE({token},'')"
 
     def concat(self, values):
         return " || ".join(values) if self.dialect == "postgresql" else f"CONCAT({','.join(values)})"
@@ -229,23 +287,23 @@ class _StorageSQL:
             return f"UPDATE {table} p SET {assignments} WHERE {condition};"
         return f"UPDATE {table} AS p SET {assignments} WHERE {condition};"
 
-    def wrap(self, body, variables):
+    def wrap(self, body, variables, *, name="record_run_checks"):
         types = {"int": "BIGINT", "text": {"postgresql": "text", "mysql": "LONGTEXT CHARACTER SET utf8mb4", "mssql": "NVARCHAR(MAX)"}[self.dialect],
                  "uuid": {"postgresql": "uuid", "mysql": "CHAR(32)", "mssql": "UNIQUEIDENTIFIER"}[self.dialect]}
         if self.dialect == "postgresql":
             declarations = '\n'.join(f"{self.variable(name)} {types[kind]};" for name, kind in variables.items())
-            return [f"""CREATE OR REPLACE FUNCTION bookkeeping.record_run_checks(p_wire text) RETURNS void
+            return [f"""CREATE OR REPLACE FUNCTION bookkeeping.{name}(p_wire text) RETURNS void
                 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $control$
                 DECLARE {declarations} BEGIN {body} END $control$;""",
-                "REVOKE ALL ON FUNCTION bookkeeping.record_run_checks(text) FROM PUBLIC"]
+                f"REVOKE ALL ON FUNCTION bookkeeping.{name}(text) FROM PUBLIC"]
         declarations = '\n'.join(f"DECLARE {self.variable(name)} {types[kind]};" for name, kind in variables.items())
         if self.dialect == "mysql":
-            return ["DROP PROCEDURE IF EXISTS bookkeeping_record_run_checks", f"""CREATE PROCEDURE bookkeeping_record_run_checks(IN p_wire LONGTEXT CHARACTER SET utf8mb4)
+            return [f"DROP PROCEDURE IF EXISTS bookkeeping_{name}", f"""CREATE PROCEDURE bookkeeping_{name}(IN p_wire LONGTEXT CHARACTER SET utf8mb4)
                 SQL SECURITY DEFINER BEGIN {declarations}
                 DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; RESIGNAL; END;
                 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
                 START TRANSACTION; {body} COMMIT; END"""]
-        return [f"""CREATE OR ALTER PROCEDURE bookkeeping.record_run_checks @p_wire NVARCHAR(MAX)
+        return [f"""CREATE OR ALTER PROCEDURE bookkeeping.{name} @p_wire NVARCHAR(MAX)
             WITH EXECUTE AS OWNER AS BEGIN SET NOCOUNT ON; SET XACT_ABORT ON;
             {declarations} BEGIN TRY BEGIN TRANSACTION; {body} COMMIT TRANSACTION;
             END TRY BEGIN CATCH IF @@TRANCOUNT>0 ROLLBACK TRANSACTION; THROW; END CATCH END"""]
