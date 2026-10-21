@@ -285,7 +285,14 @@ until the operator permits it.
 
 - A change to a Security contract or merge rule needs the full two-pass test
   (`rules test`): records reach MDM, no identifier on two Securities, and the
-  second pass changes nothing. 2026 Q2 takes about 2 h 20 min a pass on a
-  laptop; keep it on power ("Make the Securities run faster", ticket 122).
+  second pass changes nothing. 2026 Q2, one record per Security, takes about
+  3 h 10 min a pass on a laptop; keep it on power ("Make the Securities run
+  faster", ticket 122).
+- OpenFIGI joins a Security N-PORT made and never makes one, so its
+  `rules test` in an empty store only stages its records (`binding_required`).
+  That proves the fields and listings it reads; to prove the join and the
+  listings on the Security, run one slice in a store that holds N-PORT's
+  Securities (ticket 120: 49,082 of 49,082 joined, 158,554 listing rows, no
+  new Security).
 - Report counts only: Securities, held back by reason, identifiers on two
   Securities. Never an identifier or a name from the data.
