@@ -217,6 +217,13 @@ While a run is live:
   `heartbeat_seconds`.
 - **A laptop run needs power.** Sleep on a flat battery stops the workers,
   the leases expire and the units run again; `caffeinate` cannot prevent it.
+- **A deadline that stops a run leaves it resumable.** A driver's or
+  `rules test`'s deadline can stop a worker mid-unit (OpenFIGI's merge, 49,082
+  records joining Securities: 50 minutes) or stop `finalize`. Drive the same
+  run again by its id: the unit's lease expires, the merge continues record by
+  record from where it stopped, and nothing is merged twice. Never submit a
+  new run for it. `rules test --minutes` covers both passes and their
+  `finalize`s; size it to all four.
 - **Read a failed call's database error, not its last line.** The control
   call reports the `(psycopg2.errors.X)` line; SQLAlchemy's last line is only
   a link.

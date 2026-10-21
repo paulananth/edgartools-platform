@@ -68,6 +68,10 @@ low-power sleep from 02:46 to 05:55 ET; `caffeinate` cannot prevent that. The
 `holdings` unit lost its lease and ran again (two attempts). Long local runs
 need the Mac on power.
 
+## OpenFIGI's merge joining Securities (measured 2026-10-20 19:36–20:44 ET, `sec-test`)
+
+One CUSIP slice, 49,082 records each joining an existing Security with its listings (158,554 rows): the merge took about 50 minutes, about 16 records a second. At that rate the quarter's OpenFIGI records (about 383,000 by CUSIP and 33,000 by ISIN) take about 7 hours of merge in `company-on`. "Merge in sets of records" (below) is the idea it adds weight to.
+
 ## Ideas to test (none decided)
 
 - [x] Measure the split between work and Bookkeeping's checks (2026-10-20 07:55 ET): sampled over pass 2's last steps, above; checks are 48 of 74 minutes, `finalize` 16
