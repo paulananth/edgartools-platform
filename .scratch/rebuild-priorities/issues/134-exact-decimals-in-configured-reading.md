@@ -2,7 +2,7 @@
 
 Priority: 134, tier 3, product value. Map: [Rebuild priorities](../map.md).
 
-Type: task. Status: open. Blocks: 45 (the company facts reader).
+Type: task. Status: done (#1139 merged 2026-10-22 18:15 ET). Blocks: 45 (the company facts reader).
 
 ## Why
 
@@ -33,5 +33,5 @@ No source names in the engine.
 - [x] READING.md documents the option ("Complete JSON records") (2026-10-22 17:58 ET)
 - [x] Ticket 45's contract reads all 368 captured files with the option: 5,134,979 facts, every file equal fact by fact to the file read directly in exact decimals, no figure arrives as a float (`.scratch/company-financials/reader/full_read.py` on ticket 45's branch, 123 s) (2026-10-22 18:02 ET)
 - [x] Three-axis review, all findings fixed: GoF "leave it" (the `Numbers` grouping keeps the next option cheap); GoF and Standards: the fraction check made once (`decimal`), the extra comment dropped, READING.md states where the option applies and no longer names a domain skill; GoF: a kept decimal passed `type: integer`, now refused as a float is, tested; Spec: a framed record (streamed JSON array, CSV, XML records) had already parsed its numbers, so `decimals: text` returned a float's digits labelled exact; now the contract refuses there, tested, and `each.entries`, `from: document` and `jsonl` are tested to keep the digits; 33 engine test groups pass, ticket 45's 7 tests pass on the rebuilt engine (2026-10-22 18:07 ET)
-- [ ] PR, CI green, merge
+- [x] PR [#1139](https://github.com/paulananth/edgartools-platform/pull/1139), CI green, merged 2026-10-22 18:15 ET
 - [x] Learning → skill: `skills/data-platform/READING.md` (the option); `skills/company-financials/SKILL.md`, Hard stops (no `integer` or float in financial work: bigint or big decimal) and "Reading company facts" (declare `decimals: text` on `units`) (2026-10-22 17:58 ET)
