@@ -8,6 +8,8 @@ read:
   root: ownershipDocument
   context:
     accession: {type: text}
+    # The filing date, when the caller knows it (ticket 25); none otherwise.
+    filed: {type: text, nullable: true}
   # max_member_bytes bounds the XML inside an SGML file; the bare reading declares it too, so the
   # two readings' limits stay one statement (a test holds them equal).
   limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
@@ -76,6 +78,10 @@ read:
         accession: {context: {name: accession}}
         position: {ordinal: {}}
         rpt_owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
+        # The owner's record key in sec.ownership.reporting_owner.v1 (its accession and CIK,
+        # as MDM writes a two-part key), so a silver row finds the owner's Person (ticket 25).
+        owner_record_key: {concat: [{const: {value: '["'}}, {context: {name: accession}}, {const: {value: '","'}}, {text: {path: reportingOwnerId.rptOwnerCik.$}}, {const: {value: '"]'}}]}
+        filed: {context: {name: filed}}
         rpt_owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
         rpt_owner_street1: {text: {path: reportingOwnerAddress.rptOwnerStreet1.$}}
         rpt_owner_street2: {text: {path: reportingOwnerAddress.rptOwnerStreet2.$}}
@@ -100,6 +106,10 @@ read:
       columns:
         accession: {context: {name: accession}}
         position: {ordinal: {}}
+        line_table: {const: {value: non_derivative_transaction}}
+        issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
+        as_of: {coalesce: {skip: "null", values: [{date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}, {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}]}}
+        filed: {context: {name: filed}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_date: {date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}
         deemed_execution_date: {date: {path: deemedExecutionDate.value.$, kind: calendar, prefix_length: 10}}
@@ -121,6 +131,10 @@ read:
       columns:
         accession: {context: {name: accession}}
         position: {ordinal: {}}
+        line_table: {const: {value: non_derivative_holding}}
+        issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
+        as_of: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}
+        filed: {context: {name: filed}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
         shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}
@@ -132,6 +146,10 @@ read:
       columns:
         accession: {context: {name: accession}}
         position: {ordinal: {}}
+        line_table: {const: {value: derivative_transaction}}
+        issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
+        as_of: {coalesce: {skip: "null", values: [{date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}, {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}]}}
+        filed: {context: {name: filed}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_date: {date: {path: transactionDate.value.$, kind: calendar, prefix_length: 10}}
         deemed_execution_date: {date: {path: deemedExecutionDate.value.$, kind: calendar, prefix_length: 10}}
@@ -159,6 +177,10 @@ read:
       columns:
         accession: {context: {name: accession}}
         position: {ordinal: {}}
+        line_table: {const: {value: derivative_holding}}
+        issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
+        as_of: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}
+        filed: {context: {name: filed}}
         security_title: {text: {path: securityTitle.value.$}}
         transaction_form_type: {text: {path: transactionCoding.transactionFormType.$}}
         shares_owned_following_transaction: {text: {path: postTransactionAmounts.sharesOwnedFollowingTransaction.value.$}}

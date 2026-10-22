@@ -46,7 +46,7 @@ for d,_,fs in os.walk(root):
         try:
             if b.lstrip().startswith(b'<SEC-DOCUMENT>') or b'<XML>' in b: t=SGML.read(b).tables
             else:
-                m=re.search(r'(\d{10}-\d{2}-\d{6})',str(pathlib.Path(d)/f)); t=XML.read(b,context={'accession':m.group(1) if m else f}).tables
+                m=re.search(r'(\d{10}-\d{2}-\d{6})',str(pathlib.Path(d)/f)); t=XML.read(b,context={'accession':m.group(1) if m else f,'filed':None}).tables
         except SourceRejected as e:
             refused[getattr(e,'code',type(e).__name__)]+=1; continue
         for r in t['reporting_owner']:

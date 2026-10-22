@@ -1,0 +1,181 @@
+# The reporting owners of Forms 3, 4 and 5 for silver (rebuild priorities ticket
+# 25), kept apart from the lines as SEC's Insider Transactions Data Sets keep them
+# (operator, 2026-10-22: "Lines + owners, as SEC (Recommended)"): a joint filing
+# (41 of the cohort's 3,367 filings, 145 of its 11,451 lines) names each owner
+# once here and its lines once in ownership_line. Rows are the reporting_owner
+# table of ownership-xml.yaml / ownership-sgml.yaml: 3,570 owners, no key
+# repeated. The owner is found as the Person the ownership feed masters (its
+# record key), else as a Company by its CIK.
+table: ownership_owner
+definition: One reporting owner of one Form 3, 4 or 5, linked to its Person or Company and
+  to the issuer; a joint filing names several.
+grain: one row per filing (accession) and reporting owner (CIK)
+columns:
+- name: accession
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: the capture (bare XML) or the SGML header's ACCESSION NUMBER
+  sensitivity: none
+- name: position
+  type: BIGINT
+  nullable: false
+  definition: The owner's place among the filing's reporting owners, from 1.
+  source: the owner's order in the filing
+  sensitivity: none
+- name: rpt_owner_cik
+  type: VARCHAR
+  nullable: false
+  definition: The reporting owner's CIK, 10 digits as filed.
+  source: reportingOwnerId.rptOwnerCik
+  sensitivity: none
+- name: owner_record_key
+  type: VARCHAR
+  nullable: false
+  definition: The owner's record key in sec.ownership.reporting_owner.v1 (its accession and
+    CIK), by which its Person is found.
+  source: accession and reportingOwnerId.rptOwnerCik
+  sensitivity: none
+- name: rpt_owner_name
+  type: VARCHAR
+  nullable: true
+  definition: The reporting owner's name as filed.
+  source: reportingOwnerId.rptOwnerName
+  sensitivity: personal
+- name: rpt_owner_street1
+  type: VARCHAR
+  nullable: true
+  definition: The owner's street, as filed.
+  source: reportingOwnerAddress.rptOwnerStreet1
+  sensitivity: personal
+- name: rpt_owner_street2
+  type: VARCHAR
+  nullable: true
+  definition: The owner's second street line, as filed.
+  source: reportingOwnerAddress.rptOwnerStreet2
+  sensitivity: personal
+- name: rpt_owner_city
+  type: VARCHAR
+  nullable: true
+  definition: The owner's city, as filed.
+  source: reportingOwnerAddress.rptOwnerCity
+  sensitivity: personal
+- name: rpt_owner_state
+  type: VARCHAR
+  nullable: true
+  definition: The owner's state, as filed.
+  source: reportingOwnerAddress.rptOwnerState
+  sensitivity: personal
+- name: rpt_owner_zip_code
+  type: VARCHAR
+  nullable: true
+  definition: The owner's postal code, as filed.
+  source: reportingOwnerAddress.rptOwnerZipCode
+  sensitivity: personal
+- name: rpt_owner_state_description
+  type: VARCHAR
+  nullable: true
+  definition: The owner's state or country in words, as filed.
+  source: reportingOwnerAddress.rptOwnerStateDescription
+  sensitivity: none
+- name: rpt_owner_non_us_address_flag
+  type: BOOLEAN
+  nullable: true
+  definition: Whether the owner's address is outside the US.
+  source: reportingOwnerAddress.rptOwnerNonUSAddressFlag
+  sensitivity: none
+- name: rpt_owner_country
+  type: VARCHAR
+  nullable: true
+  definition: The owner's country, as filed.
+  source: reportingOwnerAddress.rptOwnerCountry
+  sensitivity: none
+- name: is_director
+  type: BOOLEAN
+  nullable: true
+  definition: The owner is a director of the issuer.
+  source: reportingOwnerRelationship.isDirector
+  sensitivity: none
+- name: is_officer
+  type: BOOLEAN
+  nullable: true
+  definition: The owner is an officer of the issuer.
+  source: reportingOwnerRelationship.isOfficer
+  sensitivity: none
+- name: is_ten_percent_owner
+  type: BOOLEAN
+  nullable: true
+  definition: The owner holds ten percent or more.
+  source: reportingOwnerRelationship.isTenPercentOwner
+  sensitivity: none
+- name: is_other
+  type: BOOLEAN
+  nullable: true
+  definition: Another relationship, named in other_text.
+  source: reportingOwnerRelationship.isOther
+  sensitivity: none
+- name: officer_title
+  type: VARCHAR
+  nullable: true
+  definition: The officer's title as filed.
+  source: reportingOwnerRelationship.officerTitle
+  sensitivity: none
+- name: other_text
+  type: VARCHAR
+  nullable: true
+  definition: The other relationship as filed.
+  source: reportingOwnerRelationship.otherText
+  sensitivity: none
+- name: issuer_cik
+  type: VARCHAR
+  nullable: false
+  definition: The issuer's CIK, 10 digits as filed.
+  source: issuer.issuerCik
+  sensitivity: none
+- name: period_of_report
+  type: DATE
+  nullable: true
+  definition: The filing's period of report (the event date).
+  source: periodOfReport
+  sensitivity: none
+- name: filed
+  type: DATE
+  nullable: true
+  definition: The filing's date, when known.
+  source: the SGML header's FILED AS OF DATE, or the caller
+  sensitivity: none
+key:
+- accession
+- rpt_owner_cik
+links:
+- columns:
+  - owner_record_key
+  kind: person
+  source_code: sec.ownership.reporting_owner.v1
+  to_part: reporting_owner
+  source_key: owner_record_key
+  mdm_id_column: person_mdm_id
+- columns:
+  - rpt_owner_cik
+  kind: company
+  source_code: sec.submissions.company.v1
+  to_part: company_owner
+  source_key: rpt_owner_cik
+  mdm_id_column: company_mdm_id
+- columns:
+  - issuer_cik
+  kind: company
+  source_code: sec.submissions.company.v1
+  to_part: issuer
+  source_key: issuer_cik
+  mdm_id_column: issuer_mdm_id
+time:
+  as_of: period_of_report
+  as_at: filed
+  event_time: null
+partition: []
+load_mode: append
+why: 'The owners of a filing, kept apart from its lines as SEC''s own data sets keep them
+  (operator, 2026-10-22: "Lines + owners, as SEC (Recommended)"), so a joint filing''s position
+  is stored once. The owner is a Person when the ownership feed masters it, else a Company
+  by its CIK.'

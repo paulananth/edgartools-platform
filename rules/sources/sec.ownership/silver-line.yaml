@@ -1,0 +1,221 @@
+# The lines of Forms 3, 4 and 5 for silver (rebuild priorities ticket 25):
+# `edgar-warehouse silver register` reads this spec (docs/specs/profiling/findings.md,
+# section 6). Rulings it rests on (operator, 2026-10-22): "Agreed Remove HOLDS from
+# MDM's relationship types", "Re-scope ticket 25 to land Form 4 holdings in silver",
+# "Don't we need a as of date for holdings", "Lines + owners, as SEC (Recommended)".
+# Rows are the four line tables of ownership-xml.yaml / ownership-sgml.yaml, landed
+# into this one table. Measured on the 3,367-filing cohort: 11,451 lines (8,391
+# non-derivative transactions, 1,104 non-derivative holdings, 1,528 derivative
+# transactions, 428 derivative holdings), every one with an as-of date and a
+# 10-digit issuer CIK, every amount a number, no key repeated. The Security
+# link waits for ticket 24 (a Form 4 names its class in words, never a CUSIP).
+table: ownership_line
+definition: 'One line of a Form 3, 4 or 5, as filed: a transaction or a holding, non-derivative
+  or derivative, with the position after it, linked to its issuer.'
+grain: one row per filing (accession), table and line
+columns:
+- name: accession
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: the capture (bare XML) or the SGML header's ACCESSION NUMBER
+  sensitivity: none
+- name: line_table
+  type: VARCHAR
+  nullable: false
+  definition: 'Which of the form''s four tables the line is in: non_derivative_transaction,
+    non_derivative_holding, derivative_transaction or derivative_holding (SEC''s NONDERIV_TRANS,
+    NONDERIV_HOLDING, DERIV_TRANS, DERIV_HOLDING).'
+  source: the table the line is filed in
+  sensitivity: none
+- name: position
+  type: BIGINT
+  nullable: false
+  definition: The line's place in its table, from 1.
+  source: the line's order in its table
+  sensitivity: none
+- name: issuer_cik
+  type: VARCHAR
+  nullable: false
+  definition: The issuer's CIK, 10 digits as filed.
+  source: issuer.issuerCik
+  sensitivity: none
+- name: as_of
+  type: DATE
+  nullable: true
+  definition: 'The date the line''s position holds at: its transaction date, else the filing''s
+    period of report.'
+  source: transactionDate, else periodOfReport
+  sensitivity: none
+- name: filed
+  type: DATE
+  nullable: true
+  definition: The filing's date, when known.
+  source: the SGML header's FILED AS OF DATE, or the caller
+  sensitivity: none
+- name: security_title
+  type: VARCHAR
+  nullable: true
+  definition: The class of security as filed.
+  source: securityTitle
+  sensitivity: none
+- name: transaction_date
+  type: DATE
+  nullable: true
+  definition: The transaction's date (transaction lines).
+  source: transactionDate
+  sensitivity: none
+- name: deemed_execution_date
+  type: DATE
+  nullable: true
+  definition: The deemed execution date, if any.
+  source: deemedExecutionDate
+  sensitivity: none
+- name: transaction_form_type
+  type: VARCHAR
+  nullable: true
+  definition: The form the transaction is reported on.
+  source: transactionCoding.transactionFormType
+  sensitivity: none
+- name: transaction_code
+  type: VARCHAR
+  nullable: true
+  definition: The transaction code (RDM sec-ownership-transaction-codes).
+  source: transactionCoding.transactionCode
+  sensitivity: none
+- name: transaction_code_label
+  type: VARCHAR
+  nullable: true
+  definition: What the transaction code means.
+  source: the pinned RDM code set
+  sensitivity: none
+- name: equity_swap_involved
+  type: BOOLEAN
+  nullable: true
+  definition: Whether an equity swap is involved.
+  source: transactionCoding.equitySwapInvolved
+  sensitivity: none
+- name: transaction_timeliness
+  type: VARCHAR
+  nullable: true
+  definition: E (early) or L (late), as filed.
+  source: transactionTimeliness
+  sensitivity: none
+- name: transaction_shares
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The number of shares in the transaction.
+  source: transactionAmounts.transactionShares
+  sensitivity: none
+- name: transaction_price_per_share
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The price per share.
+  source: transactionAmounts.transactionPricePerShare
+  sensitivity: none
+- name: transaction_total_value
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The transaction's total value, when stated instead of shares.
+  source: transactionAmounts.transactionTotalValue
+  sensitivity: none
+- name: transaction_acquired_disposed_code
+  type: VARCHAR
+  nullable: true
+  definition: A (acquired) or D (disposed).
+  source: transactionAmounts.transactionAcquiredDisposedCode
+  sensitivity: none
+- name: shares_owned_following_transaction
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: 'The shares owned after the line: the position.'
+  source: postTransactionAmounts.sharesOwnedFollowingTransaction
+  sensitivity: none
+- name: value_owned_following_transaction
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The value owned after the line, when stated instead of shares.
+  source: postTransactionAmounts.valueOwnedFollowingTransaction
+  sensitivity: none
+- name: direct_or_indirect_ownership
+  type: VARCHAR
+  nullable: true
+  definition: D (direct) or I (indirect).
+  source: ownershipNature.directOrIndirectOwnership
+  sensitivity: none
+- name: nature_of_ownership
+  type: VARCHAR
+  nullable: true
+  definition: How an indirect position is held, as filed.
+  source: ownershipNature.natureOfOwnership
+  sensitivity: none
+- name: conversion_or_exercise_price
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The conversion or exercise price (derivative lines).
+  source: conversionOrExercisePrice
+  sensitivity: none
+- name: exercise_date
+  type: DATE
+  nullable: true
+  definition: The date the derivative becomes exercisable.
+  source: exerciseDate
+  sensitivity: none
+- name: expiration_date
+  type: DATE
+  nullable: true
+  definition: The derivative's expiration date.
+  source: expirationDate
+  sensitivity: none
+- name: underlying_security_title
+  type: VARCHAR
+  nullable: true
+  definition: The class of the underlying security.
+  source: underlyingSecurity.underlyingSecurityTitle
+  sensitivity: none
+- name: underlying_security_shares
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The number of underlying shares.
+  source: underlyingSecurity.underlyingSecurityShares
+  sensitivity: none
+- name: underlying_security_value
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The underlying value, when stated instead of shares.
+  source: underlyingSecurity.underlyingSecurityValue
+  sensitivity: none
+key:
+- accession
+- line_table
+- position
+links:
+- columns:
+  - issuer_cik
+  kind: company
+  source_code: sec.submissions.company.v1
+  to_part: issuer
+  source_key: issuer_cik
+  mdm_id_column: issuer_mdm_id
+time:
+  as_of: as_of
+  as_at: filed
+  event_time: transaction_date
+partition: []
+load_mode: append
+why: 'A line is transaction data: a position or an event restated every filing with its amount,
+  so it lands in silver with its issuer''s MDM id and its as-of date, never as an MDM relationship
+  (operator, 2026-10-22). Its owners are the filing''s, in ownership_owner, joined by accession,
+  as SEC''s own data sets keep them.'
+# Data quality, as for N-PORT's holdings (operator, 2026-10-17: "Flag, land the
+# row"): a line whose ownership is neither D nor I lands flagged, never refused;
+# the cohort's 11,451 lines are all D or I.
+checks:
+- id: direct_or_indirect_known
+  check: in_set
+  column: direct_or_indirect_ownership
+  values:
+  - D
+  - I
+  on_fail: flag
+  why: Ownership is D (direct) or I (indirect), as the form's instructions name it.

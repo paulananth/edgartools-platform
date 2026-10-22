@@ -107,7 +107,7 @@ def filings() -> list[tuple[str, dict]]:
             tables = sgml.read(raw).tables
         else:
             found = re.search(r"\d{10}-\d{2}-\d{6}", str(path))
-            tables = bare.read(raw, context={"accession": found.group(0) if found else path.name}).tables
+            tables = bare.read(raw, context={"accession": found.group(0) if found else path.name, "filed": None}).tables
         out.append((hashlib.sha256(raw).hexdigest(), tables))
     return out
 

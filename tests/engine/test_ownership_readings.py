@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from tests.engine.test_sgml_container import document, submission
@@ -56,13 +57,16 @@ def filing(*, date="2026-01-05", swap="0", code="P", director="1", coding=True, 
 """.encode()
 
 
-def bare(body: bytes) -> dict:
-    return SourceEngine(XML).read(body, context={"accession": ACCESSION}).tables
+FILED = "20260107"  # the header's FILED AS OF DATE, invented
+
+
+def bare(body: bytes, filed: str | None = FILED) -> dict:
+    return SourceEngine(XML).read(body, context={"accession": ACCESSION, "filed": filed}).tables
 
 
 def wrapped(body: bytes) -> dict:
     sgml = submission(document(b"form4.xml", b"<XML>\n" + body + b"</XML>"), document(b"ex.txt", b"TEXT"),
-                      header=f"ACCESSION NUMBER:\t{ACCESSION}\n".encode())
+                      header=f"ACCESSION NUMBER:\t{ACCESSION}\nFILED AS OF DATE:\t{FILED}\n".encode())
     return SourceEngine(SGML).read(sgml).tables
 
 
@@ -71,6 +75,8 @@ def test_both_shapes_declare_the_same_tables_and_references():
         assert XML["read"][part] == SGML["read"][part], part
     assert XML["read"]["context"]["accession"] == {"type": "text"}
     assert SGML["read"]["context"]["accession"] == {"type": "text", "sgml_header": "ACCESSION NUMBER"}
+    assert XML["read"]["context"]["filed"] == {"type": "text", "nullable": True}
+    assert SGML["read"]["context"]["filed"] == {"type": "text", "nullable": True, "sgml_header": "FILED AS OF DATE"}
 
 
 def test_both_shapes_read_the_same_rows():
@@ -145,3 +151,23 @@ def test_each_owner_row_carries_the_filings_issuer_and_event_date():
     for tables in (bare(filing(date="2026-01-05-05:00")), wrapped(filing(date="2026-01-05-05:00"))):
         (owner,) = tables["reporting_owner"]
         assert (owner["issuer_cik"], owner["period_of_report"], owner["is_director"]) == ("0000000001", "2026-01-05", True)
+
+
+def test_each_line_carries_its_filing_issuer_as_of_and_filing_date():
+    """Ticket 25 (operator, 2026-10-22: "Re-scope ticket 25 to land Form 4 holdings
+    in silver", "Lines + owners, as SEC"): a line holds at its transaction date,
+    a holding line at the period of report; each names its issuer and filing date,
+    and each owner row its record key, so silver finds the owner's Person."""
+    tables = bare(filing(date="2026-01-05"))
+    assert tables == wrapped(filing(date="2026-01-05"))
+    (bought,) = tables["non_derivative_transaction"]
+    (held,) = tables["non_derivative_holding"]
+    assert (bought["line_table"], bought["issuer_cik"], bought["as_of"], bought["filed"]) == (
+        "non_derivative_transaction", "0000000001", "2026-01-05", FILED)
+    assert (held["line_table"], held["as_of"]) == ("non_derivative_holding", "2026-01-05")
+    (owner,) = tables["reporting_owner"]
+    assert owner["owner_record_key"] == f'["{ACCESSION}","0000000002"]'
+    # Exactly the key MDM stores for the owner's record under its Dataset Contract.
+    adapter = files.mdm_contract("sec.ownership", "sec.ownership.reporting_owner.v1")["adapter"]
+    assert owner["owner_record_key"] == adapters.record_key(owner, adapter["record_key"])
+    assert bare(filing(), filed=None)["non_derivative_transaction"][0]["filed"] is None
