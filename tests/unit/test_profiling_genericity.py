@@ -21,6 +21,9 @@ EXEMPT = {
     # purpose (operator, 2026-10-20: "Security master must document how the actual
     # security mastering is done so exempt").
     "security-master",
+    # The operator's rulings for company financials: naming its sources and concepts is
+    # its purpose (operator, 2026-10-21: "New company-financials skill (Recommended)").
+    "company-financials",
 }
 SCOPE = tuple(
     f"skills/{d.name}" for d in sorted((ROOT / "skills").iterdir()) if d.is_dir() and d.name not in EXEMPT

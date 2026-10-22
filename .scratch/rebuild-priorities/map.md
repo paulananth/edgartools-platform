@@ -113,6 +113,7 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
 - [Switch on the N-PORT registrant and fund over the captured quarter](issues/118-switch-on-nport-registrant.md): registrant and fund run from the captured quarter (#1114); not yet switched on
 - [A Security master skill](issues/123-security-master-skill.md): the skill holds every Securities ruling (#1117, #1118, #1119)
 - Tickets 49–62 (gold): closed as written (operator, 2026-10-18 12:25 ET, "Close all, re-raise later (Recommended)")
+- [As reported or as restated: the time model](issues/35-company-financials-03-time-model-as-reported-or-restated.md): every filed copy kept, the latest by default; years keyed on the period end (364–371 days); a changed year end Compustat-style, null with a reason when a year is missing
 
 ## Not yet specified
 
