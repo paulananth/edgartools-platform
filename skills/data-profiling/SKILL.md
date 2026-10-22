@@ -347,13 +347,20 @@ A part classed reference data becomes a code set version in RDM
      `upper_trimmed`). Take it from the findings' columns that hold the codes.
    - `hints`: plain words for the next agent: `meaning`, `use_when`,
      `avoid_when`, `example_question`. Write only what the evidence shows.
-   - `created_by`: the agent and this skill. `evidence`: the findings file.
+   - `created_by`: the agent and this skill. `evidence`: an object (the store
+     refuses text): the findings file, and the counts the codes rest on.
 3. **Draft:** `edgar-warehouse rdm draft --file <draft file>`.
 4. **Ask for approval.** Show the operator the draft and
    `edgar-warehouse rdm diff <code set> <current> <draft>`. Record their
    approval only in their words:
    `edgar-warehouse rdm approve <code set> <version> --by "<operator>" --words "<their exact words>"`.
 5. **Publish:** `edgar-warehouse rdm publish <code set> <version> --out <folder>`.
+   It writes `<folder>/<code set>/<version>/`. A repo code set keeps only
+   `canonical.jsonl` and `pin.json` under `rules/reference/published/<code
+   set>/<version>/`: publish to a scratch folder and copy those two, then check
+   the canonical file's sha256 equals the pin. With no RDM database live, use a
+   disposable PostgreSQL 16 with its own database named `rdm` (`rdm init`
+   refuses another) and a runtime login, as the earlier code sets did.
    `pin.json` there holds `{code_set, version, sha256}`, which a consumer pins.
 
 A table kept as a map of code to fields drafts with
