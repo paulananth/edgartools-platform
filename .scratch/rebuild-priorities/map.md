@@ -119,6 +119,7 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
 - [How company facts is read](issues/40-company-financials-08-how-company-facts-is-read.md): configured reading only; one row per taxonomy and concept with its units whole, flattened in silver by dbt; 367 of 368 captured files read, facts equal the long form; the 368th waits on [Exact big numbers in configured reading](issues/128-exact-big-numbers-in-configured-reading.md)
 - [Exact big numbers in configured reading](issues/128-exact-big-numbers-in-configured-reading.md): `value` gains `big_numbers: text`, an integer beyond 64-bit kept as exact text, default still a refusal; all 368 captured company facts files read, equal to the long form
 - [Currencies, IFRS filers and industry statement shapes](issues/42-company-financials-10-currency-ifrs-and-industry-shapes.md): reporting currency with its code, never converted; IFRS mapped into the same 19 line items; one item set flagged by kind, with an industrial or financial-services format from the SIC code
+- [The silver table spec for financial line items](issues/43-company-financials-11-silver-table-spec-for-financials.md): three tables, `company_fact` (every filed fact, exact, append), `company_line_item` and `company_measure` (dbt, rebuilt each run, each value traced and each null with its reason); reviewed against 35–48 and 128 first
 
 ## Not yet specified
 

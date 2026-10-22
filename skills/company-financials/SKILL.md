@@ -137,7 +137,7 @@ Evidence and sources: ticket 39, research 02 section 3.
   services (gross margin, ROIC, total debt and its ratios) is null with the
   reason "not meaningful for financial services".
 
-## Silver tables and their review (ticket 43, drafted 2026-10-22)
+## Silver tables and their review (ticket 43, decided 2026-10-22)
 
 - **Three tables**: `company_fact` (every filed fact, append, keyed on the
   measured eight columns), `company_line_item` and `company_measure` (built by

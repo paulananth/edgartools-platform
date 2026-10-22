@@ -2,7 +2,7 @@
 
 Priority: 43, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/11-silver-table-spec-for-financials.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: grilling. Status: spec drafted, awaiting the operator's approval. Blocked by: 35, 38 (both resolved); also built on 37, 39, 40, 42 and 128. Map: [map](../../company-financials/map.md).
+Type: grilling. Status: resolved (2026-10-22 09:18 ET, operator: "Approve the spec (Recommended)"). Blocked by: 35, 38 (both resolved); also built on 37, 39, 40, 42 and 128. Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -13,7 +13,7 @@ Write the silver table spec (profiling's spec format, `docs/specs/profiling/find
 - [x] Review of the financials tickets (35, 37–48, 128) for gaps before the spec ("Design review", below) (2026-10-22 08:14 ET)
 - [x] Spec drafted in the profiling silver format (`docs/specs/profiling/findings.md` section 6) from the rulings of 35, 38, 39, 40, 42 and 128 (2026-10-22 08:14 ET)
 - [x] Follow-on fixes to tickets 44, 45 and 46 from the review (2026-10-22 08:14 ET)
-- [ ] Operator's approval of the spec
+- [x] Operator's approval of the spec (operator: "Approve the spec (Recommended)") (2026-10-22 09:18 ET)
 - [x] Learning → skill (operator: "Add this to the correct skill - review"): the general practice in `skills/data-modeling/SKILL.md` Hard stops (review every related ticket before a spec or a build); the financials findings in `skills/company-financials/SKILL.md`, "Silver tables and their review" (2026-10-22 08:14 ET)
 
 ## Design review (2026-10-22)
@@ -27,7 +27,7 @@ The operator asked for `/design-review` first. That skill audits a live web page
 5. **The MDM Company is empty locally** (ticket 37: 0 of 329 CIKs match a master). The link keeps the CIK and an empty MDM id until Company is mastered, as the silver spec says; the statement format, read from the Company's SIC code, is "unknown" until then (below).
 6. **Old numbering.** Several tickets still say "ticket 03/06/07/10/11/12" in the old effort's numbers (35, 38, 39, 42, 43, 44 here). Left as is; each ticket's header says so.
 
-## The spec (draft)
+## The spec (approved)
 
 Three silver tables. The facts land from the reader (ticket 40) and dbt flattens units and facts; the line items and the measures are built from the facts by dbt, rebuilt whole each run. Rules configuration (the line-item map and the measure definitions) sits under `rules/`, with its version on every row it produced.
 
