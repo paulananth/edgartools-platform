@@ -1,7 +1,7 @@
 """N-PORT holdings for silver, each a lookup row (ticket 79).
 
 The real chain on invented holdings: holding.yaml (with each filing's series,
-registrant and date), holding-combine.yaml (an ISIN folded into a CUSIP) and
+registrant, date and as-of date), holding-combine.yaml (an ISIN folded into a CUSIP) and
 holding-rows.yaml. Each row's `security_key` must be a record key the Security
 contract makes from the same holdings (test_nport_isin_link's chain), so the
 silver writer finds its Security by lookup; the holder is the fund series, or
@@ -36,6 +36,17 @@ FOLDER = cusip.FOLDER
 # A-1's series filed lower-case; A-2's "N/A" is no series: the registrant's own.
 INFO = {"A-1": "s000000001", "A-2": "N/A"}
 REGISTRANTS = [["A-1", "0000000001"], ["A-2", "0000000002"]]
+# Each filing's as-of date as SEC writes it; A-2 states none.
+REPORTED = {"A-1": "31-MAR-2026", "A-2": ""}
+
+
+def reported_pairs(store, root, raw) -> list[list[str]]:
+    """Each filing's accession and as-of date (filings.yaml's `reported`)."""
+    reading = cusip.read(store, root / "reported", "filings.yaml", raw, None)
+    rows = [row for artifact in store.json(reading)["artifacts"] for part in artifact.get("partitions", [])
+            for row in store.json(part["receipt"])["tables"]["reported"]]
+    rows += [row for artifact in store.json(reading)["artifacts"] for row in artifact.get("tables", {}).get("reported", [])]
+    return [[row["accession"], row["as_of"]] for row in rows if row["as_of"]]
 FOLD = {"cusip": isin.CUSIP, "isin": isin.ONE, "cusip_offers": 1, "isin_offers": 1}
 
 
@@ -46,8 +57,8 @@ def holding_rows(root: Path, attached: list[dict] = ()) -> list[dict]:
     with zipfile.ZipFile(body, "w") as z:
         z.writestr("FUND_REPORTED_HOLDING.tsv", "\n".join("\t".join(r) for r in [
             cusip.COLUMNS, *([*h, ""] for h in isin.HOLDINGS), isin.WITH_CUSIP]) + "\n")
-        z.writestr("SUBMISSION.tsv", "ACCESSION_NUMBER\tFILING_DATE\n"
-                   + "".join(f"{a}\t{d}\n" for a, d in cusip.FILINGS.items()))
+        z.writestr("SUBMISSION.tsv", "ACCESSION_NUMBER\tFILING_DATE\tREPORT_DATE\n"
+                   + "".join(f"{a}\t{d}\t{REPORTED[a]}\n" for a, d in cusip.FILINGS.items()))
         z.writestr("FUND_REPORTED_INFO.tsv", "ACCESSION_NUMBER\tSERIES_ID\n"
                    + "".join(f"{a}\t{s}\n" for a, s in INFO.items()))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
@@ -57,7 +68,7 @@ def holding_rows(root: Path, attached: list[dict] = ()) -> list[dict]:
     assert pairs == [["A-1", "S000000001"]]  # "N/A" gives no pair: a lookup never holds an empty value
     holdings = cusip.read(store, root / "holding", "holding.yaml", raw, cusip.Q2, lookups={
         "isin": isin.PAIRS, "series": pairs, "registrant": REGISTRANTS,
-        "filed": cusip.filed_pairs(store, root, raw)})
+        "filed": cusip.filed_pairs(store, root, raw), "as_of": reported_pairs(store, root, raw)})
     attached_reading = store.put(root.as_uri(), {"version": 1, "artifacts": [
         {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
     combined = cusip.combine(store, root / "combine", "holding-combine.yaml",
@@ -95,6 +106,15 @@ def test_the_holder_is_the_series_else_the_registrant(tmp_path):
     by_filing = {(r["accession"], r["series_id"], r["registrant_cik"], r["filed"], r["period"]) for r in rows}
     assert by_filing == {("A-1", "S000000001", "0000000001", "2026-06-05", cusip.Q2),
                          ("A-2", None, "0000000002", "2026-05-28", cusip.Q2)}
+
+
+def test_each_holding_carries_the_date_its_filing_reports_at(tmp_path):
+    """Ticket 79 (operator, 2026-10-22: "Don't we need a as of date for holdings"):
+    a holding is true at its filing's REPORT_DATE, beside the filing date; a
+    filing stating none gives none."""
+    rows = holding_rows(tmp_path / "rows", [FOLD])
+    assert {(r["accession"], r["as_of"], r["filed"]) for r in rows} == {
+        ("A-1", "2026-03-31", "2026-06-05"), ("A-2", None, "2026-05-28")}
 
 
 def test_the_rows_fit_the_silver_spec():
@@ -148,6 +168,9 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
     # A-2 names no series and its registrant is not mastered: empty ids, the row still lands.
     a2 = [r for r in landed.values() if r["accession"] == "A-2"]
     assert a2 and all(r["fund_mdm_id"] is None and r["registrant_mdm_id"] is None for r in a2)
+    # The as-of date lands as a date: A-1 reports at 31 March, A-2 states none.
+    assert {str(r["as_of"]) for r in landed.values() if r["accession"] == "A-1"} == {"2026-03-31"}
+    assert all(r["as_of"] is None for r in a2)
     # TWO and NONE have no Security mastered here: empty, never another Security's id.
     assert landed["6"]["security_mdm_id"] is None and landed["8"]["security_mdm_id"] is None
 

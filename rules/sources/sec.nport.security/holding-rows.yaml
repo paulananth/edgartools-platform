@@ -18,6 +18,7 @@ read:
         holding_id: {text: {path: holding_id}}
         period: {value: {path: period}}
         filed: {value: {path: filed}}
+        as_of: {value: {path: as_of}}
         series_id: {value: {path: series_id}}
         registrant_cik: {value: {path: registrant_cik}}
         security_key:

@@ -20,5 +20,6 @@ Priority: 25, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 - [ ] Links by MDM id: owner and issuer by CIK; the Security once 24 attaches it
 - [ ] Rows land in a disposable PostgreSQL 16 (`silver register`, `silver land`), test
 - [ ] A person's holding never makes the Person an issuer (no `ISSUED_BY` from a Person), test
-- [ ] PR merged
+- [x] HOLDS out of MDM merged: PR #1134, CI green (2026-10-22 15:33 ET)
+- [ ] PR merged (the Form 4 silver holdings)
 - [ ] Learning → skill (part done: `skills/data-onboarding/SKILL.md`, Relationships: only a link that describes the entities is an MDM relationship; a position or event is a silver row with both MDM ids and its as-of date, 2026-10-22 14:44 ET)
