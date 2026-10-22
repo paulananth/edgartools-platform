@@ -53,6 +53,12 @@ Gathered 2026-10-21 for tickets 35 (time model), 38 (line items) and 39 (measure
 - **"Not meaningful" for growth:** a CAGR is shown as N.M. when the first or last year's value is zero or negative (Nasdaq glossary); a dash means the data is not available. Some vendors keep NA even from a loss to a profit, which drops that case.
 - **Windows:** "the number of full fiscal years shown" (Nasdaq); vendors commonly show 1-, 3-, 5- and 10-year growth (**unverified** for each vendor).
 
+## 4. Reading company facts: keys as values, and exact numbers (ticket 40)
+
+- **Keys as values, one level at a time.** The standard tools turn an object's keys into a column one level per call and compose levels laterally: Snowflake `LATERAL FLATTEN` (columns `KEY`, `VALUE`), PostgreSQL `jsonb_each`, Spark `explode` on a map (`key`, `value`), DuckDB `json_each`, jq `to_entries`. The source engine's `each.entries` is the same call; a table takes one iteration, so the deeper levels are flattened downstream (dbt, `LATERAL FLATTEN`).
+- **Number range.** RFC 8259 section 6 lets a JSON reader limit range and precision; RFC 7493 (I-JSON) advises numbers within IEEE double. Exact readers keep the number's text (serde_json `arbitrary_precision`; Python's `json` reads integers of any size). Snowflake's `NUMBER` holds up to 38 digits exactly. The engine reads exact 64-bit integers and finite floats, and refuses others.
+- **Measured on 368 captured files** (counts only; trial contract `03-company-facts-trial-contract.yaml` beside this note): 367 read in 70.9 s; facts 5,107,788, equal to the long-form copy; concepts 138,987, of which 119 have no facts; nine taxonomies, none unknown; one file refused for one 20-digit cover-page value.
+
 ## Sources
 
 - [WRDS: Compustat fiscal and calendar dates](https://wrds-support.wharton.upenn.edu/hc/en-us/articles/115003135371-Compustat-Identifying-Fiscal-and-Calendar-Dates)
@@ -69,3 +75,8 @@ Gathered 2026-10-21 for tickets 35 (time model), 38 (line items) and 39 (measure
 - [Nasdaq glossary: growth rates](https://www.nasdaq.com/glossary/g/growth-rates)
 - [Return on capital (Wikipedia)](https://en.wikipedia.org/wiki/Return_on_capital)
 - [TIKR: measuring ROIC](https://www.tikr.com/blog/how-to-measure-return-on-invested-capital-roic-properly)
+- [Snowflake FLATTEN](https://docs.snowflake.com/en/sql-reference/functions/flatten)
+- [PostgreSQL JSON functions (jsonb_each)](https://www.postgresql.org/docs/current/functions-json.html)
+- [RFC 8259, section 6: numbers](https://www.rfc-editor.org/rfc/rfc8259#section-6)
+- [RFC 7493 (I-JSON), section 2.2](https://www.rfc-editor.org/rfc/rfc7493#section-2.2)
+- [Snowflake numeric types](https://docs.snowflake.com/en/sql-reference/data-types-numeric)

@@ -100,3 +100,21 @@ Evidence and sources: ticket 38, research 02 section 2.
   answer key.
 
 Evidence and sources: ticket 39, research 02 section 3.
+
+## Reading company facts (ticket 40, decided 2026-10-22)
+
+- **Configured reading only** (operator, 2026-10-22: "configure only"): a
+  source-extract contract; no Python custom step, no new iteration primitive.
+- **One table per taxonomy**, `each.entries` on `facts.<taxonomy>`: one row per
+  concept with its key, and its `units` kept whole as one value. A table takes
+  one iteration, so silver flattens units and the list of facts (dbt,
+  Snowflake `LATERAL FLATTEN`), the way the standard tools compose one level at
+  a time (research 02 section 4).
+- **A taxonomy with no table refuses the file**: a `taxonomies` table looks each
+  key up in a frozen reference list with `on_missing: error`. Never drop one
+  silently; add its table.
+- **A concept with no facts** lands and flattens to nothing (119 of 138,987 in
+  the cohort).
+- **A number beyond exact 64-bit** refuses the file (`value_number_range`);
+  never round it. Operator: "Exact big numbers in the reader": the engine gains
+  a declared exact option (ticket 128) before the reader is built (ticket 45).
