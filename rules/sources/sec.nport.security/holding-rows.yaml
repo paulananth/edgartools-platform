@@ -1,0 +1,44 @@
+# Each holding's silver row (ticket 79), read over holding-combine.yaml's pieces:
+# the row as filed, with `security_key`, the record key of the Security it is
+# (source.yaml, record.yaml): its CUSIP; else, for an ISIN-only holding, the
+# CUSIP its ISIN is folded into (ticket 120); else its ISIN. A holding with none
+# of these has no Security (source.yaml makes none) and an empty key. The
+# holder is the fund series (`series_id`), or the registrant (`registrant_cik`)
+# for a filing that names no series; silver-holding.yaml links all three.
+# Every limit is the engine's ceiling (operator, 2026-10-22: "I asked to remove all limits").
+execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_bytes: 17179869184}
+read:
+  format: json
+  limits: {max_bytes: 17179869184, max_records: 100000000}
+  tables:
+    holding:
+      each: tables.holding
+      columns:
+        accession: {text: {path: accession}}
+        holding_id: {text: {path: holding_id}}
+        period: {value: {path: period}}
+        filed: {value: {path: filed}}
+        series_id: {value: {path: series_id}}
+        registrant_cik: {value: {path: registrant_cik}}
+        security_key:
+          coalesce:
+            skip: "null"
+            values:
+            - {value: {path: cusip}}
+            - {value: {path: folded_cusip}}
+            - {value: {path: isin}}
+        cusip: {value: {path: cusip}}
+        isin: {value: {path: isin}}
+        balance: {value: {path: balance}}
+        unit: {value: {path: unit}}
+        currency_code: {value: {path: currency_code}}
+        currency_value: {value: {path: currency_value}}
+        exchange_rate: {value: {path: exchange_rate}}
+        percentage: {value: {path: percentage}}
+        payoff_profile: {value: {path: payoff_profile}}
+        asset_cat: {value: {path: asset_cat}}
+        issuer_type: {value: {path: issuer_type}}
+        investment_country: {value: {path: investment_country}}
+        is_restricted_security: {value: {path: is_restricted_security}}
+        fair_value_level: {value: {path: fair_value_level}}
+        derivative_cat: {value: {path: derivative_cat}}

@@ -113,6 +113,37 @@ Every step says what differs for each target.
     records, keyed apart from the identifier, and asserts each MDM id; a link
     pointed at another Dataset Contract must fail it.
 
+  - **A link stated on each transaction row is a lookup, not an MDM record**
+    (a fund's holding of a security, an order's supplier). Land the rows in
+    silver with one link per master; the writer fills each MDM id by its key.
+    Never stage one MDM record per row only to master the link (operator,
+    2026-10-22: "Why do you need to merge it it's just a lookup").
+  - **Never carry a many-to-many link as a list on a record.** A reduction keeps
+    at most 1,000 members per list (`sample_limit`), so a widely held entity
+    loses links silently: one row per link instead.
+  - **The row's link key is the master's record key, as its contract makes
+    it.** Repeat the contract's own choice (an identifier, else another, a
+    folded key) in the rows' contract, and prove every row's key is a record
+    key the master's contract makes from the same files.
+  - **Rows for silver get their own reading**, beside the master's, so the
+    master's reading and its pinned digests do not change.
+  - **Limits on a production feed are the engine's ceilings** (operator,
+    2026-10-22: "No limit on production", "I asked to remove all limits").
+    The engine requires each to be declared, so "no limit" means its ceiling:
+    a stream's `max_input_bytes`, `max_bytes` and `max_spool_bytes` 1 TiB,
+    `max_records` and `max_output_rows` 10^12, `max_partitions` 10^7,
+    `max_record` 32 MiB, `partition_bytes` 8 MiB, `partition_records`
+    100,000; a lookup set's `max_values` 100,000,000, `max_bytes` 16 GiB,
+    `max_value_bytes` 16,384; a combine's `max_rows` 40,000,000; a reading
+    over pieces `execution.max_input_bytes` and `limits.max_bytes` 16 GiB,
+    `limits.max_records` 100,000,000. A streamed reading's `read.limits`
+    bounds one row: at most 32 MiB and 100,000.
+  - **Check it on the largest real case before any run** (operator,
+    2026-10-22: "make sure the logic is correct and works for a major fund
+    issuer"): cut that case's files out of the capture, run the real
+    contracts on them in pieces as a run cuts them (8 MiB, 100,000 rows; a
+    large combined output arrives as a version-2 index of pieces), and count
+    every row by outcome.
   1. Hand the approved spec to
   [data-operations](../data-operations/SKILL.md), which applies it as DDL.
   On PostgreSQL the schema owner (`SILVER_MIGRATION_DATABASE_URL`) runs

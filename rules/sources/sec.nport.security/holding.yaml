@@ -1,0 +1,85 @@
+# Each N-PORT holding as filed, for silver (ticket 79; finding q5, operator
+# 2026-10-15: "Silver + MDM link (Recommended)"; 2026-10-22: "Why do you need
+# to merge it it's just a lookup"). A holding is a lookup row, not an MDM
+# record: the silver writer fills the Fund's, the registrant Company's and the
+# Security's MDM ids by their keys (silver-holding.yaml). Its own reading, so the
+# Security's mastering reading (source.yaml) and its digests stay as they are.
+# Lookups, each keyed by the filing's accession unless named: `isin` (the
+# holding's one ISIN, by HOLDING_ID, as source.yaml reads it), `series` (the
+# filing's fund series id, holding-series.yaml; a filing with none is the
+# registrant's own), `registrant` (the filing's CIK) and `filed` (its
+# date). Production sizes (operator, 2026-10-22: "No limit on production"):
+# the 2026q2 quarter has 5,347,869 holding rows.
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  lookup_sets:
+    isin: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    series: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    registrant: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    filed: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+  context:
+    period: {type: text}
+  tables:
+    holding:
+      each: .
+      select: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        accession: {text: {path: ACCESSION_NUMBER}}
+        holding_id: {text: {path: HOLDING_ID}}
+        period:
+          context: {name: period}
+        filed:
+          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        series_id:
+          member_value: {lookup: series, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        registrant_cik:
+          member_value: {lookup: registrant, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        # The CUSIP as source.yaml reads it: a placeholder is no CUSIP.
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ""
+            transforms:
+            - case: upper
+            null_if: ["", "000000000", "999999999"]
+        # One ISIN, else none (a holding listing two names neither).
+        isin:
+          member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        balance: {text: {path: BALANCE, default: "", null_if: [""]}}
+        unit: {text: {path: UNIT, default: "", null_if: [""]}}
+        currency_code: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
+        currency_value: {text: {path: CURRENCY_VALUE, default: "", null_if: [""]}}
+        exchange_rate: {text: {path: EXCHANGE_RATE, default: "", null_if: [""]}}
+        percentage: {text: {path: PERCENTAGE, default: "", null_if: [""]}}
+        payoff_profile: {text: {path: PAYOFF_PROFILE, default: "", null_if: [""]}}
+        asset_cat: {text: {path: ASSET_CAT, default: "", null_if: [""]}}
+        issuer_type: {text: {path: ISSUER_TYPE, default: "", null_if: [""]}}
+        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", null_if: [""]}}
+        is_restricted_security: {text: {path: IS_RESTRICTED_SECURITY, default: "", null_if: [""]}}
+        fair_value_level: {text: {path: FAIR_VALUE_LEVEL, default: "", null_if: [""]}}
+        derivative_cat: {text: {path: DERIVATIVE_CAT, default: "", null_if: [""]}}
+  stream:
+    framing: delimited
+    delimited:
+      format: tsv
+      encoding: utf-8
+    container: zip
+    member: FUND_REPORTED_HOLDING.tsv
+    max_input_bytes: 1099511627776
+    max_bytes: 1099511627776
+    max_record: 33554432
+    max_records: 1000000000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 10000000
+    max_spool_bytes: 1099511627776
+    max_output_rows: 1000000000000

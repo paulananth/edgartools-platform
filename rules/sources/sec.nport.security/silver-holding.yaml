@@ -1,0 +1,209 @@
+# The silver table of N-PORT holdings (ticket 79): `edgar-warehouse silver
+# register` reads this spec (docs/specs/profiling/findings.md, section 6).
+# Rulings it rests on (operator):
+# - finding q5 (2026-10-15): "Silver + MDM link (Recommended)": each quarter's
+#   holdings land in silver with the fund's and the Security's MDM ids.
+# - 2026-10-22: "Why do you need to merge it it's just a lookup": a holding is
+#   a lookup row, so no HOLDS record goes through the Merge Stage; the writer
+#   fills each row's MDM ids by its keys. "No need to run proving run make sure
+#   the logic is correct and works for a major fund issuer"; "No limit on
+#   production".
+# Measured on the 2026q2 capture: 5,347,869 holding rows, 0 duplicate keys;
+# 4,517,554 name a fund series and 830,315 are the registrant's own (no series);
+# every row has a registrant CIK.
+# Rows are holding-rows.yaml's `holding` table. Numbers stay as filed (text) in
+# the rows and land as exact decimals. Append only: a filed holding never
+# changes; an amended report is a new filing.
+table: nport_holding
+definition: "One holding of one N-PORT filing, as filed, linked to the fund series, the registrant and the Security."
+grain: "one row per filing (accession) and holding id"
+columns:
+- name: accession
+  type: VARCHAR
+  nullable: false
+  definition: "The filing's accession number."
+  source: "ACCESSION_NUMBER"
+  sensitivity: none
+- name: holding_id
+  type: VARCHAR
+  nullable: false
+  definition: "The holding's id within the data set."
+  source: "HOLDING_ID"
+  sensitivity: none
+- name: period
+  type: VARCHAR
+  nullable: false
+  definition: "The quarter's data set period, from the run (ticket 113)."
+  source: "the run's period fact"
+  sensitivity: none
+- name: filed
+  type: DATE
+  nullable: true
+  definition: "The filing's date."
+  source: "SUBMISSION.FILING_DATE by accession"
+  sensitivity: none
+- name: series_id
+  type: VARCHAR
+  nullable: true
+  definition: "The fund series that filed it; empty for a filing that names none."
+  source: "FUND_REPORTED_INFO.SERIES_ID by accession"
+  sensitivity: none
+- name: registrant_cik
+  type: VARCHAR
+  nullable: false
+  definition: "The registrant's CIK."
+  source: "REGISTRANT.CIK by accession"
+  sensitivity: none
+- name: security_key
+  type: VARCHAR
+  nullable: true
+  definition: "The Security's record key: the CUSIP, else the CUSIP its ISIN is folded into, else the ISIN; empty when none."
+  source: "holding-rows.yaml"
+  sensitivity: none
+- name: cusip
+  type: VARCHAR
+  nullable: true
+  definition: "The CUSIP as filed; a placeholder is empty."
+  source: "ISSUER_CUSIP"
+  sensitivity: none
+- name: isin
+  type: VARCHAR
+  nullable: true
+  definition: "The holding's one ISIN; empty for none or two."
+  source: "IDENTIFIERS.IDENTIFIER_ISIN by HOLDING_ID"
+  sensitivity: none
+- name: balance
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: "The number of units held."
+  source: "BALANCE"
+  sensitivity: none
+- name: unit
+  type: VARCHAR
+  nullable: true
+  definition: "The unit of the balance (shares, principal amount, contracts, ...)."
+  source: "UNIT"
+  sensitivity: none
+- name: currency_code
+  type: VARCHAR
+  nullable: true
+  definition: "The currency of the value."
+  source: "CURRENCY_CODE"
+  sensitivity: none
+- name: currency_value
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: "The value in that currency."
+  source: "CURRENCY_VALUE"
+  sensitivity: none
+- name: exchange_rate
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: "The rate to US dollars, as filed."
+  source: "EXCHANGE_RATE"
+  sensitivity: none
+- name: percentage
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: "The share of the fund's net assets, as filed."
+  source: "PERCENTAGE"
+  sensitivity: none
+- name: payoff_profile
+  type: VARCHAR
+  nullable: true
+  definition: "Long, short or none."
+  source: "PAYOFF_PROFILE"
+  sensitivity: none
+- name: asset_cat
+  type: VARCHAR
+  nullable: true
+  definition: "The asset category code."
+  source: "ASSET_CAT"
+  sensitivity: none
+- name: issuer_type
+  type: VARCHAR
+  nullable: true
+  definition: "The issuer type code."
+  source: "ISSUER_TYPE"
+  sensitivity: none
+- name: investment_country
+  type: VARCHAR
+  nullable: true
+  definition: "The country of the investment."
+  source: "INVESTMENT_COUNTRY"
+  sensitivity: none
+- name: is_restricted_security
+  type: VARCHAR
+  nullable: true
+  definition: "Whether the security is restricted (Y or N)."
+  source: "IS_RESTRICTED_SECURITY"
+  sensitivity: none
+- name: fair_value_level
+  type: VARCHAR
+  nullable: true
+  definition: "The fair value hierarchy level."
+  source: "FAIR_VALUE_LEVEL"
+  sensitivity: none
+- name: derivative_cat
+  type: VARCHAR
+  nullable: true
+  definition: "The derivative category code."
+  source: "DERIVATIVE_CAT"
+  sensitivity: none
+key:
+- accession
+- holding_id
+# The holder: the Fund when the filing names a series, else the registrant
+# Company (both filled when both exist). The Security by its record key. A row
+# whose master is not mastered yet keeps an empty MDM id; `silver refresh-ids`
+# fills it later.
+links:
+- columns:
+  - series_id
+  kind: fund_structure
+  source_code: sec.nport.fund.v1
+  to_part: fund
+  source_key: series_id
+  mdm_id_column: fund_mdm_id
+- columns:
+  - registrant_cik
+  kind: company
+  source_code: sec.nport.registrant.v1
+  to_part: registrant
+  source_key: registrant_cik
+  mdm_id_column: registrant_mdm_id
+- columns:
+  - security_key
+  kind: security
+  source_code: sec.nport.security.v2
+  to_part: security
+  source_key: security_key
+  mdm_id_column: security_mdm_id
+time:
+  as_of: period
+  as_at: filed
+  event_time: null
+partition:
+- period
+load_mode: append
+why: >-
+  A holding is transaction data (finding q5): one row per filed holding, keyed
+  by the filing and the holding id (unique over the quarter). It links to its
+  holder and its Security by lookup, so the Fund-to-Security link needs no
+  MDM record of its own. Append, since a filed holding never changes.
+# Data quality (ticket 105; operator, 2026-10-17: "Flag, land the row"): a
+# holding whose CUSIP or ISIN fails its declared shape and check digit lands
+# flagged, the check's id in its `quality` column; it is never refused.
+checks:
+- id: cusip_valid
+  check: identifier
+  column: cusip
+  type: cusip
+  on_fail: flag
+  why: A CUSIP has the shape and the check digit rules/identifiers/cusip.yaml declares.
+- id: isin_valid
+  check: identifier
+  column: isin
+  type: isin
+  on_fail: flag
+  why: An ISIN has the shape and the check digit rules/identifiers/isin.yaml declares.
