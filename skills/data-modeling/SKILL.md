@@ -168,6 +168,12 @@ version has its own `valid_from`; publishing the next one closes its
 `valid_to` at the new one's `valid_from`. A code's own dates are business
 time.
 
+A value the source files again (a later report repeating or restating an
+earlier period) is a new fact, not an update: keep every filed copy, its
+business time the period it describes and its recorded time its filing. A
+consumer takes the latest-filed copy by default. Key a period on its own
+dates, never on the filing's period labels, which describe the filing.
+
 ## Workflow
 
 1. **Name the part.** If the operator has not said which part, ask and stop.
