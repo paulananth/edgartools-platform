@@ -80,7 +80,8 @@ these three stores. Masters' onboarding and activation remain later gates.
 - [x] Inspect the published RDM/Silver checkpoint CI for #1121 — all nine checks green at 9e8f8dfb, rechecked live; this excludes the pending native MDM changes; 2026-10-22 06:54 ET.
 - [x] Inspect native MDM revision ac3e3551 CI for #1121 — all groups passed except PostgreSQL adapter: 81 passed, one concurrent resume test exhausted tight NOWAIT retries; monitoring stopped on terminal failure before deadline; 2026-10-22 07:10 ET.
 - [x] Correct and requalify bounded concurrent-resume scheduling — 50 affected cases per PostgreSQL/MySQL and 14 retained SQL Server resume cases passed; all nine CI checks green on ff860f86, before the configured-kind schema follow-up; 2026-10-22 07:27 ET.
-- [ ] Qualify the installed configured-kind follow-up and inspect its published CI; stop on terminal result/closure or a 20-minute deadline.
+- [x] Qualify configured-kind packaging outside the checkout — committed 94a43464 independently installed all five wheels, imported the new schema module and included migration 024 without duplicate package files; one installed case passed in 178.16 seconds; 2026-10-22 07:32 ET.
+- [ ] Inspect configured-kind follow-up CI; stop on terminal result/closure or a 20-minute deadline after the final evidence commit.
 - [ ] Audit opaque JSON value fidelity and exact-key index plans in the remaining stores; preserve large integers, Unicode, nulls and original key distinctions.
 - [ ] Review Standards, Spec and GoF; record active and historical database code separately.
 - [ ] Build and freeze complete Company, Person, Security and relationship configuration using existing approved captured-input findings.

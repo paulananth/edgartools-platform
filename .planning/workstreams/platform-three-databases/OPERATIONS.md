@@ -175,3 +175,5 @@ lock ordering, a configured invented-kind normal merge, unchanged replay,
 context command and catalog write refusals. Another 100 affected integration
 cases and 32 configuration/context/limit cases passed. The normal MySQL MDM
 Store remains unsupported; this checkpoint does not qualify it.
+
+The configured-kind checkpoint at 94a43464 also passed the independent five-wheel installation/import/file-ownership check outside the checkout in 178.16 seconds, including the new schema module and migration 024.
