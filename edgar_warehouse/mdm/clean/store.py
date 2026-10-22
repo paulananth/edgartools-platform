@@ -66,6 +66,7 @@ MIGRATIONS: tuple[str, ...] = (
     "021_identifier_index_no_pending_list.sql",
     "022_detail_version.sql",
     "023_stage_details.sql",
+    "024_configured_kinds.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -112,6 +113,9 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise ValueError("MDM requires PostgreSQL 16")
         conn.execute(text("SELECT pg_advisory_xact_lock(730233)"))
+        # Saves take this lock before touching master tables. Take it before
+        # migration DDL too, so table locks cannot invert that order.
+        conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
         if conn.scalar(text("SELECT to_regnamespace('mdm_v2')")):
             raise Conflict(
                 "This database holds the retired mdm_v2 schema. Recreate the "
@@ -159,6 +163,9 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
                 )
             elif saved != extra_hash:
                 raise Conflict("Installed migration checksum differs")
+        if "024_configured_kinds.sql" in MIGRATIONS:
+            from .schema import configure_kinds
+            configure_kinds(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(
                 text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"),

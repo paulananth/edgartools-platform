@@ -36,7 +36,7 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.mdm.clean import (
         activation, adapters, assessment, binding, cascade, catalog, classification,
         correction, evidence, identifier_types, identity, matching, merge,
-        name_census, names, primitives, quality, relationships, run, scope, store, survivorship,
+        name_census, names, primitives, quality, relationships, run, schema, scope, store, survivorship,
     )
     from edgar_warehouse.rules import files, source_engine
     from edgar_warehouse.workers import source_mapping
@@ -47,7 +47,7 @@ def runtime_files() -> list[Path]:
     modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
                correction, destinations, evidence, files, identifier_types,
                identity, limits, matching, merge, name_census, names, primitives, quality,
-               relationships, run, scope, source_mapping, store, survivorship)
+               relationships, run, schema, scope, source_mapping, store, survivorship)
     adapter = store.storage_adapter()
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in
                      ("database_adapter.py", "adapter_model.py", "adapter_sql.py")]

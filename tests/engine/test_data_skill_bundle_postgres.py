@@ -216,8 +216,10 @@ print(json.dumps({{"shipped": shipped, "modules": modules}}))
     assert twice == []
     assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.clean.merge",
             "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
-            "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration"} <= set(found["modules"])
+            "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
+            "edgar_warehouse.mdm.clean.schema"} <= set(found["modules"])
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
+    assert any(p.endswith("mdm/migrations/024_configured_kinds.sql") for p in found["shipped"])
 
 
 def _stores(databases):

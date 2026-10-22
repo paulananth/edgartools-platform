@@ -26,9 +26,9 @@ from .store import Conflict
 
 # Every kind a rule may decide, plus the two verdicts that decide no kind.
 # Derived rather than restated: this list was written out by hand and was the
-# third copy of the kind set, after evidence.KINDS and the CHECK constraint on
-# mdm.master_entity. The SQL copy cannot be derived away and is held equal by
-# tests/integration/test_clean_per_kind_views.py instead.
+# third copy of the kind set. Evidence and destination vocabulary now come
+# from the same mastering configuration; the destination enforces its installed
+# selection through its owner-managed catalog.
 CLASSIFICATION_VERDICTS = KINDS | {"entity_undetermined", "deferred"}
 
 

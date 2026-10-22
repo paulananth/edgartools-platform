@@ -161,3 +161,17 @@ of source-specific engine behavior.
 Multilingual synonyms are ordered in shared native preparation by language and full label. PostgreSQL and MySQL actual emitted queries use child-key indexes and both word indexes on an invented 5,001-code catalog; PostgreSQL plan qualification analyzes all three joined tables. The combined affected reference/resumption tests passed 50 cases per selected engine. Short/stop-word, negative-only and tokenizer parity remain open.
 
 Installed native MDM bundle import/configured parser/master worker/verifier passed two cases (231.13 seconds), followed by streamed XML worker recovery (one case, 48.03 seconds). This remains PostgreSQL caller evidence, not MySQL normal Store qualification.
+
+### Configured PostgreSQL kind authority
+
+Migration 024 replaces the historical copied kind CHECK with an owner-managed
+kind catalog, a foreign key and an enabled-kind trigger. Owner installation
+creates generic views for added kinds. Removed kinds retain their identities
+and views, while destination checks refuse new identities. Migration takes the
+save advisory gate before table DDL, avoiding inverse lock order.
+
+Thirteen PostgreSQL cases cover populated upgrade, concurrent migration/save
+lock ordering, a configured invented-kind normal merge, unchanged replay,
+context command and catalog write refusals. Another 100 affected integration
+cases and 32 configuration/context/limit cases passed. The normal MySQL MDM
+Store remains unsupported; this checkpoint does not qualify it.
