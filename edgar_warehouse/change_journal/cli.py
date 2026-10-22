@@ -13,12 +13,11 @@ from pathlib import Path
 
 
 def _handle(args):
-    from sqlalchemy import create_engine
     from .database import migrate
     from .store import ChangeJournal, get_engine
 
     if args.journal_command in {"init", "migrate"}:
-        owner = create_engine(os.environ["CHANGE_JOURNAL_MIGRATION_DATABASE_URL"])
+        owner = get_engine(os.environ["CHANGE_JOURNAL_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(owner, runtime_role=args.runtime_role,
                              existing_only=args.journal_command == "migrate")

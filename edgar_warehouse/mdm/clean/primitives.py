@@ -19,7 +19,7 @@ measured classification to the row (`policy-language.md` §12).
 
 from __future__ import annotations
 
-import re
+from functools import partial
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -40,49 +40,31 @@ class Primitive:
     family: str
 
 
-def value(record: dict, path: str) -> Any:
-    """Read a declared field path. A path is data; it never executes."""
-    current: Any = record
-    for part in path.split("."):
-        if not isinstance(current, dict):
-            return None
-        current = current.get(part)
-    return current
+def prepare_matching_value(name: str, item: Any, doc: dict | None = None) -> str:
+    """Transport a value and declared normalization rules to Rust."""
+    from edgar_warehouse.rules.source_engine import apply_record_rules
 
-
-def is_empty(item: Any) -> bool:
-    return item is None or item == "" or item == 0 or item == [] or item == {}
-
-
-def declared(doc: dict, name: Any, what: str) -> list:
-    """A list a document names must be a list the same document declares."""
-    if isinstance(name, list):
-        return name
-    lists = doc.get("lists") or {}
-    if name not in lists:
-        raise Conflict(f"Policy names an undeclared {what}: {name}")
-    return lists[name]
+    try:
+        return apply_record_rules({
+            "action": "prepare_matching_value", "name": name, "value": item,
+            "doc": doc or {},
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+        })
+    except ValueError as error:
+        raise UnknownPrimitive(str(error)) from None
 
 
 def _conformed(text: Any) -> str:
-    # EDGAR conformed names: `&` carries meaning, so it becomes a word rather
-    # than being deleted with the rest of the punctuation.
-    result = str("" if text is None else text).upper().replace("&", " AND ")
-    result = re.sub(r"[.,;:/()'\"\-]", " ", result)
-    return re.sub(r"\s+", " ", result).strip()
+    from edgar_warehouse.rules.source_engine import compare_matching_values
+
+    return compare_matching_values({"action": "prepare_conformed_name", "value": text})
 
 
 NORMALIZERS: dict[str, Callable[[Any], str]] = {
     "normalize_text@edgar-conformed-v1": _conformed,
-    "normalize_identifier@sec-cik-v1": lambda s: re.sub(
-        r"\D", "", str("" if s is None else s)
-    ).lstrip("0"),
-    "normalize_identifier@crd-v1": lambda s: re.sub(
-        r"\D", "", str("" if s is None else s)
-    ),
-    "normalize_identifier@lei-v1": lambda s: re.sub(
-        r"[^A-Z0-9]", "", str("" if s is None else s).upper()
-    ),
+    "normalize_identifier@sec-cik-v1": partial(prepare_matching_value, "normalize_identifier@sec-cik-v1"),
+    "normalize_identifier@crd-v1": partial(prepare_matching_value, "normalize_identifier@crd-v1"),
+    "normalize_identifier@lei-v1": partial(prepare_matching_value, "normalize_identifier@lei-v1"),
     # Ticket 08: a name with its legal form kept, for the SEC-to-GLEIF
     # matching rule. SEC's variant drops the state tag of a conformed name.
     "normalize_text@legal-form-kept-v1": legal_form_key,
@@ -104,140 +86,30 @@ def normalizer(name: str, doc: dict) -> Callable[[Any], str]:
     return NORMALIZERS[resolved]
 
 
-def _tokens_found(
-    raw: Any,
-    listed: list,
-    normalize: Callable[[Any], str],
-    *,
-    ampersand_needs_and: bool,
-) -> list[str]:
-    """Which declared entries appear in a name as whole tokens, not substrings.
+def apply_record_test(name: str, args: dict, record: dict, doc: dict) -> bool:
+    """Run each supported test once in the common Rust engine."""
+    from edgar_warehouse.rules.source_engine import apply_record_rules
 
-    Whole-token matching is the point: INC must not match INCORPORATED, and
-    a surname containing a legal form is not a legal form.
-
-    `&` counts as one synthetic token. Version 1 counts it for every list;
-    version 2 only for a list that carries AND, the one asking whether a name
-    joins two parties (ticket 12: version 1 held back McCormick & Co at a
-    fund-name step). A primitive is never edited once written, so the
-    correction is a new version.
-    """
-    text = normalize(raw)
-    found = set()
-    for entry in listed:
-        if entry == "AND":
-            continue
-        token = re.sub(r"\s+", " ", entry)
-        if re.search(rf"(?<![A-Z0-9]){re.escape(token)}(?![A-Z0-9])", text):
-            found.add(entry)
-    if (
-        (not ampersand_needs_and or "AND" in listed)
-        and "&" in str("" if raw is None else raw)
-        and " AND " in f" {text} "
-    ):
-        found.add("&")
-    return sorted(found)
-
-
-def _evidence_present(args: dict, record: dict, doc: dict) -> bool:
-    return not is_empty(value(record, args["document"]))
-
-
-def _field_in_set(args: dict, record: dict, doc: dict) -> bool:
-    return value(record, args["field"]) in args["values"]
-
-
-def _within_counts(name: str, args: dict, found: list) -> bool:
-    """Whether a count of matches lies in the call's bounds.
-
-    Both bounds absent would make every call true whatever the record holds,
-    a fail-open in a test that decides an entity's kind, so the call is
-    refused instead. Every call in the proven documents supplies a count.
-    """
-    if args.get("min_count") is None and args.get("max_count") is None:
-        raise Conflict(f"{name} requires min_count or max_count")
-    if args.get("min_count") is not None and len(found) < args["min_count"]:
-        return False
-    return not (args.get("max_count") is not None and len(found) > args["max_count"])
-
-
-def _token_match(ampersand_needs_and: bool) -> Callable[[dict, dict, dict], bool]:
-    def evaluate(args: dict, record: dict, doc: dict) -> bool:
-        listed = declared(doc, args["token_list"], "token list")
-        found = _tokens_found(
-            value(record, args["field"]),
-            listed,
-            normalizer(args["normalizer"], doc),
-            ampersand_needs_and=ampersand_needs_and,
-        )
-        if args.get("exclude_list"):
-            excluded = set(declared(doc, args["exclude_list"], "exclude list"))
-            found = [t for t in found if t not in excluded]
-        return _within_counts("token_match", args, found)
-
-    return evaluate
-
-
-def _values_overlap(args: dict, record: dict, doc: dict) -> bool:
-    """How many of a list field's values fall in a declared set.
-
-    Exact values, no normalizer: the forms a filer files (`10-12G`, `D`,
-    `N-54A`) are SEC codes, not names. A field that is not a list is refused
-    rather than read as empty, so a changed source shape cannot pass quietly.
-    """
-    held = value(record, args["field"])
-    if held is None:
-        held = []
-    if not isinstance(held, list):
-        raise Conflict(f"values_overlap reads a list field; {args['field']} is not")
-    wanted = set(declared(doc, args["values"], "value list"))
-    return _within_counts("values_overlap", args, sorted(set(held) & wanted))
-
-
-def _name_shape(args: dict, record: dict, doc: dict) -> bool:
-    raw = str(value(record, args["field"]) or "").strip()
-    if not raw:
-        return False
-    # Digit and character checks read the ORIGINAL string: normalizing first
-    # deletes the very characters being checked (research 03 §6).
-    if any(ch in raw for ch in (args.get("forbid_characters") or {}).get("value", [])):
-        return False
-    if (args.get("forbid_digits") or {}).get("value") and re.search(r"\d", raw):
-        return False
-    tokens = [
-        t for t in re.split(r"[\s,]+", normalizer(args["normalizer"], doc)(raw)) if t
-    ]
-    if not args["min_tokens"] <= len(tokens) <= args["max_tokens"]:
-        return False
-    suffixes = set(declared(doc, args["suffix_list"], "suffix list"))
-    if len([t for t in tokens if t not in suffixes]) < 2:
-        return False
-    return all(re.fullmatch(r"[A-Z]+", t) for t in tokens)
-
-
-def _fields_all_empty(args: dict, record: dict, doc: dict) -> bool:
-    return all(
-        is_empty(value(record, path))
-        for path in declared(doc, args["fields"], "field list")
-    )
-
-
-def _runs_in_the_merge_stage(args: dict, record: dict, doc: dict) -> Any:
-    # A binding test compares a record with master state, which one record
-    # cannot see; `binding.propose` evaluates it with the lookup in hand.
-    raise Conflict("Binding and compatibility tests run in the Merge Stage")
+    try:
+        return apply_record_rules({
+            "action": "test_record", "name": name, "args": args,
+            "record": record, "doc": doc,
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+        })
+    except ValueError as error:
+        raise Conflict(str(error)) from None
 
 
 REGISTRY = MappingProxyType(
     {
-        "identifier_match@1": Primitive(_runs_in_the_merge_stage, "binding"),
-        "identifier_cardinality@1": Primitive(_runs_in_the_merge_stage, "binding"),
-        "kind_equal@1": Primitive(_runs_in_the_merge_stage, "binding"),
+        "identifier_match@1": Primitive(partial(apply_record_test, "identifier_match@1"), "binding"),
+        "identifier_cardinality@1": Primitive(partial(apply_record_test, "identifier_cardinality@1"), "binding"),
+        "kind_equal@1": Primitive(partial(apply_record_test, "kind_equal@1"), "binding"),
         # Ticket 08: the SEC-to-GLEIF matching rules. They compare two records
         # and a pinned census, so they too run where both are in hand
         # (`matching.propose`).
         **{
-            name: Primitive(_runs_in_the_merge_stage, "name_binding")
+            name: Primitive(partial(apply_record_test, name), "name_binding")
             for name in (
                 "name_census_match@1",
                 "gleif_entity_eligible@1",
@@ -249,13 +121,13 @@ REGISTRY = MappingProxyType(
                 "cascade_pass@1",
             )
         },
-        "evidence_present@1": Primitive(_evidence_present, "classification"),
-        "field_in_set@1": Primitive(_field_in_set, "classification"),
-        "token_match@1": Primitive(_token_match(False), "classification"),
-        "token_match@2": Primitive(_token_match(True), "classification"),
-        "values_overlap@1": Primitive(_values_overlap, "classification"),
-        "name_shape@1": Primitive(_name_shape, "classification"),
-        "fields_all_empty@1": Primitive(_fields_all_empty, "classification"),
+        "evidence_present@1": Primitive(partial(apply_record_test, "evidence_present@1"), "classification"),
+        "field_in_set@1": Primitive(partial(apply_record_test, "field_in_set@1"), "classification"),
+        "token_match@1": Primitive(partial(apply_record_test, "token_match@1"), "classification"),
+        "token_match@2": Primitive(partial(apply_record_test, "token_match@2"), "classification"),
+        "values_overlap@1": Primitive(partial(apply_record_test, "values_overlap@1"), "classification"),
+        "name_shape@1": Primitive(partial(apply_record_test, "name_shape@1"), "classification"),
+        "fields_all_empty@1": Primitive(partial(apply_record_test, "fields_all_empty@1"), "classification"),
     }
 )
 

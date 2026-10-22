@@ -320,3 +320,14 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
     assert [t["table_name"] for t in listed["tables"]] == ["visit"]
     with pytest.raises(ContextError, match="No silver table"):
         TableContext(runtime).answer(entity_context.args("silver", "nope"))
+
+
+def test_legacy_interval_text_transport_is_preserved(stores):
+    from datetime import timedelta
+    owner, runtime, _, _ = stores
+    config = a_spec(links=[], columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
+        {"name": "duration", "type": "INTERVAL", "nullable": True}], partition=[],
+        time={"as_of": None, "as_at": "loaded_at", "event_time": None})
+    silver.register(owner, config, runtime_role=RUNTIME)
+    assert land(PostgresSink(runtime), "visit", [{"visit_id": 1, "duration": "2 days 01:02:03.123456"}])["inserted"] == 1
+    assert table(runtime)[1]["duration"] == timedelta(days=2, hours=1, minutes=2, seconds=3, microseconds=123456)

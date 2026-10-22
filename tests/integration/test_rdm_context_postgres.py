@@ -45,7 +45,7 @@ def _now(engine):
 
 @pytest.fixture(scope="module")
 def published(tmp_path_factory):
-    """RDM at migration 001 holding published versions, then upgraded to 002."""
+    """RDM at migration 001 holding published versions, then upgraded in place."""
     out = tmp_path_factory.mktemp("published")
     first_only = tmp_path_factory.mktemp("migrations")
     shutil.copy(database.MIGRATIONS / "001_rdm.sql", first_only)
@@ -86,7 +86,7 @@ def published(tmp_path_factory):
         before_retiring = _now(runtime)
         store.retire("test-retired", "1")
         upgraded = database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)
-        assert list(upgraded) == ["001_rdm.sql", "002_code_context.sql"]  # 002 on a populated database
+        assert list(upgraded) == ["001_rdm.sql", "002_code_context.sql", "003_content_lock.sql"]
         yield runtime, first, between, before_retiring
 
 

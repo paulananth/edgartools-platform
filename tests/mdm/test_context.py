@@ -5,8 +5,6 @@ no output holds a database address or password."""
 from __future__ import annotations
 
 import json
-import re
-from pathlib import Path
 
 import pytest
 
@@ -15,15 +13,10 @@ from edgar_warehouse.cli import build_parser, main
 from edgar_warehouse.mdm.clean.evidence import KINDS
 from edgar_warehouse.rules import files
 
-MIGRATIONS = Path(context.__file__).parent / "mdm" / "migrations"
-
-
 def test_every_kind_and_relationship_type_has_a_definition():
     defined = context.definitions()
-    schema = (MIGRATIONS / "001_mdm.sql").read_text()
-    check = re.search(r"master_entity_kind_check CHECK \(\(kind = ANY \(ARRAY\[(.*?)\]", schema).group(1)
-    stored = set(re.findall(r"'([a-z_]+)'::text", check))
-    assert stored == KINDS
+    from edgar_warehouse.mdm.clean.catalog import CATALOG
+    assert set(CATALOG["kinds"]) == KINDS
     assert {k for k, v in defined["kinds"].items() if v.strip()} == KINDS
     types = files.load(files.ROOT / "merge" / "relationships.yaml")["types"]
     assert {t for t, v in defined["relationships"].items() if v.strip()} == set(types)

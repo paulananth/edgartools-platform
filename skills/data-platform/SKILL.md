@@ -121,6 +121,7 @@ checks and points to the repository lifecycle script.
    uv tool install --python 3.12 "edgartools-data @ $REPO#subdirectory=packages/data-skill" \
      --with "edgartools-bookkeeping @ $REPO#subdirectory=packages/bookkeeping" \
      --with "edgartools-change-journal @ $REPO#subdirectory=packages/change-journal" \
+     --with "edgartools-control-core @ $REPO#subdirectory=crates/control-contract" \
      --with "source-contract @ $REPO#subdirectory=crates/source-contract"
    ```
 

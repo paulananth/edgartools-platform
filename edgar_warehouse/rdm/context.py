@@ -20,9 +20,10 @@ import shlex
 import sys
 from datetime import date, datetime
 
-from sqlalchemy import text
+from sqlalchemy import select, func
 
 from edgar_warehouse.context import PROG, SEARCH_MAX, ContextError, fit, page_offset, parse_time
+from .storage import code_context, scope, tables, transaction, search_candidates
 
 # Synonyms shown inline; the count says when there are more.
 SYNONYMS_INLINE = 20
@@ -49,14 +50,12 @@ class CodeContext:
             raise ContextError("Give --as-of or --as-at, not both.", f"{command} --as-of <time>")
         if args.hops != 1 or args.relationship_type:
             raise ContextError("--hops and --type are for relationships; a code set has none.", command)
-        with self.engine.connect() as conn:
-            info = conn.execute(text("SELECT code_set, name, definition FROM rdm.code_set WHERE code_set = :s"),
-                                {"s": args.subject}).mappings().first()
+        with transaction(self.engine, write=False) as conn:
+            catalog = tables(conn.dialect.name)["code_set"]
+            info = conn.execute(select(catalog.c.code_set, catalog.c.name, catalog.c.definition).where(
+                scope(conn, catalog, code_set=args.subject))).mappings().first()
             if info is None:
-                from edgar_warehouse.mdm.clean.evidence import KINDS
-
-                raise ContextError(f"{args.subject!r} is neither a master kind ({', '.join(sorted(KINDS))}), "
-                                   "'relationship', nor a code set RDM holds.", "edgar-warehouse rdm list")
+                raise ContextError(f"{args.subject!r} is not a code set RDM holds.", "edgar-warehouse rdm list")
             if args.search is not None:
                 if args.key:
                     raise ContextError("Give a code or --search, not both.", f"{PROG} {args.subject} --search {shlex.quote(args.search)}")
@@ -71,11 +70,14 @@ class CodeContext:
         that time; a version retired before then, with no successor, is none."""
         flag, value = ("--as-of", args.as_of) if args.as_of else ("--as-at", args.as_at) if args.as_at else (None, None)
         moment = parse_time(value, flag, f"{PROG} {args.subject} {args.key or ''}".strip()) if value else None
-        row = conn.execute(text(
-            "SELECT version, sha256, valid_from, valid_to, status, approved_by, approved_at FROM rdm.code_set_version "
-            "WHERE code_set = :s AND status IN ('published','retired') "
-            "AND valid_from <= coalesce(:t, now()) AND (valid_to IS NULL OR valid_to > coalesce(:t, now())) "
-            "ORDER BY valid_from DESC LIMIT 1"), {"s": args.subject, "t": moment}).mappings().first()
+        table = tables(conn.dialect.name)["code_set_version"]
+        now = func.now() if conn.dialect.name == "postgresql" else func.utc_timestamp(6)
+        wanted = moment or now
+        row = conn.execute(select(*(table.c[n] for n in
+            ("version", "sha256", "valid_from", "valid_to", "status", "approved_by", "approved_at"))).where(
+            scope(conn, table, code_set=args.subject), table.c.status.in_(("published", "retired")),
+            table.c.valid_from <= wanted, table.c.valid_to.is_(None) | (table.c.valid_to > wanted)).order_by(
+                table.c.valid_from.desc()).limit(1)).mappings().first()
         if row is None:
             when = f" {flag} {value}" if value else " now"
             raise ContextError(f"{args.subject} has no published version{when}.", f"edgar-warehouse rdm describe {args.subject}")
@@ -86,8 +88,7 @@ class CodeContext:
 
     def _code(self, conn, args, info: dict) -> dict:
         picked = self._version(conn, args)
-        row = conn.execute(text("SELECT * FROM rdm.code_context WHERE code_set = :s AND version = :v AND code = :c"),
-                           {"s": args.subject, "v": picked["version"], "c": args.key}).mappings().first()
+        row = code_context(conn, args.subject, picked["version"], args.key)
         if row is None:
             raise ContextError(f"{args.subject} {picked['version']} has no code {args.key!r}.",
                                f"{PROG} {args.subject} --search {shlex.quote(args.key)}")
@@ -98,13 +99,16 @@ class CodeContext:
                                    f"{_iso(row['code_valid_from']) or '…'} to {_iso(row['code_valid_to']) or '…'}).",
                                    f"{PROG} {args.subject} {shlex.quote(args.key)}")
         hints, usage = {}, []
-        for r in conn.execute(text("SELECT kind, text FROM rdm.code_set_hint WHERE code_set = :s AND version = :v "
-                                   "ORDER BY kind, ordinal"), {"s": args.subject, "v": picked["version"]}):
+        table = tables(conn.dialect.name)["code_set_hint"]
+        for r in conn.execute(select(table.c.kind, table.c.text).where(scope(conn, table,
+                code_set=args.subject, version=picked["version"])).order_by(table.c.kind, table.c.ordinal)):
             hints.setdefault(r.kind, []).append(r.text)
         if args.detail == "full":
-            usage = [dict(r) for r in conn.execute(text(
-                "SELECT store, object, field, match, note FROM rdm.code_set_usage WHERE code_set = :s AND version = :v "
-                "ORDER BY store, object, field"), {"s": args.subject, "v": picked["version"]}).mappings()]
+            table = tables(conn.dialect.name)["code_set_usage"]
+            usage = [dict(r) for r in conn.execute(select(*(table.c[n] for n in
+                ("store", "object", "field", "match", "note"))).where(scope(conn, table,
+                    code_set=args.subject, version=picked["version"])).order_by(
+                        table.c.store, table.c.object, table.c.field)).mappings()]
         synonyms = list(row["synonyms"])
         answer = {
             "name": row["label"],
@@ -145,8 +149,20 @@ class CodeContext:
         if not words:
             raise ContextError("--search needs some words.", f"{PROG} {args.subject} --search \"<words>\"")
         picked = self._version(conn, args)
-        rows = conn.execute(text("SELECT * FROM rdm.code_search(:w, :s, :v, :n)"),
-                            {"w": words, "s": args.subject, "v": picked["version"], "n": args.limit}).mappings().all()
+        import edgar_control
+        from edgar_warehouse.rules import files
+
+        settings = files.load(files.ROOT / "context" / "definitions.yaml").get("reference_search", {})
+        weight = settings.get("synonym_weight")
+        position_weight = settings.get("position_weight")
+        if (type(weight) not in (int, float) or not 0 < weight <= 1
+                or type(position_weight) not in (int, float) or not 0 < position_weight <= 1):
+            raise ContextError("Reference search configuration needs synonym_weight and position_weight from 0 to 1.",
+                               f"edgar-warehouse rdm describe {args.subject}")
+        candidates = search_candidates(conn, args.subject, picked["version"], words)
+        rows = json.loads(edgar_control.prepare_reference_search(json.dumps(
+            {"rows": candidates, "limit": args.limit, "words": words, "synonym_weight": weight,
+             "position_weight": position_weight}, ensure_ascii=False, allow_nan=False)))
         matches = [{"name": r["label"], "code": r["code"], "path": r["label_path"], "matched_by": r["matched_by"]}
                    for r in rows]
         if not matches:

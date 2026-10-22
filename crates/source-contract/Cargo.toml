@@ -26,3 +26,5 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 unicode-general-category = "=0.6.0"
 unicode-normalization = "=0.1.22"
 regex = "1"
+sha2 = "0.10"
+uuid = "1"

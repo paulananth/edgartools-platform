@@ -870,11 +870,12 @@ def test_shared_identity_survivorship_and_links_prepare_the_same_storage_input(
     This proves the prepared-effect seam, not a replacement of the native
     runtime's Rules/Bookkeeping registration and source-activation workflow.
     """
-    from edgar_warehouse.mdm.clean.evidence import assertion
+    from edgar_warehouse.mdm.clean.evidence import PROFILE_KINDS, assertion
     from edgar_warehouse.mdm.clean.identity import replay
     from edgar_warehouse.mdm.clean.relationships import project, types_of
     from edgar_warehouse.mdm.clean.store import canonical, digest
-    from edgar_warehouse.mdm.clean.survivorship import current_claims, select_fields
+    from edgar_warehouse.mdm.clean.survivorship import current_claims
+    from edgar_warehouse.rules.source_engine import prepare_master_records
     from tests.integration.test_clean_mdm_postgres import identity_and_binding
     from tests.support.fresh_mastering import AS_OF, cohort
 
@@ -889,33 +890,16 @@ def test_shared_identity_survivorship_and_links_prepare_the_same_storage_input(
     identities, decisions = [pair[0] for pair in pairs], [pair[1] for pair in pairs]
     state = replay(identities, decisions, AS_OF)  # Existing Rust identity engine.
     claims = current_claims(readings, AS_OF, state.retired_sources)
-    projected = {}
     policy_digest = digest(policy)
-    for identity in identities:
-        entity = identity["entity_id"]
-        members = sorted(s for s, e in state.bindings.items() if e == entity)
-        fields, profiles, _ = select_fields(
-            identity["kind"],
-            members,
-            claims,
-            policy,
-            state.overrides,
-            as_of=AS_OF,
-            policy_digest=policy_digest,
-            entity_id=entity,
-        )
-        projected[entity] = {
-            "entity_id": entity,
-            "kind": identity["kind"],
-            "canonical_id": entity,
-            "status": "accepted",
-            "subjects": members,
-            "fields": fields,
-            "profiles": profiles,
-            "identifiers": {
-                k: [v] for k, v in claims[members[0]]["identifiers"].items()
-            },
-        }
+    projected, record_reviews, _ = prepare_master_records({
+        "identities": {identity["entity_id"]: identity for identity in identities},
+        "canonical": state.canonical, "bindings": state.bindings,
+        "quarantined": state.quarantined, "claims": claims, "policy": policy,
+        "overrides": state.overrides, "decisions": decisions, "as_of": AS_OF,
+        "policy_digest": policy_digest,
+        "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
+    })
+    assert not record_reviews
     person = next(a for a in readings if a["kind"] == "person")
     company = next(a for a in readings if a["kind"] == "company")
     sighting = assertion(

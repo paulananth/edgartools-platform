@@ -1,4 +1,4 @@
-"""Checksummed migrations of the empty, isolated PostgreSQL 16 journal."""
+"""Checksummed journal storage migrations and restricted runtime grants."""
 
 from __future__ import annotations
 
@@ -11,18 +11,27 @@ from sqlalchemy import text
 from edgar_warehouse.control_contract import Blocked, canonical
 
 
-def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
+def _execute_sql(conn, sql):
+    return conn.execute(text(sql))
+
+
+def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_name: str = "change_journal") -> dict:
     if engine.dialect.name != "postgresql":
-        raise Blocked("Change Journal requires PostgreSQL 16")
+        from .storage_migrations import migrate_storage
+        return migrate_storage(engine, runtime_role=runtime_role, existing_only=existing_only, database_name=database_name)
+    from .storage_sql import statements
+    additions = statements("postgresql")
+    addition_checksum = hashlib.sha256("\n".join(additions).encode()).hexdigest()
     paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if (
-            conn.scalar(text("SELECT current_database()")) != "change_journal"
-            or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16
+            conn.scalar(text("SELECT current_database()")) != database_name
+            or int(conn.scalar(text("SHOW server_version_num"))) < 120000
+            or conn.scalar(text("SELECT to_regprocedure('pg_catalog.sha256(bytea)')")) is None
         ):
             raise Blocked(
-                "Journal migration requires change_journal on PostgreSQL 16"
+                "Journal migration requires the selected journal database, generated columns and native SHA-256"
             )
         role = conn.execute(
             text(
@@ -64,7 +73,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
         ):
             raise Blocked("Journal database must not contain legacy or business tables")
         checksums = json.loads(saved) if saved else {}
-        if set(checksums) - {p.name for p in paths}:
+        if set(checksums) - ({p.name for p in paths} | {"003_native_storage"}):
             raise Blocked("Installed journal migration is absent from this build")
         for path in paths:
             source = path.read_text()
@@ -75,30 +84,27 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
             else:
                 conn.execute(text(source))
                 checksums[path.name] = checksum
+        if "003_native_storage" in checksums and checksums["003_native_storage"] != addition_checksum:
+            raise Blocked("Installed journal migration checksum differs")
+        for statement in additions:
+            _execute_sql(conn, statement)
+        checksums["003_native_storage"] = addition_checksum
         comment = canonical(checksums).replace("'", "''")
-        conn.exec_driver_sql(f"COMMENT ON SCHEMA journal IS '{comment}'")
+        _execute_sql(conn, f"COMMENT ON SCHEMA journal IS '{comment}'")
         runtime = quote(runtime_role)
-        conn.exec_driver_sql(f"REVOKE ALL ON SCHEMA journal FROM PUBLIC,{runtime}")
-        conn.exec_driver_sql(
+        _execute_sql(conn, f"REVOKE ALL ON SCHEMA journal FROM PUBLIC,{runtime}")
+        _execute_sql(conn,
             f"REVOKE ALL ON ALL TABLES IN SCHEMA journal FROM PUBLIC,{runtime}"
         )
-        conn.exec_driver_sql(
+        _execute_sql(conn,
             f"REVOKE ALL ON ALL SEQUENCES IN SCHEMA journal FROM PUBLIC,{runtime}"
         )
-        conn.exec_driver_sql(
+        _execute_sql(conn,
             f"REVOKE ALL ON ALL FUNCTIONS IN SCHEMA journal FROM PUBLIC,{runtime}"
         )
-        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA journal TO {runtime}")
-        for signature in (
-            "append(text,text)",
-            "get(text,text)",
-            "list_events(text,text,uuid,integer,bigint)",
-            "status(text,text)",
-            "found(text,text[])",
-        ):
-            conn.exec_driver_sql(
-                f"GRANT EXECUTE ON FUNCTION journal.{signature} TO {runtime}"
-            )
+        _execute_sql(conn, f"GRANT USAGE ON SCHEMA journal TO {runtime}")
+        _execute_sql(conn, f"GRANT SELECT ON journal.event_records TO {runtime}")
+        _execute_sql(conn, f"GRANT EXECUTE ON FUNCTION journal.record_event(text,text) TO {runtime}")
         if conn.scalar(
             text(
                 "SELECT has_schema_privilege(:r,'journal','CREATE') OR has_table_privilege(:r,'journal.event','SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES')"

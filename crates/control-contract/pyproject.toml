@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "edgartools-control-core"
+version = "0.1.0"
+description = "Shared control and journal calculations, independent of workloads and databases"
+requires-python = ">=3.12"
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "edgar_control"
+features = ["python"]

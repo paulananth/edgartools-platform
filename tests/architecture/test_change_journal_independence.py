@@ -28,10 +28,11 @@ def test_journal_imports_only_itself_pure_contracts_stdlib_and_sqlalchemy():
             else:
                 continue
             for name in names:
-                allowed = name.split(".")[0] in sys.stdlib_module_names
+                allowed = name.split(".")[0] in sys.stdlib_module_names or name == "edgar_control"
                 if path != primitives:
                     allowed = (allowed
                                or name == "sqlalchemy" or name.startswith("sqlalchemy.")
+                               or name == "edgar_control"
                                or name == "edgar_warehouse.control_contract"
                                or name == "edgar_warehouse.change_journal"
                                or name.startswith("edgar_warehouse.change_journal."))

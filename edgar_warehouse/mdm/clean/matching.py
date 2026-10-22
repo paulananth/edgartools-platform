@@ -21,20 +21,14 @@ every proposal before it commits (Q13). It never creates a Company.
 from __future__ import annotations
 
 from collections import defaultdict
+from functools import partial
 
 from . import cascade, correction
 from .activation import activated
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
-from .names import (
-    edgar_jurisdiction,
-    jurisdictions_agree,
-    jurisdictions_conflict,
-    postal_codes_agree,
-)
-from .primitives import NORMALIZERS
-from .quality import withheld
+from .names import REFERENCE_TABLES
 from .store import Conflict, rows
 
 FAMILY = "name_binding"
@@ -53,36 +47,12 @@ _value, _matching = cascade.field_value, cascade.matching_values
 
 
 def _read(record: dict, path: str):
-    """A rule's declared path: `matching.<name>` or a field name. Data, never code.
-
-    A value the feed's quality rule withheld is not there to match on
-    (ticket 22).
-    """
-    if withheld(record, path if path.startswith("matching.") else f"fields.{path}"):
-        return None
-    if path.startswith("matching."):
-        return _matching(record).get(path.removeprefix("matching."))
-    return _value(record, path)
-
-
-def _normalizer(name: str):
-    if name not in NORMALIZERS:
-        raise Conflict(f"Name binding names an unknown normalizer: {name}")
-    return NORMALIZERS[name]
-
-
-# The one code table `sec_codes` may name. Its content is
-# the RDM code set `sec-place-codes`, whose version and sha256 the policy
-# pins, so the policy's digest covers it: a new version is a new policy.
-SEC_CODES = {"edgar-iso-v1": edgar_jurisdiction}
-
-
-def _codes(args: dict):
-    if args.get("sec_codes") not in SEC_CODES:
-        raise Conflict(
-            f"Name binding names an unknown code table: {args.get('sec_codes')}"
-        )
-    return SEC_CODES[args["sec_codes"]]
+    """Read the declared matching path through the shared native implementation."""
+    from edgar_warehouse.rules.source_engine import apply_record_rules
+    try:
+        return apply_record_rules({"action": "read_matching_field", "record": record, "name": path})
+    except ValueError as error:
+        raise Conflict(str(error)) from None
 
 
 def _census_lei(record: dict) -> str | None:
@@ -104,127 +74,41 @@ def _pair_lei(rule: dict):
     return _census_lei, "census_lei"
 
 
-def _census_match(sec: dict, gleif: dict, args: dict) -> bool:
-    entry = _matching(sec).get("name_census") or {}
-    lei = (gleif.get("identifiers") or {}).get("lei")
-    key = _normalizer(args["sec_normalizer"])(_value(sec, "name"))
-    return (
-        entry.get("version") == CENSUS_VERSION
-        and entry.get("cik_count") == 1
-        and entry.get("ciks") == [sec["record_key"]]
-        and entry.get("lei_count") == 1
-        and entry.get("other_name_holders") == 0
-        and entry.get("leis") == [[lei, _value(gleif, "gleif_last_update") or ""]]
-        and bool(key)
-        and entry.get("key")
-        == key
-        == _normalizer(args["gleif_normalizer"])(_value(gleif, "name"))
-    )
+def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> list[list[bool]]:
+    """Transfer a batch of candidate pairs and its pinned reference rules once."""
+    from edgar_warehouse.rules.source_engine import compare_record_pairs
+    from .identifier_types import TYPES
+
+    try:
+        return compare_record_pairs({
+            "rule": rule, "pairs": pairs,
+            "code_tables": REFERENCE_TABLES,
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+            "census_version": CENSUS_VERSION, "cascade_version": cascade.VERSION,
+        })
+    except ValueError as error:
+        raise Conflict(str(error)) from None
 
 
-def _cascade_pass(sec: dict, gleif: dict, args: dict) -> bool:
-    """The census's cascade bound this pair in this pass (ticket 21), and the
-    Stage rows still say so: the same LEI and last update, the same name key
-    (the GLEIF legal name, unless the census matched one of its other names,
-    which the Stage record does not hold), no flag the rule refuses, and the
-    pass's address parts agree on the addresses the quality rule left fit.
-
-    The over-shared cut is the census's to make: it needs every entity. It
-    leaves a place only its country, so such a pair binds only in a pass that
-    compares no more than the country, where the cut changes nothing here."""
-    answer = (_matching(sec).get("name_census") or {}).get("cascade") or {}
-    key = _normalizer(args["sec_normalizer"])(_value(sec, "name"))
-    gleif_key = _normalizer(args["gleif_normalizer"])(_value(gleif, "name"))
-    return (
-        answer.get("version") == cascade.VERSION
-        and answer.get("pass") == args["pass"]
-        and answer.get("lei") == (gleif.get("identifiers") or {}).get("lei")
-        and answer.get("last_update") == (_value(gleif, "gleif_last_update") or "")
-        and bool(key)
-        and answer.get("key") == key
-        and (gleif_key == key or answer.get("via") == "other name")
-        and not set(answer.get("flags") or []) & set(args.get("refused_flags") or [])
-        and cascade.agrees(
-            cascade.filer_of(sec).place,
-            cascade.fit_place(gleif, _matching(gleif)),
-            args["compare"],
-        )
-    )
+def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
+    return compare_candidate_records({"when": [{"primitive": name, "args": args}]}, [(left, right)])[0][0]
 
 
-def _eligible(_sec: dict, gleif: dict, args: dict) -> bool:
-    # The GLEIF contract admits only GENERAL as a Company (its Level 1 contract),
-    # so that is the one category this test can honour; any other fails closed.
-    if args.get("categories") != ["GENERAL"]:
-        raise Conflict("Name binding can require only the GENERAL category")
-    return (
-        gleif.get("kind") == "company"
-        and _value(gleif, "gleif_entity_status") in args["entity_statuses"]
-        and _value(gleif, "gleif_registration_status")
-        not in args["refused_registration_statuses"]
-    )
-
-
-def _jurisdiction_agrees(sec: dict, gleif: dict, args: dict) -> bool:
-    return jurisdictions_agree(
-        _codes(args)(_read(sec, args["sec_field"])), _read(gleif, args["gleif_field"])
-    )
-
-
-def _no_conflict(sec: dict, gleif: dict, args: dict) -> bool:
-    return not jurisdictions_conflict(
-        _codes(args)(_read(sec, args["sec_field"])),
-        _read(gleif, args["gleif_field"]),
-        sec_business_country=_read(sec, args["sec_business_country"]),
-    )
-
-
-def _postal_agrees(sec: dict, gleif: dict, args: dict) -> bool:
-    return postal_codes_agree(
-        _read(sec, args["sec_code"]),
-        _read(sec, args["sec_country"]),
-        _read(gleif, args["gleif_code"]),
-        _read(gleif, args["gleif_country"]),
-    )
-
-
-# Every name-binding test the registry holds, implemented here: the record-pair
-# tests, and the one that needs master state (`HELD_LEI_TEST`), checked with
-# the Company in hand. A unit test holds this equal to the registry.
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
-    "name_census_match@1": _census_match,
-    "gleif_entity_eligible@1": _eligible,
-    "jurisdiction_agrees@1": _jurisdiction_agrees,
-    "jurisdictions_do_not_conflict@1": _no_conflict,
-    "postal_agrees@1": _postal_agrees,
-    cascade.TEST: _cascade_pass,
+    name: partial(compare_pair_test, name) for name in (
+        "name_census_match@1", "gleif_entity_eligible@1", "jurisdiction_agrees@1",
+        "jurisdictions_do_not_conflict@1", "postal_agrees@1", cascade.TEST,
+    )
 }
 
 
 def _passes(rule: dict, sec: dict, gleif: dict) -> bool:
-    for test in rule["when"]:
-        name = test["primitive"]
-        if name == HELD_LEI_TEST:
-            continue
-        if name not in PAIR_TESTS:
-            raise Conflict(f"Name binding test {name} has no implementation")
-        if not PAIR_TESTS[name](sec, gleif, test.get("args") or {}):
-            return False
-    return True
+    return compare_candidate_records(rule, [(sec, gleif)])[0][0]
 
 
 def _refused_by_flag(rule: dict, sec: dict, gleif: dict) -> bool:
-    """A cascade pair that passes every test but carries a flag its rule
-    refuses: it goes to a Steward, not to a bind (operator, 2026-09-28: if a
-    stratum fails its proof, "those pairs go to a Steward for review")."""
-    lenient = []
-    for test in rule["when"]:
-        args = test.get("args") or {}
-        if test["primitive"] == cascade.TEST and args.get("refused_flags"):
-            test = {**test, "args": {**args, "refused_flags": []}}
-        lenient.append(test)
-    return lenient != rule["when"] and _passes({**rule, "when": lenient}, sec, gleif)
+    return compare_candidate_records(rule, [(sec, gleif)])[0][1]
 
 
 def _latest(found: list[dict]) -> dict[str, dict]:
@@ -347,26 +231,25 @@ def propose(
         subjects = set(gleif_all) | set(sec_all)
         bindings = _bindings(conn, subjects, decisions + result["decisions"], released)
         refused = correction.refused(conn, set(gleif_all), decisions)
-        pairs = []
+        candidates = []
         for gleif in gleif_all.values():
             if bindings.get(gleif["subject"]):
-                continue  # already joined; a name match never re-binds
+                continue
             lei = (gleif.get("identifiers") or {}).get("lei")
             for sec in sec_by_lei.get(lei, []):
                 companies = bindings.get(sec["subject"]) or set()
-                if len(companies) != 1:
-                    continue
-                if _passes(rule, sec, gleif):
-                    pairs.append((gleif, sec, next(iter(companies))))
-                elif _refused_by_flag(rule, sec, gleif):
-                    result["reviews"].append(
-                        {
-                            "reason": "cascade_flagged_pair",
-                            "namespace": "lei",
-                            "subject": gleif["subject"],
-                            "assertion_id": gleif["assertion_id"],
-                        }
-                    )
+                if len(companies) == 1:
+                    candidates.append((gleif, sec, next(iter(companies))))
+        outcomes = compare_candidate_records(rule, [(sec, gleif) for gleif, sec, _ in candidates])
+        pairs = []
+        for (gleif, sec, entity), (passed, flagged) in zip(candidates, outcomes, strict=True):
+            if passed:
+                pairs.append((gleif, sec, entity))
+            elif flagged:
+                result["reviews"].append({
+                    "reason": "cascade_flagged_pair", "namespace": "lei",
+                    "subject": gleif["subject"], "assertion_id": gleif["assertion_id"],
+                })
         if not pairs:
             continue
         merged = survivors(conn, {entity for _, _, entity in pairs})

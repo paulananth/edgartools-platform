@@ -15,17 +15,17 @@ from pathlib import Path
 
 
 def _handle(args):
-    from sqlalchemy import create_engine
+    from edgar_warehouse.database_connections import engine_from_env
 
     from . import database
     from .rows import records
-    from .sink import PostgresSink
+    from .relational import DatabaseSink
     from .writer import MdmIds, land, refresh_ids
 
     engines = []
 
     def engine(variable):
-        value = create_engine(os.environ[variable])
+        value = engine_from_env(variable)
         engines.append(value)
         return value
 
@@ -38,7 +38,7 @@ def _handle(args):
                                        runtime_role=args.runtime_role)
         elif args.silver_command in {"land", "refresh-ids"}:
             ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
-            sink = PostgresSink(engine("SILVER_DATABASE_URL"))
+            sink = DatabaseSink(engine("SILVER_DATABASE_URL"))
             result = (land(sink, args.table, records(args.rows), ids) if args.silver_command == "land"
                       else refresh_ids(sink, args.table, ids))
         else:

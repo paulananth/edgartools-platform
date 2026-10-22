@@ -1,0 +1,529 @@
+//! Identifier matching over an explicit indexed read set. No database-specific rules.
+
+use crate::record_tests::{evaluate_record_test, normalize_value};
+use crate::record_values::{self as values, Object};
+use chrono::{Duration, Utc};
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Deserialize)]
+struct Inputs {
+    policy: Object,
+    assertions: Vec<Object>,
+    decisions: Vec<Object>,
+    identities: Vec<Object>,
+    bound: Vec<String>,
+    released: BTreeSet<String>,
+    normalizers: IndexMap<String, bool>,
+}
+#[derive(Serialize, Deserialize, Clone)]
+struct Match {
+    rule: Object,
+    namespace: String,
+    value: String,
+    raw: String,
+}
+#[derive(Serialize, Deserialize)]
+struct Holder {
+    namespace: String,
+    value: String,
+    records: IndexMap<String, String>,
+}
+#[derive(Serialize, Deserialize)]
+struct Plan {
+    records: BTreeMap<String, Object>,
+    applicable: BTreeMap<String, Vec<Match>>,
+    wanted: BTreeMap<String, BTreeSet<String>>,
+    kinds: BTreeSet<String>,
+    caller_holders: Vec<Holder>,
+}
+
+fn read_rule_text(body: &Object, key: &str) -> Result<String, String> {
+    values::read_text(body, key)
+}
+fn rule_is_approved_for_matching(
+    policy: &Object,
+    kind: &str,
+    rule: &Object,
+) -> Result<bool, String> {
+    for raw in values::read_array(policy, "automatic_rules")? {
+        let Ok(entry) = values::read_value::<Object>(&raw) else {
+            continue;
+        };
+        if read_rule_text(&entry, "kind").ok().as_deref() == Some(kind)
+            && read_rule_text(&entry, "verdict").ok().as_deref() == Some("bind")
+            && [
+                ("family", "family"),
+                ("rule_id", "rule_id"),
+                ("rule_version", "version"),
+            ]
+            .iter()
+            .all(|(left, right)| {
+                entry
+                    .get(*left)
+                    .zip(rule.get(*right))
+                    .is_some_and(|(left, right)| values::values_match(left, right).unwrap_or(false))
+            })
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn read_matching_namespace(rule: &Object) -> Result<String, String> {
+    let mut names = BTreeSet::new();
+    for raw in values::read_array(rule, "when")? {
+        let test: Object = values::read_value(&raw)?;
+        if [
+            "identifier_match@1",
+            "identifier_cardinality@1",
+            "kind_equal@1",
+        ]
+        .contains(&read_rule_text(&test, "primitive")?.as_str())
+        {
+            names.insert(read_rule_text(
+                &values::read_object(&test, "args")?,
+                "namespace",
+            )?);
+        }
+    }
+    if names.len() != 1 {
+        return Err("A matching rule requires one identifier namespace".into());
+    }
+    names
+        .into_iter()
+        .next()
+        .ok_or("Missing identifier namespace".into())
+}
+
+pub(crate) fn prepare_identifier_value(
+    contracts: &BTreeMap<String, (String, Object)>,
+    namespace: &str,
+    raw: &str,
+    normalizers: &IndexMap<String, bool>,
+) -> Result<String, String> {
+    match contracts.get(namespace) {
+        Some((name, aliases)) => {
+            normalize_value(name, &values::write_value(&raw)?, aliases, normalizers)
+        }
+        None => Ok(raw.into()),
+    }
+}
+
+pub(crate) fn prepare_identifier_rules(
+    policy: &Object,
+) -> Result<BTreeMap<String, (String, Object)>, String> {
+    let mut contracts = BTreeMap::new();
+    for raw in values::read_object(policy, "kinds")?.values() {
+        let block: Object = values::read_value(raw)?;
+        let aliases = Object::from([(
+            "normalizers".into(),
+            values::write_value(&values::read_object(&block, "normalizers")?)?,
+        )]);
+        for (namespace, raw) in values::read_object(&block, "identifiers")? {
+            let contract: Object = values::read_value(&raw)?;
+            contracts
+                .entry(namespace)
+                .or_insert((read_rule_text(&contract, "normalizer")?, aliases.clone()));
+        }
+    }
+    Ok(contracts)
+}
+
+pub fn plan_record_matches(raw: &str) -> Result<String, String> {
+    let input: Inputs = serde_json::from_str(raw).map_err(|_| "Invalid record matching inputs")?;
+    let mut rules = Vec::new();
+    let mut issuers: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let contracts = prepare_identifier_rules(&input.policy)?;
+    let mut blocks = BTreeMap::new();
+    for (kind, raw) in values::read_object(&input.policy, "kinds")? {
+        blocks.insert(kind, values::read_value::<Object>(&raw)?);
+    }
+    for (kind, block) in blocks {
+        for (namespace, raw) in values::read_object(&block, "identifiers")? {
+            let contract: Object = values::read_value(&raw)?;
+            let sources: Vec<String> = values::read_array(&contract, "sources")?
+                .iter()
+                .map(|raw| values::read_value(raw))
+                .collect::<Result<_, _>>()?;
+            issuers.entry(namespace).or_default().extend(sources);
+        }
+        for raw in values::read_array(&block, "rules")? {
+            let rule: Object = values::read_value(&raw)?;
+            if read_rule_text(&rule, "family")? == "binding"
+                && rule_is_approved_for_matching(&input.policy, &kind, &rule)?
+            {
+                rules.push(rule);
+            }
+        }
+    }
+    let mut ordered = Vec::new();
+    for record in &input.assertions {
+        let revision = values::read_optional_value(record, "revision")?;
+        let mapping = record
+            .get("mapping_version")
+            .cloned()
+            .unwrap_or(values::write_value(&1)?);
+        if !revision.get().bytes().all(|ch| ch.is_ascii_digit())
+            || !mapping.get().bytes().all(|ch| ch.is_ascii_digit())
+        {
+            return Err("Reading revisions must be nonnegative integers".into());
+        }
+        ordered.push((
+            (
+                revision.get().len(),
+                revision.get().to_owned(),
+                mapping.get().len(),
+                mapping.get().to_owned(),
+            ),
+            record,
+        ));
+    }
+    ordered.sort_by(|(left, _), (right, _)| left.cmp(right));
+    let mut records = BTreeMap::new();
+    for (_, record) in ordered {
+        records.insert(read_rule_text(record, "subject")?, record.clone());
+    }
+    let mut taken: BTreeSet<_> = input
+        .bound
+        .into_iter()
+        .filter(|subject| !input.released.contains(subject))
+        .collect();
+    let mut caller = BTreeMap::new();
+    for decision in &input.decisions {
+        if read_rule_text(decision, "operation")? == "bind" {
+            let subject = read_rule_text(decision, "subject")?;
+            taken.insert(subject.clone());
+            caller.insert(subject, read_rule_text(decision, "entity_id")?);
+        }
+    }
+    let mut applicable: BTreeMap<String, Vec<Match>> = BTreeMap::new();
+    let mut wanted: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut kinds = BTreeSet::new();
+    for (subject, record) in &records {
+        if taken.contains(subject) {
+            continue;
+        }
+        for rule in &rules {
+            if read_rule_text(rule, "applies_to_verdict")? != read_rule_text(record, "kind")?
+                || (values::has_value(rule, "source")
+                    && read_rule_text(rule, "source")? != read_rule_text(record, "source_code")?)
+            {
+                continue;
+            }
+            let mut passes = true;
+            for raw in values::read_array(rule, "when")? {
+                let test: Object = values::read_value(&raw)?;
+                let name = read_rule_text(&test, "primitive")?;
+                if [
+                    "identifier_match@1",
+                    "identifier_cardinality@1",
+                    "kind_equal@1",
+                ]
+                .contains(&name.as_str())
+                {
+                    continue;
+                }
+                let verdict = evaluate_record_test(
+                    &name,
+                    &values::read_object(&test, "args")?,
+                    record,
+                    &Object::new(),
+                    &input.normalizers,
+                )?;
+                if verdict == values::has_value(&test, "negate") {
+                    passes = false;
+                    break;
+                }
+            }
+            if !passes {
+                continue;
+            }
+            let namespace = read_matching_namespace(rule)?;
+            let identifiers = values::read_object(record, "identifiers")?;
+            let Some(raw) = identifiers
+                .get(&namespace)
+                .filter(|raw| raw.get() != "null")
+            else {
+                continue;
+            };
+            let raw: String = values::read_value(raw)?;
+            let value = prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?;
+            wanted
+                .entry(namespace.clone())
+                .or_default()
+                .insert(raw.clone());
+            if read_rule_text(rule, "on_no_match")? == "mint" {
+                kinds.insert(read_rule_text(record, "kind")?);
+            }
+            applicable.entry(subject.clone()).or_default().push(Match {
+                rule: rule
+                    .iter()
+                    .filter(|(key, _)| {
+                        ["rule_id", "version", "on_no_match"].contains(&key.as_str())
+                    })
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+                namespace,
+                value,
+                raw,
+            });
+        }
+    }
+    let kinds_by_id: BTreeMap<_, _> = input
+        .identities
+        .iter()
+        .map(|record| {
+            Ok((
+                read_rule_text(record, "entity_id")?,
+                read_rule_text(record, "kind")?,
+            ))
+        })
+        .collect::<Result<_, String>>()?;
+    let mut caller_holders = Vec::new();
+    for record in &input.assertions {
+        let Some(entity) = caller.get(&read_rule_text(record, "subject")?) else {
+            continue;
+        };
+        for (namespace, raw) in values::read_object(record, "identifiers")? {
+            if !issuers.get(&namespace).is_some_and(|sources| {
+                sources.contains(&read_rule_text(record, "source_code").unwrap_or_default())
+            }) {
+                continue;
+            }
+            let raw: String = values::read_value(&raw)?;
+            caller_holders.push(Holder {
+                value: prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?,
+                namespace,
+                records: IndexMap::from([(
+                    entity.clone(),
+                    kinds_by_id
+                        .get(entity)
+                        .cloned()
+                        .unwrap_or(read_rule_text(record, "kind")?),
+                )]),
+            });
+        }
+    }
+    serde_json::to_string(&Plan {
+        records,
+        applicable,
+        wanted,
+        kinds,
+        caller_holders,
+    })
+    .map_err(|_| "Cannot serialize record match plan".into())
+}
+
+#[derive(Deserialize)]
+struct PreparedInputs {
+    plan: Plan,
+    found: Vec<Holder>,
+    suspended: BTreeSet<String>,
+    newest: BTreeMap<String, Option<String>>,
+    new_ids: Vec<String>,
+    refused: BTreeSet<(String, String, String)>,
+    as_of: String,
+}
+
+fn prepare_decision_time(raw: &str) -> Result<String, String> {
+    let time = values::read_time(raw)?.with_timezone(&Utc);
+    let fraction = if time.timestamp_subsec_micros() == 0 {
+        String::new()
+    } else {
+        format!(".{:06}", time.timestamp_subsec_micros())
+    };
+    Ok(format!(
+        "{}{fraction}+00:00",
+        time.format("%Y-%m-%dT%H:%M:%S")
+    ))
+}
+
+pub fn link_matching_records(raw: &str) -> Result<String, String> {
+    let input: PreparedInputs =
+        serde_json::from_str(raw).map_err(|_| "Invalid prepared record matches")?;
+    let mut found: BTreeMap<(String, String), IndexMap<String, String>> = BTreeMap::new();
+    for holder in input.found {
+        found
+            .entry((holder.namespace, holder.value))
+            .or_default()
+            .extend(holder.records);
+    }
+    let stored = found.clone();
+    for holder in input.plan.caller_holders {
+        found
+            .entry((holder.namespace, holder.value))
+            .or_default()
+            .extend(holder.records);
+    }
+    let mut result: BTreeMap<&str, Vec<Object>> =
+        ["identities", "decisions", "reviews", "mints", "joins"]
+            .into_iter()
+            .map(|name| (name, Vec::new()))
+            .collect();
+    let mut minted = BTreeMap::new();
+    let mut ids = input.new_ids.into_iter();
+    let mut floors = BTreeMap::new();
+    let mut subjects: Vec<_> = input.plan.applicable.iter().collect();
+    subjects.sort_by_key(|(subject, items)| {
+        (
+            !items.iter().any(|item| {
+                read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
+            }),
+            *subject,
+        )
+    });
+    for (subject, items) in subjects {
+        let record = &input.plan.records[subject];
+        let kind = read_rule_text(record, "kind")?;
+        let mut matches: IndexMap<String, Vec<&Match>> = IndexMap::new();
+        let mut problem = None;
+        for item in items {
+            if let Some(held) = found.get(&(item.namespace.clone(), item.value.clone())) {
+                if held.len() > 1 {
+                    problem = Some(("ambiguous_identifier", item.namespace.clone()));
+                    break;
+                }
+                for (entity, held_kind) in held {
+                    if held_kind != &kind {
+                        problem = Some(("incompatible_identifier_kind", item.namespace.clone()));
+                        break;
+                    }
+                    if input.suspended.contains(entity) {
+                        problem = Some(("suspended_identifier", item.namespace.clone()));
+                        break;
+                    }
+                    matches.entry(entity.clone()).or_default().push(item);
+                }
+                if problem.is_some() {
+                    break;
+                }
+            }
+        }
+        if problem.is_none() && matches.len() > 1 {
+            problem = Some((
+                "conflicting_identifiers",
+                matches
+                    .values()
+                    .filter_map(|items| items.last().map(|item| item.namespace.clone()))
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ));
+        }
+        if let Some((reason, namespace)) = problem {
+            result.get_mut("reviews").unwrap().push(Object::from([
+                ("reason".into(), values::write_value(&reason)?),
+                ("namespace".into(), values::write_value(&namespace)?),
+                ("subject".into(), values::write_value(subject)?),
+                (
+                    "assertion_id".into(),
+                    values::read_optional_value(record, "assertion_id")?,
+                ),
+            ]));
+            continue;
+        }
+        let (entity, selected) = if let Some((entity, matched)) = matches.into_iter().next() {
+            for item in &matched {
+                if stored
+                    .get(&(item.namespace.clone(), item.value.clone()))
+                    .is_some_and(|held| held.contains_key(&entity))
+                {
+                    result.get_mut("joins").unwrap().push(Object::from([
+                        ("entity_id".into(), values::write_value(&entity)?),
+                        ("namespace".into(), values::write_value(&item.namespace)?),
+                        ("raw".into(), values::write_value(&item.raw)?),
+                    ]));
+                }
+            }
+            (
+                entity,
+                (*matched.last().ok_or("Missing matched rule")?).clone(),
+            )
+        } else {
+            let Some(item) = items.iter().find(|item| {
+                read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
+            }) else {
+                continue;
+            };
+            let key = (item.namespace.clone(), item.value.clone());
+            if !minted.contains_key(&key) {
+                let entity = ids.next().ok_or("Not enough allocated record identities")?;
+                if !floors.contains_key(&kind) {
+                    let at = values::read_time(&input.as_of)?;
+                    let floor =
+                        if let Some(newest) = input.newest.get(&kind).and_then(Option::as_ref) {
+                            let newest = values::read_time(newest)?;
+                            if at > newest {
+                                input.as_of.clone()
+                            } else {
+                                prepare_decision_time(
+                                    &newest
+                                        .checked_add_signed(Duration::microseconds(1))
+                                        .ok_or("Publication time overflow")?
+                                        .to_rfc3339(),
+                                )?
+                            }
+                        } else {
+                            input.as_of.clone()
+                        };
+                    floors.insert(kind.clone(), floor);
+                }
+                result.get_mut("identities").unwrap().push(Object::from([
+                    ("entity_id".into(), values::write_value(&entity)?),
+                    ("kind".into(), values::write_value(&kind)?),
+                    ("published_at".into(), values::write_value(&floors[&kind])?),
+                ]));
+                result.get_mut("mints").unwrap().push(Object::from([
+                    ("entity_id".into(), values::write_value(&entity)?),
+                    ("namespace".into(), values::write_value(&item.namespace)?),
+                    ("raw".into(), values::write_value(&item.raw)?),
+                ]));
+                found
+                    .entry(key.clone())
+                    .or_default()
+                    .insert(entity.clone(), kind.clone());
+                minted.insert(key.clone(), entity);
+            }
+            (minted[&key].clone(), item.clone())
+        };
+        let rule_id = read_rule_text(&selected.rule, "rule_id")?;
+        let version = read_rule_text(&selected.rule, "version")?;
+        if input
+            .refused
+            .contains(&(subject.clone(), rule_id.clone(), version.clone()))
+        {
+            continue;
+        }
+        let mut decision = Object::from([
+            ("operation".into(), values::write_value(&"bind")?),
+            (
+                "actor".into(),
+                values::write_value(&format!("rule:{rule_id}@{version}"))?,
+            ),
+            (
+                "reason".into(),
+                values::write_value(&format!("identifier_match {}", selected.namespace))?,
+            ),
+            (
+                "at".into(),
+                values::write_value(&prepare_decision_time(&input.as_of)?)?,
+            ),
+            ("subject".into(), values::write_value(subject)?),
+            ("entity_id".into(), values::write_value(&entity)?),
+            (
+                "evidence".into(),
+                values::write_value(&vec![read_rule_text(record, "assertion_id")?])?,
+            ),
+            ("rule_id".into(), values::write_value(&rule_id)?),
+            ("rule_version".into(), values::write_value(&version)?),
+        ]);
+        let hash = values::calculate_content_hash(&values::write_value(&decision)?)?;
+        decision.insert("decision_id".into(), values::write_value(&hash)?);
+        result.get_mut("decisions").unwrap().push(decision);
+    }
+    serde_json::to_string(&result).map_err(|_| "Cannot serialize matched record decisions".into())
+}

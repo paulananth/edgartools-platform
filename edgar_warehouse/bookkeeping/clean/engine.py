@@ -7,15 +7,17 @@ to-do 20a, after Codex's design of 2026-10-02).
 """
 from __future__ import annotations
 
+import json
 import random
 import time
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, datetime
 from uuid import uuid4, uuid5, UUID
 
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from . import storage
 from .artifacts import Artifacts
 from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, generated_worklist, reference,
                      validate, worklist)
@@ -48,10 +50,6 @@ class Claim:
     proof: list[dict]
 
 
-def _rows(conn, sql, **params):
-    return [dict(row) for row in conn.execute(text(sql), params).mappings()]
-
-
 class Bookkeeping:
     def __init__(self, engine, artifacts: Artifacts | None = None):
         self.engine = engine
@@ -68,14 +66,16 @@ class Bookkeeping:
             return conn.scalar(text(sql), params)
 
     def _run(self, run_id: str) -> dict:
-        with self.engine.connect() as conn:
-            result = _rows(conn, "SELECT * FROM bookkeeping.pipeline_run WHERE run_id=CAST(:r AS uuid)", r=run_id)
+        result = storage.run(self.engine, run_id)
         if not result:
             raise Blocked("Unknown run; legacy runs cannot be resumed")
         return result[0]
 
     def _frozen(self, run_id: str):
-        run = self._run(run_id)
+        runs, stored = storage.frozen(self.engine, run_id)
+        if not runs:
+            raise Blocked("Unknown run; legacy runs cannot be resumed")
+        run = runs[0]
         if run["submission"].get("journal") != "change-journal-v1" or run["submission"].get("protocol") != PROTOCOL:
             raise Blocked("Legacy runs and deliveries must finish on their original stack")
         try:
@@ -97,8 +97,6 @@ class Bookkeeping:
             items = worklist(manifest, config)
             if digest(items) != submission["worklist_hash"]:
                 raise Blocked("Frozen work accounting changed")
-            with self.engine.connect() as conn:
-                stored = _rows(conn, "SELECT step,unit_key,ordinal,resources,unit,receipt,state,generated_count FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid)", r=run_id)
             expected = {(entry["step"], entry["key"]): entry for entry in items}
             for row in stored:
                 cursor = row["unit"].get("cursor")
@@ -240,10 +238,8 @@ class Bookkeeping:
     def _receipt(self, item: dict, dependency: dict, context: dict) -> dict:
         """One prerequisite unit's verified output, after reverifying its chain. A unit of another run
         (ticket 120) is reverified against that run's own frozen configuration."""
-        with self.engine.connect() as conn:
-            found = _rows(conn, """SELECT * FROM bookkeeping.work_item
-                WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k AND state='verified'""",
-                r=dependency.get("run", str(item["run_id"])), s=dependency["step"], k=dependency["key"])
+        found = storage.work(self.engine, dependency.get("run", str(item["run_id"])),
+                             step=dependency["step"], key=dependency["key"], states=["verified"])
         if not found:
             raise Blocked("Prerequisite input lacks verified completion")
         if "run" in dependency:
@@ -301,9 +297,7 @@ class Bookkeeping:
         return self.artifacts.put(root, document) if store else reference(self.artifacts.address(root, document))
 
     def _row(self, run_id: str, step: str, key: str) -> dict:
-        with self.engine.connect() as conn:
-            found = _rows(conn, "SELECT * FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND step=:s AND unit_key=:k",
-                          r=run_id, s=step, k=key)
+        found = storage.work(self.engine, run_id, step=step, key=key)
         if not found:
             raise Blocked("Unknown unit")
         return found[0]
@@ -330,19 +324,23 @@ class Bookkeeping:
     def check(self, run_id: str) -> dict:
         """The run's own checks; control computes every one of them."""
         run, config, _, _ = self._frozen(run_id)
-        status = self.status(run_id)
-        results = {}
-        for name in config["checks"]:
-            if name == "manifest.hash":
-                self.artifacts.verified(run["submission"]["inputs"])
-                results[name] = True
-            elif name == "work.accounting":
-                results[name] = status["counts"].get("verified", 0) == run["expected_count"]
-            elif name == "journal.delivered":
-                results[name] = status["pending_deliveries"] == 0
-            else:
-                raise Blocked(f"Unsupported run check: {name}")
-        return results
+        return self._checks(run, config, storage.completion_observations(self.engine, run_id))
+
+    def _checks(self, run, config, observations):
+        manifest_verified = False
+        if "manifest.hash" in config["checks"]:
+            self.artifacts.verified(run["submission"]["inputs"])
+            manifest_verified = True
+        import edgar_control
+        try:
+            return json.loads(edgar_control.prepare_run_checks(canonical({
+                "checks": config["checks"], "expected": run["expected_count"],
+                "verified": observations["verified"],
+                "pending_deliveries": observations["pending_deliveries"],
+                "manifest_verified": manifest_verified,
+            })))
+        except ValueError as error:
+            raise Blocked(str(error)) from None
 
     # The task protocol. A worker pulls an envelope, renews it while it works
     # and reports a candidate; a separate verifier reads the destination and
@@ -398,13 +396,8 @@ class Bookkeeping:
         for step in config["steps"]:
             if step["operation"] != profile or len(found) >= limit:
                 continue
-            with self.engine.connect() as conn:
-                # A reported unit belongs to verifiers, never to another worker.
-                keys = conn.scalars(text("""SELECT unit_key FROM bookkeeping.work_item w
-                    WHERE run_id=CAST(:r AS uuid) AND step=:s AND state NOT IN ('verified','reported')
-                    AND NOT EXISTS(SELECT 1 FROM bookkeeping.lease l WHERE l.run_id=w.run_id
-                        AND l.attempt=w.attempt AND l.expires_at>clock_timestamp())
-                    ORDER BY ordinal LIMIT :n"""), {"r": run_id, "s": step["name"], "n": SCAN}).all()
+            # A reported unit belongs to verifiers, never another worker.
+            keys = storage.available_keys(self.engine, run_id, step["name"], SCAN)
             for key in keys:
                 if len(found) >= limit:
                     break
@@ -448,10 +441,7 @@ class Bookkeeping:
             raise ValueError("Verification limit must be 1..1000")
         _, config, _, _ = self._frozen(run_id)
         steps = [s["name"] for s in config["steps"] if s["operation"] == profile]
-        with self.engine.connect() as conn:
-            rows = _rows(conn, """SELECT step,unit_key,attempt,candidate FROM bookkeeping.work_item
-                WHERE run_id=CAST(:r AS uuid) AND step = ANY(:s) AND state='reported'
-                ORDER BY step,ordinal LIMIT :n""", r=run_id, s=steps, n=SCAN)
+        rows = storage.reported(self.engine, run_id, steps, SCAN)
         found = []
         for row in rows:
             if len(found) >= limit:
@@ -543,8 +533,7 @@ class Bookkeeping:
             conn.execute(text(finish[0]), finish[1])
 
     def resource_checkpoint(self, resource: str) -> dict | None:
-        with self.engine.connect() as conn:
-            found = _rows(conn, "SELECT * FROM bookkeeping.checkpoint WHERE resource=:p", p=resource)
+        found = storage.checkpoint(self.engine, resource)
         return found[0] if found else None
 
     def wait(self, claim: Claim, message: str):
@@ -554,8 +543,7 @@ class Bookkeeping:
     def _verify_completed(self, run_id: str, config: dict):
         # Reverify retained receipts before skipping anything. If evidence is
         # corrupt, execution blocks; it never silently repeats committed work.
-        with self.engine.connect() as conn:
-            items = _rows(conn, "SELECT * FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) AND state='verified' ORDER BY step,ordinal", r=run_id)
+        items = storage.work(self.engine, run_id, states=["verified"], ordered=True)
         try:
             run, _, manifest, _ = self._frozen(run_id)
             context = {"run": run, "config": config, "manifest": manifest}
@@ -566,35 +554,27 @@ class Bookkeeping:
             raise Blocked(str(exc)) from exc
 
     def resume(self, run_id: str) -> dict:
-        run, config, _, _ = self._frozen(run_id)
-        if run["compacted_at"]:
-            raise Blocked("Compacted runs are audit-only; start a new run")
+        import edgar_control
+        from .run_storage import record_run_resume
+        try:
+            wire = edgar_control.prepare_run_resume(canonical(storage.resume_observations(self.engine, run_id)))
+        except ValueError as error:
+            raise Blocked(str(error)) from None
+        _, config, _, _ = self._frozen(run_id)
         self._verify_completed(run_id, config)
-        self._call("SELECT bookkeeping.resume_run(CAST(:r AS uuid))", r=run_id)
+        record_run_resume(self.engine, wire)
         return self.status(run_id)
 
     def status(self, run_id: str, *, limit: int = 100) -> dict:
         if not 1 <= limit <= 1000:
             raise ValueError("status limit must be 1..1000")
-        with self.engine.connect() as conn:
-            items = _rows(conn, "SELECT step,unit_key,ordinal,state,attempt,attempts,receipt,checks,error FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) ORDER BY step,ordinal LIMIT :n", r=run_id, n=limit)
-            counts = _rows(conn, "SELECT state,count(*) AS count FROM bookkeeping.work_item WHERE run_id=CAST(:r AS uuid) GROUP BY state", r=run_id)
-            checkpoints = _rows(conn, "SELECT * FROM bookkeeping.checkpoint WHERE run_id=CAST(:r AS uuid)", r=run_id)
-            leases = _rows(conn, "SELECT * FROM bookkeeping.lease WHERE run_id=CAST(:r AS uuid) ORDER BY resource LIMIT :n", r=run_id, n=limit)
-            pending = conn.scalar(text("SELECT count(*) FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid) AND delivered_at IS NULL"), {"r": run_id})
-            deliveries = _rows(conn, "SELECT event_id,step,unit_key,attempts,error,delivered_at FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid) ORDER BY delivered_at NULLS FIRST,created_at LIMIT :n", r=run_id, n=limit)
-        return {"run": self._run(run_id), "items": items, "counts": {i["state"]: i["count"] for i in counts},
-                "checkpoints": checkpoints, "leases": leases, "pending_deliveries": pending, "deliveries": deliveries}
+        return {"run": self._run(run_id), **storage.status(self.engine, run_id, limit)}
 
     def runs(self, *, limit: int = 100, state: str | None = None) -> list[dict]:
         """Bounded discovery after a lost submission acknowledgement."""
         if not 1 <= limit <= 1000 or state not in (None, "running", "waiting", "blocked", "complete"):
             raise ValueError("Run listing requires a valid state and limit in 1..1000")
-        with self.engine.connect() as conn:
-            return _rows(conn, """SELECT run_id,state,created_at,completed_at,expected_count,summary,
-                submission->>'kind' AS kind,submission->>'name' AS name,submission->>'target' AS target
-                FROM bookkeeping.pipeline_run WHERE CAST(:s AS text) IS NULL OR state=:s
-                ORDER BY created_at DESC,run_id LIMIT :n""", s=state, n=limit)
+        return storage.runs(self.engine, limit, state=state)
 
     def verified_units(self, *, source: str, target: str, step: str, kind: str = "source") -> list[dict]:
         """Ticket 120: the verified units of `step` in the complete runs of `source`'s `target`, each
@@ -607,40 +587,50 @@ class Bookkeeping:
         The newest capture is the one whose first run started last, so a later rerun of an older
         capture never stands in for it. It is refused while any of its runs is still running or
         waiting (a blocked run is abandoned and left out), and when any of its runs is compacted."""
-        captures = """WITH runs AS (SELECT run_id, state, submission->'capture' AS capture, created_at,
-                    completed_at, compacted_at FROM bookkeeping.pipeline_run WHERE submission->>'kind'=:kind
-                      AND submission->>'name'=:source AND submission->>'target'=:target),
-                  newest AS (SELECT capture FROM runs GROUP BY capture ORDER BY min(created_at) DESC,
-                    min(run_id::text) DESC LIMIT 1)"""
-        named = {"source": source, "target": target, "kind": kind}
-        with self.engine.connect() as conn:
-            open_, compacted = conn.execute(text(captures + """
-                SELECT count(*) FILTER (WHERE state IN ('running','waiting')),
-                       count(*) FILTER (WHERE state='complete' AND compacted_at IS NOT NULL)
-                FROM runs WHERE capture IS NOT DISTINCT FROM (SELECT capture FROM newest)"""), named).one()
-            if open_:
-                raise Blocked(f"The newest capture of {source}/{target} has {open_} runs not finished; finish them first")
-            if compacted:
-                raise Blocked(f"The newest capture of {source}/{target} has {compacted} compacted runs; "
-                              "run that target again over a capture")
-            found = _rows(conn, captures + """
-                SELECT DISTINCT ON (w.receipt->>'sha256') CAST(w.run_id AS text) AS run, w.step,
-                    w.unit_key AS key, w.receipt->>'sha256' AS sha256, r.completed_at
-                FROM bookkeeping.work_item w JOIN runs r ON r.run_id=w.run_id
-                WHERE r.state='complete' AND r.capture IS NOT DISTINCT FROM (SELECT capture FROM newest)
-                  AND w.step=:step AND w.state='verified'
-                ORDER BY w.receipt->>'sha256', r.completed_at, w.run_id, w.unit_key""", step=step, **named)
-        return [{k: unit[k] for k in ("run", "step", "key", "sha256")}
-                for unit in sorted(found, key=lambda unit: (unit["completed_at"], unit["run"], unit["key"]))]
+        import edgar_control
+
+        def observed_time(value):
+            if not isinstance(value, datetime):
+                raise Blocked("Stored run metadata has an invalid time")
+            # Selected-store timestamp columns are UTC; PostgreSQL and SQL
+            # Server retain their offset, while MySQL DATETIME carries none.
+            return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+
+        with storage.consistent_read(self.engine) as conn:
+            observations = storage.capture_runs(self.engine, kind=kind, source=source, target=target, connection=conn)
+            for row in observations:
+                row["created_at"] = observed_time(row["created_at"])
+                if row["compacted_at"] is not None:
+                    row["compacted_at"] = observed_time(row["compacted_at"])
+            try:
+                selected = json.loads(edgar_control.select_latest_capture(canonical(observations)))
+                found = storage.verified_units(self.engine, selected, step, connection=conn)
+                for row in found:
+                    row["completed_at"] = observed_time(row["completed_at"])
+                return json.loads(edgar_control.select_verified_units(canonical(found)))
+            except ValueError as error:
+                raise Blocked(str(error)) from None
 
     def finalize(self, run_id: str) -> dict:
+        import edgar_control
+        from .run_storage import StaleObservation, record_run_checks
+
         run, config, _, _ = self._frozen(run_id)
-        if run["compacted_at"]:
-            return self.status(run_id)
-        self._verify_completed(run_id, config)
-        checks = self.check(run_id)
-        self._call("SELECT bookkeeping.record_checks(CAST(:r AS uuid),CAST(:c AS jsonb))", r=run_id, c=canonical(checks))
-        return self.status(run_id)
+        for _ in range(config["retry"]["attempts"]):
+            if run["compacted_at"]:
+                return self.status(run_id)
+            self._verify_completed(run_id, config)
+            observations = storage.completion_observations(self.engine, run_id)
+            checks = self._checks(run, config, observations)
+            wire = edgar_control.prepare_run_completion(canonical({
+                **observations, "expected": run["expected_count"], "run_id": run_id, "checks": checks,
+            }))
+            try:
+                record_run_checks(self.engine, wire)
+                return self.status(run_id)
+            except StaleObservation:
+                run, config, _, _ = self._frozen(run_id)
+        raise Blocked("Control changed during completion; retry finalization")
 
     def journal_event(self, event: dict) -> dict:
         """Control's one lifecycle event. Domain events (an acquisition's
@@ -673,8 +663,7 @@ class Bookkeeping:
         if not 1 <= limit <= 1000:
             raise ValueError("delivery limit must be 1..1000")
         self._frozen(run_id)
-        with self.engine.connect() as conn:
-            events = _rows(conn, "SELECT * FROM bookkeeping.journal_outbox WHERE run_id=CAST(:r AS uuid) AND delivered_at IS NULL ORDER BY created_at,event_id LIMIT :n", r=run_id, n=limit)
+        events = storage.pending_events(self.engine, run_id, limit)
         delivered = 0
         for event in events:
             try:

@@ -1,0 +1,201 @@
+# Shared engine vocabulary and legacy compatibility, delivered with the build.
+# Changing this contract requires qualification; it does not approve or activate rules.
+version: engine-catalog-v1
+kinds:
+- branch
+- company
+- fund_structure
+- government
+- international_organization
+- person
+- security
+- venue
+profiles:
+  adviser:
+  - company
+  - person
+  audit_firm:
+  - company
+  fund:
+  - company
+  - fund_structure
+accepted_bars:
+  company:
+    classification:
+      min_precision: 0.95
+      one_sided_confidence: 0.95
+    name_binding:
+      min_precision: 0.95
+      one_sided_confidence: 0.95
+  person:
+    classification:
+      min_precision: 0.99
+      one_sided_confidence: 0.975
+legacy_relationships:
+  AUDITED_BY:
+    from:
+    - company
+    to:
+    - company
+    to_profile: audit_firm
+  ISSUED_BY:
+    from:
+    - security
+    to:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+  EMPLOYED_BY:
+    from:
+    - person
+    to:
+    - company
+    capacities:
+    - director
+    - employee
+    - officer
+  CONTROLS:
+    from:
+    - person
+    to:
+    - company
+    capacities:
+    - control_person
+    - owner
+    - ten_percent_owner
+  HOLDS:
+    from:
+    - company
+    - fund_structure
+    - person
+    to:
+    - security
+  MANAGES_FUND:
+    from:
+    - company
+    - person
+    to:
+    - company
+    - fund_structure
+    from_profile: adviser
+    to_profile: fund
+  OWNERSHIP_PARENT:
+    from:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+    to:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+    hierarchy: true
+    cycles: review
+  ACCOUNTING_PARENT:
+    from:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+    to:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+    ultimate_parent: accounting-chain-v1
+  IS_DIRECTLY_CONSOLIDATED_BY:
+    from:
+    - company
+    to:
+    - company
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+    ultimate_parent: accounting-chain-v1
+  IS_ULTIMATELY_CONSOLIDATED_BY:
+    from:
+    - company
+    to:
+    - company
+    hierarchy: true
+    cycles: invalid
+    one_parent: true
+  REPORTED_ULTIMATE_PARENT:
+    from:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+    to:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+  IS_INTERNATIONAL_BRANCH_OF:
+    from:
+    - branch
+    to:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+    hierarchy: true
+    cycles: invalid
+  VENUE_OPERATOR:
+    from:
+    - venue
+    to:
+    - company
+    - fund_structure
+    - government
+    - international_organization
+  VENUE_SEGMENT_OF:
+    from:
+    - venue
+    to:
+    - venue
+    hierarchy: true
+    cycles: invalid
+  IS_SUBFUND_OF:
+    from:
+    - company
+    - fund_structure
+    to:
+    - company
+    - fund_structure
+    from_profile: fund
+    to_profile: fund
+    hierarchy: true
+    cycles: invalid
+  IS_FEEDER_TO:
+    from:
+    - company
+    - fund_structure
+    to:
+    - company
+    - fund_structure
+    from_profile: fund
+    to_profile: fund
+    hierarchy: true
+    cycles: invalid
+  IS_FUND-MANAGED_BY:
+    from:
+    - company
+    - fund_structure
+    to:
+    - company
+    - person
+    from_profile: fund
+legacy_ultimate_type: CALCULATED_ULTIMATE_PARENT
+
+reference_tables:
+  edgar-iso-v1:
+    pin: sec-place-codes
+    target_set: iso-3166
+    match_type: exact
+legacy_jurisdiction_table: edgar-iso-v1

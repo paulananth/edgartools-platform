@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 
 
 class Blocked(ValueError):
@@ -12,17 +10,26 @@ class Blocked(ValueError):
 
 
 def canonical(value) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    import edgar_control
+    encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    try:
+        return edgar_control.canonicalize(encoded)
+    except UnicodeEncodeError:
+        # Opaque processing metadata may contain lone surrogates until unused
+        # columns are dropped. Preserve Python code points for native equality;
+        # durable UTF-8 hashes and publication retain their existing refusal.
+        return edgar_control.canonicalize_opaque(value)
 
 
 def digest(value) -> str:
-    return hashlib.sha256(canonical(value).encode()).hexdigest()
+    import edgar_control
+    return edgar_control.digest_json(json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False))
 
 
 def reference(value: dict) -> dict:
-    if (not isinstance(value, dict) or set(value) != {"uri", "sha256"}
-            or not isinstance(value["uri"], str) or not value["uri"]
-            or not isinstance(value["sha256"], str)
-            or not re.fullmatch(r"[0-9a-f]{64}", value["sha256"])):
-        raise Blocked("A reference requires an exact URI and lowercase SHA-256")
+    import edgar_control
+    try:
+        edgar_control.check_reference(json.dumps(value, ensure_ascii=False, allow_nan=False))
+    except ValueError as error:
+        raise Blocked(str(error)) from None
     return value

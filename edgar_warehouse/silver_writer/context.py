@@ -10,11 +10,9 @@ from __future__ import annotations
 import argparse
 import shlex
 
-from sqlalchemy import text
-
 from edgar_warehouse.context import PROG, ContextError, fit, page_offset
 
-from .spec import quote
+from .storage import registered
 
 VIEW = "silver.table_context WHERE table_name = '<table>'"
 
@@ -37,25 +35,30 @@ class TableContext:
 
     def table(self, name: str | None) -> dict | list[dict]:
         """One table's spec as an agent reads it, or every table in a line each."""
-        with self.engine.connect() as conn:
-            if name is None:
-                return [dict(r) for r in conn.execute(text(
-                    "SELECT table_name, grain, load_mode FROM silver.table_context ORDER BY table_name")).mappings()]
-            row = conn.execute(text("SELECT * FROM silver.table_context WHERE table_name = :t"),
-                               {"t": name}).mappings().first()
+        rows = registered(self.engine, name)
+        if name is None:
+            return [{"table_name": row["table_name"], "grain": row["spec"]["grain"],
+                     "load_mode": row["spec"]["load_mode"]} for row in rows]
+        row = rows[0] if rows else None
         if row is None:
             raise ContextError(f"No silver table {name!r}.", f"{PROG} silver")
+        spec = row["spec"]
+        links = [{key: link.get(key) for key in
+                  ("columns", "kind", "source_code", "source_key", "mdm_id_column", "inclusion")}
+                 for link in spec["links"] or []]
+        quote = self.engine.dialect.identifier_preparer.quote_identifier
+        target = "silver." + quote(row["table_name"]) if self.engine.dialect.name == "postgresql" else quote(row["table_name"])
         return {
             "name": row["table_name"],
             "kind": "silver table",
-            "key": row["key"],
-            "definition": row["definition"],
-            "grain": row["grain"],
-            "links": row["links"],
-            "time": row["time_columns"],
-            "load_mode": row["load_mode"],
-            "trust": {"source": "silver", "spec_ref": row["spec_ref"], "registered_at": row["registered_at"].isoformat()},
+            "key": spec["key"],
+            "definition": spec.get("definition") or spec["why"],
+            "grain": spec["grain"],
+            "links": links,
+            "time": spec["time"],
+            "load_mode": spec["load_mode"],
+            "trust": {"source": "silver", "spec_ref": f"silver.table_spec/{name}@{row['sha256']}", "registered_at": row["registered_at"].isoformat()},
             "truncated": False,
             "next_page": None,
-            "next_step": f"SELECT * FROM silver.{quote(row['table_name'])} LIMIT 10",
+            "next_step": f"SELECT * FROM {target} LIMIT 10",
         }

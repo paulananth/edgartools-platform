@@ -26,9 +26,9 @@ from .store import Conflict
 
 # Every kind a rule may decide, plus the two verdicts that decide no kind.
 # Derived rather than restated: this list was written out by hand and was the
-# third copy of the kind set, after evidence.KINDS and the CHECK constraint on
-# mdm.master_entity. The SQL copy cannot be derived away and is held equal by
-# tests/integration/test_clean_per_kind_views.py instead.
+# third copy of the kind set. Evidence and destination vocabulary now come
+# from the same mastering configuration; the destination enforces its installed
+# selection through its owner-managed catalog.
 CLASSIFICATION_VERDICTS = KINDS | {"entity_undetermined", "deferred"}
 
 
@@ -127,12 +127,17 @@ def fired(rule: dict, record: dict, doc: dict) -> tuple[str, str]:
     (`policy-language.md` §6), so it explains itself with no lookup elsewhere.
     """
     check_rule(rule)
-    for step in rule["steps"]:
-        if step.get("otherwise") or all(
-            holds(test, record, doc) for test in step["when"]
-        ):
-            return step["verdict"], str(step["step"])
-    raise AssertionError("check_rule guarantees a catch-all step")
+    from edgar_warehouse.rules.source_engine import apply_record_rules
+    from .identifier_types import TYPES
+
+    try:
+        verdict, step = apply_record_rules({
+            "action": "classify_record", "rule": rule, "record": record, "doc": doc,
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+        })
+    except ValueError as error:
+        raise Conflict(str(error)) from None
+    return verdict, step
 
 
 def probable_kind(rule: dict, step: str, verdict: str) -> str | None:

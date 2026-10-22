@@ -32,6 +32,15 @@ ROOT = Path(os.environ.get("EDGAR_RULES_ROOT")
             or (BUNDLED if BUNDLED.is_dir() else Path(__file__).resolve().parents[2] / "rules"))
 
 
+def context_subjects(root: Path | None = None) -> frozenset[str]:
+    """Configured context namespace, independent of any store implementation."""
+    body = load((root or ROOT) / "context" / "definitions.yaml")
+    names = body.get("kinds") if isinstance(body, dict) else None
+    if (not isinstance(names, dict) or not all(isinstance(n, str) and n.strip() == n and n for n in names)):
+        raise RulesFileError("Context definitions name the configured kinds")
+    return frozenset({*names, "relationship"})
+
+
 def writable(root: Path) -> Path:
     """`root`, unless it is the bundled copy, which a reinstall replaces."""
     if Path(root).resolve().is_relative_to(BUNDLE_DATA):

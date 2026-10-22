@@ -9,13 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
+from edgar_warehouse.database_connections import storage_adapter
 
 
 class Conflict(ValueError):
@@ -38,15 +38,6 @@ def digest(value: Any) -> str:
 
 def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings()]
-
-
-def storage_adapter():
-    """Load the canonical skill-owned adapter in a checkout or installed bundle."""
-    from edgar_warehouse.rules.files import BUNDLE_DATA
-
-    bundled_adapter = BUNDLE_DATA / "skills" / "mdm-engineering" / "scripts" / "database_adapter.py"
-    package = "edgar_warehouse.bundle_data.skills" if bundled_adapter.is_file() else "skills"
-    return import_module(f"{package}.mdm-engineering.scripts.database_adapter")
 
 
 # The schema's first file, then each later file once, in order, by checksum.
@@ -75,6 +66,8 @@ MIGRATIONS: tuple[str, ...] = (
     "021_identifier_index_no_pending_list.sql",
     "022_detail_version.sql",
     "023_stage_details.sql",
+    "024_configured_kinds.sql",
+    "025_kind_descriptions.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond
@@ -121,6 +114,9 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise ValueError("MDM requires PostgreSQL 16")
         conn.execute(text("SELECT pg_advisory_xact_lock(730233)"))
+        # Saves take this lock before touching master tables. Take it before
+        # migration DDL too, so table locks cannot invert that order.
+        conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
         if conn.scalar(text("SELECT to_regnamespace('mdm_v2')")):
             raise Conflict(
                 "This database holds the retired mdm_v2 schema. Recreate the "
@@ -168,6 +164,9 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
                 )
             elif saved != extra_hash:
                 raise Conflict("Installed migration checksum differs")
+        if "024_configured_kinds.sql" in MIGRATIONS:
+            from .schema import configure_kinds
+            configure_kinds(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(
                 text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"),

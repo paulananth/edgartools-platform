@@ -1,6 +1,6 @@
 """The data skill installed whole, from a git ref, with no checkout (mastering to-do 21).
 
-The four wheels (the bundle, Bookkeeping, the Change Journal and the engine)
+The five wheels (the bundle, Bookkeeping, the Change Journal and the native source/control libraries)
 are installed from this repository's committed HEAD by URL with the
 `uv tool install` command the data-platform skill's Setup writes, the way an
 agent with no checkout installs them. Every command
@@ -40,6 +40,7 @@ WHEELS = {
     "edgartools-bookkeeping": "packages/bookkeeping",
     "edgartools-change-journal": "packages/change-journal",
     "source-contract": "crates/source-contract",
+    "edgartools-control-core": "crates/control-contract",
 }
 DOMAIN = ("edgartools", "spacy", "pandas", "streamlit", "snowflake-connector-python")
 
@@ -214,8 +215,12 @@ print(json.dumps({{"shipped": shipped, "modules": modules}}))
     twice = [path for path, count in Counter(found["shipped"]).items() if count > 1]
     assert twice == []
     assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.clean.merge",
-            "edgar_warehouse.rules.cli"} <= set(found["modules"])
+            "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
+            "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
+            "edgar_warehouse.mdm.clean.schema"} <= set(found["modules"])
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
+    assert any(p.endswith("mdm/migrations/024_configured_kinds.sql") for p in found["shipped"])
+    assert any(p.endswith("mdm/migrations/025_kind_descriptions.sql") for p in found["shipped"])
 
 
 def _stores(databases):

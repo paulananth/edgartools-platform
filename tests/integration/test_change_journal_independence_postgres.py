@@ -20,12 +20,14 @@ def journal_python(tmp_path_factory):
     root = tmp_path_factory.mktemp("independent-journal-install")
     subprocess.run(["uv", "build", "--wheel", str(ROOT / "packages/change-journal"),
                     "--out-dir", str(root / "dist")], capture_output=True, text=True, check=True)
+    subprocess.run(["uv", "build", "--wheel", str(ROOT / "crates/control-contract"),
+                    "--out-dir", str(root / "dist")], capture_output=True, text=True, check=True)
     wheels = list((root / "dist").glob("*.whl"))
-    assert len(wheels) == 1
+    assert len(wheels) == 2
     subprocess.run(["uv", "venv", "--python", sys.executable, str(root / "venv")],
                    capture_output=True, text=True, check=True)
     python = root / "venv" / "bin" / "python"
-    subprocess.run(["uv", "pip", "install", "--python", str(python), str(wheels[0])],
+    subprocess.run(["uv", "pip", "install", "--python", str(python), *map(str,wheels)],
                    capture_output=True, text=True, check=True)
     result = subprocess.run([str(python), "-I", "-c", '''
 import importlib.metadata
@@ -36,8 +38,13 @@ assert {str(path) for path in files if str(path).startswith("edgar_warehouse/") 
     "edgar_warehouse/__init__.py", "edgar_warehouse/control_contract.py",
     "edgar_warehouse/change_journal/__init__.py", "edgar_warehouse/change_journal/cli.py",
     "edgar_warehouse/change_journal/database.py", "edgar_warehouse/change_journal/store.py",
+    "edgar_warehouse/change_journal/storage.py", "edgar_warehouse/change_journal/storage_sql.py",
+    "edgar_warehouse/change_journal/storage_migrations.py",
     "edgar_warehouse/change_journal/migrations/001_event.sql",
     "edgar_warehouse/change_journal/migrations/002_found.sql",
+    "edgar_warehouse/change_journal/migrations/native/postgresql-v1.sql",
+    "edgar_warehouse/change_journal/migrations/native/mysql-v1.sql",
+    "edgar_warehouse/change_journal/migrations/native/mssql-v1.sql",
 }
 print("minimal wheel installed")
 '''], capture_output=True, text=True, check=True)
@@ -61,7 +68,7 @@ from edgar_warehouse.change_journal.cli import main
 raise SystemExit(main(["init", "--runtime-role", "ledger_runtime"]))
 ''', environment=environment, python=journal_python, installed=True)
     assert initialized.returncode == 0, initialized.stderr
-    assert set(json.loads(initialized.stdout)) == {"001_event.sql", "002_found.sql"}
+    assert set(json.loads(initialized.stdout)) == {"001_event.sql", "002_found.sql", "003_native_storage"}
     key = uuid4().hex
     runtime = run_isolated(root, '''
 import json
@@ -123,4 +130,4 @@ raise SystemExit(main(sys.argv[1:]))
         elif arguments[0] == "verify":
             assert body == receipt
         elif arguments[0] in {"init", "migrate"}:
-            assert set(body) == {"001_event.sql", "002_found.sql"}
+            assert set(body) == {"001_event.sql", "002_found.sql", "003_native_storage"}

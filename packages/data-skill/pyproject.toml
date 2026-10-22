@@ -11,12 +11,13 @@ requires-python = ">=3.12"
 # wheels and are dependencies; no file belongs to two wheels
 # (tests/engine/test_data_skill_bundle_postgres.py checks it). The engine is
 # built from crates/source-contract, which needs Rust (cargo) and maturin.
-dependencies = [
+dependencies = ["edgartools-control-core",
     "edgartools-bookkeeping",
     "edgartools-change-journal",
     "source-contract",
     "SQLAlchemy>=2.0.0,<2.1",
     "psycopg2-binary>=2.9.9",
+    "PyMySQL[rsa]>=1.1,<2",
     "PyYAML>=6.0.2",
     "openpyxl>=3.1",
     "lxml>=5.3",
@@ -43,6 +44,8 @@ bypass-selection = true
 "../../edgar_warehouse/cli.py" = "edgar_warehouse/cli.py"
 "../../edgar_warehouse/bundle.py" = "edgar_warehouse/bundle.py"
 "../../edgar_warehouse/context.py" = "edgar_warehouse/context.py"
+"../../edgar_warehouse/database_connections.py" = "edgar_warehouse/database_connections.py"
+"../../edgar_warehouse/database_types.py" = "edgar_warehouse/database_types.py"
 "../../edgar_warehouse/snowflake_settings.py" = "edgar_warehouse/snowflake_settings.py"
 "../../edgar_warehouse/application" = "edgar_warehouse/application"
 "../../edgar_warehouse/mdm" = "edgar_warehouse/mdm"

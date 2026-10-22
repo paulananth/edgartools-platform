@@ -7,21 +7,10 @@ from typing import Any
 
 from .store import Conflict, digest
 
-KINDS = {
-    "company",
-    "person",
-    "security",
-    "fund_structure",
-    "branch",
-    "government",
-    "international_organization",
-    "venue",
-}
-PROFILE_KINDS = {
-    "adviser": {"company", "person"},
-    "audit_firm": {"company"},
-    "fund": {"company", "fund_structure"},
-}
+from .catalog import CATALOG
+
+KINDS = frozenset(CATALOG["kinds"])
+PROFILE_KINDS = {role: frozenset(kinds) for role, kinds in CATALOG["profiles"].items()}
 
 
 def instant(value: str) -> datetime:

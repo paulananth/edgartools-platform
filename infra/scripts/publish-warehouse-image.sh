@@ -111,9 +111,9 @@ deps_dockerfile = pathlib.Path(sys.argv[2])
 hasher = hashlib.sha256()
 # The deps images build the source engine's wheel from crates/source-contract
 # (mastering to-do 15), so a change there is a new deps image too.
-engine = root / "crates" / "source-contract"
+engine_roots = [root / "crates" / name for name in ("source-contract", "control-contract")]
 engine_files = sorted(
-    p for p in engine.rglob("*")
+    p for engine in engine_roots for p in engine.rglob("*")
     if p.is_file() and "target" not in p.relative_to(engine).parts
     and not p.relative_to(engine).parts[0] == "tests"
 )

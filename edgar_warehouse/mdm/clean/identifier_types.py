@@ -188,8 +188,12 @@ class IdentifierType:
         return f"invalid_{self.name}_checksum"
 
     def normalize(self, item) -> str:
-        value = str("" if item is None else item).strip()
-        return value.upper() if self.upper else value
+        from edgar_warehouse.rules.source_engine import apply_record_rules
+
+        return apply_record_rules({
+            "action": "prepare_matching_value", "name": self.normalizer_name,
+            "value": item, "normalizers": {self.normalizer_name: self.upper},
+        })
 
     def refusal(self, item) -> tuple[str, str | None]:
         """The value as kept, and the reason it is refused (None when it is not)."""

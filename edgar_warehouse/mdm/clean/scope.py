@@ -85,7 +85,7 @@ class Scope:
     identities: list[dict] = field(default_factory=list)
     subjects: set[str] = field(default_factory=set)  # the affected masters' records
     masters: set[str] = field(default_factory=set)  # the affected masters
-    replayed: dict[str, str] = field(default_factory=dict)  # record -> master, replayed
+    replayed: dict[str, str | None] = field(default_factory=dict)  # record -> master, or explicitly unbound
     bound: dict[str, str] = field(default_factory=dict)  # record -> master, as stored
     stored: dict[str, dict] = field(default_factory=dict)  # master -> body, as stored
     starts: set[str] = field(default_factory=set)  # masters whose outgoing links are whole

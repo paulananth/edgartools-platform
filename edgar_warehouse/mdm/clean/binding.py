@@ -21,50 +21,15 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import timedelta
-from typing import NamedTuple
 from uuid import uuid4
 
 from sqlalchemy import text
 
 from . import correction
-from .activation import activated, binding_namespaces, declared_namespaces
-from .evidence import decision, instant
-from .classification import holds
-from .primitives import normalizer, primitive_family
+from .activation import declared_namespaces
+from .evidence import instant
+from .primitives import normalizer
 from .store import rows
-
-
-class _Match(NamedTuple):
-    """One identifier of a record that points at a stored or new Company."""
-
-    rule: dict
-    namespace: str
-    value: str  # normalized, for comparing
-    raw: str  # as the store holds it, for the lookup
-
-
-def publish_floor(conn, kind: str, as_of: str) -> str:
-    """When a Company a rule creates now is published: never before another.
-
-    The earliest-published Company survives a merge (`identity.replay`), and a
-    merge joins Companies of one kind. So a rule's new Company is published at
-    the batch's as_of, or one microsecond after the newest identity of its
-    kind already stored, whichever is later (037 steps `valid_from` the same
-    way). A batch delivered late then still creates its Company, and
-    "earliest published" means earliest committed (ticket 04).
-    """
-    newest = conn.scalar(
-        text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"),
-        {"kind": kind},
-    )
-    if newest is None or instant(as_of) > newest:
-        return as_of
-    return (
-        (newest + timedelta(microseconds=1))
-        .astimezone(instant(as_of).tzinfo)
-        .isoformat()
-    )
 
 
 def nothing() -> dict:
@@ -74,15 +39,6 @@ def nothing() -> dict:
     stored Company rests on, so the Merge Stage can re-check it under its lock.
     """
     return {"identities": [], "decisions": [], "reviews": [], "mints": [], "joins": []}
-
-
-def active_rules(policy: dict) -> list[tuple[str, dict]]:
-    return [
-        (kind, rule)
-        for kind, block in sorted((policy.get("kinds") or {}).items())
-        for rule in block.get("rules") or []
-        if rule.get("family") == "binding" and activated(policy, kind, rule, "bind")
-    ]
 
 
 def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] = frozenset()) -> dict:
@@ -209,13 +165,6 @@ def _issuers(policy: dict, namespace: str) -> list[str]:
     return sorted({s for contract, _ in _contracts(policy, namespace) for s in contract["sources"]})
 
 
-def _record_tests_hold(rule: dict, record: dict) -> bool:
-    """A binding rule's record tests (ticket 97), read on the record alone: no
-    pinned document is in hand here, so a test that reads one sees none."""
-    return all(holds(test, record, {}) for test in rule["when"]
-               if primitive_family(test["primitive"]) == "classification")
-
-
 def _normal(policy: dict, namespace: str, value: str) -> str:
     declared = _contracts(policy, namespace)
     if not declared:
@@ -237,165 +186,35 @@ def propose(
 ) -> dict:
     """The bindings and new Companies the active identifier rules propose.
     `released`: the records this batch unbinds (ticket 13)."""
-    rules = active_rules(policy)
-    if not rules or not assertions:
-        return nothing()
-    # The latest version per subject speaks for it within one batch.
-    latest: dict[str, dict] = {}
-    for a in sorted(
-        assertions, key=lambda a: (a["revision"], a.get("mapping_version", 1))
-    ):
-        latest[a["subject"]] = a
-    subjects = sorted(latest)
-    taken = {d["subject"] for d in decisions if d["operation"] == "bind"}
-    # A record whose bind this batch revokes is unbound again (ticket 13).
-    taken.update(set(bound(conn, subjects)) - released)
-    refused = correction.refused(conn, set(subjects), decisions)
-    # (subject, rule, namespace, normalized value) for every rule that applies.
-    applicable = []
-    wanted: dict[str, set[str]] = defaultdict(set)
-    for subject in subjects:
-        if subject in taken:
-            continue
-        record = latest[subject]
-        for kind, rule in rules:
-            if rule["applies_to_verdict"] != record["kind"] or rule.get(
-                "source"
-            ) not in (None, record["source_code"]) or not _record_tests_hold(rule, record):
-                continue
-            (namespace,) = binding_namespaces(rule)
-            raw = (record.get("identifiers") or {}).get(namespace)
-            if raw is None:
-                continue
-            wanted[namespace].add(raw)
-            applicable.append(
-                (subject, rule, namespace, _normal(policy, namespace, raw), raw)
-            )
-    found = holders(conn, policy, wanted, released)
-    # What the store says each value's holders are, before this batch's own
-    # bindings join them: the only holdings the Merge Stage can re-check.
-    stored = {key: set(held) for key, held in found.items()}
-    floors: dict[str, str] = {}
-    suspended = in_review(conn, {e for held in found.values() for e in held})
-    # A Company this batch's own caller binds counts as a holder too, but only
-    # of the identifiers the bound record's own source issues (Q14, as the
-    # stored lookup above: an SEC record carrying an LEI holds no LEI).
-    caller = {
-        d["subject"]: d["entity_id"] for d in decisions if d["operation"] == "bind"
-    }
-    kinds = {i["entity_id"]: i["kind"] for i in identities}
-    issuers = {namespace: _issuers(policy, namespace)
-               for namespace in declared_namespaces(policy.get("kinds") or {})}
-    for a in assertions:
-        if a["subject"] in caller:
-            for namespace, raw in (a.get("identifiers") or {}).items():
-                if a["source_code"] not in issuers.get(namespace, ()):
-                    continue
-                entity = caller[a["subject"]]
-                key = (namespace, _normal(policy, namespace, raw))
-                found[key][entity] = kinds.get(entity, a["kind"])
+    from edgar_warehouse.rules.source_engine import plan_record_matches, link_matching_records
+    from .identifier_types import TYPES
+    from .store import Conflict
 
-    by_subject = defaultdict(list)
-    for item in applicable:
-        by_subject[item[0]].append(item)
-    result = nothing()
-    minted: dict[tuple[str, str], str] = {}
-
-    def may_mint(entry):
-        return any(i[1]["on_no_match"] == "mint" for i in entry[1])
-
-    # Records that may create a Company go first, so a record in the same
-    # batch that may only join finds the Company its issuer's record just
-    # created: one Company per identifier within a batch (ticket 03,
-    # decision 3), and still only through the issuer's own record (Q14).
-    for subject, items in sorted(
-        by_subject.items(), key=lambda entry: (not may_mint(entry), entry[0])
-    ):
-        record = latest[subject]
-        matches: dict[str, list[_Match]] = defaultdict(list)
-        problem = None
-        for _, rule, namespace, value, raw in items:
-            held = found.get((namespace, value), {})
-            if len(held) > 1:
-                # One value, several Companies: the forward claim is violated.
-                problem = ("ambiguous_identifier", namespace)
-                break
-            for entity, kind in held.items():
-                if kind != record["kind"]:
-                    problem = ("incompatible_identifier_kind", namespace)
-                    break
-                if entity in suspended:
-                    problem = ("suspended_identifier", namespace)
-                    break
-                matches[entity].append(_Match(rule, namespace, value, raw))
-            if problem:
-                break
-        if problem is None and len(matches) > 1:
-            problem = (
-                "conflicting_identifiers",
-                ",".join(
-                    sorted(found_by[-1].namespace for found_by in matches.values())
-                ),
-            )
-        if problem:
-            result["reviews"].append(
-                {
-                    "reason": problem[0],
-                    "namespace": problem[1],
-                    "subject": subject,
-                    "assertion_id": record["assertion_id"],
-                }
-            )
-            continue
-        if matches:
-            ((entity, found_by),) = matches.items()
-            rule, namespace = found_by[-1].rule, found_by[-1].namespace
-            # Every identifier that pointed here is re-checked under the lock.
-            result["joins"].extend(
-                {"entity_id": entity, "namespace": m.namespace, "raw": m.raw}
-                for m in found_by
-                if entity in stored.get((m.namespace, m.value), ())
-            )
-        else:
-            minting = [i for i in items if i[1]["on_no_match"] == "mint"]
-            if not minting:
-                continue  # `wait`: the record stays in the Stage, unbound
-            _, rule, namespace, value, raw = minting[0]
-            key = (namespace, value)
-            if key not in minted:
-                minted[key] = str(uuid4())
-                if record["kind"] not in floors:  # one read per kind per batch
-                    floors[record["kind"]] = publish_floor(conn, record["kind"], as_of)
-                result["identities"].append(
-                    {
-                        "entity_id": minted[key],
-                        "kind": record["kind"],
-                        "published_at": floors[record["kind"]],
-                    }
-                )
-                # The raw form is what the store holds and what the lookup
-                # queries; the normalized form is only for comparing.
-                result["mints"].append(
-                    {"entity_id": minted[key], "namespace": namespace, "raw": raw}
-                )
-                found[key][minted[key]] = record["kind"]
-            entity = minted[key]
-        if (subject, rule["rule_id"], rule["version"]) in refused:
-            continue  # a correction revoked this record's link under this version
-        result["decisions"].append(
-            decision(
-                "bind",
-                actor=f"rule:{rule['rule_id']}@{rule['version']}",
-                reason=f"identifier_match {namespace}",
-                at=as_of,
-                subject=subject,
-                entity_id=entity,
-                evidence=[record["assertion_id"]],
-                rule_id=rule["rule_id"],
-                rule_version=rule["version"],
-            )
-        )
-    return result
+    subjects = sorted({record["subject"] for record in assertions})
+    try:
+        plan = plan_record_matches({
+            "policy": policy, "assertions": assertions, "decisions": decisions,
+            "identities": identities, "bound": list(bound(conn, subjects)),
+            "released": sorted(released),
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+        })
+        if not plan["applicable"]:
+            return nothing()
+        found = holders(conn, policy, {name: set(values) for name, values in plan["wanted"].items()}, released)
+        suspended = in_review(conn, {entity for held in found.values() for entity in held})
+        newest = {}
+        for kind in plan["kinds"]:
+            at = conn.scalar(text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"), {"kind": kind})
+            newest[kind] = str(at) if at is not None else None
+        return link_matching_records({
+            "plan": plan,
+            "found": [{"namespace": name, "value": value, "records": held} for (name, value), held in found.items()],
+            "suspended": sorted(suspended), "newest": newest,
+            "new_ids": [str(uuid4()) for _ in plan["applicable"]],
+            "refused": sorted(correction.refused(conn, set(subjects), decisions)), "as_of": as_of,
+        })
+    except ValueError as error:
+        raise Conflict(str(error)) from None
 
 
 def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = frozenset()) -> bool:

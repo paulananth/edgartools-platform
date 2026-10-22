@@ -103,7 +103,9 @@ jobs:
       - uses: astral-sh/setup-uv@v4
 
       - name: Run Rust acceptance tests
-        run: cargo test --locked --manifest-path crates/source-contract/Cargo.toml
+        run: |
+          cargo test --locked --manifest-path crates/source-contract/Cargo.toml
+          cargo test --locked --manifest-path crates/control-contract/Cargo.toml
 
       - name: Install dependencies with the engine
         run: uv sync --frozen --extra mdm --extra engine
@@ -153,6 +155,18 @@ jobs:
           uv pip install 'PyMySQL[rsa]>=1.1,<2' 'pymssql>=2.3,<3'
       - name: Qualify the selected engine on a real disposable server
         run: uv run --no-sync pytest tests/storage_adapters/ -q --tb=short
+      - name: Qualify reference storage through its normal caller
+        if: matrix.engine != 'mssql'
+        run: uv run --no-sync pytest tests/reference_storage/ -q --tb=short
+      - name: Qualify MySQL reference migration recovery
+        if: matrix.engine == 'mysql'
+        run: uv run --no-sync pytest tests/reference_mysql/ -q --tb=short
+      - name: Qualify Silver through its normal caller
+        if: matrix.engine != 'mssql'
+        run: uv run --no-sync pytest tests/silver_storage/ -q --tb=short
+      - name: Qualify MySQL Silver migration recovery
+        if: matrix.engine == 'mysql'
+        run: uv run --no-sync pytest tests/silver_mysql/ -q --tb=short
       - name: Stop this job's disposable test servers
         if: always()
         run: |

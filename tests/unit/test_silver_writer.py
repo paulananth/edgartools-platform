@@ -11,7 +11,7 @@ import pytest
 
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import rows, spec as specs, writer
-from edgar_warehouse.silver_writer.sink import _copy_text, _without_values
+from edgar_warehouse.silver_writer.tables import bound_row
 
 
 def a_spec(**more):
@@ -83,25 +83,32 @@ def test_a_spec_that_could_not_land_is_refused_before_any_table(change, refused)
         specs.check(a_spec(**change))
 
 
-def test_values_are_written_for_the_database_to_cast():
-    assert _copy_text(None, "bigint", "c") == r"\N"
-    assert _copy_text(True, "boolean", "c") == "true"
-    assert _copy_text(["a", "b"], "jsonb", "c") == '["a", "b"]'
-    assert _copy_text(datetime.date(2026, 10, 8), "date", "c") == "2026-10-08"
-    assert _copy_text("a\tb\\c\nd", "text", "c") == "a\\tb\\\\c\\nd"
+def value(logical, delivered):
+    config = {"table": "invented", "columns": [{"name": "c", "type": logical, "nullable": True}]}
+    return bound_row(config, {"c": delivered})["c"]
+
+
+def test_values_are_prepared_for_typed_database_transport():
+    assert value("BIGINT", None) is None
+    assert value("BOOLEAN", "true") is True
+    assert json.loads(value("JSON", '["a", "b"]')) == ["a", "b"]
+    assert value("DATE", "2026-10-08") == datetime.date(2026, 10, 8)
+    assert value("VARCHAR", "a\tb\\c\nd") == "a\tb\\c\nd"
     with pytest.raises(Blocked, match="not a nested value"):
-        _copy_text({"a": 1}, "text", "c")
-    with pytest.raises(Blocked, match="finite"):
-        _copy_text(float("nan"), "double precision", "c")
+        value("VARCHAR", {"a": 1})
+    with pytest.raises(Blocked, match="not its column's type"):
+        value("DOUBLE", float("nan"))
     aware = datetime.datetime(2026, 10, 8, 12, tzinfo=datetime.timezone.utc)
-    assert _copy_text(aware, "timestamp with time zone", "c") == "2026-10-08T12:00:00+00:00"
-    with pytest.raises(Blocked, match="would lose it"):
-        _copy_text(aware, "timestamp", "c")
+    assert value("TIMESTAMP WITH TIME ZONE", aware) == aware
+    with pytest.raises(Blocked, match="not its column's type"):
+        value("TIMESTAMP", aware)
 
 
 def test_a_refused_value_is_never_shown():
-    message = 'invalid input syntax for type bigint: "jane.doe@example.org"'
-    assert _without_values(message) == 'invalid input syntax for type bigint: "…"'
+    delivered = "invented invalid date"
+    with pytest.raises(Blocked) as refused:
+        value("DATE", delivered)
+    assert delivered not in str(refused.value)
 
 
 def test_rows_come_from_json_lines_csv_and_parquet(tmp_path):

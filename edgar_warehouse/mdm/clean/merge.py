@@ -21,10 +21,10 @@ from sqlalchemy.exc import DBAPIError
 from . import assessment, binding, correction, limits, matching, relationships
 from . import scope as scoping
 from .activation import check_policy
-from .evidence import instant, validate_assertion, validate_deferred
+from .evidence import PROFILE_KINDS, instant, validate_assertion, validate_deferred
 from .identity import replay
 from .store import Conflict, Store, canonical, digest, rows, storage_adapter
-from .survivorship import PROFILE_IDENTITY, current_claims, select_details, select_fields
+from .survivorship import PROFILE_IDENTITY, current_claims
 
 
 def _disposition(reason: str) -> dict:
@@ -424,112 +424,18 @@ class MergeStage:
             claims = current_claims(
                 list(evidence.values()), as_of, state.retired_sources
             )
-            # The Companies a quarantined record was linked to (ticket 13).
-            flagged = {state.canonical[e] for e in state.quarantined.values()}
-            groups = defaultdict(list)
-            for subject, entity in state.bindings.items():
-                groups[state.canonical[entity]].append(subject)
-            projected = {}
-            reviews = []
-            for entity_id, identity in sorted(all_ids.items()):
-                root = state.canonical[entity_id]
-                if root != entity_id:
-                    projected[entity_id] = {
-                        "entity_id": entity_id,
-                        "kind": identity["kind"],
-                        "canonical_id": root,
-                        "status": "alias",
-                    }
-                    continue
-                members = sorted(groups[entity_id])
-                identifiers = defaultdict(set)
-                conflicts = []
-                for subject in members:
-                    claim = claims.get(subject)
-                    if not claim:
-                        continue
-                    if claim["kind"] != identity["kind"]:
-                        conflicts.append(
-                            {"reason": "kind_conflict", "subject": subject}
-                        )
-                    for namespace, value in claim["identifiers"].items():
-                        identifiers[namespace].add(value)
-                conflicts.extend(
-                    {
-                        "reason": "authoritative_identifier_conflict",
-                        "namespace": ns,
-                        "values": sorted(values),
-                    }
-                    for ns, values in identifiers.items()
-                    if len(values) > 1
-                )
-                # Only a new bind or merge *into* this Company is refused; one
-                # elsewhere in the batch commits and this Company waits in
-                # review (ticket 04).
-                if conflicts and any(
-                    _touches(d, entity_id, state.canonical) for d in decisions
-                ):
-                    raise Conflict(
-                        "Identity decision has unresolved authoritative identifier or kind conflict"
-                    )
-                fields, profiles, field_reviews = select_fields(
-                    identity["kind"],
-                    members,
-                    claims,
-                    policy,
-                    state.overrides,
-                    as_of=as_of,
-                    policy_digest=policy_digest,
-                    entity_id=entity_id,
-                )
-                body = {
-                    "entity_id": entity_id,
-                    "kind": identity["kind"],
-                    "canonical_id": entity_id,
-                    "status": "review" if conflicts else "accepted",
-                    "fields": fields,
-                    "profiles": profiles,
-                    "identifiers": {
-                        k: sorted(v) for k, v in sorted(identifiers.items())
-                    },
-                    "subjects": members,
-                }
-                # Only when a member has any: every other master's body is unchanged.
-                if details := select_details(identity["kind"], members, claims, policy):
-                    body["details"] = details
-                if entity_id in flagged:
-                    # Only when set: every other Company's body is unchanged.
-                    body["quarantined"] = True
-                if conflicts:
-                    # A prior projection depends on delivery order. Quarantine
-                    # the current component deterministically; accepted history
-                    # remains available through its retained generation.
-                    body["fields"] = {}
-                    body["profiles"] = []
-                    body.pop("details", None)
-                projected[entity_id] = body
-                reviews.extend(
-                    {**r, "entity_id": entity_id} for r in conflicts + field_reviews
-                )
-            for subject, claim in claims.items():
-                if subject not in state.bindings and not link_only(claim):
-                    reviews.append(
-                        {
-                            "reason": "binding_required",
-                            "subject": subject,
-                            "assertion_id": claim["assertion_id"],
-                        }
-                    )
-            # Entity-scoped corrections cannot silently choose a partition after
-            # reversal. Until explicitly attributed they remain review evidence.
-            for override in state.overrides:
-                if not override.get("subject"):
-                    reviews.append(
-                        {
-                            "reason": "ambiguous_override_owner",
-                            "decision_id": override["decision_id"],
-                        }
-                    )
+            from edgar_warehouse.rules.source_engine import prepare_master_records, resolve_record_bindings
+
+            try:
+                projected, reviews, groups = prepare_master_records({
+                    "identities": all_ids, "canonical": state.canonical,
+                    "bindings": state.bindings, "quarantined": state.quarantined,
+                    "claims": claims, "policy": policy, "overrides": state.overrides,
+                    "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
+                    "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
+                })
+            except ValueError as error:
+                raise Conflict(str(error)) from None
             reviews.extend(automatic["reviews"])
             # The links: those the affected masters start, and those into a
             # master whose identity changed; a far end is read as stored.
@@ -540,7 +446,10 @@ class MergeStage:
                 stored[e].get("canonical_id") or e for e in changed if e in stored
             }
             scope.masters = set(projected)
-            scope.replayed = {s: state.canonical[e] for s, e in state.bindings.items()}
+            scope.replayed = resolve_record_bindings({
+                "subjects": sorted(scope.subjects), "bindings": state.bindings,
+                "canonical": state.canonical,
+            })
             # Every affected master starts its links here, a merged-away one
             # too: its stored links are read, and retired once it is an alias.
             scoping.links(conn, scope, set(projected), changed, types, assertions)
@@ -741,18 +650,6 @@ def _occurrences(occurrences: list[dict], assertions: list[dict]) -> list[dict]:
             raise Conflict("Invalid bronze occurrence")
         seen.add(o["assertion_id"])
     return sorted(occurrences, key=lambda o: o["assertion_id"])
-
-
-def _touches(decision: dict, entity_id: str, canonical: dict[str, str]) -> bool:
-    """Whether a bind or merge lands in the Company whose root is `entity_id`."""
-    if decision["operation"] == "bind":
-        return canonical.get(str(decision["entity_id"])) == entity_id
-    if decision["operation"] == "merge":
-        return entity_id in {
-            canonical.get(str(decision["left"])),
-            canonical.get(str(decision["right"])),
-        }
-    return False
 
 
 def _identity_work(decisions: list[dict] | None, automatic: dict | None) -> bool:

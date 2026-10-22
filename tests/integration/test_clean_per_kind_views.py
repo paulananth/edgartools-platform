@@ -10,10 +10,9 @@ the data to keep in step; 034 gave the source-side pair the Stage name.
   <kind>_master        one row per entity
   <kind>_master_field  one row per (entity, field), naming the winning source
 
-These tests hold the three things that can rot: the kind list, which now lives
-in SQL and in Python and cannot be derived across that boundary; the column
-lists, which a view freezes at creation; and the names themselves, since 033's
-generator still spells the Stage pair `_evidence` and cannot be corrected.
+These tests hold the configured kind vocabulary, the column lists each view
+freezes at creation, and the historical view names. New kinds receive generic
+views during owner installation; the historical migration stays immutable.
 """
 
 from __future__ import annotations
@@ -47,27 +46,9 @@ def installed_views(database) -> set[str]:
 
 
 def permitted_kinds(database) -> set[str]:
-    """The kinds mdm.master_entity itself allows, read from its constraint.
-
-    Anchored on the kind list rather than scanning the whole definition, for the
-    same reason migration 033 is: a later migration may add another condition to
-    this constraint, and its literals are not kinds.
-    """
+    """The configured kinds the destination permits for new identities."""
     with database.application.connect() as conn:
-        definitions = [
-            r[0]
-            for r in conn.execute(
-                text("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
-                WHERE conrelid='mdm.master_entity'::regclass AND contype='c'
-                  AND pg_get_constraintdef(oid) LIKE '%kind%'""")
-            )
-        ]
-    assert len(definitions) == 1, (
-        f"expected exactly one kind CHECK on mdm.master_entity, found {definitions}"
-    )
-    listed = re.search(r"kind[^=]*= ANY \(ARRAY\[(.*?)\]\)", definitions[0])
-    assert listed, f"cannot read the permitted kinds out of {definitions[0]}"
-    return set(re.findall(r"'([a-z_]+)'", listed.group(1)))
+        return set(conn.scalars(text("SELECT kind FROM mdm.master_kind WHERE enabled")))
 
 
 def columns(database, relation: str) -> list[str]:
@@ -88,10 +69,9 @@ def columns(database, relation: str) -> list[str]:
 def test_one_view_per_kind_per_shape_and_no_others(database):
     """The schema, Python and the views name the same set of kinds.
 
-    The kind list cannot be derived across the SQL/Python boundary, so this is
-    what holds the copies equal. The migration itself refuses to install if its
-    own list has drifted from the constraint; this proves the Python copy too,
-    and that the loop produced every view it promised.
+    The destination vocabulary is installed from configuration; this checks
+    that runtime and destination hold the same selection and that each
+    configured kind has its expected read views.
     """
     schema_kinds = permitted_kinds(database)
     assert schema_kinds == KINDS, (
@@ -218,16 +198,12 @@ def test_the_privilege_is_what_refuses_the_write_not_the_view_shape(database):
 
 
 def test_every_permitted_kind_has_its_views(database):
-    """The views are generated from master_entity's own kind check, so a new
-    kind gets its views without a second list that could drift from it."""
+    """The destination's configured vocabulary and existing views agree."""
+    permitted = permitted_kinds(database)
     with database.admin.connect() as conn:
-        permitted = set(conn.scalars(text(
-            "SELECT m[1] FROM pg_constraint c, "
-            "LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') m "
-            "WHERE c.conname = 'master_entity_kind_check'")))
         views = set(conn.scalars(text(
             "SELECT viewname FROM pg_views WHERE schemaname = 'mdm'")))
-    assert len(permitted) == 8
+    assert permitted == KINDS
     for kind in permitted:
         assert {kind + "_stage", kind + "_stage_field"} <= views
         if kind != "company":
