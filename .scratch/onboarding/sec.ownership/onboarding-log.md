@@ -104,3 +104,24 @@ left the machine. Names stay out of this file (the repo is public).
   left undecided were drafted by an agent and checked by the operator (answer 4).
 - A prolific owner: one record per filing. The Merge Stage closure limit is being
   removed (answer 5).
+
+## The lines and owners to silver (rebuild priorities ticket 25, 2026-10-22)
+
+- Rulings: "Agreed Remove HOLDS from MDM's relationship types", "Re-scope ticket 25
+  to land Form 4 holdings in silver", "Don't we need a as of date for holdings",
+  "Lines + owners, as SEC (Recommended)".
+- The source's own shape: SEC's Insider Transactions Data Sets keep the four line
+  tables (NONDERIV_TRANS, NONDERIV_HOLDING, DERIV_TRANS, DERIV_HOLDING) apart from
+  REPORTINGOWNER, joined by accession. Silver does the same: `ownership_line` (the
+  four tables in one, a column naming each) and `ownership_owner`.
+- Measured on the 3,367 local filings (the cohort is bare XML, so no filing date
+  is local: it comes from the SGML header in production): 3,326 filings name one
+  owner, 41 several (7 two, 3 three, 31 four or more), holding 145 of the 11,451
+  lines; every line has an as-of date and a 10-digit issuer CIK; every amount is
+  a number (at most 9 integer digits); line D/I: 5,525 direct, 5,926 indirect; no
+  line or owner key repeats.
+- The owner's Person is found by its record key in
+  `sec.ownership.reporting_owner.v1` (accession and CIK, as MDM writes a two-part
+  key); an owner the ownership feed holds back is found as a Company by its CIK.
+- Gaps: the Security link waits for ticket 24; no Bookkeeping step lands silver
+  (ticket 79's gap, after #1121), so `silver land` lands the rows by hand.

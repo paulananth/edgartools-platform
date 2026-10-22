@@ -102,6 +102,15 @@ Every step says what differs for each target.
     a key may have been staged by either of two contracts (one column holding
     either of two identifier types), give that column two links, each with its
     own MDM id column; each row fills the one whose contract staged its key.
+  - **A master whose record key has several parts** is found by that key as
+    MDM writes it: the parts as a compact JSON list (`["<part 1>","<part 2>"]`).
+    Build that text as a column in the reading (`concat` of the parts) and
+    test it against `adapters.record_key` on the master's contract.
+  - **Keep the source's own shape for rows several parties share.** When one
+    record names several parties for the same lines, land the lines once and
+    the parties in their own table, joined by the record's key, as the source's
+    own published data sets do; never repeat a line per party, or a sum over
+    parties counts it several times.
   - **The spec goes in the repo.** Write the approved spec to
     `rules/sources/<source>/silver-<table>.yaml` (comments carry the rulings),
     put the same spec in the part's `silver` in `findings.yaml`, and
