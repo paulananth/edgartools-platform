@@ -8,6 +8,8 @@ Person, Company and capacity, and `mdm.is_insider` shows the Section 16 ones.
 
 from __future__ import annotations
 
+import pytest
+
 from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean.store import migrate
@@ -82,6 +84,31 @@ def test_a_sighting_after_a_stated_end_opens_a_steward_review(database):
     (review,) = [r for r in documents(database, "review").values()
                  if r["reason"] == "contradicts_stated_end"]
     assert (review["open"], review["blocking"], review["on"]) == (True, True, D3)
+
+
+@pytest.mark.parametrize(("kind", "relationship"), [
+    ("person", {"type": "EMPLOYED_BY", "capacity": "director", "on": D1}),
+    ("company", {"type": "ACCOUNTING_PARENT", "scope": "consolidated", "valid_from": D1}),
+])
+def test_revoking_a_record_binding_leaves_its_relationship_endpoint_unresolved(database, kind, relationship):
+    from edgar_warehouse.mdm.clean.evidence import decision
+
+    owned = source("owned", kind=kind, fields={"name": "Invented Record"})
+    other = source("other")
+    pairs = [identity_and_binding(owned), identity_and_binding(other)]
+    apply(database, 1, assertions=[owned, other], identities=[item for item, _ in pairs], decisions=[item for _, item in pairs])
+    record = source("relationship", kind=kind, fields={}, relationships=[{
+        "source_subject": owned["subject"], "target_subject": other["subject"], **relationship,
+    }])
+    apply(database, 2, assertions=[record])
+    assert documents(database, "relationship")
+    original = pairs[0][1]
+    revoke = decision("revoke", actor="fixture", reason="corrected source match", at="2026-02-01T00:00:00+00:00",
+                      target=original["decision_id"], subject=owned["subject"], entity_id=original["entity_id"])
+    apply(database, 3, decisions=[revoke])
+    assert not any(not edge.get("retired") for edge in documents(database, "relationship").values())
+    assert any(review["reason"] == "unresolved_endpoint" and review.get("waiting_for_end")
+               and not review.get("retired") for review in documents(database, "review").values())
 
 
 def test_a_populated_store_at_003_takes_004(database):

@@ -127,12 +127,17 @@ def fired(rule: dict, record: dict, doc: dict) -> tuple[str, str]:
     (`policy-language.md` §6), so it explains itself with no lookup elsewhere.
     """
     check_rule(rule)
-    for step in rule["steps"]:
-        if step.get("otherwise") or all(
-            holds(test, record, doc) for test in step["when"]
-        ):
-            return step["verdict"], str(step["step"])
-    raise AssertionError("check_rule guarantees a catch-all step")
+    from edgar_warehouse.rules.source_engine import apply_record_rules
+    from .identifier_types import TYPES
+
+    try:
+        verdict, step = apply_record_rules({
+            "action": "classify_record", "rule": rule, "record": record, "doc": doc,
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+        })
+    except ValueError as error:
+        raise Conflict(str(error)) from None
+    return verdict, step
 
 
 def probable_kind(rule: dict, step: str, verdict: str) -> str | None:

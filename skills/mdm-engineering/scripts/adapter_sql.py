@@ -354,6 +354,9 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     if protocol >= 2:
         publication_payload = f"CASE WHEN {f('version')}='2' THEN i.payload_bytes ELSE {v('payload')} END"
         consumer_refusal += f" OR ({f('version')}='2' AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
+    if protocol >= 3:
+        publication_payload = f"CASE WHEN {f('version')} IN ('2','3') THEN i.payload_bytes ELSE {v('payload')} END"
+        consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1) OR ({f('version')} IN ('2','3') AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
     matching = "c.type_key=i.type_key AND c.id_key=i.id_key"
     lease_check = (
         f"NOT EXISTS(SELECT 1 FROM {n['lease']} l WHERE l.scope_key={v('scope_key')} "
@@ -362,7 +365,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     lines = [
         d.assign("intent", d.field("intent")),
         d.guard(
-            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
+            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2','3')" if protocol >= 3 else f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
             "unsupported_request_version",
         ),
         d.number_guard("fence", positive=True),
@@ -445,6 +448,26 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         )
     else:
         invalid_expected = "i.expected_text IS NULL OR i.expected_text='' OR i.expected_text LIKE '%[^0-9]%'"
+    index_guards, index_writes = [], []
+    evidence_changed = f"EXISTS(SELECT 1 FROM {evidence} i WHERE NOT EXISTS(SELECT 1 FROM {n['evidence']} c WHERE {matching}))"
+    if protocol >= 3:
+        indexes = d.rows("indexes", expected=True)
+        evidence_changed = f"({f('version')}<>'3' AND {evidence_changed})"
+        index_guards = [
+            d.guard(f"{f('version')}<>'3' AND EXISTS(SELECT 1 FROM {indexes} i)", "unsupported_index_changes"),
+            d.guard(f"EXISTS(SELECT 1 FROM {indexes} i WHERE {invalid_expected} OR i.type_bytes IS NULL OR i.id_bytes IS NULL)", "invalid_index_version"),
+            d.guard(f"EXISTS(SELECT i.type_key,i.id_key FROM {indexes} i GROUP BY i.type_key,i.id_key HAVING COUNT(*)>1)", "duplicate_index_key"),
+            d.guard(f"EXISTS(SELECT 1 FROM {indexes} i LEFT JOIN {n['lookup']} c ON {matching} WHERE COALESCE(c.version,0)<>i.expected_version)", "stale_index_version"),
+            d.guard(f"EXISTS(SELECT 1 FROM {indexes} i JOIN {n['lookup']} c ON {matching} WHERE c.type_bytes<>i.type_bytes OR c.id_bytes<>i.id_bytes)", "index_digest_collision"),
+        ]
+        index_writes = [
+            f"DELETE FROM {n['lookup']} WHERE EXISTS(SELECT 1 FROM {indexes} i WHERE i.body_bytes IS NULL AND {n['lookup']}.type_key=i.type_key AND {n['lookup']}.id_key=i.id_key);",
+            d.update_from("lookup", {
+                "body": "i.body_bytes", "body_hash": "i.body_key", "batch_key": v("batch_key"),
+                "version": "c.version+1", "generation": v("generation"),
+            }, f"{indexes} i", f"{matching} AND i.body_bytes IS NOT NULL AND (c.body_hash<>i.body_key OR c.body<>i.body_bytes)"),
+            f"INSERT INTO {n['lookup']}(type_key,id_key,type_bytes,id_bytes,body,body_hash,batch_key,version,generation) SELECT i.type_key,i.id_key,i.type_bytes,i.id_bytes,i.body_bytes,i.body_key,{v('batch_key')},1,{v('generation')} FROM {indexes} i WHERE i.body_bytes IS NOT NULL AND NOT EXISTS(SELECT 1 FROM {n['lookup']} c WHERE {matching});",
+        ]
     lines.extend(
         [
             d.guard(
@@ -471,9 +494,10 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
                 f"EXISTS(SELECT 1 FROM {evidence} i JOIN {n['evidence']} c ON {matching} WHERE c.body<>i.body_bytes OR c.type_bytes<>i.type_bytes OR c.id_bytes<>i.id_bytes)",
                 "immutable_evidence_collision",
             ),
+            *index_guards,
             d.assign(
                 "changed",
-                f"CASE WHEN EXISTS(SELECT 1 FROM {incoming} i LEFT JOIN {n['current']} c ON {matching} WHERE c.body_hash IS NULL OR c.body_hash<>i.body_key OR c.body<>i.body_bytes) OR EXISTS(SELECT 1 FROM {evidence} i WHERE NOT EXISTS(SELECT 1 FROM {n['evidence']} c WHERE {matching})) THEN 1 ELSE 0 END",
+                f"CASE WHEN EXISTS(SELECT 1 FROM {incoming} i LEFT JOIN {n['current']} c ON {matching} WHERE c.body_hash IS NULL OR c.body_hash<>i.body_key OR c.body<>i.body_bytes) OR {evidence_changed} THEN 1 ELSE 0 END",
             ),
             d.assign("generation", f"{v('generation')}+1"),
             f"INSERT INTO {n['run']}(run_key,run_bytes,pins) SELECT {v('run_key')},{v('run')},{v('pins')} WHERE NOT EXISTS(SELECT 1 FROM {n['run']} r WHERE r.run_key={v('run_key')});",
@@ -496,6 +520,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             ),
             f"INSERT INTO {n['current']}(type_key,id_key,type_bytes,id_bytes,body,body_hash,batch_key,version,generation) SELECT h.type_key,h.id_key,h.type_bytes,h.id_bytes,h.body,h.body_hash,h.batch_key,h.version,h.generation FROM {n['history']} h WHERE h.generation={v('generation')} AND NOT EXISTS(SELECT 1 FROM {n['current']} c WHERE c.type_key=h.type_key AND c.id_key=h.id_key);",
             f"INSERT INTO {n['evidence']}(type_key,id_key,type_bytes,id_bytes,body,body_hash,batch_key) SELECT i.type_key,i.id_key,i.type_bytes,i.id_bytes,i.body_bytes,i.body_key,{v('batch_key')} FROM {evidence} i WHERE NOT EXISTS(SELECT 1 FROM {n['evidence']} c WHERE {matching});",
+            *index_writes,
             f"UPDATE {n['checkpoint']} SET position={d.integer(f('checkpoint'))} WHERE scope_key={v('scope_key')};",
             f"INSERT INTO {n['checkpoint']}(scope_key,position) SELECT {v('scope_key')},{d.integer(f('checkpoint'))} WHERE NOT EXISTS(SELECT 1 FROM {n['checkpoint']} c WHERE c.scope_key={v('scope_key')});",
             f"UPDATE {n['gate']} SET generation={v('generation')} WHERE id=1;",

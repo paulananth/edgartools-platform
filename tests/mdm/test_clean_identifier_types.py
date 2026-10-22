@@ -42,6 +42,12 @@ def test_a_declaration_gives_its_check_and_its_reasons():
     assert widget.normalizer_name == "normalize_identifier@widget-v1"
 
 
+def test_declared_normalization_keeps_pinned_case_and_control_whitespace():
+    widget = declared(WIDGET, "widget")
+    assert widget.normalize("\x1c ab \x1f") == "AB"
+    assert widget.normalize("\u0264") == "\u0264"
+
+
 def test_a_run_of_one_character_is_refused_only_when_declared():
     assert declared({**WIDGET, "parts": [{"length": 6, "characters": ["digits"]}],
                      "check_digit": None}, "widget").refusal("000000")[1] == "invalid_widget"

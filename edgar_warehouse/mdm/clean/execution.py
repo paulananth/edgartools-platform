@@ -34,7 +34,7 @@ def runtime_files() -> list[Path]:
     """The execution module owns the code its caller must pin."""
     from edgar_warehouse.bookkeeping.clean import config, destinations
     from edgar_warehouse.mdm.clean import (
-        activation, adapters, assessment, binding, cascade, classification,
+        activation, adapters, assessment, binding, cascade, catalog, classification,
         correction, evidence, identifier_types, identity, matching, merge,
         name_census, names, primitives, quality, relationships, run, scope, store, survivorship,
     )
@@ -44,7 +44,7 @@ def runtime_files() -> list[Path]:
     # Explicit execution dependencies, including destination authority.
     # CLI presentation is not executable merge behavior. This is not
     # the separately tracked complete environment/reproducibility fingerprint.
-    modules = (activation, adapters, assessment, binding, cascade, classification, config,
+    modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
                correction, destinations, evidence, files, identifier_types,
                identity, limits, matching, merge, name_census, names, primitives, quality,
                relationships, run, scope, source_mapping, store, survivorship)
@@ -52,7 +52,7 @@ def runtime_files() -> list[Path]:
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in
                      ("database_adapter.py", "adapter_model.py", "adapter_sql.py")]
     return [Path(__file__), *[Path(getfile(module)) for module in modules],
-            *source_engine.runtime_files(), *adapter_files]
+            *source_engine.runtime_files(), catalog.path(), *adapter_files]
 
 
 def _reject_json_constant(value):

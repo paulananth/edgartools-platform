@@ -33,29 +33,12 @@ from .evidence import KINDS
 from .primitives import NORMALIZERS, primitive_family
 from .store import Conflict, canonical
 
-# The accepted bar per (kind, family): the least a document may declare
-# (company mastering ticket 02, decision 4). A document may raise its own bar,
-# never lower it, and a pair with no accepted bar cannot declare one. Keyed by
-# family so lowering one decision never lowers another: Company classification
-# acts at 95% (confidence bands, company-policy.md, 2026-09-24), while merging
-# two published Company IDs keeps Q10/Q11's 99.9% by having no entry here.
-ACCEPTED_BARS = {
-    ("company", "classification"): {
-        "min_precision": 0.95,
-        "one_sided_confidence": 0.95,
-    },
-    # SEC-to-GLEIF matching (ticket 08): the operator's 95% band applies to
-    # this family. Merging two published Companies keeps its 99.9% by having
-    # no entry, and identifier binding activates deterministically, not here.
-    ("company", "name_binding"): {
-        "min_precision": 0.95,
-        "one_sided_confidence": 0.95,
-    },
-    ("person", "classification"): {
-        "min_precision": 0.99,
-        "one_sided_confidence": 0.975,
-    },
-}
+# Approval floors are configuration shipped with the engine, separate from a
+# document's own requested bar. A declared bar may raise a floor, never lower it.
+from .catalog import CATALOG, assert_current
+ACCEPTED_BARS = {(kind, family): bar for kind, families in CATALOG["accepted_bars"].items()
+                 for family, bar in families.items()}
+
 METHOD = "wilson_lower_bound"
 # A stated lower bound reproduces when it is no higher than the recomputed one
 # and within this of it: a bound written to five decimals, as the spec's own
@@ -83,6 +66,7 @@ def _rules(body: dict) -> Iterable[tuple[str, dict]]:
 
 def check_policy(body: dict) -> None:
     """Refuse a body whose rules or activations do not hold (§9.2, §10)."""
+    assert_current()
     kinds = body.get("kinds") or {}
     for kind, block in sorted(kinds.items()):
         for family, bar in sorted((block.get("bars") or {}).items()):

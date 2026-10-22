@@ -238,6 +238,46 @@ class ReductionEngine:
         return self._engine.finish()
 
 
+def prepare_current_records(readings: list[dict], as_of: str, retired: set[str]) -> dict:
+    """Transport retained readings to Rust without interpreting their values."""
+    return json.loads(source_contract.prepare_current_records(
+        json.dumps(readings, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+        as_of, sorted(retired)))
+
+
+def identify_profile(profile: dict) -> str:
+    """Use Rust's common profile identity across every storage engine."""
+    return source_contract.identify_profile(
+        json.dumps(profile, ensure_ascii=False, separators=(",", ":"), allow_nan=False))
+
+
+def choose_field_values(command: Mapping) -> tuple[dict, list[dict], list[dict]]:
+    """Carry records and configured rules to the shared Rust calculation."""
+    fields, profiles, reviews = json.loads(source_contract.choose_field_values(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return fields, profiles, reviews
+
+
+def describe_field_rules() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Read the field-rule vocabulary from its single Rust owner."""
+    authority, other = source_contract.describe_field_rules()
+    return tuple(authority), tuple(other)
+
+
+def prepare_relationships(command: Mapping) -> tuple[list[dict], list[dict]]:
+    """Carry the affected records and relationship rules to Rust."""
+    relationships, reviews = json.loads(source_contract.prepare_relationships(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return relationships, reviews
+
+
+def prepare_relationship_periods(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Carry dated observations to the common relationship-history calculation."""
+    periods, reviews = json.loads(source_contract.prepare_relationship_periods(
+        json.dumps(sightings, ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return periods, reviews
+
+
 def rank_claims(sources: list[str], clear_sources: list[str], allow_unknown_effective: bool,
                 candidates: list[tuple[str, str, float | None, bool, str, str]]) -> tuple[list[int], list[int]]:
     """Rank opaque claim references by configured authority and recency.
@@ -259,6 +299,75 @@ def replay_identity(identities: list[dict], decisions: list[dict], clock: int) -
     return json.loads(source_contract.replay_identity(
         json.dumps(identities, ensure_ascii=False, separators=(",", ":")),
         json.dumps(decisions, ensure_ascii=False, separators=(",", ":")), clock))
+
+
+def replay_record_decisions(command: Mapping) -> dict:
+    """Carry retained decisions and exact values to the shared Rust replay."""
+    return json.loads(source_contract.replay_record_decisions(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def prepare_master_records(command: Mapping) -> tuple[dict, list[dict], dict]:
+    """Prepare all affected masters with one transfer of records and rules."""
+    records, reviews, groups = json.loads(source_contract.prepare_master_records(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return records, reviews, groups
+
+
+def compare_matching_values(command: Mapping):
+    """Carry name and place values to the common matching calculation."""
+    return json.loads(source_contract.compare_matching_values(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def apply_record_rules(command: Mapping):
+    """Carry configured record tests and classification to Rust."""
+    return json.loads(source_contract.apply_record_rules(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def plan_record_matches(command: Mapping) -> dict:
+    """Prepare the matching read requests from explicit records and rules."""
+    return json.loads(source_contract.plan_record_matches(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def link_matching_records(command: Mapping) -> dict:
+    """Carry indexed lookup results and allocated IDs to the Rust matching owner."""
+    return json.loads(source_contract.link_matching_records(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def compare_record_pairs(command: Mapping) -> list[list[bool]]:
+    """Compare a batch of candidate pairs, transferring its pinned rules once."""
+    return json.loads(source_contract.compare_record_pairs(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def prepare_record_history(command: Mapping) -> tuple[list[dict], list[dict]]:
+    """Prepare exact retained inputs and references for indexed scope reads."""
+    evidence, indexes = json.loads(source_contract.prepare_record_history(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return evidence, indexes
+
+
+def plan_affected_records(command: Mapping) -> dict:
+    """Let Rust request the indexed records that make affected identities whole."""
+    return json.loads(source_contract.plan_affected_records(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
+def prepare_record_lookups(command: Mapping) -> tuple[dict, list[dict]]:
+    """Prepare latest-record pointers and owned lookup changes once in Rust."""
+    records, changes = json.loads(source_contract.prepare_record_lookups(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return records, changes
+
+
+def resolve_record_bindings(command: Mapping) -> dict[str, str | None]:
+    """Carry explicit current bindings, including unbound owned records, from Rust."""
+    return json.loads(source_contract.resolve_record_bindings(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
 
 
 def combine_tables(plan: Mapping, inputs: Mapping, canonical) -> dict[str, list[dict]]:

@@ -68,7 +68,7 @@ def native_registry_model(dialect: str) -> tuple[MetaData, dict[str, Table]]:
     return metadata, tables
 
 
-def model(prefix: str, schema: str | None = None) -> tuple[MetaData, dict[str, Table]]:
+def model(prefix: str, schema: str | None = None, *, protocol=1) -> tuple[MetaData, dict[str, Table]]:
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,30}", prefix):
         raise ValueError(
             "Storage prefix must be a lower-case SQL identifier of at most 31 characters"
@@ -177,6 +177,25 @@ def model(prefix: str, schema: str | None = None) -> tuple[MetaData, dict[str, T
             )
         )
         table(name, *cols)
+    if protocol >= 3:
+        # Rebuildable indexed pointers are not business versions or publication.
+        table(
+            "lookup",
+            Column("type_key", key, primary_key=True),
+            Column("id_key", key, primary_key=True),
+            Column("type_bytes", binary, nullable=False),
+            Column("id_bytes", binary, nullable=False),
+            Column("body", binary, nullable=False),
+            Column("body_hash", key, nullable=False),
+            Column("batch_key", key, nullable=False),
+            Column("version", BigInteger, nullable=False),
+            Column("generation", BigInteger, nullable=False),
+            ForeignKeyConstraint(
+                ["batch_key"], [f"{schema + '.' if schema else ''}{prefix}_batch.batch_key"]
+            ),
+            CheckConstraint("version > 0"),
+            CheckConstraint("generation > 0"),
+        )
     table(
         "outbox",
         Column("batch_key", key, primary_key=True),

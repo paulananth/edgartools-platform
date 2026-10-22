@@ -105,8 +105,7 @@ source and all frozen migrations plus the native control wheel. Their runtime
 must remain free of source/domain packages. The full data-skill bundle, native
 worker runtime inputs, image cache inputs and selected drivers must also be
 qualified. MDM's merge/publication workers construct the normal `Store`, so
-adapter helper success cannot establish worker support. Silver CLI still
-constructs `PostgresSink`; a separate helper sink would not replace that caller.
+adapter helper success cannot establish worker support. Silver CLI now constructs the shared `DatabaseSink`; its independently installed normal caller passed on PostgreSQL and MySQL at 9e8f8dfb. This does not qualify the remaining MDM ID integration.
 
 Health/connectivity and migration CLI checks must observe the selected engine
 and actual installed schema/build. Frozen legacy PostgreSQL migrations remain
@@ -124,3 +123,35 @@ normal operational readiness. Preserve retained source stores.
 Captured-input onboarding tests and proving runs remain after configuration
 freeze. No new provider request, approval, activation, hosted cutover or merge
 is implied by engine qualification.
+
+## Native MDM integration checkpoint, 2026-10-22
+
+Forty preserved engine/test paths were three-way integrated from the untouched
+MDM draft onto the current branch. The original files still match their private
+fingerprints. Deterministic records, identity decisions, fields, profiles,
+relationships and matching preparation use the existing native facade; the
+PostgreSQL normal caller retains ticket 120's detail/history migrations and
+the later capture-reading/opaque-Unicode corrections. The removed private
+matching-field reader was restored as a thin native call after unit collection
+found an existing consumer.
+
+Kinds, profile eligibility, accepted approval floors and legacy relationship
+defaults now come from a build-delivered mastering catalog, with the old values
+preserved. The engine fingerprint includes the loaded catalog path. Parsing
+uses captured bytes; fingerprinting and policy validation refuse subsequent
+file changes or a switch from the shipped fallback to a selected catalog.
+New configuration tests demonstrate an invented kind/profile and unchanged
+floor enforcement; they do not qualify a new kind in the legacy physical
+PostgreSQL schema. No approved policy body or operational activation changed.
+
+Evidence: 929 MDM unit cases before the drift correction, 119 affected
+catalog/activation/relationship cases after it, 104 normal PostgreSQL, worker,
+Unicode and configured-combination cases after the correction, and 82 storage
+adapter cases on each selected engine. The source-contract Rust suite passed.
+Current installed native-MDM proof is pending.
+
+Normal MDM Store/migration and publication still require PostgreSQL. The
+remaining source-specific census/cascade namespace, field and reference
+selectors, and name/place reference constants, remain explicit decoupling
+work. Moving the catalog is not complete MDM portability or complete removal
+of source-specific engine behavior.

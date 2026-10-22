@@ -66,6 +66,15 @@ class TestTheRegistry:
 
 
 class TestNormalizers:
+    def test_matching_keeps_its_pinned_unicode_case_rules(self):
+        # Later Unicode versions added an uppercase partner to this letter.
+        # Approved matching versions retain the earlier mapping.
+        assert normalizer(CONFORMED, DOC)("\u0264") == "\u0264"
+
+    @pytest.mark.parametrize("separator", ["\x1c", "\x1d", "\x1e", "\x1f"])
+    def test_control_whitespace_keeps_its_previous_matching_meaning(self, separator):
+        assert normalizer(CONFORMED, DOC)("a" + separator + "b") == "A B"
+
     def test_a_conformed_name_is_upper_cased_and_punctuation_becomes_space(self):
         assert normalizer(CONFORMED, DOC)("Acme Co., Inc.") == "ACME CO INC"
 

@@ -285,6 +285,23 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rank_claims, m)?)?;
     m.add_function(wrap_pyfunction!(crate::combination::combine_tables, m)?)?;
     m.add_function(wrap_pyfunction!(replay_identity, m)?)?;
+    m.add_function(wrap_pyfunction!(replay_record_decisions, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_master_records, m)?)?;
+    m.add_function(wrap_pyfunction!(compare_matching_values, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_record_rules, m)?)?;
+    m.add_function(wrap_pyfunction!(plan_record_matches, m)?)?;
+    m.add_function(wrap_pyfunction!(link_matching_records, m)?)?;
+    m.add_function(wrap_pyfunction!(compare_record_pairs, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_record_history, m)?)?;
+    m.add_function(wrap_pyfunction!(plan_affected_records, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_record_lookups, m)?)?;
+    m.add_function(wrap_pyfunction!(resolve_record_bindings, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_current_records, m)?)?;
+    m.add_function(wrap_pyfunction!(identify_profile, m)?)?;
+    m.add_function(wrap_pyfunction!(choose_field_values, m)?)?;
+    m.add_function(wrap_pyfunction!(describe_field_rules, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_relationships, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_relationship_periods, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
     m.add_function(wrap_pyfunction!(postgres_jsonb_text, m)?)?;
@@ -440,10 +457,96 @@ fn rank_claims(
 }
 
 #[pyfunction]
+fn prepare_current_records(py: Python<'_>, readings: &str, as_of: &str, retired: Vec<String>) -> PyResult<String> {
+    py.allow_threads(|| crate::readings::prepare_current_records(readings, as_of, &retired))
+        .map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn identify_profile(py: Python<'_>, profile: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::readings::identify_profile(profile)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn choose_field_values(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::field_values::choose_field_values(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn describe_field_rules() -> (Vec<String>, Vec<String>) {
+    crate::field_values::describe_field_rules()
+}
+
+#[pyfunction]
+fn prepare_relationships(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::relationships::prepare_relationships(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn prepare_relationship_periods(py: Python<'_>, sightings: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::relationships::prepare_relationship_periods(sightings)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
 fn replay_identity(py: Python<'_>, identities: &str, decisions: &str, clock: i64) -> PyResult<String> {
     let identities = serde_json::from_str(identities).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let decisions = serde_json::from_str(decisions).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let state = py.allow_threads(|| crate::identity::replay(identities, decisions, clock))
         .map_err(PyValueError::new_err)?;
     serde_json::to_string(&state).map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+#[pyfunction]
+fn replay_record_decisions(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::decisions::replay_record_decisions(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn prepare_master_records(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::master_records::prepare_master_records(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn compare_matching_values(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::matching_values::compare_matching_values(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn apply_record_rules(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_tests::apply_record_rules(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn plan_record_matches(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_matches::plan_record_matches(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn link_matching_records(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_matches::link_matching_records(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn compare_record_pairs(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_pairs::compare_record_pairs(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn prepare_record_history(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_history::prepare_record_history(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn plan_affected_records(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::affected_records::plan_affected_records(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn prepare_record_lookups(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_lookups::prepare_record_lookups(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn resolve_record_bindings(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::decisions::resolve_record_bindings(command)).map_err(PyValueError::new_err)
 }

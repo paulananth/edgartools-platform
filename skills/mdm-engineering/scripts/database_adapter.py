@@ -256,6 +256,19 @@ class Effect:
 
 
 @dataclass(frozen=True)
+class IndexChange(Effect):
+    removed: bool = False
+
+    def wire(self, *, immutable=False):
+        if type(self.removed) is not bool:
+            raise AdapterError("Lookup removal must be a boolean")
+        result = super().wire()
+        if self.removed:
+            result["body"] = None
+        return result
+
+
+@dataclass(frozen=True)
 class PreparedBatch:
     batch: str
     run: str
@@ -270,6 +283,7 @@ class PreparedBatch:
     payload: Any
     evidence: tuple[Effect, ...] = ()
     payloads: dict[str, Any] | None = None
+    indexes: tuple[IndexChange, ...] | None = None
 
     def intent(self) -> str:
         for value in (self.batch, self.run, self.scope):
@@ -314,6 +328,15 @@ class PreparedBatch:
                 {"consumer": c.encode().hex(), "payload": document(self.payloads[c]).hex()}
                 for c in sorted(self.consumers)
             ]
+        if self.indexes is not None:
+            if len({(entry.type, entry.id) for entry in self.indexes}) != len(self.indexes):
+                raise AdapterError("A prepared batch repeats an index key")
+            result["version"] = "3"
+            result["indexes"] = [entry.wire() for entry in sorted(self.indexes, key=lambda entry: (entry.type, entry.id))]
+            result["consumers"] = [
+                {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
+                for c in sorted(self.consumers)
+            ]
         # The wire document is ASCII; opaque original UTF-8 bodies remain bytes.
         return json.dumps(
             result, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -352,6 +375,11 @@ ERRORS = frozenset(
         "stale_object_version",
         "object_digest_collision",
         "immutable_evidence_collision",
+        "invalid_index_version",
+        "duplicate_index_key",
+        "stale_index_version",
+        "index_digest_collision",
+        "unsupported_index_changes",
         "scope_lease_expired_before_save",
         "unknown_publication",
         "publication_already_leased",
@@ -373,10 +401,10 @@ class Adapter:
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
-        if type(protocol) is not int or protocol not in (1, 2):
+        if type(protocol) is not int or protocol not in (1, 2, 3):
             raise AdapterError("Unsupported storage protocol")
         self.protocol = protocol
-        self.metadata, self.tables = model(prefix, self.schema)
+        self.metadata, self.tables = model(prefix, self.schema, protocol=protocol)
         self.routines = capabilities(engine.dialect, self.tables, prefix, protocol=protocol)
         self.commit_guards = commit_guards(engine.dialect, self.tables, prefix)
         self.migration_guards = migration_guards(engine.dialect, self.tables, prefix) if protocol >= 2 else []
@@ -410,6 +438,21 @@ class Adapter:
                 (code for code in sorted(ERRORS) if code in original),
                 "database_operation_failed",
             )
+            # MySQL replacement removes EXECUTE until migration finishes and
+            # may leave the routine absent after an interruption. Classify only
+            # those errors against the selected store's durable pending flag;
+            # ordinary permission and connection failures remain failures.
+            arguments = getattr(exc.orig, "args", ())
+            if (code == "database_operation_failed" and self.engine.dialect.name == "mysql"
+                    and arguments and arguments[0] in {1305, 1370}):
+                try:
+                    with self.engine.connect() as conn:
+                        ledger = self.tables["migration"]
+                        ready = conn.scalar(select(ledger.c.complete).order_by(ledger.c.version.desc()).limit(1))
+                    if ready == 0:
+                        code = "storage_not_initialized"
+                except SQLAlchemyError:
+                    pass
             raise AdapterError(code) from None
 
     def claim(self, scope: str, owner: str, *, seconds=300) -> Lease:
@@ -428,6 +471,8 @@ class Adapter:
     def apply(self, batch: PreparedBatch, lease: Lease) -> dict:
         if batch.scope != lease.scope:
             raise AdapterError("Lease scope differs from prepared effects")
+        if batch.indexes is not None and self.protocol < 3:
+            raise AdapterError("Selected storage protocol has no lookup entries")
         result = self._rpc(
             "apply",
             {
@@ -472,7 +517,7 @@ class Adapter:
             )
         return cast(literal(key(value)), String(64))
 
-    def lookup_statement(self, keys, *, immutable=False):
+    def lookup_statement(self, keys, *, immutable=False, lookup=False):
         if not keys:
             raise AdapterError("A nonempty lookup key collection is required")
 
@@ -485,7 +530,9 @@ class Adapter:
         wanted = (
             union_all(*selections) if len(selections) > 1 else selections[0]
         ).subquery("wanted")
-        table = self.tables["evidence" if immutable else "current"]
+        if lookup and (immutable or self.protocol < 3):
+            raise AdapterError("Selected storage protocol has no lookup entries")
+        table = self.tables["lookup" if lookup else "evidence" if immutable else "current"]
         condition = (table.c.type_key == wanted.c.type_key) & (
             table.c.id_key == wanted.c.id_key
         )
@@ -513,14 +560,14 @@ class Adapter:
             **{name: int(row[name]) for name in ("version", "generation") if name in row},
         }
 
-    def read(self, keys, *, immutable=False, connection=None) -> dict[tuple[str, str], dict]:
+    def read(self, keys, *, immutable=False, lookup=False, connection=None) -> dict[tuple[str, str], dict]:
         unique = list(dict.fromkeys(keys))
         found = {}
         # Divide the complete list below the engine's bound-parameter limit.
         for start in range(0, len(unique), 400):
             with self.engine.connect() if connection is None else nullcontext(connection) as conn:
                 rows = (
-                    conn.execute(self.lookup_statement(unique[start : start + 400], immutable=immutable))
+                    conn.execute(self.lookup_statement(unique[start : start + 400], immutable=immutable, lookup=lookup))
                     .mappings()
                     .all()
                 )
@@ -534,9 +581,11 @@ class Adapter:
                 found[identity] = self._read_record(row)
         return found
 
-    def type_statement(self, type: str, *, after: str | None = None):
+    def type_statement(self, type: str, *, after: str | None = None, lookup=False):
         """One bounded seek of an opaque type's primary-key prefix."""
-        table = self.tables["current"]
+        if lookup and self.protocol < 3:
+            raise AdapterError("Selected storage protocol has no lookup entries")
+        table = self.tables["lookup" if lookup else "current"]
         statement = select(table).where(table.c.type_key == self._bound_key(type))
         if after is not None:
             statement = statement.where(table.c.id_key > after)
@@ -546,7 +595,7 @@ class Adapter:
             statement = statement.with_hint(table, hint, dialect_name=self.engine.dialect.name)
         return statement
 
-    def iter_type(self, type: str, *, connection=None):
+    def iter_type(self, type: str, *, lookup=False, connection=None):
         """Read a keyed index's opaque entries without a table scan or size cap.
 
         A native caller gives each lookup key its own opaque type. It must not
@@ -556,7 +605,7 @@ class Adapter:
         after = None
         while True:
             with self.engine.connect() if connection is None else nullcontext(connection) as conn:
-                rows = conn.execute(self.type_statement(type, after=after)).mappings().all()
+                rows = conn.execute(self.type_statement(type, after=after, lookup=lookup)).mappings().all()
             for row in rows:
                 identity = (bytes(row["type_bytes"]).decode(), bytes(row["id_bytes"]).decode())
                 if identity[0] != type or key(identity[1]) != row["id_key"]:
@@ -565,6 +614,43 @@ class Adapter:
             if len(rows) < 400:
                 return
             after = rows[-1]["id_key"]
+
+    def lookup_groups_statement(self, types):
+        """One indexed probe per requested group, compiled as a bound collection."""
+        if self.protocol < 3 or not types:
+            raise AdapterError("A protocol-3 lookup group collection is required")
+        selections = [select(self._bound_key(type).label("type_key")) for type in types]
+        wanted = (union_all(*selections) if len(selections) > 1 else selections[0]).subquery("wanted")
+        table = self.tables["lookup"]
+        condition = table.c.type_key == wanted.c.type_key
+        if self.engine.dialect.name == "postgresql":
+            probe = select(table).where(condition).offset(0).lateral("probe")
+            return select(probe).select_from(wanted.join(probe, true()))
+        statement = select(table).select_from(wanted.join(table, condition))
+        if self.engine.dialect.name == "mysql":
+            statement = statement.prefix_with("STRAIGHT_JOIN", dialect="mysql")
+        hint = "FORCE INDEX (PRIMARY)" if self.engine.dialect.name == "mysql" else "WITH (FORCESEEK)"
+        return statement.with_hint(table, hint, dialect_name=self.engine.dialect.name)
+
+    def read_lookup_groups(self, types, *, connection=None):
+        """Retrieve complete affected groups without one database call per record."""
+        unique = list(dict.fromkeys(types))
+        found = {}
+        for start in range(0, len(unique), 400):
+            chunk = unique[start:start + 400]
+            wanted = set(chunk)
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+                result = conn.execute(self.lookup_groups_statement(chunk))
+                try:
+                    for row in result.mappings().yield_per(400):
+                        identity = (bytes(row["type_bytes"]).decode(), bytes(row["id_bytes"]).decode())
+                        if (identity[0] not in wanted or key(identity[0]) != row["type_key"]
+                                or key(identity[1]) != row["id_key"]):
+                            raise AdapterError("object_digest_collision")
+                        found[identity] = self._read_record(row)
+                finally:
+                    result.close()
+        return found
 
     def history(self, type: str, id: str) -> list[dict]:
         table = self.tables["history"]
@@ -1143,7 +1229,7 @@ def _migration_checksums(adapter) -> frozenset[str]:
 def migrate(
     engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1
 ) -> dict:
-    if type(protocol) is not int or protocol not in (1, 2):
+    if type(protocol) is not int or protocol not in (1, 2, 3):
         raise AdapterError("Unsupported storage protocol")
     builds = {version: Adapter(engine, prefix=prefix, protocol=version) for version in range(1, protocol + 1)}
     checksums = {version: hashlib.sha256("\n".join(_migration_statements(build)).encode()).hexdigest()
@@ -1296,7 +1382,7 @@ def main(argv=None):
     setup = sub.add_parser("migrate")
     setup.add_argument("--runtime-role", required=True)
     setup.add_argument("--runtime-host", default="%")
-    setup.add_argument("--protocol", type=int, choices=(1, 2), default=1)
+    setup.add_argument("--protocol", type=int, choices=(1, 2, 3), default=1)
     principal = sub.add_parser(
         "provision",
         help="Provision a separate test runtime principal; preserve existing passwords",
@@ -1309,6 +1395,7 @@ def main(argv=None):
     )
     apply.add_argument("--input", required=True, type=Path)
     apply.add_argument("--owner", required=True)
+    apply.add_argument("--protocol", type=int, choices=(1, 2, 3), default=1)
     sub.add_parser("status")
     args = parser.parse_args(argv)
     engine = None
@@ -1340,7 +1427,7 @@ def main(argv=None):
                 protocol=args.protocol,
             )
         else:
-            adapter = Adapter(engine, prefix=args.prefix)
+            adapter = Adapter(engine, prefix=args.prefix, protocol=getattr(args, "protocol", 1))
             if args.command == "status":
                 output = {"engine": args.engine, "generation": adapter.generation()}
             else:
@@ -1371,6 +1458,10 @@ def main(argv=None):
                     consumers=tuple(raw["consumers"]),
                     payload=raw.get("payload_json", raw.get("payload")),
                     payloads=raw.get("payloads_json", raw.get("payloads")),
+                    indexes=tuple(IndexChange(
+                        entry["type"], entry["id"], entry.get("body_json", entry.get("body")),
+                        entry.get("expected_version", 0), entry.get("removed", False),
+                    ) for entry in raw["indexes"]) if "indexes" in raw else None,
                 )
                 lease = adapter.claim(batch.scope, args.owner)
                 output = adapter.apply(batch, lease)
