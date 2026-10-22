@@ -7,8 +7,8 @@
 # Lookups, each keyed by the filing's accession unless named: `isin` (the
 # holding's one ISIN, by HOLDING_ID, as source.yaml reads it), `series` (the
 # filing's fund series id, holding-series.yaml; a filing with none is the
-# registrant's own), `registrant` (the filing's CIK) and `filed` (its
-# date). Production sizes (operator, 2026-10-22: "No limit on production"):
+# registrant's own), `registrant` (the filing's CIK), `filed` (its
+# date) and `as_of` (the date its holdings are reported at). Production sizes (operator, 2026-10-22: "No limit on production"):
 # the 2026q2 quarter has 5,347,869 holding rows.
 execution:
   profile: source.read
@@ -24,6 +24,7 @@ read:
     series: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     registrant: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     filed: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    as_of: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
   context:
     period: {type: text}
   tables:
@@ -37,6 +38,8 @@ read:
           context: {name: period}
         filed:
           member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        as_of:
+          member_value: {lookup: as_of, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         series_id:
           member_value: {lookup: series, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         registrant_cik:

@@ -42,6 +42,12 @@ columns:
   definition: "The filing's date."
   source: "SUBMISSION.FILING_DATE by accession"
   sensitivity: none
+- name: as_of
+  type: DATE
+  nullable: true
+  definition: "The date the holding is reported at: the filing's date as of which information is reported (ticket 79)."
+  source: "SUBMISSION.REPORT_DATE by accession"
+  sensitivity: none
 - name: series_id
   type: VARCHAR
   nullable: true

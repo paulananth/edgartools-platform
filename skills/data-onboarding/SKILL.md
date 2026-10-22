@@ -492,6 +492,11 @@ missing, go on and log it.
     its as-of date, the date it holds at, beside the date it was reported (operator,
     2026-10-22: "Agreed Remove HOLDS from MDM's relationship types", "Don't
     we need a as of date for holdings").
+    When a source states two report dates, tell them apart by their values
+    before choosing: the as-of date falls just before the delivery, while a
+    period end such as a fiscal year end often lies after it. Count the
+    values that fall outside the delivery's window; they are why each row
+    keeps its own date.
   - A relationship ends only on an end the source states. A record missing
     from a later file, or a source that falls silent, closes nothing.
   - Order and compare by the date the event happened, never the date it was

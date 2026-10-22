@@ -578,6 +578,8 @@ bookkeeping:
                            max_input_bytes: 17179869184, max_input_rows: 100000000}
               filed: {from: submissions, table: filed, column: accession, value_column: filed,
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
+              as_of: {from: submissions, table: reported, column: accession, value_column: as_of,
+                      max_input_bytes: 17179869184, max_input_rows: 100000000}
         - name: holding_combine
           operation: source.combine
           requires: [holding, attach]
