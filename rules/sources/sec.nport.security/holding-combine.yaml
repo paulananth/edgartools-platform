@@ -1,0 +1,20 @@
+# Each holding row with the CUSIP its ISIN is folded into (ticket 79; ticket
+# 120, operator 2026-10-20: "One master record"): an ISIN-only holding whose
+# ISIN FIGI attaches to a CUSIP one to one is that CUSIP's Security, so its
+# silver row must find the CUSIP's record. The same group as fold.yaml and
+# combine.yaml. Inputs: holding.yaml's output (`holdings`) and figi-attach.yaml's
+# (`attached`). holding-rows.yaml then names each row's Security key.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 40000000  # the engine's ceiling (operator: "I asked to remove all limits")
+  groups:
+    isin_cusip: {source: attached, table: attached, key: isin, value: cusip, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {cusip_offers: 1, isin_offers: 1}}
+  tables:
+    holding:
+      source: holdings
+      table: holding
+      checks: {}
+      where: {}
+      joins:
+        folded_cusip: {group: isin_cusip, key: isin, on_missing: empty, replace: false}

@@ -534,6 +534,65 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
           input: {contract: record.yaml, pieces: {step: combine}}
+        # Each holding for silver (ticket 79): a lookup row, not an MDM record
+        # (operator, 2026-10-22: "Why do you need to merge it it's just a
+        # lookup"). The filing's series (holding-series.yaml), its
+        # registrant (sec.nport.registrant's) and its date name each row's
+        # holder; holding-combine.yaml folds an ISIN into its CUSIP as fold.yaml
+        # does; holding-rows.yaml gives the rows silver-holding.yaml lands.
+        - name: registrants
+          operation: source.read
+          requires: [submissions]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: sec.nport.registrant/source.yaml
+            lookups:
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                      max_input_bytes: 17179869184, max_input_rows: 100000000}
+        - name: series
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input: {contract: holding-series.yaml}
+        - name: holding
+          operation: source.read
+          requires: [identifiers, submissions, registrants, series]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: holding.yaml
+            context: {period: {fact: period}}
+            lookups:
+              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
+                     max_input_bytes: 17179869184, max_input_rows: 100000000}
+              series: {from: series, table: series, column: accession, value_column: series_id,
+                       max_input_bytes: 17179869184, max_input_rows: 100000000}
+              registrant: {from: registrants, table: filing, column: accession, value_column: cik,
+                           max_input_bytes: 17179869184, max_input_rows: 100000000}
+              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+                      max_input_bytes: 17179869184, max_input_rows: 100000000}
+        - name: holding_combine
+          operation: source.combine
+          requires: [holding, attach]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: holding-combine.yaml, readings: {holdings: {step: holding}, attached: {step: attach}}}
+        - name: holding_rows
+          operation: source.read
+          requires: [holding_combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: holding-rows.yaml, pieces: {step: holding_combine}}
         - name: prepare
           operation: mdm.prepare
           requires: [record]

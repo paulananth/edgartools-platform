@@ -1,0 +1,66 @@
+# Each filing's fund series, for holding.yaml's `series` lookup (ticket 79):
+# FUND_REPORTED_INFO's SERIES_ID, upper-cased as sec.nport.fund reads it. A
+# filing with no usable series id ("", "N/A") gives no row, so the lookup never
+# holds an empty value and the holding is the registrant's own (spec review,
+# 2026-10-22: sec.nport.fund's `filing` table keeps an "N/A" row with an empty
+# id, which a lookup refuses). Every limit is the engine's ceiling.
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    series:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: SERIES_ID
+                  default: ""
+                  transforms:
+                  - case: upper
+                  null_if: ["", "N/A"]
+              right:
+                value:
+                  path: NO_SUCH_COLUMN
+          then:
+            value:
+              path: NO_SUCH_COLUMN
+          else:
+            test:
+              path: ACCESSION_NUMBER
+              kind: present
+      columns:
+        accession: {text: {path: ACCESSION_NUMBER}}
+        series_id:
+          text:
+            path: SERIES_ID
+            default: ""
+            transforms:
+            - case: upper
+            null_if: ["", "N/A"]
+  stream:
+    framing: delimited
+    delimited:
+      format: tsv
+      encoding: utf-8
+    container: zip
+    member: FUND_REPORTED_INFO.tsv
+    max_input_bytes: 1099511627776
+    max_bytes: 1099511627776
+    max_record: 33554432
+    max_records: 1000000000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 10000000
+    max_spool_bytes: 1099511627776
+    max_output_rows: 1000000000000
