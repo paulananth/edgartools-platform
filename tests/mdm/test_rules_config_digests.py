@@ -120,7 +120,7 @@ def _without_ticket_10_checks(contract: dict) -> dict:
 # Ticket 129, fixes 2 and 3 (operator, 2026-10-22): GLEIF's record-keeping
 # dates and the SIC code's label left the Company; with them put back, each
 # contract is the one pinned before.
-WITHOUT_COMPANY_DATES = {
+WITHOUT_TICKET_129_FIELDS = {
     "sec.submissions.company.v1": "7786ffdd0187f24b4206762125ae09535cdc1c98b009406e174b8175a25006c4",
     "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
 }
@@ -133,8 +133,8 @@ _FIELDS_BACK = {
 }
 
 
-def _with_company_dates_back(contract: dict, code: str) -> dict:
-    assert digest(contract) == WITHOUT_COMPANY_DATES[code], code
+def _with_company_fields_back(contract: dict, code: str) -> dict:
+    assert digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
     after, back = _FIELDS_BACK[code]
     contract = copy.deepcopy(contract)
     reading = contract["adapter"]["reading"]
@@ -162,7 +162,7 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
-    company = _with_company_dates_back(sec_company.CONTRACT, sec_company.SOURCE_CODE)
+    company = _with_company_fields_back(sec_company.CONTRACT, sec_company.SOURCE_CODE)
     company = _with_retired_lists(company, sec_company.SOURCE_CODE)
     assert digest(company) == WITH_PINNED_PLACE_CHECK
     assert digest(_with_yaml_place_check(company)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
@@ -335,8 +335,8 @@ def _without_invalid_lei(contract: dict) -> dict:
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_publication.dataset_contract(member)
-    if f"gleif.{member}.v1" in WITHOUT_COMPANY_DATES:
-        contract = _with_company_dates_back(contract, f"gleif.{member}.v1")
+    if f"gleif.{member}.v1" in WITHOUT_TICKET_129_FIELDS:
+        contract = _with_company_fields_back(contract, f"gleif.{member}.v1")
     if member in WITH_ISSUER_FLAG:
         assert digest(contract) == WITH_ISSUER_FLAG[member]
         contract = _without_issuer_flag(contract)

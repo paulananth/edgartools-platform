@@ -223,8 +223,7 @@ fn test_record_pair(
                 held.is_some_and(|(lei, updated)| {
                     values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
                         && same_update(&updated, right)
-                })
-                && value_matches_rule(&entry, "version", &command.census_version)?
+                }) && value_matches_rule(&entry, "version", &command.census_version)?
                     && value_matches_rule(&entry, "cik_count", &1)?
                     && value_matches_rule(
                         &entry,
@@ -323,9 +322,11 @@ fn test_record_pair(
             {
                 return Ok(false);
             }
-            let updated = values::read_value::<String>(&values::read_optional_value(&answer, "last_update")?)
-                .unwrap_or_default();
-            if !same_update(&updated, right) || key.is_empty()
+            let updated =
+                values::read_value::<String>(&values::read_optional_value(&answer, "last_update")?)
+                    .unwrap_or_default();
+            if !same_update(&updated, right)
+                || key.is_empty()
                 || !value_matches_rule(&answer, "key", &key)?
                 || !(other_key == key || value_matches_rule(&answer, "via", &"other name")?)
             {

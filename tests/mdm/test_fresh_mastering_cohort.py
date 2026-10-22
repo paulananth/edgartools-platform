@@ -20,7 +20,7 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
     import json
 
     from edgar_warehouse.rules import files
-    from tests.mdm.test_rules_config_digests import WITHOUT_COMPANY_DATES, _with_company_dates_back
+    from tests.mdm.test_rules_config_digests import WITHOUT_TICKET_129_FIELDS, _with_company_fields_back
     from tests.support import person_quality
 
     actual = json.dumps(cohort()[2], sort_keys=True).encode()
@@ -29,11 +29,11 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
     # the cohort is the one pinned before.
     current = files.mdm_contract
 
-    def with_company_dates(source, code, root=None):
+    def with_company_fields(source, code, root=None):
         found = current(source, code, root)
-        return _with_company_dates_back(found, code) if code in WITHOUT_COMPANY_DATES else found
+        return _with_company_fields_back(found, code) if code in WITHOUT_TICKET_129_FIELDS else found
 
-    monkeypatch.setattr(files, "mdm_contract", with_company_dates)
+    monkeypatch.setattr(files, "mdm_contract", with_company_fields)
     actual = json.dumps(cohort()[2], sort_keys=True).encode()
     assert hashlib.sha256(actual).hexdigest() == "e908d67bbdf589e1081ff77aa025d2e83b89ad154ea0846428f46bdbff10e8d2"
     # Rebuild ticket 10 made Person's quality v2 (one more check, which the
