@@ -93,7 +93,7 @@ mdm:
         relationships:
         - type: CUSTODIAN
           each: custodians
-          target_key: [published, item]
+          target_key: [item]
           target_source: iapd.adv.custodians.v1
           valid_from: item.valid_from
           scope: IAPD Form ADV custodian
@@ -102,8 +102,8 @@ mdm:
       provider: SEC Investment Adviser Public Disclosure (IAPD)
       family: iapd_adv_bulk
       schema_version: iapd-adv-custodian-csv-v1
-      record_key: one custodian named in one monthly file (the file's month end and
-        custodian_id, from its first custody row in the file); a custodian's
+      record_key: one custodian (custodian_id, from its first custody row in a
+        file); each monthly file restates it as a new publication; a custodian's
         records join by LEI or SEC broker-dealer number
       publication_key: exact captured monthly ADV bulk file (sha256)
       effective_time: the end of the month the file covers (context `published`)
@@ -158,8 +158,14 @@ mdm:
         # closure. Every custody row, with its amount, is a silver fact linked to
         # both Companies; the adviser-to-custodian history is read there, not
         # from an MDM link (operator: "silver contains other dimentions and facts").
+        # The record key is the custodian alone: custodian_id is stable from
+        # file to file, and the month is the publication's, not the record's
+        # (ticket 129; operator, 2026-10-22: "Fix 5"), so each month restates
+        # one record instead of making a new one. A run prepares each month's
+        # file as its own publication: mdm.prepare `publication_key` the file,
+        # `revision` its month (YYYYMM), `effective_at` its month end, so a later
+        # month is a later revision (a restatement with revision 1 is refused).
         record_key:
-        - published
         - custodian_id
         # The custodian's identity, operator 2026-10-09: "BD number first
         # (Recommended)" (it replaced "LEI, then BD number, name last"):

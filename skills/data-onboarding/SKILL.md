@@ -444,6 +444,15 @@ missing, go on and log it.
 - **Kind:** from `KINDS`, or the field or rule that decides it.
 - **Record key:** its parts, in the order the source defines its unique key.
   The order is part of each record's identity.
+  - **No publication time in a record key.** A delivery's date belongs in its
+    publication, not the key, or each delivery makes a new record of the same
+    entity (operator, 2026-10-22: "Fix 5"). A feed that restates its records
+    in every delivery gives each delivery its own `publication_key` and a
+    rising `revision` (its period, for example YYYYMM) in `mdm.prepare`, with
+    `effective_at` its period end; a restatement left at revision 1 is
+    refused ("contradictory publications").
+  - A one-part record key is the plain value, not a one-item list: a test
+    computes its subject from the value itself.
 - **Identifiers:** each namespace and its format.
   - Ask about every identifier the source carries; never drop one silently.
   - An identifier with no format yet is declared, not coded: write
