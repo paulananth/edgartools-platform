@@ -1,0 +1,21 @@
+{
+ "thirteenf_rows": 2953581,
+ "thirteenf": {
+  "cusips": 29942,
+  "lettered": 2896,
+  "conflict": 5
+ },
+ "nport_equity": {
+  "cusips": 24946,
+  "lettered": 1402,
+  "conflict": 5
+ },
+ "nport_other": {
+  "cusips": 363177,
+  "lettered": 15946,
+  "conflict": 3
+ },
+ "cusips_lettered_in_both": 777,
+ "cross_source_disagree": 1,
+ "nport_other_also_equity": 98
+}

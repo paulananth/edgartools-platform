@@ -1,0 +1,16 @@
+# Data quality for 13F Securities (ticket 130; operator, 2026-10-22:
+# "Approve the rule (Recommended)"). Checks run on each record after the
+# mapping and before the merge. The CUSIP check digit is the identifier type's
+# (rules/identifiers/): a failing one is set aside where the record is read.
+version: sec-thirteenf-security-quality-v1
+quality:
+  sec.thirteenf.information_table.security.v1:
+    checks:
+    # Filers that name two share classes for one Security give it none
+    # (combine.yaml); the Security is listed for a steward, never held back.
+    - id: share_class_one_letter
+      test: pattern@1
+      value: matching.share_classes_filed
+      on_fail: flag
+      args:
+        regex: "[A-Z]"
