@@ -212,6 +212,13 @@ For example: a cascade pass, a name rule, or records waiting for review.
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
 
+A rule that asks whether two records state the same time compares them as
+instants, never as text: the Stage stores a record's `effective_at` in UTC
+(`+00:00`), while a census or a source keeps the provider's spelling (`Z`, an
+offset). A source's record-keeping date that only marks a new version is that
+record's effective time, not a field of the master (ticket 129: GLEIF's
+LastUpdateDate).
+
 ### test: the cheapest proof, then record it
 
 Prove the change at the level it needs, no more (`mdm-engineering`, "Choose

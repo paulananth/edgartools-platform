@@ -30,6 +30,20 @@ fn read_field_value(record: &Object, name: &str) -> Result<Document, String> {
         values::write_value(&())
     }
 }
+/// The census saw the GLEIF record GLEIF last updated at `census`; the stored
+/// record is the same version when its effective time is that instant (or both
+/// are unknown). GLEIF's own spelling and the stored UTC form compare as instants.
+fn same_update(census: &str, record: &Object) -> bool {
+    let stated = values::read_text(record, "effective_at").ok();
+    match (census.is_empty(), stated) {
+        (true, None) => true,
+        (false, Some(stated)) => match (values::read_time(census), values::read_time(&stated)) {
+            (Ok(left), Ok(right)) => left == right,
+            _ => false,
+        },
+        _ => false,
+    }
+}
 fn read_matching_values(record: &Object) -> Result<Object, String> {
     values::read_object(&values::read_object(record, "provenance")?, "matching")
 }
@@ -200,14 +214,17 @@ fn test_record_pair(
             let identifier =
                 values::read_optional_value(&values::read_object(right, "identifiers")?, "lei")?;
             let key = read_name(args, left, "sec_normalizer", command)?;
-            let updated = read_field_value(right, "gleif_last_update")?;
-            let updated = if values::has_content(&updated) {
-                updated
-            } else {
-                values::write_value(&"")?
+            let leis = values::read_array(&entry, "leis")?;
+            let held = match leis.as_slice() {
+                [only] => values::read_value::<(Option<String>, String)>(only).ok(),
+                _ => None,
             };
             Ok(
-                value_matches_rule(&entry, "version", &command.census_version)?
+                held.is_some_and(|(lei, updated)| {
+                    values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
+                        && same_update(&updated, right)
+                })
+                && value_matches_rule(&entry, "version", &command.census_version)?
                     && value_matches_rule(&entry, "cik_count", &1)?
                     && value_matches_rule(
                         &entry,
@@ -216,7 +233,6 @@ fn test_record_pair(
                     )?
                     && value_matches_rule(&entry, "lei_count", &1)?
                     && value_matches_rule(&entry, "other_name_holders", &0)?
-                    && value_matches_rule(&entry, "leis", &vec![vec![identifier, updated]])?
                     && !key.is_empty()
                     && value_matches_rule(&entry, "key", &key)?
                     && key == read_name(args, right, "gleif_normalizer", command)?,
@@ -307,16 +323,9 @@ fn test_record_pair(
             {
                 return Ok(false);
             }
-            let updated = read_field_value(right, "gleif_last_update")?;
-            let updated = if values::has_content(&updated) {
-                updated
-            } else {
-                values::write_value(&"")?
-            };
-            if !values::values_match(
-                &values::read_optional_value(&answer, "last_update")?,
-                &updated,
-            )? || key.is_empty()
+            let updated = values::read_value::<String>(&values::read_optional_value(&answer, "last_update")?)
+                .unwrap_or_default();
+            if !same_update(&updated, right) || key.is_empty()
                 || !value_matches_rule(&answer, "key", &key)?
                 || !(other_key == key || value_matches_rule(&answer, "via", &"other name")?)
             {

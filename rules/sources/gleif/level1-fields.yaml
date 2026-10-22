@@ -152,18 +152,6 @@ read:
                   null_if_blank: true
                   type: text
                   path_mode: literal
-              gleif_last_update:
-                value:
-                  path: Registration.LastUpdateDate.$
-                  null_if_blank: true
-                  type: text
-                  path_mode: literal
-              gleif_next_renewal:
-                value:
-                  path: Registration.NextRenewalDate.$
-                  null_if_blank: true
-                  type: text
-                  path_mode: literal
               gleif_managing_lou:
                 value:
                   path: Registration.ManagingLOU.$

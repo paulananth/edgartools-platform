@@ -320,7 +320,7 @@ def source(key="c1", source_code="fixture.primary", revision=1, **kw):
         record_key=key,
         publication_key=f"p{revision}",
         revision=revision,
-        effective_at=AT,
+        effective_at=kw.pop("effective_at", AT),
         kind=kw.pop("kind", "company"),
         fields=kw.pop("fields", {"name": "Acme"}),
         **kw,
