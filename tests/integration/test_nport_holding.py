@@ -78,6 +78,9 @@ def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
         "4": isin.CUSIP, "5": isin.CUSIP, "6": isin.TWO, "7": isin.TWO, "8": isin.NONE, "9": isin.CUSIP}
     assert {r["security_key"] for r in rows.values()} <= keys
     assert len(rows) == len(isin.HOLDINGS) + 1  # every filed holding is a row
+    # The filed issuer LEI stays on the row, as filed (an LEI is a Company's identifier,
+    # never a Security field): ONE's holdings name LEI, holding 8 names none.
+    assert rows["4"]["issuer_lei"] == cusip.LEI and rows["8"]["issuer_lei"] is None
 
 
 def test_an_isin_folded_into_no_cusip_keeps_its_own_security(tmp_path):

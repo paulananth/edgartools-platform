@@ -29,6 +29,7 @@ read:
             - {value: {path: isin}}
         cusip: {value: {path: cusip}}
         isin: {value: {path: isin}}
+        issuer_lei: {value: {path: issuer_lei}}
         balance: {value: {path: balance}}
         unit: {value: {path: unit}}
         currency_code: {value: {path: currency_code}}

@@ -911,9 +911,9 @@ mdm:
                         market_sector:
                           value:
                             path: market_sector
-                        share_class_figi:
-                          value:
-                            path: share_class_figi
+                        # No share_class_figi field: it is the Security's
+                        # cross-reference below (lookup only), one place, not
+                        # two (ticket 129; operator, 2026-10-22: "Fix 4").
                   matching:
                     object:
                       fields: {}
@@ -1021,9 +1021,9 @@ mdm:
                         market_sector:
                           value:
                             path: market_sector
-                        share_class_figi:
-                          value:
-                            path: share_class_figi
+                        # No share_class_figi field: it is the Security's
+                        # cross-reference below (lookup only), one place, not
+                        # two (ticket 129; operator, 2026-10-22: "Fix 4").
                   matching:
                     object:
                       fields: {}

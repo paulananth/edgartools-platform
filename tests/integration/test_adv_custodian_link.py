@@ -2,8 +2,8 @@
 
 The real chain on two invented monthly Form ADV files: the filings and custody
 source extracts (each file's month end in their context), combine.yaml,
-mdm.prepare (filings and custodians, dated by `published`; custodians one per
-file), the two Dataset Contracts, then the Merge Stage with the Form ADV
+mdm.prepare (filings and custodians, dated by `published`; a custodian one
+record, restated by each file), the two Dataset Contracts, then the Merge Stage with the Form ADV
 matching rules switched on in a copy of the policy. A custodian named by its
 BD number or by its LEI is linked; one named only by name waits; a custodian
 named again in a later month keeps one link, its start at the first month and
@@ -72,9 +72,10 @@ def read(store, root: Path, contract_file: str, raw: dict, published: str) -> di
 
 
 def prepare(store, root: Path, reading: dict, table: str, code: str, **keys) -> list[dict]:
+    dated = {} if "effective_at" in keys else {"effective_column": "published"}
     prepared = chain.prepare(store, root, reading, {
         "table": table, "dataset": code, "policy": "0" * 64, "consumer": "check", "batch_id": f"check-{code}",
-        "as_of": "2026-10-16T00:00:00+00:00", "effective_column": "published", **keys})
+        "as_of": "2026-10-16T00:00:00+00:00", **dated, **keys})
     return chain.records(store, root, prepared, code, files.source(NAME)["mdm"][code]["contract"])
 
 
@@ -93,7 +94,10 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
     custody_rows = read(store, root / "custody", "custody-csv.yaml", raw, published)
     combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
                              {"filings": filings, "custody": custody_rows})
-    custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS, distinct_on=["custodian_id"])
+    # Each month's file restates every custodian it names: its own publication, the
+    # month (YYYYMM) its revision, so a later month is a later revision (ticket 129).
+    custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS, distinct_on=["custodian_id"],
+                         publication_key=f"iapd.adv:{tag}", revision=tag, effective_at=published)
     advisers = prepare(store, root / "mdm-filings", combined, "filings", FILINGS)
     return custodians, advisers
 
@@ -102,11 +106,15 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
     may_custodians, may_filings = month(tmp_path / "may", MAY)
     june_custodians, june_filings = month(tmp_path / "june", JUNE)
     (may_filing,) = may_filings
-    custodian_subjects = {subject_key(CUSTODIANS, canonical([MAY, f"{p}{v}"])) for p, v in
+    # The custodian alone keys its record (ticket 129, "Fix 5"): the month is the publication's.
+    custodian_subjects = {subject_key(CUSTODIANS, f"{p}{v}") for p, v in
                           (("bd:", BD), ("lei:", LEI), ("name:", "EXAMPLE TRUST CO"))}
     assert {l["target_subject"] for l in may_filing["relationships"]} == custodian_subjects
     assert {subject_key(CUSTODIANS, r["provenance"]["record_key"]) for r in may_custodians} == custodian_subjects
     assert len(may_custodians) == 3  # the BD custodian's two rows are one record
+    # June restates the same custodians as new publications of the same records, not new ones.
+    june_keys = {r["provenance"]["record_key"] for r in june_custodians}
+    assert june_keys <= {r["provenance"]["record_key"] for r in may_custodians}
     with database.admin.begin() as conn:
         for code in (FILINGS, CUSTODIANS):
             register_dataset(conn, code, database.registry, files.mdm_contract(NAME, code))

@@ -296,9 +296,11 @@ def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_lis
     by_key = {r["provenance"]["record_key"]: r for r in records}
     equity = by_key[EQUITY]
     assert {k: equity["fields"][k]["value"] for k in ("name_of_issuer", "security_type", "security_type2",
-                                                       "market_sector", "share_class_figi")} == {
+                                                       "market_sector")} == {
         "name_of_issuer": "EXAMPLE CORP", "security_type": "Common Stock", "security_type2": "Common Stock",
-        "market_sector": "Equity", "share_class_figi": "BBGZZ00000SC"}
+        "market_sector": "Equity"}
+    # The share class FIGI is a cross-reference only, never a field too (ticket 129, "Fix 4").
+    assert "share_class_figi" not in equity["fields"]
     assert [(r["key"], r["exchange"], r["ticker"]) for r in equity["details"]["listings"]] == [
         ("BBGZZ0000GR1", "GR", "EXB"), ("BBGZZ0000GY1", "GY", "EXB"), ("BBGZZ0000UN1", "UN", "EXA"),
         ("BBGZZ0000US1", "US", "EXA")]

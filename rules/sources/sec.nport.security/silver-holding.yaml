@@ -72,6 +72,12 @@ columns:
   definition: "The holding's one ISIN; empty for none or two."
   source: "IDENTIFIERS.IDENTIFIER_ISIN by HOLDING_ID"
   sensitivity: none
+- name: issuer_lei
+  type: VARCHAR
+  nullable: true
+  definition: "The issuer's LEI as the fund filed it; the Security reaches its issuer by ISSUED_BY, not by this column."
+  source: "ISSUER_LEI"
+  sensitivity: none
 - name: balance
   type: DECIMAL(38,10)
   nullable: true
