@@ -96,6 +96,15 @@ Evidence and sources: ticket 38, research 02 section 2.
   years (Recommended)"). "Not meaningful" when the first or last value is zero
   or negative; null with "missing year" or "fiscal year changed" when an
   endpoint is missing.
+- **An average balance needs both balances**: a return on the average balance
+  is null, "missing year" (or "fiscal year changed"), when the prior year's
+  balance is missing, as the beginning form is (operator, 2026-10-22: 'Null,
+  "missing year" (Recommended)').
+- **ROIC's tax rate** is income tax over pretax income; when pretax income is
+  zero or negative, or that rate falls outside 0–100%, it is the statutory rate
+  of the filer's country, from RDM's `corporate-tax-rates` (OECD; operator,
+  2026-10-22: "Statutory rate (new source)", "RDM, OECD source (Recommended)";
+  ticket 133).
 - **Definitions** as research 01 section 4 gives them: ROIC after tax on debt +
   equity − cash; FCF = operating cash flow − capital expenditure; per-share on
   the latest-filed series.
@@ -145,14 +154,22 @@ Evidence and sources: ticket 39, research 02 section 3.
   conversion needs an exchange-rate source: a new provider, its own ticket.
 - **IFRS mapped into the same 19 line items** (operator: "Map into same items
   (Recommended)"): an ordered `ifrs-full` list beside each `us-gaap` list in
-  the rules YAML; a filer is read from the taxonomy it files in.
+  the rules YAML; a filer is read from the taxonomy it files in. The lists are
+  research 04 (`.scratch/company-financials/research/04-ifrs-concept-lists.md`;
+  operator, 2026-10-22: "Approve the lists (Recommended)"): IFRS taxonomy
+  elements, first present wins; operating income empty where a filer presents
+  none (IAS 1 defines none); lease liabilities never added to total debt; the
+  taxonomy read period by period, since a filer can move between the two.
 - **One item set, flagged by kind** (operator: "Same items, flagged by kind
   (Recommended)"): a value from an industry concept carries its kind (bank,
   insurer, REIT, utility). Each filer has a format, industrial or financial
   services, from its SIC code (6000–6199, 6300–6411 are financial services),
   as Compustat keeps `INDL` and `FS`. A measure meaningless for financial
-  services (gross margin, ROIC, total debt and its ratios) is null with the
-  reason "not meaningful for financial services".
+  services (gross margin, ROIC, total debt and its ratios, and the current
+  ratio, since a bank presents its balance sheet by liquidity; operator,
+  2026-10-22: "The four, plus current ratio (Recommended)") is null with the
+  reason "not meaningful for financial services". Operating margin follows its
+  inputs.
 
 ## Silver tables and their review (ticket 43, decided 2026-10-22)
 

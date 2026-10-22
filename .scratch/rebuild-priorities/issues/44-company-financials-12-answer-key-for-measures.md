@@ -21,9 +21,11 @@ counts and the key file's sha256, so ticket 48 scores against that exact key.
 - [x] How long a year is: "364–371 days" counts a period's first and last day; by subtraction the cohort's years are 363 (52-week, 31 filers), 364, 365 and 370 (53-week, 28 filers), so only that reading keeps both 52- and 53-week years (skill clarified) (2026-10-22 16:43 ET)
 - [x] Hard cases found (`answer-key/find_cases.py`, counts only): 52/53-week 28 companies, non-December 68, changed year end 16, restatement 133, stock split 43, negative base 173, non-USD 19, IFRS 6, financial services 42, mixed currencies 18; three companies cover all ten (local file) (2026-10-22 16:43 ET)
 - [x] IFRS concept lists proposed from the IFRS taxonomy and the cohort's 6 IFRS filers (operator: "Propose from IFRS taxonomy (Recommended)"): research 04 (2026-10-22 16:43 ET)
-- [ ] The operator approves research 04's lists
+- [x] The operator approves research 04's lists: "Approve the lists (Recommended)" (2026-10-22 16:55 ET)
 - [ ] Each chosen company's cases checked by hand against its facts (a differing figure is not always a restatement)
-- [ ] Open definition questions, one at a time: the ROIC tax rate when pretax income is zero or negative; average-balance returns when the start balance is missing; which measures are not meaningful for financial services beyond the four ruled
+- [x] ROIC's tax rate when pretax income is zero or negative, or the effective rate falls outside 0–100%: the filer's country's statutory rate (operator, 2026-10-22: "Statutory rate (new source)"), held in RDM from the OECD table ("RDM, OECD source (Recommended)"; ticket [133](133-statutory-tax-rates-in-rdm.md)); until it exists the key marks those years "waiting for the statutory rate" (2026-10-22 16:57 ET)
+- [x] Average-balance returns when the prior balance is missing: null, "missing year" (or "fiscal year changed"), as CAGR's endpoints (operator, 2026-10-22: "Null, \"missing year\" (Recommended)") (2026-10-22 16:57 ET)
+- [x] Not meaningful for financial services: gross margin, ROIC, total debt and its ratios, and the current ratio (operator, 2026-10-22: "The four, plus current ratio (Recommended)"); operating margin follows its inputs (2026-10-22 16:57 ET)
 - [ ] The oracle: every line item and measure by the rulings (35, 38, 39, 42), each value with every candidate fact tried and why the chosen one won; local key, sha256 in the repo
 - [ ] Every null reason appears at least once (no concept filed, missing year, fiscal year changed, not meaningful, mixed currencies, not meaningful for financial services, a denominator of zero or less)
 - [ ] One value per hard case recomputed by hand from the raw facts, recorded here

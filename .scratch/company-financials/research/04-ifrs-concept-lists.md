@@ -3,7 +3,7 @@
 Gathered 2026-10-22 for ticket 44 (the answer key) and build ticket 46 (the line
 items in rules configuration). The operator ruled on 2026-10-22, ticket 42:
 "IFRS mapped into the same 19 items: an ordered `ifrs-full` list beside each
-`us-gaap` list". Then, ticket 44: "Propose from IFRS taxonomy (Recommended)".
+`us-gaap` list". Then, ticket 44: "Propose from IFRS taxonomy (Recommended)". **Approved** (operator, 2026-10-22: "Approve the lists (Recommended)").
 Later financials decisions read this note beside research 01 and 02.
 
 ## Sources
