@@ -28,6 +28,7 @@ not describe any of them as running.
 | Overwrite a figure when a later filing restates it | Keep every filed copy; the latest is the default (below) |
 | Fill a missing year from a nearby year | Null, with its reason |
 | Send a request to the SEC or a data provider | Captured files only; a new request needs the operator's permission for that request |
+| Type a financial column `integer`, `int`, `float`, `double` or `real`, in a silver spec, dbt, Python or the engine | A whole number (CIK, year, window, count) is `bigint`; a figure, ratio or measure is a big decimal (`decimal(38,10)`, Python `Decimal`, exact text from the engine). No float anywhere between the filed text and the stored value, even where no captured figure loses a digit today (operator, 2026-10-22: "For financial projects never use integer's use only bigint or big decimal", "Big decimal") |
 
 ## The time model (ticket 35, decided 2026-10-21)
 
@@ -119,6 +120,12 @@ Evidence and sources: ticket 39, research 02 section 3.
   `big_numbers: text` on the `units` value (ticket 128; operator: "Exact big
   numbers in the reader"). Never round it; without the option the file is
   refused (`value_number_range`). With it, all 368 captured files read.
+- **Every decimal figure is a big decimal**: declare `decimals: text` on the
+  `units` value too (ticket 134), so a figure with a decimal point reaches
+  silver as its exact filed digits, never through a float (operator,
+  2026-10-22: "For financial projects never use integer's use only bigint or
+  big decimal", "Big decimal"). Of 323,634 decimal figures captured, none loses a
+  digit through a float today; the rule holds anyway.
 
 ## Currencies, IFRS and industry formats (ticket 42, decided 2026-10-22)
 
