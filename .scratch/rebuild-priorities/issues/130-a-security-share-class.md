@@ -13,7 +13,7 @@ OpenFIGI gives each class its own share-class FIGI and no letter. The class is
 the letter the issuer gave it, as the filed title states it (Form 4 instruction
 3(b); the CUSIP Global Services descriptions in 13F).
 
-**Status:** waiting for the operator's ruling on the proposed rule
+**Status:** built, PR open
 
 ## Proposed rule
 
@@ -36,8 +36,12 @@ the letter the issuer gave it, as the filed title states it (Form 4 instruction
 
 - [x] Outside standards researched, research note 01 written (2026-10-22 13:55 ET)
 - [x] Measured on local copies: N-PORT 2026q2 equity titles and the Form 4 cohort (research note 01) (2026-10-22 13:55 ET)
-- [ ] The operator rules on the proposed rule
-- [ ] The class token recipe in the source extracts (13F, N-PORT, OpenFIGI none, Form 4), tested on each source's titles
-- [ ] `share_class` on the Security's Dataset Contracts and merge rules; MAPPING.xlsx and security.xlsx regenerated
-- [ ] The quality rule for a CUSIP with two letters
-- [ ] Learning → skill
+- [x] The operator rules on the proposed rule: "Approve the rule (Recommended)" (2026-10-22 14:13 ET)
+- [x] The class recipe in the 13F and N-PORT source extracts (N-PORT equity holdings only, by CUSIP, by ISIN and folded); the source engine equals the oracle on all 163,731 distinct local titles (`.scratch/onboarding/security-share-class/`); chain tests on invented holdings, `tests/integration/test_security_share_class.py` (2026-10-22 14:13 ET)
+- [ ] ~~The class recipe for Form 4 titles~~ deferred to [24](24-security-mastering-04-form-4-attaches-by-class.md): a Form 4 Security record is built there, with the matching rule that waits on #1121
+- [x] `share_class` on both Dataset Contracts; the merge rules unchanged (the default source order fills it); MAPPING.xlsx and security.xlsx regenerated, mapdoc check passed (2026-10-22 14:13 ET)
+- [x] The quality rule for a Security its filers name two letters for: `share_class_one_letter`, flag only, 13F (new quality file) and N-PORT (quality v2); N-PORT, OpenFIGI, mapdoc, catalog, rules and MDM tests 1,093 passed (2026-10-22 14:13 ET)
+- [x] Approval recorded under the operator's standing words "Approved the rules always" (2026-10-15), on the evidence above (2026-10-22 14:13 ET)
+- [ ] ~~Two sources that disagree give no letter~~ deferred: the merge has no "agree or none" field rule (new code); the first-ranked source wins, as for the title. 777 CUSIPs carry a letter in both sources, 1 disagrees (refining log)
+- [ ] PR merged
+- [x] Learning → skill: `skills/data-platform/READING.md`: keeping one token of a text with literal-marker replacements; a selection's "no" is a presence test on a missing path; a value kept only when every row agrees (select, count members, `where: {<count>: 1}`). `skills/data-onboarding/REFERENCE.md`: a contract field is a `value`, `join` or `object` (the Mapping Document refuses a computed one); a scripted rules file needs a dumper without aliases (2026-10-22 14:13 ET)

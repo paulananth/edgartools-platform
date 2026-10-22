@@ -253,6 +253,286 @@ read:
             value: isin
         period:
           context: {name: period}
+    # The share class each equity holding's title names (ticket 130;
+    # operator, 2026-10-22: "Approve the rule (Recommended)"): the letter
+    # after CL, CLASS or CLS, from equity holdings (asset category EC) only,
+    # so a bond tranche's "CL A" names none; a holding naming none is left
+    # out, so reduce.yaml counts only the letters filed. The rows are
+    # security_cusip's and security_isin's.
+    cusip_class:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: ASSET_CAT
+                          default: ''
+                      right:
+                        const:
+                          value: EC
+                  then:
+                    text:
+                      path: ISSUER_TITLE
+                      default: ''
+                      transforms:
+                      - case: upper
+                      - regex_replace:
+                          pattern: '[^A-Z]+'
+                          with: ' '
+                      - pad:
+                          left: ' '
+                          right: ' '
+                      - regex_replace:
+                          pattern: '^.* (CL|CLASS|CLS) '
+                          with: '#'
+                      - regex_replace:
+                          pattern: ^[^#].*$
+                          with: ''
+                      - regex_replace:
+                          pattern: ' .*$'
+                          with: ''
+                      - regex_replace:
+                          pattern: ^#[A-Z][A-Z]+$
+                          with: ''
+                      - replace:
+                          from: '#'
+                          to: ''
+                  else:
+                    const:
+                      value: ''
+              right:
+                const:
+                  value: ''
+          then:
+            test:
+              path: NO_SUCH_COLUMN
+              kind: present
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    text:
+                      path: ISSUER_CUSIP
+                      default: ''
+                      transforms:
+                      - case: upper
+                      null_if:
+                      - ''
+                      - '000000000'
+                      - '999999999'
+                  right:
+                    value:
+                      path: NO_SUCH_COLUMN
+              then:
+                value:
+                  path: NO_SUCH_COLUMN
+              else:
+                test:
+                  path: HOLDING_ID
+                  kind: present
+      columns:
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ''
+            transforms:
+            - case: upper
+            null_if:
+            - ''
+            - '000000000'
+            - '999999999'
+        share_class:
+          choose:
+            condition:
+              equal:
+                left:
+                  text:
+                    path: ASSET_CAT
+                    default: ''
+                right:
+                  const:
+                    value: EC
+            then:
+              text:
+                path: ISSUER_TITLE
+                default: ''
+                transforms:
+                - case: upper
+                - regex_replace:
+                    pattern: '[^A-Z]+'
+                    with: ' '
+                - pad:
+                    left: ' '
+                    right: ' '
+                - regex_replace:
+                    pattern: '^.* (CL|CLASS|CLS) '
+                    with: '#'
+                - regex_replace:
+                    pattern: ^[^#].*$
+                    with: ''
+                - regex_replace:
+                    pattern: ' .*$'
+                    with: ''
+                - regex_replace:
+                    pattern: ^#[A-Z][A-Z]+$
+                    with: ''
+                - replace:
+                    from: '#'
+                    to: ''
+            else:
+              const:
+                value: ''
+    isin_class:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: ASSET_CAT
+                          default: ''
+                      right:
+                        const:
+                          value: EC
+                  then:
+                    text:
+                      path: ISSUER_TITLE
+                      default: ''
+                      transforms:
+                      - case: upper
+                      - regex_replace:
+                          pattern: '[^A-Z]+'
+                          with: ' '
+                      - pad:
+                          left: ' '
+                          right: ' '
+                      - regex_replace:
+                          pattern: '^.* (CL|CLASS|CLS) '
+                          with: '#'
+                      - regex_replace:
+                          pattern: ^[^#].*$
+                          with: ''
+                      - regex_replace:
+                          pattern: ' .*$'
+                          with: ''
+                      - regex_replace:
+                          pattern: ^#[A-Z][A-Z]+$
+                          with: ''
+                      - replace:
+                          from: '#'
+                          to: ''
+                  else:
+                    const:
+                      value: ''
+              right:
+                const:
+                  value: ''
+          then:
+            test:
+              path: NO_SUCH_COLUMN
+              kind: present
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    text:
+                      path: ISSUER_CUSIP
+                      default: ''
+                      transforms:
+                      - case: upper
+                      null_if:
+                      - ''
+                      - '000000000'
+                      - '999999999'
+                  right:
+                    value:
+                      path: NO_SUCH_COLUMN
+              then:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        member_value:
+                          lookup: isin
+                          key:
+                            text:
+                              path: HOLDING_ID
+                          on_many: 'null'
+                      right:
+                        value:
+                          path: NO_SUCH_COLUMN
+                  then:
+                    value:
+                      path: NO_SUCH_COLUMN
+                  else:
+                    test:
+                      path: HOLDING_ID
+                      kind: present
+              else:
+                value:
+                  path: NO_SUCH_COLUMN
+      columns:
+        isin:
+          member_value:
+            lookup: isin
+            key:
+              text:
+                path: HOLDING_ID
+            on_many: 'null'
+        share_class:
+          choose:
+            condition:
+              equal:
+                left:
+                  text:
+                    path: ASSET_CAT
+                    default: ''
+                right:
+                  const:
+                    value: EC
+            then:
+              text:
+                path: ISSUER_TITLE
+                default: ''
+                transforms:
+                - case: upper
+                - regex_replace:
+                    pattern: '[^A-Z]+'
+                    with: ' '
+                - pad:
+                    left: ' '
+                    right: ' '
+                - regex_replace:
+                    pattern: '^.* (CL|CLASS|CLS) '
+                    with: '#'
+                - regex_replace:
+                    pattern: ^[^#].*$
+                    with: ''
+                - regex_replace:
+                    pattern: ' .*$'
+                    with: ''
+                - regex_replace:
+                    pattern: ^#[A-Z][A-Z]+$
+                    with: ''
+                - replace:
+                    from: '#'
+                    to: ''
+            else:
+              const:
+                value: ''
   stream:
     framing: delimited
     delimited:
@@ -326,6 +606,11 @@ mdm:
                             item_path: issuer_title
                             separator: ""
                             max_items: 1
+                        # The share class (ticket 130): the one letter the
+                        # equity holdings name; none when they name two
+                        # (combine.yaml).
+                        share_class:
+                          join: {path: class, item_path: share_class, separator: "", max_items: 1}
                         # No issuer LEI field: an LEI identifies a Company, not a
                         # Security ("A value of another kind stays out of this
                         # kind"); the Security reaches its issuer by ISSUED_BY
@@ -333,12 +618,18 @@ mdm:
                         # (silver-holding.yaml; operator, 2026-10-22: "Fix 1").
                   matching:
                     object:
-                      fields: {}
+                      fields:
+                        # Every letter the holdings name, for the quality
+                        # check that lists a Security they disagree on.
+                        share_classes_filed:
+                          join: {path: classes.class_sample, item_path: share_class, separator: "", max_items: 26}
           input_fields:
           - key
           - cusip
           - name
           - title
+          - class
+          - classes
           - lei
           - isin
           - issuer

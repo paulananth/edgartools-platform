@@ -46,6 +46,20 @@ read:
                   - {value: {path: title}}
                   - {value: {path: isin_title}}
                   - {value: {path: folded_title}}
+              class:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: class}}
+                  - {value: {path: isin_class}}
+                  - {value: {path: folded_class}}
+              classes:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: classes}}
+                  - {value: {path: isin_classes}}
+                  - {value: {path: folded_classes}}
               lei:
                 coalesce:
                   skip: "null"

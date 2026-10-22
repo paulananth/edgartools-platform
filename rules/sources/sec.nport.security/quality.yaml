@@ -4,8 +4,9 @@
 # Approved under the operator's standing words "Approved the rules always"
 # (2026-10-15), on the data-quality measure of the test run: 0 of 383,595
 # CUSIP and 0 of 35,309 ISIN Securities fail it. One Dataset Contract for both
-# since ticket 120 (sec.nport.security.v2).
-version: sec-nport-security-quality-v1
+# since ticket 120 (sec.nport.security.v2). v2 adds the share-class check
+# (ticket 130; operator, 2026-10-22: "Approve the rule (Recommended)").
+version: sec-nport-security-quality-v2
 quality:
   sec.nport.security.v2:
     checks:
@@ -16,3 +17,11 @@ quality:
       on_fail: withhold
       args:
         values: [NONE, "NULL", UNKNOWN, TBD, NOTAPPLICABLE, NOTAVAILABLE]
+    # Filers that name two share classes for one Security give it none
+    # (combine.yaml); the Security is listed for a steward, never held back.
+    - id: share_class_one_letter
+      test: pattern@1
+      value: matching.share_classes_filed
+      on_fail: flag
+      args:
+        regex: "[A-Z]"
