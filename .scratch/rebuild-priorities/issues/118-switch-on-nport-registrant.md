@@ -2,7 +2,7 @@
 
 Priority: 118 (operator, 2026-10-19: "Can you turn on company mastering one source at a time sec, geilf, and the rest"; the N-PORT registrant follows SEC Company). Map: [Rebuild priorities](../map.md).
 
-Type: task (configuration only). Status: in progress (Claude, 2026-10-19). Blocked by: #1113 (a source with no feed of its own activates) for the switch-on.
+Type: task (configuration only). Status: done (#1114 merged 2026-10-19 13:47 ET). Blocked by: #1113 (a source with no feed of its own activates) for the switch-on.
 
 ## Checklist
 
@@ -15,5 +15,9 @@ Type: task (configuration only). Status: in progress (Claude, 2026-10-19). Block
 - [x] Fund: saved as `fund-2026-10-19.pipes-on`, its test run recorded, approved under the standing approval, active in the `company-on` store after the registrant; `rules run` (no feed) over the quarter (2026-10-19 12:57 ET): complete in 80 s, every step verified
 - [x] Found (Spec review, 2026-10-19 13:06 ET): a test run's checks "second pass changed nothing" and "no identifier on two masters" read only `mdm.current_record`, but Companies are kept in `mdm.company`, so for a Company source both checked nothing (the registrant's first test hashed an empty set). Fixed in `rules/proving.py` (`counts`): both now read the current Company rows too. Rerun of the registrant test (2026-10-19 13:06 ET): passed, the same Company hash on both passes, no identifier on two masters; on the `company-on` store the 2,433 Companies hold no identifier twice. Earlier Company claims that rested on these checks hold on today's store; the 2026-10-14 installed proof counted Companies with its own queries
 - [x] Three-axis review (2026-10-19 13:06 ET): GoF: leave it. Standards: another source's file named clearly (a missing source or the source's own folder refused), tests for the path (refused paths, loading from the other folder, the identity moving with that file). Spec: the gap above; Bookkeeping SPEC documents `<source>/<file>`; the readings' header comments name the record step and the steps after it. Tests: `tests/mdm/test_read_units.py` and `test_target_manifest.py` 49 passed
-- [ ] PR, CI, merge
-- [ ] Learning → skill
+- [x] PR, CI, merge: #1114 merged 2026-10-19 13:47 ET (checked 2026-10-21 21:02 ET)
+- [x] Learning → skill: #1114 (`skills/bookkeeping/SPEC.md`) (checked 2026-10-21 21:02 ET)
+
+## Answer
+
+N-PORT registrant and fund run from the captured quarter. Merged in #1114 (2026-10-19 13:47 ET).

@@ -2,7 +2,7 @@
 
 Priority: 115. Map: [Rebuild priorities](../map.md).
 
-Type: task (skills). Status: in progress (Claude, 2026-10-19). Blocked by: none.
+Type: task (skills). Status: done (#1109 merged 2026-10-19 08:40 ET). Blocked by: none.
 
 ## Operator ruling
 
@@ -25,5 +25,9 @@ Type: task (skills). Status: in progress (Claude, 2026-10-19). Blocked by: none.
   - data-platform: stale qualification history cut to the evidence versions carry forward
   - mdm-engineering, data-profiling, sql-writer, data-scientist, data-engineering-fundamentals: read; no waste beyond the pointer (data-profiling already profiles once; its narration section is the operator's)
 - [x] Three-axis review (2026-10-19 08:30 ET): GoF: "carry a proof forward" was stated five times and already drifting (now one owner, mdm-engineering's last proof row, the others link to it); bookkeeping and RUN.md still required a feed (now feed only for live acquisition). Standards and Spec: how a carried proof is recorded (`record-proof` checks the digest: a new proof file, written out in the owner row); the standing rule approval had reached only data-quality (APPROVE.md and COMPLETION.md now record a passing version under it; overrules, new kinds and switch-on still ask); data-quality's hard stops contradicted its new section (fixed); data-engineering-fundamentals answers from its own file only (pointer removed). Merges after #1108, whose feed-less runs these skills describe
-- [ ] PR, CI, merge (after #1108)
-- [ ] Learning → skill: this ticket is the skill change
+- [x] PR, CI, merge (after #1108): #1109 merged 2026-10-19 08:40 ET (checked 2026-10-21 21:02 ET)
+- [x] Learning → skill: this ticket is the skill change, #1109 (bookkeeping, change-journal, data-modeling, data-onboarding and others) (checked 2026-10-21 21:02 ET)
+
+## Answer
+
+Every skill works lean (the seven wastes). Merged in #1109 (2026-10-19 08:40 ET).

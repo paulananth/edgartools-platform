@@ -36,7 +36,7 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 
 Reviewed 2026-10-21 20:14 ET, over all 127 tickets. Operator, asked what "complete the project" means: "Two proofs, local (Recommended)". The destination above stands: done when the operator accepts the recreation proof ([32](issues/32-profiling-08-recreation-proof.md)) and the financials cohort proof ([48](issues/48-company-financials-16-cohort-proof.md)) on local stores. This order replaces "ticket number = priority" for what is left:
 
-1. **Close what is finished** (docs only, one session). The work is merged; only "PR / merge / learning" ticks or deferred parts stay open: 02, 03, 04, 06, 07, 10, 11, 13, 16, 17, 19, 22, 23, 66, 74, 76, 86, 88, 89, 100, 101, 105, 111, 112, 113, 115, 116, 117, 118, 123. Tickets 50–62 were closed by the ruling of 2026-10-18 ("Close all, re-raise later"); mark their files closed in this step too.
+1. **Close what is finished** (docs only, one session). Done 2026-10-21 21:02 ET: tickets 113, 115–118 and 123 closed; the rest were already closed; gists added. The work is merged; only "PR / merge / learning" ticks or deferred parts stay open: 02, 03, 04, 06, 07, 10, 11, 13, 16, 17, 19, 22, 23, 66, 74, 76, 86, 88, 89, 100, 101, 105, 111, 112, 113, 115, 116, 117, 118, 123. Tickets 50–62 were closed by the ruling of 2026-10-18 ("Close all, re-raise later"); mark their files closed in this step too.
 2. **Switch on what is proved** (each on the operator's words): [120](issues/120-switch-on-securities.md) Securities, then OpenFIGI, in `company-on` (about 3 h, then about 7 h of merge); [114](issues/114-onboard-company.md) Company; [80](issues/80-onboard-openfigi.md) OpenFIGI's source activation; [09](issues/09-mastering-to-done-07-cascade-passes-switch-on.md) the cascade passes (about 1½ h of the operator's labels, 344 pairs).
 3. **Close the mastering gaps**, so every captured feed is read and mastered: [01](issues/01-profiling-07-readers-per-feed.md) Form ADV's custodian links; [24](issues/24-security-mastering-04-form-4-attaches-by-class.md) a Form 4 attaches by share class; [25](issues/25-security-mastering-05-a-person-holds-and-does-not-issue.md) a Person holds and does not issue; [79](issues/79-onboard-funds-and-securities-with-the-skills.md) 13F Securities and funds' `HOLDS`; [99](issues/99-an-identifier-rule-creates-after-the-name-rules.md) an identifier rule creates after the name rules.
 4. **Build the financials to their cohort proof**: [35](issues/35-company-financials-03-time-model-as-reported-or-restated.md) and 37–47 in order, then [48](issues/48-company-financials-16-cohort-proof.md).
@@ -100,6 +100,19 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
 - [Profiling ranks several sources](issues/110-profiling-ranks-several-sources.md): `rank_sources.py` measures coverage, one-value rate and pairwise agreement per field and writes the order in the kind file's shape (#1080)
 - [Which filed words a Security keeps](issues/84-security-filed-words.md): OpenFIGI names a Security first, then N-PORT, then 13F; the title keeps the filed words; 3,688 of 3,927 cohort Securities take OpenFIGI's name (#1085)
 - [rules test first](issues/12-mastering-to-done-09-test-check-and-preview-for-onboarding.md): the other onboarding commands fold into `rules test` (ticket 14); `rules profile` dropped
+- [Run a source into MDM](issues/13-rules-skill-04-run-a-source-into-mdm.md): closed; `rules run` submits configured runs, the rest moved to ticket 12
+- [Data Onboarding skill gaps found by the Person feed 1 onboarding](issues/16-platform-validation-05c-data-onboarding-skill-gaps.md): each gap fixed in the skill (#1092)
+- [05b Relationships at a past recording time (`--as-at`)](issues/19-profiling-05b-relationship-as-at.md): done locally; the hosted `mdm migrate` waits for hosting (ticket 68, out of scope)
+- [Matching rules declared but not switched on](issues/76-declared-rules-not-switched-on.md): switched on (#1042)
+- [A step reads a reading in pieces](issues/111-a-step-reads-a-reading-in-pieces.md): a step reads a frozen reading in pieces (#1093)
+- [A combine reads many readings under one name](issues/112-a-combine-reads-many-readings-under-one-name.md): one name covers many readings (#1094)
+- [An N-PORT ISSUED_BY link starts at its filing, and a link that exists keeps its start](issues/113-issued-by-starts-at-the-filing.md): the filing date starts a new link; an existing link keeps its start; the quarter stays in silver (#1107)
+- [Every skill works lean: the seven wastes](issues/115-every-skill-works-lean.md): the seven wastes removed from every skill (#1109)
+- [Switch on GLEIF over the captured Golden Copy](issues/116-switch-on-gleif.md): GLEIF runs from a captured Golden Copy (#1112); not yet switched on
+- [Switch on SEC Person over captured submissions](issues/117-switch-on-person.md): Person runs over captured filings of people (#1113, #1116); not yet switched on
+- [Switch on the N-PORT registrant and fund over the captured quarter](issues/118-switch-on-nport-registrant.md): registrant and fund run from the captured quarter (#1114); not yet switched on
+- [A Security master skill](issues/123-security-master-skill.md): the skill holds every Securities ruling (#1117, #1118, #1119)
+- Tickets 49–62 (gold): closed as written (operator, 2026-10-18 12:25 ET, "Close all, re-raise later (Recommended)")
 
 ## Not yet specified
 

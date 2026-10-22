@@ -4,7 +4,7 @@ Priority: 123 (operator, 2026-10-20 08:16 ET: "Create a security master skill
 that codifies these rules"). Map: [Rebuild priorities](../map.md). Rules from
 ticket 120's rulings (2026-10-15 to 2026-10-20) and `rules/merge/kinds/security.yaml`.
 
-Type: task. Status: in progress (Claude, 2026-10-20). Blocked by: none.
+Type: task. Status: done (#1117 merged 2026-10-20 08:47 ET). Blocked by: none.
 
 ## Checklist
 
@@ -16,5 +16,9 @@ Type: task. Status: in progress (Claude, 2026-10-20). Blocked by: none.
 - [x] Every Security uniquely identifiable (operator, 2026-10-20 08:24 ET, rulings 08:28 ET): which holdings become Securities, by identifier, with counts; work in ticket 125 (2026-10-20 08:29 ET)
 - [x] CI found the skill names its sources, which the genericity test forbids outside Examples; operator, 2026-10-20: "Security master must document how the actual security mastering is done so exempt": `security-master` joins the test's exempt list, with that reason (`test_profiling_genericity.py`: 78 passed)
 - [x] PR, CI, merge: #1117 merged on green (2026-10-20 08:47 ET)
-- [ ] Ticket 120 ticks each "decided" rule here as live when it lands
-- [ ] Learning → skill: this ticket is the skill; ticket 120's later rulings are recorded in it
+- [ ] ~~Ticket 120 ticks each "decided" rule here as live when it lands~~ deferred to ticket 120: the rules are in the skill (#1118, #1119) but none is live until the operator switches on Securities (route step 2)
+- [x] Learning → skill: this ticket is the skill, `skills/security-master/SKILL.md` (#1117); ticket 120's later rulings are recorded in it (#1118, #1119) (checked 2026-10-21 21:02 ET)
+
+## Answer
+
+The security-master skill. Merged in #1117 (2026-10-20 08:47 ET); ticket 120's rulings added by #1118 and #1119.
