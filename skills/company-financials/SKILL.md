@@ -136,3 +136,16 @@ Evidence and sources: ticket 39, research 02 section 3.
   as Compustat keeps `INDL` and `FS`. A measure meaningless for financial
   services (gross margin, ROIC, total debt and its ratios) is null with the
   reason "not meaningful for financial services".
+
+## Silver tables and their review (ticket 43, decided 2026-10-22)
+
+- **Three tables**: `company_fact` (every filed fact, append, keyed on the
+  measured eight columns), `company_line_item` and `company_measure` (built by
+  dbt from the facts, rebuilt whole each run). The spec is on ticket 43.
+- **Review the financials tickets before a spec or a build**: the rulings of 35,
+  38, 39, 40, 42 and 128 each reach the spec, the reader (45), the line items
+  (46) and the answer key (44). The review of 2026-10-22 found a spec waiting on
+  too few tickets, a build still offering a custom step, an answer key without
+  the IFRS, financial-services, mixed-currency and changed-year-end cases.
+- **The statement format is "unknown" until Company is mastered**: it comes from
+  the Company master's SIC code, and the local MDM has no Company yet (ticket 37).
