@@ -1,0 +1,43 @@
+# Trial source-extract contract for one company facts file (ticket 40).
+# Configured reading only. One table per taxonomy, one row per concept, its
+# units kept whole as one value; silver flattens units and facts (dbt).
+# Run 2026-10-22 over the 368 captured cohort files: research 02 section 4.
+# Three of the nine taxonomy tables are shown; ecd, ffd, invest, rxp, srt and
+# vip repeat the dei table with their own path.
+read:
+  format: json
+  limits: {max_records: 100000}
+  references:
+    taxonomies:
+      dei: {known: true}
+      ecd: {known: true}
+      ffd: {known: true}
+      ifrs-full: {known: true}
+      invest: {known: true}
+      rxp: {known: true}
+      srt: {known: true}
+      us-gaap: {known: true}
+      vip: {known: true}
+  tables:
+    taxonomies:
+      each: {entries: {path: facts, key_field: taxonomy, value_field: concepts, on_invalid: empty}}
+      columns:
+        taxonomy: {text: {path: taxonomy, trim: false}}
+        # A taxonomy with no table of its own refuses the file (lookup_missing).
+        known:
+          lookup: {reference: taxonomies, column: known, key: {text: {path: taxonomy, trim: false}}, on_missing: error}
+    concepts_us_gaap:
+      each: {entries: {path: facts.us-gaap, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        concept: {text: {path: concept, trim: false}}
+        units: {value: {path: body.units}}
+    concepts_ifrs_full:
+      each: {entries: {path: facts.ifrs-full, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        concept: {text: {path: concept, trim: false}}
+        units: {value: {path: body.units}}
+    concepts_dei:
+      each: {entries: {path: facts.dei, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        concept: {text: {path: concept, trim: false}}
+        units: {value: {path: body.units}}
