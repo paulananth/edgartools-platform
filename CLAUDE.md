@@ -222,7 +222,9 @@ Learned the hard way; each is a standing operator rule.
   case is where a gap hides.
 - Every background watcher (CI, a long test, a proof) has a deadline and an
   exit for every outcome, including the PR merging or closing. Stop test
-  containers when a run ends, however it ends.
+  containers when a run ends, however it ends. macOS has no `timeout`
+  command (a watcher wrapped in it exits at once and does nothing); give the
+  deadline with a background `sleep N; kill <pid>` instead.
 - Choose the cheapest proof that proves the change (the `mdm-engineering`
   skill, "Choose the cheapest proof"); say the time of any step over ten
   minutes before starting it.

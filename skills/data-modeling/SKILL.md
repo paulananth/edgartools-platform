@@ -30,6 +30,7 @@ check (data-quality), or approve anything.
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
 | Write rules, contracts, quality files, or a code set version | Hand off; drafts in RDM go through data-profiling's RDM steps |
 | Request anything from a provider's live service | Use the captured files and this repo |
+| Propose a domain rule (a year key, a line item, a precedence) from the captured data alone | First find how a public standard or the main vendors do it (operator, 2026-10-21: "use standards from external vendors"). Write it in a research note the next decision reads, mark what is unverified, and follow the standard unless the operator rules otherwise |
 
 ## What the platform already says
 
@@ -156,6 +157,13 @@ From the findings' silver spec: the grain (one row per what), the key, the
 links to masters (the source key and the MDM id, with the overlap measured),
 the time columns, and the load mode. The spec is advice; this skill does not
 build the table.
+
+A standard line item built from many reported concepts (revenue from any of
+several tags) is an ordered concept list in rules configuration: the first
+concept present for the exact period wins, its name recorded beside the
+value. Follow a public standard's order where one exists; a computed
+fallback carries a "computed" flag; a missing item stays empty with its
+reason and is counted, never filled from a nearby period.
 
 ### 7. Time
 
