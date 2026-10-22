@@ -7,6 +7,10 @@ the profiler reads object keys as columns, so this workaround writes the keys as
 facts.parquet (cik, taxonomy, concept, unit, start, end, val, accn, fy, fp, form, filed, frame),
 concepts.parquet (taxonomy, concept, label, description; one row per concept seen) and
 entities.parquet (cik, entityName).
+
+`val` is the value exactly as filed, as text (ticket 44): a float would round a
+figure past 15 to 17 significant digits, and one cohort fact is beyond 64 bits
+(ticket 128). Read it with an exact decimal type, never a float.
 """
 
 import gzip
@@ -27,7 +31,8 @@ def main(capture: str, out: str) -> int:
     staged = target / "facts.jsonl.gz"  # streamed, then read once by DuckDB
     with gzip.open(staged, "wt", encoding="utf-8", compresslevel=1) as handle:
         for path in sorted(folder.glob("*.json.gz")):
-            document = json.loads(gzip.decompress(path.read_bytes()))
+            # Numbers keep their exact text: never a float (ticket 44).
+            document = json.loads(gzip.decompress(path.read_bytes()), parse_float=str, parse_int=str)
             cik = path.name.split(".")[0]
             if not document.get("facts"):  # SEC answered with an empty document: no facts
                 print(f"no facts in {path.name}")
@@ -40,9 +45,10 @@ def main(capture: str, out: str) -> int:
                         for fact in facts:
                             row = {"cik": cik, "taxonomy": taxonomy, "concept": concept, "unit": unit}
                             row.update({k: fact.get(k) for k in FIELDS})
+                            row["fy"] = int(row["fy"]) if row["fy"] is not None else None
                             handle.write(json.dumps(row) + "\n")
     columns = ("{cik: 'VARCHAR', taxonomy: 'VARCHAR', concept: 'VARCHAR', unit: 'VARCHAR', start: 'VARCHAR', "
-               "\"end\": 'VARCHAR', val: 'DOUBLE', accn: 'VARCHAR', fy: 'INTEGER', fp: 'VARCHAR', form: 'VARCHAR', "
+               "\"end\": 'VARCHAR', val: 'VARCHAR', accn: 'VARCHAR', fy: 'INTEGER', fp: 'VARCHAR', form: 'VARCHAR', "
                "filed: 'VARCHAR', frame: 'VARCHAR'}")
     con.execute(f"COPY (SELECT * FROM read_json('{staged}', format='newline_delimited', columns={columns})) "
                 f"TO '{target / 'facts.parquet'}' (FORMAT parquet)")

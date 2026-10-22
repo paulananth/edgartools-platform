@@ -28,7 +28,7 @@ not describe any of them as running.
 | Overwrite a figure when a later filing restates it | Keep every filed copy; the latest is the default (below) |
 | Fill a missing year from a nearby year | Null, with its reason |
 | Send a request to the SEC or a data provider | Captured files only; a new request needs the operator's permission for that request |
-| Type a financial column `integer`, `int`, `float`, `double` or `real`, in a silver spec, dbt, Python or the engine | A whole number (CIK, year, window, count) is `bigint`; a figure, ratio or measure is a big decimal (`decimal(38,10)`, Python `Decimal`, exact text from the engine). No float anywhere between the filed text and the stored value, even where no captured figure loses a digit today (operator, 2026-10-22: "For financial projects never use integer's use only bigint or big decimal", "Big decimal") |
+| Type a financial column `integer`, `int`, `float`, `double` or `real`, in a silver spec, dbt, Python or the engine, or read a filed figure as a float | A whole number (CIK, year, window, count) is `bigint`; a figure, ratio or measure is a big decimal (`decimal(38,10)`, Python `Decimal`, exact text from the engine: `big_numbers: text` and `decimals: text`, or a JSON reader with `parse_float=str`). No float anywhere between the filed text and the stored value, even where no captured figure loses a digit today (operator, 2026-10-22: "For financial projects never use integer's use only bigint or big decimal", "Big decimal", "Fix the data type issue") |
 
 ## The time model (ticket 35, decided 2026-10-21)
 
@@ -39,7 +39,9 @@ not describe any of them as running.
   split; the first-reported figure can be read back from the kept copies.
 - **A year is keyed on the period's end date** (operator: "Period end, 364–371
   days (Recommended)"). A figure belongs to the fiscal year whose end falls in
-  calendar year Y. A period is annual when it is 364–371 days long. CAGR counts
+  calendar year Y. A period is annual when it is 364–371 days long, counting
+  its first and last day (`end − start + 1`): a 52-week year is 364 days, a
+  53-week year 371. CAGR counts
   years, not days, so a 53-week year keeps its extra week.
 - **A changed fiscal year end, Compustat-style** (operator: "Compustat-style,
   null if missing (Recommended)"). A transition period is kept as filed but is
