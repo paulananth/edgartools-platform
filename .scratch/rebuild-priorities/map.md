@@ -117,6 +117,7 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
 - [The standard line items and how concepts map to them](issues/38-company-financials-06-standard-line-items-and-concept-mapping.md): 19 line items, each an ordered concept list in rules configuration (the public standard's order); computed fallbacks flagged; revenue order kept with a quality check; missing items empty and counted. Outside standards: [research 02](../company-financials/research/02-vendor-standards.md)
 - [Where CAGR and the measures are computed, and their definitions](issues/39-company-financials-07-where-cagr-and-measures-are-computed.md): stored, built from silver, each row naming its inputs; returns in both forms (average and beginning balance); CAGR over 1, 3, 5 and 10 years, not meaningful on a zero or negative end; proved against ticket 44's answer key
 - [How company facts is read](issues/40-company-financials-08-how-company-facts-is-read.md): configured reading only; one row per taxonomy and concept with its units whole, flattened in silver by dbt; 367 of 368 captured files read, facts equal the long form; the 368th waits on [Exact big numbers in configured reading](issues/128-exact-big-numbers-in-configured-reading.md)
+- [Exact big numbers in configured reading](issues/128-exact-big-numbers-in-configured-reading.md): `value` gains `big_numbers: text`, an integer beyond 64-bit kept as exact text, default still a refusal; all 368 captured company facts files read, equal to the long form
 
 ## Not yet specified
 

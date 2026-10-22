@@ -57,7 +57,7 @@ Gathered 2026-10-21 for tickets 35 (time model), 38 (line items) and 39 (measure
 
 - **Keys as values, one level at a time.** The standard tools turn an object's keys into a column one level per call and compose levels laterally: Snowflake `LATERAL FLATTEN` (columns `KEY`, `VALUE`), PostgreSQL `jsonb_each`, Spark `explode` on a map (`key`, `value`), DuckDB `json_each`, jq `to_entries`. The source engine's `each.entries` is the same call; a table takes one iteration, so the deeper levels are flattened downstream (dbt, `LATERAL FLATTEN`).
 - **Number range.** RFC 8259 section 6 lets a JSON reader limit range and precision; RFC 7493 (I-JSON) advises numbers within IEEE double. Exact readers keep the number's text (serde_json `arbitrary_precision`; Python's `json` reads integers of any size). Snowflake's `NUMBER` holds up to 38 digits exactly. The engine reads exact 64-bit integers and finite floats, and refuses others.
-- **Measured on 368 captured files** (counts only; trial contract `03-company-facts-trial-contract.yaml` beside this note): 367 read in 70.9 s; facts 5,107,788, equal to the long-form copy; concepts 138,987, of which 119 have no facts; nine taxonomies, none unknown; one file refused for one 20-digit cover-page value.
+- **Measured on 368 captured files** (counts only; trial contract `03-company-facts-trial-contract.yaml` beside this note): 367 read in 70.9 s; facts 5,107,788, equal to the long-form copy; concepts 138,987, of which 119 have no facts; nine taxonomies, none unknown; one file refused for one 20-digit cover-page value. With `big_numbers: text` (ticket 128) all 368 read in 75.7 s: facts 5,134,979 and concepts with facts 139,524, both equal to the long-form copy.
 
 ## Sources
 

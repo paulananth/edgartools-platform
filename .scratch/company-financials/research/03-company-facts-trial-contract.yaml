@@ -2,6 +2,7 @@
 # Configured reading only. One table per taxonomy, one row per concept, its
 # units kept whole as one value; silver flattens units and facts (dbt).
 # Run 2026-10-22 over the 368 captured cohort files: research 02 section 4.
+# `big_numbers: text` (ticket 128) keeps an integer beyond 64-bit as exact text.
 # Three of the nine taxonomy tables are shown; ecd, ffd, invest, rxp, srt and
 # vip repeat the dei table with their own path.
 read:
@@ -30,14 +31,14 @@ read:
       each: {entries: {path: facts.us-gaap, key_field: concept, value_field: body, on_invalid: empty}}
       columns:
         concept: {text: {path: concept, trim: false}}
-        units: {value: {path: body.units}}
+        units: {value: {path: body.units, big_numbers: text}}
     concepts_ifrs_full:
       each: {entries: {path: facts.ifrs-full, key_field: concept, value_field: body, on_invalid: empty}}
       columns:
         concept: {text: {path: concept, trim: false}}
-        units: {value: {path: body.units}}
+        units: {value: {path: body.units, big_numbers: text}}
     concepts_dei:
       each: {entries: {path: facts.dei, key_field: concept, value_field: body, on_invalid: empty}}
       columns:
         concept: {text: {path: concept, trim: false}}
-        units: {value: {path: body.units}}
+        units: {value: {path: body.units, big_numbers: text}}
