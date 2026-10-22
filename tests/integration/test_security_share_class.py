@@ -13,11 +13,15 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+from sqlalchemy import text
+
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import quality
+from edgar_warehouse.mdm.clean.merge import MergeStage
+from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_nport_link_start as nport
 from tests.support import source_chain as chain
+from tests.support.rules_authority import register_dataset
 
 # Invented CUSIPs, check digits valid.
 CLASS_A, PLAIN, TWO, TRANCHE, BARE = "ZZ0000013", "ZZ0000021", "ZZ0000039", "ZZ0000047", "ZZ0000054"
@@ -29,10 +33,22 @@ def classes(records: list[dict]) -> dict[str, str | None]:
     return {r["provenance"]["record_key"]: (r["fields"].get("share_class") or {}).get("value") for r in records}
 
 
-def nport_records(root: Path) -> list[dict]:
-    """The N-PORT chain over equity holdings, and one bond tranche titled by class."""
+# Invented ISINs, check digits valid; FOLDED is attached to the CUSIP FOLD_INTO.
+ISIN_ONLY, FOLDED, FOLD_INTO = "ZZ0000000016", "ZZ0000000024", "ZZ0000062"
+
+
+def flagged(records: list[dict]) -> list[str]:
+    return sorted(r["provenance"]["record_key"] for r in records
+                  if "share_class_one_letter" in ((r["provenance"].get("quality") or {}).get("flags") or []))
+
+
+def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]] = (),
+                  attached: list[dict] = ()) -> list[dict]:
+    """The N-PORT chain over equity holdings, and one bond tranche titled by class;
+    `pairs` gives a holding its ISIN, `attached` the pairs FIGI agrees on."""
     rows = [[f"A-{n}", str(n), "Example Corp", "", title, cusip, "EC"] for n, (cusip, title) in enumerate(TITLES)]
     rows.append(["A-9", "9", "Example Trust", "", "2021-1 CL A", TRANCHE, "ABS-O"])
+    rows += extra
     root.mkdir(parents=True, exist_ok=True)
     zipped = root / "nport.zip"
     with zipfile.ZipFile(zipped, "w") as z:
@@ -42,12 +58,12 @@ def nport_records(root: Path) -> list[dict]:
         z.writestr("SUBMISSION.tsv", "ACCESSION_NUMBER\tFILING_DATE\n")
     store = Artifacts()
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
-    holdings = nport.read(store, root / "holdings", "source.yaml", raw, nport.Q2, lookups={"isin": []})
-    issuers = nport.issuers(store, root, raw, [], nport.Q2)
+    holdings = nport.read(store, root / "holdings", "source.yaml", raw, nport.Q2, lookups={"isin": list(pairs)})
+    issuers = nport.issuers(store, root, raw, list(pairs), nport.Q2)
     securities = nport.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = nport.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
     attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": []}, "deferred": []}]})
+        {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
     folded = nport.combine(store, root / "fold", "fold.yaml", {"securities": securities, "attached": attached, "issuers": reduced})
     combined = nport.combine(store, root / "combine", "combine.yaml",
                              {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
@@ -88,12 +104,40 @@ def thirteenf_records(root: Path) -> list[dict]:
 def test_nport_names_the_one_class_its_equity_titles_agree_on(tmp_path):
     records = nport_records(tmp_path)
     assert classes(records) == {CLASS_A: "A", PLAIN: None, TWO: None, TRANCHE: None, BARE: None}
-    assert quality.counts(records, []).get("flagged:share_class_one_letter") == 1
+    assert flagged(records) == [TWO]
+
+
+def test_nport_an_isin_only_security_and_a_folded_one_take_their_own_levels_class(tmp_path):
+    """An ISIN-only equity holding names its Security's class; a CUSIP whose own
+    holdings name two letters gets none, even when a folded holding names one."""
+    extra = [["A-20", "20", "Example Corp", "", "CL B", "", "EC"],
+             ["A-21", "21", "Example Corp", "", "CL A", FOLD_INTO, "EC"],
+             ["A-22", "22", "Example Corp", "", "CL C", FOLD_INTO, "EC"],
+             ["A-23", "23", "Example Corp", "", "CL A", "", "EC"]]
+    pairs = [["20", ISIN_ONLY], ["23", FOLDED]]
+    pair = {"cusip": FOLD_INTO, "isin": FOLDED, "cusip_offers": 1, "isin_offers": 1}
+    records = nport_records(tmp_path, extra, pairs, [pair])
+    found = classes(records)
+    assert (found[ISIN_ONLY], found[FOLD_INTO]) == ("B", None) and FOLDED not in found
+    assert flagged(records) == [TWO, FOLD_INTO]
 
 
 def test_thirteenf_names_the_one_class_its_titles_agree_on(tmp_path):
     records = thirteenf_records(tmp_path)
     assert classes(records) == {CLASS_A: "A", PLAIN: None, TWO: None, BARE: None}
-    flagged = [r["provenance"]["record_key"] for r in records
-               if "share_class_one_letter" in ((r["provenance"].get("quality") or {}).get("flags") or [])]
-    assert flagged == [TWO]
+    assert flagged(records) == [TWO]
+
+
+def test_the_mastered_security_carries_its_class(database, tmp_path):
+    """The Merge Stage on a disposable PostgreSQL 16: the Security takes the letter
+    as a field; the Securities its titles name none or two of have none."""
+    records = nport_records(tmp_path)
+    with database.admin.begin() as conn:
+        register_dataset(conn, nport.CODE, database.registry, files.mdm_contract(nport.NAME, nport.CODE))
+        policy = register_policy(conn, files.policy())
+    nport.apply(MergeStage(Store(database.application)), policy, "class", records, 1)
+    with database.application.connect() as conn:
+        rows = conn.execute(text("SELECT body->'identifiers'->'cusip'->>0, body->'fields'->'share_class' "
+                                 "FROM mdm.current_record WHERE object_type='entity' AND body->>'kind'='security'")).all()
+    mastered = {cusip: (value.get("value") if isinstance(value, dict) else value) for cusip, value in rows}
+    assert mastered == {CLASS_A: "A", PLAIN: None, TWO: None, TRANCHE: None, BARE: None}

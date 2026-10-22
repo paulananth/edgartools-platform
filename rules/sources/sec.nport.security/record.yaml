@@ -46,13 +46,18 @@ read:
                   - {value: {path: title}}
                   - {value: {path: isin_title}}
                   - {value: {path: folded_title}}
+              # The class from the level whose letters `classes` reads, so a
+              # Security its own holdings disagree on never takes a folded
+              # holding's letter (ticket 130).
               class:
-                coalesce:
-                  skip: "null"
-                  values:
-                  - {value: {path: class}}
-                  - {value: {path: isin_class}}
-                  - {value: {path: folded_class}}
+                choose:
+                  condition: {test: {path: classes, kind: present}}
+                  then: {value: {path: class}}
+                  else:
+                    choose:
+                      condition: {test: {path: isin_classes, kind: present}}
+                      then: {value: {path: isin_class}}
+                      else: {value: {path: folded_class}}
               classes:
                 coalesce:
                   skip: "null"

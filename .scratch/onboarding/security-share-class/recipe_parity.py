@@ -14,9 +14,14 @@ def letter(t):
     s=t.strip().upper(); s=re.sub('[^A-Z]+',' ',s); s=' '+s+' '
     s=re.sub('^.* (CL|CLASS|CLS) ','#',s); s=re.sub('^[^#].*$','',s); s=re.sub(' .*$','',s)
     s=re.sub('^#[A-Z][A-Z]+$','',s); return s.replace('#','')
-t13 = files.load(files.ROOT/"sources/sec.thirteenf.information_table/source.yaml")["read"]["tables"]["sec_thirteenf_class"]["columns"]["share_class"]["text"]["transforms"]
-tnp = files.load(files.ROOT/"sources/sec.nport.security/source.yaml")["read"]["tables"]["security_cusip"]["columns"]["share_class"]["choose"]["then"]["text"]["transforms"]
-assert t13 == tnp, "the two sources' recipes differ"
+t13 = files.load(files.ROOT/"sources/sec.thirteenf.information_table/source.yaml")["read"]["tables"]["sec_thirteenf_class"]
+tnp = files.load(files.ROOT/"sources/sec.nport.security/source.yaml")["read"]["tables"]
+# Each class table's selection reads the same recipe as its column.
+assert t13["select"]["choose"]["condition"]["equal"]["left"] == t13["columns"]["share_class"]
+for name in ("cusip_class", "isin_class"):
+    assert tnp[name]["select"]["choose"]["condition"]["equal"]["left"] == tnp[name]["columns"]["share_class"]
+    assert tnp[name]["columns"]["share_class"]["choose"]["then"]["text"]["transforms"] == t13["columns"]["share_class"]["text"]["transforms"]
+t13 = t13["columns"]["share_class"]["text"]["transforms"]
 root = Path(tempfile.mkdtemp(dir=S)); store = Artifacts()
 body = {"source": "sec.thirteenf.information_table", "execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1}, "read": {"format": "json", "limits": {"max_bytes": 33554432, "max_records": 100000},
         "tables": {"t": {"each": "titles", "columns": {"i": {"integer": {"path": "i"}}, "share_class": {"text": {"path": "t", "default": "", "transforms": t13}}}}}}}
@@ -28,5 +33,4 @@ for i in range(0, len(titles), 20000):
     for a in store.json(out)["artifacts"]:
         for row in a["tables"]["t"]: got[row["i"]] = row["share_class"]
 diff = [t for n, t in enumerate(titles) if got.get(n) != letter(t)]
-print([letter(t) for t in diff[:0]])
 print(json.dumps({"titles": len(titles), "read": len(got), "lettered": sum(1 for v in got.values() if v), "differ": len(diff)}))

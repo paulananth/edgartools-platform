@@ -19,8 +19,9 @@ Research: `.scratch/security-mastering/research/01-share-class-standards.md`.
   is filed, every letter kept for the quality check. New `quality.yaml`
   (`sec-thirteenf-security-quality-v1`): `share_class_one_letter`, flag only.
 - N-PORT: the same from equity holdings (asset category EC) only, by CUSIP,
-  by ISIN, and for ISIN-only holdings folded into a CUSIP (the CUSIP's own
-  letter first, as for the title). Quality `sec-nport-security-quality-v2`.
+  by ISIN, and for ISIN-only holdings folded into a CUSIP. The class comes
+  from the level whose letters were counted, so a CUSIP its own holdings
+  disagree on never takes a folded holding's letter (record.yaml). Quality `sec-nport-security-quality-v2`.
 - MAPPING.xlsx for both sources and `security.xlsx` regenerated.
 
 ## Evidence
@@ -34,10 +35,23 @@ Research: `.scratch/security-mastering/research/01-share-class-standards.md`.
   every one; 6,656 name a class.
 - `tests/integration/test_security_share_class.py`: both chains on invented
   holdings: one letter kept, a bare title none, two letters none and flagged,
-  "CL" alone and "CLASS AB" none, an N-PORT bond tranche none.
+  "CL" alone and "CLASS AB" none, an N-PORT bond tranche none, an ISIN-only
+  Security its letter, a CUSIP whose own holdings disagree none even with a
+  folded letter; and the Merge Stage on a disposable PostgreSQL 16 gives the
+  mastered Security its letter.
+
+- `dry_run.py` (`dry-run.json`), the committed chains to the Dataset Contracts on
+  the local captured files, no database: 13F 20,311 Securities, 1,885 with a
+  letter, every one the oracle's, 5 flagged (the oracle's 5), none both filled
+  and flagged; N-PORT 383,612 CUSIP Securities, 1,394 with a letter, every one
+  the oracle's, 3 flagged (the oracle's fourth has a CUSIP failing its check
+  digit, set aside), none both; 201 of 35,309 ISIN-only Securities with a
+  letter. N-PORT ran without OpenFIGI's answers (no fold) and without issuer
+  facts; the fold is in the tests. About 5 min (13F) and 20 min (N-PORT).
 
 ## Known limit
 
 Across sources the first-ranked source wins the field (N-PORT before 13F),
 as for the title; the merge has no "agree or none" field rule. 777 CUSIPs
-carry a letter in both sources; they disagree on 1.
+carry a letter in both sources; they disagree on 1. Ticket 131 adds the
+field rule, after Codex's PR #1121.
