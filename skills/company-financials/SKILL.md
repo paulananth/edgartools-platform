@@ -38,8 +38,10 @@ not describe any of them as running.
   the latest-filed copy, which keeps per-share series consistent across a stock
   split; the first-reported figure can be read back from the kept copies.
 - **A year is keyed on the period's end date** (operator: "Period end, 364–371
-  days (Recommended)"). A figure belongs to the fiscal year whose end falls in
-  calendar year Y. A period is annual when it is 364–371 days long, counting
+  days (Recommended)"), by Compustat's FYEAR (operator, 2026-10-22: "Compustat
+  FYEAR (Recommended)"): a year ending June to December is that calendar year's,
+  one ending January to May the previous year's, so a 52/53-week year ending on
+  1-3 January stays in its year. A period is annual when it is 364–371 days long, counting
   its first and last day (`end − start + 1`): a 52-week year is 364 days, a
   53-week year 371. CAGR counts
   years, not days, so a 53-week year keeps its extra week.
@@ -73,6 +75,12 @@ Evidence and sources: ticket 35, research 02 section 1.
   quality check (Recommended)"). Never a silent switch to the larger total.
 - **A missing line item** is empty, with the reason "no concept filed", and
   counted per line item.
+- **The line items are an RDM code set** (operator, 2026-10-22: "Yes, code set +
+  crosswalk (Recommended)"): `financial-line-items`, 19 codes with label,
+  definition and kind, crosswalked to the `us-gaap` and `ifrs-full` concepts each
+  uses. The rules file below names those codes and holds only the order and
+  the fallbacks. The taxonomies are not loaded into RDM; a fact keeps its
+  concept's label in silver.
 - **The map is rules configuration** (operator: "Rules configuration
   (Recommended)"): a reviewed YAML file under `rules/` names each line item, its
   concepts in order, any computed fallback and its flag; a configured step
