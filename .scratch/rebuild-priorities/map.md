@@ -32,6 +32,18 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 
 - **Answered (operator, 2026-10-14 08:19 ET):** Form ADV's custodian links come back once the Merge Stage has no limit (ticket 75, "Yes, a new ticket"); the GLEIF cascade and Form ADV matching rules, declared but not switched on, are measured and then switched on or deleted (ticket 76, "Track them on the map"). For the ownership feed, a ten-percent owner is linked `BENEFICIAL_OWNER_OF` ("BENEFICIAL_OWNER_OF (Recommended)"), and a random 50 of the 198 owners with no submissions document are checked before its switch-on ("Check a sample first (Recommended)"); both are recorded in ticket 01.
 
+## Route to completion
+
+Reviewed 2026-10-21 20:14 ET, over all 127 tickets. Operator, asked what "complete the project" means: "Two proofs, local (Recommended)". The destination above stands: done when the operator accepts the recreation proof ([32](issues/32-profiling-08-recreation-proof.md)) and the financials cohort proof ([48](issues/48-company-financials-16-cohort-proof.md)) on local stores. This order replaces "ticket number = priority" for what is left:
+
+1. **Close what is finished** (docs only, one session). The work is merged; only "PR / merge / learning" ticks or deferred parts stay open: 02, 03, 04, 06, 07, 10, 11, 13, 16, 17, 19, 22, 23, 66, 74, 76, 86, 88, 89, 100, 101, 105, 111, 112, 113, 115, 116, 117, 118, 123. Tickets 50–62 were closed by the ruling of 2026-10-18 ("Close all, re-raise later"); mark their files closed in this step too.
+2. **Switch on what is proved** (each on the operator's words): [120](issues/120-switch-on-securities.md) Securities, then OpenFIGI, in `company-on` (about 3 h, then about 7 h of merge); [114](issues/114-onboard-company.md) Company; [80](issues/80-onboard-openfigi.md) OpenFIGI's source activation; [09](issues/09-mastering-to-done-07-cascade-passes-switch-on.md) the cascade passes (about 1½ h of the operator's labels, 344 pairs).
+3. **Close the mastering gaps**, so every captured feed is read and mastered: [01](issues/01-profiling-07-readers-per-feed.md) Form ADV's custodian links; [24](issues/24-security-mastering-04-form-4-attaches-by-class.md) a Form 4 attaches by share class; [25](issues/25-security-mastering-05-a-person-holds-and-does-not-issue.md) a Person holds and does not issue; [79](issues/79-onboard-funds-and-securities-with-the-skills.md) 13F Securities and funds' `HOLDS`; [99](issues/99-an-identifier-rule-creates-after-the-name-rules.md) an identifier rule creates after the name rules.
+4. **Build the financials to their cohort proof**: [35](issues/35-company-financials-03-time-model-as-reported-or-restated.md) and 37–47 in order, then [48](issues/48-company-financials-16-cohort-proof.md).
+5. **Ready and run the recreation proof**: [14](issues/14-rules-skill-15-test-rules-locally.md) rules tested locally at full size, [20](issues/20-mastering-to-done-19-restore-the-catalog-and-publish-person.md) the catalog, [21](issues/21-clean-mdm-06-version-consumer-contracts.md) consumer contracts, [18](issues/18-profiling-05-agent-context-views-and-command.md) the context views, then [32](issues/32-profiling-08-recreation-proof.md).
+
+Steps 3 and 4 can run side by side; step 5's proof runs last, on everything switched on.
+
 ## Decisions so far
 
 - [Which measures analysts use, and the reported concepts behind each](issues/33-company-financials-01-which-measures-and-concepts.md): 19 line items by usage, concepts chosen per period, years keyed on period end
@@ -98,3 +110,10 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 ## Out of scope
 
 - The retired pipeline: the daily, bootstrap and load-history commands, their state machines, the DuckDB silver store and the old MDM runs. 77 tickets about them were deleted on 2026-10-13 (mastering-to-done ticket 25), and git history keeps them.
+- **Past the two local proofs (review of 2026-10-21; operator: "Two proofs, local (Recommended)").** A later effort, not this map:
+  - hosting: [68](issues/68-clean-mdm-07-qualify-and-cut-over.md) hosted Snowflake Postgres, [71](issues/71-mastering-to-done-24-worker-runtime-on-aws.md) the worker runtime on AWS;
+  - SEC backfills: [69](issues/69-release-readiness-90-backfill-apple-494-missing-bronze-objects.md), [70](issues/70-release-readiness-103-backfill-mega-cap-missing-bronze-objects.md); [67](issues/67-mdm-enrichment-program-09-defer-existing-sec-bronze-migration.md) deferred;
+  - one code for every engine: [119](issues/119-one-code-every-engine.md) (Codex, parked);
+  - Security quality and speed: [121](issues/121-another-runs-reading-over-time.md), [122](issues/122-securities-run-time.md), [124](issues/124-profile-fund-share-classes.md), [125](issues/125-securities-and-funds-uniquely-identifiable.md), [126](issues/126-openfigi-for-13f-only-securities.md), [127](issues/127-folded-holdings-earliest-filing.md);
+  - text from HTML, PDF and free text: [31](issues/31-profiling-07c-unstructured-extraction.md) (no captured feed needs it);
+  - housekeeping: [63](issues/63-agent-guides-01-consolidate-claude-and-agents-md.md), [73](issues/73-mdm-is-just-mdm-code.md), [109](issues/109-one-definition-of-the-manifest-procedures.md).
