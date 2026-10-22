@@ -15,7 +15,7 @@ From research: the two differ for 152 of 307 filers on net income, and on every 
 - [x] Which figure silver keeps and CAGR uses (operator, 2026-10-21 21:04 ET: "Keep all, latest by default (Recommended)") (2026-10-21 21:10 ET)
 - [x] How a year is identified (operator, 2026-10-21 21:05 ET: "Period end, 364–371 days (Recommended)") (2026-10-21 21:10 ET)
 - [x] A changed fiscal year end: researched on the operator's instruction ("research how others do like factset or bloomberg ar data set"), measured on the cohort, then ruled (operator, 2026-10-21 21:08 ET: "Compustat-style, null if missing (Recommended)") (2026-10-21 21:10 ET)
-- [x] Learning → skill: `skills/data-modeling/SKILL.md`, "7. Time": a value filed again is a new fact, every copy kept, the latest by default; a period is keyed on its own dates (2026-10-21 21:10 ET)
+- [x] Learning → skill: the new `skills/company-financials/SKILL.md`, "The time model" (operator, 2026-10-21: "New company-financials skill (Recommended)", after "this cannot be in a general skill be careful"); the general data-modeling skill is unchanged (2026-10-21 21:24 ET)
 
 ## Answer
 

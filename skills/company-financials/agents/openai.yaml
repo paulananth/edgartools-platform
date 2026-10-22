@@ -1,0 +1,4 @@
+interface:
+  display_name: "Company Financials"
+  short_description: "The rules for company financials: which figure, year keys, line items, measures"
+  default_prompt: "Use $company-financials before changing how company facts are read, mapped to line items or turned into measures."
