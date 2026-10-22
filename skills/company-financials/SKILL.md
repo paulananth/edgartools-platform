@@ -106,6 +106,14 @@ Evidence and sources: ticket 39, research 02 section 3.
 
 - **Configured reading only** (operator, 2026-10-22: "configure only"): a
   source-extract contract; no Python custom step, no new iteration primitive.
+  It is `rules/sources/sec.company-facts/facts.yaml` (ticket 45).
+- **The filer's CIK is filed two ways**: a JSON number in some files, digit text
+  (zero-padded) in others (262 and 105 of the cohort). `integer` reads both as
+  one bigint; never key on its spelling.
+- **Any other shape refuses the file, never drops it**: document assertions
+  require facts, each taxonomy and each concept's `units` to be objects, and a
+  CIK wherever there are facts. A filer with no facts (an empty object) lands
+  nothing.
 - **One table per taxonomy**, `each.entries` on `facts.<taxonomy>`: one row per
   concept with its key, and its `units` kept whole as one value. A table takes
   one iteration, so silver flattens units and the list of facts (dbt,

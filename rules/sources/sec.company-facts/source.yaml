@@ -1,0 +1,11 @@
+# SEC company facts: every XBRL fact a filer reported, one JSON file per filer
+# (ticket 45). This file names the source; it reads nothing itself. Each file is
+# read by facts.yaml, one table per taxonomy (ticket 40). Its rows are
+# transactions for silver (`company_fact`, ticket 43), linked to the Company by
+# CIK; nothing goes to MDM. A Bookkeeping target comes with the silver landing
+# (ticket 46).
+source: sec.company-facts
+bronze:
+  # Bronze: company_facts/, the family the repo has named for these files;
+  # the cohort's local copies are one gzip file per filer.
+  family: company_facts

@@ -53,3 +53,9 @@ sources:
     target: null
     requires: []
     after: [sec.nport.security]
+  # Company facts (ticket 45): silver rows linked to the Company by CIK, so they
+  # run after it. Its silver landing target comes with ticket 46.
+  sec.company-facts:
+    target: null
+    requires: []
+    after: [sec.submissions.company]

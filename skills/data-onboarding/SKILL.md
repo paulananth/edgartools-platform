@@ -72,6 +72,7 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | File | What it holds |
 |---|---|
 | `rules/sources/<source>/source.yaml` | The feed: `source`, `bronze` and `mdm` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
+| `rules/source-sequence.yaml` | One line per source folder, `target: null` until its Bookkeeping target exists, `after` the masters its rows link to. Every folder needs a `source.yaml` (even one that only names the source and reads nothing) and this line: suite tests walk both (ticket 45) |
 | `rules/sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
 | `rules/sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
 | `rules/merge/kinds/<kind>.yaml` | A new domain's matching and merge rules (only when the kind is new) |

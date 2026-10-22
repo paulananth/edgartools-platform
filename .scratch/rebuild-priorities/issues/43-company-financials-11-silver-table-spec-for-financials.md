@@ -48,7 +48,7 @@ columns:
   - {name: accession, type: text, nullable: false, definition: the filing that reported it, source: accn}
   - {name: filed, type: date, nullable: false, definition: the filing date, source: filed}
   - {name: form, type: text, nullable: false, definition: the form filed (10-K, 10-Q, 20-F, ...), source: form}
-  - {name: fiscal_year_filed, type: integer, nullable: true, definition: the filing's own fy label; kept, never a key, source: fy}
+  - {name: fiscal_year_filed, type: bigint, nullable: true, definition: the filing's own fy label; kept, never a key, source: fy}
   - {name: fiscal_period_filed, type: text, nullable: true, definition: the filing's own fp label (FY, Q1, ...); kept, never a key, source: fp}
   - {name: frame, type: text, nullable: true, definition: the SEC calendar frame, a cross-check only, source: frame}
 key: [cik, taxonomy, concept, unit, period_start, period_end, accession, filed]
@@ -79,7 +79,7 @@ columns:
   - {name: period_start, type: date, nullable: true}
   - {name: period_end, type: date, nullable: false}
   - {name: period_kind, type: text, nullable: false, definition: "annual (364-371 days), quarter, instant or transition"}
-  - {name: fiscal_year, type: integer, nullable: true, definition: calendar year of period_end for an annual period; the later year end wins a year (ticket 35)}
+  - {name: fiscal_year, type: bigint, nullable: true, definition: "Compustat FYEAR of period_end for an annual period: an end in January to May is the previous year (ticket 35, operator 2026-10-22); the later year end wins a year"}
   - {name: value, type: "decimal(38,10)", nullable: true, definition: empty when no concept was filed}
   - {name: unit, type: text, nullable: true}
   - {name: currency, type: text, nullable: true, definition: ISO code; the figure stays in its reporting currency (ticket 42)}
@@ -115,8 +115,8 @@ grain: one row per company, measure, fiscal year and window
 columns:
   - {name: cik, type: bigint, nullable: false}
   - {name: measure, type: text, nullable: false, definition: "e.g. revenue CAGR, ROE (average balance), ROE (beginning balance), gross margin"}
-  - {name: fiscal_year, type: integer, nullable: false, definition: the window's last year}
-  - {name: window_years, type: integer, nullable: false, definition: "1 for a single-year measure; 1, 3, 5 or 10 for a CAGR"}
+  - {name: fiscal_year, type: bigint, nullable: false, definition: the window's last year}
+  - {name: window_years, type: bigint, nullable: false, definition: "1 for a single-year measure; 1, 3, 5 or 10 for a CAGR"}
   - {name: value, type: "decimal(38,10)", nullable: true, definition: raw, no truncation or smoothing (ticket 39)}
   - {name: currency, type: text, nullable: true, definition: the inputs' one currency, empty for a ratio of like amounts}
   - {name: null_reason, type: text, nullable: true, definition: "not meaningful, missing year, fiscal year changed, mixed currencies, not meaningful for financial services, denominator zero or negative"}

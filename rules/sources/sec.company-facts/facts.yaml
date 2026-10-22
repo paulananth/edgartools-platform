@@ -1,0 +1,176 @@
+# One SEC company facts file: every XBRL fact a filer reported, one JSON object per
+# filer (`facts.<taxonomy>.<concept>.units.<unit>[]`). Configured source extract only
+# (ticket 40; operator, 2026-10-22: "configure only"). One table per taxonomy, one row
+# per concept, its `units` kept whole as one value; silver flattens units and facts
+# (ticket 43, `company_fact`). Built from the trial contract (research 03), ticket 45.
+source: sec.company-facts
+read:
+  format: json
+  limits: {max_bytes: 134217728, max_records: 100000}
+  # Nothing is dropped silently (ticket 40): a file is refused when its shape is
+  # not the one read below. A filer with no facts (an empty object) lands nothing.
+  assertions:
+  - test: {test: {path: '.', kind: object}}
+    reason: A company facts file must be a JSON object
+  - test:
+      choose:
+        condition: {test: {path: facts, kind: missing}}
+        then: {test: {path: facts, kind: missing}}
+        else: {test: {path: facts, kind: object}}
+    reason: Facts must be a JSON object of taxonomies
+  - test:
+      choose:
+        condition: {test: {path: facts, kind: missing}}
+        then: {test: {path: facts, kind: missing}}
+        else: {test: {path: cik, kind: not_null}}
+    reason: A file with facts must name its filer's CIK
+  - test:
+      choose:
+        condition: {test: {path: facts.dei, kind: missing}}
+        then: {test: {path: facts.dei, kind: missing}}
+        else: {test: {path: facts.dei, kind: object}}
+    reason: Taxonomy dei must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.ecd, kind: missing}}
+        then: {test: {path: facts.ecd, kind: missing}}
+        else: {test: {path: facts.ecd, kind: object}}
+    reason: Taxonomy ecd must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.ffd, kind: missing}}
+        then: {test: {path: facts.ffd, kind: missing}}
+        else: {test: {path: facts.ffd, kind: object}}
+    reason: Taxonomy ffd must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.ifrs-full, kind: missing}}
+        then: {test: {path: facts.ifrs-full, kind: missing}}
+        else: {test: {path: facts.ifrs-full, kind: object}}
+    reason: Taxonomy ifrs-full must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.invest, kind: missing}}
+        then: {test: {path: facts.invest, kind: missing}}
+        else: {test: {path: facts.invest, kind: object}}
+    reason: Taxonomy invest must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.rxp, kind: missing}}
+        then: {test: {path: facts.rxp, kind: missing}}
+        else: {test: {path: facts.rxp, kind: object}}
+    reason: Taxonomy rxp must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.srt, kind: missing}}
+        then: {test: {path: facts.srt, kind: missing}}
+        else: {test: {path: facts.srt, kind: object}}
+    reason: Taxonomy srt must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.us-gaap, kind: missing}}
+        then: {test: {path: facts.us-gaap, kind: missing}}
+        else: {test: {path: facts.us-gaap, kind: object}}
+    reason: Taxonomy us-gaap must be a JSON object of concepts
+  - test:
+      choose:
+        condition: {test: {path: facts.vip, kind: missing}}
+        then: {test: {path: facts.vip, kind: missing}}
+        else: {test: {path: facts.vip, kind: object}}
+    reason: Taxonomy vip must be a JSON object of concepts
+  references:
+    # The taxonomies with a table below. A taxonomy not listed refuses the file
+    # (lookup_missing), never drops silently: add its table and its line here.
+    taxonomies:
+      dei: {known: true}
+      ecd: {known: true}
+      ffd: {known: true}
+      ifrs-full: {known: true}
+      invest: {known: true}
+      rxp: {known: true}
+      srt: {known: true}
+      us-gaap: {known: true}
+      vip: {known: true}
+  tables:
+    taxonomies:
+      each: {entries: {path: facts, key_field: taxonomy, value_field: concepts, on_invalid: empty}}
+      columns:
+        taxonomy: {text: {path: taxonomy, trim: false}}
+        known:
+          lookup: {reference: taxonomies, column: known, key: {text: {path: taxonomy, trim: false}}, on_missing: error}
+    # Each concept row carries the filer's CIK. The SEC files it as a JSON number in
+    # some files and as digit text (zero-padded) in others; `integer` reads both exactly.
+    # Every figure stays exact: an integer beyond 64-bit (ticket 128) and every decimal
+    # (ticket 134) as its filed digits, a big decimal, never a float.
+    concepts_dei:
+      each: {entries: {path: facts.dei, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_ecd:
+      each: {entries: {path: facts.ecd, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_ffd:
+      each: {entries: {path: facts.ffd, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_ifrs_full:
+      each: {entries: {path: facts.ifrs-full, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_invest:
+      each: {entries: {path: facts.invest, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_rxp:
+      each: {entries: {path: facts.rxp, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_srt:
+      each: {entries: {path: facts.srt, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_us_gaap:
+      each: {entries: {path: facts.us-gaap, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    concepts_vip:
+      each: {entries: {path: facts.vip, key_field: concept, value_field: body, on_invalid: empty}}
+      columns:
+        cik: {integer: {path: cik, from: document}}
+        concept: {text: {path: concept, trim: false}}
+        label: {value: {path: body.label, type: text}}
+        description: {value: {path: body.description, type: text}}
+        units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
