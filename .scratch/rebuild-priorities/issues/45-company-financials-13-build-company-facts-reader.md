@@ -18,6 +18,6 @@ Implement the reading ticket 40 decided: a configured source-extract contract un
 - [x] All 368 captured files read: 5,134,979 facts and 139,643 concepts, every file equal fact by fact to the file read directly in exact decimals, every row's CIK equal to its file's, no float (`.scratch/company-financials/reader/full_read.py`, 123 s, on ticket 134's engine) (2026-10-22 18:08 ET)
 - [x] Tests on invented documents, `tests/engine/test_company_facts_reading.py`: one table per taxonomy, CIK as number and padded text, every figure exact, an unknown taxonomy refuses, an empty document and a concept with no facts; 7 pass on ticket 134's engine (2026-10-22 18:08 ET)
 - [ ] Rebase onto main once 134 (#1139) merges; tests again
-- [ ] Three-axis review (Standards, Spec, GoF)
+- [x] Three-axis review, all findings fixed: GoF "leave it" (anchors are refused; a new taxonomy is rare), plus a test holding the nine tables' columns equal; Standards: a `source.yaml` naming the source and its bronze family (`company_facts`), since a suite test loads one per folder, and a plainer test placeholder; Spec: a file with facts and no CIK, facts or a taxonomy that is not an object, and a concept without a `units` object were landed or dropped silently, now refused by document assertions and `type: object, nullable: false`, one test each; a test that a fact lands whole with every field silver needs; 16 tests pass, all 368 captured files still read equal (122.6 s) (2026-10-22 18:12 ET)
 - [ ] PR, CI green, merge
 - [ ] Learning → skill
