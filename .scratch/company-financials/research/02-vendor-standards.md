@@ -59,6 +59,13 @@ Gathered 2026-10-21 for tickets 35 (time model), 38 (line items) and 39 (measure
 - **Number range.** RFC 8259 section 6 lets a JSON reader limit range and precision; RFC 7493 (I-JSON) advises numbers within IEEE double. Exact readers keep the number's text (serde_json `arbitrary_precision`; Python's `json` reads integers of any size). Snowflake's `NUMBER` holds up to 38 digits exactly. The engine reads exact 64-bit integers and finite floats, and refuses others.
 - **Measured on 368 captured files** (counts only; trial contract `03-company-facts-trial-contract.yaml` beside this note): 367 read in 70.9 s; facts 5,107,788, equal to the long-form copy; concepts 138,987, of which 119 have no facts; nine taxonomies, none unknown; one file refused for one 20-digit cover-page value. With `big_numbers: text` (ticket 128) all 368 read in 75.7 s: facts 5,134,979 and concepts with facts 139,524, both equal to the long-form copy.
 
+## 5. Currencies, IFRS filers and industry formats (ticket 42)
+
+- **Currency.** Compustat carries each company's figures in its reporting currency with an ISO code (`curcd`); Compustat Global has a separate currency file of exchange rates for translation. FactSet's Fundamentals API takes a currency, defaulting to the pricing currency, with `RPT` for the reporting currency. Bloomberg converts on request through the `EQY_FUND_CRNCY` override. So vendors keep the reported currency and convert as a separate step against an exchange-rate source (field definitions **unverified**: the dictionaries are behind logins).
+- **IFRS.** Compustat Global standardizes IFRS filers into the same items as its other filers (**unverified** at item level).
+- **Industry formats.** Compustat keeps an Industrial format (`INDFMT = INDL`) and a Financial Services format (`FS`) for banks and insurers, with items only financial firms carry (bank capital ratios, insurance business lines); a company can appear in both.
+- **Measured on the cohort** (counts only): 52 of 329 filers report some amount in a currency other than USD (EUR 19, GBP 9, CAD 9 lead); 3 report their headline figures (assets, net income, revenue) with no USD figure. 6 filers use `ifrs-full` (2 of them only it); their headline figures are in CAD for 3, EUR for 1, USD for 3. Industry concepts: `Deposits` 44 filers, `InterestAndDividendIncomeOperating` 27, `OperatingLeasesIncomeStatementLeaseRevenue` 21, `PremiumsEarnedNet` 12, `RealEstateInvestmentPropertyNet` 12, `RealEstateRevenueNet` 9, `PolicyholderFunds` 7, `LiabilityForFuturePolicyBenefits` 7, `PublicUtilitiesPropertyPlantAndEquipmentNet` 7, `RevenuesNetOfInterestExpense` 5, `RegulatedAndUnregulatedOperatingRevenue` 3.
+
 ## Sources
 
 - [WRDS: Compustat fiscal and calendar dates](https://wrds-support.wharton.upenn.edu/hc/en-us/articles/115003135371-Compustat-Identifying-Fiscal-and-Calendar-Dates)
@@ -80,3 +87,9 @@ Gathered 2026-10-21 for tickets 35 (time model), 38 (line items) and 39 (measure
 - [RFC 8259, section 6: numbers](https://www.rfc-editor.org/rfc/rfc8259#section-6)
 - [RFC 7493 (I-JSON), section 2.2](https://www.rfc-editor.org/rfc/rfc7493#section-2.2)
 - [Snowflake numeric types](https://docs.snowflake.com/en/sql-reference/data-types-numeric)
+
+- [Compustat Global manual (WRDS, a university copy)](https://studerende.au.dk/fileadmin/www.medarbejdere.au.dk/it/BSS_Analysevaerktoejer/Finansielle_Databaser/Manual_WRDS_Compustat_Global.pdf)
+- [Compustat Global Vantage: industrial and financial services formats](https://business.uc3m.es/en/databases/compustat-global-vantage/)
+- [S&P query library: Industrial format (INDFMT = INDL)](https://www.marketplace.spglobal.com/ja/support/query-library/query-(232))
+- [FactSet Fundamentals Report Builder (currency parameter)](https://pypi.org/project/fds.sdk.FactSetFundamentalsReportBuilder/1.0.5)
+- [Bloomberg currency override (EQY_FUND_CRNCY)](https://www.optuma.com/kb/data/bloomberg-functionality/external-data-fields-bloomberg-override-functionality)
