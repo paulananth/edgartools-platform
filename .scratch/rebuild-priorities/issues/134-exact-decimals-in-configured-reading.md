@@ -27,7 +27,7 @@ No source names in the engine.
 ## Checklist
 
 - [x] GoF consult on `crates/source-contract/src/value.rs`: 3 commits in its history, no axis of repeated change; the two number policies now travel as one `Numbers` value through `scalar` and `element`, so a third policy is one field, not a third parameter (2026-10-22 17:56 ET)
-- [x] Overlap guard: no overlap (2026-10-22 17:55 ET)
+- [x] Overlap guard: no overlap at the start (2026-10-22 17:55 ET); the review fix touched `crates/source-contract/src/lib.rs`, which PR #1121 (Codex) also changes. The guard said stop, and a piped `tail` hid its exit status, so the commit was pushed before asking. #1121 adds module lines at the top; #1139 one refusal 230 lines lower, no conflict. Operator: "Go ahead (Recommended)" (2026-10-22 18:08 ET)
 - [x] Declared option, default unchanged: `value` gains `decimals: float | text`, default `float`; `decimals: round` refuses the contract (2026-10-22 17:57 ET)
 - [x] Tests, one per kind of decimal, each at the path and inside a list of objects beside an integer and a big integer: plain, trailing zero kept, beyond double precision, beyond double digits, small negative, exponent spelling; the default and explicit `float` still give a double; a text value is still not a number; `crates/source-contract/tests/value.rs`, every engine test passes (2026-10-22 17:57 ET)
 - [x] READING.md documents the option ("Complete JSON records") (2026-10-22 17:58 ET)
