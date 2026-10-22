@@ -115,6 +115,7 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
 - Tickets 49–62 (gold): closed as written (operator, 2026-10-18 12:25 ET, "Close all, re-raise later (Recommended)")
 - [As reported or as restated: the time model](issues/35-company-financials-03-time-model-as-reported-or-restated.md): every filed copy kept, the latest by default; years keyed on the period end (364–371 days); a changed year end Compustat-style, null with a reason when a year is missing
 - [The standard line items and how concepts map to them](issues/38-company-financials-06-standard-line-items-and-concept-mapping.md): 19 line items, each an ordered concept list in rules configuration (the public standard's order); computed fallbacks flagged; revenue order kept with a quality check; missing items empty and counted. Outside standards: [research 02](../company-financials/research/02-vendor-standards.md)
+- [Where CAGR and the measures are computed, and their definitions](issues/39-company-financials-07-where-cagr-and-measures-are-computed.md): stored, built from silver, each row naming its inputs; returns in both forms (average and beginning balance); CAGR over 1, 3, 5 and 10 years, not meaningful on a zero or negative end; proved against ticket 44's answer key
 
 ## Not yet specified
 

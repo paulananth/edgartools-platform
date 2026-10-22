@@ -78,3 +78,25 @@ Evidence and sources: ticket 35, research 02 section 1.
 - USD only, until ticket 42 (currencies and IFRS) rules otherwise.
 
 Evidence and sources: ticket 38, research 02 section 2.
+
+## Measures (ticket 39, decided 2026-10-21)
+
+- **Stored, built from silver** (operator: "Stored, built from silver
+  (Recommended)"): one row per company, measure, fiscal year and window, naming
+  its inputs and the definition's version; definitions are rules configuration;
+  raw ratios, no truncation or smoothing.
+- **Returns in both forms** (operator: "can we have both"): ROE, ROA and ROIC on
+  the average of start and end balance (WRDS) and on the beginning balance
+  (Damodaran), as two named measures. Null with a reason when a balance is
+  missing or the denominator is zero or negative.
+- **CAGR** over exactly 1, 3, 5 and 10 annual years (operator: "1, 3, 5 and 10
+  years (Recommended)"). "Not meaningful" when the first or last value is zero
+  or negative; null with "missing year" or "fiscal year changed" when an
+  endpoint is missing.
+- **Definitions** as research 01 section 4 gives them: ROIC after tax on debt +
+  equity − cash; FCF = operating cash flow − capital expenditure; per-share on
+  the latest-filed series.
+- **Proved** per measure and per null reason against ticket 44's hand-computed
+  answer key.
+
+Evidence and sources: ticket 39, research 02 section 3.
