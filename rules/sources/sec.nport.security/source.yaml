@@ -326,12 +326,11 @@ mdm:
                             item_path: issuer_title
                             separator: ""
                             max_items: 1
-                        issuer_lei:
-                          join:
-                            path: lei.lei_sample
-                            item_path: issuer_lei
-                            separator: ""
-                            max_items: 1
+                        # No issuer LEI field: an LEI identifies a Company, not a
+                        # Security ("A value of another kind stays out of this
+                        # kind"); the Security reaches its issuer by ISSUED_BY
+                        # (ticket 22), and each holding's filed LEI is in silver
+                        # (silver-holding.yaml; operator, 2026-10-22: "Fix 1").
                   matching:
                     object:
                       fields: {}

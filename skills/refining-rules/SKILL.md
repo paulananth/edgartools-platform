@@ -63,6 +63,15 @@ both in the log.
 - **Silver target.** A change to the `bookkeeping` section (the steps that
   land silver) belongs to the Bookkeeping skill. A quality fix applies to
   records before MDM; silver keeps the source's values.
+- **Which target a field belongs to.** Review a live contract's MDM fields
+  against data-onboarding's map rules ("Fields"): a date that usually changes
+  stays out of MDM unless it adds meaning to the entity or switches it on or
+  off; evidence about a transaction or a link goes on the silver row; another
+  kind's identifier stays out; a code's label belongs in RDM (operator,
+  2026-10-22: "Fix 1, 2 date that changes usually should not be in MDM unless
+  it adds meaning to the entity or turn on or off"). Moving a field the
+  engine or a stored table reads (a column, a matching check) is engine work:
+  name each reader before you change the contract.
 
 ## Modes
 
@@ -82,6 +91,9 @@ only changes how records are retired). A feed with no approved findings yet:
 profile it with data-profiling first, and log it. After any change to a rules file, regenerate its Mapping
 Document (`rules mapdoc write --only <source or kind>`) and commit it with
 the change. `rules mapdoc check` and CI fail otherwise.
+Adding or removing a field changes two workbooks: the source's
+`MAPPING.xlsx` and its kind's (`rules/merge/kinds/<kind>.xlsx`, "Who wins each
+field"). Regenerate both (`--only <source>`, then `--only <kind>`).
 
 ### change-mapping: a steward changed a Mapping Document
 

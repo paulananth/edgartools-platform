@@ -463,6 +463,16 @@ missing, go on and log it.
     wrong or partial for the very records that matter.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
+  - **A date that usually changes stays out of MDM** unless it adds meaning
+    to the entity or switches it on or off (operator, 2026-10-22: "date that
+    changes usually should not be in MDM unless it adds meaning to the entity
+    or turn on or off"). A source's record-keeping dates (last updated, next
+    renewal) change the master's version without changing the entity: keep
+    them in silver, or as the record's own effective time. A creation date, or
+    a status change with its date, stays.
+  - **Evidence about a link stays on the silver row**, not on the master: the
+    issuer's identifier a holding names is the holding's, while the held
+    entity reaches its issuer by the link (operator, 2026-10-22: "Fix 1").
 - **Relationships:** type, the other end's key, the source it lives in,
   start and end. List every type the source carries. Label each mapped one's
   `scope` `<Provider> <relationship family>`.
