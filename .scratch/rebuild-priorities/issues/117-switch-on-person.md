@@ -2,7 +2,7 @@
 
 Priority: 117 (operator, 2026-10-19: "Can you turn on company mastering one source at a time sec, geilf, and the rest"; Person follows GLEIF in `rules/source-sequence.yaml`). Map: [Rebuild priorities](../map.md).
 
-Type: task. Status: in progress (Claude, 2026-10-19). Blocked by: none.
+Type: task. Status: done (#1113 and #1116 merged 2026-10-19 13:03 and 13:58 ET). Blocked by: none.
 
 ## Found (2026-10-19 ET)
 
@@ -18,4 +18,8 @@ This finishes the decoupling ticket 114 made (slice 1, #1108) under the operator
 - [x] Three-axis review (2026-10-19 12:43 ET): GoF: leave it. Spec: stale lines in `docs/specs/source-readiness.md` and Bookkeeping SPEC rewritten; both registration cases tested; this change linked to the generic ruling. Standards: a source with no feed of its own must name the family it reads (`bronze.family`) for each dataset; a dataset belongs to the source that first registered it, and another source's activation is refused; scope: every source with no feed of its own switches on the same way (gleif, iapd.adv, sec.ownership, sec.thirteenf.information_table, sec.nport.*), as the ruling covers "the rest" (each still needs its run target and its own switch-on). Tests: 7 unit, 2 integration passed
 - [x] PR, CI, merge (#1113 merged 2026-10-19 13:03 ET)
 - [x] A run over captured filings of people (operator, 2026-10-19: "Can you turn on person") (2026-10-19 13:51 ET): `rules run` (no feed) in `company-on` over the 500 filings of the earlier Person test (`person-1000/documents-1.json`, 496 found in the capture), complete in 47 s, every step verified: 194 Person masters; the rest held back with open reviews, 221 `classification_entity_undetermined` and 81 `classification_deferred` (39% people, as in the 2026-10-14 proof's 31,326 of 76,230); Company (2,433), Funds (12,937) and GLEIF unchanged; no identifier on two masters
-- [ ] Learning → skill
+- [x] Learning → skill: #1113, a source with no feed of its own switches on its pipes (`skills/bookkeeping/SPEC.md`); #1116 changed no skill (checked 2026-10-21 21:02 ET)
+
+## Answer
+
+Person runs over captured filings of people (#1116, 2026-10-19 13:58 ET); a source with no feed of its own switches on its pipes (#1113, 13:03 ET).

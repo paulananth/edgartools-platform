@@ -2,7 +2,7 @@
 
 Priority: 113. Map: [Rebuild priorities](../map.md).
 
-Type: task. Status: open (Claude, 2026-10-19). Blocked by: none. Changes: ticket 100's design (the quarter dated each N-PORT publication in MDM).
+Type: task. Status: done (#1107 merged 2026-10-19 07:38 ET). Blocked by: none. Changes: ticket 100's design (the quarter dated each N-PORT publication in MDM).
 
 ## Operator rulings (2026-10-19, asked while wiring the N-PORT run, ticket 79)
 
@@ -26,5 +26,9 @@ Type: task. Status: open (Claude, 2026-10-19). Blocked by: none. Changes: ticket
 - [x] Tickets 100 and 79 updated (2026-10-19 07:22 ET): 100's run-wiring line struck, superseded by 113; 79's run-wiring line struck and restated (`period` in both readings' context, no `effective_column` or `effective_at`, the `filed` pair set); declaring the N-PORT target is 79's run-wiring part, open there
 - [x] Three-axis review (2026-10-19 07:22 ET): GoF "leave it"; Standards: a day or year of another shape gave a bad date (now checked like the month, tested), the refusal test matched any "context" error (narrowed), the reduction budget unmeasured (measured above), the `keeps_start` message (kept: it states the requirement, as `ends_parent_links` does); Spec: no blockers, the same bad-date point, and tickets 100/79 (updated)
 - [x] Noted (2026-10-19 07:22 ET): a stored start is kept only by a period equal but for its start; a property that changes between deliveries makes a new period. N-PORT's ISSUED_BY has no properties, so nothing triggers it
-- [ ] PR, CI, merge
+- [x] PR, CI, merge: #1107 merged 2026-10-19 07:38 ET (checked 2026-10-21 21:02 ET)
 - [x] Learning → skill (2026-10-19 07:22 ET): data-modeling "Dates": prefer a date the source states for each record over the delivery's date; `keeps_start` for a start that never moves later
+
+## Answer
+
+An N-PORT ISSUED_BY link starts at its filing date, and a link that already exists keeps its start; the quarter stays in silver, not MDM. Merged in #1107 (2026-10-19 07:38 ET), with its line in `skills/data-modeling/SKILL.md`.
