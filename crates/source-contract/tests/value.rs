@@ -48,3 +48,33 @@ fn value_is_explicit_and_does_not_change_existing_text_contracts() {
     let bounded=CONTRACT.replace("format: json","format: json\n  limits: {max_bytes: 2}");
     assert_eq!(Engine::from_yaml(&bounded,Steps::new()).unwrap().read(b"{\"a\":1}",&Lookups::new()).unwrap_err().code,"limit_exceeded");
 }
+#[test]
+fn big_numbers_text_keeps_out_of_range_numbers_exactly_and_default_refuses() {
+    let contract = |policy: &str| format!("read:\n  format: json\n  tables:\n    rows:\n      each: .\n      columns:\n        record: {{value: {{path: .{policy}}}}}\n        top: {{value: {{path: top, type: number{policy}}}}}\n");
+    let text = Engine::from_yaml(&contract(", big_numbers: text"), Steps::new()).unwrap();
+    for (lexeme, kind) in [("18446744073709551616", "beyond unsigned"), ("123456789012345678901234567890", "thirty digits"), ("-9223372036854775809", "large negative")] {
+        let raw = format!(r#"{{"top":{lexeme},"units":{{"USD":[{{"val":{lexeme}}},{{"val":5}}]}}}}"#);
+        let row = &text.read(raw.as_bytes(), &Lookups::new()).unwrap_or_else(|e| panic!("{kind}: {e:?}")).tables["rows"][0];
+        let Val::Map(record) = &row["record"] else { panic!() };
+        let Val::Map(units) = &record["units"] else { panic!() };
+        let Val::List(facts) = &units["USD"] else { panic!() };
+        let Val::Map(first) = &facts[0] else { panic!() };
+        assert_eq!(first["val"], Val::Str(lexeme.into()), "{kind}");
+        let Val::Map(second) = &facts[1] else { panic!() };
+        assert_eq!(second["val"], Val::Int(5), "{kind}: in-range numbers keep their type");
+        assert_eq!(row["top"], Val::Str(lexeme.into()), "{kind}");
+    }
+    let row = &text.read(br#"{"top":9223372036854775808}"#, &Lookups::new()).unwrap().tables["rows"][0];
+    assert_eq!(row["top"], Val::UInt(9223372036854775808), "an unsigned 64-bit integer stays a number");
+    let integer = Engine::from_yaml(&contract(", big_numbers: text").replace("type: number", "type: integer"), Steps::new()).unwrap();
+    assert_eq!(integer.read(br#"{"top":18446744073709551616}"#, &Lookups::new()).unwrap().tables["rows"][0]["top"], Val::Str("18446744073709551616".into()));
+    let row = &text.read(br#"{"top":"9223372036854775808"}"#, &Lookups::new());
+    assert_eq!(row.as_ref().unwrap_err().code, "value_type", "a text value is still not a number");
+    assert_eq!(text.read(br#"{"top":1e400}"#, &Lookups::new()).unwrap_err().code, "malformed", "a float beyond double range refuses when parsed, whatever the policy");
+    let refuse = Engine::from_yaml(&contract(""), Steps::new()).unwrap();
+    let explicit = Engine::from_yaml(&contract(", big_numbers: refuse"), Steps::new()).unwrap();
+    for engine in [&refuse, &explicit] {
+        assert_eq!(engine.read(br#"{"top":1,"x":18446744073709551616}"#, &Lookups::new()).unwrap_err().code, "value_number_range");
+    }
+    assert!(Engine::from_yaml(&contract(", big_numbers: round"), Steps::new()).is_err());
+}

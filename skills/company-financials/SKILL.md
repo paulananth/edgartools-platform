@@ -115,6 +115,7 @@ Evidence and sources: ticket 39, research 02 section 3.
   silently; add its table.
 - **A concept with no facts** lands and flattens to nothing (119 of 138,987 in
   the cohort).
-- **A number beyond exact 64-bit** refuses the file (`value_number_range`);
-  never round it. Operator: "Exact big numbers in the reader": the engine gains
-  a declared exact option (ticket 128) before the reader is built (ticket 45).
+- **A number beyond exact 64-bit** is kept as exact text: declare
+  `big_numbers: text` on the `units` value (ticket 128; operator: "Exact big
+  numbers in the reader"). Never round it; without the option the file is
+  refused (`value_number_range`). With it, all 368 captured files read.

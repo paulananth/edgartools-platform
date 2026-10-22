@@ -211,6 +211,17 @@ rather than silently rounding into a different record. Existing byte,
 nesting, UTF-8 and finite-number safety checks remain. This is a declared
 numeric boundary, not universal equivalence with Python's arbitrary integers.
 
+`big_numbers: text` keeps a number beyond that boundary exactly: an integer
+outside signed and unsigned 64-bit becomes text holding its JSON digits, at the
+path and inside any object or list the value returns. Numbers within the
+boundary keep their types; the default, `big_numbers: refuse`, refuses as
+above. Only an integer can be kept as text: a float beyond double range is
+refused when the document is parsed (`malformed`), whatever the policy. A
+number kept as text at the path still counts as `type: integer` or
+`type: number`, never `type: text`. It applies to a whole document read (`json`, `jsonl`); a streamed JSON
+array still refuses an integer beyond signed 64-bit while framing ("Large
+JSON array framing foundation"), before any column reads it.
+
 ### Typed dictionary values
 
 For JSON mappings, `value` also accepts `type` (`text`, `integer`, `number`,
