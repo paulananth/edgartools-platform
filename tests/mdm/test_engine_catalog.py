@@ -89,3 +89,70 @@ for action in (execution.runtime_files, lambda: check_policy({"kinds":{}})):
     result = subprocess.run([sys.executable, "-c", program], env={**os.environ, "EDGAR_RULES_ROOT": str(tmp_path)},
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("change", ["unknown_default", "unknown_selector", "blank_pin"])
+def test_invalid_reference_selector_is_refused(tmp_path, change):
+    body = copy.deepcopy(catalog.CATALOG)
+    alias = body["legacy_jurisdiction_table"]
+    if change == "unknown_default": body["legacy_jurisdiction_table"] = "absent"
+    elif change == "unknown_selector": body["reference_tables"][alias]["sql"] = "forbidden"
+    else: body["reference_tables"][alias]["pin"] = " "
+    write(tmp_path, body)
+    with pytest.raises(ValueError, match="reference tables"):
+        catalog.load(tmp_path)
+
+
+def test_invented_reference_selector_reaches_normal_matching_caller(tmp_path):
+    import hashlib
+
+    shutil.copytree(files.ROOT, tmp_path, dirs_exist_ok=True)
+    rows = [{"code": "SYNTHETIC", "crosswalk": [
+        ["invented-target", "one", "ZZ-Q", "exact"],
+        ["ignored-target", "one", "ignored", "exact"],
+        ["invented-target", "one", "ignored", "approximate"]]}]
+    raw = (json.dumps(rows[0]) + "\n").encode()
+    relative = tmp_path / "reference/published/invented-codes/one/canonical.jsonl"
+    relative.parent.mkdir(parents=True)
+    relative.write_bytes(raw)
+    pins_path = tmp_path / "merge/reference-pins.yaml"
+    pins = files.load(pins_path)
+    pins["invented-pin"] = {"code_set": "invented-codes", "version": "one",
+                            "sha256": hashlib.sha256(raw).hexdigest()}
+    pins_path.write_text(files.dumps(pins))
+    body = copy.deepcopy(catalog.CATALOG)
+    body["reference_tables"] = {"invented-alias": {
+        "pin": "invented-pin", "target_set": "invented-target", "match_type": "exact"}}
+    body["legacy_jurisdiction_table"] = "invented-alias"
+    write(tmp_path, body)
+    program = '''
+from edgar_warehouse.mdm.clean.names import REFERENCE_TABLES, edgar_jurisdiction
+from edgar_warehouse.mdm.clean.matching import compare_candidate_records
+assert REFERENCE_TABLES == {"invented-alias": {"SYNTHETIC": "ZZ-Q"}}
+assert edgar_jurisdiction("synthetic") == "ZZ-Q"
+rule = {"when": [{"primitive": "jurisdiction_agrees@1", "args": {
+    "sec_codes": "invented-alias", "sec_field": "invented_origin", "gleif_field": "invented_place"}}]}
+left = {"fields": {"invented_origin": {"op": "value", "value": "synthetic"}}}
+right = {"fields": {"invented_place": {"op": "value", "value": "ZZ-Q"}}}
+assert compare_candidate_records(rule, [(left, right)]) == [[True, False]]
+right["fields"]["invented_place"]["value"] = "YY-Q"
+assert compare_candidate_records(rule, [(left, right)]) == [[False, False]]
+'''
+    result = subprocess.run([sys.executable, "-c", program],
+        env={**os.environ, "EDGAR_RULES_ROOT": str(tmp_path)}, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_configured_crosswalk_refuses_ambiguous_targets_in_either_order(monkeypatch, reverse):
+    from edgar_warehouse.mdm.clean.names import load_reference_tables
+
+    crosswalk = [["invented-target", "one", "ZZ-Q", "exact"],
+                 ["invented-target", "two", "YY-Q", "exact"]]
+    if reverse: crosswalk.reverse()
+    monkeypatch.setattr(files, "pinned_reference", lambda pin: [{"code": "synthetic", "crosswalk": crosswalk}])
+    selectors = {"invented-alias": {"pin": "invented-pin", "target_set": "invented-target", "match_type": "exact"}}
+    with pytest.raises(ValueError, match="Ambiguous configured reference crosswalk"):
+        load_reference_tables(selectors)
+    crosswalk[1][2] = crosswalk[0][2]
+    assert load_reference_tables(selectors) == {"invented-alias": {"synthetic": crosswalk[0][2]}}

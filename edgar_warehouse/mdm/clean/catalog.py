@@ -21,7 +21,8 @@ def load(root=None):
 
 
 def _validate(body):
-    expected = {"version", "kinds", "profiles", "accepted_bars", "legacy_relationships", "legacy_ultimate_type"}
+    expected = {"version", "kinds", "profiles", "accepted_bars", "legacy_relationships", "legacy_ultimate_type",
+                "reference_tables", "legacy_jurisdiction_table"}
     if not isinstance(body, dict) or set(body) != expected or not isinstance(body["version"], str) or not body["version"]:
         raise ValueError("Mastering engine catalog must name its version and configured sections")
     kinds = body["kinds"]
@@ -46,6 +47,15 @@ def _validate(body):
                 raise ValueError("Mastering accepted bar is invalid")
     if not isinstance(body["legacy_relationships"], dict) or not isinstance(body["legacy_ultimate_type"], str) or not body["legacy_ultimate_type"]:
         raise ValueError("Mastering legacy relationship contract is invalid")
+    references = body["reference_tables"]
+    if (not isinstance(references, dict) or not references
+        or any(not isinstance(alias, str) or not alias or not isinstance(spec, dict)
+               or set(spec) != {"pin", "target_set", "match_type"}
+               or any(not isinstance(value, str) or not value or value.strip() != value for value in spec.values())
+               for alias, spec in references.items())
+        or not isinstance(body["legacy_jurisdiction_table"], str)
+        or body["legacy_jurisdiction_table"] not in references):
+        raise ValueError("Mastering reference tables name pinned crosswalk selectors and a configured compatibility table")
     return body
 
 

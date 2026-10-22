@@ -18,6 +18,7 @@ from typing import Any
 
 from edgar_warehouse.rules import files as rules_files
 from edgar_warehouse.rules.source_engine import compare_matching_values
+from .catalog import CATALOG
 
 
 def legal_form_key(name: Any) -> str:
@@ -31,12 +32,25 @@ def sec_legal_form_key(name: Any) -> str:
 
 
 # Pinned reference data remains under Rules authority; comparisons belong to Rust.
-_EDGAR_ISO = {
-    row["code"]: target
-    for row in rules_files.pinned_reference("sec-place-codes")
-    for to_set, _version, target, match_type in row["crosswalk"]
-    if to_set == "iso-3166" and match_type == "exact"
-}
+def load_reference_tables(declarations: dict) -> dict[str, dict[str, str]]:
+    """Resolve declared crosswalk selectors through Rules' pinned artifacts."""
+    tables = {}
+    for alias, spec in declarations.items():
+        table = {}
+        for row in rules_files.pinned_reference(spec["pin"]):
+            for to_set, _version, target, match_type in row["crosswalk"]:
+                if to_set != spec["target_set"] or match_type != spec["match_type"]:
+                    continue
+                if row["code"] in table and table[row["code"]] != target:
+                    raise ValueError("Ambiguous configured reference crosswalk")
+                table[row["code"]] = target
+        tables[alias] = table
+    return tables
+
+
+REFERENCE_TABLES = load_reference_tables(CATALOG["reference_tables"])
+# Compatibility exports retain the existing caller surface.
+_EDGAR_ISO = REFERENCE_TABLES[CATALOG["legacy_jurisdiction_table"]]
 _US_TERRITORIES = frozenset({"PR", "GU", "VI", "MP", "AS"})
 
 

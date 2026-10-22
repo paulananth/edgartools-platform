@@ -192,3 +192,10 @@ legacy_relationships:
     - person
     from_profile: fund
 legacy_ultimate_type: CALCULATED_ULTIMATE_PARENT
+
+reference_tables:
+  edgar-iso-v1:
+    pin: sec-place-codes
+    target_set: iso-3166
+    match_type: exact
+legacy_jurisdiction_table: edgar-iso-v1

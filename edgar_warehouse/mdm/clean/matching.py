@@ -28,7 +28,7 @@ from .activation import activated
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
-from .names import _EDGAR_ISO
+from .names import REFERENCE_TABLES
 from .store import Conflict, rows
 
 FAMILY = "name_binding"
@@ -82,7 +82,7 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
     try:
         return compare_record_pairs({
             "rule": rule, "pairs": pairs,
-            "code_tables": {"edgar-iso-v1": _EDGAR_ISO},
+            "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
             "census_version": CENSUS_VERSION, "cascade_version": cascade.VERSION,
         })
