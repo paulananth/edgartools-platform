@@ -196,8 +196,19 @@ def code_context(conn, code_set, version, code):
     if row is None:
         return None
     result = dict(row)
-    result["crosswalk"] = sorted(result["crosswalk"], key=lambda r: (r["to_set"], r["to_version"], r["to_code"]))
-    result["synonyms"] = sorted(result["synonyms"])
+    # Keep language ordering, which the view's flat synonym list cannot carry.
+    labels = Table("code_label", MetaData(), *(Column(n, Text) for n in
+        ("code_set", "version", "code", "language", "label", "kind")), schema=base.schema)
+    predicate = and_(labels.c.code_set == code_set, labels.c.version == version,
+                     labels.c.code == code, labels.c.kind == "synonym")
+    if conn.dialect.name == "mysql":
+        labels.append_column(Column("_code_key", String(64)))
+        predicate = and_(labels.c._code_key == tuple_hash(literal(code_set), literal(version), literal(code)), predicate)
+    ordered = [dict(row) for row in conn.execute(select(labels.c.language, labels.c.label).where(predicate)).mappings()]
+    import edgar_control
+    import json
+    result.update(json.loads(edgar_control.prepare_reference_context(json.dumps(
+        {"labels": ordered, "crosswalk": result["crosswalk"]}, ensure_ascii=False, allow_nan=False))))
     return result
 
 

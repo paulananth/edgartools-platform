@@ -355,6 +355,7 @@ mod python {
         m.add_function(wrap_pyfunction!(prepare_run_completion, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_resume, m)?)?;
         m.add_function(wrap_pyfunction!(canonicalize_numeric_json, m)?)?;
+        m.add_function(wrap_pyfunction!(prepare_reference_context, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_reference_version, m)?)?;
         m.add_function(wrap_pyfunction!(order_reference_rows, m)?)?;
         m.add_function(wrap_pyfunction!(compile_reference_query, m)?)?;
@@ -383,6 +384,10 @@ mod python {
     #[pyfunction]
     fn canonicalize_numeric_json(py: Python<'_>, raw: String) -> PyResult<String> {
         py.allow_threads(|| super::silver::canonicalize_numeric_json(&raw)).map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
+    fn prepare_reference_context(py: Python<'_>, raw: String) -> PyResult<String> {
+        py.allow_threads(|| super::reference::prepare_reference_context(&raw)).map_err(PyValueError::new_err)
     }
     #[pyfunction]
     fn prepare_reference_version(py: Python<'_>, raw: String) -> PyResult<String> {

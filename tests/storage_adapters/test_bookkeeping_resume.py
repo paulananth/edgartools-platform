@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 import json
+import time
 from uuid import uuid4
 
 import edgar_control
@@ -179,12 +180,14 @@ def test_concurrent_identical_resumes_settle_on_one_unchanged_result(recovery):
     wire = observed_wire(runtime, rid)
 
     def resume(_):
-        for _ in range(20):
+        for attempt in range(20):
             try:
                 run_storage.record_run_resume(runtime, wire)
                 return
             except run_storage.StaleObservation:
-                continue
+                # NOWAIT refuses an occupied row immediately. Yield between
+                # attempts so the lock holder can commit on a busy runner.
+                time.sleep(min(0.01 * (attempt + 1), 0.05))
         pytest.fail("Concurrent resume did not settle within bounded retries")
 
     with ThreadPoolExecutor(max_workers=4) as pool:

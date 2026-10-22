@@ -32,6 +32,28 @@ pub fn order_reference_rows(raw: &str) -> Result<String, String> {
     )
 }
 
+#[derive(Deserialize)]
+struct ContextLists {
+    labels: Vec<Object>,
+    crosswalk: Vec<Object>,
+}
+
+pub fn prepare_reference_context(raw: &str) -> Result<String, String> {
+    let input: ContextLists = serde_json::from_str(raw).map_err(|_| "Invalid reference context lists")?;
+    let mut labels = input.labels.into_iter().map(|row| Ok((text(&row,"language")?, text(&row,"label")?)))
+        .collect::<Result<Vec<_>,String>>()?;
+    labels.sort();
+    let mut crosswalk = input.crosswalk.into_iter().map(|row| Ok((
+        (text(&row,"to_set")?, text(&row,"to_version")?, text(&row,"to_code")?), row)))
+        .collect::<Result<Vec<_>,String>>()?;
+    crosswalk.sort_by(|a,b| a.0.cmp(&b.0));
+    let result = BTreeMap::from([
+        ("synonyms", write(&labels.into_iter().map(|(_, label)|label).collect::<Vec<_>>())?),
+        ("crosswalk", write(&crosswalk.into_iter().map(|(_, row)|row).collect::<Vec<_>>())?),
+    ]);
+    Ok(write(&result)?.get().to_string())
+}
+
 fn optional_text(row: &Object, name: &str) -> Result<Option<String>, String> {
     match row.get(name) {
         None => Ok(None),

@@ -155,3 +155,9 @@ remaining source-specific census/cascade namespace, field and reference
 selectors, and name/place reference constants, remain explicit decoupling
 work. Moving the catalog is not complete MDM portability or complete removal
 of source-specific engine behavior.
+
+### RDM ordering and installed native proof follow-up
+
+Multilingual synonyms are ordered in shared native preparation by language and full label. PostgreSQL and MySQL actual emitted queries use child-key indexes and both word indexes on an invented 5,001-code catalog; PostgreSQL plan qualification analyzes all three joined tables. The combined affected reference/resumption tests passed 50 cases per selected engine. Short/stop-word, negative-only and tokenizer parity remain open.
+
+Installed native MDM bundle import/configured parser/master worker/verifier passed two cases (231.13 seconds), followed by streamed XML worker recovery (one case, 48.03 seconds). This remains PostgreSQL caller evidence, not MySQL normal Store qualification.

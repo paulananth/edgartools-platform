@@ -309,3 +309,62 @@ def test_native_search_density_matches_the_postgres_reference(reference, words, 
             original = conn.scalar(text("SELECT ts_rank_cd(to_tsvector('simple',:label),websearch_to_tsquery('simple',:words))"),
                                    {"label": label, "words": words})
         assert found == pytest.approx(original, abs=1e-7)
+
+
+def test_multilingual_synonyms_keep_language_then_full_label_order(reference, tmp_path):
+    from argparse import Namespace
+    from edgar_warehouse.rdm.context import CodeContext
+    store, *_ = reference
+    labels = [{"code": "a", "language": language, "label": label, "kind": "synonym"}
+              for language, label in [("fr", "Alpha"), ("en", "Zulu"), ("en", "Ω"), ("en-US", "American")]]
+    name = draft(store, labels=labels)
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    args = Namespace(subject=name, key="a", as_of=None, as_at=None, hops=1, relationship_type=None,
+                     search=None, detail="full", page=None, limit=5)
+    answer = CodeContext(store.engine).answer(args)
+    assert answer["synonyms"] == ["Zulu", "Ω", "American", "Alpha"]
+
+
+def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path):
+    from sqlalchemy import event
+    from edgar_warehouse.rdm.storage import code_context, search_candidates, transaction
+    store, owner, _ = reference
+    codes = [{"code": "r" + str(n).zfill(4), "label": "Ordinary reference value " + str(n)} for n in range(5000)]
+    codes.append({"code": "sought", "label": "Needleword direct"})
+    labels = [{"code": row["code"], "language": "en", "label": "Alternate filler " + row["code"], "kind": "synonym"}
+              for row in codes]
+    labels[0]["label"] = "Needleword alternate"
+    name = draft(store, codes=codes, labels=labels)
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    if owner.dialect.name == "postgresql":
+        with owner.begin() as conn:
+            for table in ("code", "code_label", "code_path"):
+                conn.execute(text("ANALYZE rdm." + table))
+    queries = []
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if "UNION ALL" in statement or "code_label.language" in statement:
+            queries.append((statement, parameters))
+    event.listen(store.engine, "before_cursor_execute", capture)
+    try:
+        with transaction(store.engine, write=False) as conn:
+            assert code_context(conn, name, "1", "r0000")["synonyms"] == ["Needleword alternate"]
+            assert {r["code"] for r in search_candidates(conn, name, "1", "needleword")} == {"r0000", "sought"}
+    finally:
+        event.remove(store.engine, "before_cursor_execute", capture)
+    assert len(queries) == 2
+    plans = []
+    with owner.begin() as conn:
+        for statement, parameters in queries:
+            if owner.dialect.name == "mysql":
+                plans.append([dict(row) for row in conn.exec_driver_sql("EXPLAIN " + statement, parameters).mappings()])
+            else:
+                plans.append(conn.exec_driver_sql("EXPLAIN (FORMAT JSON) " + statement, parameters).scalar())
+    if owner.dialect.name == "mysql":
+        assert any(row["key"] == "_code_key" and row["type"] == "ref" for row in plans[0])
+        assert {row["key"] for row in plans[1] if row["type"] == "fulltext"} == {"code_words", "code_label_words"}
+    else:
+        encoded = [json.dumps(plan) for plan in plans]
+        assert "code_label_pkey" in encoded[0]
+        assert "code_label_words" in encoded[1] and "code_synonym_words" in encoded[1], encoded[1]
