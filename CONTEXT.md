@@ -129,8 +129,8 @@ An organization accepted as that kind from its source category, distinct from a 
 _Avoid_: Company, Government Entity, a new identity for every registry category
 
 **Holdings**:
-The relationship (HOLDS) from a Person, a Company, or a Fund Series to a Security it holds, for one reported period, as filed: a 13F manager's holding carries its investment discretion and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
-_Avoid_: ISSUED_BY, INVESTMENT_ADVISER_TO, employment, beneficial ownership inferred from a 13F alone
+A position a Person, a Company, or a Fund Series reports in a Security, for one reported period, as filed: a silver row carrying the MDM ids of the holder and the Security, never a relationship MDM masters. A 13F manager's holding carries its investment discretion and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
+_Avoid_: HOLDS (no longer an MDM relationship), ISSUED_BY, INVESTMENT_ADVISER_TO, employment, beneficial ownership inferred from a 13F alone
 
 **AUDITED_BY**:
 The relationship from a Company to the Company that audits it for one engagement.
@@ -150,7 +150,7 @@ _Avoid_: IS_DIRECTLY_CONSOLIDATED_BY, a similar name as proof of ownership
 
 **BENEFICIAL_OWNER_OF**:
 The relationship from an owner to an issuer whose securities it beneficially owns, with the percent as filed (Schedules 13D and 13G, Forms 3/4/5). Who owns, not who decides.
-_Avoid_: Discretion, HOLDS by a 13F manager, IS_SUBSIDIARY_OF
+_Avoid_: Discretion, a 13F manager's Holdings, IS_SUBSIDIARY_OF
 
 **IS_DIRECTLY_CONSOLIDATED_BY**:
 The one direct accounting parent of an entity, which consolidates its accounts (IFRS 10 / ASC 810), in one scope and time, as GLEIF names it; the one direct-parent type for any source. A missing parent is not proof of no parent.
