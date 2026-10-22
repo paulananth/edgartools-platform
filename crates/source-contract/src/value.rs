@@ -6,7 +6,7 @@ use crate::tree::{Child, El, ScalarKind};
 
 pub(crate) fn validate(args: &Value) -> Result<(), String> {
     let map = args.as_mapping().ok_or("value arguments must be a mapping")?;
-    if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "from" | "type" | "nullable" | "trim" | "null_if_blank" | "path_mode" | "big_numbers"))) {
+    if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "from" | "type" | "nullable" | "trim" | "null_if_blank" | "path_mode" | "big_numbers" | "decimals"))) {
         return Err("value has an unknown argument".into());
     }
     if args.get("from").is_some_and(|v| !matches!(v.as_str(), Some("document" | "item"))) {
@@ -17,33 +17,41 @@ pub(crate) fn validate(args: &Value) -> Result<(), String> {
         if args.get(key).is_some_and(|v| v.as_bool().is_none()) { return Err("value policies are booleans".into()); }
     }
     if args.get("big_numbers").is_some_and(|v| !matches!(v.as_str(),Some("refuse"|"text"))) { return Err("value big_numbers is refuse or text".into()); }
+    if args.get("decimals").is_some_and(|v| !matches!(v.as_str(),Some("float"|"text"))) { return Err("value decimals is float or text".into()); }
     if args.get("path_mode").is_some_and(|v| !matches!(v.as_str(),Some("tree"|"literal"))) { return Err("value path_mode is tree or literal".into()); }
     if setting(args,"path_mode") == Some("literal") && setting(args,"path").is_some_and(|p| p.contains(['[',']'])) { return Err("literal paths have no filters".into()); }
     check_path(setting(args, "path").ok_or("value names no path")?)
 }
 
-fn scalar(text: Option<&str>, kind: ScalarKind, exact: Option<&str>, big: bool) -> Result<Val, Rejected> {
+/// How a contract reads numbers: `big` keeps an integer beyond 64-bit as its JSON
+/// digits; `decimals` keeps every number with a fraction or exponent as its JSON digits.
+#[derive(Clone, Copy)]
+struct Numbers { big: bool, decimals: bool }
+
+fn scalar(text: Option<&str>, kind: ScalarKind, exact: Option<&str>, numbers: Numbers) -> Result<Val, Rejected> {
     let Some(text) = text else { return Ok(Val::Null) };
     match kind {
         ScalarKind::Text => Ok(Val::Str(text.into())),
         ScalarKind::Boolean => Ok(Val::Bool(text == "true")),
         ScalarKind::Number => {
             let text = exact.unwrap_or(text);
-            if text.contains(['.', 'e', 'E']) {
+            if text.contains(['.', 'e', 'E']) && numbers.decimals {
+                Some(Val::Str(text.into()))
+            } else if text.contains(['.', 'e', 'E']) {
                 text.parse::<f64>().ok().filter(|n| n.is_finite()).map(Val::Float)
             } else {
                 text.parse::<i64>().ok().map(Val::Int).or_else(|| text.parse::<u64>().ok().map(Val::UInt))
-            }.or_else(|| big.then(|| Val::Str(text.into())))
+            }.or_else(|| numbers.big.then(|| Val::Str(text.into())))
             .ok_or_else(|| Rejected::new("value_number_range", "JSON evidence number exceeds its exact integer or finite float range"))
         }
     }
 }
 
-fn element(el: &El, big: bool) -> Result<Val, Rejected> {
-    if el.scalar { return scalar(el.text.as_deref(), el.kind, el.exact_number.as_deref(), big); }
+fn element(el: &El, numbers: Numbers) -> Result<Val, Rejected> {
+    if el.scalar { return scalar(el.text.as_deref(), el.kind, el.exact_number.as_deref(), numbers); }
     if el.array {
         return match el.children.get("item") {
-            Some(Child::Many(items)) => items.iter().map(|item| element(item, big)).collect::<Result<Vec<_>, _>>().map(Val::List),
+            Some(Child::Many(items)) => items.iter().map(|item| element(item, numbers)).collect::<Result<Vec<_>, _>>().map(Val::List),
             _ => Err(Rejected::new("value_shape", "array has no item sequence")),
         };
     }
@@ -52,8 +60,8 @@ fn element(el: &El, big: bool) -> Result<Val, Rejected> {
     for (key, text) in &el.attrs { values.insert(key.clone(), Val::Str(text.clone())); }
     for (key, child) in &el.children {
         let value = match child {
-            Child::One(el) => element(el, big)?,
-            Child::Many(items) => Val::List(items.iter().map(|item| element(item, big)).collect::<Result<Vec<_>, _>>()?),
+            Child::One(el) => element(el, numbers)?,
+            Child::Many(items) => Val::List(items.iter().map(|item| element(item, numbers)).collect::<Result<Vec<_>, _>>()?),
         };
         values.insert(key.clone(), value);
     }
@@ -62,13 +70,13 @@ fn element(el: &El, big: bool) -> Result<Val, Rejected> {
 
 pub(crate) fn read(start: &El, args: &Value) -> Result<Val, Rejected> {
     let found = if setting(args,"path_mode") == Some("literal") { lookup_literal(start,setting(args,"path").unwrap())? } else { lookup_shape(start,setting(args,"path").unwrap())? };
-    let big = setting(args,"big_numbers") == Some("text");
+    let numbers = Numbers { big: setting(args,"big_numbers") == Some("text"), decimals: setting(args,"decimals") == Some("text") };
     let mut number = false;
     let value = match found {
         Found::Missing => Ok(Val::Null),
-        Found::El(el) => { number = el.scalar && el.kind == ScalarKind::Number; element(el, big) },
-        Found::Text(text, kind, exact) => { number = kind == ScalarKind::Number; scalar(Some(&text), kind, exact, big) },
-        Found::List(items) => items.into_iter().map(|item| element(item, big)).collect::<Result<Vec<_>, _>>().map(Val::List),
+        Found::El(el) => { number = el.scalar && el.kind == ScalarKind::Number; element(el, numbers) },
+        Found::Text(text, kind, exact) => { number = kind == ScalarKind::Number; scalar(Some(&text), kind, exact, numbers) },
+        Found::List(items) => items.into_iter().map(|item| element(item, numbers)).collect::<Result<Vec<_>, _>>().map(Val::List),
     }?;
     let valid = match &value {
         Val::Null => args["nullable"].as_bool() != Some(false),

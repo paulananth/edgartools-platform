@@ -222,6 +222,15 @@ number kept as text at the path still counts as `type: integer` or
 array still refuses an integer beyond signed 64-bit while framing ("Large
 JSON array framing foundation"), before any column reads it.
 
+`decimals: text` keeps every number written with a fraction or an exponent as
+its exact JSON digits (`2.50` stays `2.50`, `1E2` stays `1E2`), as a big
+decimal for the consumer to parse (Python `Decimal`, SQL `decimal`), never a
+float. Use it for money and every other figure where a float's rounding is not
+allowed (company-financials). The default, `decimals: float`, reads such a
+number as a double, as before. A number kept as text this way still counts as
+`type: number`, never `type: text`; combine it with `big_numbers: text` to keep
+every figure exact.
+
 ### Typed dictionary values
 
 For JSON mappings, `value` also accepts `type` (`text`, `integer`, `number`,
