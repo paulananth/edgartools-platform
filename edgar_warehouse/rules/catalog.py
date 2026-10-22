@@ -16,9 +16,11 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
 - lineage: feed to the datasets it captures, and dataset to kind, column by
   column (the source paths that fill each MDM field);
 - from a source's approved profile (`profile.yaml`, written by data-profiling's
-  `catalog` from approved findings: names and counts only), database `silver`:
-  a schema per source, a table per part, a column per silver field, each with
-  the data quality rules it needs; and database `rdm`, schema `code_sets`: a
+  `catalog` from approved findings: names and counts only) and its registered
+  silver specs (`silver-*.yaml`, which replace the profile's proposal of the
+  same table), database `silver`: a schema per source, a table per part, a
+  column per silver field, each with the data quality rules it needs; and
+  database `rdm`, schema `code_sets`: a
   table per code set the data needs, with lineage from each silver table that
   uses it.
 
@@ -35,6 +37,8 @@ from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote as escape, urlencode
 from urllib.request import Request, urlopen
+
+from edgar_warehouse.silver_writer import spec as silver_spec
 
 from . import files
 from .mapdoc import critical_elements, mapped, paths, winners
@@ -164,11 +168,51 @@ def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
     return tables, uses
 
 
+def _registered(source: str, spec: dict) -> dict:
+    """A silver table as `silver register` makes it from the source's spec
+    (`silver-*.yaml`): its columns, the MDM id each link fills, the quality
+    column its checks write and the load time it adds (`silver_spec.columns`)."""
+    spec = silver_spec.check(spec)
+    checks = defaultdict(list)
+    for check in spec.get("checks") or []:
+        checks[check.get("column")].append(f"{check['id']} ({check['on_fail']}): {check['why']}")
+    columns = []
+    for column in spec["columns"]:
+        about = [column.get("definition") or "",
+                 f"{'Nullable' if column['nullable'] else 'Always filled'}; sensitivity {column['sensitivity']}."]
+        about += [f"Data quality: {c}." for c in checks.get(column["name"], [])]
+        columns.append({"name": column["name"], "dataType": TYPES.get(str(column["type"]).upper(), TEXT),
+                        "description": " ".join(a for a in about if a)})
+    columns += [{"name": link["mdm_id_column"], "dataType": TEXT,
+                 "description": f"The MDM id of the {link['kind']} `{', '.join(link['columns'])}` names, "
+                                f"among the records of `{link['source_code']}`; empty until it is mastered."}
+                for link in spec.get("links") or []]
+    columns += [{"name": name, "dataType": TEXT, "description": "The data quality checks this row failed, by id "
+                 "(each flagged, the row still landed); empty when it passed every one."}
+                for name in silver_spec.quality_columns(spec)]
+    columns += [{"name": name, "dataType": "TIMESTAMP", "description": "When the row's delivered values were last "
+                 "written (the as-at time)."} for name in silver_spec.added_time(spec)]
+    if [c["name"] for c in columns] != silver_spec.columns(spec):
+        raise ValueError(f"The catalog must show every column {spec['table']} lands: {silver_spec.columns(spec)}")
+    about = [spec.get("definition") or "", f"Grain: {spec['grain']}." if spec.get("grain") else "",
+             f"Key: {', '.join(spec['key'])}; load mode {spec['load_mode']}."]
+    about += [f"Data quality: {c}." for c in checks.get(None, [])]
+    return {"name": spec["table"], "databaseSchema": fqn(SERVICE, SILVER, source),
+            "description": " ".join(a for a in about if a), "columns": columns}
+
+
 def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
-    """Every source's approved profile: its silver schema and tables, a table per code set
-    the profiled data needs, and lineage from each code set to the tables using it."""
+    """Every source's silver schema and tables, a table per code set the profiled
+    data needs, and lineage from each code set to the tables using it. A table
+    the source registers (`silver-*.yaml`, what `silver register` makes) replaces
+    its approved profile's proposal of the same name, so the catalog shows the
+    table as it lands."""
     tables, lineage = [], []
     silver_schemas, code_sets, used_by = [], {}, defaultdict(set)
+    registered = {}
+    for path in sorted((root / "sources").glob("*/silver-*.yaml")):
+        table = _registered(path.parent.name, files.load(path))
+        registered[(table["databaseSchema"], table["name"])] = table
     for path in sorted((root / "sources").glob("*/profile.yaml")):
         profile, source = files.load(path), path.parent.name
         silver_schemas.append({"name": source, "database": fqn(SERVICE, SILVER),
@@ -183,6 +227,13 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
             known["existing"] |= code_set["existing"]
         for name, at in uses.items():
             used_by[name] |= at
+    tables = [t for t in tables if (t["databaseSchema"], t["name"]) not in registered]
+    tables += [registered[k] for k in sorted(registered)]
+    profiled = {s["name"] for s in silver_schemas}
+    for source in sorted({path.parent.name for path in (root / "sources").glob("*/silver-*.yaml")} - profiled):
+        silver_schemas.append({"name": source, "database": fqn(SERVICE, SILVER),
+                               "description": f"Silver tables of `{source}`, as registered "
+                                              f"(rules/sources/{source}/silver-*.yaml)."})
     for name, known in sorted(code_sets.items()):
         tables.append({"name": name, "databaseSchema": fqn(SERVICE, RDM, CODE_SETS),
                        "description": f"RDM code set `{name}`" + (" (published)" if known["existing"] else
@@ -275,7 +326,7 @@ def plan(root: Path | None = None) -> dict:
             {"name": SOURCES, "service": SERVICE, "description": "Every source: its feeds and datasets."},
             {"name": MDM, "service": SERVICE, "description": "MDM: every kind and its fields."},
             *([{"name": SILVER, "service": SERVICE,
-                "description": "Silver: every profiled part's table and fields, with their data quality rules."},
+                "description": "Silver: every registered or profiled table and its fields, with their data quality rules."},
                {"name": RDM, "service": SERVICE, "description": "RDM: the code sets the profiled data needs."}]
               if silver_schemas else [])],
         "schemas": schemas + [{"name": CLEAN, "database": fqn(SERVICE, MDM),

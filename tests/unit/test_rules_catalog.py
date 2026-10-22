@@ -186,12 +186,50 @@ def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_t
     assert catalog.plan(root) == plan  # the same rules, the same catalog
 
 
-def test_without_a_profile_the_catalog_has_no_silver_or_rdm_database(tmp_path):
+def test_without_a_profile_or_a_silver_spec_the_catalog_has_no_silver_or_rdm_database(tmp_path):
     root = tmp_path / "rules"
-    shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml"))
+    shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml", "silver-*.yaml"))
     assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm"}
 
 
 def test_an_approved_profile_in_the_repo_adds_silver_and_rdm():
     # OpenFIGI's approved findings (ticket 80) are the first profile committed.
     assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm", "silver", "rdm"}
+
+
+def test_a_registered_silver_table_shows_as_it_lands(tmp_path):
+    """Ticket 79: the catalog shows the table `silver register` makes from the
+    source's spec, replacing its profile's proposal of the same name; a source
+    with a spec and no profile gets its silver schema."""
+    root = tmp_path / "rules"
+    shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml"))
+    folder = root / "sources" / "example.profiled"
+    folder.mkdir()
+    (folder / "silver-visit.yaml").write_text(files.dumps({
+        "table": "visit", "definition": "One visit.", "grain": "one row per visit", "key": ["visit_id"],
+        "load_mode": "append", "partition": [], "why": "A visit is an event.",
+        "time": {"as_of": "seen", "as_at": "loaded_at", "event_time": None},
+        "columns": [{"name": "visit_id", "type": "VARCHAR", "nullable": False, "definition": "The visit's id.",
+                     "source": "ID", "sensitivity": "none"},
+                    {"name": "seen", "type": "DATE", "nullable": True, "definition": "When it happened.",
+                     "source": "SEEN", "sensitivity": "none"}],
+        "links": [{"columns": ["visit_id"], "kind": "company", "source_code": "example.v1", "to_part": "company",
+                   "source_key": "visit_id", "mdm_id_column": "company_mdm_id"}],
+        "checks": [{"id": "visit_known", "check": "in_set", "column": "visit_id", "values": ["V1", "V2"],
+                    "on_fail": "flag", "why": "A visit is one the desk issued."}]}), encoding="utf-8")
+    plan = catalog.plan(root)
+    assert '"example.profiled"' in {catalog.quote(s["name"]) for s in plan["schemas"]
+                                    if s["database"] == "edgartools-rules.silver"}
+    tables = {f"{t['databaseSchema']}.{t['name']}": t for t in plan["tables"]}
+    visit = tables['edgartools-rules.silver."example.profiled".visit']
+    columns = {c["name"]: c for c in visit["columns"]}
+    assert list(columns) == ["visit_id", "seen", "company_mdm_id", "quality", "loaded_at"]
+    assert columns["seen"]["dataType"] == "DATE" and "visit_known (flag)" in columns["visit_id"]["description"]
+    assert "Key: visit_id; load mode append." in visit["description"]
+    # A profile proposing a table of the same name is replaced by the registered one.
+    (folder / "profile.yaml").write_text(files.dumps({
+        "version": 1, "dataset": "example", "parts": [{"part": "visits", "class": "transaction", "rows": 3,
+        "silver": {"table": "visit", "key": [], "load_mode": "replace", "fields": [
+            {"name": "other", "type": "VARCHAR", "nullable": True, "sensitivity": "none"}]}}]}), encoding="utf-8")
+    again = [t for t in catalog.plan(root)["tables"] if t["name"] == "visit"]
+    assert [[c["name"] for c in t["columns"]] for t in again] == [["visit_id", "seen", "company_mdm_id", "quality", "loaded_at"]]

@@ -412,6 +412,11 @@ that matter most:
   Data Catalog (`edgar-warehouse rules catalog`) shows it as the `silver` and
   `rdm` databases. It holds names, types and counts only: never an example, a
   top value or a check's values, since the repository is public.
+  A table onboarding registers (`rules/sources/<source>/silver-*.yaml`, what
+  `silver register` makes) replaces the profile's proposal of the same name, so
+  the catalog shows each table as it lands, with its MDM id, quality and load
+  time columns; a source with a registered table and no profile gets its silver
+  schema from the specs alone.
 
 ## Compare a new delivery
 
