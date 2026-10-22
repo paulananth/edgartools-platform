@@ -39,7 +39,7 @@ def test_every_table_view_column_and_function_has_a_comment(database):
         # The per-kind views are generated, and commented, for every kind.
         kinds = conn.scalar(text(
             "SELECT count(*) FROM pg_views WHERE schemaname='mdm' AND viewname LIKE '%\\_stage'"))
-        assert kinds == 8
+        assert kinds == conn.scalar(text("SELECT count(*) FROM mdm.master_kind"))
 
 
 def test_only_the_mdm_schema_exists(database):

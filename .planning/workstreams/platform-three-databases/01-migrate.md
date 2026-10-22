@@ -240,3 +240,19 @@ This resumption/review/CI correction pass took approximately 30 minutes. The
 longest local invocation remained the five-wheel installation at 177.72 seconds.
 The PRs remain draft; skill PR #1120 has green CI. The next #1121 revision must
 pass full CI before readiness is claimed. No merge or activation is authorized.
+
+
+## PR #1121 landing follow-up (operator, 2026-10-22)
+
+The operator requested rebase, conflict resolution and completion of this PR
+as soon as possible because other work depends on it. This landing checklist
+covers the implemented PR. The wider portability checklist above remains open.
+
+- [x] Rebase the ten PR commits onto current origin/main f3eeaa44 — no conflicts; all ten range-diff entries equal; recovery branch retained; 2026-10-22 18:56 ET.
+- [x] Diagnose the terminal CI failure — one schema description test failed, 507 PostgreSQL integration cases passed; three missing comments identified; 2026-10-22 18:56 ET.
+- [x] Add migration 025 without modifying migration 024, document generated kind views and preserve existing steward descriptions — 27 affected PostgreSQL cases passed in 10.61 seconds, including populated upgrade, schema completeness, repair, normal configured-kind merge/replay/context, Person links and detail rows; 2026-10-22 18:56 ET.
+- [x] Review Standards, Spec and GoF — independent read-only reviewers found no remaining issue in the incremental correction; existing owner helper retained; 2026-10-22 18:56 ET.
+- [ ] Verify the rebased, corrected installed bundle includes migration 025.
+- [ ] Publish using the exact observed remote lease and inspect CI to a terminal result; monitor deadline is 20 minutes after the final push.
+- [ ] Mark PR #1121 ready for review once checks pass. Merge remains a separate operator instruction under AGENTS.md.
+- [ ] Learning → skill: none expected for this correction; it applies the existing schema documentation and immutable-migration requirements.

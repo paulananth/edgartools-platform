@@ -32,6 +32,45 @@ VIEWS = {
 }
 
 
+COLUMN_DESCRIPTIONS = {
+    "assertion_id": "Immutable source reading identifier.",
+    "source_code": "Dataset Contract that supplied the source record.",
+    "record_key": "Record key within the source's Dataset Contract.",
+    "publication_key": "Source publication that supplied this reading.",
+    "revision": "Source publication revision recorded for this reading.",
+    "mapping_version": "Version of the registered source mapping that produced this reading.",
+    "effective_at": "Business time stated by the source, when known.",
+    "batch_id": "Committed MDM batch that retained this reading or master projection.",
+    "subject": "Source record identity, combining source code and record key.",
+    "schema_version": "Source schema version declared by this reading.",
+    "body": "Complete retained reading or current master projection as JSON.",
+    "entity_id": "Stable master identity identifier, including identities redirected to a canonical master.",
+    "status": "Current master disposition, including accepted, review or alias.",
+    "canonical_id": "Canonical master identity after accepted redirects.",
+    "field_name": "Configured field named by the reading or master projection.",
+    "operation": "Source field operation, such as supplying or clearing a value.",
+    "field_value": "Field value rendered as text from its retained JSON representation.",
+    "cleared": "Whether the winning source claim explicitly cleared this field.",
+    "policy_digest": "Mastering policy fingerprint that selected this field's winner.",
+    "kind_version": "Configured kind rules version that selected this field's winner.",
+    "conflict_count": "Number of retained disagreements about this selected field.",
+}
+
+
+def describe_view(conn, target, kind, shape):
+    """Fill missing descriptions, preserving historical steward-written text."""
+    if not conn.scalar(text("SELECT obj_description(to_regclass(:name),'pg_class')"), {"name": target}):
+        conn.execute(text("COMMENT ON VIEW " + target + " IS :words"),
+                     {"words": f"Configured {shape.replace('_', ' ')} view for kind {kind}; reads retained MDM records without copying them."})
+    missing = conn.scalars(text("""SELECT attname FROM pg_attribute
+        WHERE attrelid=to_regclass(:name) AND attnum>0 AND NOT attisdropped
+        AND coalesce(col_description(attrelid,attnum),'')=''"""), {"name": target}).all()
+    quote = conn.dialect.identifier_preparer.quote_identifier
+    for column in missing:
+        conn.execute(text("COMMENT ON COLUMN " + target + "." + quote(column) + " IS :words"),
+                     {"words": COLUMN_DESCRIPTIONS[column]})
+
+
 def configure_kinds(conn):
     """Under the migration lock, install additions and disable removed kinds.
 
@@ -54,6 +93,11 @@ def configure_kinds(conn):
             if conn.scalar(text("SELECT to_regclass(:name)"), {"name": target}) is not None:
                 raise ValueError("Configured kind view collides with an existing relation")
             conn.execute(text("CREATE VIEW " + target + " AS " + query), {"kind": kind})
+    for kind in sorted(configured | known):
+        for shape in VIEWS:
+            target = "mdm." + quote(kind + "_" + shape)
+            if conn.scalar(text("SELECT to_regclass(:name)"), {"name": target}) is not None:
+                describe_view(conn, target, kind, shape)
     conn.execute(text("UPDATE mdm.master_kind SET enabled=false WHERE enabled"))
     conn.execute(text("""INSERT INTO mdm.master_kind(kind,enabled) VALUES(:kind,true)
         ON CONFLICT(kind) DO UPDATE SET enabled=true"""), [{"kind": kind} for kind in sorted(configured)])

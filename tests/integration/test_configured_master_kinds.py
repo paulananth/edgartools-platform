@@ -19,7 +19,7 @@ from tests.integration import test_clean_mdm_postgres as core
 
 def test_populated_kind_constraint_upgrade_preserves_business_rows(database, monkeypatch):
     with monkeypatch.context() as patch:
-        patch.setattr(store, "MIGRATIONS", tuple(p for p in store.MIGRATIONS if p != "024_configured_kinds.sql"))
+        patch.setattr(store, "MIGRATIONS", store.MIGRATIONS[:store.MIGRATIONS.index("024_configured_kinds.sql")])
         patch.setattr(schema, "configure_kinds", lambda conn: None)
         old = core.initialize_database(database.admin, database.application)
         item = core.source("invented-existing", fields={"name": "Invented Existing"})
@@ -114,9 +114,19 @@ finally:
         "KIND_TEST_RUNTIME_URL": database.application.url.render_as_string(hide_password=False)},
         capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr
+    from tests.integration.test_mdm_schema_comments import _uncommented
+    with database.admin.connect() as conn:
+        assert _uncommented(conn) == []
+    with database.admin.begin() as conn:
+        conn.execute(text("COMMENT ON VIEW mdm.invented_kind_master IS ''"))
+        conn.execute(text("COMMENT ON COLUMN mdm.invented_kind_master.body IS ''"))
+        conn.execute(text("COMMENT ON VIEW mdm.invented_kind_stage IS 'Invented steward description'"))
     # The original configuration disables the added kind without deleting its
     # historical identity or views. Destination enforcement refuses new ones.
     store.migrate(database.admin, application_role="clean_application")
+    with database.admin.connect() as conn:
+        assert _uncommented(conn) == []
+        assert conn.scalar(text("SELECT obj_description('mdm.invented_kind_stage'::regclass,'pg_class')")) == "Invented steward description"
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM mdm.invented_kind_master")) == 1
         assert conn.scalar(text("SELECT enabled FROM mdm.master_kind WHERE kind='invented_kind'")) is False

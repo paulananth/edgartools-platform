@@ -220,6 +220,7 @@ print(json.dumps({{"shipped": shipped, "modules": modules}}))
             "edgar_warehouse.mdm.clean.schema"} <= set(found["modules"])
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/024_configured_kinds.sql") for p in found["shipped"])
+    assert any(p.endswith("mdm/migrations/025_kind_descriptions.sql") for p in found["shipped"])
 
 
 def _stores(databases):
