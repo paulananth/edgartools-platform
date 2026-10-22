@@ -23,10 +23,10 @@ pub(crate) fn validate(args: &Value) -> Result<(), String> {
     check_path(setting(args, "path").ok_or("value names no path")?)
 }
 
-/// How a contract reads numbers: `big` keeps an integer beyond 64-bit as its JSON
-/// digits; `decimals` keeps every number with a fraction or exponent as its JSON digits.
 #[derive(Clone, Copy)]
 struct Numbers { big: bool, decimals: bool }
+
+fn decimal(text: &str) -> bool { text.contains(['.', 'e', 'E']) }
 
 fn scalar(text: Option<&str>, kind: ScalarKind, exact: Option<&str>, numbers: Numbers) -> Result<Val, Rejected> {
     let Some(text) = text else { return Ok(Val::Null) };
@@ -35,10 +35,8 @@ fn scalar(text: Option<&str>, kind: ScalarKind, exact: Option<&str>, numbers: Nu
         ScalarKind::Boolean => Ok(Val::Bool(text == "true")),
         ScalarKind::Number => {
             let text = exact.unwrap_or(text);
-            if text.contains(['.', 'e', 'E']) && numbers.decimals {
-                Some(Val::Str(text.into()))
-            } else if text.contains(['.', 'e', 'E']) {
-                text.parse::<f64>().ok().filter(|n| n.is_finite()).map(Val::Float)
+            if decimal(text) {
+                if numbers.decimals { Some(Val::Str(text.into())) } else { text.parse::<f64>().ok().filter(|n| n.is_finite()).map(Val::Float) }
             } else {
                 text.parse::<i64>().ok().map(Val::Int).or_else(|| text.parse::<u64>().ok().map(Val::UInt))
             }.or_else(|| numbers.big.then(|| Val::Str(text.into())))
@@ -81,6 +79,7 @@ pub(crate) fn read(start: &El, args: &Value) -> Result<Val, Rejected> {
     let valid = match &value {
         Val::Null => args["nullable"].as_bool() != Some(false),
         _ if setting(args,"type").is_none() => true,
+        Val::Str(text) if number && decimal(text) => setting(args,"type") == Some("number"),
         Val::Str(_) if number => matches!(setting(args,"type"),Some("integer"|"number")),
         Val::Str(_) => setting(args,"type") == Some("text"),
         Val::Int(_) | Val::UInt(_) => matches!(setting(args,"type"),Some("integer"|"number")),

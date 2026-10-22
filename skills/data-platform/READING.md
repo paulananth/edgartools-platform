@@ -226,10 +226,13 @@ JSON array framing foundation"), before any column reads it.
 its exact JSON digits (`2.50` stays `2.50`, `1E2` stays `1E2`), as a big
 decimal for the consumer to parse (Python `Decimal`, SQL `decimal`), never a
 float. Use it for money and every other figure where a float's rounding is not
-allowed (company-financials). The default, `decimals: float`, reads such a
+allowed. The default, `decimals: float`, reads such a
 number as a double, as before. A number kept as text this way still counts as
-`type: number`, never `type: text`; combine it with `big_numbers: text` to keep
-every figure exact.
+`type: number`, never `type: integer` or `type: text`; combine it with
+`big_numbers: text` to keep every figure exact. It needs a whole document read
+(`json`, `jsonl`): a framed record (a streamed JSON array, CSV or XML records)
+has had its numbers parsed before the contract sees them, so a contract
+declaring `decimals: text` refuses there rather than return a float's digits.
 
 ### Typed dictionary values
 

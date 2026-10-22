@@ -269,6 +269,11 @@ impl Engine {
         if setting(&self.read, "format") != Some("json") || self.read.get("container").is_some() {
             return Err(Rejected::new("contract", "framed JSON projection requires json without a container"));
         }
+        // A framed record's numbers were parsed before the engine sees them, so
+        // their exact digits are gone: keeping decimals as text needs the whole document.
+        if uses_feature(&self.read, |expr| expr.get("value").and_then(|v| v.get("decimals")).and_then(Value::as_str) == Some("text")) {
+            return Err(Rejected::new("contract", "value decimals: text needs a whole-document read"));
+        }
         Ok(())
     }
 

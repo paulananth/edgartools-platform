@@ -1,4 +1,4 @@
-use source_contract::{Engine, Lookups, Steps, Val};
+use source_contract::{Engine, Lookups, Row, Steps, Val};
 const CONTRACT: &str = r#"
 read:
   format: json
@@ -99,5 +99,21 @@ fn decimals_text_keeps_every_decimal_as_its_json_digits_and_default_stays_float(
         assert_eq!(engine.read(br#"{"top":1.23}"#, &Lookups::new()).unwrap().tables["rows"][0]["top"], Val::Float(1.23), "default unchanged");
     }
     assert_eq!(text.read(br#"{"top":"1.23"}"#, &Lookups::new()).unwrap_err().code, "value_type", "a text value is still not a number");
+    let integer = Engine::from_yaml(&contract(", decimals: text").replace("type: number", "type: integer"), Steps::new()).unwrap();
+    assert_eq!(integer.read(br#"{"top":1.5}"#, &Lookups::new()).unwrap_err().code, "value_type", "a decimal is not an integer, as a float is not");
+    assert_eq!(integer.read(br#"{"top":15}"#, &Lookups::new()).unwrap().tables["rows"][0]["top"], Val::Int(15));
     assert!(Engine::from_yaml(&contract(", decimals: round"), Steps::new()).is_err());
+}
+#[test]
+fn decimals_text_keeps_digits_in_every_whole_document_route_and_framed_records_refuse() {
+    let entries = "read:\n  format: json\n  tables:\n    rows:\n      each: {entries: {path: facts, key_field: name, value_field: body}}\n      columns:\n        val: {value: {path: body.val, decimals: text}}\n        top: {value: {path: top, from: document, decimals: text}}\n";
+    let engine = Engine::from_yaml(entries, Steps::new()).unwrap();
+    let row = &engine.read(br#"{"top":2.50,"facts":{"a":{"val":1E2}}}"#, &Lookups::new()).unwrap().tables["rows"][0];
+    assert_eq!((&row["val"], &row["top"]), (&Val::Str("1E2".into()), &Val::Str("2.50".into())), "entries and from: document");
+    let lines = Engine::from_yaml(&format!("{}", "read:\n  format: jsonl\n  tables:\n    rows:\n      each: record\n      columns:\n        val: {value: {path: val, decimals: text}}\n"), Steps::new()).unwrap();
+    let rows = &lines.read(b"{\"val\":0.1000000000000000055511151231257827}\n{\"val\":2.50}\n", &Lookups::new()).unwrap().tables["rows"];
+    assert_eq!((&rows[0]["val"], &rows[1]["val"]), (&Val::Str("0.1000000000000000055511151231257827".into()), &Val::Str("2.50".into())), "jsonl");
+    let framed = Engine::from_yaml("read:\n  format: json\n  tables:\n    rows:\n      each: .\n      columns:\n        val: {value: {path: val, decimals: text}}\n", Steps::new()).unwrap();
+    let refused = framed.read_json_value(serde_json::json!({"val": 2.5}), &Lookups::new(), &Row::new()).unwrap_err();
+    assert_eq!(refused.code, "contract", "a framed record's numbers were already parsed: refuse rather than return float digits as exact");
 }
