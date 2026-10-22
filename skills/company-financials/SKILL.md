@@ -23,7 +23,7 @@ not describe any of them as running.
 
 | Never | Instead |
 |---|---|
-| Propose a financials rule from the captured data alone | Read [research 02](../../.scratch/company-financials/research/02-vendor-standards.md) first and follow the outside standard unless the operator rules otherwise (operator, 2026-10-21: "again use standards from external vendors keep this reserch handy for other decssions") |
+| Propose a financials rule from the captured data alone | Read research 02 (`.scratch/company-financials/research/02-vendor-standards.md` in the repository) first and follow the outside standard unless the operator rules otherwise (operator, 2026-10-21: "again use standards from external vendors keep this reserch handy for other decssions") |
 | Key a year on the filing's `fy` or `fp` | Key it on the period's end date (below) |
 | Overwrite a figure when a later filing restates it | Keep every filed copy; the latest is the default (below) |
 | Fill a missing year from a nearby year | Null, with its reason |
