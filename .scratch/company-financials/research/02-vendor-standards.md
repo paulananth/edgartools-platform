@@ -1,6 +1,6 @@
 # 02 Research: how outside vendors and standards set the financials
 
-Gathered 2026-10-21 for tickets 35 (time model) and 38 (line items), at the operator's request ("use standards from external vendors keep this reserch handy for other decssions"). Later financials decisions (39, 42, 43, 44) read this note first. Public sources only. FactSet's, Bloomberg's and S&P's manuals are behind logins; where only their general practice is known, it is marked **unverified**.
+Gathered 2026-10-21 for tickets 35 (time model), 38 (line items) and 39 (measures), at the operator's request ("use standards from external vendors keep this reserch handy for other decssions"). Later financials decisions (39, 42, 43, 44) read this note first. Public sources only. FactSet's, Bloomberg's and S&P's manuals are behind logins; where only their general practice is known, it is marked **unverified**.
 
 ## Sources at a glance
 
@@ -45,6 +45,14 @@ Gathered 2026-10-21 for tickets 35 (time model) and 38 (line items), at the oper
 - The three uncounted concepts are used: `NetIncomeLossAttributableToNoncontrollingInterest` by 133 filers, `MinorityInterest` by 139, `TemporaryEquityCarryingAmountAttributableToParent` by 55.
 - `ProfitLoss` gives an annual figure where `NetIncomeLoss` has none for 41 filers (212 periods). Of the 47 filers with 284 missing net income years, `ProfitLoss` fills 46 years, leaving 38 filers with 238.
 
+## 3. Measures: where they live and how they are defined (ticket 39)
+
+- **Vendors store measures.** The WRDS Financial Ratio Suite, built on Compustat, publishes "pre-calculated metrics" at firm and industry level; firm-level ratios are raw, "without any truncation or smoothing" (winsorizing applies only to industry aggregates).
+- **Return denominators differ by standard.** WRDS defines after-tax return on average common equity on "average of Common Equity based on most recent two periods"; its quarterly after-tax return on invested capital divides by invested capital lagged a year, only when that is positive (from a copy of the WRDS manual and a forum post; the WRDS pages are behind a login). Damodaran (research 01 section 4) uses beginning-of-period balances. Generic sources use the average of beginning and end.
+- **ROIC's capital differs too:** debt plus equity minus (excess) cash is the common form; some definitions use operating assets less non-interest-bearing operating liabilities.
+- **"Not meaningful" for growth:** a CAGR is shown as N.M. when the first or last year's value is zero or negative (Nasdaq glossary); a dash means the data is not available. Some vendors keep NA even from a loss to a profit, which drops that case.
+- **Windows:** "the number of full fiscal years shown" (Nasdaq); vendors commonly show 1-, 3-, 5- and 10-year growth (**unverified** for each vendor).
+
 ## Sources
 
 - [WRDS: Compustat fiscal and calendar dates](https://wrds-support.wharton.upenn.edu/hc/en-us/articles/115003135371-Compustat-Identifying-Fiscal-and-Calendar-Dates)
@@ -56,3 +64,8 @@ Gathered 2026-10-21 for tickets 35 (time model) and 38 (line items), at the oper
 - [Bloomberg BQL fundamentals fact sheet](https://www.wu.ac.at/fileadmin/wu/s/library/databases_info_image/Bloomberg_BQL_Fundamentals_FactSheet.pdf)
 - [FactSet Fundamentals DataFeed](https://insight.factset.com/resources/at-a-glance-factset-fundamental-datafeed)
 - [Intrinio: mapping documentation](https://help.intrinio.com/does-intrinio-provide-mapping-documentation-for-its-standardized-financials)
+- [WRDS research data overview (Financial Ratio Suite)](https://wrds-www.wharton.upenn.edu/documents/1400/wrds_research_data_overview.pdf)
+- [finsets: WRDS ratios replication notes](https://ionmihai.github.io/finsets/01_wrds/ratios.html)
+- [Nasdaq glossary: growth rates](https://www.nasdaq.com/glossary/g/growth-rates)
+- [Return on capital (Wikipedia)](https://en.wikipedia.org/wiki/Return_on_capital)
+- [TIKR: measuring ROIC](https://www.tikr.com/blog/how-to-measure-return-on-invested-capital-roic-properly)
