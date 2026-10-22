@@ -47,9 +47,6 @@ relationships:
     or a five percent owner (Schedules 13D/13G, Section 13(d)), with the percent as filed. Who owns, not
     who decides: an adviser's discretion is on INVESTMENT_ADVISER_TO.
   EMPLOYED_BY: The person works for the company as a director, an officer (with the title) or an employee.
-  HOLDS: >-
-    The entity holds the security, as filed: a 13F manager's holding carries its investment discretion
-    and voting authority; a Forms 3/4/5 holding its direct or indirect ownership.
   ISSUED_BY: The security is issued by this entity.
   CUSTODIAN: >-
     The custodian holds 10% or more of the adviser's separately managed account assets, as the

@@ -487,9 +487,9 @@ missing, go on and log it.
   `scope` `<Provider> <relationship family>`.
   - **Only a link that describes the entities is an MDM relationship**: a
     parent, an issuer, a role, a fund's adviser, which change rarely. A
-    position or an event (a holding, a transaction), restated every filing
+    position or an event (a holding, a transaction), restated in every report
     with its amount, is a silver row carrying the MDM ids of both ends and
-    its as-of date, the date it holds at, beside the filing date (operator,
+    its as-of date, the date it holds at, beside the date it was reported (operator,
     2026-10-22: "Agreed Remove HOLDS from MDM's relationship types", "Don't
     we need a as of date for holdings").
   - A relationship ends only on an end the source states. A record missing

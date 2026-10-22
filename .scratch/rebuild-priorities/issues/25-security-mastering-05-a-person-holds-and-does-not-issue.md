@@ -13,8 +13,8 @@ Priority: 25, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 **Status:** ready-for-agent
 
-- [x] `HOLDS` out of MDM's relationship types: `rules/merge/relationships.yaml` (relationship-types-v6) and CONTEXT.md (Holdings is a silver row); the policy digest moves by one new layer, peeled back to the one before (`tests/mdm/policy_layers.py`); MDM, rules and fixture tests 1,072 passed (2026-10-22 14:44 ET)
-- [ ] ~~The unused HOLDS line in `rules/context/definitions.yaml` removed~~ deferred to [132](132-relationship-types-in-one-place.md): Codex's PR #1121 edits that file; an unused line breaks nothing (definition tests 61 passed)
+- [x] `HOLDS` out of MDM's relationship types: `rules/merge/relationships.yaml` (relationship-types-v6), definitions and CONTEXT.md (Holdings is a silver row); the policy digest moves by one new layer, peeled back to the one before (`tests/mdm/policy_layers.py`); MDM, rules and fixture tests 1,072 passed (2026-10-22 14:44 ET)
+- [x] The HOLDS line out of `rules/context/definitions.yaml` (a test holds the definitions equal to the types); #1121 edits another part of that file (operator, 2026-10-22: "Edit it now (Recommended)") (2026-10-22 15:23 ET)
 - [ ] The silver table spec for Forms 3/4/5 holdings, with its as-of date
 - [ ] The reading tables give each line its as-of date and filing date
 - [ ] Links by MDM id: owner and issuer by CIK; the Security once 24 attaches it
