@@ -34,9 +34,13 @@
 # investment discretion, voting authority, a corporate action's event type)
 # are carried on its periods.
 #
+# A link that describes the entities and changes rarely is mastered here; a
+# position or an event (a holding, a transaction) is a silver row carrying the
+# MDM ids of both ends (operator, 2026-10-22).
+#
 # Before this file the same table was held in code; a policy registered without
-# this section still uses it (relationships.TYPES_V0), so the two must agree.
-version: relationship-types-v5
+# this section still uses it (relationships.TYPES_V0; ticket 132 removes it).
+version: relationship-types-v6
 types:
   # Consolidation (GLEIF's relationship file names; IFRS 10 / ASC 810).
   IS_DIRECTLY_CONSOLIDATED_BY:
@@ -73,10 +77,10 @@ types:
     from: [person]
     to: [company]
     capacities: [director, employee, officer]
-  # Securities (13F, Forms 3/4/5).
-  HOLDS:
-    from: [company, fund_structure, person]
-    to: [security]
+  # Securities. A holding is not a relationship MDM masters: a position,
+  # restated every filing with its amount, lands in silver with the MDM ids of
+  # its holder and its Security (operator, 2026-10-22: "Agreed Remove HOLDS
+  # from MDM's relationship types").
   # A Security keeps the start its issuer link first got (ticket 113;
   # operator, 2026-10-19: "if issued by already exist do not overight"; a
   # backfill: "Keep the earlier date (Recommended)").

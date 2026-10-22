@@ -130,6 +130,16 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
+def without_holds_removed(policy: dict) -> dict:
+    """Rebuild priorities ticket 25 (operator, 2026-10-22: "Agreed Remove HOLDS
+    from MDM's relationship types"): a holding is a silver row, not a
+    relationship MDM masters. Peeled, the policy is the one before."""
+    body = _copy(policy)
+    body["relationships"]["types"]["HOLDS"] = {"from": ["company", "fund_structure", "person"], "to": ["security"]}
+    body["relationships"]["version"] = "relationship-types-v5"
+    return body
+
+
 def without_issued_by_keeps_start(policy: dict) -> dict:
     """Rebuild priorities ticket 113 (operator, 2026-10-19: "if issued by
     already exist do not overight"; a backfill: "Keep the earlier date
@@ -266,6 +276,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Removed: "Agreed Remove HOLDS from MDM's relationship types" (2026-10-22, ticket 25).
+    (without_holds_removed, "0b8f20457f7775d8c6bc14badc4e9ee7a08147e198b42bc409bdc2e14741dd89"),
     # Recorded under the standing rule on its tests (2026-10-19, ticket 113).
     (without_issued_by_keeps_start, "eacd7b763ae928188f339f7fb8c9e57f4bdb0c8132f804f8fd2355dc29f92909"),
     # Switched on: "Switch on all six (Recommended)" (2026-10-17 21:03 ET, ticket 79).
