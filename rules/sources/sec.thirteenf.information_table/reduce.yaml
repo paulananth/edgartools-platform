@@ -48,6 +48,16 @@ reduce:
       count: titles
       sample: title_sample
       sample_limit: 1
+    # Every share class the titles name (ticket 130), all kept: at most 26.
+    classes:
+      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      table: sec_thirteenf_class
+      keys: [cusip]
+      mode: members
+      member: share_class
+      count: classes
+      sample: class_sample
+      sample_limit: 26
     figis:
       source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
       table: sec_thirteenf_figi

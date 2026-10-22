@@ -26,6 +26,13 @@ combine:
       where: {}
       joins:
         cusip: {group: isin_cusip, key: isin, on_missing: empty, replace: false}
+    classes:
+      source: securities
+      table: isin_classes
+      checks: {}
+      where: {}
+      joins:
+        cusip: {group: isin_cusip, key: isin, on_missing: empty, replace: false}
     leis:
       source: securities
       table: isin_leis

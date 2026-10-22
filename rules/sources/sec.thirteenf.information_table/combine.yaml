@@ -1,5 +1,5 @@
 # One row per CUSIP: every CUSIP the reduction names, joined with its filed
-# name and title groups and the lexically first FIGI filed with it, each if
+# name, title and share-class (ticket 130) groups and the lexically first FIGI filed with it, each if
 # any (ticket 79). Its one input is the reduction's output, named
 # `securities`. Pin canonical JSON of this file as the source.combine contract.
 execution:
@@ -40,6 +40,31 @@ combine:
       skip_null_values: true
       checks: {}
       where: {}
+    # The share class only when the titles name exactly one (ticket 130;
+    # operator, 2026-10-22: "Approve the rule (Recommended)"); `one` never
+    # chooses. `classes` keeps every letter, for the quality check.
+    class:
+      source: securities
+      table: classes
+      key: cusip
+      value: class_sample
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {classes: 1}
+    classes:
+      source: securities
+      table: classes
+      key: cusip
+      value: .
+      mode: one
+      order_by: []
+      distinct: false
+      skip_null_values: true
+      checks: {}
+      where: {}
   tables:
     security:
       source: securities
@@ -50,3 +75,5 @@ combine:
         name: {group: name, key: cusip, on_missing: skip, replace: false}
         title: {group: title, key: cusip, on_missing: skip, replace: false}
         figi: {group: figi, key: cusip, on_missing: skip, replace: false}
+        class: {group: class, key: cusip, on_missing: skip, replace: false}
+        classes: {group: classes, key: cusip, on_missing: skip, replace: false}

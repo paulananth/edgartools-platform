@@ -512,6 +512,11 @@ Operations are single-key mappings:
 - `replace: {from: "&", to: " AND "}`: literal non-overlapping replacement.
 - `regex_replace: {pattern: "[^A-Z0-9]+", with: " "}`: Rust regex replacement;
   replacement text is literal, including `$`. Lookaround and backreferences are refused.
+  To keep one token of a text (a code after a marker word), replace in steps
+  with a literal marker: everything up to the marker word with `#`, a value
+  with no `#` with `""`, everything after the token with `""`, then drop the
+  `#`. A value naming no token ends blank; prove the recipe against an
+  oracle on every distinct captured value.
 - `pad: {left: " ", right: " "}`: append declared surrounding text.
 - `remove_prefix: "THE "`: remove one exact leading prefix.
 
@@ -969,6 +974,13 @@ input prefix. Default `ordinal: source` reports iterator position;
 later record check defers. Deferred/error locations keep source positions.
 Selection expressions see source positions. For permissive matrix iteration,
 non-array rows skipped by that iterator do not have a row position.
+
+A selection's "no" is `test: {path: <a path that is never there>, kind:
+present}`: a `const` false is refused as a selection, and `value` is for JSON
+only. A value kept only when every row agrees: select only the rows that
+state one (a blank leaves the row out), count its members in the reduction,
+and join it in the combine with `mode: one` and `where: {<count>: 1}`; a
+second group without `where` keeps every member for a quality check.
 
 A catalog contract can declare every captured layout of a catalog and its
 legacy skip, fallback and text rules with these generic calls. Receipt context

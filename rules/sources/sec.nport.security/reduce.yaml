@@ -57,6 +57,16 @@ reduce:
       count: titles
       sample: title_sample
       sample_limit: 1
+    # Every share class its equity holdings name (ticket 130), all kept.
+    cusip_classes:
+      source: holdings
+      table: cusip_class
+      keys: [cusip]
+      mode: members
+      member: share_class
+      count: classes
+      sample: class_sample
+      sample_limit: 26
     cusip_leis:
       source: holdings
       table: security_cusip
@@ -118,6 +128,16 @@ reduce:
       count: titles
       sample: title_sample
       sample_limit: 1
+    # Every share class its equity holdings name (ticket 130), all kept.
+    isin_classes:
+      source: holdings
+      table: isin_class
+      keys: [isin]
+      mode: members
+      member: share_class
+      count: classes
+      sample: class_sample
+      sample_limit: 26
     isin_leis:
       source: holdings
       table: security_isin

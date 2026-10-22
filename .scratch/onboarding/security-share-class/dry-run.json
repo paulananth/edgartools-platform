@@ -1,0 +1,48 @@
+{
+ "thirteenf": {
+  "records": 20311,
+  "share_class_filled": 1885,
+  "flagged": 5,
+  "filled_and_flagged": 0,
+  "oracle_lettered": 2891,
+  "oracle_two_letters": 5,
+  "filled_differs_from_oracle": 0,
+  "flagged_not_oracle_conflict": 0,
+  "refused": {
+   "invalid_cusip": 28,
+   "invalid_cusip_checksum": 9603
+  },
+  "quality_counts": {
+   "flagged:share_class_one_letter": 5
+  }
+ },
+ "nport": {
+  "by_cusip": {
+   "records": 383612,
+   "share_class_filled": 1394,
+   "flagged": 3,
+   "filled_and_flagged": 0,
+   "oracle_lettered": 1397,
+   "oracle_two_letters": 4,
+   "filled_differs_from_oracle": 0,
+   "flagged_not_oracle_conflict": 0
+  },
+  "isin_only": {
+   "records": 35309,
+   "share_class_filled": 201,
+   "flagged": 0,
+   "filled_and_flagged": 0
+  },
+  "refused": {
+   "invalid_cusip_checksum": 1769,
+   "invalid_cusip": 1
+  },
+  "quality_counts": {
+   "flagged:share_class_one_letter": 3
+  }
+ },
+ "seconds": {
+  "thirteenf": "about 5 min",
+  "nport": "about 20 min"
+ }
+}
