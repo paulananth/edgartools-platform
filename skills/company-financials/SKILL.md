@@ -75,7 +75,7 @@ Evidence and sources: ticket 35, research 02 section 1.
   concepts in order, any computed fallback and its flag; a configured step
   applies it. An operation the engine lacks is added as a generic engine
   primitive (build ticket 46).
-- USD only, until ticket 42 (currencies and IFRS) rules otherwise.
+- Figures in the reporting currency with its ISO code (ticket 42, below).
 
 Evidence and sources: ticket 38, research 02 section 2.
 
@@ -119,3 +119,20 @@ Evidence and sources: ticket 39, research 02 section 3.
   `big_numbers: text` on the `units` value (ticket 128; operator: "Exact big
   numbers in the reader"). Never round it; without the option the file is
   refused (`value_number_range`). With it, all 368 captured files read.
+
+## Currencies, IFRS and industry formats (ticket 42, decided 2026-10-22)
+
+- **Reporting currency with its ISO code beside each figure** (operator:
+  "Reporting currency + code (Recommended)"); never convert. A measure whose
+  inputs mix currencies is null with the reason "mixed currencies". USD
+  conversion needs an exchange-rate source: a new provider, its own ticket.
+- **IFRS mapped into the same 19 line items** (operator: "Map into same items
+  (Recommended)"): an ordered `ifrs-full` list beside each `us-gaap` list in
+  the rules YAML; a filer is read from the taxonomy it files in.
+- **One item set, flagged by kind** (operator: "Same items, flagged by kind
+  (Recommended)"): a value from an industry concept carries its kind (bank,
+  insurer, REIT, utility). Each filer has a format, industrial or financial
+  services, from its SIC code (6000–6199, 6300–6411 are financial services),
+  as Compustat keeps `INDL` and `FS`. A measure meaningless for financial
+  services (gross margin, ROIC, total debt and its ratios) is null with the
+  reason "not meaningful for financial services".

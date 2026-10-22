@@ -3,7 +3,7 @@
 Priority: 128. Map: [Rebuild priorities](../map.md). Raised by ticket 40
 (2026-10-22), operator: "Exact big numbers in the reader".
 
-Type: task. Status: done (2026-10-22 06:55 ET; PR and merge below). Blocked by: none. Blocks: 45.
+Type: task. Status: done (2026-10-22 06:55 ET; merged as #1129, 07:05 ET). Blocked by: none. Blocks: 45.
 
 ## What is open
 
@@ -32,5 +32,5 @@ to 38 digits exactly.
 - [x] READING.md documents the option ("Complete JSON records") (2026-10-22 06:55 ET)
 - [x] Ticket 40's trial contract reads all 368 captured files with the option: 75.7 s; facts 5,134,979 and concepts with facts 139,524, both equal to the long-form copy (2026-10-22 06:55 ET)
 - [x] Three-axis review: GoF "leave it"; Standards: a misleading code comment removed, a guide sentence reworded; Spec: streamed JSON arrays still refuse while framing, now stated in READING.md (company facts is a whole-document read) (2026-10-22 06:55 ET)
-- [ ] PR, CI green, merged
+- [x] PR [#1129](https://github.com/paulananth/edgartools-platform/pull/1129), CI green, merged 2026-10-22 07:05 ET
 - [x] Learning → skill: `skills/data-platform/READING.md` (the option) and `skills/company-financials/SKILL.md`, "Reading company facts" (declare it on `units`) (2026-10-22 06:55 ET)
