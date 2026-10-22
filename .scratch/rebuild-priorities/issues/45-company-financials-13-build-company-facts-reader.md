@@ -6,4 +6,4 @@ Type: task. Status: open. Blocked by: 40, 41, 128. Map: [map](../../company-fina
 
 ## Question
 
-Implement the reading ticket 08 decides (a reading contract under `rules/sources/`, or a custom step), with its tests on captured files; GoF consult before code; three-axis review; merge on the operator's word.
+Implement the reading ticket 40 decided: a configured source-extract contract under `rules/sources/` (no custom step), one table per taxonomy with `big_numbers: text` on `units` (ticket 128), starting from `.scratch/company-financials/research/03-company-facts-trial-contract.yaml`, with its tests on captured files; GoF consult before code; three-axis review; merge on the operator's word.
