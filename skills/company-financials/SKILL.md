@@ -47,3 +47,34 @@ not describe any of them as running.
   gives null with the reason "fiscal year changed".
 
 Evidence and sources: ticket 35, research 02 section 1.
+
+## Standard line items (ticket 38, decided 2026-10-21)
+
+- **Nineteen line items**, as research 01 section 6 lists them
+  (`.scratch/company-financials/research/01-measures-and-concepts.md`). Each is
+  an ordered list of reported concepts. Where research 01's order differs from
+  the Fundamental Accounting Concepts' Try Order, the standard's order wins:
+  cost of revenue tries `CostOfRevenue` first, then `CostOfGoodsAndServicesSold`,
+  `CostOfServices`, `CostOfGoodsSold`.
+- **First present wins:** for each company and annual period, the first concept
+  with a fact for that exact period, using the latest-filed copy. The chosen
+  concept and accession are recorded beside the value.
+- **Computed fallbacks** (the standard's impute rules: net income = `ProfitLoss`
+  − NCI net income; parent equity = equity including NCI − `MinorityInterest`;
+  gross profit = revenue − cost of revenue; liabilities from liabilities and
+  equity; total debt from its parts) only where research 01 lists them, each
+  value flagged "computed".
+- **Revenue keeps the standard order** (`Revenues` first), with a data-quality
+  rule that flags a period where the chosen revenue is smaller than another
+  revenue total filed for it, for a steward (operator: "Standard order + a
+  quality check (Recommended)"). Never a silent switch to the larger total.
+- **A missing line item** is empty, with the reason "no concept filed", and
+  counted per line item.
+- **The map is rules configuration** (operator: "Rules configuration
+  (Recommended)"): a reviewed YAML file under `rules/` names each line item, its
+  concepts in order, any computed fallback and its flag; a configured step
+  applies it. An operation the engine lacks is added as a generic engine
+  primitive (build ticket 46).
+- USD only, until ticket 42 (currencies and IFRS) rules otherwise.
+
+Evidence and sources: ticket 38, research 02 section 2.

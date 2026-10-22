@@ -16,7 +16,7 @@ Starting point: research section 6 (nineteen line items, ordered concept lists, 
 - [x] Outside standards researched on the operator's instruction ("again use standards from external vendors keep this reserch handy for other decssions"): [research 02](../../company-financials/research/02-vendor-standards.md) (2026-10-21 21:16 ET)
 - [x] Revenue when `Revenues` is smaller than contract revenue (operator: "Standard order + a quality check (Recommended)") (2026-10-21 21:16 ET)
 - [x] Where the map lives (operator: "Rules configuration (Recommended)") (2026-10-21 21:16 ET)
-- [x] Learning → skill: `skills/data-modeling/SKILL.md`, "6. A transaction part" (a standard line item from many reported concepts) and Hard stops (outside standards before a domain rule); `CLAUDE.md`: macOS has no `timeout` for a watcher deadline (2026-10-21 21:19 ET)
+- [x] Learning → skill: `skills/company-financials/SKILL.md`, "Standard line items" (the financials domain skill, operator 2026-10-21: "this cannot be in a general skill be careful"); `skills/data-modeling/SKILL.md` Hard stops gains only the general rule (outside standards before a domain rule); `CLAUDE.md`: macOS has no `timeout` for a watcher deadline (2026-10-21 21:41 ET)
 
 ## Answer
 
