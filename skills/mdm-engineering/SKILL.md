@@ -85,6 +85,18 @@ writers and stale leases. Verify each engine's migrations, grants and indexed
 lookup plans as well. An engine is supported only after its full caller path
 passes; compilation, connectivity and PostgreSQL-only tests are insufficient.
 
+### Search candidate completeness
+
+Prove candidate retrieval as well as ranking. Database word indexes differ in
+minimum/maximum token length, stop words, punctuation and negative-only queries;
+a shared ranker cannot recover rows its index omitted. Qualify short and stop
+words alone and with other terms, quoted phrases, exclusions, alternatives and
+compound boundaries through the normal caller on each selected engine. Keep
+positive searches indexed and scope negative-only complements to the requested
+version. A derived-index upgrade must preserve published content and pins,
+revoke runtime writes during interrupted DDL, recover on retry and refresh from
+authoritative content before approval freezes it.
+
 ## Hard stops
 
 - **Design for the hosted target.** MDM, Rules and Bookkeeping run on the
