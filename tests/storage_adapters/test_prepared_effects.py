@@ -89,18 +89,28 @@ def test_native_connection_uses_configured_driver_and_restricted_principal(adapt
             engine.dispose()
 
 
-def test_native_policy_registration_uses_the_selected_engine_and_transaction(database, storage_api):
+@pytest.fixture
+def native_registry_database(database_factory):
+    with database_factory() as isolated:
+        yield isolated
+
+
+def test_native_policy_registration_uses_the_selected_engine_and_transaction(native_registry_database, storage_api):
     """Exercise the actual native registration caller, not an opaque effect."""
     from edgar_warehouse.mdm.clean.store import current_reading, reading_at, register_policy
     from edgar_warehouse.mdm.clean.merge import MergeStage
     from tests.support.rules_authority import register_dataset
 
-    admin, runtime, role = database
+    admin, runtime, role = native_registry_database
     metadata, tables = storage_api.native_registry_model(admin.dialect.name)
+    if admin.dialect.name == "mysql":
+        from edgar_warehouse.mdm.clean.store import migrate
+        migrate(admin,application_role=role)
     with admin.begin() as conn:
         if metadata.schema:
             conn.execute(CreateSchema(metadata.schema))
-        metadata.create_all(conn)
+        if admin.dialect.name != "mysql":
+            metadata.create_all(conn)
         quote = admin.dialect.identifier_preparer.quote
         principal = f"'{role}'@'%'" if admin.dialect.name == "mysql" else quote(role)
         if admin.dialect.name == "postgresql":
