@@ -115,7 +115,7 @@ These are responsibility assignments, not approved DROP statements. Each retirem
 | Pinned PostgreSQL candidate selectors and migration 027 | Merged in PR #1148; configured normal PostgreSQL behavior qualified | Indexed-record ticket integrates the rest; retirement ticket handles superseded native caller paths |
 | Native candidate routes, retained latest-reading reindexing and RecordReader transport | Merged; restricted real-engine helper and binding/correction module checks pass | Indexed-record ticket connects the entire normal proposal/scope path |
 | Protocol-4 destination authority and explicit input publication | Merged; PostgreSQL/MySQL helper qualified; SQL Server protocol 4 refused | Worker-authority and atomic-merge tickets connect normal worker/publication/assessment semantics |
-| Reusable guidance | Separate PR #1150; depends on #1148; merge approval remains separate | Final completion/skill-learning ticket accounts for its outcome |
+| Reusable guidance | Separate PR #1150 merged as acd96aa8 after explicit operator approval; all nine checks passed | Final completion/skill-learning ticket accounts for its outcome |
 
 The merged tree matches qualified revision `149ff418` exactly. The private pending patch passes a reverse apply check against the merged tree, and the separately preserved new test matches its committed hash. The original implementation worktree is clean; the fresh inventory branch carries no runtime changes. Shared-main fix-pipelines WIP and unrelated artifacts remain untouched. The former uncommitted MDM work is now retained in the merge, so later tickets start from current main instead of reapplying an old draft.
 

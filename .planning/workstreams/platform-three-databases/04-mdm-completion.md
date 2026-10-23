@@ -14,9 +14,9 @@ last, retain database authority, and introduce no entity/source policy in code.
 - [ ] Qualify competing/stale writers, rollback, interrupted recovery and unchanged replay on both engines.
 - [x] Qualify the shipped candidate profile and registered migration files outside the checkout — independently installed five-wheel bundle from 48e406db; two checks passed in 182.37 seconds; 2026-10-23 09:13 ET.
 - [ ] Qualify independently installed normal merge callers on both engines with invented vocabulary.
-- [ ] Verify the checkpoint final CI head and review readiness.
+- [x] Verify the checkpoint final CI head and review readiness — all nine checks green at 149ff418; operator-approved PR #1148 merged as 4b1bb68f after 994 unit, 49 PostgreSQL workflow, 98 adapter cases per PostgreSQL/MySQL, 88 retained SQL Server adapter and two independently installed bundle checks passed; 2026-10-23 13:23 ET.
 - [x] Review the candidate-route checkpoint on Standards, Spec and GoF; publish evidence/PR — review below, clean whitespace/overlap checks and draft PR #1148 at implementation head 48e406db; 2026-10-23 09:13 ET.
-- [ ] Learning → skill: document the protocol-4 destination-authority and explicit-input-publication capability and its integration limits on a separate skill branch/PR before final handoff.
+- [x] Learning → skill: document protocol-4 destination authority, explicit input publication and pinned route reindexing with integration limits — separate skill PR #1150, seven genericity checks and all nine CI checks passed; operator-approved merge acd96aa8 verified; 2026-10-23 13:23 ET.
 
 ## Initial design review
 
