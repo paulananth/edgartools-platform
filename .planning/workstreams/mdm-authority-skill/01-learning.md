@@ -4,7 +4,7 @@ Depends on code PR #1148; this branch changes guidance only.
 
 - [x] Document commit-lifetime authority, retry identity, explicit input publication and derived-route reindexing in the owning skill reference — compared with PR #1148 implementation; 2026-10-23 13:05 ET.
 - [x] Verify guidance against the protocol-4 implementation and real-engine outcomes; check source neutrality and local links — PostgreSQL/MySQL checkpoint outcomes compared with the API and SQL, seven skill-neutrality cases passed; 2026-10-23 13:05 ET.
-- [ ] Review Standards, Spec and GoF, pass the overlap guard, and create the separate skill PR.
+- [x] Review Standards, Spec and GoF, pass the overlap guard, and create the separate skill PR — review below, overlap/whitespace checks pass, PR #1150 created; 2026-10-23 13:08 ET.
 - [ ] Verify final CI; retain an explicit named merge gate.
 - [x] Learning → skill: `mdm-engineering/references/storage-adapters.md`, worker authority and input-publication section; seven genericity cases passed; 2026-10-23 13:05 ET.
 
