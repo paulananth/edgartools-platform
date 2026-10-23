@@ -272,6 +272,72 @@ END""",
         )
 
 
+def authority_checks(d):
+    """Destination-local monotonic fences, outside immutable business intent."""
+    names = ("resource", "run", "attempt")
+    if d.name == "postgresql":
+        present = f"{d.wire}::jsonb ? 'authority'"
+        kind = f"jsonb_typeof({d.wire}::jsonb->'authority')"
+        origin = f"jsonb_array_elements(COALESCE({d.wire}::jsonb->'authority','[]'::jsonb)) j(value)"
+        scalar = lambda name: f"(j.value->>'{name}')"
+        array_kind = "array"
+    else:
+        present = f"JSON_CONTAINS_PATH({d.wire},'one','$.authority')=1"
+        kind = f"JSON_TYPE(JSON_EXTRACT({d.wire},'$.authority'))"
+        specs = [f"{name}_hex LONGTEXT PATH '$.{name}' ERROR ON ERROR" for name in names]
+        specs += [f"{name}_text VARCHAR(32) PATH '$.{name}' ERROR ON ERROR" for name in ("token","expires")]
+        origin = f"JSON_TABLE({d.wire},'$.authority[*]' COLUMNS ({','.join(specs)})) j"
+        scalar = lambda name: f"j.{name}_text" if name in {"token","expires"} else f"j.{name}_hex"
+        array_kind = "ARRAY"
+    columns = []
+    for name in names:
+        decoded = d.decode(scalar(name))
+        columns.append(f"{decoded} AS {name}_bytes")
+        if name == "resource":
+            hashed = d.hash(decoded)
+            if d.name == "mysql":
+                hashed = f"CAST({hashed} AS CHAR(64) CHARACTER SET ascii) COLLATE ascii_bin"
+            columns.append(f"{hashed} AS resource_key")
+    for name in ("token","expires"):
+        columns += [f"{scalar(name)} AS {name}_text", f"{d.integer(scalar(name))} AS {name}"]
+    proofs = f"(SELECT {','.join(columns)} FROM {origin})"
+    invalid = []
+    for name in ("token","expires"):
+        value = f"i.{name}_text"
+        pattern = f"{value} !~ '^[1-9][0-9]*$'" if d.name == "postgresql" else f"NOT({value} REGEXP '^[1-9][0-9]*$')"
+        invalid.append(f"{value} IS NULL OR {pattern} OR LENGTH({value})>19 OR (LENGTH({value})=19 AND {value}>'9223372036854775807')")
+    invalid += [f"i.{name}_bytes IS NULL OR OCTET_LENGTH(i.{name}_bytes)=0" for name in names]
+    table = d.names["authority"]
+    match = "c.resource_key=i.resource_key"
+    assignments = {name:f"i.{name}" for name in ("token","run_bytes","attempt_bytes","expires")}
+    if d.name == "postgresql":
+        existing = f"(SELECT a.resource_key,a.resource_bytes,a.token,a.run_bytes,a.attempt_bytes,a.expires FROM {table} a WHERE a.resource_key=i.resource_key OFFSET 0)"
+        joined = f"{proofs} i CROSS JOIN LATERAL {existing} c"
+        update_source = f"{proofs} i CROSS JOIN LATERAL (SELECT a.ctid AS tid FROM {table} a WHERE a.resource_key=i.resource_key OFFSET 0) held"
+        update = d.update_from("authority", assignments, update_source, "c.ctid=held.tid")
+        absent = f"NOT EXISTS(SELECT 1 FROM {existing} c)"
+        valid = f"SELECT 1 FROM {existing} c WHERE c.resource_bytes=i.resource_bytes AND c.token=i.token AND c.run_bytes=i.run_bytes AND c.attempt_bytes=i.attempt_bytes AND c.expires=i.expires AND c.expires>{d.now}"
+    else:
+        joined = f"{proofs} i STRAIGHT_JOIN {table} c FORCE INDEX (PRIMARY) ON {match}"
+        update = f"UPDATE {joined} SET " + ",".join(f"c.{name}={value}" for name,value in assignments.items()) + ";"
+        absent = f"NOT EXISTS(SELECT 1 FROM {table} c FORCE INDEX (PRIMARY) WHERE {match})"
+        valid = f"SELECT 1 FROM {table} c FORCE INDEX (PRIMARY) WHERE {match} AND c.resource_bytes=i.resource_bytes AND c.token=i.token AND c.run_bytes=i.run_bytes AND c.attempt_bytes=i.attempt_bytes AND c.expires=i.expires AND c.expires>{d.now}"
+    start = [
+        f"SELECT CASE WHEN version={d.protocol} THEN complete ELSE 0 END INTO {d.v('authority_ready')} FROM {d.names['migration']} ORDER BY version DESC LIMIT 1 FOR SHARE;",
+        d.guard(f"{d.v('authority_ready')} IS NULL OR {d.v('authority_ready')}<>1", "storage_not_initialized"),
+        d.guard(f"({present}) AND ({kind} IS NULL OR {kind}<>'{array_kind}')", "invalid_destination_authority"),
+        d.guard(f"({present}) AND NOT EXISTS(SELECT 1 FROM {proofs} i)", "invalid_destination_authority"),
+        d.guard(f"EXISTS(SELECT 1 FROM {proofs} i WHERE {' OR '.join(invalid)})", "invalid_destination_authority"),
+        d.guard(f"EXISTS(SELECT i.resource_key FROM {proofs} i GROUP BY i.resource_key HAVING COUNT(*)>1)", "invalid_destination_authority"),
+        d.guard(f"EXISTS(SELECT 1 FROM {proofs} i WHERE i.expires<={d.now})", "expired_destination_authority"),
+        d.guard(f"EXISTS(SELECT 1 FROM {joined} WHERE c.resource_bytes<>i.resource_bytes OR c.token>i.token OR (c.token=i.token AND (c.run_bytes<>i.run_bytes OR c.attempt_bytes<>i.attempt_bytes)))", "stale_destination_authority"),
+        update,
+        f"INSERT INTO {table}(resource_key,resource_bytes,token,run_bytes,attempt_bytes,expires) SELECT i.resource_key,i.resource_bytes,i.token,i.run_bytes,i.attempt_bytes,i.expires FROM {proofs} i WHERE {absent};",
+    ]
+    finish = d.guard(f"EXISTS(SELECT 1 FROM {proofs} i WHERE NOT EXISTS({valid}))", "destination_authority_expired_before_save")
+    return start, finish
+
+
 def capabilities(dialect, tables, prefix, *, protocol=1):
     d = SQL(dialect, tables, protocol=protocol)
     n, v = d.names, d.v
@@ -345,6 +411,8 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         "batch": "bytes",
         "checkpoint": "int",
     }
+    if protocol >= 4:
+        variables["authority_ready"] = "int"
     f = lambda name: d.field(name, v("intent"))
     incoming = d.rows("objects", expected=True)
     evidence = d.rows("evidence")
@@ -357,6 +425,9 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     if protocol >= 3:
         publication_payload = f"CASE WHEN {f('version')} IN ('2','3') THEN i.payload_bytes ELSE {v('payload')} END"
         consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1) OR ({f('version')} IN ('2','3') AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
+    if protocol >= 4:
+        publication_payload = f"CASE WHEN {f('version')} IN ('2','3','4') THEN i.payload_bytes ELSE {v('payload')} END"
+        consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1) OR ({f('version')} IN ('2','3','4') AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
     matching = "c.type_key=i.type_key AND c.id_key=i.id_key"
     lease_check = (
         f"NOT EXISTS(SELECT 1 FROM {n['lease']} l WHERE l.scope_key={v('scope_key')} "
@@ -365,7 +436,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     lines = [
         d.assign("intent", d.field("intent")),
         d.guard(
-            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2','3')" if protocol >= 3 else f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
+            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2','3','4')" if protocol >= 4 else f"{f('version')} NOT IN ('1','2','3')" if protocol >= 3 else f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
             "unsupported_request_version",
         ),
         d.number_guard("fence", positive=True),
@@ -374,6 +445,11 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         d.number_guard("checkpoint", v("intent"), positive=True),
         d.lock(),
     ]
+    if protocol >= 4:
+        flag_kind = (f"jsonb_typeof({v('intent')}::jsonb->'publish_inputs')" if d.name == "postgresql"
+                     else f"JSON_TYPE(JSON_EXTRACT({v('intent')},'$.publish_inputs'))")
+        boolean_kind = "boolean" if d.name == "postgresql" else "BOOLEAN"
+        lines.append(d.guard(f"{f('version')}='4' AND (COALESCE({flag_kind},'')<>'{boolean_kind}' OR {f('publish_inputs')}<>'true')", "invalid_input_publication"))
     for name in ("scope", "run", "batch", "pins", "payload"):
         lines.append(d.assign(name, d.decode(f(name))))
     for name in ("scope", "run", "batch"):
@@ -394,6 +470,10 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             ),
         ]
     )
+    authority_finish = ""
+    if protocol >= 4:
+        authority_start, authority_finish = authority_checks(d)
+        lines.extend(authority_start)
     prior = f"{n['batch']} b WHERE b.batch_key={v('batch_key')}"
     lines.append(
         d.if_(
@@ -404,6 +484,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
                         f"NOT EXISTS(SELECT 1 FROM {prior} AND b.request_hash={v('request_hash')} AND b.batch_bytes={v('batch')})",
                         "batch_content_collision",
                     ),
+                    *([authority_finish] if protocol >= 4 else []),
                     d.finish(
                         [
                             ("generation", f"(SELECT b.generation FROM {prior})"),
@@ -452,9 +533,13 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     evidence_changed = f"EXISTS(SELECT 1 FROM {evidence} i WHERE NOT EXISTS(SELECT 1 FROM {n['evidence']} c WHERE {matching}))"
     if protocol >= 3:
         indexes = d.rows("indexes", expected=True)
-        evidence_changed = f"({f('version')}<>'3' AND {evidence_changed})"
+        if protocol >= 4:
+            evidence_changed = f"(({f('version')} NOT IN ('3','4') OR ({f('version')}='4' AND {f('publish_inputs')}='true')) AND {evidence_changed})"
+        else:
+            evidence_changed = f"({f('version')}<>'3' AND {evidence_changed})"
+        unsupported_indexes = f"{f('version')} NOT IN ('3','4')" if protocol >= 4 else f"{f('version')}<>'3'"
         index_guards = [
-            d.guard(f"{f('version')}<>'3' AND EXISTS(SELECT 1 FROM {indexes} i)", "unsupported_index_changes"),
+            d.guard(f"{unsupported_indexes} AND EXISTS(SELECT 1 FROM {indexes} i)", "unsupported_index_changes"),
             d.guard(f"EXISTS(SELECT 1 FROM {indexes} i WHERE {invalid_expected} OR i.type_bytes IS NULL OR i.id_bytes IS NULL)", "invalid_index_version"),
             d.guard(f"EXISTS(SELECT i.type_key,i.id_key FROM {indexes} i GROUP BY i.type_key,i.id_key HAVING COUNT(*)>1)", "duplicate_index_key"),
             d.guard(f"EXISTS(SELECT 1 FROM {indexes} i LEFT JOIN {n['lookup']} c ON {matching} WHERE COALESCE(c.version,0)<>i.expected_version)", "stale_index_version"),
@@ -526,6 +611,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             f"UPDATE {n['gate']} SET generation={v('generation')} WHERE id=1;",
             f"INSERT INTO {n['outbox']}(batch_key,consumer_key,consumer_bytes,payload,payload_hash,fence,verified) SELECT {v('batch_key')},i.consumer_key,i.consumer_bytes,{publication_payload},{d.hash(publication_payload)},0,0 FROM {consumers} i WHERE {v('changed')}=1;",
             d.guard(lease_check, "scope_lease_expired_before_save"),
+            *([authority_finish] if protocol >= 4 else []),
             d.finish(
                 [
                     ("generation", v("generation")),
@@ -671,7 +757,7 @@ def commit_guards(dialect, tables, prefix):
     d = SQL(dialect, tables)
     quote = dialect.identifier_preparer.quote
     definitions = []
-    for table, condition in (
+    conditions = [
         (
             "batch",
             f"NOT EXISTS(SELECT 1 FROM {d.names['lease']} l WHERE l.scope_key=NEW.scope_key AND l.owner_key=NEW.lease_owner AND l.fence=NEW.lease_fence AND l.expires>{d.now})",
@@ -680,7 +766,10 @@ def commit_guards(dialect, tables, prefix):
             "outbox",
             f"NEW.owner_key IS NOT NULL AND (NEW.expires<={d.now} OR NOT EXISTS(SELECT 1 FROM {d.names['outbox']} o WHERE o.batch_key=NEW.batch_key AND o.consumer_key=NEW.consumer_key AND o.owner_key=NEW.owner_key AND o.fence=NEW.fence))",
         ),
-    ):
+    ]
+    if "authority" in tables:
+        conditions.append(("authority", f"NEW.expires<={d.now}"))
+    for table, condition in conditions:
         function = f"{quote(d.schema)}.{quote(prefix + '_' + table + '_commit_check')}"
         trigger = prefix + "_" + table + "_commit_guard"
         body = f"BEGIN IF {condition} THEN RAISE EXCEPTION 'lease_invalid_at_commit' USING ERRCODE='P0001'; END IF; RETURN NEW; END"

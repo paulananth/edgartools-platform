@@ -5,6 +5,7 @@ use crate::record_matches::{prepare_identifier_rules, prepare_identifier_value};
 use crate::record_values::{self as values, Object};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Deserialize)]
@@ -18,6 +19,14 @@ struct Inputs {
     normalizers: IndexMap<String, bool>,
     batch_id: String,
     occurrences: BTreeMap<String, Object>,
+    candidate_routes: BTreeMap<String, Vec<PathSegment>>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+enum PathSegment {
+    Field(String),
+    Index(usize),
 }
 #[derive(Serialize)]
 struct Entry {
@@ -46,27 +55,34 @@ fn read_revision(body: &Object) -> Result<(usize, String, usize, String), String
         mapping.get().into(),
     ))
 }
-fn read_candidate_keys(reading: &Object) -> Result<Object, String> {
-    let identifiers = values::read_object(reading, "identifiers")?;
-    let census = values::read_object(
-        &values::read_object(&values::read_object(reading, "provenance")?, "matching")?,
-        "name_census",
-    )?;
+fn read_candidate_keys(
+    reading: &Object,
+    routes: &BTreeMap<String, Vec<PathSegment>>,
+) -> Result<Object, String> {
     let mut keys = Object::new();
-    if values::has_value(&identifiers, "lei") {
-        keys.insert("lei".into(), identifiers["lei"].clone());
-    }
-    if let Some(first) = values::read_array(&census, "leis")?.first() {
-        let pair: Vec<values::Document> = values::read_value(first)?;
-        if let Some(value) = pair.first() {
-            if values::has_content(value) {
-                keys.insert("census_lei".into(), value.clone());
+    for (name, path) in routes {
+        let mut current = match &path[0] {
+            PathSegment::Field(field) => reading.get(field).cloned(),
+            PathSegment::Index(_) => None,
+        };
+        for part in &path[1..] {
+            current = match (current, part) {
+                (Some(raw), PathSegment::Field(field)) => {
+                    values::read_value::<Object>(&raw)
+                        .ok()
+                        .and_then(|mut body| body.shift_remove(field))
+                }
+                (Some(raw), PathSegment::Index(index)) => values::read_value::<Vec<values::Document>>(&raw)
+                    .ok()
+                    .and_then(|array| array.get(*index).cloned()),
+                (None, _) => None,
+            };
+        }
+        if let Some(raw) = current {
+            if values::read_value::<String>(&raw).is_ok_and(|value| !value.is_empty()) {
+                keys.insert(name.clone(), raw);
             }
         }
-    }
-    let cascade = values::read_object(&census, "cascade")?;
-    if values::has_value(&cascade, "lei") {
-        keys.insert("cascade_lei".into(), cascade["lei"].clone());
     }
     Ok(keys)
 }
@@ -148,7 +164,17 @@ fn collect_entries(
 pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
     let input: Inputs =
         serde_json::from_str(raw).map_err(|_| "Invalid source-record lookup inputs")?;
+    if input.candidate_routes.iter().any(|(name, path)| name.is_empty() || path.is_empty()
+        || path.iter().any(|part| matches!(part, PathSegment::Field(field) if field.is_empty()))) {
+        return Err("Candidate routes require names and nonempty paths".into());
+    }
     let contracts = prepare_identifier_rules(&input.policy)?;
+    let route_bytes = serde_json::to_vec(&input.candidate_routes)
+        .map_err(|_| "Invalid candidate route declaration")?;
+    let route_digest = format!("{:x}", Sha256::digest(route_bytes));
+    let available: BTreeMap<_, _> = input.readings.iter()
+        .map(|reading| Ok((values::read_text(reading, "assertion_id")?, reading)))
+        .collect::<Result<_, String>>()?;
     let previous: BTreeMap<_, _> = input
         .previous
         .into_iter()
@@ -156,7 +182,7 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
         .collect();
     let mut current = previous.clone();
     let mut ordered = Vec::new();
-    for reading in input.readings {
+    for reading in &input.readings {
         ordered.push((read_revision(&reading)?, reading));
     }
     ordered.sort_by(|(left, _), (right, _)| left.cmp(right));
@@ -200,10 +226,6 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
             "cross_references".into(),
             values::write_value(&values::read_object(&reading, "cross_references")?)?,
         );
-        record.insert(
-            "matching_keys".into(),
-            values::write_value(&read_candidate_keys(&reading)?)?,
-        );
         record.insert("batch_id".into(), values::write_value(&input.batch_id)?);
         record.insert(
             "bronze".into(),
@@ -223,6 +245,15 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
         current.insert(subject, record);
     }
     for (subject, record) in &mut current {
+        let latest_id = values::read_text(record, "assertion_id")?;
+        if let Some(reading) = available.get(&latest_id) {
+            record.insert("matching_keys".into(),
+                values::write_value(&read_candidate_keys(reading, &input.candidate_routes)?)?);
+            record.insert("matching_routes_sha256".into(), values::write_value(&route_digest)?);
+        } else if values::read_text(record, "matching_routes_sha256").ok().as_deref()
+            != Some(route_digest.as_str()) {
+            return Err("Changed candidate routes require the retained latest reading".into());
+        }
         record.insert(
             "entity_id".into(),
             values::write_value(&input.bindings.get(subject))?,

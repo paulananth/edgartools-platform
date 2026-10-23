@@ -30,6 +30,7 @@ from .activation import declared_namespaces
 from .evidence import instant
 from .primitives import normalizer
 from .store import rows
+from .record_reads import RecordReader
 
 
 def nothing() -> dict:
@@ -97,6 +98,9 @@ def bound(conn, subjects) -> dict[str, str]:
     """
     if not subjects:
         return {}
+    if isinstance(conn, RecordReader):
+        return {subject:record["entity_id"] for subject,record in conn.current(subjects).items()
+                if record.get("entity_id")}
     return {
         r["subject"]: r["entity_id"]
         for r in rows(
@@ -112,6 +116,9 @@ def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
     """Each merged-away Company's survivor; shared with `matching.py`."""
     if not entity_ids:
         return {}
+    if isinstance(conn, RecordReader):
+        return {identity:body["canonical_id"] for identity,body in conn.masters(entity_ids).items()
+                if body.get("canonical_id")}
     return {
         r["object_id"]: r["canonical_id"]
         for r in rows(
@@ -133,6 +140,8 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
     """
     if not entity_ids:
         return set()
+    if isinstance(conn, RecordReader):
+        return {identity for identity,body in conn.masters(entity_ids).items() if body.get("status") == "review"}
     return {
         r["object_id"]
         for r in rows(

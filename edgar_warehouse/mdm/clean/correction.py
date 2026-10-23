@@ -19,6 +19,7 @@ from __future__ import annotations
 from .activation import activated
 from .evidence import decision
 from .store import Conflict, rows
+from .record_reads import RecordReader
 
 
 def _revoking(conn, decisions: list[dict], operation: str) -> set[str]:
@@ -28,15 +29,15 @@ def _revoking(conn, decisions: list[dict], operation: str) -> set[str]:
     if not targets:
         return set()
     found = {d["decision_id"] for d in decisions if d["operation"] == operation}
-    found.update(
-        r["decision_id"]
-        for r in rows(
+    stored = ([body for body in conn.inputs((("decision", target) for target in targets), required=False).values()
+               if body["operation"] == operation] if isinstance(conn,RecordReader) else rows(
             conn,
             """SELECT decision_id FROM mdm.decision
             WHERE operation = :operation AND decision_id = ANY(:targets)""",
-            operation=operation,
-            targets=sorted(targets),
-        )
+            operation=operation, targets=sorted(targets)))
+    found.update(
+        r["decision_id"]
+        for r in stored
     )
     return {
         d["subject"]
@@ -68,6 +69,13 @@ def quarantined(conn, subjects: set[str], decisions: list[dict]) -> set[str]:
         for d in decisions
         if d["operation"] == "quarantine" and d["subject"] in subjects
     }
+    if isinstance(conn,RecordReader):
+        candidates = [body for body in conn.related_decisions(subjects)
+                      if body.get("subject") in subjects and body["operation"] == "quarantine"]
+        revoked = {body["target"] for body in conn.related_decisions({body["decision_id"] for body in candidates})
+                   if body["operation"] == "revoke"}
+        held.update((body["decision_id"],body["subject"]) for body in candidates if body["decision_id"] not in revoked)
+        return {subject for key,subject in held.items() if key not in lifting}
     held.update(
         (r["decision_id"], r["subject"])
         for r in rows(
@@ -100,6 +108,8 @@ def readings(conn, subjects: set[str]) -> list[dict]:
     """The current Stage readings of `subjects`, for the rules to reconsider."""
     if not subjects:
         return []
+    if isinstance(conn,RecordReader):
+        return list(conn.readings(subjects).values())
     return [
         r["reading"]
         for r in rows(
@@ -116,7 +126,9 @@ def refused(conn, subjects: set[str], decisions: list[dict]) -> set[tuple]:
     a later merge of that Company cannot bring the pair back."""
     found = [d for d in decisions if d["operation"] == "revoke"]
     if subjects:
-        found += [
+        found += ([body for body in conn.related_decisions(subjects)
+                   if body["operation"] == "revoke" and body.get("subject") in subjects]
+                  if isinstance(conn,RecordReader) else [
             r["body"]
             for r in rows(
                 conn,
@@ -124,7 +136,7 @@ def refused(conn, subjects: set[str], decisions: list[dict]) -> set[tuple]:
                 WHERE operation = 'revoke' AND body->>'subject' = ANY(:subjects)""",
                 subjects=sorted(subjects),
             )
-        ]
+        ])
     return {
         (d["subject"], d["rule_id"], d["rule_version"])
         for d in found

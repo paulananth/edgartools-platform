@@ -212,12 +212,15 @@ body["kinds"].append("bundle-invented-kind")
 profile = copy.deepcopy(body["pair_comparisons"][body["legacy_pair_comparison"]])
 profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=["INVENTED"],
                name_field="invented_name", status_field="invented_status",
-               registration_status_field="invented_registration")
+               registration_status_field="invented_registration",
+               identifier_namespace="invented_namespace", census_field="invented_census",
+               census_entries_field="invented_entries", cascade_field="invented_cascade",
+               cascade_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
 env = {**os.environ, "EDGAR_RULES_ROOT": str(folder.resolve())}
 code = """
-from edgar_warehouse.mdm.clean.matching import compare_candidate_records
+from edgar_warehouse.mdm.clean.matching import compare_candidate_records, candidate_paths, candidate_value
 rule = {"pair_comparison": "bundle-invented", "when": [{"primitive": "gleif_entity_eligible@1",
     "args": {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
              "refused_registration_statuses": ["REFUSED"]}}]}
@@ -225,6 +228,23 @@ right = {"kind": "bundle-invented-kind", "fields": {
     "invented_status": {"op": "value", "value": "ACCEPTED"},
     "invented_registration": {"op": "value", "value": "ISSUED"}}}
 assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
+paths = candidate_paths(rule)
+assert paths["identifier"] == ("identifiers", "invented_namespace")
+assert paths["census"] == ("provenance", "matching", "invented_census", "invented_entries", 0, 0)
+assert paths["cascade"] == ("provenance", "matching", "invented_census", "invented_cascade", "invented_target")
+assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
+from edgar_warehouse.mdm.clean.matching import candidate_routes
+from edgar_warehouse.mdm.clean.evidence import assertion
+from edgar_warehouse.rules.source_engine import prepare_record_lookups
+item = assertion(source_code="invented.source",record_key="one",publication_key="first",revision=1,
+    effective_at=None,kind="bundle-invented-kind",fields={},identifiers={"invented_namespace":"invented-value"})
+command = {"readings":[item],"previous":{},"subjects":[item["subject"]],"bindings":{},
+    "quarantined":{},"policy":{},"normalizers":{},"batch_id":"invented-first","occurrences":{},
+    "candidate_routes":candidate_routes()}
+current, changes = prepare_record_lookups(command)
+assert current[item["subject"]]["matching_keys"] == {'["bundle-invented","identifier"]':"invented-value"}
+again, changes = prepare_record_lookups({**command,"previous":current,"batch_id":"invented-retry"})
+assert again == current and changes == []
 right["fields"]["invented_status"]["value"] = "OTHER"
 assert compare_candidate_records(rule, [({}, right)]) == [[False, False]]
 """

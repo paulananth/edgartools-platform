@@ -223,3 +223,111 @@ def test_retained_readings_and_decisions_are_retrieved_through_their_references(
     assert_index_lookup(owner.engine, runtime.lookup_groups_statement(sorted(buckets)), runtime.tables["lookup"].name)
     with pytest.raises(ValueError, match="contradictory content"):
         prepare_record_history({**inputs, "readings": [first, {**first, "fields": {}}]})
+
+
+
+def test_native_candidate_routes_reindex_without_business_versions(lookup_store, storage_api):
+    from edgar_warehouse.mdm.clean.evidence import assertion
+    from edgar_warehouse.rules.source_engine import prepare_record_lookups, prepare_record_history
+    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+
+    owner, runtime, lease, request = lookup_store
+    item = assertion(source_code="invented.source",record_key="one",publication_key="first",
+        revision=1,effective_at="2026-01-01T00:00:00+00:00",kind="person",fields={"amount":10**80},
+        provenance={"matching":{"invented_old":"old-target","invented_new":"new-target"}})
+    command = {"readings":[item],"previous":{},"subjects":[item["subject"]], "bindings":{},
+        "quarantined":{},"policy":{},"normalizers":{},"batch_id":"lookup-one","occurrences":{},
+        "candidate_routes":{"invented-route":["provenance","matching","invented_old"]}}
+    current, changes = prepare_record_lookups(command)
+    def effects(changes):
+        keys = [(change["type"],change["id"]) for change in changes]
+        versions = runtime.read(keys,lookup=True)
+        return tuple(storage_api.IndexChange(change["type"],change["id"],change["body_json"] or {},
+            expected_version=versions.get((change["type"],change["id"]),{}).get("version",0),
+            removed=change["removed"]) for change in changes)
+    evidence, history_indexes = prepare_record_history({"readings":[item],"decisions":[],"identities":[]})
+    initial = replace(request,indexes=effects(changes + [{**entry,"removed":False} for entry in history_indexes]),
+        evidence=tuple(storage_api.Effect(entry["type"],entry["id"],entry["body_json"]) for entry in evidence))
+    before = {name:count(owner,name) for name in ("current","history","outbox")}
+    assert not runtime.apply(initial,lease)["changed"]
+    old = 'lookup/name_candidates/["invented.source","invented-route","old-target"]'
+    new = 'lookup/name_candidates/["invented.source","invented-route","new-target"]'
+    assert len(runtime.read_lookup_groups([old])) == 1
+    reader = RecordReader(runtime,routes=command["candidate_routes"])
+    assert reader.candidates("invented.source","invented-route",["old-target"]) == [item]
+    assert reader.candidates("invented.source","invented-route",["missing"]) == []
+    corrected, changes = prepare_record_lookups({**command,"previous":current,
+        "candidate_routes":{"invented-route":["provenance","matching","invented_new"]}})
+    upgrade = replace(initial,batch="route-upgrade",expected_generation=2,expected_checkpoint=2,
+        checkpoint=3,indexes=effects(changes))
+    assert not runtime.apply(upgrade,lease)["changed"]
+    assert runtime.apply(upgrade,lease)["duplicate"]
+    assert runtime.read_lookup_groups([old]) == {}
+    assert len(runtime.read_lookup_groups([new])) == 1
+    reader = RecordReader(runtime,routes={"invented-route":["provenance","matching","invented_new"]})
+    assert reader.candidates("invented.source","invented-route",["old-target"]) == []
+    assert reader.candidates("invented.source","invented-route",["new-target"]) == [item]
+    assert {name:count(owner,name) for name in before} == before
+    assert corrected[item["subject"]]["assertion_id"] == item["assertion_id"]
+    assert corrected[item["subject"]]["batch_id"] == "lookup-one"
+    again, changes = prepare_record_lookups({**command,"previous":corrected,
+        "candidate_routes":{"invented-route":["provenance","matching","invented_new"]}})
+    assert again == corrected and changes == []
+    assert_index_lookup(owner.engine,runtime.lookup_groups_statement([new]),runtime.tables["lookup"].name)
+
+
+
+def test_record_reader_serves_binding_and_correction_from_native_indexes(lookup_store,storage_api):
+    from edgar_warehouse.mdm.clean import binding,correction,matching
+    from edgar_warehouse.mdm.clean.evidence import assertion,decision
+    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+    from edgar_warehouse.rules.source_engine import prepare_record_history,prepare_record_lookups
+
+    owner,runtime,lease,request = lookup_store
+    at = "2026-01-01T00:00:00+00:00"
+    identity = "00000000-0000-0000-0000-000000000001"
+    survivor = "00000000-0000-0000-0000-000000000002"
+    item = assertion(source_code="invented.source",record_key="one",publication_key="first",
+        revision=1,effective_at=at,kind="person",fields={"amount":10**80},identifiers={"invented-id":"target"})
+    bind = decision("bind",actor="fixture",reason="reviewed",at=at,
+        subject=item["subject"],entity_id=identity)
+    quarantine = decision("quarantine",actor="fixture",reason="reviewed",at=at,
+        subject=item["subject"],policy="invented-policy")
+    routes = {"invented-route":["identifiers","invented-id"]}
+    _,pointers = prepare_record_lookups({"readings":[item],"previous":{},"subjects":[item["subject"]],
+        "bindings":{item["subject"]:identity},"quarantined":{},"policy":{},"normalizers":{},
+        "batch_id":"lookup-one","occurrences":{},"candidate_routes":routes})
+    evidence,indexes = prepare_record_history({"readings":[item],"decisions":[bind,quarantine],"identities":[]})
+    def saved(entries):
+        return tuple(storage_api.IndexChange(e["type"],e["id"],e["body_json"]) for e in entries)
+    initial = replace(request,
+        objects=(storage_api.Effect("entity",identity,{"entity_id":identity,"canonical_id":survivor,"status":"review"}),),
+        evidence=tuple(storage_api.Effect(e["type"],e["id"],e["body_json"]) for e in evidence),
+        indexes=saved(pointers+indexes))
+    runtime.apply(initial,lease)
+    reader = RecordReader(runtime,routes=routes)
+    assert binding.bound(reader,{item["subject"],"absent"}) == {item["subject"]:identity}
+    assert binding.survivors(reader,{identity,"absent"}) == {identity:survivor}
+    assert binding.in_review(reader,{identity,"absent"}) == {identity}
+    assert reader.members({identity}) == {item["subject"]}
+    assert correction.readings(reader,{item["subject"]}) == [item]
+    assert correction.quarantined(reader,{item["subject"]},[]) == {item["subject"]}
+    revoke_bind = decision("revoke",actor="fixture",reason="corrected",at=at,target=bind["decision_id"],
+        subject=item["subject"],rule_id="invented-rule",rule_version=1)
+    revoke_quarantine = decision("revoke",actor="fixture",reason="corrected",at=at,
+        target=quarantine["decision_id"],subject=item["subject"])
+    assert correction.released(reader,[revoke_bind]) == {item["subject"]}
+    assert correction.lifted(reader,[revoke_quarantine]) == {item["subject"]}
+    assert correction.quarantined(reader,{item["subject"]},[revoke_quarantine]) == set()
+    assert matching._stored(reader,"invented.source",tuple(routes["invented-route"]),["target"]) == [item]
+    assert dict(matching._held_identifiers(reader,"invented.source","invented-id",{identity},set())) == {identity:{"target"}}
+    assert not matching._held_identifiers(reader,"invented.source","invented-id",{identity},{item["subject"]})
+
+    evidence,indexes = prepare_record_history({"readings":[],"decisions":[revoke_bind,revoke_quarantine],"identities":[]})
+    later = replace(initial,batch="corrections",expected_generation=2,expected_checkpoint=2,checkpoint=3,objects=(),
+        evidence=tuple(storage_api.Effect(e["type"],e["id"],e["body_json"]) for e in evidence),indexes=saved(indexes))
+    runtime.apply(later,lease)
+    assert correction.quarantined(reader,{item["subject"]},[]) == set()
+    assert correction.refused(reader,{item["subject"]},[]) == {(item["subject"],"invented-rule",1)}
+    assert correction.refused(reader,{"absent"},[]) == set()
+    assert runtime.apply(later,lease)["duplicate"]

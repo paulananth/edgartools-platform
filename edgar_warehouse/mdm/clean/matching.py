@@ -1,21 +1,9 @@
-"""SEC-to-GLEIF name matching, proposed inside the Merge Stage.
+"""Propose measured name bindings using the rule's pinned record selectors.
 
-Company mastering ticket 08. A waiting GLEIF record joins the Company its SEC
-record already holds by CIK when an active `name_binding` rule's tests all
-hold. The rules are measured, not deterministic: each activates only with its
-proof at the operator's 95% band (`activation.py`).
-
-A pair is found from either side, because the two sources load separately:
-- a GLEIF record in this batch meets an SEC record already in the Stage;
-- an SEC record in this batch meets a GLEIF record already waiting.
-
-The Name Census (`name_census.py`) the SEC record carries only **proposes**
-the pair. Every test runs here, on the Stage rows: both name keys are
-re-derived, the census must name exactly this CIK and this LEI at the GLEIF
-record's own last update, and the place tests read both records.
-
-This module only proposes, as `binding.py` does. The Merge Stage assesses
-every proposal before it commits (Q13). It never creates a Company.
+Either source can arrive first. Candidate retrieval proposes pairs from the
+current readings; the shared native comparison checks the declared census,
+names, eligibility and places. The Merge Stage assesses every proposal before
+commit. This module never creates a master or activates a rule.
 """
 
 from __future__ import annotations
@@ -44,9 +32,6 @@ def active_rules(policy: dict) -> list[tuple[str, dict]]:
     ]
 
 
-_value, _matching = cascade.field_value, cascade.matching_values
-
-
 def _read(record: dict, path: str):
     """Read the declared matching path through the shared native implementation."""
     from edgar_warehouse.rules.source_engine import apply_record_rules
@@ -56,23 +41,50 @@ def _read(record: dict, path: str):
         raise Conflict(str(error)) from None
 
 
-def _census_lei(record: dict) -> str | None:
-    """The first LEI the record's census entry names; the rule needs exactly one."""
-    leis = (_matching(record).get("name_census") or {}).get("leis") or []
-    return leis[0][0] if leis else None
+def comparison_profile(rule: dict) -> dict:
+    """Candidate retrieval and comparison use the same pinned declaration."""
+    assert_current()
+    profile = rule.get("pair_comparison", CATALOG["legacy_pair_comparison"])
+    if not isinstance(profile, str) or profile not in CATALOG["pair_comparisons"]:
+        raise Conflict("Name binding names an unknown pair comparison profile")
+    return CATALOG["pair_comparisons"][profile]
 
 
-def _cascade_lei(record: dict) -> str | None:
-    """The LEI the census's cascade assigned this record's CIK (ticket 21)."""
-    return ((_matching(record).get("name_census") or {}).get("cascade") or {}).get("lei")
+def candidate_paths(rule: dict) -> dict[str, tuple]:
+    profile = comparison_profile(rule)
+    census = ("provenance", "matching", profile["census_field"])
+    return {
+        "identifier": ("identifiers", profile["identifier_namespace"]),
+        "census": (*census, profile["census_entries_field"], 0, 0),
+        "cascade": (*census, profile["cascade_field"], profile["cascade_identifier_field"]),
+    }
 
 
-def _pair_lei(rule: dict):
-    """How a rule finds the GLEIF record for an SEC one: a cascade pass reads
-    the cascade's answer, the other rules the census entry."""
-    if any(t["primitive"] == cascade.TEST for t in rule["when"]):
-        return _cascade_lei, "cascade_lei"
-    return _census_lei, "census_lei"
+def candidate_routes() -> dict[str, tuple]:
+    """All build-pinned candidate selectors, with unambiguous opaque keys."""
+    from .store import canonical
+
+    assert_current()
+    return {
+        canonical([profile, role]): path
+        for profile in sorted(CATALOG["pair_comparisons"])
+        for role, path in candidate_paths({"pair_comparison": profile}).items()
+    }
+
+
+def candidate_value(record: dict, path: tuple) -> str | None:
+    """Read a scalar candidate key; absent or malformed paths propose nothing."""
+    value = record
+    for key in path:
+        if isinstance(key, int):
+            if not isinstance(value, list) or len(value) <= key:
+                return None
+            value = value[key]
+        else:
+            if not isinstance(value, dict):
+                return None
+            value = value.get(key)
+    return value if isinstance(value, str) and value else None
 
 
 def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> list[list[bool]]:
@@ -80,17 +92,14 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
     from edgar_warehouse.rules.source_engine import compare_record_pairs
     from .identifier_types import TYPES
 
-    assert_current()
-    profile = rule.get("pair_comparison", CATALOG["legacy_pair_comparison"])
-    if not isinstance(profile, str) or profile not in CATALOG["pair_comparisons"]:
-        raise Conflict("Name binding names an unknown pair comparison profile")
+    profile = comparison_profile(rule)
     try:
         return compare_record_pairs({
             "rule": rule, "pairs": pairs,
             "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
             "census_version": CENSUS_VERSION, "cascade_version": cascade.VERSION,
-            "pair_comparison": CATALOG["pair_comparisons"][profile],
+            "pair_comparison": profile,
         })
     except ValueError as error:
         raise Conflict(str(error)) from None
@@ -126,28 +135,52 @@ def _latest(found: list[dict]) -> dict[str, dict]:
     return by_subject
 
 
-# The only lookups `_stored` runs: fixed expressions, never caller text.
-_LOOKUPS = {
-    "lei": "reading->'identifiers'->>'lei'",
-    "census_lei": "reading->'provenance'->'matching'->'name_census'->'leis'->0->>0",
-    "cascade_lei": "reading->'provenance'->'matching'->'name_census'->'cascade'->>'lei'",
-}
+def _stored(conn, source: str, path: tuple, values: list[str]) -> list[dict]:
+    """Probe one indexed JSON key at a time, then check array positions exactly.
 
+    Containment gives a candidate superset for array routes. Comparing the
+    declared scalar path removes later entries and non-scalar values before
+    any binding proposal is made. Only constant storage expressions reach SQL.
+    """
+    import json
+    from .record_reads import RecordReader
 
-def _stored(conn, source: str, lookup: str, values: list[str]) -> list[dict]:
-    """The latest stored version of each record of `source` matching `lookup`."""
     if not values:
         return []
-    where = _LOOKUPS[lookup]
+    if isinstance(conn, RecordReader):
+        routes = [name for name, held in (conn.routes or {}).items() if tuple(path) == held]
+        return conn.candidates(source,routes,values)
+    if path[:1] == ("identifiers",):
+        expression, tail = "reading->'identifiers'", path[1:]
+    elif path[:2] == ("provenance", "matching"):
+        expression, tail = "reading->'provenance'->'matching'", path[2:]
+    else:
+        raise Conflict("Unsupported candidate path")
+    wanted = set(values)
+    probes = []
+    for value in sorted(wanted):
+        probe = value
+        for key in reversed(tail):
+            if key == 0:
+                probe = [probe]
+            elif isinstance(key, str):
+                probe = {key: probe}
+            else:
+                raise Conflict("Unsupported candidate array position")
+        probes.append(json.dumps(probe))
     return [
         r["reading"]
         for r in rows(
             conn,
-            f"""SELECT reading FROM mdm.stage_record
-            WHERE source_code = :source AND {where} = ANY(:values)""",
+            f"""SELECT DISTINCT s.reading FROM unnest(CAST(:probes AS jsonb[])) k(doc)
+            CROSS JOIN LATERAL (
+                SELECT reading, source_code FROM mdm.stage_record
+                WHERE ({expression}) @> k.doc OFFSET 0
+            ) s WHERE s.source_code = :source""",
             source=source,
-            values=sorted(set(values)),
+            probes=probes,
         )
+        if candidate_value(r["reading"], path) in wanted
     ]
 
 
@@ -164,22 +197,34 @@ def _bindings(
     return entities
 
 
-def _held_leis(conn, source: str, entities: set[str], released: set[str] = frozenset()) -> dict:
-    """The LEIs each Company already holds through its bound GLEIF records,
-    not counting a record this batch releases (ticket 13)."""
+def _held_identifiers(conn, source: str, namespace: str, entities: set[str], released: set[str] = frozenset()) -> dict:
+    """Identifiers already held through bound records, excluding releases."""
     held: dict[str, set] = defaultdict(set)
+    if not entities:
+        return held
+    from .record_reads import RecordReader
+    if isinstance(conn, RecordReader):
+        for record in conn.current(conn.members(entities)).values():
+            if record["source_code"] == source and record["subject"] not in released:
+                value = (record.get("identifiers") or {}).get(namespace)
+                if value is not None:
+                    held[record["entity_id"]].add(value)
+        return held
     for r in rows(
         conn,
-        """SELECT entity_id::text AS entity_id, reading->'identifiers'->>'lei' AS lei
-        FROM mdm.stage_record
-        WHERE entity_id = ANY(CAST(:entities AS uuid[])) AND source_code = :source
-          AND reading->'identifiers'->>'lei' IS NOT NULL
-          AND NOT subject = ANY(:released)""",
+        """SELECT s.entity_id::text AS entity_id, s.reading->'identifiers'->>:namespace AS value
+        FROM unnest(CAST(:entities AS uuid[])) k(id) CROSS JOIN LATERAL (
+            SELECT entity_id,reading,source_code,subject FROM mdm.stage_record
+            WHERE entity_id=k.id AND entity_id IS NOT NULL OFFSET 0
+        ) s WHERE s.source_code = :source
+          AND s.reading->'identifiers'->>:namespace IS NOT NULL
+          AND NOT s.subject = ANY(:released)""",
+        namespace=namespace,
         entities=sorted(entities),
         source=source,
         released=sorted(released),
     ):
-        held[r["entity_id"]].add(r["lei"])
+        held[r["entity_id"]].add(r["value"])
     return held
 
 
@@ -195,7 +240,7 @@ def propose(
     """The bindings the active name-binding rules propose for this batch.
 
     `decisions` holds the caller's and the identifier rules' bindings for this
-    batch, so an SEC record bound in the same batch holds its Company.
+    batch, so a holder record bound in the same batch already names its master.
     """
     rules = active_rules(policy)
     result = nothing()
@@ -204,117 +249,121 @@ def propose(
     batch = _latest(assertions)
     for _kind, rule in rules:
         source, holder = rule["source"], rule["holder_source"]
-        gleif_here = [
+        candidates_here = [
             a
             for a in batch.values()
             if a["source_code"] == source and a["kind"] == rule["applies_to_verdict"]
         ]
-        sec_here = [a for a in batch.values() if a["source_code"] == holder]
-        lei_of, lookup = _pair_lei(rule)
+        holders_here = [a for a in batch.values() if a["source_code"] == holder]
+        paths = candidate_paths(rule)
+        namespace = comparison_profile(rule)["identifier_namespace"]
+        lookup = paths["cascade" if any(t["primitive"] == cascade.TEST for t in rule["when"]) else "census"]
+        def value_of(record):
+            return candidate_value(record, lookup)
         # Each side of a pair: from this batch, or the latest stored version.
-        lei_of_sec = {lei_of(a) for a in sec_here} - {None}
-        gleif_all = _latest(
-            _stored(conn, source, "lei", sorted(lei_of_sec)) + gleif_here
+        holder_values = {value_of(a) for a in holders_here} - {None}
+        candidates_all = _latest(
+            _stored(conn, source, paths["identifier"], sorted(holder_values)) + candidates_here
         )
         # A quarantined record is left out of matching (ticket 13), stored
-        # or delivered: a later batch's SEC record never pairs with it.
-        for subject in correction.quarantined(conn, set(gleif_all), decisions):
-            del gleif_all[subject]
-        leis = [(a.get("identifiers") or {}).get("lei") for a in gleif_all.values()]
-        sec_all = _latest(
+        # or delivered: a later batch's holder never pairs with it.
+        for subject in correction.quarantined(conn, set(candidates_all), decisions):
+            del candidates_all[subject]
+        values = [candidate_value(a, paths["identifier"]) for a in candidates_all.values()]
+        holders_all = _latest(
             _stored(
                 conn,
                 holder,
                 lookup,
-                [lei for lei in leis if lei],
+                [value for value in values if value],
             )
-            + sec_here
+            + holders_here
         )
-        sec_by_lei = defaultdict(list)
-        for sec in sec_all.values():
-            if lei := lei_of(sec):
-                sec_by_lei[lei].append(sec)
-        subjects = set(gleif_all) | set(sec_all)
+        holders_by_value = defaultdict(list)
+        for holder_record in holders_all.values():
+            if value := value_of(holder_record):
+                holders_by_value[value].append(holder_record)
+        subjects = set(candidates_all) | set(holders_all)
         bindings = _bindings(conn, subjects, decisions + result["decisions"], released)
-        refused = correction.refused(conn, set(gleif_all), decisions)
+        refused = correction.refused(conn, set(candidates_all), decisions)
         candidates = []
-        for gleif in gleif_all.values():
-            if bindings.get(gleif["subject"]):
+        for candidate in candidates_all.values():
+            if bindings.get(candidate["subject"]):
                 continue
-            lei = (gleif.get("identifiers") or {}).get("lei")
-            for sec in sec_by_lei.get(lei, []):
-                companies = bindings.get(sec["subject"]) or set()
-                if len(companies) == 1:
-                    candidates.append((gleif, sec, next(iter(companies))))
-        outcomes = compare_candidate_records(rule, [(sec, gleif) for gleif, sec, _ in candidates])
+            value = candidate_value(candidate, paths["identifier"])
+            for holder_record in holders_by_value.get(value, []):
+                entities = bindings.get(holder_record["subject"]) or set()
+                if len(entities) == 1:
+                    candidates.append((candidate, holder_record, next(iter(entities))))
+        outcomes = compare_candidate_records(rule, [(holder_record, candidate) for candidate, holder_record, _ in candidates])
         pairs = []
-        for (gleif, sec, entity), (passed, flagged) in zip(candidates, outcomes, strict=True):
+        for (candidate, holder_record, entity), (passed, flagged) in zip(candidates, outcomes, strict=True):
             if passed:
-                pairs.append((gleif, sec, entity))
+                pairs.append((candidate, holder_record, entity))
             elif flagged:
                 result["reviews"].append({
-                    "reason": "cascade_flagged_pair", "namespace": "lei",
-                    "subject": gleif["subject"], "assertion_id": gleif["assertion_id"],
+                    "reason": "cascade_flagged_pair", "namespace": namespace,
+                    "subject": candidate["subject"], "assertion_id": candidate["assertion_id"],
                 })
         if not pairs:
             continue
         merged = survivors(conn, {entity for _, _, entity in pairs})
         pairs = [(g, s, merged.get(e, e)) for g, s, e in pairs]
-        held = _held_leis(conn, source, {e for _, _, e in pairs}, released)
+        held = _held_identifiers(conn, source, namespace, {e for _, _, e in pairs}, released)
         suspended = in_review(conn, {e for _, _, e in pairs})
         targets: dict[str, set] = defaultdict(set)
-        for gleif, _sec, entity in pairs:
-            targets[gleif["subject"]].add(entity)
-        for gleif, sec, entity in pairs:
-            lei = gleif["identifiers"]["lei"]
-            if len(targets[gleif["subject"]]) > 1:
+        for candidate, _holder_record, entity in pairs:
+            targets[candidate["subject"]].add(entity)
+        for candidate, holder_record, entity in pairs:
+            value = candidate_value(candidate, paths["identifier"])
+            if len(targets[candidate["subject"]]) > 1:
                 result["reviews"].append(
                     {
                         "reason": "ambiguous_name_match",
-                        "namespace": "lei",
-                        "subject": gleif["subject"],
-                        "assertion_id": gleif["assertion_id"],
+                        "namespace": namespace,
+                        "subject": candidate["subject"],
+                        "assertion_id": candidate["assertion_id"],
                     }
                 )
-                targets[gleif["subject"]] = set()  # one review, no binding
+                targets[candidate["subject"]] = set()  # one review, no binding
                 continue
-            if not targets[gleif["subject"]]:
+            if not targets[candidate["subject"]]:
                 continue
             if entity in suspended:
-                # As for identifier rules (`binding.in_review`): a Company in
+                # As for identifier rules (`binding.in_review`): a master in
                 # review for a contradiction gains no record by a rule.
                 result["reviews"].append(
                     {
                         "reason": "suspended_identifier",
-                        "namespace": "lei",
-                        "subject": gleif["subject"],
-                        "assertion_id": gleif["assertion_id"],
+                        "namespace": namespace,
+                        "subject": candidate["subject"],
+                        "assertion_id": candidate["assertion_id"],
                     }
                 )
-                targets[gleif["subject"]] = set()
+                targets[candidate["subject"]] = set()
                 continue
-            # A legal entity has one LEI: a Company holding another defers,
-            # when the rule asks it to.
+            # The configured namespace's held-value veto applies only when
+            # the rule explicitly asks for it.
             vetoes = any(t["primitive"] == HELD_LEI_TEST for t in rule["when"])
-            if vetoes and held[entity] - {lei}:
+            if vetoes and held[entity] - {value}:
                 continue
-            if (gleif["subject"], rule["rule_id"], rule["version"]) in refused:
+            if (candidate["subject"], rule["rule_id"], rule["version"]) in refused:
                 continue  # a correction revoked this record's link under this version
             result["decisions"].append(
                 decision(
                     "bind",
                     actor=f"rule:{rule['rule_id']}@{rule['version']}",
-                    # Evidence describes the subject bound; the SEC record the
-                    # name matched is named here, and holds the Company.
-                    reason=f"name_match lei with {sec['assertion_id']}",
+                    # Evidence describes the subject bound; the matched holder
+                    # is named here and already holds the master.
+                    reason=f"name_match {namespace} with {holder_record['assertion_id']}",
                     at=as_of,
-                    subject=gleif["subject"],
+                    subject=candidate["subject"],
                     entity_id=entity,
-                    evidence=[gleif["assertion_id"]],
+                    evidence=[candidate["assertion_id"]],
                     rule_id=rule["rule_id"],
                     rule_version=rule["version"],
                 )
             )
-            held[entity].add(lei)
-            targets[gleif["subject"]] = set()
+            held[entity].add(value)
+            targets[candidate["subject"]] = set()
     return result

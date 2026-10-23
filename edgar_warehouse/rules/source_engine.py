@@ -358,7 +358,11 @@ def plan_affected_records(command: Mapping) -> dict:
 
 
 def prepare_record_lookups(command: Mapping) -> tuple[dict, list[dict]]:
-    """Prepare latest-record pointers and owned lookup changes once in Rust."""
+    """Prepare latest pointers and lookup changes with supplied pinned candidate_routes.
+
+    The caller supplies opaque route names and typed field/array paths. No
+    domain namespace or metadata field is selected inside the native engine.
+    """
     records, changes = json.loads(source_contract.prepare_record_lookups(
         json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
     return records, changes
