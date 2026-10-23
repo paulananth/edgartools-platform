@@ -28,7 +28,7 @@ not describe any of them as running.
 | Overwrite a figure when a later filing restates it | Keep every filed copy; the latest is the default (below) |
 | Fill a missing year from a nearby year | Null, with its reason |
 | Send a request to the SEC or a data provider | Captured files only; a new request needs the operator's permission for that request |
-| Type a financial column `integer`, `int`, `float`, `double` or `real`, in a silver spec, dbt, Python or the engine | A whole number (CIK, year, window, count) is `bigint`; a figure, ratio or measure is a big decimal (`decimal(38,10)`, Python `Decimal`, exact text from the engine). No float anywhere between the filed text and the stored value, even where no captured figure loses a digit today (operator, 2026-10-22: "For financial projects never use integer's use only bigint or big decimal", "Big decimal") |
+| Type a financial column `integer`, `int`, `float`, `double` or `real`, in a silver spec, dbt, Python or the engine, or read a filed figure as a float | A whole number (CIK, year, window, count) is `bigint`; a figure, ratio or measure is a big decimal (`decimal(38,10)`, Python `Decimal`, exact text from the engine: `big_numbers: text` and `decimals: text`, or a JSON reader with `parse_float=str`). No float anywhere between the filed text and the stored value, even where no captured figure loses a digit today (operator, 2026-10-22: "For financial projects never use integer's use only bigint or big decimal", "Big decimal", "Fix the data type issue") |
 
 ## The time model (ticket 35, decided 2026-10-21)
 
@@ -38,14 +38,22 @@ not describe any of them as running.
   the latest-filed copy, which keeps per-share series consistent across a stock
   split; the first-reported figure can be read back from the kept copies.
 - **A year is keyed on the period's end date** (operator: "Period end, 364–371
-  days (Recommended)"). A figure belongs to the fiscal year whose end falls in
-  calendar year Y. A period is annual when it is 364–371 days long. CAGR counts
+  days (Recommended)"), by Compustat's FYEAR (operator, 2026-10-22: "Compustat
+  FYEAR (Recommended)"): a year ending June to December is that calendar year's,
+  one ending January to May the previous year's, so a 52/53-week year ending on
+  1-3 January stays in its year. A period is annual when it is 364–371 days long, counting
+  its first and last day (`end − start + 1`): a 52-week year is 364 days, a
+  53-week year 371. CAGR counts
   years, not days, so a 53-week year keeps its extra week.
 - **A changed fiscal year end, Compustat-style** (operator: "Compustat-style,
   null if missing (Recommended)"). A transition period is kept as filed but is
-  not a year. When two annual periods end in one calendar year, that year is the
-  later one (the new year end). A window that needs a year with no annual period
-  gives null with the reason "fiscal year changed".
+  not a year. When two annual periods fall in one fiscal year, the year is the
+  one an annual report (10-K, 20-F, 40-F) covers as its own fiscal year; a
+  12-month period seen only as a later comparative is kept as filed but is not a
+  year (operator, 2026-10-22: "The reported year (Recommended)"). When both or
+  neither are reported, the later one (the new year end). A window that needs a
+  year with no annual period gives null with the reason "fiscal year changed",
+  and a missing figure in a year that has one gives "missing year".
 
 Evidence and sources: ticket 35, research 02 section 1.
 
@@ -71,6 +79,12 @@ Evidence and sources: ticket 35, research 02 section 1.
   quality check (Recommended)"). Never a silent switch to the larger total.
 - **A missing line item** is empty, with the reason "no concept filed", and
   counted per line item.
+- **The line items are an RDM code set** (operator, 2026-10-22: "Yes, code set +
+  crosswalk (Recommended)"): `financial-line-items`, 19 codes with label,
+  definition and kind, crosswalked to the `us-gaap` and `ifrs-full` concepts each
+  uses. The rules file below names those codes and holds only the order and
+  the fallbacks. The taxonomies are not loaded into RDM; a fact keeps its
+  concept's label in silver.
 - **The map is rules configuration** (operator: "Rules configuration
   (Recommended)"): a reviewed YAML file under `rules/` names each line item, its
   concepts in order, any computed fallback and its flag; a configured step
@@ -94,6 +108,15 @@ Evidence and sources: ticket 38, research 02 section 2.
   years (Recommended)"). "Not meaningful" when the first or last value is zero
   or negative; null with "missing year" or "fiscal year changed" when an
   endpoint is missing.
+- **An average balance needs both balances**: a return on the average balance
+  is null, "missing year" (or "fiscal year changed"), when the prior year's
+  balance is missing, as the beginning form is (operator, 2026-10-22: 'Null,
+  "missing year" (Recommended)').
+- **ROIC's tax rate** is income tax over pretax income; when pretax income is
+  zero or negative, or that rate falls outside 0–100%, it is the statutory rate
+  of the filer's country, from RDM's `corporate-tax-rates` (OECD; operator,
+  2026-10-22: "Statutory rate (new source)", "RDM, OECD source (Recommended)";
+  ticket 133).
 - **Definitions** as research 01 section 4 gives them: ROIC after tax on debt +
   equity − cash; FCF = operating cash flow − capital expenditure; per-share on
   the latest-filed series.
@@ -143,14 +166,22 @@ Evidence and sources: ticket 39, research 02 section 3.
   conversion needs an exchange-rate source: a new provider, its own ticket.
 - **IFRS mapped into the same 19 line items** (operator: "Map into same items
   (Recommended)"): an ordered `ifrs-full` list beside each `us-gaap` list in
-  the rules YAML; a filer is read from the taxonomy it files in.
+  the rules YAML; a filer is read from the taxonomy it files in. The lists are
+  research 04 (`.scratch/company-financials/research/04-ifrs-concept-lists.md`;
+  operator, 2026-10-22: "Approve the lists (Recommended)"): IFRS taxonomy
+  elements, first present wins; operating income empty where a filer presents
+  none (IAS 1 defines none); lease liabilities never added to total debt; the
+  taxonomy read period by period, since a filer can move between the two.
 - **One item set, flagged by kind** (operator: "Same items, flagged by kind
   (Recommended)"): a value from an industry concept carries its kind (bank,
   insurer, REIT, utility). Each filer has a format, industrial or financial
   services, from its SIC code (6000–6199, 6300–6411 are financial services),
   as Compustat keeps `INDL` and `FS`. A measure meaningless for financial
-  services (gross margin, ROIC, total debt and its ratios) is null with the
-  reason "not meaningful for financial services".
+  services (gross margin, ROIC, total debt and its ratios, and the current
+  ratio, since a bank presents its balance sheet by liquidity; operator,
+  2026-10-22: "The four, plus current ratio (Recommended)") is null with the
+  reason "not meaningful for financial services". Operating margin follows its
+  inputs.
 
 ## Silver tables and their review (ticket 43, decided 2026-10-22)
 
