@@ -12,7 +12,7 @@ it does not complete MySQL's normal MDM migration or commit path.
 - [x] Qualify the catalog/native contract and worker recovery through the independently installed five-wheel bundle — committed 74c13c36 installed all five wheels without duplicate modules, the invented profile passed outside the checkout, and streamed-worker interruption/recovery passed; three cases in 236.03 seconds; 2026-10-22 20:31 ET.
 - [x] Review Standards, Spec and GoF — resulting diff reviewed against the three axes below, current main and the declared bounded scope; `git diff --check` and overlap guard passed; 2026-10-22 20:31 ET.
 - [x] Publish this bounded change for review — draft PR #1142 opened and its published head a012c428 read back from GitHub; 2026-10-22 20:33 ET.
-- [ ] Verify published CI checks and mark the bounded PR ready; stop monitoring on terminal failure/closure or a 20-minute deadline.
+- [x] Verify CI for the qualified implementation — all nine PR #1142 checks passed on 6b0e2c71; the only changes since installed proof 74c13c36 are evidence records; bounded monitoring stopped on success after about 11 minutes; 2026-10-22 20:45 ET.
 - [x] Learning → skill: none; existing configuration, frozen execution identity, package qualification and comparison/storage separation guidance applies; 2026-10-22 20:31 ET.
 
 ## Design evidence
