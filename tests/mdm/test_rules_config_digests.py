@@ -17,6 +17,7 @@ from edgar_warehouse.mdm.clean import sec_company, gleif_publication
 from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import policy_layers
+from tests.support.company_fields import before_ticket_129
 
 BEFORE = {
     "policy": "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
@@ -124,30 +125,9 @@ WITHOUT_TICKET_129_FIELDS = {
     "sec.submissions.company.v1": "7786ffdd0187f24b4206762125ae09535cdc1c98b009406e174b8175a25006c4",
     "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
 }
-_FIELDS_BACK = {
-    "sec.submissions.company.v1": ("sic", {"sic_description": {"value": {
-        "path": "sic_description", "path_mode": "literal", "type": "text", "null_if_blank": True}}}),
-    "gleif.level1.v1": ("gleif_initial_registration", {name: {"value": {
-        "path": f"Registration.{path}.$", "null_if_blank": True, "type": "text", "path_mode": "literal"}}
-        for name, path in (("gleif_last_update", "LastUpdateDate"), ("gleif_next_renewal", "NextRenewalDate"))}),
-}
-
-
 def _with_company_fields_back(contract: dict, code: str) -> dict:
     assert digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
-    after, back = _FIELDS_BACK[code]
-    contract = copy.deepcopy(contract)
-    reading = contract["adapter"]["reading"]
-    holder = reading["read"]["tables"]["mapped"]["columns"]["fields"]["object"]
-    fields = {}
-    for name, body in holder["fields"].items():
-        fields[name] = body
-        if name == after:
-            fields.update(back)
-    holder["fields"] = fields
-    if "input_fields" in reading:
-        reading["input_fields"] = sorted([*reading["input_fields"], *back])
-    return contract
+    return before_ticket_129(contract, code)
 
 
 def _with_retired_lists(contract: dict, code: str) -> dict:

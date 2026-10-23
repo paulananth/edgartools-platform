@@ -216,8 +216,7 @@ A rule that asks whether two records state the same time compares them as
 instants, never as text: the Stage stores a record's `effective_at` in UTC
 (`+00:00`), while a census or a source keeps the provider's spelling (`Z`, an
 offset). A source's record-keeping date that only marks a new version is that
-record's effective time, not a field of the master (ticket 129: GLEIF's
-LastUpdateDate).
+record's effective time, not a field of the master (rebuild ticket 129).
 
 ### test: the cheapest proof, then record it
 

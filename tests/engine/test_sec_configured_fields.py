@@ -11,6 +11,7 @@ import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.rules import files,source_engine
+from tests.support.company_fields import before_ticket_129
 
 SOURCES=('sec.submissions.company','sec.submissions.person')
 RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
@@ -24,6 +25,10 @@ def contracts(source):
         # mapper's outcomes are compared under v1.
         from tests.support.person_quality import before_ticket_10
         contract=before_ticket_10(contract)
+    else:
+        # Rebuild ticket 129 took the SIC code's label out of the Company; the
+        # retired mapper's outcomes are compared with it put back.
+        contract=before_ticket_129(contract,'sec.submissions.company.v1')
     return contract
 
 
@@ -47,7 +52,7 @@ def row(source):
 
 @pytest.mark.parametrize('source',SOURCES)
 def test_inline_native_reading_matches_bundled_recipe(source):
-    configured=contracts(source)
+    configured=next(iter(files.source(source)['mdm'].values()))['contract']
     recipe=files.load(files.ROOT/'sources'/source/'fields.yaml')
     assert digest(configured['adapter']['reading'])==digest(recipe)
 
