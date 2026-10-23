@@ -309,9 +309,10 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
         return (Decimal(got["value"]), currency(got["unit"])) if got.get("value") is not None else (None, None)
 
     def missing(year, prior):
-        """Why a year a measure needs has no figure (ticket 35): its year end moved
-        around the gap ("fiscal year changed"), or it is simply absent."""
-        absent = prior if prior not in company.years else year
+        """Why the earlier year a measure needs has no figure (ticket 35): its year
+        end moved around the gap ("fiscal year changed"), or it is simply absent.
+        Callers ask only once the later figure is known, so the gap is `prior`."""
+        absent = prior
         before = [y for y in company.years if y < absent]
         after = [y for y in company.years if y > absent]
         if not before or not after:
