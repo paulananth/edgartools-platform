@@ -63,6 +63,42 @@ hash. Omitting the map preserves the version-1 request representation and
 replay identity; the upgraded store still accepts those original requests.
 The top-level payload remains required and is unused for version-2 delivery.
 
+## Worker authority and input publication
+
+When a worker’s external resource lease must protect the destination commit,
+explicitly select storage protocol 4 on PostgreSQL or MySQL. SQL Server retains
+protocols 1–3 and refuses protocol 4 until its commit-authority path is qualified.
+The normal application worker must still integrate this capability; helper
+qualification alone establishes neither that integration nor engine support.
+
+`Adapter.apply(..., authority=proofs)` takes a nonempty list of resource proofs.
+Each names `resource`, positive `token`, UUID `run_id` and `attempt`, and an
+explicit-timezone ISO `expires_at`. Pass authority separately from the immutable
+prepared intent so a retry can refresh its proof without changing business
+identity. The destination must refuse an older token, a same-token different
+run/attempt, and an expired proof, including on the duplicate path.
+
+**Expiry covers the commit.** A successful precheck is insufficient if writes
+or a caller-held transaction can outlive the proof. Qualify late expiry after
+writes, rollback of all effects, duplicate retry under fresh authority and
+migration overlap. PostgreSQL uses a deferred commit check; MySQL owns its
+transaction and refuses a caller-held transaction. Test malformed direct
+requests and excess column grants as well as Python API validation. Freeze
+historical protocol fingerprints before adding a new protocol.
+
+Use `PreparedBatch.publish_inputs=True` (CLI input `publish_inputs: true`) when
+new immutable inputs require publication even if current master effects stay
+the same. Protocol 4 makes that choice part of the immutable intent. Repeated
+identical inputs create no new delivery; index-only maintenance retains the
+existing no-publication behavior. Qualify both cases and their unchanged replay.
+
+Keep candidate routes pinned with native record-index preparation. A route
+change must rebuild derived keys from the retained latest reading while
+preserving its original assertion, occurrence and batch. Refuse a changed route
+without that reading. Read back the frozen route fingerprint and dereference
+exact immutable input keys before using indexed candidates; a pointer alone is
+not the retained evidence.
+
 An upgrade appends migration history and preserves populated state. Pending
 state disables old entry points before procedure replacement; mutation guards
 installed first also fence calls already inside a legacy procedure. Their
