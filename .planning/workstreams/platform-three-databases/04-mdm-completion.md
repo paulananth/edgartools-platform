@@ -4,7 +4,7 @@ Operator direction from Lavish, 2026-10-23: implement MDM. Keep SQL Server
 last, retain database authority, and introduce no entity/source policy in code.
 
 - [x] Finish configured candidate routes and namespace selection through the normal PostgreSQL matching caller; preserve approved default outcomes — 979 MDM unit cases and 26 affected real-PostgreSQL cases passed; 2026-10-23 09:08 ET.
-- [x] Install and qualify indexed candidate retrieval against populated PostgreSQL state — six invented-profile normal merge cases cover both routes, either arrival order, replay and held-value veto; populated migration preserves rows and pins; actual plans probe one key at a time beside 5,001 unrelated records; 2026-10-23 09:08 ET.
+- [x] Install and qualify indexed candidate retrieval against populated PostgreSQL state — six invented-profile normal merge cases cover both routes, either arrival order, replay and held-value veto; populated migration preserves rows and pins; actual plans probe one key at a time on a 5,001-row current store; 2026-10-23 09:08 ET.
 - [ ] Complete normal MySQL owner migration and restricted caller operations; helper storage qualification alone is insufficient.
 - [ ] Qualify atomic merge, identity, history, relationships, detail lists and publication on both selected engines.
 - [ ] Qualify competing/stale writers, rollback, interrupted recovery and unchanged replay on both engines.

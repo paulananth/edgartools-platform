@@ -116,7 +116,7 @@ finally:
 
 def test_populated_candidate_index_upgrade_preserves_history_and_pins(database, monkeypatch):
     with monkeypatch.context() as patch:
-        patch.setattr(store, "MIGRATIONS", store.MIGRATIONS[:-1])
+        patch.setattr(store, "MIGRATIONS", store.MIGRATIONS[:store.MIGRATIONS.index("027_candidate_routes.sql")])
         db = core.initialize_database(database.admin, database.application)
         item = core.source("invented-existing", provenance={"matching":{
             "name_census":{"leis":[["invented-target",1]]}}})
