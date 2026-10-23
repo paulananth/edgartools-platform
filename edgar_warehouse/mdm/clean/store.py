@@ -99,13 +99,18 @@ RUNTIME_FUNCTIONS = (
 )
 
 
-def migrate(engine: Engine, *, application_role: str) -> dict:
+def migrate(engine: Engine, *, application_role: str, application_host: str = "%") -> dict:
     """Explicit isolated migration with checksum validation.
 
     Role provisioning stays outside this function; deployments provide the
     restricted login role. A database that still holds the retired `mdm_v2`
     schema is refused: it is recreated, not upgraded in place.
     """
+    if engine.dialect.name == "mysql":
+        from . import catalog
+        catalog.assert_current()
+        return storage_adapter().migrate_registry(engine,runtime_role=application_role,
+            runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"])
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
     path = Path(__file__).parents[1] / "migrations" / BASELINE
@@ -169,6 +174,7 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
         if "024_configured_kinds.sql" in MIGRATIONS:
             from .schema import configure_kinds
             configure_kinds(conn)
+            storage_adapter().verify_native_registry(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(
                 text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"),
@@ -198,7 +204,8 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
             )
         leaked = conn.scalar(
             text("""SELECT count(*) FROM pg_tables WHERE schemaname='mdm'
-            AND has_table_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE')"""),
+            AND (has_table_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE')
+              OR has_any_column_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE'))"""),
             {"r": application_role},
         )
         if leaked:
@@ -208,6 +215,13 @@ def migrate(engine: Engine, *, application_role: str) -> dict:
         "checksum": checksum,
         "installed": not bool(installed),
     }
+
+
+def _registry_configuration(conn):
+    if conn.dialect.name == "mysql":
+        from . import catalog
+        catalog.assert_current()
+        storage_adapter().require_registry(conn,digest(catalog.CATALOG))
 
 
 def register_policy(conn: Connection, body: dict) -> str:
@@ -221,6 +235,7 @@ def register_policy(conn: Connection, body: dict) -> str:
     from .activation import check_policy, rule_version_conflicts
 
     check_policy(body)
+    _registry_configuration(conn)
     adapter = storage_adapter()
     registered = [b for b in adapter.registered_policies(conn) if "kinds" in b]
     reused = rule_version_conflicts(body, registered)
@@ -366,6 +381,7 @@ def register_dataset(
         raise Conflict("Dataset requires approved frozen Rules source authority")
     from edgar_warehouse.rules.acquisition_authority import registration_authority
 
+    _registry_configuration(conn)
     evidence = registration_authority(rules_authority, code, body)
     authority_version = evidence["version_id"]
     # Pin the authority after the comparison below, not before: a registry
@@ -416,6 +432,7 @@ def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
     `mdm.dataset` cannot answer this: it is append-only,
     so its body stays whatever was registered first.
     """
+    _registry_configuration(conn)
     found = storage_adapter().dataset_reading(conn, code)
     return (found["mapping_version"], found["body"]) if found is not None else None
 
@@ -428,6 +445,7 @@ def reading_at(conn: Connection, code: str, mapping_version: int) -> tuple[int, 
     a corrected mapping mid-run changes the reconstructed run scope and the
     run can never be resumed (Codex review of PR #695, P1).
     """
+    _registry_configuration(conn)
     found = storage_adapter().dataset_reading(conn, code, mapping_version)
     if found is None:
         raise Conflict(

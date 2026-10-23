@@ -112,6 +112,7 @@ include = [
 "skills/mdm-engineering/scripts/database_adapter.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/database_adapter.py"
 "skills/mdm-engineering/scripts/adapter_model.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/adapter_model.py"
 "skills/mdm-engineering/scripts/adapter_sql.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/adapter_sql.py"
+"skills/mdm-engineering/scripts/registry_migration.py" = "edgar_warehouse/bundle_data/skills/mdm-engineering/scripts/registry_migration.py"
 
 [tool.pytest.ini_options]
 markers = []

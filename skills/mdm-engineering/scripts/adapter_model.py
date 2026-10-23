@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import json
 
 from sqlalchemy import (
     BigInteger,
@@ -23,6 +24,30 @@ from sqlalchemy import (
 from sqlalchemy.dialects.mssql import NVARCHAR, VARBINARY
 from sqlalchemy.dialects.mysql import LONGBLOB, LONGTEXT
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import TypeDecorator
+
+
+class ExactJSON(TypeDecorator):
+    """Configuration JSON whose numbers retain their original Python values."""
+    impl = UnicodeText
+    cache_ok = True
+
+    @property
+    def python_type(self):
+        return dict
+
+    def load_dialect_impl(self, dialect):
+        return dialect.type_descriptor(LONGTEXT(charset="utf8mb4", collation="utf8mb4_0900_bin")
+                                       if dialect.name == "mysql" else JSONB()
+                                       if dialect.name == "postgresql" else JSON())
+
+    def process_bind_param(self, value, dialect):
+        if dialect.name == "mysql":
+            return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        return value
+
+    def process_result_value(self, value, dialect):
+        return json.loads(value) if dialect.name == "mysql" and value is not None else value
 
 
 def native_registry_model(dialect: str) -> tuple[MetaData, dict[str, Table]]:
@@ -34,8 +59,8 @@ def native_registry_model(dialect: str) -> tuple[MetaData, dict[str, Table]]:
     if dialect not in {"postgresql", "mysql", "mssql"}:
         raise ValueError("Unsupported registry database engine")
     metadata = MetaData(schema=None if dialect == "mysql" else "mdm")
-    body = JSON().with_variant(JSONB(), "postgresql")
-    source = UnicodeText().with_variant(LONGTEXT(charset="utf8mb4"), "mysql").with_variant(NVARCHAR(None), "mssql")
+    body = ExactJSON()
+    source = UnicodeText().with_variant(LONGTEXT(charset="utf8mb4",collation="utf8mb4_0900_bin"), "mysql").with_variant(NVARCHAR(None), "mssql")
 
     def source_columns():
         columns = [Column("source_code", source, primary_key=dialect == "postgresql", nullable=False)]

@@ -50,7 +50,7 @@ def runtime_files() -> list[Path]:
                relationships, run, schema, scope, source_mapping, store, survivorship)
     adapter = store.storage_adapter()
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in
-                     ("database_adapter.py", "adapter_model.py", "adapter_sql.py")]
+                     ("database_adapter.py", "adapter_model.py", "adapter_sql.py", "registry_migration.py")]
     return [Path(__file__), *[Path(getfile(module)) for module in modules],
             *source_engine.runtime_files(), catalog.path(), *adapter_files]
 

@@ -55,8 +55,19 @@ class AdapterError(ValueError):
     """A data-free capability refusal safe to include in an operational report."""
 
 
+def require_registry(conn, configuration: str | None = None):
+    """MySQL's native owner installation must be complete and build-pinned."""
+    if conn.dialect.name == "mysql":
+        if __package__:
+            from .registry_migration import require_ready
+        else:
+            from registry_migration import require_ready
+        return require_ready(conn, configuration)
+
+
 def registered_policies(conn) -> list[dict]:
     """The bounded governance registry, not a read over master records."""
+    require_registry(conn)
     _, tables = native_registry_model(conn.dialect.name)
     table = tables["policy"]
     return list(conn.scalars(select(table.c.body).order_by(table.c.digest)))
@@ -64,6 +75,7 @@ def registered_policies(conn) -> list[dict]:
 
 def registered_policy(conn, digest: str) -> dict | None:
     """Read typed policy content in the caller's transaction and database."""
+    require_registry(conn)
     _, tables = native_registry_model(conn.dialect.name)
     table = tables["policy"]
     return conn.scalar(select(table.c.body).where(table.c.digest == digest))
@@ -71,6 +83,7 @@ def registered_policy(conn, digest: str) -> dict | None:
 
 def dataset_contracts(conn, codes) -> dict[str, dict]:
     """Exact source contracts for a bound key collection, with no row cap."""
+    require_registry(conn)
     _, tables = native_registry_model(conn.dialect.name)
     table = tables["dataset"]
     codes = sorted(set(codes))
@@ -93,6 +106,7 @@ def retain_policy(conn, body: dict, digest: str) -> None:
     The native registry's SELECT/INSERT grants remain the authority; this
     function never opens an owner connection or commits the caller's work.
     """
+    require_registry(conn)
     if hashlib.sha256(canonical(body)).hexdigest() != digest:
         raise AdapterError("Policy content differs from its digest")
     _, tables = native_registry_model(conn.dialect.name)
@@ -133,6 +147,7 @@ def dataset_reading_statement(dialect: str, code: str, version: int | None = Non
 
 def dataset_reading(conn, code: str, version: int | None = None) -> dict | None:
     """One native mapping by its source key and optionally its frozen version."""
+    require_registry(conn)
     row = conn.execute(dataset_reading_statement(conn.dialect.name, code, version)).mappings().first()
     if row is None:
         return None
@@ -147,6 +162,7 @@ def retain_dataset_reading(conn, code: str, version: int, body: dict, registry: 
     Existing source and version keys arbitrate competing registrations. Neither
     the first source body nor an earlier mapping is ever updated in place.
     """
+    require_registry(conn)
     counter(version, positive=True)
     _, tables = native_registry_model(conn.dialect.name)
     values = {"source_code": code, "registry_version": registry, "body": body}
@@ -809,7 +825,7 @@ def _migration_lock(conn, prefix):
                 raise
 
 
-def _grants(conn, adapter, runtime_role, runtime_host):
+def _grants(conn, adapter, runtime_role, runtime_host, *, runtime_execute=True):
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,62}", runtime_role):
         raise AdapterError("A valid, pre-provisioned runtime principal is required")
     d = conn.dialect
@@ -921,6 +937,7 @@ def _grants(conn, adapter, runtime_role, runtime_host):
             global_rights
             or broad
             or roles
+            or conn.scalar(text("SELECT @@mandatory_roles")) not in ("", "NONE")
             or conn.scalar(
                 text("SELECT SUBSTRING_INDEX(CURRENT_USER(),'@',1)=:u"),
                 {"u": runtime_role},
@@ -930,7 +947,7 @@ def _grants(conn, adapter, runtime_role, runtime_host):
         for name in table_names:
             rights = conn.scalar(
                 text(
-                    "SELECT COUNT(*) FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE=:g AND TABLE_SCHEMA=:s AND TABLE_NAME=:t AND PRIVILEGE_TYPE<>'SELECT'"
+                    "SELECT COUNT(*) FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE=:g AND TABLE_SCHEMA=:s AND TABLE_NAME=:t AND (PRIVILEGE_TYPE<>'SELECT' OR IS_GRANTABLE='YES')"
                 ),
                 {
                     "g": grantee,
@@ -961,6 +978,19 @@ def _grants(conn, adapter, runtime_role, runtime_host):
                     {"user": runtime_role, "host": runtime_host},
                 )
         for name, _ in adapter.routines.values():
+            granted = conn.scalar(text(
+                "SELECT COUNT(*) FROM mysql.procs_priv WHERE User=:u AND Host=:h AND Db=:s "
+                "AND Routine_name=:t AND Routine_type='PROCEDURE' AND FIND_IN_SET('Grant',Proc_priv)>0"),
+                {"u":runtime_role,"h":runtime_host,"s":adapter.schema,"t":name.rsplit(".",1)[-1].strip("`")})
+            if granted:
+                raise AdapterError("Runtime has grantable storage execution")
+            if not runtime_execute:
+                if conn.scalar(text(
+                    "SELECT COUNT(*) FROM mysql.procs_priv WHERE User=:u AND Host=:h AND Db=:s "
+                    "AND Routine_name=:t AND Routine_type='PROCEDURE'"),
+                    {"u":runtime_role,"h":runtime_host,"s":adapter.schema,"t":name.rsplit(".",1)[-1].strip("`")}):
+                    raise AdapterError("Runtime has unqualified storage execution")
+                continue
             if not conn.scalar(
                 text(
                     "SELECT COUNT(*) FROM mysql.procs_priv WHERE User=:u AND Host=:h AND Db=:s AND Routine_name=:t AND Routine_type='PROCEDURE' AND FIND_IN_SET('Execute',Proc_priv)>0"
@@ -1282,10 +1312,13 @@ def _migration_checksums(adapter) -> frozenset[str]:
 
 
 def migrate(
-    engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1
+    engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1,
+    runtime_execute=True,
 ) -> dict:
     if type(protocol) is not int or protocol not in (1, 2, 3, 4):
         raise AdapterError("Unsupported storage protocol")
+    if type(runtime_execute) is not bool or not runtime_execute and engine.dialect.name != "mysql":
+        raise AdapterError("Deferred runtime execution is qualified only for MySQL")
     builds = {version: Adapter(engine, prefix=prefix, protocol=version) for version in range(1, protocol + 1)}
     checksums = {version: hashlib.sha256("\n".join(_migration_statements(build)).encode()).hexdigest()
                  for version, build in builds.items()}
@@ -1412,7 +1445,7 @@ def migrate(
                 raise AdapterError("Storage requires transactional InnoDB tables")
         _verify_capabilities(conn, adapter)
         _verify_migration_guards(conn, adapter)
-        _grants(conn, adapter, runtime_role, runtime_host)
+        _grants(conn, adapter, runtime_role, runtime_host, runtime_execute=runtime_execute)
         conn.execute(update(ledger).where(ledger.c.version.in_(builds)).values(complete=1))
     return {
         "initialized": fresh,
@@ -1420,6 +1453,24 @@ def migrate(
         "tables": len(adapter.tables),
         "engine": engine.dialect.name,
     }
+
+
+def migrate_registry(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
+    """Install the native governed registry through its owning command."""
+    if __package__:
+        from .registry_migration import migrate as migrate_native
+    else:
+        from registry_migration import migrate as migrate_native
+    return migrate_native(engine, runtime_role=runtime_role, runtime_host=runtime_host,
+                          configuration=configuration, kinds=kinds)
+
+
+def verify_native_registry(conn):
+    if __package__:
+        from .registry_migration import verify_postgres_registry
+    else:
+        from registry_migration import verify_postgres_registry
+    return verify_postgres_registry(conn)
 
 
 def main(argv=None):
