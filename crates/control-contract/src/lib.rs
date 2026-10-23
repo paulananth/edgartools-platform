@@ -359,6 +359,8 @@ mod python {
         m.add_function(wrap_pyfunction!(prepare_reference_version, m)?)?;
         m.add_function(wrap_pyfunction!(order_reference_rows, m)?)?;
         m.add_function(wrap_pyfunction!(compile_reference_query, m)?)?;
+        m.add_function(wrap_pyfunction!(encode_reference_search, m)?)?;
+        m.add_function(wrap_pyfunction!(reference_query_matches, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_reference_search, m)?)?;
         m.add_function(wrap_pyfunction!(completion_storage_contract, m)?)?;
         m.add_function(wrap_pyfunction!(select_latest_capture, m)?)?;
@@ -402,6 +404,14 @@ mod python {
     #[pyfunction]
     fn compile_reference_query(py: Python<'_>, words: String) -> String {
         py.allow_threads(|| super::reference::compile_reference_query(&words))
+    }
+    #[pyfunction]
+    fn encode_reference_search(py: Python<'_>, label: String) -> String {
+        py.allow_threads(|| super::reference::encode_reference_search(&label))
+    }
+    #[pyfunction]
+    fn reference_query_matches(py: Python<'_>, words: String, label: String) -> bool {
+        py.allow_threads(|| super::reference::reference_query_matches(&words, &label))
     }
     #[pyfunction]
     fn prepare_reference_search(py: Python<'_>, raw: String) -> PyResult<String> {

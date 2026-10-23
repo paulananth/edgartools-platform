@@ -85,7 +85,9 @@ def tables(dialect: str) -> dict[str, Table]:
                 # maintained by the destination trigger.
                 found.append_column(Column("_search_text", LONGTEXT(charset="utf8mb4", collation="utf8mb4_0900_as_ci"),
                                            nullable=False, server_default=text("('')")))
-                Index(name + "_words", found.c._search_text, mysql_prefix="FULLTEXT")
+                found.append_column(Column("_search_tokens", LONGTEXT(charset="ascii", collation="ascii_bin"),
+                                           nullable=False, server_default=text("('')")))
+                Index(name + "_search_tokens_words", found.c._search_tokens, mysql_prefix="FULLTEXT")
         return found
 
     result = {}
@@ -229,7 +231,12 @@ def search_candidates(conn, code_set, version, words):
         from sqlalchemy.dialects.mysql import match
         import edgar_control
 
-        score = match(table.c._search_text, against=edgar_control.compile_reference_query(words)).in_boolean_mode()
+        query = edgar_control.compile_reference_query(words)
+        if not query:
+            # A negative-only query is the complement within this one indexed
+            # version, never an unrestricted read of the store.
+            return literal(0.0), literal(True)
+        score = match(table.c._search_tokens, against=query).in_boolean_mode()
         return score, score > 0
 
     rank, matches = ranked(code)
@@ -241,7 +248,9 @@ def search_candidates(conn, code_set, version, words):
         literal("synonym").label("matched_by"), literal(0.0).label("rank"), labels.c.label.label("search_text")).select_from(
             labels.join(code, join_label).join(path, join_path)).where(
                 scope(conn, labels, code_set=code_set, version=version), labels.c.kind == "synonym", matches)
-    found = [dict(row) for row in conn.execute(union_all(direct, synonyms)).mappings()]
+    import edgar_control
+    found = [dict(row) for row in conn.execute(union_all(direct, synonyms)).mappings()
+             if conn.dialect.name == "postgresql" or edgar_control.reference_query_matches(words, row["search_text"])]
     if found:
         return found
     pattern = "%" + words.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -255,3 +264,43 @@ def search_candidates(conn, code_set, version, words):
         literal(0.0).label("rank"), labels.c.label.label("search_text")).select_from(labels.join(code, join_label).join(path, join_path)).where(
             scope(conn, labels, code_set=code_set, version=version), labels.c.kind == "synonym", contains(labels))
     return [dict(row) for row in conn.execute(union_all(direct, synonyms)).mappings()]
+
+
+def refresh_search_tokens(conn, **version):
+    """Refresh derived search tokens before approval, or during owner upgrade.
+
+    Content remains the canonical authority. Draft edits through SQL cannot
+    leave a stale index when that version is approved. The caller holds its
+    version lock; an owner upgrade has revoked runtime writes first.
+    """
+    import edgar_control
+    from sqlalchemy import select
+    import json
+
+    for name in ("code", "code_label"):
+        table = tables("mysql")[name]
+        query = select(table.c._row_key, table.c.label, table.c._search_tokens)
+        if version:
+            query = query.where(scope(conn, table, **version))
+        query = query.order_by(table.c._row_key).limit(1000)
+        target = conn.dialect.identifier_preparer.quote(table.name)
+        statement = text("UPDATE /* reference-search-tokens */ JSON_TABLE(:rows, '$[*]' COLUMNS ("
+            "held_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PATH '$.key', "
+            "tokens LONGTEXT CHARACTER SET ascii PATH '$.tokens')) AS prepared "
+            "STRAIGHT_JOIN " + target + " AS dest ON dest._row_key=prepared.held_key "
+            "SET dest._search_tokens=prepared.tokens")
+        after = None
+        while True:
+            page = query if after is None else query.where(table.c._row_key > after)
+            rows = conn.execute(page).mappings().all()
+            if not rows:
+                break
+            changed = {}
+            for row in rows:
+                tokens = edgar_control.encode_reference_search(row["label"])
+                if tokens != row["_search_tokens"]:
+                    changed[row["_row_key"]] = tokens
+            if changed:
+                conn.execute(statement, {"rows": json.dumps([
+                    {"key": key, "tokens": tokens} for key, tokens in changed.items()])})
+            after = rows[-1]["_row_key"]

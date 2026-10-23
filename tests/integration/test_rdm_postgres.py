@@ -132,8 +132,20 @@ def test_place_codes_import_approve_publish_and_read_by_pin(rdm, tmp_path):
     assert listed["sec-place-types"]["newest_status"] == "draft" and listed["sec-place-types"]["published_version"] is None
 
 
-def test_describe_gives_an_agent_the_semantic_layer_in_one_bounded_answer(rdm):
-    rdm, _ = rdm
+@pytest.fixture
+def described_places(tmp_path):
+    """This answer's published input is independent of test collection order."""
+    with server() as engine:
+        migrate(engine("rdm"), runtime_role="rdm_runtime")
+        reference = RDM(engine("rdm", "rdm_runtime"))
+        _import(reference)
+        reference.approve("sec-place-codes", "1", **OPERATOR)
+        reference.publish("sec-place-codes", "1", out=tmp_path)
+        yield reference
+
+
+def test_describe_gives_an_agent_the_semantic_layer_in_one_bounded_answer(described_places):
+    rdm = described_places
     answer = rdm.describe("sec-place-codes")
     assert answer["version"] == "1" and answer["status"] == "published" and len(answer["sha256"]) == 64
     assert {"store": "mdm", "object": "company", "field": "state_of_incorporation", "match": "upper_trimmed",
