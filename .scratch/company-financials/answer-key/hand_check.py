@@ -21,7 +21,6 @@ def chosen(case):
     return next(cik for cik, cases in CASES.items() if case in cases)
 
 
-
 def raw(cik):
     with gzip.open(ROOT / "cohort" / f"{cik}.json.gz", "rt") as f:
         return json.loads(f.read(), parse_float=Decimal, parse_int=Decimal)

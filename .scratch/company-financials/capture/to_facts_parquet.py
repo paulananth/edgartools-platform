@@ -48,7 +48,7 @@ def main(capture: str, out: str) -> int:
                             row["fy"] = int(row["fy"]) if row["fy"] is not None else None
                             handle.write(json.dumps(row) + "\n")
     columns = ("{cik: 'VARCHAR', taxonomy: 'VARCHAR', concept: 'VARCHAR', unit: 'VARCHAR', start: 'VARCHAR', "
-               "\"end\": 'VARCHAR', val: 'VARCHAR', accn: 'VARCHAR', fy: 'INTEGER', fp: 'VARCHAR', form: 'VARCHAR', "
+               "\"end\": 'VARCHAR', val: 'VARCHAR', accn: 'VARCHAR', fy: 'BIGINT', fp: 'VARCHAR', form: 'VARCHAR', "
                "filed: 'VARCHAR', frame: 'VARCHAR'}")
     con.execute(f"COPY (SELECT * FROM read_json('{staged}', format='newline_delimited', columns={columns})) "
                 f"TO '{target / 'facts.parquet'}' (FORMAT parquet)")

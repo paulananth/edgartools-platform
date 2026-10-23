@@ -8,7 +8,10 @@ the CIKs it chooses go to a local file, never into the repository.
     uv run --no-sync python .scratch/company-financials/answer-key/find_cases.py \
         <company facts folder> <submissions bronze folder> <local out file>
 """
-import gzip, json, re, sys
+import gzip
+import json
+import re
+import sys
 from collections import Counter, defaultdict
 from datetime import date
 from decimal import Decimal
@@ -27,6 +30,10 @@ def days(f):
 
 
 def year_end_month(end: str) -> int:
+    """A coarser rule than `oracle.end_month` (which steps back 7 days): it only
+    flags candidate companies, and the oracle decides each chosen company's years.
+    The two agree on every month-end and 52/53-week end; they differ only for a
+    year that ends between the 8th and the 23rd of a month."""
     d = date.fromisoformat(end)
     return 12 if (d.month == 1 and d.day <= 7) else (d.month if d.day >= 24 else (d.month - 1 or 12))
 

@@ -308,7 +308,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
         got = (items.get(year) or {}).get(name) or {}
         return (Decimal(got["value"]), currency(got["unit"])) if got.get("value") is not None else (None, None)
 
-    def missing(year, prior):
+    def missing(prior):
         """Why the earlier year a measure needs has no figure (ticket 35): its year
         end moved around the gap ("fiscal year changed"), or it is simply absent.
         Callers ask only once the later figure is known, so the gap is `prior`."""
@@ -387,7 +387,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     add(name, year, None, reason="no concept filed")
                     continue
                 if prior not in items or then[0] is None:
-                    add(name, year, None, reason=missing(year, prior))
+                    add(name, year, None, reason=missing(prior))
                     continue
                 currencies = {c for c in (top[1], now[1], then[1]) if c}
                 if len(currencies) > 1:
@@ -409,7 +409,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                 if end_value[0] is None:
                     add(label, year, n, reason="no concept filed")
                 elif start[0] is None:
-                    add(label, year, n, reason=missing(year, year - n))
+                    add(label, year, n, reason=missing(year - n))
                 elif start[1] and end_value[1] and start[1] != end_value[1]:
                     add(label, year, n, reason="mixed currencies")
                 elif start[0] <= 0 or end_value[0] <= 0:

@@ -25,7 +25,6 @@ def chosen(case):
     return next(cik for cik, cases in CASES.items() if case in cases)
 
 
-
 def doc(cik):
     if cik not in DOCS:
         with gzip.open(ROOT / "cohort" / f"{cik}.json.gz", "rt") as f:
@@ -75,8 +74,20 @@ m = measure(B, "revenue_cagr", long_year, 1)
 rows.append(("52/53-week year", f"revenue CAGR 1y, {long_year} (371 days)", same(now / prior - 1, m)))
 
 # Stock split (B): diluted EPS CAGR over 1 year on the split-adjusted latest copies.
-m = measure(B, "eps_diluted_cagr", 2012, 1)
-rows.append(("stock split", "diluted EPS CAGR 1y, 2012", same(raw(B, 2012, "eps_diluted")[0] / raw(B, 2011, "eps_diluted")[0] - 1, m)))
+def split_visible(cik, year, name):
+    """The year's filed copies differ by a whole-number ratio: a split restated them."""
+    it = item(cik, year, name)
+    vals = {Decimal(c["val"]) for t in it.get("tried", []) for c in t["copies"] if c["concept"] == it["concept"]}
+    lo, hi = min(vals, default=0), max(vals, default=0)
+    return lo > 0 and hi != lo and (hi / lo) == (hi / lo).to_integral_value()
+
+
+split_year = next(x["year"] for x in key["companies"][B]["measures"]
+                  if x["measure"] == "eps_diluted_cagr" and x["window"] == 1 and x["value"] is not None
+                  and split_visible(B, x["year"], "diluted_shares"))
+m = measure(B, "eps_diluted_cagr", split_year, 1)
+rows.append(("stock split", f"diluted EPS CAGR 1y, {split_year}",
+             same(raw(B, split_year, "eps_diluted")[0] / raw(B, split_year - 1, "eps_diluted")[0] - 1, m)))
 
 # Negative base (B or A): a CAGR marked not meaningful has a first value at or below zero.
 for cik in (B, A):
@@ -94,9 +105,16 @@ near = [str(y) for y in (prior - 1, prior, prior + 1) if str(y) in yrs]
 moved = any("earlier_end" in yrs[y] for y in near) or len({yrs[y]["end"][5:7] for y in near}) > 1
 rows.append(("changed year end", f"{x['measure']} {x['window']}y, {x['year']}: the year end moves beside {prior}", x["value"] is None and moved))
 
-# Restatement (C): 2018 net margin on the latest copies (2018 revenue has 2 distinct filed values).
-m = measure(C, "net_margin", 2018)
-rows.append(("restatement", "net margin 2018, latest copies", same(raw(C, 2018, "net_income")[0] / raw(C, 2018, "revenue")[0], m)))
+# Restatement (C): net margin in the first year whose revenue has two distinct filed values.
+def restated(cik, year, name):
+    it = item(cik, year, name)
+    return len({c["val"] for t in it.get("tried", []) for c in t["copies"] if c["concept"] == it["concept"]}) > 1
+
+
+ry = next(x["year"] for x in key["companies"][C]["measures"]
+          if x["measure"] == "net_margin" and x["value"] is not None and restated(C, x["year"], "revenue"))
+m = measure(C, "net_margin", ry)
+rows.append(("restatement", f"net margin {ry}, latest copies", same(raw(C, ry, "net_income")[0] / raw(C, ry, "revenue")[0], m)))
 
 # Non-December year end (C): ROE on the beginning balance, the prior October's equity.
 y = next(x["year"] for x in key["companies"][C]["measures"] if x["measure"] == "roe_beginning" and x["value"] is not None)
@@ -104,12 +122,12 @@ ni, _, _, _, end = raw(C, y, "net_income"); bv, _, _, _, bend = raw(C, y - 1, "b
 m = measure(C, "roe_beginning", y)
 rows.append(("non-December year end", f"ROE beginning {y} (ends {end[5:]}, prior {bend[5:]})", same(ni / bv, m) and end[5:7] != "12"))
 
-# Non-USD and IFRS (C): revenue 2018 in its reporting currency, from ifrs-full.
-v, unit, tax, _, _ = raw(C, 2018, "revenue")
-rows.append(("non-USD filer", f"revenue 2018 kept in {unit}, not converted", unit != "USD" and Decimal(item(C, 2018, "revenue")["value"]) == v))
-rows.append(("IFRS filer", f"revenue 2018 from {tax}", tax == "ifrs-full"))
+# Non-USD and IFRS (C): the same year's revenue in its reporting currency, from ifrs-full.
+v, unit, tax, _, _ = raw(C, ry, "revenue")
+rows.append(("non-USD filer", f"revenue {ry} kept in {unit}, not converted", unit != "USD" and Decimal(item(C, ry, "revenue")["value"]) == v))
+rows.append(("IFRS filer", f"revenue {ry} from {tax}", tax == "ifrs-full"))
 
-# Financial services (C, SIC 6029): gross margin not meaningful.
+# Financial services (C, a bank's SIC code): gross margin not meaningful.
 x = next(x for x in key["companies"][C]["measures"] if x["measure"] == "gross_margin")
 rows.append(("financial services", f"gross margin {x['year']}: {x['reason']}", key["companies"][C]["sic"].startswith("60") and x["reason"] == "not meaningful for financial services"))
 
