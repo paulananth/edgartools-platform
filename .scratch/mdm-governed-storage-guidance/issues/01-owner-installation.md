@@ -1,7 +1,7 @@
 # Publish governed owner installation learning
 
 Type: task
-Status: claimed
+Status: resolved
 Assignee: Codex
 
 ## Parts
@@ -9,8 +9,8 @@ Assignee: Codex
 - [x] Review the storage ticket's normal caller and independent installation evidence — PostgreSQL/MySQL five-wheel proofs pass, 2026-10-23 15:20 ET.
 - [x] Document the normal owner installation boundary, exact configuration numbers, pending recovery and inherited grants in mdm-engineering — skill and storage reference updated, 2026-10-23 15:20 ET.
 - [x] Validate source neutrality and registered commands — 79 genericity/skill-command tests pass; the local storage-reference link and its heading resolve, 2026-10-23 15:20 ET.
-- [ ] Publish a separate PR with the implementation prerequisite.
-- [ ] Verify final-head CI and retain named merge approval as a separate gate.
+- [x] Publish a separate PR with the implementation prerequisite — PR #1153 names #1152 as its merge prerequisite, 2026-10-23 15:30 ET.
+- [x] Verify CI on the guidance revision and retain final landing-head checks and named merge approval as separate PR gates — all nine checks pass at 51582ecd, 2026-10-23 15:30 ET.
 - [x] Learning → skill: mdm-engineering, Governed owner installation; exact-number, recovery and grant qualification guidance updated and 79 checks pass, 2026-10-23 15:20 ET.
 
 ## Scope
@@ -36,3 +36,12 @@ readback and inherited column grants are qualification requirements.
 
 Documentation-only guidance for the existing adapter seam. No new abstraction
 or duplicated merge algorithm; no design-pattern refactor warranted.
+
+## Answer
+
+The normal-owner installation boundary and its exact-value, grant and recovery
+requirements now live in mdm-engineering and its storage reference. All 79
+local checks and all nine CI checks pass on the published guidance revision.
+Merge after implementation #1152 and named operator approval. This
+checklist-only closeout also needs green final-head checks, whose live status
+is held in the PR rather than another recursive CI-status commit.
