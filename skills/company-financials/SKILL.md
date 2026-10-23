@@ -47,9 +47,13 @@ not describe any of them as running.
   years, not days, so a 53-week year keeps its extra week.
 - **A changed fiscal year end, Compustat-style** (operator: "Compustat-style,
   null if missing (Recommended)"). A transition period is kept as filed but is
-  not a year. When two annual periods end in one calendar year, that year is the
-  later one (the new year end). A window that needs a year with no annual period
-  gives null with the reason "fiscal year changed".
+  not a year. When two annual periods fall in one fiscal year, the year is the
+  one an annual report (10-K, 20-F, 40-F) covers as its own fiscal year; a
+  12-month period seen only as a later comparative is kept as filed but is not a
+  year (operator, 2026-10-22: "The reported year (Recommended)"). When both or
+  neither are reported, the later one (the new year end). A window that needs a
+  year with no annual period gives null with the reason "fiscal year changed",
+  and a missing figure in a year that has one gives "missing year".
 
 Evidence and sources: ticket 35, research 02 section 1.
 

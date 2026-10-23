@@ -30,6 +30,7 @@ FACTS, SUBMISSIONS, CASES, OUT = (Path(a).expanduser() for a in sys.argv[1:5])
 
 # --- the rulings ------------------------------------------------------------------
 ANNUAL = range(364, 372)  # ticket 35: 364-371 days, counting the first and last day
+ANNUAL_REPORTS = {"10-K", "20-F", "40-F"}  # with their amendments (form "/A")
 INSTANT = {"book_value", "assets", "shares_outstanding", "total_debt", "cash", "liabilities",
            "current_assets", "current_liabilities"}
 # Ticket 38 (research 01 section 6, cost of revenue in the standard's order) and
@@ -156,21 +157,33 @@ class Company:
                 yield unit, f
 
     def _years(self) -> dict[int, dict]:
-        """Each fiscal year: its annual period's end, keyed by Compustat's FYEAR; when
-        two annual periods fall in one fiscal year, the later one (ticket 35)."""
-        ends: dict[str, set] = {}
+        """Each fiscal year: its annual period's end, keyed by Compustat's FYEAR. When
+        two annual periods fall in one fiscal year, the year is the one an annual
+        report covers as its own fiscal year; a 12-month period seen only as a
+        comparative is kept as filed but is not a year (operator, 2026-10-22: "The
+        reported year (Recommended)"). A report's own period is the annual period
+        it files the most facts for. Both or neither reported: the later (ticket 35)."""
+        ends: set[str] = set()
+        per_report: dict[str, Counter] = {}
         for taxonomy in ("us-gaap", "ifrs-full"):
             for concept, spec in (self.facts.get(taxonomy) or {}).items():
                 for unit, rows in (spec.get("units") or {}).items():
                     for f in rows:
                         if f.get("start") and days(f["start"], f["end"]) in ANNUAL:
-                            ends.setdefault(f["end"], set()).add(taxonomy)
+                            ends.add(f["end"])
+                            if (f.get("form") or "").split("/")[0] in ANNUAL_REPORTS:
+                                per_report.setdefault(f["accn"], Counter())[f["end"]] += 1
+        reported = {counts.most_common(1)[0][0] for counts in per_report.values()}
         years: dict[int, dict] = {}
         for end in sorted(ends):
             year = fiscal_year(end)
-            if year in years and years[year]["end"] != end:
-                years[year]["earlier_end"] = years[year]["end"]
-            years.setdefault(year, {})["end"] = end
+            held = years.get(year, {}).get("end")
+            if held is None:
+                years[year] = {"end": end}
+            elif (held in reported) and (end not in reported):
+                years[year]["comparative_end"] = end
+            else:
+                years[year] = {"end": end, ("comparative_end" if held not in reported and end in reported else "earlier_end"): held}
         for year, entry in years.items():
             entry["taxonomy"] = self._taxonomy(entry["end"])
         return years
@@ -310,12 +323,13 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
 
     def missing(prior):
         """Why the earlier year a measure needs has no figure. A year that has an
-        annual period but not this figure is "no concept filed", as for the later
-        year. A year with no annual period is "fiscal year changed" when the year
-        end moved around the gap, else "missing year" (ticket 35). Callers ask only
-        once the later figure is known, so the gap is `prior`."""
+        annual period but not this figure is "missing year" (operator, 2026-10-22:
+        'Null, "missing year"'; CAGR's missing endpoint). A year with no annual
+        period is "fiscal year changed" when the year end moved around the gap,
+        else "missing year" (ticket 35). Callers ask only once the later figure is
+        known, so the gap is `prior`."""
         if prior in company.years:
-            return "no concept filed"
+            return "missing year"
         absent = prior
         before = [y for y in company.years if y < absent]
         after = [y for y in company.years if y > absent]
@@ -323,7 +337,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
             return "missing year"
         lo, hi = max(before), min(after)
         moved = end_month(company.years[lo]["end"]) != end_month(company.years[hi]["end"])
-        moved |= any("earlier_end" in company.years[y] for y in company.years if lo <= y <= hi)
+        moved |= any({"earlier_end", "comparative_end"} & set(company.years[y]) for y in company.years if lo <= y <= hi)
         return "fiscal year changed" if moved else "missing year"
 
     def add(name, year, window, val=None, reason=None, inputs=None):
@@ -453,7 +467,7 @@ def main() -> None:
             "input_sha256": hashlib.sha256(raw).hexdigest(), "cases": chosen["cases"][cik],
             "format": "financial services" if company.fs else "industrial", "sic": sic.get(cik),
             "years": {y: {"end": company.years[y]["end"], "taxonomy": company.years[y]["taxonomy"],
-                          **({"earlier_end": company.years[y]["earlier_end"]} if "earlier_end" in company.years[y] else {})}
+                          **{k: company.years[y][k] for k in ("earlier_end", "comparative_end") if k in company.years[y]}}
                       for y in company.years},
             "line_items": items, "measures": measures(company, items)}
     text = json.dumps(key, indent=1, sort_keys=True, default=str)
