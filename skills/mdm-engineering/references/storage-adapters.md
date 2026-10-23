@@ -63,6 +63,34 @@ hash. Omitting the map preserves the version-1 request representation and
 replay identity; the upgraded store still accepts those original requests.
 The top-level payload remains required and is unused for version-2 delivery.
 
+## Governed owner installation
+
+Use the normal installed `mdm migrate --help` interface for the application's
+registry. The owner connection selects PostgreSQL or MySQL; supply a separate,
+pre-provisioned runtime account and MySQL's intended application host. The
+MySQL installation requires an isolated database and its pinned catalog. It
+retains immutable policy and dataset versions, catalog history and configured
+vocabulary. Normal MySQL mastering remains unsupported: prepared-effect
+storage is installed with runtime execution withheld until the normal merge
+caller qualifies. SQL Server normal installation remains deferred.
+
+Qualify installation through the normal owner command from an independent
+five-wheel installation, then register configuration through the normal API
+and read it as the restricted runtime. Test exact large integers and Unicode:
+MySQL native JSON may round a configuration integer, changing its fingerprint.
+Keep its canonical JSON in validated text with binary Unicode collation;
+read back the original values before accepting its digest.
+
+Recovery distinguishes an interrupted first installation from damage to an
+initialized registry. A checksummed pending marker fences registry calls;
+existing transactions drain before it is published. Retry the same build to
+finish interrupted DDL. A missing installed table or immutable guard requires
+restoration; a retry must continue refusing it rather than silently recreate
+lost storage. Qualify populated retries, already-open runtime connections,
+held transactions, exact schema/grant readback, inherited column write grants
+and unchanged historical prepared-effect fingerprints. Empty helper-created
+tables are not evidence of this owner workflow.
+
 ## Worker authority and input publication
 
 When a worker’s external resource lease must protect the destination commit,

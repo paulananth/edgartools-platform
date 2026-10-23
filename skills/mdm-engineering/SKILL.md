@@ -18,8 +18,10 @@ The operator chooses PostgreSQL, MySQL or SQL Server Express. This skill owns
 one Merge Stage contract across those engines and the engineering needed to
 support their storage differences. Its executable adapter persists prepared
 effects without interpreting entity or source policy. The application's
-native store commands remain PostgreSQL-only; the skill adapter does not
-replace their configuration or run-control workflow. A silver table spec is applied by
+native owner migration installs governed registry storage on PostgreSQL and
+MySQL; normal mastering remains PostgreSQL-only until its portable caller is
+qualified. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
+before installing or recovering that registry. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
 Adapter implementation belongs under this skill's `scripts/`, with
