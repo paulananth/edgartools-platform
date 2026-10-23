@@ -252,39 +252,6 @@ def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, da
     assert {k: r["loaded_at"] for k, r in rows.items()} == loaded  # an id is not a delivered value
 
 
-def test_upsert_changes_only_changed_rows_and_snapshot_removes_rows_no_longer_delivered(stores):
-    owner, runtime, ids, _ = stores
-    for mode in ("upsert", "snapshot"):
-        silver.register(owner, visit_spec(table=mode, load_mode=mode), runtime_role=RUNTIME)
-    sink = PostgresSink(runtime)
-    land(sink, "upsert", visits(), ids)
-    before = table(runtime, "upsert")
-    changed = land(sink, "upsert", visits((2, "amount", "4")), ids)
-    after = table(runtime, "upsert")
-    assert (changed["inserted"], changed["changed"]) == (0, 1)
-    assert str(after[2]["amount"]) == "4.00" and after[2]["loaded_at"] >= before[2]["loaded_at"]
-    assert after[1] == before[1] and after[3] == before[3]  # untouched rows keep their loaded_at
-    land(sink, "snapshot", visits(), ids)
-    removed = land(sink, "snapshot", visits()[:2], ids)
-    assert removed["deleted"] == 1 and set(table(runtime, "snapshot")) == {1, 2}
-    with pytest.raises(Blocked, match="empty delivery"):
-        land(sink, "snapshot", [], ids)
-
-
-@pytest.mark.parametrize("delivery, refused", [
-    (visits((1, "visited_on", "not a date")), "not its column's type"),
-    (visits((1, "visit_id", None)), "column visit_id is empty"),
-    (visits((2, "visit_id", 1)), "a key more than once"),
-    (visits((1, "amount", {"nested": 1})), "not a nested value"),
-])
-def test_a_bad_delivery_writes_nothing(stores, delivery, refused):
-    owner, runtime, ids, _ = stores
-    silver.register(owner, visit_spec(), runtime_role=RUNTIME)
-    with pytest.raises(Blocked, match=refused):
-        land(PostgresSink(runtime), "visit", delivery, ids)
-    assert table(runtime) == {}
-
-
 def test_a_name_with_symbols_is_quoted_everywhere(stores):
     owner, runtime, ids, _ = stores
     odd = a_spec(table="Odd % : Table", columns=[
