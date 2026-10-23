@@ -199,3 +199,29 @@ reference_tables:
     target_set: iso-3166
     match_type: exact
 legacy_jurisdiction_table: edgar-iso-v1
+
+# Compatibility selectors for the existing versioned pair primitives.
+# These are build-pinned configuration, not approval or source activation.
+legacy_pair_comparison: existing-name-binding
+pair_comparisons:
+  existing-name-binding:
+    name_field: name
+    identifier_namespace: lei
+    census_field: name_census
+    census_entries_field: leis
+    census_holder_keys_field: ciks
+    census_holder_count_field: cik_count
+    census_identifier_count_field: lei_count
+    census_other_holders_field: other_name_holders
+    cascade_field: cascade
+    cascade_identifier_field: lei
+    eligibility_kind: company
+    eligibility_categories:
+    - GENERAL
+    status_field: gleif_entity_status
+    registration_status_field: gleif_registration_status
+    left_address_fields:
+    - address
+    right_address_fields:
+    - headquarters_address
+    - address

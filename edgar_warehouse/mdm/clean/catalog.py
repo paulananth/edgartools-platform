@@ -22,7 +22,7 @@ def load(root=None):
 
 def _validate(body):
     expected = {"version", "kinds", "profiles", "accepted_bars", "legacy_relationships", "legacy_ultimate_type",
-                "reference_tables", "legacy_jurisdiction_table"}
+                "reference_tables", "legacy_jurisdiction_table", "pair_comparisons", "legacy_pair_comparison"}
     if not isinstance(body, dict) or set(body) != expected or not isinstance(body["version"], str) or not body["version"]:
         raise ValueError("Mastering engine catalog must name its version and configured sections")
     kinds = body["kinds"]
@@ -56,7 +56,31 @@ def _validate(body):
         or not isinstance(body["legacy_jurisdiction_table"], str)
         or body["legacy_jurisdiction_table"] not in references):
         raise ValueError("Mastering reference tables name pinned crosswalk selectors and a configured compatibility table")
+    comparisons = body["pair_comparisons"]
+    if (not isinstance(comparisons, dict) or not comparisons
+        or any(not isinstance(alias, str) or not alias or alias.strip() != alias for alias in comparisons)
+        or not isinstance(body["legacy_pair_comparison"], str)
+        or body["legacy_pair_comparison"] not in comparisons):
+        raise ValueError("Mastering pair comparison names configured selectors and a compatibility profile")
+    for pair in comparisons.values():
+        _validate_pair_comparison(pair, kinds)
     return body
+
+
+def _validate_pair_comparison(pair, kinds):
+    text_fields = {"name_field", "identifier_namespace", "census_field", "census_entries_field",
+                   "census_holder_keys_field", "census_holder_count_field", "census_identifier_count_field",
+                   "census_other_holders_field", "cascade_field", "cascade_identifier_field",
+                   "eligibility_kind", "status_field", "registration_status_field"}
+    list_fields = {"eligibility_categories", "left_address_fields", "right_address_fields"}
+    if (not isinstance(pair, dict) or set(pair) != text_fields | list_fields
+        or any(not isinstance(pair[key], str) or not pair[key] or pair[key].strip() != pair[key]
+               for key in text_fields)
+        or pair["eligibility_kind"] not in kinds
+        or any(not isinstance(pair[key], list) or not pair[key]
+               or any(not isinstance(value, str) or not value or value.strip() != value for value in pair[key])
+               or len(set(pair[key])) != len(pair[key]) for key in list_fields)):
+        raise ValueError("Mastering pair comparison requires configured record selectors and eligibility")
 
 
 LOADED_PATH = _selected_path().resolve()

@@ -20,6 +20,27 @@ struct Command {
     normalizers: IndexMap<String, bool>,
     census_version: String,
     cascade_version: String,
+    pair_comparison: PairComparison,
+}
+
+#[derive(Deserialize)]
+struct PairComparison {
+    name_field: String,
+    identifier_namespace: String,
+    census_field: String,
+    census_entries_field: String,
+    census_holder_keys_field: String,
+    census_holder_count_field: String,
+    census_identifier_count_field: String,
+    census_other_holders_field: String,
+    cascade_field: String,
+    cascade_identifier_field: String,
+    eligibility_kind: String,
+    eligibility_categories: Vec<String>,
+    status_field: String,
+    registration_status_field: String,
+    left_address_fields: Vec<String>,
+    right_address_fields: Vec<String>,
 }
 
 fn read_field_value(record: &Object, name: &str) -> Result<Document, String> {
@@ -83,7 +104,7 @@ fn read_name(
     let name = values::read_text(args, argument)?;
     normalize_value(
         &name,
-        &read_field_value(record, "name")?,
+        &read_matching_field(record, &command.pair_comparison.name_field)?,
         &Object::new(),
         &command.normalizers,
     )
@@ -119,7 +140,7 @@ fn reference_place(
         matching_values::prepare_uppercase(code.trim_matches(crate::text_transform::whitespace));
     Ok(table.get(&code).cloned())
 }
-fn prepared_address(record: &Object, names: &[&str]) -> Result<Object, String> {
+fn prepared_address(record: &Object, names: &[String]) -> Result<Object, String> {
     let matching = read_matching_values(record)?;
     let mut country = None;
     for name in names {
@@ -207,42 +228,46 @@ fn test_record_pair(
 ) -> Result<bool, String> {
     let left = &command.left;
     let right = &command.right;
+    let shape = &command.pair_comparison;
     match name {
         "holds_no_other_lei@1" => Ok(true),
         "name_census_match@1" => {
-            let entry = values::read_object(&read_matching_values(left)?, "name_census")?;
-            let identifier =
-                values::read_optional_value(&values::read_object(right, "identifiers")?, "lei")?;
+            let entry = values::read_object(&read_matching_values(left)?, &shape.census_field)?;
+            let identifier = values::read_optional_value(
+                &values::read_object(right, "identifiers")?,
+                &shape.identifier_namespace,
+            )?;
             let key = read_name(args, left, "sec_normalizer", command)?;
-            let leis = values::read_array(&entry, "leis")?;
+            let leis = values::read_array(&entry, &shape.census_entries_field)?;
             let held = match leis.as_slice() {
                 [only] => values::read_value::<(Option<String>, String)>(only).ok(),
                 _ => None,
             };
-            Ok(
-                held.is_some_and(|(lei, updated)| {
-                    values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
-                        && same_update(&updated, right)
-                }) && value_matches_rule(&entry, "version", &command.census_version)?
-                    && value_matches_rule(&entry, "cik_count", &1)?
-                    && value_matches_rule(
-                        &entry,
-                        "ciks",
-                        &vec![values::read_optional_value(left, "record_key")?],
-                    )?
-                    && value_matches_rule(&entry, "lei_count", &1)?
-                    && value_matches_rule(&entry, "other_name_holders", &0)?
-                    && !key.is_empty()
-                    && value_matches_rule(&entry, "key", &key)?
-                    && key == read_name(args, right, "gleif_normalizer", command)?,
-            )
+            Ok(held.is_some_and(|(lei, updated)| {
+                values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
+                    && same_update(&updated, right)
+            }) && value_matches_rule(&entry, "version", &command.census_version)?
+                && value_matches_rule(&entry, &shape.census_holder_count_field, &1)?
+                && value_matches_rule(
+                    &entry,
+                    &shape.census_holder_keys_field,
+                    &vec![values::read_optional_value(left, "record_key")?],
+                )?
+                && value_matches_rule(&entry, &shape.census_identifier_count_field, &1)?
+                && value_matches_rule(&entry, &shape.census_other_holders_field, &0)?
+                && !key.is_empty()
+                && value_matches_rule(&entry, "key", &key)?
+                && key == read_name(args, right, "gleif_normalizer", command)?)
         }
         "gleif_entity_eligible@1" => {
-            if !value_matches_rule(args, "categories", &vec!["GENERAL"])? {
-                return Err("Name binding can require only the GENERAL category".into());
+            if !value_matches_rule(args, "categories", &shape.eligibility_categories)? {
+                return Err(format!(
+                    "Name binding can require only the {} category",
+                    shape.eligibility_categories.join(", ")
+                ));
             }
-            let status = read_field_value(right, "gleif_entity_status")?;
-            let registration = read_field_value(right, "gleif_registration_status")?;
+            let status = read_matching_field(right, &shape.status_field)?;
+            let registration = read_matching_field(right, &shape.registration_status_field)?;
             let contains = |name: &str, value: &Document| -> Result<bool, String> {
                 for item in values::read_array(args, name)? {
                     if values::values_match(&item, value)? {
@@ -251,11 +276,10 @@ fn test_record_pair(
                 }
                 Ok(false)
             };
-            Ok(
-                values::read_text(right, "kind").ok().as_deref() == Some("company")
-                    && contains("entity_statuses", &status)?
-                    && !contains("refused_registration_statuses", &registration)?,
-            )
+            Ok(values::read_text(right, "kind").ok().as_deref()
+                == Some(shape.eligibility_kind.as_str())
+                && contains("entity_statuses", &status)?
+                && !contains("refused_registration_statuses", &registration)?)
         }
         "jurisdiction_agrees@1" | "jurisdictions_do_not_conflict@1" => {
             let left = reference_place(args, left, command)?;
@@ -302,8 +326,8 @@ fn test_record_pair(
         )),
         "cascade_pass@1" => {
             let answer = values::read_object(
-                &values::read_object(&read_matching_values(left)?, "name_census")?,
-                "cascade",
+                &values::read_object(&read_matching_values(left)?, &shape.census_field)?,
+                &shape.cascade_field,
             )?;
             let key = read_name(args, left, "sec_normalizer", command)?;
             let other_key = read_name(args, right, "gleif_normalizer", command)?;
@@ -313,10 +337,10 @@ fn test_record_pair(
                     &values::read_optional_value(args, "pass")?,
                 )?
                 || !values::values_match(
-                    &values::read_optional_value(&answer, "lei")?,
+                    &values::read_optional_value(&answer, &shape.cascade_identifier_field)?,
                     &values::read_optional_value(
                         &values::read_object(right, "identifiers")?,
-                        "lei",
+                        &shape.identifier_namespace,
                     )?,
                 )?
             {
@@ -344,8 +368,8 @@ fn test_record_pair(
                 }
             }
             addresses_agree(
-                &prepared_address(left, &["address"])?,
-                &prepared_address(right, &["headquarters_address", "address"])?,
+                &prepared_address(left, &shape.left_address_fields)?,
+                &prepared_address(right, &shape.right_address_fields)?,
                 &values::read_optional_value(args, "compare")?,
             )
         }

@@ -25,6 +25,7 @@ from functools import partial
 
 from . import cascade, correction
 from .activation import activated
+from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
@@ -79,12 +80,17 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
     from edgar_warehouse.rules.source_engine import compare_record_pairs
     from .identifier_types import TYPES
 
+    assert_current()
+    profile = rule.get("pair_comparison", CATALOG["legacy_pair_comparison"])
+    if not isinstance(profile, str) or profile not in CATALOG["pair_comparisons"]:
+        raise Conflict("Name binding names an unknown pair comparison profile")
     try:
         return compare_record_pairs({
             "rule": rule, "pairs": pairs,
             "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
             "census_version": CENSUS_VERSION, "cascade_version": cascade.VERSION,
+            "pair_comparison": CATALOG["pair_comparisons"][profile],
         })
     except ValueError as error:
         raise Conflict(str(error)) from None

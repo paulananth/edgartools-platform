@@ -196,6 +196,44 @@ def _run(python, *arguments, env=None, cwd=None, document=None):
                           input=None if document is None else json.dumps(document))
 
 
+def test_configured_pair_profile_runs_from_installed_bundle(installed):
+    """The shipped catalog and native comparison agree outside the checkout."""
+    python, root = installed
+    program = '''
+import copy, os, shutil, sys, tempfile
+from pathlib import Path
+from edgar_warehouse.rules import files
+from edgar_warehouse.mdm.clean import catalog
+
+folder = Path(tempfile.mkdtemp(dir=".")) / "rules"
+shutil.copytree(files.ROOT, folder)
+body = copy.deepcopy(catalog.CATALOG)
+body["kinds"].append("bundle-invented-kind")
+profile = copy.deepcopy(body["pair_comparisons"][body["legacy_pair_comparison"]])
+profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=["INVENTED"],
+               name_field="invented_name", status_field="invented_status",
+               registration_status_field="invented_registration")
+body["pair_comparisons"]["bundle-invented"] = profile
+(folder / catalog.RELATIVE).write_text(files.dumps(body))
+env = {**os.environ, "EDGAR_RULES_ROOT": str(folder.resolve())}
+code = """
+from edgar_warehouse.mdm.clean.matching import compare_candidate_records
+rule = {"pair_comparison": "bundle-invented", "when": [{"primitive": "gleif_entity_eligible@1",
+    "args": {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
+             "refused_registration_statuses": ["REFUSED"]}}]}
+right = {"kind": "bundle-invented-kind", "fields": {
+    "invented_status": {"op": "value", "value": "ACCEPTED"},
+    "invented_registration": {"op": "value", "value": "ISSUED"}}}
+assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
+right["fields"]["invented_status"]["value"] = "OTHER"
+assert compare_candidate_records(rule, [({}, right)]) == [[False, False]]
+"""
+os.execve(sys.executable, [sys.executable, "-I", "-c", code], env)
+'''
+    result = _run(python, "-c", program, cwd=root)
+    assert result.returncode == 0, result.stderr
+
+
 def test_the_bundle_installs_whole_with_no_file_in_two_wheels(installed):
     python, root = installed
     result = _run(python, "-c", f'''
