@@ -12,7 +12,7 @@ history, exact transport, indexed reads and recovery through real callers.
 - [x] Move any uncovered calculation cases into database-free engine tests, then retire their duplicated PostgreSQL cases. Verified 2026-10-23 05:56 ET: eight passing database-free cases; native facade unchanged.
 - [x] Retire PostgreSQL-only storage checks only where the same contract remains covered on both selected engines. Verified 2026-10-23 05:56 ET: 57 storage cases passed separately on PostgreSQL and MySQL.
 - [x] Verify affected engine and storage cases, imports, collection and case-count changes; use bounded test runs. Verified 2026-10-23 05:56 ET: 41 affected cases, 44 final engine cases and 510 integration cases collected.
-- [ ] Review Standards, Spec and GoF; publish the change and verify CI without removing the storage gate.
+- [x] Review Standards, Spec and GoF; publish the change and verify CI without removing the storage gate. Verified 2026-10-23 06:07 ET: PR #1145, all nine CI checks green on source head `fffe980e`; no runtime or CI selection change.
 - [x] Learning → skill: none; the existing mdm-engineering “Compute once in programs” and “Choose the cheapest proof” rules already cover this boundary. Reviewed 2026-10-23 05:56 ET.
 
 ## Audit boundary
@@ -108,3 +108,9 @@ Reviewed matching co-change through #1141/#1142 and shared storage tests from
 #1121. Keep the current native facade and storage adapter seams. The test
 matrix removes duplicated calculation setup; no new hierarchy or design
 pattern has an evidence-backed benefit for this change.
+
+- Full CI verified 2026-10-23 06:07 ET: all nine checks passed on `fffe980e`, run
+  [39935597121](https://github.com/paulananth/edgartools-platform/actions/runs/39935597121).
+  PostgreSQL integration took 9 minutes 14 seconds; no speedup claim.
+  The completion-record commit changes only this ticket; final-head CI remains
+  the PR readiness gate.
