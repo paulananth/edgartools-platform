@@ -11,7 +11,7 @@ it does not complete MySQL's normal MDM migration or commit path.
 - [x] Verify the affected matching, catalog and normal PostgreSQL caller cases, preserving #1141's effective-time behavior — 215 unit cases in 9.72 seconds and 29 PostgreSQL cases in 12.34 seconds; 2026-10-22 20:26 ET.
 - [x] Qualify the catalog/native contract and worker recovery through the independently installed five-wheel bundle — committed 74c13c36 installed all five wheels without duplicate modules, the invented profile passed outside the checkout, and streamed-worker interruption/recovery passed; three cases in 236.03 seconds; 2026-10-22 20:31 ET.
 - [x] Review Standards, Spec and GoF — resulting diff reviewed against the three axes below, current main and the declared bounded scope; `git diff --check` and overlap guard passed; 2026-10-22 20:31 ET.
-- [ ] Publish this bounded change for review.
+- [x] Publish this bounded change for review — draft PR #1142 opened and its published head a012c428 read back from GitHub; 2026-10-22 20:33 ET.
 - [ ] Verify published CI checks and mark the bounded PR ready; stop monitoring on terminal failure/closure or a 20-minute deadline.
 - [x] Learning → skill: none; existing configuration, frozen execution identity, package qualification and comparison/storage separation guidance applies; 2026-10-22 20:31 ET.
 
