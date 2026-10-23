@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import sys
 from collections import Counter
-from decimal import Decimal
 from pathlib import Path
 
 CAPTURE, PLACES, OUT = (Path(a) for a in sys.argv[1:4])
@@ -64,7 +64,7 @@ def main() -> None:
                           "to_code": alpha3, "match_type": "exact"})
     for r in sorted(rows, key=lambda r: (alpha2[r["REF_AREA"]], r["TIME_PERIOD"])):
         value = r["OBS_VALUE"]
-        Decimal(value)  # exact decimal text, refused otherwise
+        assert re.fullmatch(r"-?[0-9]+(\.[0-9]+)?", value), value  # plain decimal text, as the store requires
         year = r["TIME_PERIOD"]
         codes.append({"code": f"{alpha2[r['REF_AREA']]}:{year}", "label": f"{r['Reference area']} {year}",
                       "parent_code": alpha2[r["REF_AREA"]], "valid_from": f"{year}-01-01", "valid_to": f"{year}-12-31",

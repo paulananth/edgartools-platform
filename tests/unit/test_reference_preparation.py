@@ -2,6 +2,7 @@
 import hashlib
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -46,8 +47,7 @@ def test_a_typed_value_is_pinned_with_its_unit():
             store.canonical([{"code": "a", "label": "Invented", "value": value, "unit": unit}])
 
 
-PUBLISHED = sorted((store_path.parent for store_path in
-                    __import__("pathlib").Path(__file__).parents[2].glob("rules/reference/published/*/*/pin.json")))
+PUBLISHED = sorted(pin.parent for pin in Path(__file__).parents[2].glob("rules/reference/published/*/*/pin.json"))
 
 
 @pytest.mark.parametrize("folder", PUBLISHED, ids=lambda f: f"{f.parent.name}@{f.name}")

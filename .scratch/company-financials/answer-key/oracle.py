@@ -425,6 +425,9 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                         continue
                     rate = tax[0] / pre[0] if pre[0] > 0 else None
                     if rate is None or not (0 <= rate <= 1):
+                        if company.country is None:
+                            add(name, year, None, reason="no country of incorporation")
+                            continue
                         rate = statutory_rate(company.country, company.years[year]["end"])
                         if rate is None:
                             add(name, year, None, reason="no statutory rate for the country and year")

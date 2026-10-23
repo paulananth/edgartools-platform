@@ -366,7 +366,7 @@ pub fn prepare_reference_version(raw: &str) -> Result<String, String> {
         // so every version published before values existed keeps its bytes.
         match (optional_text(row, "value")?, optional_text(row, "unit")?) {
             (None, None) => {}
-            (Some(value), Some(unit)) if is_decimal(&value) && !unit.trim().is_empty() => {
+            (Some(value), Some(unit)) if is_decimal(&value) && !unit.trim_matches(' ').is_empty() => {
                 body.insert("value".into(), write(&value)?);
                 body.insert("unit".into(), write(&unit)?);
             }

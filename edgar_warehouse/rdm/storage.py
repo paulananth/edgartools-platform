@@ -185,7 +185,8 @@ def code_context(conn, code_set, version, code):
     base = tables(conn.dialect.name)["code"]
     metadata = MetaData()
     view = Table("code_context", metadata, *(Column(n, Text) for n in
-        ("code_set", "version", "code", "label", "definition", "path", "label_path", "level", "parent_code", "invalid_reason", "code_status")),
+        ("code_set", "version", "code", "label", "definition", "path", "label_path", "level", "parent_code", "invalid_reason", "code_status",
+         "value", "unit")),
         Column("depth", Integer), Column("synonyms", ExactJSON()), Column("crosswalk", ExactJSON()),
         Column("code_valid_from", Date), Column("code_valid_to", Date),
         schema=base.schema)

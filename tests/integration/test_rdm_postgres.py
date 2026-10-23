@@ -18,7 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.control_contract import Blocked
-from edgar_warehouse.rdm import cli, store
+from edgar_warehouse.rdm import cli, database, store
 from edgar_warehouse.rdm.database import migrate
 from edgar_warehouse.rdm.store import RDM
 from edgar_warehouse.rules import files
@@ -200,7 +200,7 @@ def test_a_hierarchy_publishes_paths_and_a_new_version_supersedes(rdm, tmp_path)
     assert rdm.diff("test-industry", "1", "3") == {
         "code_set": "test-industry", "from": "1", "to": "3", "added": [], "removed": [],
         "relabelled": [{"code": "B", "from": "Mining", "to": "Mining and quarrying"}],
-        "moved": [{"code": "C", "from": "A1", "to": "A"}]}
+        "moved": [{"code": "C", "from": "A1", "to": "A"}], "revalued": []}
     rdm.approve("test-industry", "3", **OPERATOR)
     third = rdm.publish("test-industry", "3", out=tmp_path)
     assert third["superseded"] == "1" and third["sha256"] != first["sha256"]
@@ -271,12 +271,22 @@ def test_a_code_carries_an_exact_value_for_its_period(rdm, tmp_path):
     for bad in ("2.5e1", "twenty"):
         with pytest.raises(DBAPIError, match="check constraint"):
             _rates(rdm, "bad", value=bad)
+    from edgar_warehouse.rdm.context import CodeContext
+    asked = argparse.Namespace(subject="test-rates", key="XA:2025", as_of=None, as_at=None, hops=1,
+                               relationship_type=None, search=None, detail="brief", page=None, limit=5)
+    answer = CodeContext(rdm.engine).answer(asked)
+    assert (answer["value"], answer["unit"]) == ("21.000000", "percent of taxable income")
+    assert "value" not in CodeContext(rdm.engine).answer(argparse.Namespace(**{**vars(asked), "key": "XA"}))
+    _rates(rdm, "2", value="24.75")
+    assert rdm.diff("test-rates", "1", "2")["revalued"] == [
+        {"code": "XA:2024", "from": {"value": "25.5", "unit": "percent of taxable income", "valid_from": "2024-01-01",
+                                     "valid_to": "2024-12-31"},
+         "to": {"value": "24.75", "unit": "percent of taxable income", "valid_from": "2024-01-01",
+                "valid_to": "2024-12-31"}}]
 
 
 def test_the_value_migration_keeps_every_published_pin(tmp_path, monkeypatch):
     """A store published before 004 reads back the same bytes after it."""
-    from edgar_warehouse.rdm import database
-
     early = tmp_path / "migrations"
     early.mkdir()
     for path in sorted(database.MIGRATIONS.glob("00[1-3]_*.sql")):
@@ -289,7 +299,7 @@ def test_the_value_migration_keeps_every_published_pin(tmp_path, monkeypatch):
             assert "value" not in set(conn.scalars(text(
                 "SELECT column_name FROM information_schema.columns WHERE table_schema='rdm' AND table_name='code'")))
         _industry_before_values(engine)
-        before = runtime_sha(engine)
+        before = _runtime_sha(engine)
         monkeypatch.undo()
         assert "004_code_value.sql" in migrate(owner, runtime_role="rdm_runtime")
         after = RDM(engine("rdm", "rdm_runtime"))
@@ -327,6 +337,6 @@ def _industry_before_values(engine):
                           "WHERE code_set='test-industry' AND version='1'"), {"s": prepared["sha256"]})
 
 
-def runtime_sha(engine):
+def _runtime_sha(engine):
     with engine("rdm", "rdm_runtime").connect() as conn:
         return conn.scalar(text("SELECT sha256 FROM rdm.code_set_version WHERE code_set='test-industry' AND version='1'"))
