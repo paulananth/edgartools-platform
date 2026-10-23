@@ -45,16 +45,19 @@ def _now(engine):
 
 @pytest.fixture(scope="module")
 def published(tmp_path_factory):
-    """RDM at migration 001 holding published versions, then upgraded in place."""
+    """RDM at migration 001 holding published versions, then upgraded in place.
+    004 (a code's typed value) is installed with 001: today's writer fills its
+    columns, and it only adds them, so 002 and 003 still upgrade a populated store."""
     out = tmp_path_factory.mktemp("published")
     first_only = tmp_path_factory.mktemp("migrations")
     shutil.copy(database.MIGRATIONS / "001_rdm.sql", first_only)
+    shutil.copy(database.MIGRATIONS / "004_code_value.sql", first_only)
     with server() as engine:
         owner, runtime = engine("rdm"), engine("rdm", "rdm_runtime")
         store = RDM(runtime)
         held, database.MIGRATIONS = database.MIGRATIONS, first_only
         try:
-            assert list(database.migrate(owner, runtime_role="rdm_runtime")) == ["001_rdm.sql"]
+            assert list(database.migrate(owner, runtime_role="rdm_runtime")) == ["001_rdm.sql", "004_code_value.sql"]
         finally:
             database.MIGRATIONS = held
         _import(store)
@@ -86,7 +89,7 @@ def published(tmp_path_factory):
         before_retiring = _now(runtime)
         store.retire("test-retired", "1")
         upgraded = database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)
-        assert list(upgraded) == ["001_rdm.sql", "002_code_context.sql", "003_content_lock.sql"]
+        assert sorted(upgraded) == ["001_rdm.sql", "002_code_context.sql", "003_content_lock.sql", "004_code_value.sql"]
         yield runtime, first, between, before_retiring
 
 

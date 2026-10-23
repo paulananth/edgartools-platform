@@ -284,6 +284,18 @@ fn list(row: &Object, name: &str) -> Result<Vec<Object>, String> {
     }
 }
 
+/// Exact decimal text as filed: an optional minus, digits, and optional decimals.
+fn is_decimal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    let (whole, fraction) = match digits.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (digits, None),
+    };
+    !whole.is_empty()
+        && whole.bytes().all(|b| b.is_ascii_digit())
+        && fraction.map_or(true, |f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()))
+}
+
 pub fn prepare_reference_version(raw: &str) -> Result<String, String> {
     let input: Input = serde_json::from_str(raw).map_err(|_| "Invalid reference preparation")?;
     let mut by_code = BTreeMap::new();
@@ -349,6 +361,16 @@ pub fn prepare_reference_version(raw: &str) -> Result<String, String> {
                     None => write(&Option::<String>::None)?,
                 },
             );
+        }
+        // A typed value joins the canonical form only on a code that has one,
+        // so every version published before values existed keeps its bytes.
+        match (optional_text(row, "value")?, optional_text(row, "unit")?) {
+            (None, None) => {}
+            (Some(value), Some(unit)) if is_decimal(&value) && !unit.trim().is_empty() => {
+                body.insert("value".into(), write(&value)?);
+                body.insert("unit".into(), write(&unit)?);
+            }
+            _ => return Err("A code's value is decimal text with its unit, or neither".into()),
         }
         let level = paths
             .last()
@@ -441,6 +463,23 @@ pub fn prepare_reference_version(raw: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_value_joins_the_canonical_form_only_where_a_code_has_one() {
+        let plain = prepare_reference_version(r#"{"codes":[{"code":"a","label":"A","value":null,"unit":null}]}"#).unwrap();
+        let before = prepare_reference_version(r#"{"codes":[{"code":"a","label":"A"}]}"#).unwrap();
+        assert_eq!(plain, before);
+        let valued = prepare_reference_version(
+            r#"{"codes":[{"code":"a","label":"A","value":"25.250000","unit":"percent"}]}"#,
+        )
+        .unwrap();
+        assert!(valued.contains(r#"\"unit\":\"percent\""#) && valued.contains(r#"\"value\":\"25.250000\""#), "{valued}");
+        for bad in [r#""value":"25""#, r#""value":"2.5e1","unit":"percent""#, r#""value":"25.","unit":"percent""#,
+                    r#""value":"","unit":"percent""#, r#""value":"25","unit":" ""#] {
+            let raw = format!(r#"{{"codes":[{{"code":"a","label":"A",{bad}}}]}}"#);
+            assert!(prepare_reference_version(&raw).unwrap_err().contains("decimal text"), "{bad}");
+        }
+    }
 
     #[test]
     fn hierarchy_escapes_and_refuses_missing_parents_and_cycles() {

@@ -39,7 +39,7 @@ reads it, why it exists).
 |---|---|---|
 | `code_set` | `code_set` | `name`, `definition`, `authority` (who issues the codes: a standard body, a source, or internal), `steward` |
 | `code_set_version` | (`code_set`, `version`) | `status` (`draft`, `approved`, `published`, `retired`), `valid_from`, `valid_to`, `supersedes`, `created_by` (agent or person), `evidence` (jsonb: profiling findings ref, counts), `approved_by`, `approved_words`, `approved_at`, `published_at`, `sha256` (of the canonical form, §4) |
-| `code` | (`code_set`, `version`, `code`) | `label`, `definition`, `parent_code` (nullable; one hierarchy per code set version), `valid_from`, `valid_to`, `status` (`valid`, `invalid`), `invalid_reason` |
+| `code` | (`code_set`, `version`, `code`) | `label`, `definition`, `parent_code` (nullable; one hierarchy per code set version), `valid_from`, `valid_to`, `status` (`valid`, `invalid`), `invalid_reason`, `value` and `unit` (nullable, both or neither: the code's value for its period, exact decimal text as published, and what it measures; ticket 133) |
 | `code_label` | (`code_set`, `version`, `code`, `language`, `label`) | `kind` (`preferred`, `synonym`), `source` (steward, profiling, agent draft) |
 | `level` | (`code_set`, `version`, `depth`) | `name`, `definition` (stewards name the levels) |
 | `code_path` | (`code_set`, `version`, `code`) | `path` (text, delimiter-escaped codes, root first), `label_path` ("Finance > Depository > State banks"), `level`, `depth`. **Written once at publish**; never edited |
@@ -109,7 +109,9 @@ without it, the code is marked "needs steward".
 The canonical form of a version is UTF-8 JSON Lines, sorted by code, one object
 per code with `code`, `label`, `definition`, `parent_code`, `valid_from`,
 `valid_to`, `status`, `invalid_reason`, the name of its `level`, its labels
-sorted and its crosswalk rows sorted. `sha256` is taken over those bytes, so a pin covers everything a
+sorted and its crosswalk rows sorted, plus `value` and `unit` on a code that
+has a value (only there, so a version published before values existed keeps
+its bytes). `sha256` is taken over those bytes, so a pin covers everything a
 consumer reads (a changed crosswalk is a new sha256).
 
 A consumer pins `{code_set, version, sha256}`:
@@ -186,6 +188,10 @@ Examples only; nothing above depends on them.
 - Codes needing a code set: `DE` (a state), `10-K` (a form type), `6022` (an
   industry code).
 - A reference hierarchy: industry division → major group → industry.
+- A value per period: a country code with one child code per year, each child
+  dated to its year and carrying that year's statutory tax rate as `value`
+  (`"25.000000"`) with its `unit` (`percent of taxable income`); a consumer takes
+  the child whose period holds the date it needs.
 - The existing `rules/reference/sec-place-codes.yaml` becomes the first code set
   in plan row 2: `place` is the label; its ISO 3166 codes become `exact`
   crosswalk rows to `iso-3166` (`outside`); its `type` (US, CANADIAN, FOREIGN,

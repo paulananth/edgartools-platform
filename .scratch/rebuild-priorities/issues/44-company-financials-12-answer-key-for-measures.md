@@ -40,5 +40,5 @@ counts and the key file's sha256, so ticket 48 scores against that exact key.
   - the two checks above tightened.
   Key now: 867 measures with a value; no concept filed 232, missing year 337, not meaningful 85, not meaningful for financial services 60, waiting for the statutory rate 8, mixed currencies 6, denominator zero or less 5; "fiscal year changed" 0, since none of the three companies has a fiscal year without an annual period. Local key sha256 `8c9c0d1e6319711a95ff94769cb6e83ff71e53de040209c262fe99c359590f87`
 - [ ] ~~"fiscal year changed" shown on a real company~~ deferred to [47](47-company-financials-15-build-measures.md): its tests carry an invented filer whose change leaves a fiscal year without an annual period
-- [ ] PR, CI green, merge
+- [x] PR, CI green, merged as #1144 (2026-10-22 21:42 ET)
 - [x] Learning → skill: `skills/company-financials/SKILL.md`, the time model: at a year-end change the year is the reported one, a comparative is not a year, and a missing figure in a year that has one is "missing year"; the hard-stop row names both exact-text engine options (2026-10-22 21:32 ET)

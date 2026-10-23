@@ -11,6 +11,7 @@ from .storage import KEYS
 BOUNDARY = "\n-- statement boundary\n"
 MIGRATION = Path(__file__).parent / "migrations" / "mysql-v1.sql"
 SEARCH_MIGRATION = MIGRATION.with_name("mysql-search-v2.sql")
+VALUE_MIGRATION = MIGRATION.with_name("mysql-value-v3.sql")
 
 
 def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
@@ -23,6 +24,8 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
     checksum = hashlib.sha256(payload.encode()).hexdigest()
     search_payload = SEARCH_MIGRATION.read_text()
     search_checksum = hashlib.sha256(search_payload.encode()).hexdigest()
+    value_payload = VALUE_MIGRATION.read_text()
+    value_checksum = hashlib.sha256(value_payload.encode()).hexdigest()
     statements = payload.strip().split(BOUNDARY)
     quote = engine.dialect.identifier_preparer.quote_identifier
     role = "'" + runtime_role + "'@'%'"
@@ -81,7 +84,10 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
             saved_search = conn.execute(text("SELECT checksum FROM rdm_migrations WHERE id=2")).scalar()
             if saved_search and saved_search != search_checksum:
                 raise Blocked("Installed RDM search migration checksum differs")
-            if conn.scalar(text("SELECT COUNT(*) FROM rdm_migrations WHERE id NOT IN (1,2)")):
+            saved_value = conn.execute(text("SELECT checksum FROM rdm_migrations WHERE id=3")).scalar()
+            if saved_value and saved_value != value_checksum:
+                raise Blocked("Installed RDM value migration checksum differs")
+            if conn.scalar(text("SELECT COUNT(*) FROM rdm_migrations WHERE id NOT IN (1,2,3)")):
                 raise Blocked("Installed RDM migration is absent from this build")
             conn.execute(text("UPDATE rdm_migrations SET complete=0 WHERE id=1"))
             # DDL commits implicitly. Revoke writes before removing any guard;
@@ -97,6 +103,7 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
                     continue
                 conn.execute(text(statement))
             _search_migration(conn, search_payload, search_checksum, statements)
+            _value_migration(conn, value_payload, value_checksum)
             conn.execute(text("CREATE OR REPLACE SQL SECURITY DEFINER VIEW rdm_readiness AS "
                               "SELECT MIN(complete) AS complete FROM rdm_migrations"))
             for name in KEYS:
@@ -112,7 +119,7 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
             conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=1"))
         finally:
             conn.execute(text("SELECT RELEASE_LOCK(:n)"), {"n": lock})
-    return {"mysql-v1.sql": checksum, "mysql-search-v2.sql": search_checksum}
+    return {"mysql-v1.sql": checksum, "mysql-search-v2.sql": search_checksum, "mysql-value-v3.sql": value_checksum}
 
 
 def _revoke(conn, database_name, name, runtime_role):
@@ -156,3 +163,25 @@ def _search_migration(conn, payload, checksum, base_statements):
             if any(statement.startswith("CREATE TRIGGER `" + name + "`") for name in guards):
                 conn.execute(text(statement))
         conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=2"))
+
+
+def _value_migration(conn, payload, checksum):
+    """Resume the checksummed typed-value columns with writes still revoked.
+    Existing codes gain empty values, so no published content changes."""
+    held = conn.execute(text("SELECT checksum,complete FROM rdm_migrations WHERE id=3")).first()
+    if held and held.checksum != checksum:
+        raise Blocked("Installed RDM value migration checksum differs")
+    if not held:
+        conn.execute(text("INSERT INTO rdm_migrations VALUES (3,:h,0)"), {"h": checksum})
+    for statement in payload.strip().split(BOUNDARY):
+        statement = "\n".join(line for line in statement.splitlines() if not line.startswith("--"))
+        column = re.search(r"ALTER TABLE (\w+) ADD COLUMN (\w+)", statement)
+        if column and column[2] in {row["name"] for row in inspect(conn).get_columns(column[1])}:
+            continue
+        check = re.search(r"ALTER TABLE (\w+) ADD CONSTRAINT (\w+)", statement)
+        if check and conn.scalar(text("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE "
+                                      "TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t AND CONSTRAINT_NAME=:c"),
+                                 {"t": check[1], "c": check[2]}):
+            continue
+        conn.execute(text(statement))
+    conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=3"))

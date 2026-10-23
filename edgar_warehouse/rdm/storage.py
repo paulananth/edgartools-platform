@@ -104,7 +104,8 @@ def tables(dialect: str) -> dict[str, Table]:
     result["code"] = table("code", *(text_column(n) for n in
         ("code_set", "version", "code", "label", "definition", "status")),
         text_column("parent_code", nullable=True), text_column("invalid_reason", nullable=True),
-        Column("valid_from", Date), Column("valid_to", Date))
+        Column("valid_from", Date), Column("valid_to", Date),
+        text_column("value", nullable=True), text_column("unit", nullable=True))
     result["code_label"] = table("code_label", *(text_column(n) for n in
         ("code_set", "version", "code", "language", "label", "kind", "source")))
     result["level"] = table("level", *(text_column(n) for n in

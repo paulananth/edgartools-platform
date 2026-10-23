@@ -152,6 +152,48 @@ def test_search_migration_drift_does_not_disable_installed_store(store, monkeypa
 
 
 
+def test_value_migration_drift_does_not_disable_installed_store(store, monkeypatch, tmp_path):
+    owner, runtime, arguments = store
+    migrate(owner, **arguments)
+    changed = tmp_path / "value.sql"
+    changed.write_text(mysql_migration.VALUE_MIGRATION.read_text() + "\n-- invented drift\n")
+    monkeypatch.setattr(mysql_migration, "VALUE_MIGRATION", changed)
+    with pytest.raises(Blocked, match="checksum differs"):
+        migrate(owner, **arguments)
+    assert RDM(runtime).code_sets() == []
+
+
+def test_interrupted_value_migration_resumes_and_keeps_published_pins(store, monkeypatch, tmp_path):
+    owner, runtime, arguments = store
+    execute = Connection.execute
+    def interrupted(self, statement, *args, **kwargs):
+        if str(statement).startswith("ALTER TABLE code ADD CONSTRAINT code_check_6"):
+            raise RuntimeError("Invented interruption")
+        return execute(self, statement, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(Connection, "execute", interrupted)
+        with pytest.raises(RuntimeError, match="interruption"):
+            migrate(owner, **arguments)
+    with pytest.raises(DBAPIError, match="denied"):  # a first install grants nothing until it completes
+        RDM(runtime).code_sets()
+    installed = migrate(owner, **arguments)
+    assert "mysql-value-v3.sql" in installed
+    reference = RDM(runtime, reserved_subjects=())
+    reference.draft({"code_set": "invented", "name": "Invented"}, "1",
+                    [{"code": "a", "label": "First"},
+                     {"code": "a:2025", "label": "First 2025", "parent_code": "a", "valid_from": "2025-01-01",
+                      "valid_to": "2025-12-31", "value": "21.500000", "unit": "percent"}], created_by="drafter")
+    reference.approve("invented", "1", by="operator", words="Approve this invented version")
+    published = reference.publish("invented", "1", out=tmp_path)
+    assert reference.verify("invented", "1")["matches"]
+    rows = {r["code"]: r for r in reference.codes("invented", "1")}
+    assert (rows["a:2025"]["value"], rows["a"]["value"]) == ("21.500000", None)
+    with pytest.raises(DBAPIError, match="Only a draft"):
+        with runtime.begin() as conn:
+            conn.execute(text("UPDATE code SET value='30' WHERE code='a:2025'"))
+    assert published["sha256"] == reference.version("invented", "1")["sha256"]
+
+
 def test_approval_refresh_is_set_based_and_unchanged_refresh_writes_nothing(store):
     from sqlalchemy import event
     from edgar_warehouse.rdm.storage import refresh_search_tokens, transaction

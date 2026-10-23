@@ -20,7 +20,8 @@ from sqlalchemy import case, select
 from edgar_warehouse.control_contract import Blocked
 from .storage import clock, lock_code_set, public_columns, scope, tables, transaction
 
-CODE_COLUMNS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason")
+CODE_COLUMNS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason",
+                "value", "unit")
 # A crosswalk target RDM does not hold (an outside standard) carries this version.
 OUTSIDE = "outside"
 # An answer for an agent stays within this many bytes of JSON, as `context` does.
@@ -136,7 +137,8 @@ class RDM:
                 code_table = self.tables["code"]
                 conn.execute(code_table.insert(),
                              [{"definition": "", "parent_code": None, "valid_from": None, "valid_to": None,
-                               "status": "valid", "invalid_reason": None, **row, **values, "parent_code": None}
+                               "status": "valid", "invalid_reason": None, "value": None, "unit": None,
+                               **row, **values, "parent_code": None}
                               for row in codes])
                 # Insert every code before setting parents: this retains cyclic
                 # drafts and permits child-first inputs without deferred FKs.
