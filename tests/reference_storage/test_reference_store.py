@@ -345,6 +345,10 @@ def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path
         with owner.begin() as conn:
             for table in ("code", "code_label", "code_path"):
                 conn.execute(text("ANALYZE rdm." + table))
+    negative_set = draft(store, codes=[{"code": "n1", "label": "First"}, {"code": "n2", "label": "Second"}],
+                         labels=[{"code": "n1", "label": "Alternate first", "kind": "synonym"}])
+    approve(store, negative_set)
+    store.publish(negative_set, "1", out=tmp_path)
     queries = []
     def capture(conn, cursor, statement, parameters, context, executemany):
         if "UNION ALL" in statement or "code_label.language" in statement:
@@ -355,9 +359,10 @@ def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path
             assert code_context(conn, name, "1", "r0000")["synonyms"] == ["Needleword alternate"]
             assert {r["code"] for r in search_candidates(conn, name, "1", "needleword")} == {"r0000", "sought"}
             assert {r["code"] for r in search_candidates(conn, name, "1", "AI")} == {"sought"}
+            assert {r["code"] for r in search_candidates(conn, negative_set, "1", "-second")} == {"n1"}
     finally:
         event.remove(store.engine, "before_cursor_execute", capture)
-    assert len(queries) == 3
+    assert len(queries) == 4
     plans = []
     with owner.begin() as conn:
         for statement, parameters in queries:
@@ -367,13 +372,15 @@ def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path
                 plans.append(conn.exec_driver_sql("EXPLAIN (FORMAT JSON) " + statement, parameters).scalar())
     if owner.dialect.name == "mysql":
         assert any(row["key"] == "_code_key" and row["type"] == "ref" for row in plans[0])
-        for plan in plans[1:]:
+        for plan in plans[1:3]:
             assert {row["key"] for row in plan if row["type"] == "fulltext"} == {"code_search_tokens_words", "code_label_search_tokens_words"}
+        assert {row["key"] for row in plans[3] if row["type"] == "ref"} >= {"code_version_lookup", "code_label_version_lookup"}
     else:
         encoded = [json.dumps(plan) for plan in plans]
         assert "code_label_pkey" in encoded[0]
-        for plan in encoded[1:]:
+        for plan in encoded[1:3]:
             assert "code_label_words" in plan and "code_synonym_words" in plan, plan
+        assert "code_pkey" in encoded[3] and "code_label_pkey" in encoded[3], encoded[3]
 
 
 @pytest.mark.parametrize("words,expected", [

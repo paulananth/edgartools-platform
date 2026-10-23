@@ -51,9 +51,9 @@ cases pass, including failure against populated published history.
 The current checkpoint passes 34 shared cases on each engine and seven MySQL
 DDL/security cases. Basic word/phrase/alternative/exclusion and literal-fallback
 search cases pass; eight native scoring cases agree with the PostgreSQL
-reference. Search is not fully qualified: short/stop-word candidate behavior,
+reference. At that checkpoint search was not fully qualified: short/stop-word candidate behavior,
 negative-only queries, compound tokens, multilingual ordering and actual search
-plans remain. The data wheel explicitly includes both new neutral modules;
+plans remained. See the later two-engine completion below for their closeout. The data wheel explicitly includes both new neutral modules;
 the five-wheel import/ownership proof passed at e6c09467 in 168.26 seconds. No retained operational store,
 source onboarding, configuration activation or cutover was changed.
 
@@ -177,3 +177,23 @@ cases and 32 configuration/context/limit cases passed. The normal MySQL MDM
 Store remains unsupported; this checkpoint does not qualify it.
 
 The configured-kind checkpoint at 94a43464 also passed the independent five-wheel installation/import/file-ownership check outside the checkout in 178.16 seconds, including the new schema module and migration 024.
+
+## RDM two-engine completion, 2026-10-23
+
+PR #1147 closes the recorded PostgreSQL/MySQL reference caller and search gaps.
+MySQL indexes native fixed-length word tokens so short/stop words remain
+retrievable; native candidate checks retain phrases, exclusions, compound and
+punctuation boundaries. Negative-only alternatives use the requested indexed
+version scope. Existing PostgreSQL candidate semantics and canonical pins are
+preserved. A checksummed owner upgrade backfills derived tokens with runtime
+writes revoked and resumes interrupted DDL/backfill without changing published
+content. Approval refreshes tokens from the locked draft's current labels.
+
+The affected suites passed 104 cases on MySQL and 105 on PostgreSQL. The
+committed 12a8d744 five-wheel installed normal CLI passed outside the checkout
+on each engine: init, draft, approve, publish, short/stop/negative/compound and
+synonym search, supersession, historical context, migration replay, verification
+and retirement. Ordinary/short-word and negative-only index plans passed on
+both engines alongside a 5,001-code unrelated version. PR CI and merge remain
+separate gates. SQL Server remains deferred; no production or hosted store was
+migrated and no operational source approval or activation occurred.
