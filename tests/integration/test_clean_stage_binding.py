@@ -219,16 +219,16 @@ def test_the_latest_stored_readings_read_as_before(database):
             (SEC, "lei", [L1]),
             (SEC, "census_lei", [L1, L9]),
         ):
-            new = matching._stored(conn, source, lookup, values)
+            new = matching._stored(conn, source, matching.candidate_paths({})["identifier" if lookup == "lei" else "census"], values)
             assert by_id(new) == by_id(old_stored(conn, source, lookup, values))
-        (latest,) = matching._stored(conn, SEC, "census_lei", [L1, L9])
+        (latest,) = matching._stored(conn, SEC, matching.candidate_paths({})["census"], [L1, L9])
         assert latest["revision"] == 2
 
 
 def test_a_replaced_census_entry_no_longer_matches(database):
     seed(database)
     with database.application.connect() as conn:
-        new = matching._stored(conn, SEC, "census_lei", [L1])
+        new = matching._stored(conn, SEC, matching.candidate_paths({})["census"], [L1])
         (old,) = old_stored(conn, SEC, "census_lei", [L1])
     # An intended difference: the history read took the latest reading that
     # matched, so a's revision 1 still matched on the census LEI its revision
@@ -258,7 +258,7 @@ def test_the_leis_a_company_holds_are_its_records_latest(database):
     seeded = seed(database)
     entities = {seeded["e1"], seeded["e2"]}
     with database.application.connect() as conn:
-        new = matching._held_leis(conn, GLEIF, entities)
+        new = matching._held_identifiers(conn, GLEIF, "lei", entities)
         old = old_held_leis(conn, GLEIF, entities)
     # An intended difference: h's LEI changed from L2 to L3. The history read
     # kept both; the Stage keeps the latest, as `holders` always did. A GLEIF
