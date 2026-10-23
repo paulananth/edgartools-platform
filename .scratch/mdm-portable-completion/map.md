@@ -19,6 +19,7 @@ One configuration-driven normal MDM workflow runs on PostgreSQL and MySQL, with 
 ## Decisions so far
 
 - [Inventory the current caller and preserve unfinished work](issues/01-inventory-current-caller-and-preserve-work.md) — merged WIP retained; all 36 installed functions and remaining caller operations allocated to their replacement tickets; historical SQL and storage enforcement are separately accounted for.
+- [Install governed MDM storage on both engines](issues/02-install-governed-portable-store.md) — normal PostgreSQL/MySQL owner installation and retained registry qualification delivered in PR #1152, with skill learning in #1153; both implementation revisions pass all nine checks. Final landing checks and named merge approval remain PR gates. MySQL normal merge execution stays withheld until its caller qualifies.
 
 ## Not yet specified
 
