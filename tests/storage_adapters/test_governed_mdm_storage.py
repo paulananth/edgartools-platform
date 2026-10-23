@@ -458,12 +458,16 @@ def test_governed_store_runs_from_installed_bundle(installed, database):
     code = """
 import json, os
 from pathlib import Path
+from types import SimpleNamespace
+from sqlalchemy.engine import make_url
 from edgar_warehouse.database_connections import storage_adapter
 from edgar_warehouse.mdm.clean.connections import engine_from_env
 from edgar_warehouse.mdm.clean.store import migrate, register_policy
 api=storage_adapter()
 assert "bundle_data" in str(Path(api.__file__).resolve())
-owner=engine_from_env("MDM_DATABASE_URL",restricted=False)
+selected=make_url(os.environ["MDM_DATABASE_URL"]).get_backend_name()
+owner=(SimpleNamespace(dialect=SimpleNamespace(name="mssql")) if selected=="mssql" else
+       engine_from_env("MDM_DATABASE_URL",restricted=False))
 if owner.dialect.name=="mssql":
     try:migrate(owner,application_role=os.environ["TEST_RUNTIME_ROLE"])
     except ValueError:pass

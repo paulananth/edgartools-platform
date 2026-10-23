@@ -13,11 +13,12 @@ Can the normal owner migration install and upgrade the same governed storage con
 
 ## Parts
 
-- [ ] Connect the existing portable adapter to the normal MDM owner migration; retain immutable policies, dataset contracts, configured kind authority, version pins and runtime restrictions.
-- [ ] Preserve migration checksums and retained records; qualify populated upgrade, interruption, already-open runtime connections and repeat migration.
-- [ ] Refuse missing or changed configuration, direct runtime governance writes and excess privileges; retain owner/runtime separation.
-- [ ] Qualify exact registry JSON values and reject an untracked or structurally changed registry; preserve all existing prepared-effect protocol fingerprints.
-- [ ] Qualify the normal migration CLI and independently installed packaging for the new storage helper.
+- [x] Connect the existing portable adapter to the normal MDM owner migration; retain immutable policies, dataset contracts, configured kind authority, version pins and runtime restrictions — normal-caller checks on PostgreSQL/MySQL, 2026-10-23 15:17 ET.
+- [x] Preserve migration checksums and retained records; qualify populated upgrade, interruption, already-open runtime connections and repeat migration — shared governed-storage checks, including held MySQL transaction and prepared-store retention, 2026-10-23 15:17 ET.
+- [x] Refuse missing or changed configuration, direct runtime governance writes and excess privileges; retain owner/runtime separation — real restricted-role and inherited column-grant checks, 2026-10-23 15:17 ET.
+- [x] Qualify exact registry JSON values and reject an untracked or structurally changed registry; preserve all existing prepared-effect protocol fingerprints — exact-number, structural/guard drift, untracked-adoption, hash-seed and protocols 1–4 checks (SQL Server 1–3), 2026-10-23 15:17 ET.
+- [x] Qualify the normal migration CLI and independently installed packaging for the new storage helper — five-wheel normal-owner proofs on both engines from committed implementation f44de352, 2026-10-23 15:17 ET.
+- [ ] Publish implementation and verify final-head CI; retain named merge approval as a separate gate.
 - [ ] Learning → skill: update its owning skill on a separate branch/PR, or record none.
 
 ## Acceptance evidence
@@ -75,3 +76,21 @@ is isolated from application policy. The cost is a new versioned registry DDL
 contract to retain; checksummed installation and corruption/recovery tests
 make that cost explicit. No further pattern refactor is justified by the
 current history or this diff.
+
+## Local qualification
+
+- 994 MDM tests passed; 7 CLI/skill-command tests passed.
+- PostgreSQL: 110 adapter checks passed, plus one independently installed
+  normal-owner case. MySQL: 118 adapter checks passed; the expanded governed
+  file then passed 21 cases, including held-transaction/migration overlap;
+  independently installed normal-owner case passed.
+- SQL Server: 91 retained adapter checks passed; normal owner migration remains
+  explicitly deferred. Protocol 4 remains unsupported there.
+- Three historical fingerprint cases pass, covering protocols 1–4 on
+  PostgreSQL/MySQL and 1–3 on SQL Server. Hash-seed checks pass.
+- All local runs were bounded below five minutes. Two independent five-wheel
+  installation runs each took approximately three minutes. Disposable test
+  containers were stopped by their fixtures.
+
+No hosted migration, source acquisition, activation or PostgreSQL routine
+retirement was performed. The full normal MySQL Merge Stage remains ticket 04.

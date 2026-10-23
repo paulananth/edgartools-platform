@@ -218,13 +218,17 @@ def test_destination_authority(case, adapters, storage_api):
 
 # Captured from the committed pre-protocol-4 implementation (7ce5acbe),
 # using the pinned SQLAlchemy compiler and invented schema/prefix.
+# Protocol 4 was captured separately from merged main fd95de34 before the
+# governed registry installation was added; SQL Server still defers it.
 @pytest.mark.parametrize("engine,expected", [
     ("postgresql", ("08bd177086b94177a75f542a52e72158bf8f8f89e741bfbb721e3d5d9ad9ddf3",
                     "a7b48ad7d0eae0b9ad4e7ef31e8919421b031fe12b933fc106c3261dc9658a7a",
-                    "e74b0a48a84d488425518c3e4af975b0e4341d9195f4e89e34ffe9bd8661533b")),
+                    "e74b0a48a84d488425518c3e4af975b0e4341d9195f4e89e34ffe9bd8661533b",
+                    "c5956454fdf8f02a453d13a5d615fecb8069ad56c4f98377fce8da593eda04ef")),
     ("mysql", ("aa3e6dd5ff01e752d7be38891aeb8b8a4b988a0227bfa849c5da8cf41ed3bba9",
                "8d04821d53724ba88136b6283177f778fd0fd05cdd2a3b0457fe067e50eed778",
-               "26cf604355cf38f723d8147c48e9f5bdbe6028cc903e8b91cca4b95b7820f976")),
+               "26cf604355cf38f723d8147c48e9f5bdbe6028cc903e8b91cca4b95b7820f976",
+               "4f426e9f62817ce047e135e49d32f7836a8f509b971e7d8c311af34cc33accb0")),
     ("mssql", ("77f851249b359c239a0beb57b2d13ab8dcd8231ba2874537a9b099796d941620",
                "dcc3e4347f45814c48e670499ee74974622a7befcff161099fa43b78a349f8fb",
                "0b243f03c34ac319c893f26b8049ecdbbd0ef9c59aa66a2e23bb3c5f22fa1515")),
