@@ -10,6 +10,7 @@ from .storage import KEYS
 
 BOUNDARY = "\n-- statement boundary\n"
 MIGRATION = Path(__file__).parent / "migrations" / "mysql-v1.sql"
+SEARCH_MIGRATION = MIGRATION.with_name("mysql-search-v2.sql")
 
 
 def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
@@ -20,6 +21,8 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
         raise Blocked("An existing restricted runtime account is required")
     payload = MIGRATION.read_text()
     checksum = hashlib.sha256(payload.encode()).hexdigest()
+    search_payload = SEARCH_MIGRATION.read_text()
+    search_checksum = hashlib.sha256(search_payload.encode()).hexdigest()
     statements = payload.strip().split(BOUNDARY)
     quote = engine.dialect.identifier_preparer.quote_identifier
     role = "'" + runtime_role + "'@'%'"
@@ -75,6 +78,11 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
                 held = conn.execute(text("SELECT checksum,complete FROM rdm_migrations WHERE id=1")).first()
             if not held or held.checksum != checksum:
                 raise Blocked("Installed RDM migration checksum differs")
+            saved_search = conn.execute(text("SELECT checksum FROM rdm_migrations WHERE id=2")).scalar()
+            if saved_search and saved_search != search_checksum:
+                raise Blocked("Installed RDM search migration checksum differs")
+            if conn.scalar(text("SELECT COUNT(*) FROM rdm_migrations WHERE id NOT IN (1,2)")):
+                raise Blocked("Installed RDM migration is absent from this build")
             conn.execute(text("UPDATE rdm_migrations SET complete=0 WHERE id=1"))
             # DDL commits implicitly. Revoke writes before removing any guard;
             # interruption must leave neither an admitted caller nor direct SQL
@@ -88,8 +96,9 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
                 if index and index[1] in {row["name"] for row in inspect(conn).get_indexes(index[2])}:
                     continue
                 conn.execute(text(statement))
+            _search_migration(conn, search_payload, search_checksum, statements)
             conn.execute(text("CREATE OR REPLACE SQL SECURITY DEFINER VIEW rdm_readiness AS "
-                              "SELECT complete FROM rdm_migrations WHERE id=1"))
+                              "SELECT MIN(complete) AS complete FROM rdm_migrations"))
             for name in KEYS:
                 target = quote(database_name) + "." + quote(name)
                 conn.execute(text("GRANT SELECT ON " + target + " TO " + role))
@@ -103,7 +112,7 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
             conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=1"))
         finally:
             conn.execute(text("SELECT RELEASE_LOCK(:n)"), {"n": lock})
-    return {"mysql-v1.sql": checksum}
+    return {"mysql-v1.sql": checksum, "mysql-search-v2.sql": search_checksum}
 
 
 def _revoke(conn, database_name, name, runtime_role):
@@ -116,3 +125,34 @@ def _revoke(conn, database_name, name, runtime_role):
                              "AND TABLE_SCHEMA=:d AND TABLE_NAME=:t"), parameters)
     if held:
         conn.execute(text("REVOKE ALL PRIVILEGES ON " + quote(database_name) + "." + quote(name) + " FROM " + role))
+
+
+def _search_migration(conn, payload, checksum, base_statements):
+    """Resume the checksummed derived-index upgrade with writes still revoked."""
+    from .storage import refresh_search_tokens
+
+    held = conn.execute(text("SELECT checksum,complete FROM rdm_migrations WHERE id=2")).first()
+    if held and held.checksum != checksum:
+        raise Blocked("Installed RDM search migration checksum differs")
+    if not held:
+        conn.execute(text("INSERT INTO rdm_migrations VALUES (2,:h,0)"), {"h": checksum})
+    for statement in payload.strip().split(BOUNDARY):
+        statement = "\n".join(line for line in statement.splitlines() if not line.startswith("--"))
+        column = re.search(r"ALTER TABLE (\w+) ADD COLUMN (\w+)", statement)
+        if column and column[2] in {row["name"] for row in inspect(conn).get_columns(column[1])}:
+            continue
+        index = re.match(r"CREATE FULLTEXT INDEX (\w+) ON (\w+)", statement)
+        if index and index[1] in {row["name"] for row in inspect(conn).get_indexes(index[2])}:
+            continue
+        conn.execute(text(statement))
+    if not held or not held.complete:
+        guards = ("code_update_guard", "code_label_update_guard")
+        # Published content is not changed. Only its derived search index is
+        # backfilled by the owner; all runtime writes were revoked above.
+        for name in guards:
+            conn.execute(text("DROP TRIGGER IF EXISTS `" + name + "`"))
+        refresh_search_tokens(conn)
+        for statement in base_statements:
+            if any(statement.startswith("CREATE TRIGGER `" + name + "`") for name in guards):
+                conn.execute(text(statement))
+        conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=2"))

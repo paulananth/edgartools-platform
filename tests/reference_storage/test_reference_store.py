@@ -334,7 +334,7 @@ def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path
     from edgar_warehouse.rdm.storage import code_context, search_candidates, transaction
     store, owner, _ = reference
     codes = [{"code": "r" + str(n).zfill(4), "label": "Ordinary reference value " + str(n)} for n in range(5000)]
-    codes.append({"code": "sought", "label": "Needleword direct"})
+    codes.append({"code": "sought", "label": "AI Needleword direct"})
     labels = [{"code": row["code"], "language": "en", "label": "Alternate filler " + row["code"], "kind": "synonym"}
               for row in codes]
     labels[0]["label"] = "Needleword alternate"
@@ -354,9 +354,10 @@ def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path
         with transaction(store.engine, write=False) as conn:
             assert code_context(conn, name, "1", "r0000")["synonyms"] == ["Needleword alternate"]
             assert {r["code"] for r in search_candidates(conn, name, "1", "needleword")} == {"r0000", "sought"}
+            assert {r["code"] for r in search_candidates(conn, name, "1", "AI")} == {"sought"}
     finally:
         event.remove(store.engine, "before_cursor_execute", capture)
-    assert len(queries) == 2
+    assert len(queries) == 3
     plans = []
     with owner.begin() as conn:
         for statement, parameters in queries:
@@ -366,8 +367,118 @@ def test_context_child_and_word_candidates_use_their_indexes(reference, tmp_path
                 plans.append(conn.exec_driver_sql("EXPLAIN (FORMAT JSON) " + statement, parameters).scalar())
     if owner.dialect.name == "mysql":
         assert any(row["key"] == "_code_key" and row["type"] == "ref" for row in plans[0])
-        assert {row["key"] for row in plans[1] if row["type"] == "fulltext"} == {"code_words", "code_label_words"}
+        for plan in plans[1:]:
+            assert {row["key"] for row in plan if row["type"] == "fulltext"} == {"code_search_tokens_words", "code_label_search_tokens_words"}
     else:
         encoded = [json.dumps(plan) for plan in plans]
         assert "code_label_pkey" in encoded[0]
-        assert "code_label_words" in encoded[1] and "code_synonym_words" in encoded[1], encoded[1]
+        for plan in encoded[1:]:
+            assert "code_label_words" in plan and "code_synonym_words" in plan, plan
+
+
+@pytest.mark.parametrize("words,expected", [
+    ("AI", ["a", "b"]), ("the", ["a", "b"]),
+    ("AI reference", ["a"]), ("the reference", ["a"]),
+    ("-second", ["a", "b"]), ("-missing", ["a", "b", "c"]),
+    ("well-known", ["a"]), ('"well known"', ["a", "c"]),
+    ("alpha.beta", ["a"]), ("alpha", ["b"]),
+    ("reference -second", ["a"]),
+])
+def test_search_edge_cases_through_normal_context(reference, tmp_path, words, expected):
+    from argparse import Namespace
+    from edgar_warehouse.rdm.context import CodeContext
+
+    store, *_ = reference
+    name = draft(store, codes=[
+        {"code": "a", "label": "AI the reference well-known alpha.beta"},
+        {"code": "b", "label": "AI the alpha chair"},
+        {"code": "c", "label": "Second reference well known"},
+    ])
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    args = Namespace(subject=name, key=None, as_of=None, as_at=None, hops=1,
+                     relationship_type=None, search=words, detail="brief", page=None, limit=5)
+    found = CodeContext(store.engine).answer(args)["matches"]
+    assert sorted(row["code"] for row in found) == expected
+    assert all(not row["matched_by"].endswith("contains") for row in found)
+
+
+@pytest.mark.parametrize("words,expected", [
+    ("alpha@example.test", ["email"]), ("alpha", ["plain", "punctuation"]),
+    ("alpha/beta", ["path"]), ("alpha_beta", ["punctuation"]),
+    ("alpha--beta", ["punctuation"]), ("12.34", ["decimal"]),
+    ("don't", ["apostrophe"]), ("(alpha)", ["plain", "punctuation"]),
+])
+def test_search_punctuation_keeps_token_boundaries(reference, tmp_path, words, expected):
+    from argparse import Namespace
+    from edgar_warehouse.rdm.context import CodeContext
+
+    store, *_ = reference
+    name = draft(store, codes=[
+        {"code": "email", "label": "alpha@example.test"},
+        {"code": "compound-email", "label": "alpha-beta@example.test"},
+        {"code": "plain", "label": "alpha"},
+        {"code": "path", "label": "alpha/beta"},
+        {"code": "punctuation", "label": "alpha beta"},
+        {"code": "decimal", "label": "12.34"},
+        {"code": "apostrophe", "label": "Don't ignore"},
+    ])
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    args = Namespace(subject=name, key=None, as_of=None, as_at=None, hops=1,
+                     relationship_type=None, search=words, detail="brief", page=None, limit=5)
+    found = CodeContext(store.engine).answer(args)["matches"]
+    assert sorted(row["code"] for row in found) == expected
+    assert all(not row["matched_by"].endswith("contains") for row in found)
+
+
+
+def test_approval_searches_the_latest_draft_labels(reference, tmp_path):
+    from argparse import Namespace
+    from edgar_warehouse.rdm.context import CodeContext
+    from edgar_warehouse.rdm.storage import refresh_search_tokens, tables, transaction
+
+    store, *_ = reference
+    name = draft(store, codes=[{"code": "a", "label": "Oldword"}],
+                 labels=[{"code": "a", "label": "Oldsynonym", "kind": "synonym"}])
+    with transaction(store.engine) as conn:
+        if conn.dialect.name == "mysql":
+            refresh_search_tokens(conn, code_set=name, version="1")
+        for table_name in ("code", "code_label"):
+            table = tables(conn.dialect.name)[table_name]
+            conn.execute(table.update().where(scope(conn, table, code_set=name, version="1"),
+                table.c.label == "Oldword").values(label="AI newword"))
+        table = tables(conn.dialect.name)["code_label"]
+        conn.execute(table.update().where(scope(conn, table, code_set=name, version="1"),
+            table.c.kind == "synonym").values(label="An newsynonym"))
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    for words, expected, method in [("AI", ["a"], "label"), ("an", ["a"], "synonym"),
+                                     ("Oldword", [], None), ("Oldsynonym", [], None)]:
+        args = Namespace(subject=name, key=None, as_of=None, as_at=None, hops=1,
+                         relationship_type=None, search=words, detail="brief", page=None, limit=5)
+        rows = CodeContext(store.engine).answer(args)["matches"]
+        assert [row["code"] for row in rows] == expected
+        if method:
+            assert rows[0]["matched_by"] == method
+
+
+@pytest.mark.parametrize("words,expected", [
+    ("OR", ["a", "b"]), ("OR first", ["a", "b"]), ("first OR", ["a", "b"]),
+    ("first & second", ["b"]), ("first:second", ["b"]),
+    ("first!second", ["b"]), ("first,second", []),
+    ("- second", ["a"]), ("first OR OR second", ["a", "b"]),
+])
+def test_search_operators_and_literal_stop_words(reference, tmp_path, words, expected):
+    from argparse import Namespace
+    from edgar_warehouse.rdm.context import CodeContext
+    store, *_ = reference
+    name = draft(store, codes=[{"code": "a", "label": "OR first"},
+                              {"code": "b", "label": "First ignored second or"}])
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    args = Namespace(subject=name, key=None, as_of=None, as_at=None, hops=1,
+                     relationship_type=None, search=words, detail="brief", page=None, limit=5)
+    found = CodeContext(store.engine).answer(args)["matches"]
+    assert sorted(row["code"] for row in found) == expected
+    assert all(not row["matched_by"].endswith("contains") for row in found)

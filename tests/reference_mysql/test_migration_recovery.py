@@ -88,3 +88,64 @@ def test_checksum_change_is_refused_without_disabling_installed_store(store, tmp
     with pytest.raises(Blocked, match="checksum differs"):
         migrate(owner, **arguments)
     assert RDM(runtime).code_sets() == []
+
+
+@pytest.mark.parametrize("interrupt_before", ["ALTER TABLE code_label ADD COLUMN", "UPDATE code SET _search_tokens="])
+def test_populated_word_index_upgrade_recovers_without_changing_published_pin(store, monkeypatch, tmp_path, interrupt_before):
+    from argparse import Namespace
+    from edgar_warehouse.rdm import storage
+    from edgar_warehouse.rdm.context import CodeContext
+
+    owner, runtime, arguments = store
+    # Install the frozen v1 schema and populate it through its normal caller.
+    with monkeypatch.context() as patch:
+        patch.setattr(mysql_migration, "_search_migration", lambda *args: None)
+        patch.setattr(storage, "refresh_search_tokens", lambda *args, **kwargs: None)
+        migrate(owner, **arguments)
+        reference = RDM(runtime, reserved_subjects=())
+        reference.draft({"code_set": "invented", "name": "Invented"}, "1",
+                        [{"code": "a", "label": "AI the reference"}], created_by="drafter",
+                        labels=[{"code": "a", "label": "An alternate", "kind": "synonym"}])
+        reference.approve("invented", "1", by="operator", words="Approve this invented version")
+        reference.publish("invented", "1", out=tmp_path)
+    before = reference.verify("invented", "1")
+    version = reference.version("invented", "1")
+    artifact = (tmp_path / "invented" / "1" / "canonical.jsonl").read_bytes()
+    execute = Connection.execute
+    def interrupted(self, statement, *args, **kwargs):
+        if str(statement).startswith(interrupt_before):
+            raise RuntimeError("Invented search backfill interruption")
+        return execute(self, statement, *args, **kwargs)
+    with runtime.begin() as admitted:
+        admitted.execute(text("SELECT 1"))
+        with monkeypatch.context() as patch:
+            patch.setattr(Connection, "execute", interrupted)
+            with pytest.raises(RuntimeError, match="backfill interruption"):
+                migrate(owner, **arguments)
+        with pytest.raises(DBAPIError):
+            admitted.execute(text("UPDATE code SET label='Changed'"))
+    with pytest.raises(Blocked, match="incomplete"):
+        reference.code_sets()
+    installed = migrate(owner, existing_only=True, **arguments)
+    assert migrate(owner, existing_only=True, **arguments) == installed
+    assert reference.verify("invented", "1") == before
+    assert reference.version("invented", "1") == version
+    assert (tmp_path / "invented" / "1" / "canonical.jsonl").read_bytes() == artifact
+    for words, method in [("AI", "label"), ("the", "label"), ("an", "synonym"), ("-absent", "label")]:
+        args = Namespace(subject="invented", key=None, as_of=None, as_at=None, hops=1,
+                         relationship_type=None, search=words, detail="brief", page=None, limit=5)
+        assert CodeContext(runtime).answer(args)["matches"][0]["matched_by"] == method
+    with pytest.raises(DBAPIError, match="Only a draft"):
+        with runtime.begin() as conn:
+            conn.execute(text("UPDATE code SET _search_tokens=''"))
+
+
+def test_search_migration_drift_does_not_disable_installed_store(store, monkeypatch, tmp_path):
+    owner, runtime, arguments = store
+    migrate(owner, **arguments)
+    changed = tmp_path / "search.sql"
+    changed.write_text(mysql_migration.SEARCH_MIGRATION.read_text() + "\n-- invented drift\n")
+    monkeypatch.setattr(mysql_migration, "SEARCH_MIGRATION", changed)
+    with pytest.raises(Blocked, match="checksum differs"):
+        migrate(owner, **arguments)
+    assert RDM(runtime).code_sets() == []

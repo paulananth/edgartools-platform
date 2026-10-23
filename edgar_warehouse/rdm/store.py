@@ -218,6 +218,14 @@ class RDM:
         with transaction(self.engine) as conn:
             lock_code_set(conn, code_set)
             table = self.tables["code_set_version"]
+            if conn.dialect.name == "mysql":
+                state = conn.scalar(select(table.c.status).where(
+                    scope(conn, table, code_set=code_set, version=version)).with_for_update())
+                if state != "draft":
+                    raise Blocked(f"{code_set} {version} is not a draft")
+                from .storage import refresh_search_tokens
+
+                refresh_search_tokens(conn, code_set=code_set, version=version)
             done = conn.execute(table.update().where(scope(conn, table, code_set=code_set, version=version),
                 table.c.status == "draft").values(status="approved", approved_by=by, approved_words=words)).rowcount
             if done != 1:

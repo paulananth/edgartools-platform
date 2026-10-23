@@ -81,48 +81,83 @@ fn query_groups(words: &str) -> Vec<Vec<String>> {
         terms.push(token);
     }
     let mut groups = vec![Vec::new()];
-    for term in terms {
-        if term.eq_ignore_ascii_case("or") {
-            if !groups.last().unwrap().is_empty() {
-                groups.push(Vec::new());
+    let count = terms.len();
+    let mut terms = terms.into_iter().enumerate();
+    while let Some((index, mut term)) = terms.next() {
+        if term == "-" {
+            if let Some((_, following)) = terms.next() {
+                term.push_str(&following);
             }
-            continue;
         }
-        groups.last_mut().unwrap().push(term);
+        if term.eq_ignore_ascii_case("or") && index + 1 < count
+            && !groups.last().unwrap().is_empty() {
+            groups.push(Vec::new());
+        } else if !lexemes(&term).is_empty() {
+            groups.last_mut().unwrap().push(term);
+        }
     }
     groups.into_iter().filter(|g| !g.is_empty()).collect()
 }
 
+fn search_token(term: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(term.as_bytes()))
+}
+
+pub fn encode_reference_search(label: &str) -> String {
+    lexemes(label).iter().map(|term| search_token(term)).collect::<Vec<_>>().join(" ")
+}
+
 pub fn compile_reference_query(words: &str) -> String {
-    // Query values never become SQL text.
-    query_groups(words)
-        .into_iter()
-        .map(|group| {
-            let terms = group
-                .into_iter()
-                .filter_map(|term| {
-                    let negative = term.starts_with('-');
-                    let term = term.trim_start_matches('-').trim_matches('"');
-                    let term = term.replace(['"', '\\'], " ");
-                    if !term.is_empty() {
-                        Some(format!("{}\"{}\"", if negative { "-" } else { "+" }, term))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-            format!("({})", terms.join(" "))
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    // Probe a superset: native matching checks exclusions and phrase positions.
+    // A negative-only alternative needs the complete indexed version scope.
+    let mut groups = Vec::new();
+    for group in query_groups(words) {
+        let terms = group.iter().filter(|term| !term.starts_with('-'))
+            .flat_map(|term| lexemes(term)).collect::<BTreeSet<_>>();
+        if terms.is_empty() { return String::new(); }
+        groups.push(format!("({})", terms.iter().map(|term| format!("+{}", search_token(term)))
+            .collect::<Vec<_>>().join(" ")));
+    }
+    groups.join(" ")
 }
 
 fn lexemes(value: &str) -> Vec<String> {
-    value
-        .split(|ch: char| !ch.is_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .map(str::to_lowercase)
-        .collect()
+    let mut found = Vec::new();
+    // Keep compound words as well as their components, and dotted tokens as
+    // units, matching the existing simple-parser word/compound behavior.
+    for token in value.split(|ch: char| !ch.is_alphanumeric() && !matches!(ch, '-' | '.' | '@' | '/')) {
+        let token = token.trim_matches(['-', '.']).to_lowercase();
+        if token.is_empty() { continue; }
+        if token.contains(['.', '@', '/']) {
+            found.push(token);
+        } else if token.contains("--") {
+            found.extend(token.split('-').filter(|s| !s.is_empty()).map(str::to_string));
+        } else {
+            found.push(token.clone());
+            if token.contains('-') {
+                found.extend(token.split('-').filter(|s| !s.is_empty()).map(str::to_string));
+            }
+        }
+    }
+    found
+}
+
+pub fn reference_query_matches(words: &str, label: &str) -> bool {
+    let tokens = lexemes(label);
+    query_groups(words).iter().any(|group| group.iter().all(|term| {
+        let negative = term.starts_with('-');
+        let term = term.trim_start_matches('-');
+        let terms = lexemes(term);
+        if terms.is_empty() { return false; }
+        let phrase = term.starts_with('"') || (terms.len() > 1 && !term.contains([':', '!', '&']));
+        let found = if phrase {
+            tokens.windows(terms.len()).any(|part| part == terms)
+        } else {
+            terms.iter().all(|word| tokens.contains(word))
+        };
+        found != negative
+    }))
 }
 
 fn cover_density(words: &str, label: &str, weight: f64) -> f64 {
