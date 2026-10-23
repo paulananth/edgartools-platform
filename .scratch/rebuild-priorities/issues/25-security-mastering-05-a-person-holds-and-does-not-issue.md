@@ -11,7 +11,7 @@ Priority: 25, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 **Blocked by:** security-mastering 01 (done). The Security link waits on [24](24-security-mastering-04-form-4-attaches-by-class.md); the rows land without it.
 
-**Status:** built, PR open
+**Status:** closed: merged as PR #1134 (2026-10-22 15:33 ET)
 
 - [x] `HOLDS` out of MDM's relationship types: `rules/merge/relationships.yaml` (relationship-types-v6), definitions and CONTEXT.md (Holdings is a silver row); the policy digest moves by one new layer, peeled back to the one before (`tests/mdm/policy_layers.py`); MDM, rules and fixture tests 1,072 passed (2026-10-22 14:44 ET)
 - [x] The HOLDS line out of `rules/context/definitions.yaml` (a test holds the definitions equal to the types); #1121 edits another part of that file (operator, 2026-10-22: "Edit it now (Recommended)") (2026-10-22 15:23 ET)
@@ -24,5 +24,5 @@ Priority: 25, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 - [ ] ~~Scheduled landing by a Bookkeeping step~~ deferred to ticket 79's same gap: no Bookkeeping step lands silver yet (waits for #1121); `edgar-warehouse silver land` lands the rows by hand
 - [x] A person's holding never makes the Person an issuer: holdings never reach MDM, and `ISSUED_BY` starts only at a Security (`rules/merge/relationships.yaml`; the type check refuses another kind, `tests/mdm/test_clean_relationship_types.py`) (2026-10-22 16:23 ET)
 - [x] HOLDS out of MDM merged: PR #1134, CI green (2026-10-22 15:33 ET)
-- [ ] PR merged (the Form 4 silver holdings)
+- [x] PR merged (the Form 4 silver holdings): #1134, CI green (2026-10-22 15:33 ET)
 - [x] Learning → skill: `skills/data-onboarding/SKILL.md`, Relationships: only a link that describes the entities is an MDM relationship (14:44 ET); Silver target: a master with a several-part record key is found by the key as MDM writes it (a compact JSON list), built in the reading and tested against `adapters.record_key`; rows several parties share keep the source's own shape, lines once and parties apart (2026-10-22 16:23 ET)

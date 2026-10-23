@@ -4,7 +4,7 @@ Priority: 20, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 Type: task
 Status: open
-Blocked by: mastering-to-done 11, 10
+Blocked by: 01 (mastering-to-done 11 is resolved; mastering-to-done 10 moved to profiling 07, this map's 01: the ownership feed's Dataset Contracts)
 
 ## Question
 

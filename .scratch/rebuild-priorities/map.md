@@ -34,15 +34,26 @@ The rebuild carries the captured data end to end, and proves it. Every captured 
 
 ## Route to completion
 
-Reviewed 2026-10-21 20:14 ET, over all 127 tickets. Operator, asked what "complete the project" means: "Two proofs, local (Recommended)". The destination above stands: done when the operator accepts the recreation proof ([32](issues/32-profiling-08-recreation-proof.md)) and the financials cohort proof ([48](issues/48-company-financials-16-cohort-proof.md)) on local stores. This order replaces "ticket number = priority" for what is left:
+Reviewed again 2026-10-22 21:11 ET, over all 135 tickets (the review of 2026-10-21 is in git history). The destination stands (operator, 2026-10-21: "Two proofs, local (Recommended)"): done when the operator accepts the recreation proof ([32](issues/32-profiling-08-recreation-proof.md)) and the financials cohort proof ([48](issues/48-company-financials-16-cohort-proof.md)) on local stores.
 
-1. **Close what is finished** (docs only, one session). Done 2026-10-21 21:02 ET: tickets 113, 115–118 and 123 closed; the rest were already closed; gists added. The work is merged; only "PR / merge / learning" ticks or deferred parts stay open: 02, 03, 04, 06, 07, 10, 11, 13, 16, 17, 19, 22, 23, 66, 74, 76, 86, 88, 89, 100, 101, 105, 111, 112, 113, 115, 116, 117, 118, 123. Tickets 50–62 were closed by the ruling of 2026-10-18 ("Close all, re-raise later"); mark their files closed in this step too.
-2. **Switch on what is proved** (each on the operator's words): [120](issues/120-switch-on-securities.md) Securities, then OpenFIGI, in `company-on` (about 3 h, then about 7 h of merge); [114](issues/114-onboard-company.md) Company; [80](issues/80-onboard-openfigi.md) OpenFIGI's source activation; [09](issues/09-mastering-to-done-07-cascade-passes-switch-on.md) the cascade passes (about 1½ h of the operator's labels, 344 pairs).
-3. **Close the mastering gaps**, so every captured feed is read and mastered: [01](issues/01-profiling-07-readers-per-feed.md) Form ADV's custodian links; [130](issues/130-a-security-share-class.md) a Security's share class ([131](issues/131-a-field-kept-only-when-sources-agree.md) a field kept only when sources agree, after #1121), then [24](issues/24-security-mastering-04-form-4-attaches-by-class.md) a Form 4 attaches by share class (both need a new matching rule in code, after Codex's #1121); [25](issues/25-security-mastering-05-a-person-holds-and-does-not-issue.md) a Person holds and does not issue; [79](issues/79-onboard-funds-and-securities-with-the-skills.md) 13F Securities and funds' `HOLDS`; [99](issues/99-an-identifier-rule-creates-after-the-name-rules.md) an identifier rule creates after the name rules.
-4. **Build the financials to their cohort proof**: [35](issues/35-company-financials-03-time-model-as-reported-or-restated.md) and 37–47 in order ([128](issues/128-exact-big-numbers-in-configured-reading.md) before 45), then [48](issues/48-company-financials-16-cohort-proof.md).
-5. **Ready and run the recreation proof**: [14](issues/14-rules-skill-15-test-rules-locally.md) rules tested locally at full size, [20](issues/20-mastering-to-done-19-restore-the-catalog-and-publish-person.md) the catalog, [21](issues/21-clean-mdm-06-version-consumer-contracts.md) consumer contracts, [18](issues/18-profiling-05-agent-context-views-and-command.md) the context views, then [32](issues/32-profiling-08-recreation-proof.md).
+**What changed since 2026-10-21.** Merged: 45 (#1140), 128, 134 (#1139), 129 (#1133, #1141), 130 (#1135), 25 (#1134), parts of 79 (#1136, #1137), and Codex's #1121 and #1142. #1121 unblocked [24](issues/24-security-mastering-04-form-4-attaches-by-class.md), [131](issues/131-a-field-kept-only-when-sources-agree.md), [132](issues/132-relationship-types-in-one-place.md) and the Bookkeeping silver-landing step (79). The financials chain is open up to its build: [46](issues/46-company-financials-14-build-line-items-into-silver.md)'s blockers (38, 42, 43, 45) are all closed.
 
-Steps 3 and 4 can run side by side; step 5's proof runs last, on everything switched on.
+**The one gate nobody on this map holds:** [135: the recreation proof starts from configured Company records](issues/135-the-proof-starts-from-configured-company-records.md). 32's baseline and cold-agent run wait on an unchecked item of Codex's `sec-configured-fields` workstream (retire the Company preparation, census and provenance; repeat the installed population proof). It needs the operator's ruling on who builds it.
+
+Two tracks run side by side; the recreation proof runs last, on everything switched on.
+
+**Track A: the financials, to their cohort proof (48)**
+1. [44: the answer key](issues/44-company-financials-12-answer-key-for-measures.md): on `claude/financials-answer-key`; confirm the restatement and the stock split by hand, recompute one value per hard case, rebase over main's company-financials skill lines, PR.
+2. [133: statutory corporate tax rates in RDM](issues/133-statutory-tax-rates-in-rdm.md): ROIC's fallback rate; one OECD fetch, only with the operator's permission for that request.
+3. [46: line items into silver](issues/46-company-financials-14-build-line-items-into-silver.md), then [47: the measures](issues/47-company-financials-15-build-measures.md) (needs 44, and 133 for ROIC), then [48: the cohort proof](issues/48-company-financials-16-cohort-proof.md); the operator accepts.
+
+**Track B: every captured feed mastered, then the recreation proof (32)**
+1. Switch-ons, each on the operator's words: [120](issues/120-switch-on-securities.md) Securities, then OpenFIGI's own records, in `company-on`; [09](issues/09-mastering-to-done-07-cascade-passes-switch-on.md) the cascade passes (about 1½ h of the operator's labels, 344 pairs). [114](issues/114-onboard-company.md) and [80](issues/80-onboard-openfigi.md) have only bookkeeping lines left; their source activations moved to 71 (hosting).
+2. Mastering gaps, now unblocked: [131](issues/131-a-field-kept-only-when-sources-agree.md) a field kept only when sources agree, then [24](issues/24-security-mastering-04-form-4-attaches-by-class.md) a Form 4 attaches by share class; [132](issues/132-relationship-types-in-one-place.md) relationship types in one place; [79](issues/79-onboard-funds-and-securities-with-the-skills.md)'s Bookkeeping silver-landing step; [01](issues/01-profiling-07-readers-per-feed.md) Form ADV's custodians and the ownership feed's Dataset Contracts (the engine reads XML inside an SGML submission first).
+3. The proof's readiness: [135](issues/135-the-proof-starts-from-configured-company-records.md) (the gate above); [14](issues/14-rules-skill-15-test-rules-locally.md) rules tested locally at full size (512-file bundles); [20](issues/20-mastering-to-done-19-restore-the-catalog-and-publish-person.md) the catalog, after 01's ownership contracts; [21](issues/21-clean-mdm-06-version-consumer-contracts.md) consumer contracts, verified offline (its hosted cut-over is 68).
+4. [32: the recreation proof](issues/32-profiling-08-recreation-proof.md); the operator accepts, and the program ends.
+
+**Operator decisions on the route:** who builds 135; switching on 120 and 09 (with the labels); the OECD fetch for 133; accepting 48 and 32.
 
 ## Decisions so far
 
@@ -121,6 +132,12 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
 - [Currencies, IFRS filers and industry statement shapes](issues/42-company-financials-10-currency-ifrs-and-industry-shapes.md): reporting currency with its code, never converted; IFRS mapped into the same 19 line items; one item set flagged by kind, with an industrial or financial-services format from the SIC code
 - [The silver table spec for financial line items](issues/43-company-financials-11-silver-table-spec-for-financials.md): three tables, `company_fact` (every filed fact, exact, append), `company_line_item` and `company_measure` (dbt, rebuilt each run, each value traced and each null with its reason); reviewed against 35–48 and 128 first
 
+- [The company facts source extract](issues/45-company-financials-13-build-company-facts-reader.md): configured only, one table per taxonomy, every number exact (#1140)
+- [Exact decimals in configured reading](issues/134-exact-decimals-in-configured-reading.md): `value` gains `decimals: text`, a decimal kept as its filed digits; refused where numbers were already parsed (#1139)
+- [Fields in MDM that belong elsewhere](issues/129-fields-in-mdm-that-belong-elsewhere.md): issuer LEI and filed dates to silver, SIC labels to RDM, GLEIF's dates and the SIC label out of the Company (#1133, #1141); the hosted migration is 68
+- [A Security's share class](issues/130-a-security-share-class.md): one letter from the filed titles (#1135); disagreeing sources give none in 131
+- [A Person holds and does not issue](issues/25-security-mastering-05-a-person-holds-and-does-not-issue.md): HOLDS out of MDM; Form 4 holdings land in silver (#1134)
+
 ## Not yet specified
 
 - **Where gold stands in the rebuild.** Answered (operator, 2026-10-18 12:25 ET, "Close all, re-raise later (Recommended)"): tickets 49–62 are closed as written for the retired gold layer; product value is re-raised against silver and the context views.
@@ -136,4 +153,4 @@ Steps 3 and 4 can run side by side; step 5's proof runs last, on everything swit
   - one code for every engine: [119](issues/119-one-code-every-engine.md) (Codex, parked);
   - Security quality and speed: [121](issues/121-another-runs-reading-over-time.md), [122](issues/122-securities-run-time.md), [124](issues/124-profile-fund-share-classes.md), [125](issues/125-securities-and-funds-uniquely-identifiable.md), [126](issues/126-openfigi-for-13f-only-securities.md), [127](issues/127-folded-holdings-earliest-filing.md);
   - text from HTML, PDF and free text: [31](issues/31-profiling-07c-unstructured-extraction.md) (no captured feed needs it);
-  - housekeeping: [63](issues/63-agent-guides-01-consolidate-claude-and-agents-md.md), [73](issues/73-mdm-is-just-mdm-code.md), [109](issues/109-one-definition-of-the-manifest-procedures.md).
+  - housekeeping: [63](issues/63-agent-guides-01-consolidate-claude-and-agents-md.md), [73](issues/73-mdm-is-just-mdm-code.md), [109](issues/109-one-definition-of-the-manifest-procedures.md); the digest test's undo chain as one loop (GoF finding on 129).
