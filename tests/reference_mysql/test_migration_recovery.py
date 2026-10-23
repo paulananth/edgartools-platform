@@ -90,7 +90,7 @@ def test_checksum_change_is_refused_without_disabling_installed_store(store, tmp
     assert RDM(runtime).code_sets() == []
 
 
-@pytest.mark.parametrize("interrupt_before", ["ALTER TABLE code_label ADD COLUMN", "UPDATE code SET _search_tokens="])
+@pytest.mark.parametrize("interrupt_before", ["ALTER TABLE code_label ADD COLUMN", "UPDATE /* reference-search-tokens */"])
 def test_populated_word_index_upgrade_recovers_without_changing_published_pin(store, monkeypatch, tmp_path, interrupt_before):
     from argparse import Namespace
     from edgar_warehouse.rdm import storage
@@ -149,3 +149,37 @@ def test_search_migration_drift_does_not_disable_installed_store(store, monkeypa
     with pytest.raises(Blocked, match="checksum differs"):
         migrate(owner, **arguments)
     assert RDM(runtime).code_sets() == []
+
+
+
+def test_approval_refresh_is_set_based_and_unchanged_refresh_writes_nothing(store):
+    from sqlalchemy import event
+    from edgar_warehouse.rdm.storage import refresh_search_tokens, transaction
+
+    owner, runtime, arguments = store
+    migrate(owner, **arguments)
+    reference = RDM(runtime, reserved_subjects=())
+    reference.draft({"code_set": "invented", "name": "Invented"}, "1",
+                    [{"code": f"c{n:04}", "label": f"AI reference {n}"} for n in range(2001)],
+                    created_by="drafter")
+    updates = []
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("UPDATE ") and "_search_tokens" in statement:
+            updates.append((statement, parameters, executemany))
+    event.listen(runtime, "before_cursor_execute", capture)
+    try:
+        reference.approve("invented", "1", by="operator", words="Approve this invented test version")
+        # Three pages for codes and three for their preferred labels. One SQL
+        # statement per page, rather than a driver's row-by-row executemany.
+        assert len(updates) == 6 and all(not many for _, _, many in updates)
+        with owner.connect() as conn:
+            for statement, parameters, _ in updates:
+                plan = conn.exec_driver_sql("EXPLAIN " + statement, parameters).mappings().all()
+                assert any(row["table"] == "dest" and row["type"] == "eq_ref" and row["key"] == "PRIMARY"
+                           for row in plan)
+        updates.clear()
+        with transaction(runtime) as conn:
+            refresh_search_tokens(conn, code_set="invented", version="1")
+        assert updates == []
+    finally:
+        event.remove(runtime, "before_cursor_execute", capture)

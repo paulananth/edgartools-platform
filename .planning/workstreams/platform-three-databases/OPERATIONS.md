@@ -189,7 +189,7 @@ preserved. A checksummed owner upgrade backfills derived tokens with runtime
 writes revoked and resumes interrupted DDL/backfill without changing published
 content. Approval refreshes tokens from the locked draft's current labels.
 
-The affected suites passed 104 cases on MySQL and 105 on PostgreSQL. The
+The affected suites passed 105 cases on each selected engine. The MySQL refresh uses one bound JSON-table/primary-key join per changed batch; 4,002 rows require six indexed updates and unchanged refresh writes nothing. The
 committed 12a8d744 five-wheel installed normal CLI passed outside the checkout
 on each engine: init, draft, approve, publish, short/stop/negative/compound and
 synonym search, supersession, historical context, migration replay, verification

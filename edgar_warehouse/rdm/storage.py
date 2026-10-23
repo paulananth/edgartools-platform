@@ -274,22 +274,33 @@ def refresh_search_tokens(conn, **version):
     version lock; an owner upgrade has revoked runtime writes first.
     """
     import edgar_control
-    from sqlalchemy import bindparam, select
+    from sqlalchemy import select
+    import json
 
     for name in ("code", "code_label"):
         table = tables("mysql")[name]
-        query = select(table.c._row_key, table.c.label)
+        query = select(table.c._row_key, table.c.label, table.c._search_tokens)
         if version:
             query = query.where(scope(conn, table, **version))
         query = query.order_by(table.c._row_key).limit(1000)
-        statement = table.update().where(table.c._row_key == bindparam("held_key")).values(
-            _search_tokens=bindparam("tokens"))
+        target = conn.dialect.identifier_preparer.quote(table.name)
+        statement = text("UPDATE /* reference-search-tokens */ JSON_TABLE(:rows, '$[*]' COLUMNS ("
+            "held_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PATH '$.key', "
+            "tokens LONGTEXT CHARACTER SET ascii PATH '$.tokens')) AS prepared "
+            "STRAIGHT_JOIN " + target + " AS dest ON dest._row_key=prepared.held_key "
+            "SET dest._search_tokens=prepared.tokens")
         after = None
         while True:
             page = query if after is None else query.where(table.c._row_key > after)
             rows = conn.execute(page).mappings().all()
             if not rows:
                 break
-            conn.execute(statement, [{"held_key": row["_row_key"],
-                "tokens": edgar_control.encode_reference_search(row["label"])} for row in rows])
+            changed = {}
+            for row in rows:
+                tokens = edgar_control.encode_reference_search(row["label"])
+                if tokens != row["_search_tokens"]:
+                    changed[row["_row_key"]] = tokens
+            if changed:
+                conn.execute(statement, {"rows": json.dumps([
+                    {"key": key, "tokens": tokens} for key, tokens in changed.items()])})
             after = rows[-1]["_row_key"]
