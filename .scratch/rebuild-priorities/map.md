@@ -38,7 +38,7 @@ Reviewed again 2026-10-22 21:11 ET, over all 135 tickets (the review of 2026-10-
 
 **What changed since 2026-10-21.** Merged: 45 (#1140), 128, 134 (#1139), 129 (#1133, #1141), 130 (#1135), 25 (#1134), parts of 79 (#1136, #1137), and Codex's #1121 and #1142. #1121 unblocked [24](issues/24-security-mastering-04-form-4-attaches-by-class.md), [131](issues/131-a-field-kept-only-when-sources-agree.md), [132](issues/132-relationship-types-in-one-place.md) and the Bookkeeping silver-landing step (79). The financials chain is open up to its build: [46](issues/46-company-financials-14-build-line-items-into-silver.md)'s blockers (38, 42, 43, 45) are all closed.
 
-**The one gate nobody on this map holds:** [135: the recreation proof starts from configured Company records](issues/135-the-proof-starts-from-configured-company-records.md). 32's baseline and cold-agent run wait on an unchecked item of Codex's `sec-configured-fields` workstream (retire the Company preparation, census and provenance; repeat the installed population proof). It needs the operator's ruling on who builds it.
+**The one gate nobody on this map holds:** [135: the recreation proof starts from configured Company records](issues/135-the-proof-starts-from-configured-company-records.md). 32's baseline and cold-agent run wait on an unchecked item of Codex's `sec-configured-fields` workstream (retire the Company preparation, census and provenance; repeat the installed population proof). It needs the operator's ruling on who builds it; set aside for now (operator, 2026-10-22 21:13 ET: "skip this move to next").
 
 Two tracks run side by side; the recreation proof runs last, on everything switched on.
 

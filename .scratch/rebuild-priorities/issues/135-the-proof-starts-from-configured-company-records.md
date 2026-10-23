@@ -4,7 +4,7 @@ Priority: 135, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md
 Opened 2026-10-22 from the map review ("review all existing ticket and provide a
 way to complete the project").
 
-Type: task. Status: open; waits for the operator's ruling on who builds it.
+Type: task. Status: open, set aside (operator, 2026-10-22 21:13 ET: "skip this move to next"); the route goes on with the next ticket.
 Blocked by: nothing on this map (#1121 and #1142 merged).
 
 ## Question
@@ -35,7 +35,7 @@ open branch.
 
 ## Checklist
 
-- [ ] Operator's ruling: Claude takes the item over, or it waits for Codex
+- [ ] Operator's ruling: Claude takes the item over, or it waits for Codex. Asked 2026-10-22 21:13 ET; answer: "skip this move to next", so not now; ask again when Track B reaches step 3
 - [ ] The item's remaining parts listed here from the workstream file, each with its evidence
 - [ ] Built, reviewed (Standards, Spec, GoF), PR, CI green, merged
 - [ ] 32's two deferred parts re-opened on this ticket's merge
