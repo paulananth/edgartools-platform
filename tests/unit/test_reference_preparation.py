@@ -66,7 +66,7 @@ def test_every_published_version_keeps_its_pinned_bytes(folder):
     rows = [{**{key: row[key] for key in row if key not in ("labels", "crosswalk", "level")},
              "labels": [dict(zip(("language", "kind", "label"), label)) for label in row["labels"]],
              "crosswalk": [dict(zip(("to_set", "to_version", "to_code", "match_type"), item)) for item in row["crosswalk"]],
-             "value": None, "unit": None} for row in lines]
+             "value": row.get("value"), "unit": row.get("unit")} for row in lines]
     assert store.canonical(rows, levels) == data
 
 

@@ -337,6 +337,10 @@ A part classed reference data becomes a code set version in RDM
    - `codes`: each code with its `label`. A reference hierarchy gives each
      code one `parent_code`. An invalid row stays, with `status: invalid` and
      its `invalid_reason`.
+   - A value per period (a rate, a threshold): `value` (exact decimal text as
+     published, never a float) with its `unit`, both or neither, on a child
+     code dated to its period (`valid_from`, `valid_to`) under the code it
+     belongs to; a consumer takes the child whose period holds its date.
    - `labels`: one `preferred` label per language, plus any `synonym`s.
    - `levels`: the names stewards gave each depth.
    - `crosswalk`: a code mapped to another code set, with `match_type`

@@ -116,7 +116,10 @@ Evidence and sources: ticket 38, research 02 section 2.
   zero or negative, or that rate falls outside 0–100%, it is the statutory rate
   of the filer's country, from RDM's `corporate-tax-rates` (OECD; operator,
   2026-10-22: "Statutory rate (new source)", "RDM, OECD source (Recommended)";
-  ticket 133).
+  ticket 133). The country is the filer's place of incorporation through the
+  pinned `sec-place-codes` ISO crosswalk (a subdivision such as US-PA reads as
+  its country); the rate is the child code whose year holds the fiscal year's
+  end, the combined central and sub-central rate, divided by 100.
 - **Definitions** as research 01 section 4 gives them: ROIC after tax on debt +
   equity − cash; FCF = operating cash flow − capital expenditure; per-share on
   the latest-filed series.
