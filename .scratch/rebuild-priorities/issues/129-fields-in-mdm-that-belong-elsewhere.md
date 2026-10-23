@@ -5,7 +5,7 @@ review request, 2026-10-22: "Review using onboarding skill are there fields that
 must be silver incorrectly in mdm"; rulings: "Fix 1, 2 date that changes usually
 should not be in MDM unless it adds meaning to the entity or turn on or off".
 
-Type: task. Status: in progress; #1121 merged 2026-10-22 19:08 ET, fixes 2 and 3 (the Company) built on it.
+Type: task. Status: closed: fixes 1, 3 (code set), 4 and 5 merged as #1133, fixes 2 and 3 (the Company) as #1141 (2026-10-22 20:13 ET); the hosted deploy moved to 68.
 
 ## What the review found
 
@@ -40,13 +40,13 @@ Clean: no amounts, positions, transactions or quarter dates are in MDM.
 - [x] Fix 5 (operator, 2026-10-22: "Fix 5"): `iapd.adv.custodians.v1` keys on `custodian_id` alone, and the CUSTODIAN link targets `[item]`; each monthly file is its own publication with its month (YYYYMM) as `revision` and its month end as `effective_at`, written in the contract for the run that prepares it. Test: May and June make one record per custodian, June a later revision, one link per custodian; custodian, catalog, mapdoc, N-PORT and OpenFIGI 58 passed, MDM 896 passed (2026-10-22 11:49 ET)
 - [x] Fixes 1, 3 (code set), 4 and 5 merged: PR #1133, CI green (2026-10-22 12:03 ET)
 - [x] Fixes 2 and 3 (the Company): three-axis review. Spec: no findings (no reader of the three columns left; `same_update` right in each case; 026 keeps the writer's grants and drops without a table rewrite). Standards: two fixed (the test helpers named for the fields they put back, `_with_company_fields_back`; the matching rule's condition chain indented as one expression); engine tests and digest, cohort and matching 135 passed. GoF: one finding, deferred below (2026-10-22 19:49 ET)
-- [ ] ~~GoF: the digest test's undo chain as one ordered list walked by a loop~~ deferred to its own ticket: it changes every pinned layer, not ticket 129's fields; each ticket that moves a contract adds one more hand-written layer today
+- [ ] ~~GoF: the digest test's undo chain as one ordered list walked by a loop~~ deferred past this map (housekeeping, beside 63, 73 and 109 under Out of scope): it changes every pinned layer, not ticket 129's fields; each ticket that moves a contract adds one more hand-written layer today
 - [x] First CI run on PR #1141 failed, 28 engine tests and 1 unit test; fixed (2026-10-22 20:03 ET):
   - the SEC Company `fields.yaml` recipe still listed `sic_description`, which broke the inline-equals-recipe checks and the installed bundle test; removed;
   - the GLEIF and SEC tests that compare with the retired mapper's answers now compare with the ticket 129 fields put back (`tests/support/company_fields.py`, shared with the digest layers, as Person's `before_ticket_10`);
   - the skill line named a source outside the Examples; it now names the ticket only;
   - engine 1,021 passed locally without the PostgreSQL bundle file; digest, cohort and the two fields files 215; genericity 78
-- [ ] Fixes 2 and 3 (the Company): CI green, merge (PR #1141)
-- [ ] Deploy: migration 026 runs on the hosted MDM only with the operator's word (`mdm migrate` is explicit). Expected: stored Company bodies still hold the three old fields, so the first merge after 026 writes one new version of each Company with GLEIF or SEC evidence that held them
+- [x] Fixes 2 and 3 (the Company): CI green, merged as PR #1141 (2026-10-22 20:13 ET)
+- [ ] ~~Deploy: migration 026 runs on the hosted MDM only with the operator's word~~ deferred to [68](68-clean-mdm-07-qualify-and-cut-over.md), hosting, out of scope of the two local proofs (map review, 2026-10-21); the local stores take it with `mdm migrate` (`mdm migrate` is explicit). Expected: stored Company bodies still hold the three old fields, so the first merge after 026 writes one new version of each Company with GLEIF or SEC evidence that held them
 - [x] Learning → skill (fixes 2 and 3): `skills/refining-rules/SKILL.md`, change-matching: a rule comparing two records' times compares instants, never text; a record-keeping date that only marks a new version is the record's effective time, not a master field. (`skills/mdm-engineering/SKILL.md` was the first choice; a Codex worktree is changing it, so the line went beside the matching rules instead.) (2026-10-22 19:46 ET)
 - [x] Learning → skill: `skills/data-onboarding/SKILL.md`, Record key: no publication time in a record key; a restating feed gives each delivery its own publication and a rising revision; a one-part key is the plain value. `skills/data-profiling/SKILL.md`, Reference data: evidence is an object; publish writes `<folder>/<code set>/<version>/`, the repo keeps canonical and pin, sha256 checked; a disposable PG16 needs a database named `rdm`. `skills/data-onboarding/SKILL.md`, map "Fields": a date that usually changes stays out of MDM unless it adds meaning or switches the entity on or off; evidence about a link stays on the silver row. `skills/refining-rules/SKILL.md`: which target a field belongs to (name every engine reader before moving one), and a field change regenerates both the source and the kind workbook (2026-10-22 11:27 ET)

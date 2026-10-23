@@ -13,7 +13,7 @@ OpenFIGI gives each class its own share-class FIGI and no letter. The class is
 the letter the issuer gave it, as the filed title states it (Form 4 instruction
 3(b); the CUSIP Global Services descriptions in 13F).
 
-**Status:** built, PR open
+**Status:** closed: merged as PR #1135 (2026-10-22 16:30 ET)
 
 ## Proposed rule
 
@@ -45,5 +45,5 @@ the letter the issuer gave it, as the filed title states it (Form 4 instruction
 - [x] The class from the level whose letters were counted, so a disagreeing CUSIP never takes a folded letter (`record.yaml`), test; and the Merge Stage on a disposable PostgreSQL 16 gives the mastered Security its letter, test (2026-10-22 14:52 ET)
 - [x] Approval recorded under the operator's standing words "Approved the rules always" (2026-10-15), on the evidence above (2026-10-22 14:52 ET)
 - [ ] ~~Two sources that disagree give no letter~~ deferred to [131](131-a-field-kept-only-when-sources-agree.md): the merge has no "agree or none" field rule (new code, after #1121); the first-ranked source wins, as for the title. 777 CUSIPs carry a letter in both sources, 1 disagrees (refining log)
-- [ ] PR merged
+- [x] PR merged: #1135, CI green (2026-10-22 16:30 ET)
 - [x] Learning → skill: `skills/data-platform/READING.md`: keeping one token of a text with literal-marker replacements; a selection's "no" is a presence test on a missing path; a value kept only when every row agrees (select, count members, `where: {<count>: 1}`). `skills/data-onboarding/REFERENCE.md`: a contract field is a `value`, `join` or `object` (the Mapping Document refuses a computed one); a scripted rules file needs a dumper without aliases (2026-10-22 14:13 ET)

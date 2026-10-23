@@ -6,7 +6,7 @@ Priority: 24, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 **Blocked by:** security-mastering 01: Publish one Security per 13F CUSIP (done); [22: ISSUED_BY a mastered Company](22-security-mastering-02-issued-by-a-mastered-company.md); [130: A Security's share class](130-a-security-share-class.md); Codex PR #1121 (the matching code it needs).
 
-**Status:** blocked
+**Status:** open, unblocked (2026-10-22 21:11 ET): 22 and 130 (#1135) are closed and #1121 merged (2026-10-22 19:08 ET)
 
 **Finding (2026-10-22 13:55 ET):** not configuration alone. A Form 4 names its issuer by CIK and the class in words, and carries no CUSIP; today's matching rules only match an identifier the record carries. "The issuer's Securities, narrowed to one class" is a new matching rule in code (`primitives.py`, `binding.py`, `matching.py`, `merge.py`), all four edited by #1121. Measured on the Form 4 cohort (3,398 filings, 63 issuers): 5,283 of 9,495 common-stock rows (56%) name a class, from 6 issuers; 1 issuer names two classes.
 

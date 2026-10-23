@@ -20,7 +20,7 @@ source's quality check sees only its own filers.
 survivorship. That is new code in the merge, so it is built after Codex's
 PR #1121, which edits the same files.
 
-**Status:** blocked (Codex PR #1121)
+**Status:** open, unblocked (2026-10-22 21:11 ET): #1121 merged (2026-10-22 19:08 ET)
 
 - [ ] The field rule's name and its words in the kind file, the operator's ruling
 - [ ] The Merge Stage applies it; a test with two sources agreeing, disagreeing and one alone
