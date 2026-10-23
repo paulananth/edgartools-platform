@@ -1,0 +1,322 @@
+{
+  "baseline": "4b1bb68f",
+  "counts": {
+    "migration_files": 27,
+    "migration_lines": 4874,
+    "function_declarations": 56,
+    "current_function_names": 36,
+    "latest_function_definition_lines": 1130
+  },
+  "groups": [
+    {
+      "name": "Shared preparation or display expressions",
+      "routines": [
+        "stage_claim",
+        "stage_fold",
+        "stage_profile_key",
+        "detail_rows",
+        "entity_name",
+        "relationship_holds"
+      ],
+      "next_tickets": "03 / 04 / 05"
+    },
+    {
+      "name": "Mixed preparation and durable writes",
+      "routines": [
+        "keep_stage",
+        "record_stage",
+        "record_binding",
+        "release_binding",
+        "record_company_version",
+        "record_detail_versions",
+        "record_relationship_version",
+        "keep_detail_versions",
+        "keep_relationship_version",
+        "write_batch"
+      ],
+      "next_tickets": "04"
+    },
+    {
+      "name": "Indexed retrieval and context",
+      "routines": [
+        "cross_reference_lookup",
+        "decisions_naming",
+        "reading_link_subjects",
+        "readings_naming",
+        "entity_search",
+        "relationship_chain"
+      ],
+      "next_tickets": "03 / 05"
+    },
+    {
+      "name": "Atomic enforcement, assessment and lifecycle",
+      "routines": [
+        "save_batch",
+        "preview_batch",
+        "record_match_proposal",
+        "supersede_match_proposal",
+        "claim_outbox",
+        "claim_outbox_input",
+        "finish_outbox",
+        "queue_outbox",
+        "force_publish",
+        "record_attempt",
+        "start_run",
+        "finish_run",
+        "immutable_row",
+        "require_configured_kind"
+      ],
+      "next_tickets": "02 / 04 / 06"
+    }
+  ],
+  "routines": {
+    "claim_outbox": {
+      "file": "edgar_warehouse/mdm/migrations/014_outbox_names_batch.sql",
+      "line": 218,
+      "lines": 20,
+      "calls": []
+    },
+    "save_batch": {
+      "file": "edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql",
+      "line": 23,
+      "lines": 56,
+      "calls": [
+        "write_batch"
+      ]
+    },
+    "write_batch": {
+      "file": "edgar_warehouse/mdm/migrations/019_merge_stage_no_limit.sql",
+      "line": 15,
+      "lines": 201,
+      "calls": [
+        "keep_stage",
+        "queue_outbox",
+        "record_company_version"
+      ]
+    },
+    "finish_outbox": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 762,
+      "lines": 18,
+      "calls": []
+    },
+    "finish_run": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 781,
+      "lines": 19,
+      "calls": []
+    },
+    "immutable_row": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 801,
+      "lines": 5,
+      "calls": []
+    },
+    "keep_stage": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 807,
+      "lines": 62,
+      "calls": [
+        "record_binding",
+        "record_stage",
+        "release_binding"
+      ]
+    },
+    "preview_batch": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 870,
+      "lines": 14,
+      "calls": [
+        "write_batch"
+      ]
+    },
+    "record_match_proposal": {
+      "file": "edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql",
+      "line": 80,
+      "lines": 44,
+      "calls": []
+    },
+    "record_attempt": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 924,
+      "lines": 29,
+      "calls": []
+    },
+    "record_binding": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 954,
+      "lines": 22,
+      "calls": []
+    },
+    "record_stage": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 1059,
+      "lines": 46,
+      "calls": [
+        "stage_fold"
+      ]
+    },
+    "release_binding": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 1106,
+      "lines": 32,
+      "calls": []
+    },
+    "stage_claim": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 1139,
+      "lines": 8,
+      "calls": []
+    },
+    "stage_fold": {
+      "file": "edgar_warehouse/mdm/migrations/023_stage_details.sql",
+      "line": 6,
+      "lines": 62,
+      "calls": [
+        "stage_claim",
+        "stage_profile_key"
+      ]
+    },
+    "stage_profile_key": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 1210,
+      "lines": 15,
+      "calls": []
+    },
+    "start_run": {
+      "file": "edgar_warehouse/mdm/migrations/001_mdm.sql",
+      "line": 1226,
+      "lines": 19,
+      "calls": []
+    },
+    "supersede_match_proposal": {
+      "file": "edgar_warehouse/mdm/migrations/020_merge_record_by_record.sql",
+      "line": 125,
+      "lines": 15,
+      "calls": []
+    },
+    "reading_link_subjects": {
+      "file": "edgar_warehouse/mdm/migrations/003_lookup_indexes.sql",
+      "line": 17,
+      "lines": 11,
+      "calls": []
+    },
+    "cross_reference_lookup": {
+      "file": "edgar_warehouse/mdm/migrations/005_cross_reference.sql",
+      "line": 47,
+      "lines": 14,
+      "calls": []
+    },
+    "entity_name": {
+      "file": "edgar_warehouse/mdm/migrations/006_relationship_context.sql",
+      "line": 12,
+      "lines": 8,
+      "calls": []
+    },
+    "relationship_holds": {
+      "file": "edgar_warehouse/mdm/migrations/006_relationship_context.sql",
+      "line": 79,
+      "lines": 10,
+      "calls": []
+    },
+    "relationship_chain": {
+      "file": "edgar_warehouse/mdm/migrations/006_relationship_context.sql",
+      "line": 97,
+      "lines": 34,
+      "calls": [
+        "entity_name",
+        "relationship_holds"
+      ]
+    },
+    "entity_search": {
+      "file": "edgar_warehouse/mdm/migrations/007_entity_context.sql",
+      "line": 96,
+      "lines": 51,
+      "calls": [
+        "entity_name"
+      ]
+    },
+    "record_relationship_version": {
+      "file": "edgar_warehouse/mdm/migrations/010_relationship_version.sql",
+      "line": 50,
+      "lines": 36,
+      "calls": []
+    },
+    "keep_relationship_version": {
+      "file": "edgar_warehouse/mdm/migrations/010_relationship_version.sql",
+      "line": 121,
+      "lines": 9,
+      "calls": [
+        "record_relationship_version"
+      ]
+    },
+    "readings_naming": {
+      "file": "edgar_warehouse/mdm/migrations/012_key_join_lookups.sql",
+      "line": 26,
+      "lines": 9,
+      "calls": [
+        "reading_link_subjects"
+      ]
+    },
+    "decisions_naming": {
+      "file": "edgar_warehouse/mdm/migrations/012_key_join_lookups.sql",
+      "line": 52,
+      "lines": 10,
+      "calls": []
+    },
+    "claim_outbox_input": {
+      "file": "edgar_warehouse/mdm/migrations/016_publication_inputs.sql",
+      "line": 42,
+      "lines": 26,
+      "calls": []
+    },
+    "record_company_version": {
+      "file": "edgar_warehouse/mdm/migrations/026_company_fields_out.sql",
+      "line": 14,
+      "lines": 81,
+      "calls": []
+    },
+    "queue_outbox": {
+      "file": "edgar_warehouse/mdm/migrations/018_publish_changed_records.sql",
+      "line": 88,
+      "lines": 16,
+      "calls": []
+    },
+    "force_publish": {
+      "file": "edgar_warehouse/mdm/migrations/018_publish_changed_records.sql",
+      "line": 315,
+      "lines": 65,
+      "calls": [
+        "queue_outbox"
+      ]
+    },
+    "detail_rows": {
+      "file": "edgar_warehouse/mdm/migrations/022_detail_version.sql",
+      "line": 45,
+      "lines": 7,
+      "calls": []
+    },
+    "record_detail_versions": {
+      "file": "edgar_warehouse/mdm/migrations/022_detail_version.sql",
+      "line": 58,
+      "lines": 37,
+      "calls": [
+        "detail_rows"
+      ]
+    },
+    "keep_detail_versions": {
+      "file": "edgar_warehouse/mdm/migrations/022_detail_version.sql",
+      "line": 99,
+      "lines": 9,
+      "calls": [
+        "record_detail_versions"
+      ]
+    },
+    "require_configured_kind": {
+      "file": "edgar_warehouse/mdm/migrations/024_configured_kinds.sql",
+      "line": 19,
+      "lines": 10,
+      "calls": []
+    }
+  }
+}
