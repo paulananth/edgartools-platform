@@ -55,9 +55,36 @@ def check(cik, want):
     return found
 
 
+SPLIT = {"diluted_shares": "count", "shares_outstanding": "count", "dps": "per share", "eps_diluted": "per share"}
+
 for cik, want in [(c, "restatement") for c, cases in CASES.items() if "restatement" in cases] + [(chosen("stock_split"), "split")]:
     rows = check(cik, want)
     agree = sum(1 for r in rows if r[5])
     print(f"== {', '.join(CASES[cik])}: {want}: {len(rows)} line-item years with differing filed copies; key takes the latest in {agree}")
-    for r in rows[:12]:
-        print("  ", r[0], r[1], r[2], f"copies={r[3]} distinct={r[4]} latest={r[5]}", f"ratio={r[6]:.6f}" if r[6] else "")
+    if want == "split":
+        # The split shows on share counts and per-share figures only: the earliest copy
+        # against the latest is a whole-number factor (counts) or its inverse (per share;
+        # EPS within its cent rounding). Other differing rows are restatements.
+        doc_ = raw(cik)
+        split, other = [], 0
+        for year, name, concept, n, d, latest, _ in rows:
+            if name not in SPLIT:
+                other += 1
+                continue
+            it = key["companies"][cik]["line_items"][year][name]
+            start = next(c.get("start") for t in it["tried"] for c in t["copies"] if c["accn"] == it["accn"])
+            filed = sorted(copies(doc_, it["taxonomy"], concept, it["unit"], start, it["end"]), key=lambda f: (f["filed"], f["accn"]))
+            ratio = Decimal(str(filed[-1]["val"])) / Decimal(str(filed[0]["val"]))
+            factor = ratio if SPLIT[name] == "count" else 1 / ratio
+            whole = factor.to_integral_value()
+            exact = factor == whole if name != "eps_diluted" else abs(factor - whole) / whole < Decimal("0.01")
+            split.append((year, name, factor, exact and whole > 1, latest))
+        good = [r for r in split if r[3] and r[4]]
+        print(f"   split rows (share counts, per share): {len(split)}; whole-number factor and latest copy in {len(good)}; "
+              f"factors {sorted({str(r[2].to_integral_value()) for r in good})}; other differing rows (restatements): {other}")
+        for r in split:
+            if not (r[3] and r[4]):
+                print("   not a split factor:", r[0], r[1], f"{r[2]:.6f}")
+    else:
+        for r in rows[:12]:
+            print("  ", r[0], r[1], r[2], f"copies={r[3]} distinct={r[4]} latest={r[5]}")

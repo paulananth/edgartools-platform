@@ -309,9 +309,13 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
         return (Decimal(got["value"]), currency(got["unit"])) if got.get("value") is not None else (None, None)
 
     def missing(prior):
-        """Why the earlier year a measure needs has no figure (ticket 35): its year
-        end moved around the gap ("fiscal year changed"), or it is simply absent.
-        Callers ask only once the later figure is known, so the gap is `prior`."""
+        """Why the earlier year a measure needs has no figure. A year that has an
+        annual period but not this figure is "no concept filed", as for the later
+        year. A year with no annual period is "fiscal year changed" when the year
+        end moved around the gap, else "missing year" (ticket 35). Callers ask only
+        once the later figure is known, so the gap is `prior`."""
+        if prior in company.years:
+            return "no concept filed"
         absent = prior
         before = [y for y in company.years if y < absent]
         after = [y for y in company.years if y > absent]
@@ -369,7 +373,10 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     if oi[0] is None:
                         add(name, year, None, reason="no concept filed")
                         continue
-                    if pre[0] is None or tax[0] is None or pre[0] <= 0 or not (0 <= tax[0] / pre[0] <= 1):
+                    if pre[0] is None or tax[0] is None:
+                        add(name, year, None, reason="no concept filed")
+                        continue
+                    if pre[0] <= 0 or not (0 <= tax[0] / pre[0] <= 1):
                         add(name, year, None, reason="waiting for the statutory rate")  # ticket 133
                         continue
                     top = (oi[0] * (1 - tax[0] / pre[0]), oi[1])

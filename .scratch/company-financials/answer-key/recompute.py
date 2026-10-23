@@ -89,21 +89,28 @@ m = measure(B, "eps_diluted_cagr", split_year, 1)
 rows.append(("stock split", f"diluted EPS CAGR 1y, {split_year}",
              same(raw(B, split_year, "eps_diluted")[0] / raw(B, split_year - 1, "eps_diluted")[0] - 1, m)))
 
-# Negative base (B or A): a CAGR marked not meaningful has a first value at or below zero.
+# Negative base (B or A): a CAGR whose first or last raw value is at or below zero
+# is null, "not meaningful" (ticket 39).
 for cik in (B, A):
     nm = [x for x in key["companies"][cik]["measures"] if x["reason"] == "not meaningful" and x["measure"].endswith("_cagr")]
     if nm:
         x = nm[0]; base = x["measure"][:-5]; first = x["year"] - x["window"]
         v, w = raw(cik, first, base)[0], raw(cik, x["year"], base)[0]
-        rows.append(("negative base", f"{x['measure']} {x['window']}y, {x['year']}: first or last value <= 0", min(v, w) <= 0 and x["value"] is None))
+        rows.append(("negative base", f"{x['measure']} {x['window']}y, {x['year']}: first or last value <= 0",
+                     min(v, w) <= 0 and x["value"] is None and x["reason"] == "not meaningful"))
         break
 
-# Changed year end (A): a window across the change is null, "fiscal year changed".
-x = next(x for x in key["companies"][A]["measures"] if x["reason"] == "fiscal year changed")
-yrs = key["companies"][A]["years"]; prior = x["year"] - x["window"]
-near = [str(y) for y in (prior - 1, prior, prior + 1) if str(y) in yrs]
-moved = any("earlier_end" in yrs[y] for y in near) or len({yrs[y]["end"][5:7] for y in near}) > 1
-rows.append(("changed year end", f"{x['measure']} {x['window']}y, {x['year']}: the year end moves beside {prior}", x["value"] is None and moved))
+# Changed year end (A): the year keeps the new year end's period (ticket 35), and a
+# 1-year CAGR into it is computed on that period, recomputed from the raw copies.
+yrs = key["companies"][A]["years"]
+x = next(x for x in key["companies"][A]["measures"]
+         if x["measure"].endswith("_cagr") and x["window"] == 1 and x["value"] is not None
+         and "earlier_end" in yrs[str(x["year"])])
+base = x["measure"][:-5]
+now, _, _, start, end = raw(A, x["year"], base)
+later = end == yrs[str(x["year"])]["end"] and end > yrs[str(x["year"])]["earlier_end"]
+rows.append(("changed year end", f"{x['measure']} 1y, {x['year']}: on the period ending at the new year end",
+             later and same(now / raw(A, x["year"] - 1, base)[0] - 1, x)))
 
 # Restatement (C): net margin in the first year whose revenue has two distinct filed values.
 def restated(cik, year, name):
@@ -122,10 +129,15 @@ ni, _, _, _, end = raw(C, y, "net_income"); bv, _, _, _, bend = raw(C, y - 1, "b
 m = measure(C, "roe_beginning", y)
 rows.append(("non-December year end", f"ROE beginning {y} (ends {end[5:]}, prior {bend[5:]})", same(ni / bv, m) and end[5:7] != "12"))
 
-# Non-USD and IFRS (C): the same year's revenue in its reporting currency, from ifrs-full.
+# Non-USD (C): the restated year's revenue in its reporting currency, never converted.
 v, unit, tax, _, _ = raw(C, ry, "revenue")
 rows.append(("non-USD filer", f"revenue {ry} kept in {unit}, not converted", unit != "USD" and Decimal(item(C, ry, "revenue")["value"]) == v))
-rows.append(("IFRS filer", f"revenue {ry} from {tax}", tax == "ifrs-full"))
+
+# IFRS (A): net margin in a year A files under ifrs-full, from its ifrs-full concepts.
+iy = next(x["year"] for x in key["companies"][A]["measures"] if x["measure"] == "net_margin" and x["value"] is not None
+          and yrs[str(x["year"])]["taxonomy"] == "ifrs-full")
+(ni, _, nt, _, _), (rv, _, rt, _, _) = raw(A, iy, "net_income"), raw(A, iy, "revenue")
+rows.append(("IFRS filer", f"net margin {iy} from {nt} concepts", nt == rt == "ifrs-full" and same(ni / rv, measure(A, "net_margin", iy))))
 
 # Financial services (C, a bank's SIC code): gross margin not meaningful.
 x = next(x for x in key["companies"][C]["measures"] if x["measure"] == "gross_margin")
@@ -136,7 +148,9 @@ x = next(x for x in key["companies"][A]["measures"] if x["reason"] == "mixed cur
 base = x["measure"][:-5]
 units = {raw(A, yy, base)[1] for yy in (x["year"] - x["window"], x["year"])}
 rows.append(("mixed currencies", f"{x['measure']} {x['year']}: input units {sorted(units)}", len(units) > 1 and x["value"] is None))
+recomputed = {"52/53-week year", "stock split", "changed year end", "restatement", "non-December year end", "IFRS filer"}
 
 for case, what, ok in rows:
+    what = f"{what} [{'value recomputed' if case in recomputed else 'reason from raw inputs'}]"
     print(f"{'OK ' if ok else 'BAD'} {case}: {what}")
 print(f"{sum(r[2] for r in rows)} of {len(rows)} agree")
