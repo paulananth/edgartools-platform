@@ -11,6 +11,7 @@ import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.rules import files, source_engine
+from tests.support.company_fields import before_ticket_129, reading_before_ticket_129
 
 
 RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
@@ -18,6 +19,13 @@ RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read
 
 def contract(member):
     return copy.deepcopy(files.source('gleif')['mdm'][f'gleif.{member}.v1']['contract'])
+
+
+def retired_contract(member):
+    """Rebuild ticket 129 took GLEIF's two record-keeping dates out of Level 1;
+    the retired mapper's outcomes are compared with them put back."""
+    found=contract(member)
+    return before_ticket_129(found,'gleif.level1.v1') if member=='level1' else found
 
 
 def retired(key, outcome):
@@ -28,6 +36,7 @@ def retired(key, outcome):
 
 def project(member, row):
     config=files.load(files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml')
+    if member=='level1': config=reading_before_ticket_129(config,'gleif.level1.v1')
     # The field projection alone; the contract's record checks have their own tests.
     mapped=config['read']['tables']['mapped']
     mapped.pop('checks',None)
@@ -112,7 +121,7 @@ def test_configured_normalization_preserves_assertion_ids_and_deferrals(case):
     publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture',
                  'revision':1,'effective_at':None}
     try:
-        outcome=('assertion',digest(adapters.normalize(row,source_code='gleif.level1.v1',contract=contract('level1'),
+        outcome=('assertion',digest(adapters.normalize(row,source_code='gleif.level1.v1',contract=retired_contract('level1'),
                                                          publication=publication)))
     except adapters.UnsupportedRecord as error:
         outcome=('deferred',error.reason,digest(error.detail),error.probable_kind)

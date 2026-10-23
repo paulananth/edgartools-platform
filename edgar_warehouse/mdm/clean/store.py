@@ -68,6 +68,7 @@ MIGRATIONS: tuple[str, ...] = (
     "023_stage_details.sql",
     "024_configured_kinds.sql",
     "025_kind_descriptions.sql",
+    "026_company_fields_out.sql",
 )
 
 # The functions the application login may run. It has no table rights beyond

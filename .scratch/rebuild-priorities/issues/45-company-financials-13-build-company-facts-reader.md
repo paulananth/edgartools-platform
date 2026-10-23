@@ -2,7 +2,7 @@
 
 Priority: 45, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/13-build-company-facts-reader.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: open. Blocked by: 40, 41, 128, 134. Map: [map](../../company-financials/map.md).
+Type: task. Status: done (#1140 merged 2026-10-22 18:37 ET). Blocked by: 40, 41, 128, 134. Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -20,5 +20,5 @@ Implement the reading ticket 40 decided: a configured source-extract contract un
 - [x] Rebased onto main after #1139 merged; 46 tests of the areas it touches pass on main's engine (2026-10-22 18:17 ET)
 - [x] Three-axis review, all findings fixed: GoF "leave it" (anchors are refused; a new taxonomy is rare), plus a test holding the nine tables' columns equal; Standards: a `source.yaml` naming the source and its bronze family (`company_facts`), since a suite test loads one per folder, and a plainer test placeholder; Spec: a file with facts and no CIK, facts or a taxonomy that is not an object, and a concept without a `units` object were landed or dropped silently, now refused by document assertions and `type: object, nullable: false`, one test each; a test that a fact lands whole with every field silver needs; 16 tests pass, all 368 captured files still read equal (122.6 s) (2026-10-22 18:12 ET)
 - [x] CI's first run failed one unit test: `rules/source-sequence.yaml` must declare every source with a `source.yaml`, and the new one was missing. Declared, with no target until ticket 46, after Company (its rows link by CIK); the sequence tests name it; 114 tests of the areas pass (2026-10-22 18:27 ET)
-- [ ] PR [#1140](https://github.com/paulananth/edgartools-platform/pull/1140), CI green, merge
+- [x] PR [#1140](https://github.com/paulananth/edgartools-platform/pull/1140), CI green, merged 2026-10-22 18:37 ET
 - [x] Learning → skill: `skills/company-financials/SKILL.md`, "Reading company facts" (the contract's file, the CIK filed two ways, every other shape refused); `CLAUDE.md`, Path ownership (run the overlap guard unpiped); `skills/data-onboarding/SKILL.md`, files table (a new source folder needs `source.yaml` and a line in `rules/source-sequence.yaml`) (2026-10-22 18:17 ET)

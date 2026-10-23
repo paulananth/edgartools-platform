@@ -17,6 +17,7 @@ from edgar_warehouse.mdm.clean import sec_company, gleif_publication
 from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import policy_layers
+from tests.support.company_fields import before_ticket_129
 
 BEFORE = {
     "policy": "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
@@ -117,6 +118,18 @@ def _without_ticket_10_checks(contract: dict) -> dict:
                                              if r not in TICKET_10_REASONS]}
 
 
+# Ticket 129, fixes 2 and 3 (operator, 2026-10-22): GLEIF's record-keeping
+# dates and the SIC code's label left the Company; with them put back, each
+# contract is the one pinned before.
+WITHOUT_TICKET_129_FIELDS = {
+    "sec.submissions.company.v1": "7786ffdd0187f24b4206762125ae09535cdc1c98b009406e174b8175a25006c4",
+    "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
+}
+def _with_company_fields_back(contract: dict, code: str) -> dict:
+    assert digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
+    return before_ticket_129(contract, code)
+
+
 def _with_retired_lists(contract: dict, code: str) -> dict:
     assert digest(contract) == ONE_STATEMENT[code], code
     return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[code]}}
@@ -129,7 +142,8 @@ def test_the_company_configuration_is_unchanged():
     assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
-    company = _with_retired_lists(sec_company.CONTRACT, sec_company.SOURCE_CODE)
+    company = _with_company_fields_back(sec_company.CONTRACT, sec_company.SOURCE_CODE)
+    company = _with_retired_lists(company, sec_company.SOURCE_CODE)
     assert digest(company) == WITH_PINNED_PLACE_CHECK
     assert digest(_with_yaml_place_check(company)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
     contract = _without_configured_reading(_with_yaml_place_check(company))
@@ -301,6 +315,8 @@ def _without_invalid_lei(contract: dict) -> dict:
 @pytest.mark.parametrize("member", sorted(GLEIF_BEFORE))
 def test_each_gleif_mapping_is_unchanged(member):
     contract = gleif_publication.dataset_contract(member)
+    if f"gleif.{member}.v1" in WITHOUT_TICKET_129_FIELDS:
+        contract = _with_company_fields_back(contract, f"gleif.{member}.v1")
     if member in WITH_ISSUER_FLAG:
         assert digest(contract) == WITH_ISSUER_FLAG[member]
         contract = _without_issuer_flag(contract)

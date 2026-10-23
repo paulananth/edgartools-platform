@@ -150,11 +150,12 @@ def gleif(
         fields={
             "name": name,
             "jurisdiction": jurisdiction,
-            "gleif_last_update": updated,
             "gleif_entity_status": status,
             "gleif_registration_status": "ISSUED",
         },
         identifiers={"lei": lei},
+        # GLEIF's LastUpdateDate is the record's effective time (ticket 129).
+        effective_at=updated,
         provenance={
             "matching": {
                 "headquarters_postal_code": postal,

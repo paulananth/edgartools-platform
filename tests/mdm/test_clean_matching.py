@@ -43,14 +43,16 @@ def sec(state="CA", postal="95014", country="US"):
     }
 
 
-def gleif(jurisdiction="US-CA", postal="95014"):
+def gleif(jurisdiction="US-CA", postal="95014", effective_at="2026-09-01T00:00:00+00:00"):
+    # The Stage keeps GLEIF's LastUpdateDate as the record's effective time, in
+    # UTC; the census keeps GLEIF's own spelling (ticket 129, fix 2).
     return {
         "kind": "company",
         "identifiers": {"lei": "HWUPKR0MPOU8FGXBT394"},
+        "effective_at": effective_at,
         "fields": {
             "name": value("Apple Inc."),
             "jurisdiction": value(jurisdiction),
-            "gleif_last_update": value("2026-09-01T00:00:00Z"),
             "gleif_entity_status": value("ACTIVE"),
             "gleif_registration_status": value("ISSUED"),
         },
@@ -79,6 +81,26 @@ def test_every_registered_name_binding_test_is_implemented():
 def test_both_measured_rules_pass_a_matching_pair():
     assert _passes(NAME_STATE, sec(), gleif())
     assert _passes(NAME_POSTCODE, sec(), gleif())
+
+
+def test_the_census_names_the_gleif_version_the_stage_holds_by_its_effective_time():
+    # GLEIF's spelling and the Stage's UTC form are one instant.
+    assert _passes(NAME_STATE, sec(), gleif(effective_at="2026-09-01T02:00:00+02:00"))
+    # A later GLEIF version than the one the census saw is not the census's answer.
+    assert not _passes(NAME_STATE, sec(), gleif(effective_at="2026-09-02T00:00:00+00:00"))
+    # A record with no stated time matches only a census that saw none.
+    assert not _passes(NAME_STATE, sec(), gleif(effective_at=None))
+    record = sec()
+    record["provenance"]["matching"]["name_census"]["leis"] = [["HWUPKR0MPOU8FGXBT394", ""]]
+    assert _passes(NAME_STATE, record, gleif(effective_at=None))
+    assert not _passes(NAME_STATE, record, gleif())
+
+
+def test_a_cascade_pass_checks_the_gleif_version_by_its_effective_time():
+    for effective_at, passes in [("2026-08-31T20:00:00-04:00", True), ("2026-09-03T00:00:00+00:00", False)]:
+        record, other = cascaded()
+        other["effective_at"] = effective_at
+        assert _passes(_pass(1), record, other) is passes, effective_at
 
 
 def test_a_field_path_is_read_from_the_rule():

@@ -45,6 +45,9 @@ def test_versions_stored_before_read_the_same_after(database):
     with database.admin.begin() as conn:
         conn.exec_driver_sql("DROP VIEW mdm.company_master_field")
         conn.exec_driver_sql("ALTER TABLE mdm.company ADD COLUMN fields jsonb")
+        # 026 dropped three columns the writers before it fill.
+        for name in ("sic_description", "gleif_last_update", "gleif_next_renewal"):
+            conn.exec_driver_sql(f"ALTER TABLE mdm.company ADD COLUMN {name} text")
         conn.exec_driver_sql("DROP FUNCTION mdm.record_company_version(jsonb, text, timestamp with time zone)")
         conn.exec_driver_sql(old_fn.replace("%", "%%"))  # psycopg2 formats a bare %
         conn.exec_driver_sql(old_batch.replace("%", "%%"))

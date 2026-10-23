@@ -30,12 +30,6 @@ read:
                   path_mode: literal
                   type: text
                   null_if_blank: true
-              sic_description:
-                value:
-                  path: sic_description
-                  path_mode: literal
-                  type: text
-                  null_if_blank: true
               state_of_incorporation:
                 value:
                   path: state_of_incorporation
@@ -123,5 +117,4 @@ input_fields:
 - fiscal_year_end
 - name_census
 - sic
-- sic_description
 - state_of_incorporation
