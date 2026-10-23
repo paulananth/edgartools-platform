@@ -5,6 +5,10 @@ last, retain database authority, and introduce no entity/source policy in code.
 
 - [x] Finish configured candidate routes and namespace selection through the normal PostgreSQL matching caller; preserve approved default outcomes — 979 MDM unit cases and 26 affected real-PostgreSQL cases passed; 2026-10-23 09:08 ET.
 - [x] Install and qualify indexed candidate retrieval against populated PostgreSQL state — six invented-profile normal merge cases cover both routes, either arrival order, replay and held-value veto; populated migration preserves rows and pins; actual plans probe one key at a time on a 5,001-row current store; 2026-10-23 09:08 ET.
+- [x] Remove fixed candidate selectors from shared native record-index preparation; reindex from retained latest readings and refuse an unqualified route change without them — 994 MDM unit cases passed with the rebuilt native wheel; configured reindex/replay passed in the 24-case PostgreSQL and MySQL checkpoint cohorts; 2026-10-23 12:59 ET.
+- [x] Add indexed current-record, candidate and membership transport with binding/correction readers against the shared native indexes; retain exact reference and provenance validation — 24 checkpoint cases per engine, including normal binding/correction module entry points, passed; this does not connect the complete Merge Stage caller; 2026-10-23 12:59 ET.
+- [x] Qualify the destination-authority storage capability independently — PostgreSQL/MySQL commit expiry, overtaking, duplicate proof refresh, direct malformed requests, restricted rights, interrupted upgrade, indexed plans and unchanged historical fingerprints passed within each 24-case cohort; normal worker integration remains unchecked below; 2026-10-23 12:59 ET.
+- [ ] Close the demonstrated worker dependency: destination-local external resource fences and expiry must hold through the MySQL commit; preserve protocol 1–3 migration fingerprints and publication-on-input behavior.
 - [ ] Complete normal MySQL owner migration and restricted caller operations; helper storage qualification alone is insufficient.
 - [ ] Qualify atomic merge, identity, history, relationships, detail lists and publication on both selected engines.
 - [ ] Qualify competing/stale writers, rollback, interrupted recovery and unchanged replay on both engines.
@@ -12,7 +16,7 @@ last, retain database authority, and introduce no entity/source policy in code.
 - [ ] Qualify independently installed normal merge callers on both engines with invented vocabulary.
 - [ ] Verify the checkpoint final CI head and review readiness.
 - [x] Review the candidate-route checkpoint on Standards, Spec and GoF; publish evidence/PR — review below, clean whitespace/overlap checks and draft PR #1148 at implementation head 48e406db; 2026-10-23 09:13 ET.
-- [x] Learning → skill: none; `mdm-engineering` already requires configured computation, indexed key probes, exact candidate checks, populated migration proof and separate normal-caller qualification; 2026-10-23 09:13 ET.
+- [ ] Learning → skill: document the protocol-4 destination-authority and explicit-input-publication capability and its integration limits on a separate skill branch/PR before final handoff.
 
 ## Initial design review
 
@@ -87,3 +91,49 @@ installed MySQL merge workflow. PR #1148 remains draft pending final CI.
 
 The overall MDM ticket is **incomplete** while any part above remains unchecked.
 SQL Server remains deferred until both first-priority engines are complete.
+
+
+## Portable record-read and destination-authority checkpoint
+
+The native lookup preparation now receives typed candidate routes from pinned
+configuration. A route change rebuilds derived keys from the retained latest
+reading, preserving the assertion, original batch and bronze provenance; it
+refuses a changed route without that reading. RecordReader dereferences exact
+immutable inputs and validates current source-record metadata and route pins.
+Matching, binding and correction have indexed reader entry points; the complete
+normal MySQL Store and Merge Stage are still unsupported.
+
+Storage protocol 4, explicitly selected on PostgreSQL/MySQL only, adds optional
+external destination-authority proofs outside the immutable business intent.
+The destination checks monotonic fences, run/attempt ownership and expiry under
+its transaction and again before completion. PostgreSQL also enforces expiry at
+a caller-held commit; MySQL owns the commit and refuses an existing transaction.
+SQL Server explicitly refuses protocol 4 while retaining its protocols 1–3.
+Explicit publish_inputs distinguishes new immutable inputs that require a
+publication from derived-index-only maintenance, which still creates no business
+history or delivery. The nine historical engine/protocol fingerprints are frozen
+and unchanged. Direct malformed requests are refused at the database itself.
+
+### Standards
+
+Existing WIP remains on its owning branch; no unrelated edits are included.
+Public examples are invented. Real-engine cohorts use disposable isolated
+servers and restricted runtime roles. Historical SQL and protocol fingerprints
+remain unchanged; the new capability requires an explicit protocol upgrade.
+
+### Spec
+
+This checkpoint qualifies configured native selectors, indexed read transport
+and required destination enforcement. It does not claim full normal MySQL
+mastering, normal worker authority integration or PostgreSQL business-routine
+retirement. Those remain unchecked and are decomposed in the separate Wayfinder
+map. No source policy, acquisition, activation or deployment changes.
+
+### GoF
+
+History shows the existing skill-owned adapter and native record preparation
+already carry this boundary (foundation changes #1073, #1096 and #1121). Retain
+that adapter and shared computation. RecordReader collects exact pointer/input
+transport without interpreting a second merge policy. No class hierarchy or
+new merge algorithm is added; the cost is explicit derived-route reindexing and
+qualification of the new storage protocol before normal worker integration.

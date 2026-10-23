@@ -196,6 +196,18 @@ def model(prefix: str, schema: str | None = None, *, protocol=1) -> tuple[MetaDa
             CheckConstraint("version > 0"),
             CheckConstraint("generation > 0"),
         )
+    if protocol >= 4:
+        table(
+            "authority",
+            Column("resource_key", key, primary_key=True),
+            Column("resource_bytes", binary, nullable=False),
+            Column("token", BigInteger, nullable=False),
+            Column("run_bytes", binary, nullable=False),
+            Column("attempt_bytes", binary, nullable=False),
+            Column("expires", BigInteger, nullable=False),
+            CheckConstraint("token > 0"),
+            CheckConstraint("expires > 0"),
+        )
     table(
         "outbox",
         Column("batch_key", key, primary_key=True),

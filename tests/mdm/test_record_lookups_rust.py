@@ -3,6 +3,7 @@
 import pytest
 
 from edgar_warehouse.mdm.clean.evidence import KINDS, assertion
+from edgar_warehouse.mdm.clean.matching import candidate_routes
 from edgar_warehouse.rules.source_engine import prepare_record_lookups
 
 AT = "2026-01-01T00:00:00+00:00"
@@ -16,13 +17,14 @@ def reading(revision=1, kind="person", **changes):
     return assertion(**{**args, **changes})
 
 
-def prepare(readings, previous=None, *, bindings=None, subjects=None, occurrences=None, batch="first"):
+def prepare(readings, previous=None, *, bindings=None, subjects=None, occurrences=None, batch="first", routes=None):
     previous = previous or {}
     subjects = subjects if subjects is not None else sorted(set(previous) | {item["subject"] for item in readings})
     return prepare_record_lookups({
         "readings": readings, "previous": previous, "subjects": subjects,
         "bindings": bindings or {}, "quarantined": {}, "batch_id": batch,
         "occurrences": occurrences or {}, "normalizers": {},
+        "candidate_routes": candidate_routes() if routes is None else routes,
         "policy": {"kinds": {kind: {"identifiers": {"number": {
             "normalizer": "normalize_identifier@crd-v1", "sources": ["fixture.latest"],
         }}} for kind in sorted(KINDS)}},
@@ -84,3 +86,62 @@ def test_records_outside_the_affected_scope_are_not_changed_or_removed():
 def test_reading_outside_the_declared_scope_is_refused():
     with pytest.raises(ValueError, match="outside its affected record scope"):
         prepare([reading()], subjects=[])
+
+
+@pytest.mark.parametrize("value,expected", [("invented-target", {"invented-route":"invented-target"}),
+    (None, {}), (False, {}), (0, {}), ("", {}), ([], {}), ({"value":"invented-target"}, {})])
+def test_candidate_route_reads_only_nonempty_scalar_keys(value, expected):
+    item = reading(provenance={"matching":{"invented_census":{"invented_entries":[[value,1]]}}})
+    route = {"invented-route":["provenance","matching","invented_census","invented_entries",0,0]}
+    current, changes = prepare([item], routes=route)
+    assert current[item["subject"]]["matching_keys"] == expected
+    groups = [entry for entry in changes if entry["type"].startswith("lookup/name_candidates/")]
+    assert len(groups) == len(expected)
+
+
+def test_profile_routes_include_identifier_census_and_cascade_without_fixed_fields():
+    item = reading(provenance={"matching":{"invented/field'Ω":{"entries":[["target-one",1]],
+        "assignment":{"target":"target-two"}}}})
+    routes = {"reference":["identifiers","number"],
+        "census":["provenance","matching","invented/field'Ω","entries",0,0],
+        "assignment":["provenance","matching","invented/field'Ω","assignment","target"]}
+    current, _ = prepare([item], routes=routes)
+    assert current[item["subject"]]["matching_keys"] == {
+        "reference":"17-1", "census":"target-one", "assignment":"target-two"}
+    assert len(current[item["subject"]]["matching_routes_sha256"]) == 64
+
+
+def test_route_upgrade_reindexes_retained_latest_reading_without_a_new_revision():
+    item = reading(provenance={"matching":{"one":"old-target","two":"new-target"}})
+    before, _ = prepare([item], routes={"old":["provenance","matching","one"]})
+    after, changes = prepare([item], before, routes={"new":["provenance","matching","two"]}, batch="later")
+    assert after[item["subject"]]["matching_keys"] == {"new":"new-target"}
+    assert after[item["subject"]]["batch_id"] == "first"
+    assert after[item["subject"]]["assertion_id"] == item["assertion_id"]
+    groups = [entry for entry in changes if entry["type"].startswith("lookup/name_candidates/")]
+    assert len(groups) == 2 and sum(entry["removed"] for entry in groups) == 1
+    repeated, changes = prepare([item], after, routes={"new":["provenance","matching","two"]}, batch="again")
+    assert repeated == after and changes == []
+    with pytest.raises(ValueError, match="require the retained latest reading"):
+        prepare([], before, routes={"new":["provenance","matching","two"]})
+
+
+def test_old_pointer_without_route_fingerprint_requires_its_latest_reading():
+    item = reading()
+    before, _ = prepare([item])
+    before[item["subject"]].pop("matching_routes_sha256")
+    with pytest.raises(ValueError, match="require the retained latest reading"):
+        prepare([], before)
+    after, _ = prepare([item], before, batch="repair")
+    assert after[item["subject"]]["batch_id"] == "first"
+    assert after[item["subject"]]["assertion_id"] == item["assertion_id"]
+    assert after[item["subject"]]["matching_routes_sha256"]
+
+
+@pytest.mark.parametrize("route", [{"": ["identifiers","number"]}, {"route": []},
+    {"route":["missing",""]}, {"route":["identifiers",-1]}, {"route":["identifiers",True]}])
+def test_invalid_candidate_route_is_refused_before_data_dependent_selection(route):
+    with pytest.raises(ValueError):
+        prepare([reading()], routes=route)
+    with pytest.raises(ValueError):
+        prepare([], routes=route)

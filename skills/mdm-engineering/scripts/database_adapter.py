@@ -19,6 +19,7 @@ import re
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from decimal import Decimal
+from datetime import UTC, datetime
 from itertools import permutations
 from pathlib import Path
 from typing import Any
@@ -284,8 +285,11 @@ class PreparedBatch:
     evidence: tuple[Effect, ...] = ()
     payloads: dict[str, Any] | None = None
     indexes: tuple[IndexChange, ...] | None = None
+    publish_inputs: bool = False
 
     def intent(self) -> str:
+        if type(self.publish_inputs) is not bool:
+            raise AdapterError("Input publication must be a boolean")
         for value in (self.batch, self.run, self.scope):
             key(value)
         if not self.consumers or len(set(self.consumers)) != len(self.consumers):
@@ -337,6 +341,14 @@ class PreparedBatch:
                 {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
                 for c in sorted(self.consumers)
             ]
+        if self.publish_inputs:
+            result["version"] = "4"
+            result["publish_inputs"] = True
+            result.setdefault("indexes", [])
+            result["consumers"] = [
+                {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
+                for c in sorted(self.consumers)
+            ]
         # The wire document is ASCII; opaque original UTF-8 bodies remain bytes.
         return json.dumps(
             result, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -379,6 +391,11 @@ ERRORS = frozenset(
         "duplicate_index_key",
         "stale_index_version",
         "index_digest_collision",
+        "invalid_destination_authority",
+        "expired_destination_authority",
+        "stale_destination_authority",
+        "destination_authority_expired_before_save",
+        "invalid_input_publication",
         "unsupported_index_changes",
         "scope_lease_expired_before_save",
         "unknown_publication",
@@ -401,8 +418,10 @@ class Adapter:
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
-        if type(protocol) is not int or protocol not in (1, 2, 3):
+        if type(protocol) is not int or protocol not in (1, 2, 3, 4):
             raise AdapterError("Unsupported storage protocol")
+        if protocol >= 4 and engine.dialect.name == "mssql":
+            raise AdapterError("Destination authority is not yet qualified for SQL Server")
         self.protocol = protocol
         self.metadata, self.tables = model(prefix, self.schema, protocol=protocol)
         self.routines = capabilities(engine.dialect, self.tables, prefix, protocol=protocol)
@@ -468,19 +487,49 @@ class Adapter:
         )
         return Lease(scope, owner, int(row["fence"]), int(row["expires"]))
 
-    def apply(self, batch: PreparedBatch, lease: Lease) -> dict:
+    def apply(self, batch: PreparedBatch, lease: Lease, *, authority=None) -> dict:
         if batch.scope != lease.scope:
             raise AdapterError("Lease scope differs from prepared effects")
         if batch.indexes is not None and self.protocol < 3:
             raise AdapterError("Selected storage protocol has no lookup entries")
+        if (batch.publish_inputs or authority is not None) and self.protocol < 4:
+            raise AdapterError("Selected storage protocol has no destination authority")
+        values = {
+            "intent": batch.intent(),
+            "owner": lease.owner.encode().hex(),
+            "fence": counter(lease.fence, positive=True),
+            "expected_generation": counter(batch.expected_generation),
+        }
+        if authority is not None:
+            if not isinstance(authority, list) or not authority:
+                raise AdapterError("A nonempty destination authority proof is required")
+            proofs, resources = [], set()
+            for item in authority:
+                try:
+                    if set(item) != {"resource", "token", "run_id", "attempt", "expires_at"}:
+                        raise ValueError
+                    resource = item["resource"]
+                    key(resource)
+                    if resource in resources:
+                        raise ValueError
+                    resources.add(resource)
+                    expires = datetime.fromisoformat(item["expires_at"].replace("Z", "+00:00"))
+                    if expires.tzinfo is None:
+                        raise ValueError
+                    offset = expires.astimezone(UTC) - datetime(1970,1,1,tzinfo=UTC)
+                    micros = (offset.days * 86400 + offset.seconds) * 1000000 + offset.microseconds
+                    from uuid import UUID
+                    proofs.append({"resource": resource.encode().hex(),
+                        "token": counter(item["token"], positive=True),
+                        "run": str(UUID(item["run_id"])).encode().hex(),
+                        "attempt": str(UUID(item["attempt"])).encode().hex(),
+                        "expires": counter(micros, positive=True)})
+                except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                    raise AdapterError("Invalid destination authority proof") from None
+            values["authority"] = sorted(proofs, key=lambda proof: proof["resource"])
         result = self._rpc(
             "apply",
-            {
-                "intent": batch.intent(),
-                "owner": lease.owner.encode().hex(),
-                "fence": counter(lease.fence, positive=True),
-                "expected_generation": counter(batch.expected_generation),
-            },
+            values,
         )
         return {
             name: bool(value) if name in {"duplicate", "changed"} else int(value)
@@ -891,6 +940,12 @@ def _grants(conn, adapter, runtime_role, runtime_host):
             )
             if rights:
                 raise AdapterError("Runtime already has direct storage writes")
+            column_rights = conn.scalar(text(
+                "SELECT COUNT(*) FROM information_schema.COLUMN_PRIVILEGES WHERE GRANTEE=:g "
+                "AND TABLE_SCHEMA=:s AND TABLE_NAME=:t AND (PRIVILEGE_TYPE<>'SELECT' OR IS_GRANTABLE='YES')"),
+                {"g": grantee,"s":adapter.schema,"t":name.rsplit(".",1)[-1].strip("`")})
+            if column_rights:
+                raise AdapterError("Runtime already has direct storage column writes")
             if not conn.scalar(
                 text(
                     "SELECT COUNT(*) FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE=:g AND TABLE_SCHEMA=:s AND TABLE_NAME=:t AND PRIVILEGE_TYPE='SELECT'"
@@ -1229,7 +1284,7 @@ def _migration_checksums(adapter) -> frozenset[str]:
 def migrate(
     engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1
 ) -> dict:
-    if type(protocol) is not int or protocol not in (1, 2, 3):
+    if type(protocol) is not int or protocol not in (1, 2, 3, 4):
         raise AdapterError("Unsupported storage protocol")
     builds = {version: Adapter(engine, prefix=prefix, protocol=version) for version in range(1, protocol + 1)}
     checksums = {version: hashlib.sha256("\n".join(_migration_statements(build)).encode()).hexdigest()
@@ -1382,7 +1437,7 @@ def main(argv=None):
     setup = sub.add_parser("migrate")
     setup.add_argument("--runtime-role", required=True)
     setup.add_argument("--runtime-host", default="%")
-    setup.add_argument("--protocol", type=int, choices=(1, 2, 3), default=1)
+    setup.add_argument("--protocol", type=int, choices=(1, 2, 3, 4), default=1)
     principal = sub.add_parser(
         "provision",
         help="Provision a separate test runtime principal; preserve existing passwords",
@@ -1395,7 +1450,7 @@ def main(argv=None):
     )
     apply.add_argument("--input", required=True, type=Path)
     apply.add_argument("--owner", required=True)
-    apply.add_argument("--protocol", type=int, choices=(1, 2, 3), default=1)
+    apply.add_argument("--protocol", type=int, choices=(1, 2, 3, 4), default=1)
     sub.add_parser("status")
     args = parser.parse_args(argv)
     engine = None
@@ -1462,9 +1517,10 @@ def main(argv=None):
                         entry["type"], entry["id"], entry.get("body_json", entry.get("body")),
                         entry.get("expected_version", 0), entry.get("removed", False),
                     ) for entry in raw["indexes"]) if "indexes" in raw else None,
+                    publish_inputs=raw.get("publish_inputs", False),
                 )
                 lease = adapter.claim(batch.scope, args.owner)
-                output = adapter.apply(batch, lease)
+                output = adapter.apply(batch, lease, authority=raw.get("authority"))
         print(json.dumps(output, sort_keys=True))
         return 0
     except (

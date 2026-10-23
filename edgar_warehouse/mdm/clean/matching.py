@@ -60,6 +60,18 @@ def candidate_paths(rule: dict) -> dict[str, tuple]:
     }
 
 
+def candidate_routes() -> dict[str, tuple]:
+    """All build-pinned candidate selectors, with unambiguous opaque keys."""
+    from .store import canonical
+
+    assert_current()
+    return {
+        canonical([profile, role]): path
+        for profile in sorted(CATALOG["pair_comparisons"])
+        for role, path in candidate_paths({"pair_comparison": profile}).items()
+    }
+
+
 def candidate_value(record: dict, path: tuple) -> str | None:
     """Read a scalar candidate key; absent or malformed paths propose nothing."""
     value = record
@@ -131,9 +143,13 @@ def _stored(conn, source: str, path: tuple, values: list[str]) -> list[dict]:
     any binding proposal is made. Only constant storage expressions reach SQL.
     """
     import json
+    from .record_reads import RecordReader
 
     if not values:
         return []
+    if isinstance(conn, RecordReader):
+        routes = [name for name, held in (conn.routes or {}).items() if tuple(path) == held]
+        return conn.candidates(source,routes,values)
     if path[:1] == ("identifiers",):
         expression, tail = "reading->'identifiers'", path[1:]
     elif path[:2] == ("provenance", "matching"):
@@ -185,6 +201,14 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
     """Identifiers already held through bound records, excluding releases."""
     held: dict[str, set] = defaultdict(set)
     if not entities:
+        return held
+    from .record_reads import RecordReader
+    if isinstance(conn, RecordReader):
+        for record in conn.current(conn.members(entities)).values():
+            if record["source_code"] == source and record["subject"] not in released:
+                value = (record.get("identifiers") or {}).get(namespace)
+                if value is not None:
+                    held[record["entity_id"]].add(value)
         return held
     for r in rows(
         conn,
