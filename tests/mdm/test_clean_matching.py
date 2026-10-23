@@ -96,6 +96,54 @@ def test_the_census_names_the_gleif_version_the_stage_holds_by_its_effective_tim
     assert not _passes(NAME_STATE, record, gleif())
 
 
+@pytest.mark.parametrize(
+    "case,expected",
+    [
+        ("ambiguous_candidates", (False, False)),
+        ("ambiguous_holders", (False, False)),
+        ("stale_census", (False, False)),
+        ("different_legal_form", (False, False)),
+        ("inactive_candidate", (False, False)),
+        ("different_places", (False, False)),
+        ("conflicting_jurisdictions", (False, False)),
+        ("foreign_business_country", (False, True)),
+    ],
+)
+def test_pair_policy_without_storage(case, expected):
+    """Calculation matrix retired from PostgreSQL integration; fixtures are invented."""
+    record, other = sec(), gleif()
+    record["record_key"] = "9999999999"
+    record["fields"]["name"] = value("INVENTED GROUP INC")
+    other["fields"]["name"] = value("Invented Group Inc.")
+    other["identifiers"] = {"lei": "9999000000EXAMPLE113"}
+    entry = record["provenance"]["matching"]["name_census"]
+    entry.update(key="INVENTED GROUP INC", ciks=[record["record_key"]],
+                 leis=[[other["identifiers"]["lei"], "2026-09-01T00:00:00Z"]])
+    assert all(_passes(rule, record, other) for rule in (NAME_STATE, NAME_POSTCODE))
+    if case == "ambiguous_candidates":
+        entry["leis"].append(["9999000000EXAMPLE114", "2026-09-01T00:00:00Z"])
+        entry["lei_count"] = 2
+    elif case == "ambiguous_holders":
+        entry["ciks"].append("9999999998")
+        entry["cik_count"] = 2
+    elif case == "stale_census":
+        other["effective_at"] = "2026-09-20T00:00:00Z"
+    elif case == "different_legal_form":
+        other["fields"]["name"] = value("Invented Group LLC")
+    elif case == "inactive_candidate":
+        other["fields"]["gleif_entity_status"] = value("INACTIVE")
+    elif case == "different_places":
+        other["fields"]["jurisdiction"] = value("US-NV")
+        other["provenance"]["matching"]["headquarters_postal_code"] = "89501"
+    elif case == "conflicting_jurisdictions":
+        other["fields"]["jurisdiction"] = value("US-NV")
+    elif case == "foreign_business_country":
+        record["provenance"]["matching"]["business_country"] = "GB"
+        other["fields"]["jurisdiction"] = value("GB")
+        other["provenance"]["matching"]["headquarters_country"] = "GB"
+    assert tuple(_passes(rule, record, other) for rule in (NAME_STATE, NAME_POSTCODE)) == expected
+
+
 def test_a_cascade_pass_checks_the_gleif_version_by_its_effective_time():
     for effective_at, passes in [("2026-08-31T20:00:00-04:00", True), ("2026-09-03T00:00:00+00:00", False)]:
         record, other = cascaded()

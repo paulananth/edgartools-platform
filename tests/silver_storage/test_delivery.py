@@ -59,11 +59,14 @@ def test_normal_modes_repeat_and_populated_migration(silver, mode):
         with pytest.raises(Blocked, match="append only"): land(sink, config["table"], changed)
         assert stored(runtime, config) == before
     else:
-        assert land(sink, config["table"], changed)["changed"] == 1
+        result = land(sink, config["table"], changed)
+        assert (result["inserted"], result["changed"]) == (0, 1)
         after = stored(runtime, config)
         assert str(after[0]["amount"]) == "4.00" and after[1] == before[1]
+        assert after[0]["loaded_at"] >= before[0]["loaded_at"]
     if mode == "snapshot":
         assert land(sink, config["table"], changed[:1])["deleted"] == 1
+        assert [row["visit_id"] for row in stored(runtime, config)] == [1]
         with pytest.raises(Blocked, match="empty delivery"): land(sink, config["table"], [])
     assert migrate(owner, runtime_role=role, existing_only=True)
     assert land(sink, config["table"], changed[:1] if mode == "snapshot" else rows())["inserted"] == 0

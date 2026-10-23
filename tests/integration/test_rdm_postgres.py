@@ -201,17 +201,6 @@ def test_a_hierarchy_publishes_paths_and_a_new_version_supersedes(rdm, tmp_path)
     assert rdm.publish("test-industry", "4", out=tmp_path)["superseded"] is None  # it replaces the retired 3
 
 
-def test_a_cycle_never_publishes(rdm, tmp_path):
-    rdm, _ = rdm
-    rdm.draft({"code_set": "test-cycle", "name": "A cycle"}, "1",
-              [{"code": "A", "label": "a", "parent_code": "B"}, {"code": "B", "label": "b", "parent_code": "A"}],
-              created_by="test")
-    rdm.approve("test-cycle", "1", **OPERATOR)
-    with pytest.raises(Blocked, match="cycle"):
-        rdm.publish("test-cycle", "1", out=tmp_path)
-    assert rdm.version("test-cycle", "1")["status"] == "approved"  # nothing half-published
-
-
 def test_an_agent_drafts_from_a_file(rdm, tmp_path):
     rdm, _ = rdm
     path = tmp_path / "draft.json"

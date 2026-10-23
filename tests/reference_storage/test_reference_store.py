@@ -113,6 +113,9 @@ def test_cycles_and_artifact_failure_publish_nothing(reference, tmp_path, monkey
     with pytest.raises(Blocked, match="cycle"):
         store.publish(name, "1", out=tmp_path)
     assert store.version(name, "1")["status"] == "approved"
+    table = store.tables["code_path"]
+    with store.engine.connect() as conn:
+        assert not conn.execute(select(table.c.code).where(scope(conn, table, code_set=name, version="1"))).all()
     name = draft(store)
     approve(store, name)
     def fail(*args):
