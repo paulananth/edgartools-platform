@@ -8,9 +8,11 @@ last, retain database authority, and introduce no entity/source policy in code.
 - [ ] Complete normal MySQL owner migration and restricted caller operations; helper storage qualification alone is insufficient.
 - [ ] Qualify atomic merge, identity, history, relationships, detail lists and publication on both selected engines.
 - [ ] Qualify competing/stale writers, rollback, interrupted recovery and unchanged replay on both engines.
-- [ ] Qualify independently installed configured callers with invented vocabulary.
-- [ ] Review Standards, Spec and GoF; resolve findings and publish evidence/PR.
-- [ ] Learning → skill.
+- [x] Qualify the shipped candidate profile and registered migration files outside the checkout — independently installed five-wheel bundle from 48e406db; two checks passed in 182.37 seconds; 2026-10-23 09:13 ET.
+- [ ] Qualify independently installed normal merge callers on both engines with invented vocabulary.
+- [ ] Verify the checkpoint final CI head and review readiness.
+- [x] Review the candidate-route checkpoint on Standards, Spec and GoF; publish evidence/PR — review below, clean whitespace/overlap checks and draft PR #1148 at implementation head 48e406db; 2026-10-23 09:13 ET.
+- [x] Learning → skill: none; `mdm-engineering` already requires configured computation, indexed key probes, exact candidate checks, populated migration proof and separate normal-caller qualification; 2026-10-23 09:13 ET.
 
 ## Initial design review
 
@@ -67,3 +69,21 @@ retrieval; no class hierarchy, registry or second merge algorithm was added.
 The cost is one generic metadata index and a required explicit owner migration.
 Actual plans prove indexed probes on the populated store. Existing comparison,
 correction and identity behavior remains protected by the affected tests.
+
+## Final local checkpoint evidence
+
+The complete MDM unit cohort passed 979 cases in 79.05 seconds. The two disjoint
+PostgreSQL cohorts passed 26 cases in 27.81 seconds and 93 cases in 150.97 seconds
+(119 total). Coverage retains correction/quarantine, identifier binding, atomic
+save/rollback, competing generation/checkpoint writers, publication retry,
+restricted grants, configured kinds and real lookup-index checks. All disposable
+servers stopped when their cohort ended; retained test servers were not changed.
+
+Implementation head 48e406db independently installed all five wheels. Two
+outside-checkout checks passed in 182.37 seconds: an alternate candidate profile
+reaches the shipped comparison and route selectors, and every registered migration
+including 027 ships with publication preparation. This does not claim a complete
+installed MySQL merge workflow. PR #1148 remains draft pending final CI.
+
+The overall MDM ticket is **incomplete** while any part above remains unchecked.
+SQL Server remains deferred until both first-priority engines are complete.
