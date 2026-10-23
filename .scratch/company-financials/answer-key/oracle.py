@@ -27,6 +27,8 @@ from pathlib import Path
 getcontext().prec = 40
 PLACES = Decimal("1e-12")
 FACTS, SUBMISSIONS, CASES, OUT = (Path(a).expanduser() for a in sys.argv[1:5])
+# The pinned reference data this key reads (ticket 133): read by its pin, never a copy.
+PUBLISHED = Path(__file__).resolve().parents[3] / "rules" / "reference" / "published"
 
 # --- the rulings ------------------------------------------------------------------
 ANNUAL = range(364, 372)  # ticket 35: 364-371 days, counting the first and last day
@@ -142,9 +144,40 @@ def currency(unit: str) -> str | None:
     return head if len(head) == 3 and head.isupper() else None
 
 
+def pinned(code_set: str, version: str = "1") -> dict[str, dict]:
+    """A published code set's codes, refused unless they are its pinned bytes."""
+    folder = PUBLISHED / code_set / version
+    data = (folder / "canonical.jsonl").read_bytes()
+    if hashlib.sha256(data).hexdigest() != json.loads((folder / "pin.json").read_text())["sha256"]:
+        raise SystemExit(f"{code_set} {version} differs from its pin")
+    return {row["code"]: row for row in map(json.loads, data.decode().splitlines())}
+
+
+PLACE_CODES, RATES = pinned("sec-place-codes"), pinned("corporate-tax-rates")
+
+
+def country(place: str | None) -> str | None:
+    """The ISO country a filed place code names: its exact ISO 3166 crosswalk, a
+    subdivision (US-PA, CA-ON) read as its country."""
+    for to_set, _, code, match in (PLACE_CODES.get(place or "") or {}).get("crosswalk", []):
+        if to_set == "iso-3166" and match == "exact":
+            return code.split("-")[0]
+    return None
+
+
+def statutory_rate(alpha2: str | None, end: str) -> Decimal | None:
+    """The country's statutory rate in force on the fiscal year's end, as a fraction
+    (operator, 2026-10-22: "Statutory rate (new source)"; RDM corporate-tax-rates)."""
+    row = RATES.get(f"{alpha2}:{end[:4]}") if alpha2 else None
+    if row is None or not (row["valid_from"] <= end <= row["valid_to"]):
+        return None
+    return Decimal(row["value"]) / 100
+
+
 class Company:
-    def __init__(self, cik: str, body: dict, sic: str | None):
+    def __init__(self, cik: str, body: dict, sic: str | None, place: str | None = None):
         self.cik, self.sic = cik, sic
+        self.country = country(place)
         self.fs = bool(sic and sic.isdigit() and (6000 <= int(sic) <= 6199 or 6300 <= int(sic) <= 6411))
         self.facts = body.get("facts") or {}
         self.years = self._years()
@@ -390,10 +423,16 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     if pre[0] is None or tax[0] is None:
                         add(name, year, None, reason="no concept filed")
                         continue
-                    if pre[0] <= 0 or not (0 <= tax[0] / pre[0] <= 1):
-                        add(name, year, None, reason="waiting for the statutory rate")  # ticket 133
-                        continue
-                    top = (oi[0] * (1 - tax[0] / pre[0]), oi[1])
+                    rate = tax[0] / pre[0] if pre[0] > 0 else None
+                    if rate is None or not (0 <= rate <= 1):
+                        if company.country is None:
+                            add(name, year, None, reason="no country of incorporation")
+                            continue
+                        rate = statutory_rate(company.country, company.years[year]["end"])
+                        if rate is None:
+                            add(name, year, None, reason="no statutory rate for the country and year")
+                            continue
+                    top = (oi[0] * (1 - rate), oi[1])
 
                     def capital(y):
                         d, e, c = number(y, "total_debt"), number(y, "book_value"), number(y, "cash")
@@ -441,31 +480,34 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
     return out
 
 
-def sics() -> dict[str, str]:
+def filers() -> dict[str, tuple[str | None, str | None]]:
+    """Each filer's SIC code and filed place of incorporation."""
     found = {}
     for path in SUBMISSIONS.rglob("CIK*.json"):
         try:
             body = json.loads(path.read_bytes())
         except ValueError:
             continue
-        if body.get("cik") is not None and body.get("sic"):
-            found[str(body["cik"]).zfill(10)] = str(body["sic"])
+        if body.get("cik") is not None:
+            found[str(body["cik"]).zfill(10)] = (str(body["sic"]) if body.get("sic") else None,
+                                                 body.get("stateOfIncorporation") or None)
     return found
 
 
 def main() -> None:
     chosen = json.loads(CASES.read_text())
-    sic = sics()
+    filed = filers()
     key = {"rulings": "skills/company-financials/SKILL.md (tickets 35, 38, 39, 42, 44)", "companies": {}}
     for cik in chosen["chosen"]:
         path = FACTS / f"{cik}.json.gz"
         raw = path.read_bytes()
         body = json.loads(gzip.decompress(raw), parse_float=Decimal)
-        company = Company(cik, body, sic.get(cik))
+        sic, place = filed.get(cik, (None, None))
+        company = Company(cik, body, sic, place)
         items = {y: {name: item(company, y, name) for name in LISTS["us-gaap"]} for y in sorted(company.years)}
         key["companies"][cik] = {
             "input_sha256": hashlib.sha256(raw).hexdigest(), "cases": chosen["cases"][cik],
-            "format": "financial services" if company.fs else "industrial", "sic": sic.get(cik),
+            "format": "financial services" if company.fs else "industrial", "sic": sic, "country": company.country,
             "years": {y: {"end": company.years[y]["end"], "taxonomy": company.years[y]["taxonomy"],
                           **{k: company.years[y][k] for k in ("earlier_end", "comparative_end") if k in company.years[y]}}
                       for y in company.years},

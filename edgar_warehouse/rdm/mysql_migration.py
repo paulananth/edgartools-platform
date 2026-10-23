@@ -11,6 +11,7 @@ from .storage import KEYS
 BOUNDARY = "\n-- statement boundary\n"
 MIGRATION = Path(__file__).parent / "migrations" / "mysql-v1.sql"
 SEARCH_MIGRATION = MIGRATION.with_name("mysql-search-v2.sql")
+VALUE_MIGRATION = MIGRATION.with_name("mysql-value-v3.sql")
 
 
 def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
@@ -21,8 +22,11 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
         raise Blocked("An existing restricted runtime account is required")
     payload = MIGRATION.read_text()
     checksum = hashlib.sha256(payload.encode()).hexdigest()
-    search_payload = SEARCH_MIGRATION.read_text()
-    search_checksum = hashlib.sha256(search_payload.encode()).hexdigest()
+    follow_ups = []  # (id, name, file name, payload, checksum, step), read now so a test may swap a file
+    for number, name, path, after in FOLLOW_UPS:
+        found = globals()[path]
+        body = found.read_text()
+        follow_ups.append((number, name, found.name, body, hashlib.sha256(body.encode()).hexdigest(), after))
     statements = payload.strip().split(BOUNDARY)
     quote = engine.dialect.identifier_preparer.quote_identifier
     role = "'" + runtime_role + "'@'%'"
@@ -78,10 +82,13 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
                 held = conn.execute(text("SELECT checksum,complete FROM rdm_migrations WHERE id=1")).first()
             if not held or held.checksum != checksum:
                 raise Blocked("Installed RDM migration checksum differs")
-            saved_search = conn.execute(text("SELECT checksum FROM rdm_migrations WHERE id=2")).scalar()
-            if saved_search and saved_search != search_checksum:
-                raise Blocked("Installed RDM search migration checksum differs")
-            if conn.scalar(text("SELECT COUNT(*) FROM rdm_migrations WHERE id NOT IN (1,2)")):
+            for number, name, _, _, follow_checksum, _ in follow_ups:
+                saved = conn.execute(text("SELECT checksum FROM rdm_migrations WHERE id=:i"), {"i": number}).scalar()
+                if saved and saved != follow_checksum:
+                    raise Blocked(f"Installed RDM {name} migration checksum differs")
+            known = [1, *(number for number, *_ in follow_ups)]
+            if conn.scalar(text("SELECT COUNT(*) FROM rdm_migrations WHERE id NOT IN ("
+                                + ",".join(str(number) for number in known) + ")")):
                 raise Blocked("Installed RDM migration is absent from this build")
             conn.execute(text("UPDATE rdm_migrations SET complete=0 WHERE id=1"))
             # DDL commits implicitly. Revoke writes before removing any guard;
@@ -96,7 +103,8 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
                 if index and index[1] in {row["name"] for row in inspect(conn).get_indexes(index[2])}:
                     continue
                 conn.execute(text(statement))
-            _search_migration(conn, search_payload, search_checksum, statements)
+            for number, name, _, follow_payload, follow_checksum, after in follow_ups:
+                _follow_up(conn, number, name, follow_payload, follow_checksum, after, statements)
             conn.execute(text("CREATE OR REPLACE SQL SECURITY DEFINER VIEW rdm_readiness AS "
                               "SELECT MIN(complete) AS complete FROM rdm_migrations"))
             for name in KEYS:
@@ -112,7 +120,7 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
             conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=1"))
         finally:
             conn.execute(text("SELECT RELEASE_LOCK(:n)"), {"n": lock})
-    return {"mysql-v1.sql": checksum, "mysql-search-v2.sql": search_checksum}
+    return {MIGRATION.name: checksum, **{file: sha for _, _, file, _, sha, _ in follow_ups}}
 
 
 def _revoke(conn, database_name, name, runtime_role):
@@ -127,15 +135,15 @@ def _revoke(conn, database_name, name, runtime_role):
         conn.execute(text("REVOKE ALL PRIVILEGES ON " + quote(database_name) + "." + quote(name) + " FROM " + role))
 
 
-def _search_migration(conn, payload, checksum, base_statements):
-    """Resume the checksummed derived-index upgrade with writes still revoked."""
-    from .storage import refresh_search_tokens
-
-    held = conn.execute(text("SELECT checksum,complete FROM rdm_migrations WHERE id=2")).first()
+def _follow_up(conn, number, name, payload, checksum, after, base_statements):
+    """Resume one checksummed follow-up migration with writes still revoked: a
+    column, index or named constraint already in place is skipped; `after` runs
+    once, with the base migration's statements, before the migration is marked complete."""
+    held = conn.execute(text("SELECT checksum,complete FROM rdm_migrations WHERE id=:i"), {"i": number}).first()
     if held and held.checksum != checksum:
-        raise Blocked("Installed RDM search migration checksum differs")
+        raise Blocked(f"Installed RDM {name} migration checksum differs")
     if not held:
-        conn.execute(text("INSERT INTO rdm_migrations VALUES (2,:h,0)"), {"h": checksum})
+        conn.execute(text("INSERT INTO rdm_migrations VALUES (:i,:h,0)"), {"i": number, "h": checksum})
     for statement in payload.strip().split(BOUNDARY):
         statement = "\n".join(line for line in statement.splitlines() if not line.startswith("--"))
         column = re.search(r"ALTER TABLE (\w+) ADD COLUMN (\w+)", statement)
@@ -144,15 +152,34 @@ def _search_migration(conn, payload, checksum, base_statements):
         index = re.match(r"CREATE FULLTEXT INDEX (\w+) ON (\w+)", statement)
         if index and index[1] in {row["name"] for row in inspect(conn).get_indexes(index[2])}:
             continue
+        check = re.search(r"ALTER TABLE (\w+) ADD CONSTRAINT (\w+)", statement)
+        if check and conn.scalar(text("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE "
+                                      "TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t AND CONSTRAINT_NAME=:c"),
+                                 {"t": check[1], "c": check[2]}):
+            continue
         conn.execute(text(statement))
-    if not held or not held.complete:
-        guards = ("code_update_guard", "code_label_update_guard")
-        # Published content is not changed. Only its derived search index is
-        # backfilled by the owner; all runtime writes were revoked above.
-        for name in guards:
-            conn.execute(text("DROP TRIGGER IF EXISTS `" + name + "`"))
-        refresh_search_tokens(conn)
-        for statement in base_statements:
-            if any(statement.startswith("CREATE TRIGGER `" + name + "`") for name in guards):
-                conn.execute(text(statement))
-        conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=2"))
+    if after and not (held and held.complete):
+        after(conn, base_statements)
+    conn.execute(text("UPDATE rdm_migrations SET complete=1 WHERE id=:i"), {"i": number})
+
+
+def _rebuild_search_guards(conn, base_statements):
+    """Backfill the derived search index with the code guards lifted."""
+    from .storage import refresh_search_tokens
+
+    guards = ("code_update_guard", "code_label_update_guard")
+    # Published content is not changed. Only its derived search index is
+    # backfilled by the owner; all runtime writes were revoked above.
+    for name in guards:
+        conn.execute(text("DROP TRIGGER IF EXISTS `" + name + "`"))
+    refresh_search_tokens(conn)
+    for statement in base_statements:
+        if any(statement.startswith("CREATE TRIGGER `" + name + "`") for name in guards):
+            conn.execute(text(statement))
+
+
+# Follow-up migrations in their installed order: (id, name, path constant, a step
+# run once before completion). A new one is a new file and one entry here. The
+# ids are recorded in installed stores, so the order never changes.
+FOLLOW_UPS = ((2, "search", "SEARCH_MIGRATION", _rebuild_search_guards),
+              (3, "value", "VALUE_MIGRATION", None))

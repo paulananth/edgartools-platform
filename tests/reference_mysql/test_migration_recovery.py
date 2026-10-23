@@ -99,7 +99,8 @@ def test_populated_word_index_upgrade_recovers_without_changing_published_pin(st
     owner, runtime, arguments = store
     # Install the frozen v1 schema and populate it through its normal caller.
     with monkeypatch.context() as patch:
-        patch.setattr(mysql_migration, "_search_migration", lambda *args: None)
+        patch.setattr(mysql_migration, "FOLLOW_UPS",
+                      tuple(f for f in mysql_migration.FOLLOW_UPS if f[1] != "search"))
         patch.setattr(storage, "refresh_search_tokens", lambda *args, **kwargs: None)
         migrate(owner, **arguments)
         reference = RDM(runtime, reserved_subjects=())
@@ -150,6 +151,72 @@ def test_search_migration_drift_does_not_disable_installed_store(store, monkeypa
         migrate(owner, **arguments)
     assert RDM(runtime).code_sets() == []
 
+
+
+def test_value_migration_drift_does_not_disable_installed_store(store, monkeypatch, tmp_path):
+    owner, runtime, arguments = store
+    migrate(owner, **arguments)
+    changed = tmp_path / "value.sql"
+    changed.write_text(mysql_migration.VALUE_MIGRATION.read_text() + "\n-- invented drift\n")
+    monkeypatch.setattr(mysql_migration, "VALUE_MIGRATION", changed)
+    with pytest.raises(Blocked, match="checksum differs"):
+        migrate(owner, **arguments)
+    assert RDM(runtime).code_sets() == []
+
+
+def test_interrupted_value_migration_resumes_and_keeps_published_pins(store, monkeypatch, tmp_path):
+    owner, runtime, arguments = store
+    execute = Connection.execute
+    def interrupted(self, statement, *args, **kwargs):
+        if str(statement).startswith("ALTER TABLE code ADD CONSTRAINT code_check_6"):
+            raise RuntimeError("Invented interruption")
+        return execute(self, statement, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(Connection, "execute", interrupted)
+        with pytest.raises(RuntimeError, match="interruption"):
+            migrate(owner, **arguments)
+    with pytest.raises(DBAPIError, match="denied"):  # a first install grants nothing until it completes
+        RDM(runtime).code_sets()
+    installed = migrate(owner, **arguments)
+    assert "mysql-value-v3.sql" in installed
+    reference = RDM(runtime, reserved_subjects=())
+    reference.draft({"code_set": "invented", "name": "Invented"}, "1",
+                    [{"code": "a", "label": "First"},
+                     {"code": "a:2025", "label": "First 2025", "parent_code": "a", "valid_from": "2025-01-01",
+                      "valid_to": "2025-12-31", "value": "21.500000", "unit": "percent"}], created_by="drafter")
+    reference.approve("invented", "1", by="operator", words="Approve this invented version")
+    published = reference.publish("invented", "1", out=tmp_path)
+    assert reference.verify("invented", "1")["matches"]
+    rows = {r["code"]: r for r in reference.codes("invented", "1")}
+    assert (rows["a:2025"]["value"], rows["a"]["value"]) == ("21.500000", None)
+    with pytest.raises(DBAPIError, match="Only a draft"):
+        with runtime.begin() as conn:
+            conn.execute(text("UPDATE code SET value='30' WHERE code='a:2025'"))
+    assert published["sha256"] == reference.version("invented", "1")["sha256"]
+
+
+def test_value_migration_on_a_published_store_keeps_its_pin(store, monkeypatch, tmp_path):
+    """A version published before the value migration verifies after it, and reads no value."""
+    from edgar_warehouse.rdm import store as store_module
+
+    owner, runtime, arguments = store
+    with monkeypatch.context() as patch:
+        patch.setattr(mysql_migration, "FOLLOW_UPS",
+                      tuple(f for f in mysql_migration.FOLLOW_UPS if f[1] != "value"))
+        patch.setattr(store_module, "CODE_COLUMNS",
+                      tuple(c for c in store_module.CODE_COLUMNS if c not in ("value", "unit")))
+        assert "mysql-value-v3.sql" not in migrate(owner, **arguments)
+        reference = RDM(runtime, reserved_subjects=())
+        reference.draft({"code_set": "invented", "name": "Invented"}, "1",
+                        [{"code": "a", "label": "First"}, {"code": "b", "label": "Second", "parent_code": "a"}],
+                        created_by="drafter")
+        reference.approve("invented", "1", by="operator", words="Approve this invented version")
+        published = reference.publish("invented", "1", out=tmp_path)
+    assert "mysql-value-v3.sql" in migrate(owner, **arguments)
+    assert reference.verify("invented", "1") == {"code_set": "invented", "version": "1", "stored": published["sha256"],
+                                                 "computed": published["sha256"], "matches": True}
+    assert [(r["code"], r["value"], r["unit"]) for r in reference.codes("invented", "1")] == \
+        [("a", None, None), ("b", None, None)]
 
 
 def test_approval_refresh_is_set_based_and_unchanged_refresh_writes_nothing(store):

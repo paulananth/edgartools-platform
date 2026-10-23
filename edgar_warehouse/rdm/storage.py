@@ -104,7 +104,8 @@ def tables(dialect: str) -> dict[str, Table]:
     result["code"] = table("code", *(text_column(n) for n in
         ("code_set", "version", "code", "label", "definition", "status")),
         text_column("parent_code", nullable=True), text_column("invalid_reason", nullable=True),
-        Column("valid_from", Date), Column("valid_to", Date))
+        Column("valid_from", Date), Column("valid_to", Date),
+        text_column("value", nullable=True), text_column("unit", nullable=True))
     result["code_label"] = table("code_label", *(text_column(n) for n in
         ("code_set", "version", "code", "language", "label", "kind", "source")))
     result["level"] = table("level", *(text_column(n) for n in
@@ -184,7 +185,8 @@ def code_context(conn, code_set, version, code):
     base = tables(conn.dialect.name)["code"]
     metadata = MetaData()
     view = Table("code_context", metadata, *(Column(n, Text) for n in
-        ("code_set", "version", "code", "label", "definition", "path", "label_path", "level", "parent_code", "invalid_reason", "code_status")),
+        ("code_set", "version", "code", "label", "definition", "path", "label_path", "level", "parent_code", "invalid_reason", "code_status",
+         "value", "unit")),
         Column("depth", Integer), Column("synonyms", ExactJSON()), Column("crosswalk", ExactJSON()),
         Column("code_valid_from", Date), Column("code_valid_to", Date),
         schema=base.schema)

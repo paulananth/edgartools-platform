@@ -137,6 +137,8 @@ class CodeContext:
             answer["synonyms_count"] = len(synonyms)
         if row["invalid_reason"]:
             answer["invalid_reason"] = row["invalid_reason"]
+        if row["value"] is not None:
+            answer["value"], answer["unit"] = row["value"], row["unit"]
         if args.detail == "full":
             answer["used_in"] = usage
         command = f"{PROG} {args.subject} {shlex.quote(args.key)}{_flags(args)}" + (" --detail full" if args.detail == "full" else "")
