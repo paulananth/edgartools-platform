@@ -30,6 +30,7 @@ from sqlalchemy import (
     cast,
     create_engine,
     event,
+    func,
     inspect,
     insert,
     literal,
@@ -154,6 +155,25 @@ def dataset_reading(conn, code: str, version: int | None = None) -> dict | None:
     if row["source_code"] != code:
         raise AdapterError("Source key digest collision")
     return {name: value for name, value in row.items() if name != "source_code"}
+
+
+def dataset_readings(conn, keys) -> dict:
+    """Grouped exact mapping probes in the caller's snapshot, never per record."""
+    require_registry(conn)
+    wanted = sorted(set(keys))
+    result = {}
+    for offset in range(0, len(wanted), 200):
+        chunk = wanted[offset:offset + 200]
+        statement = union_all(*(
+            dataset_reading_statement(conn.dialect.name, code, version).subquery().select()
+            for code, version in chunk
+        ))
+        for row in conn.execute(statement).mappings():
+            key = (row["source_code"], row["mapping_version"])
+            if key not in chunk:
+                raise AdapterError("Stored mapping identity differs from its requested key")
+            result[key] = dict(row)
+    return result
 
 
 def retain_dataset_reading(conn, code: str, version: int, body: dict, registry: str) -> None:
@@ -286,6 +306,23 @@ class IndexChange(Effect):
 
 
 @dataclass(frozen=True)
+class ProducerPayload:
+    """Opaque frozen fragments around the destination's quoted producer key."""
+    before: bytes
+    after: bytes
+
+    def wire(self):
+        if not isinstance(self.before, bytes) or not isinstance(self.after, bytes):
+            raise AdapterError("Producer payload fragments must be bytes")
+        document(self.before + b'""' + self.after)
+        return {"payload": b"{}".hex(), "prefix": self.before.hex(), "suffix": self.after.hex()}
+
+
+def _payload_wire(value):
+    return value.wire() if isinstance(value, ProducerPayload) else {"payload": document(value).hex()}
+
+
+@dataclass(frozen=True)
 class PreparedBatch:
     batch: str
     run: str
@@ -302,8 +339,17 @@ class PreparedBatch:
     payloads: dict[str, Any] | None = None
     indexes: tuple[IndexChange, ...] | None = None
     publish_inputs: bool = False
+    governed: bool = False
+    required_pins: dict[str, str] | None = None
 
     def intent(self) -> str:
+        if type(self.governed) is not bool:
+            raise AdapterError("Governed admission must be a boolean")
+        if self.required_pins is not None and not self.governed:
+            raise AdapterError("Command reference approval requires governed admission")
+        if not self.governed and (isinstance(self.payload, ProducerPayload) or
+                isinstance(self.payloads, dict) and any(isinstance(value, ProducerPayload) for value in self.payloads.values())):
+            raise AdapterError("Producer metadata requires governed admission")
         if type(self.publish_inputs) is not bool:
             raise AdapterError("Input publication must be a boolean")
         for value in (self.batch, self.run, self.scope):
@@ -326,7 +372,7 @@ class PreparedBatch:
             "scope": self.scope.encode().hex(),
             "pins": document(self.pins).hex(),
             "assessment": document(self.assessment).hex(),
-            "payload": document(self.payload).hex(),
+            "payload": (b"{}" if isinstance(self.payload, ProducerPayload) else document(self.payload)).hex(),
             "expected_checkpoint": counter(self.expected_checkpoint),
             "checkpoint": counter(self.checkpoint, positive=True),
             "objects": [
@@ -345,7 +391,7 @@ class PreparedBatch:
                 raise AdapterError("Publication payloads must name exactly the frozen consumers")
             result["version"] = "2"
             result["consumers"] = [
-                {"consumer": c.encode().hex(), "payload": document(self.payloads[c]).hex()}
+                {"consumer": c.encode().hex(), **_payload_wire(self.payloads[c])}
                 for c in sorted(self.consumers)
             ]
         if self.indexes is not None:
@@ -354,7 +400,7 @@ class PreparedBatch:
             result["version"] = "3"
             result["indexes"] = [entry.wire() for entry in sorted(self.indexes, key=lambda entry: (entry.type, entry.id))]
             result["consumers"] = [
-                {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
+                {"consumer": c.encode().hex(), **_payload_wire(self.payloads[c] if self.payloads is not None else self.payload)}
                 for c in sorted(self.consumers)
             ]
         if self.publish_inputs:
@@ -362,7 +408,19 @@ class PreparedBatch:
             result["publish_inputs"] = True
             result.setdefault("indexes", [])
             result["consumers"] = [
-                {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
+                {"consumer": c.encode().hex(), **_payload_wire(self.payloads[c] if self.payloads is not None else self.payload)}
+                for c in sorted(self.consumers)
+            ]
+        if self.governed:
+            # The observing/root run is admission provenance, not immutable
+            # business intent. Redelivery may observe the original batch.
+            result.pop("run")
+            result["version"] = "5"
+            result["required_pins"] = document(self.required_pins or {}).hex()
+            result["publish_inputs"] = self.publish_inputs
+            result.setdefault("indexes", [])
+            result["consumers"] = [
+                {"consumer": c.encode().hex(), **_payload_wire(self.payloads[c] if self.payloads is not None else self.payload)}
                 for c in sorted(self.consumers)
             ]
         # The wire document is ASCII; opaque original UTF-8 bodies remain bytes.
@@ -420,6 +478,13 @@ ERRORS = frozenset(
         "publication_lease_expired",
         "ambient_transaction_refused",
         "lease_invalid_at_commit",
+        "proposal_required",
+        "invalid_proposal",
+        "invalid_proposal_intent",
+        "proposal_content_collision",
+        "proposal_not_ready",
+        "assessed_effects_changed",
+        "unregistered_frozen_pins",
     }
 )
 
@@ -434,7 +499,7 @@ class Adapter:
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
-        if type(protocol) is not int or protocol not in (1, 2, 3, 4):
+        if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5):
             raise AdapterError("Unsupported storage protocol")
         if protocol >= 4 and engine.dialect.name == "mssql":
             raise AdapterError("Destination authority is not yet qualified for SQL Server")
@@ -470,7 +535,7 @@ class Adapter:
         except DBAPIError as exc:
             original = str(exc.orig)
             code = next(
-                (code for code in sorted(ERRORS) if code in original),
+                (code for code in sorted(ERRORS, key=len, reverse=True) if code in original),
                 "database_operation_failed",
             )
             # MySQL replacement removes EXECUTE until migration finishes and
@@ -503,19 +568,75 @@ class Adapter:
         )
         return Lease(scope, owner, int(row["fence"]), int(row["expires"]))
 
-    def apply(self, batch: PreparedBatch, lease: Lease, *, authority=None) -> dict:
+    def apply(self, batch: PreparedBatch, lease: Lease, *, authority=None,
+              proposal_key=None, proposal_body=None, observer=None) -> dict:
         if batch.scope != lease.scope:
             raise AdapterError("Lease scope differs from prepared effects")
         if batch.indexes is not None and self.protocol < 3:
             raise AdapterError("Selected storage protocol has no lookup entries")
         if (batch.publish_inputs or authority is not None) and self.protocol < 4:
             raise AdapterError("Selected storage protocol has no destination authority")
+        if (batch.governed or proposal_key is not None or proposal_body is not None or observer is not None) and self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        return self._apply_intent(
+            batch.intent(), lease, expected_generation=batch.expected_generation,
+            authority=authority, proposal_key=proposal_key, proposal_body=proposal_body,
+            observer=batch.run if observer is None else observer,
+        )
+
+    def read_batch(self, batch: str, *, connection=None):
+        """Read original committed bytes by key, including their first producer."""
+        table = self.tables["batch"]
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            row = conn.execute(select(table).where(table.c.batch_key == key(batch))).mappings().first()
+            if row is None:
+                return None
+            if bytes(row["batch_bytes"]) != batch.encode():
+                raise AdapterError("Batch key digest collision")
+            return dict(row)
+
+    def replay(self, batch: str, lease: Lease, *, observer: str, authority=None):
+        """Observe a committed command without reconstructing its prepared bytes.
+
+        The destination still validates the lease, pins, original intent and
+        observer. An unknown batch is refused rather than admitted as new work.
+        """
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        saved = self.read_batch(batch)
+        if saved is None:
+            raise AdapterError("unknown_committed_batch")
+        intent = bytes(saved["intent"]).decode("ascii")
+        if json.loads(intent)["scope"] != lease.scope.encode().hex():
+            raise AdapterError("Lease scope differs from prepared effects")
+        return self._apply_intent(intent, lease, expected_generation=saved["generation"] - 1,
+                                  observer=observer, authority=authority)
+
+    def preview(self, batch: PreparedBatch, *, proposal_body):
+        if self.protocol != 5 or not batch.governed:
+            raise AdapterError("Destination preview requires governed admission")
+        return self._apply_intent(
+            batch.intent(), Lease(batch.scope, "preview", 1, 0),
+            expected_generation=batch.expected_generation, observer=batch.run,
+            proposal_body=proposal_body, operation="preview",
+        )
+
+    def _apply_intent(self, intent, lease, *, expected_generation, observer,
+                      authority=None, proposal_key=None, proposal_body=None, operation="apply"):
         values = {
-            "intent": batch.intent(),
+            "intent": intent,
             "owner": lease.owner.encode().hex(),
             "fence": counter(lease.fence, positive=True),
-            "expected_generation": counter(batch.expected_generation),
+            "expected_generation": counter(expected_generation),
         }
+        if self.protocol >= 5:
+            key(observer)
+            values["observer"] = observer.encode().hex()
+            if proposal_key is not None:
+                key(proposal_key)
+                values["proposal_key"] = proposal_key
+            if proposal_body is not None:
+                values["proposal_body"] = document(proposal_body).hex()
         if authority is not None:
             if not isinstance(authority, list) or not authority:
                 raise AdapterError("A nonempty destination authority proof is required")
@@ -544,13 +665,104 @@ class Adapter:
                     raise AdapterError("Invalid destination authority proof") from None
             values["authority"] = sorted(proofs, key=lambda proof: proof["resource"])
         result = self._rpc(
-            "apply",
+            operation,
             values,
         )
         return {
             name: bool(value) if name in {"duplicate", "changed"} else int(value)
             for name, value in result.items()
         }
+
+    def record_proposal(self, batch: str, body, observer: str, *,
+                        outcome: str, expected_generation: int, intent=None) -> str:
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        key(batch)
+        key(observer)
+        return self._rpc("record_proposal", {
+            "batch": batch.encode().hex(), "body": document(body).hex(),
+            "observer": observer.encode().hex(), "outcome": outcome,
+            "expected_generation": counter(expected_generation), "intent": intent,
+        })["proposal_key"]
+
+    def supersede_proposal(self, proposal_key: str, observer: str) -> None:
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        key(proposal_key)
+        key(observer)
+        self._rpc("supersede_proposal", {"proposal_key": proposal_key,
+                  "observer": observer.encode().hex()})
+
+    def read_proposal(self, proposal_key: str, *, connection=None):
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        table = self.tables["proposal"]
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            row = conn.execute(select(table).where(table.c.proposal_key == proposal_key)).mappings().first()
+            return None if row is None else dict(row)
+
+    def admit_pin(self, connection, name: str, value: str, *, exclusive=False):
+        """Owner-only approval; serialize activation with destination admission."""
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        if type(exclusive) is not bool:
+            raise AdapterError("Exclusive pin activation must be a boolean")
+        name_key, value_key = key(name), key(value)
+        connection.execute(select(self.tables["gate"].c.generation)
+                           .where(self.tables["gate"].c.id == 1).with_for_update()).scalar_one()
+        table = self.tables["pin"]
+        wanted = (table.c.name_key == name_key) & (table.c.value_key == value_key)
+        old = connection.execute(select(table).where(wanted)).mappings().first()
+        if old and (bytes(old["name_bytes"]) != name.encode() or bytes(old["value_bytes"]) != value.encode()):
+            raise AdapterError("Frozen pin digest collision")
+        if exclusive:
+            connection.execute(update(table).where(table.c.name_key == name_key).values(active=0))
+        if old:
+            connection.execute(update(table).where(wanted).values(active=1))
+        else:
+            connection.execute(insert(table).values(name_key=name_key, value_key=value_key,
+                name_bytes=name.encode(), value_bytes=value.encode(), active=1))
+
+    def activate(self, connection, pins: dict[str, str], *, exclusive=()):
+        """Owner finalization in the same transaction as its registry activation.
+
+        Runtime execution is granted separately after this transaction commits.
+        Already-entered calls remain fenced by the durable pending marker until
+        the complete registry and its approved references become visible together.
+        """
+        if self.protocol != 5 or not isinstance(pins, dict) or not pins:
+            raise AdapterError("Governed activation requires approved references")
+        if set(exclusive) - set(pins):
+            raise AdapterError("Exclusive activation must name an approved reference")
+        ledger = self.tables["migration"]
+        installed = {int(row.version): row for row in connection.execute(select(ledger))}
+        if set(installed) != set(range(1, 6)) or any(
+            installed[version].checksum not in _migration_checksums(
+                Adapter(self.engine, prefix=self.prefix, protocol=version)
+            ) for version in installed
+        ):
+            raise AdapterError("Installed storage migration differs from this build")
+        _verify_capabilities(connection, self)
+        _verify_migration_guards(connection, self)
+        connection.execute(select(self.tables["gate"].c.generation)
+                           .where(self.tables["gate"].c.id == 1).with_for_update()).scalar_one()
+        connection.execute(update(ledger).values(complete=1))
+        for name, value in pins.items():
+            self.admit_pin(connection, name, value, exclusive=name in exclusive)
+
+    def enable_runtime(self, runtime_role: str, *, runtime_host="%"):
+        """Owner grants execution only after governed activation has committed."""
+        if self.protocol != 5:
+            raise AdapterError("Explicit runtime activation requires governed storage")
+        with self.engine.begin() as connection:
+            installed = list(connection.execute(select(self.tables["migration"])))
+            if {int(row.version) for row in installed} != set(range(1, 6)) or any(
+                row.complete != 1 for row in installed
+            ):
+                raise AdapterError("storage_not_initialized")
+            _verify_capabilities(connection, self)
+            _verify_migration_guards(connection, self)
+            _grants(connection, self, runtime_role, runtime_host)
 
     def generation(self, *, connection=None) -> int:
         with self.engine.connect() if connection is None else nullcontext(connection) as conn:
@@ -886,10 +1098,15 @@ def _grants(conn, adapter, runtime_role, runtime_host, *, runtime_execute=True):
                 {"f": name + "(text)"},
             ):
                 conn.exec_driver_sql(f"REVOKE ALL ON FUNCTION {name}(text) FROM PUBLIC")
-            if not conn.scalar(
+            granted = conn.scalar(
                 text("SELECT has_function_privilege(:r,:f,'EXECUTE')"),
                 {"r": runtime_role, "f": name + "(text)"},
-            ):
+            )
+            if not runtime_execute:
+                if granted:
+                    conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION {name}(text) FROM {role}")
+                continue
+            if not granted:
                 conn.exec_driver_sql(
                     f"GRANT EXECUTE ON FUNCTION {name}(text) TO {role}"
                 )
@@ -989,7 +1206,10 @@ def _grants(conn, adapter, runtime_role, runtime_host, *, runtime_execute=True):
                     "SELECT COUNT(*) FROM mysql.procs_priv WHERE User=:u AND Host=:h AND Db=:s "
                     "AND Routine_name=:t AND Routine_type='PROCEDURE'"),
                     {"u":runtime_role,"h":runtime_host,"s":adapter.schema,"t":name.rsplit(".",1)[-1].strip("`")}):
-                    raise AdapterError("Runtime has unqualified storage execution")
+                    if getattr(adapter, "protocol", 1) < 5:
+                        raise AdapterError("Runtime has unqualified storage execution")
+                    conn.execute(text(f"REVOKE EXECUTE ON PROCEDURE {name} FROM :user@:host"),
+                                 {"user": runtime_role, "host": runtime_host})
                 continue
             if not conn.scalar(
                 text(
@@ -1245,6 +1465,8 @@ def _verify_capabilities(conn, adapter):
 
 def _verify_migration_guards(conn, adapter, *, install=False):
     for name, function, ddl, table, body in adapter.migration_guards:
+        if install and not inspect(conn).has_table(adapter.tables[table].name, schema=adapter.schema):
+            continue
         values = {"schema": adapter.schema, "name": name, "table": adapter.tables[table].name}
         if conn.dialect.name == "postgresql":
             qualified = conn.dialect.identifier_preparer.format_table(adapter.tables[table])
@@ -1313,11 +1535,13 @@ def _migration_checksums(adapter) -> frozenset[str]:
 
 def migrate(
     engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1,
-    runtime_execute=True,
+    runtime_execute=True, defer_ready=False,
 ) -> dict:
-    if type(protocol) is not int or protocol not in (1, 2, 3, 4):
+    if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5):
         raise AdapterError("Unsupported storage protocol")
-    if type(runtime_execute) is not bool or not runtime_execute and engine.dialect.name != "mysql":
+    if type(defer_ready) is not bool or defer_ready and (protocol != 5 or runtime_execute):
+        raise AdapterError("Deferred activation requires governed storage without runtime execution")
+    if type(runtime_execute) is not bool or not runtime_execute and engine.dialect.name != "mysql" and protocol != 5:
         raise AdapterError("Deferred runtime execution is qualified only for MySQL")
     builds = {version: Adapter(engine, prefix=prefix, protocol=version) for version in range(1, protocol + 1)}
     checksums = {version: hashlib.sha256("\n".join(_migration_statements(build)).encode()).hexdigest()
@@ -1375,6 +1599,8 @@ def migrate(
                     barrier.execute(update(ledger).values(complete=0))
                     barrier.execute(insert(ledger).values(version=version, checksum=checksums[version], complete=0))
             adapter.metadata.create_all(conn)
+            if version >= 5:
+                _verify_migration_guards(conn, build, install=True)
             gate = adapter.tables["gate"]
             if conn.scalar(select(gate.c.id).where(gate.c.id == 1)) is None:
                 conn.execute(insert(gate).values(id=1, generation=0))
@@ -1446,7 +1672,7 @@ def migrate(
         _verify_capabilities(conn, adapter)
         _verify_migration_guards(conn, adapter)
         _grants(conn, adapter, runtime_role, runtime_host, runtime_execute=runtime_execute)
-        conn.execute(update(ledger).where(ledger.c.version.in_(builds)).values(complete=1))
+        conn.execute(update(ledger).where(ledger.c.version.in_(builds)).values(complete=0 if defer_ready else 1))
     return {
         "initialized": fresh,
         "migration": protocol,
@@ -1455,14 +1681,24 @@ def migrate(
     }
 
 
-def migrate_registry(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
+def storage_version(conn, *, prefix="mdm_store") -> int:
+    """Read the installed protocol marker by its small migration ledger."""
+    schema = inspect(conn).default_schema_name
+    _, tables = model(prefix, schema, protocol=1)
+    ledger = tables["migration"]
+    if not inspect(conn).has_table(ledger.name, schema=schema):
+        return 0
+    return int(conn.scalar(select(func.max(ledger.c.version))) or 0)
+
+
+def migrate_registry(engine, *, runtime_role, configuration, kinds, runtime_host="%", prepared=False):
     """Install the native governed registry through its owning command."""
     if __package__:
         from .registry_migration import migrate as migrate_native
     else:
         from registry_migration import migrate as migrate_native
     return migrate_native(engine, runtime_role=runtime_role, runtime_host=runtime_host,
-                          configuration=configuration, kinds=kinds)
+                          configuration=configuration, kinds=kinds, prepared=prepared)
 
 
 def verify_native_registry(conn):

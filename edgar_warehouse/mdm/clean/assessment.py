@@ -11,7 +11,10 @@ class StaleAssessment(Conflict):
     """Reassess against current evidence; never copy cached winners forward."""
 
 
-def record(store, body: dict, run_id: str) -> dict:
+def record(store, body: dict, run_id: str, *, intent=None) -> dict:
+    if getattr(store, "prepared", False):
+        from .prepared import record as retain
+        return retain(store, body, run_id, intent=intent)
     with store.engine.begin() as conn:
         store._authorize(conn)
         key = record_in(conn, body, run_id)
@@ -27,6 +30,14 @@ def record_in(conn, body: dict, run_id: str) -> str:
 
 
 def load(conn, key: str) -> dict:
+    from .store import storage_adapter
+    api = storage_adapter()
+    if api.storage_version(conn) >= 5:
+        import json
+        held = api.Adapter(conn.engine, prefix="mdm_store", protocol=5).read_proposal(key, connection=conn)
+        if held is None:
+            raise Conflict("Unknown identity assessment")
+        return json.loads(bytes(held["body"]))
     body = conn.scalar(
         text("SELECT body FROM mdm.match_proposal WHERE assessment_id=:key"),
         {"key": key},
@@ -45,6 +56,10 @@ def stale(exc) -> bool:
 
 
 def supersede(store, key: str, run_id: str) -> None:
+    if getattr(store, "prepared", False):
+        from .store import storage_adapter
+        storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=5).supersede_proposal(key, run_id)
+        return
     # Outside the rolled-back master transaction. A concurrent successful
     # application wins; the SQL capability never supersedes an applied proposal.
     with store.engine.begin() as conn:

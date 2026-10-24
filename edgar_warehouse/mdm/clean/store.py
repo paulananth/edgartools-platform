@@ -99,18 +99,21 @@ RUNTIME_FUNCTIONS = (
 )
 
 
-def migrate(engine: Engine, *, application_role: str, application_host: str = "%") -> dict:
+def migrate(engine: Engine, *, application_role: str, application_host: str = "%", prepared: bool = False) -> dict:
     """Explicit isolated migration with checksum validation.
 
     Role provisioning stays outside this function; deployments provide the
     restricted login role. A database that still holds the retired `mdm_v2`
     schema is refused: it is recreated, not upgraded in place.
     """
+    if type(prepared) is not bool:
+        raise ValueError("prepared must be a boolean")
     if engine.dialect.name == "mysql":
         from . import catalog
         catalog.assert_current()
         return storage_adapter().migrate_registry(engine,runtime_role=application_role,
-            runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"])
+            runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"],
+            prepared=prepared)
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
     path = Path(__file__).parents[1] / "migrations" / BASELINE
@@ -124,6 +127,12 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
         # Saves take this lock before touching master tables. Take it before
         # migration DDL too, so table locks cannot invert that order.
         conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
+        if storage_adapter().storage_version(conn) >= 5 and not prepared:
+            raise Conflict("Governed storage requires prepared owner installation")
+        if prepared and conn.scalar(text("SELECT to_regclass('mdm.batch')")) and conn.scalar(
+            text("SELECT EXISTS(SELECT 1 FROM mdm.batch)")
+        ):
+            raise Conflict("Populated native MDM requires a qualified data migration; use a fresh prepared store")
         if conn.scalar(text("SELECT to_regnamespace('mdm_v2')")):
             raise Conflict(
                 "This database holds the retired mdm_v2 schema. Recreate the "
@@ -191,7 +200,7 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
         runtime = quote(application_role)
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm TO {runtime}")
         conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO {runtime}")
-        for signature in RUNTIME_FUNCTIONS:
+        for signature in (() if prepared else RUNTIME_FUNCTIONS):
             conn.exec_driver_sql(
                 f"GRANT EXECUTE ON FUNCTION mdm.{signature} TO {runtime}"
             )
@@ -210,11 +219,18 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
         )
         if leaked:
             raise ValueError("Runtime role inherits direct MDM writes")
-    return {
+    result = {
         "migration": path.name,
         "checksum": checksum,
         "installed": not bool(installed),
     }
+    if prepared:
+        from .prepared_registry import initialize
+
+        result["prepared_storage"] = initialize(
+            engine, application_role=application_role, application_host=application_host
+        )["migration"]
+    return result
 
 
 def _registry_configuration(conn):
@@ -261,6 +277,8 @@ def register_policy(conn: Connection, body: dict) -> str:
         raise ValueError("A policy requires distinct nonempty consumer names")
     key = digest(body)
     adapter.retain_policy(conn, body, key)
+    from .prepared_registry import approve_policy
+    approve_policy(conn, key)
     return key
 
 
@@ -299,7 +317,7 @@ def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
         raise ValueError(f"A format for no cross-reference: {sorted(set(formats) - set(names))}")
 
 
-def _check_details(adapter: dict) -> None:
+def _check_details(adapter: dict, *, prepared=False) -> None:
     """Detail lists (ticket 120): `detail_keys` maps each list the reading's
     `details` column gives to the field that keys its rows. A master's body
     carries them, and mdm.detail_version keeps every row; a Company is kept in
@@ -314,7 +332,7 @@ def _check_details(adapter: dict) -> None:
             not isinstance(name, str) or not NAMESPACE.fullmatch(name) or not isinstance(key, str) or not key
             for name, key in keys.items()):
         raise ValueError("detail_keys maps each detail list, lower-case words, to the field that keys its rows")
-    if "kind" not in adapter or adapter["kind"] == "company":
+    if "kind" not in adapter or not prepared and adapter["kind"] == "company":
         raise ValueError("Detail lists are kept for a stated kind other than company (mdm.company holds no lists)")
     columns = ((adapter.get("reading") or {}).get("read", {}).get("tables", {}).get("mapped", {}).get("columns", {}))
     if "details" not in columns:
@@ -357,7 +375,7 @@ def register_dataset(
     from .adapters import FORMATS
 
     _check_cross_references(adapter, _bound_namespaces(conn))
-    _check_details(adapter)
+    _check_details(adapter, prepared=conn is not None and storage_adapter().storage_version(conn) >= 5)
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),
@@ -393,6 +411,8 @@ def register_dataset(
     if current is not None:
         stored = current["body"]
         if stored == pinned and current["registry_version"] == authority_version:
+            from .prepared_registry import approve_mapping
+            approve_mapping(conn, code, current["mapping_version"], pinned)
             return
         if _mapping_of(stored) == _mapping_of(pinned):
             raise Conflict(
@@ -400,8 +420,12 @@ def register_dataset(
             )
         protected_change(stored, pinned)
         adapter.retain_dataset_reading(conn, code, current["mapping_version"] + 1, pinned, str(UUID(authority_version)))
+        from .prepared_registry import approve_mapping
+        approve_mapping(conn, code, current["mapping_version"] + 1, pinned)
         return
     adapter.retain_dataset_reading(conn, code, 1, pinned, str(UUID(authority_version)))
+    from .prepared_registry import approve_mapping
+    approve_mapping(conn, code, 1, pinned)
 
 
 def _mapping_of(body: dict) -> dict:
@@ -486,8 +510,12 @@ class Store:
     def __init__(self, engine: Engine, *, lease_authority=None, read_only: bool = False):
         if type(read_only) is not bool:
             raise ValueError("read_only must be a boolean")
-        if engine.dialect.name != "postgresql" and not (read_only and engine.dialect.name == "mysql"):
+        if engine.dialect.name not in ("postgresql", "mysql"):
             raise ValueError("MDM requires PostgreSQL")
+        with engine.connect() as conn:
+            self.prepared = storage_adapter().storage_version(conn) >= 5
+        if engine.dialect.name == "mysql" and not self.prepared and not read_only:
+            raise ValueError("MDM requires PostgreSQL or a governed prepared store")
         self.engine = engine
         self.lease_authority = lease_authority
         self.read_only = read_only
@@ -503,6 +531,11 @@ class Store:
             guard(conn, self.lease_authority.current())
 
     def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
+        if self.prepared:
+            if self.read_only:
+                raise Conflict("A read-only MDM store cannot admit writes or publication")
+            from .prepared import commit
+            return commit(self, request, run_id)
         self._authorize(conn)
         return conn.scalar(
             text("SELECT mdm.save_batch(:request,CAST(:run AS uuid))"),
@@ -518,6 +551,8 @@ class Store:
         lease_seconds: int = 300,
         batch_id: str | None = None,
     ) -> bool:
+        if self.prepared:
+            raise Conflict("Prepared publication recovery requires its qualified worker integration")
         with self.engine.begin() as conn:
             self._authorize(conn)
             claim = conn.scalar(
@@ -561,7 +596,7 @@ class Store:
 
     def run_status(self, run_id: str) -> dict:
         """Observation for Bookkeeping; never declares an empty run complete."""
-        if self.engine.dialect.name != "postgresql":
+        if self.prepared or self.engine.dialect.name != "postgresql":
             raise Conflict("Normal run observation is not yet qualified for this engine")
         with self.engine.connect() as conn:
             result = rows(

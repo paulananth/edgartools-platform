@@ -233,6 +233,47 @@ def model(prefix: str, schema: str | None = None, *, protocol=1) -> tuple[MetaDa
             CheckConstraint("token > 0"),
             CheckConstraint("expires > 0"),
         )
+    if protocol >= 5:
+        # Owner-approved opaque references, not copied policy/configuration.
+        table(
+            "pin",
+            Column("name_key", key, primary_key=True),
+            Column("value_key", key, primary_key=True),
+            Column("name_bytes", binary, nullable=False),
+            Column("value_bytes", binary, nullable=False),
+            Column("active", Integer, nullable=False),
+            CheckConstraint("active IN (0, 1)"),
+        )
+        # Prepared commands have a destination-owned lifecycle. Bodies and
+        # intents are opaque; the store verifies bytes, state and freshness.
+        table(
+            "proposal",
+            Column("proposal_key", key, primary_key=True),
+            Column("batch_key", key, nullable=False),
+            Column("body", binary, nullable=False),
+            Column("intent", binary),
+            Column("intent_hash", key),
+            Column("observed_generation", BigInteger, nullable=False),
+            Column("outcome", String(12), nullable=False),
+            Column("state", String(12), nullable=False),
+            CheckConstraint("outcome IN ('ready', 'rejected')"),
+            CheckConstraint("state IN ('ready', 'rejected', 'applied', 'superseded')"),
+            CheckConstraint("observed_generation >= 0"),
+        )
+        Index(f"{prefix}_proposal_batch", tables["proposal"].c.batch_key,
+              tables["proposal"].c.state, tables["proposal"].c.proposal_key)
+        table(
+            "proposal_event",
+            Column("proposal_key", key, primary_key=True),
+            Column("observer_key", key, primary_key=True),
+            Column("event", String(12), primary_key=True),
+            Column("observer_bytes", binary, nullable=False),
+            Column("batch_key", key),
+            Column("occurred", BigInteger, nullable=False),
+            ForeignKeyConstraint(["proposal_key"], [f"{schema + '.' if schema else ''}{prefix}_proposal.proposal_key"]),
+            ForeignKeyConstraint(["batch_key"], [f"{schema + '.' if schema else ''}{prefix}_batch.batch_key"]),
+            CheckConstraint("event IN ('ready', 'rejected', 'observed', 'applied', 'superseded', 'duplicate')"),
+        )
     table(
         "outbox",
         Column("batch_key", key, primary_key=True),

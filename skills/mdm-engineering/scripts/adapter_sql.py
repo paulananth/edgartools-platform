@@ -133,12 +133,14 @@ class SQL:
             return "COMMIT; " + selection + "; LEAVE capability;"
         return "COMMIT TRANSACTION; " + selection + "; RETURN;"
 
-    def rows(self, path, *, expected=False, consumer=False, payloads=False):
+    def rows(self, path, *, expected=False, consumer=False, payloads=False, producer=False):
         """One set-based input relation; all keys and bodies are decoded bytes."""
         source = self.v("intent")
         names = ("consumer",) if consumer else ("type", "id", "body")
         if consumer and payloads:
             names += ("payload",)
+        if producer:
+            names += ("prefix", "suffix")
         if self.name == "postgresql":
             scalar = lambda n: f"(j.value->>'{n}')"
             origin = f"jsonb_array_elements({source}::jsonb->'{path}') AS j(value)"
@@ -338,6 +340,94 @@ def authority_checks(d):
     return start, finish
 
 
+def proposal_event(d, event, *, proposal=None, batch="NULL"):
+    """Append an opaque observer's event once, under the destination gate."""
+    key = proposal or d.v("proposal_key")
+    observer = d.v("run")
+    observer_key = d.hash(observer)
+    table = d.names["proposal_event"]
+    return (f"INSERT INTO {table}(proposal_key,observer_key,event,observer_bytes,batch_key,occurred) "
+            f"SELECT {key},{observer_key},{event},{observer},{batch},{d.now} "
+            f"WHERE NOT EXISTS(SELECT 1 FROM {table} e WHERE e.proposal_key={key} "
+            f"AND e.observer_key={observer_key} AND e.event={event});")
+
+
+def record_proposal_lines(d, body, outcome):
+    """Record bytes and a prepared intent without changing business generation."""
+    v, n = d.v, d.names
+    ready = f"{v('proposal_outcome')}='ready'"
+    return [
+        d.assign("proposal_body", body),
+        d.assign("proposal_outcome", outcome),
+        d.guard(f"{v('proposal_body')} IS NULL OR octet_length({v('proposal_body')})=0 OR "
+                f"{v('proposal_outcome')} IS NULL OR {v('proposal_outcome')} NOT IN ('ready','rejected') "
+                f"OR {v('batch')} IS NULL OR {v('run')} IS NULL OR octet_length({v('run')})=0", "invalid_proposal"),
+        d.guard(f"{ready} AND ({d.field('version',v('intent'))} IS NULL OR "
+                f"{d.field('version',v('intent'))}<>'5' OR "
+                f"{d.decode(d.field('batch',v('intent')))} IS NULL OR "
+                f"{d.decode(d.field('batch',v('intent')))}<>{v('batch')})", "invalid_proposal_intent"),
+        d.if_(ready, d.assign("pins", d.decode(d.field("pins", v("intent")))) + "\n" + approved_command_pins(d)),
+        d.assign("proposal_key", d.hash(v("proposal_body"))),
+        d.assign("proposal_intent", f"CASE WHEN {ready} THEN {d.ascii_bytes(v('intent'))} ELSE NULL END"),
+        d.assign("proposal_hash", d.hash(v("proposal_intent"))),
+        d.guard(f"EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')} "
+                f"AND (p.body<>{v('proposal_body')} OR p.batch_key<>{v('batch_key')} "
+                f"OR COALESCE(p.intent_hash,'')<>COALESCE({v('proposal_hash')},'') "
+                f"OR (p.intent IS NULL AND {v('proposal_intent')} IS NOT NULL) "
+                f"OR (p.intent IS NOT NULL AND {v('proposal_intent')} IS NULL) "
+                f"OR p.intent<>{v('proposal_intent')} "
+                f"OR p.outcome<>{v('proposal_outcome')}))", "proposal_content_collision"),
+        f"INSERT INTO {n['proposal']}(proposal_key,batch_key,body,intent,intent_hash,observed_generation,outcome,state) "
+        f"SELECT {v('proposal_key')},{v('batch_key')},{v('proposal_body')},{v('proposal_intent')},"
+        f"{v('proposal_hash')},{v('generation')},{v('proposal_outcome')},{v('proposal_outcome')} "
+        f"WHERE NOT EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')});",
+        proposal_event(d, v("proposal_outcome")),
+        proposal_event(d, "'observed'"),
+    ]
+
+
+def proposal_variables():
+    return {"proposal_key": "key", "proposal_body": "bytes", "proposal_outcome": "key",
+            "proposal_intent": "bytes", "proposal_hash": "key"}
+
+
+def approved_pin_check(d, expression=None, *, allow_empty=False):
+    """Every opaque pin must exist and remain owner-approved at admission."""
+    expression = expression or d.v("pins")
+    raw = (f"convert_from({expression},'UTF8')" if d.name == "postgresql"
+           else f"CONVERT({expression} USING utf8mb4)")
+    if d.name == "postgresql":
+        rows = f"jsonb_each({raw}::jsonb) AS p(name,value)"
+        name = "p.name"
+        value = "(p.value#>>'{}')"
+        kind = "jsonb_typeof(p.value)"
+        text_kind = "string"
+        bad_object = f"jsonb_typeof({raw}::jsonb)<>'object'" + ("" if allow_empty else f" OR {raw}::jsonb='{{}}'::jsonb")
+    else:
+        rows = f"JSON_TABLE(JSON_KEYS({raw}),'$[*]' COLUMNS (pin_name LONGTEXT PATH '$')) AS p"
+        name = "p.pin_name"
+        selected = f"JSON_EXTRACT({raw},CONCAT('$.',JSON_QUOTE(p.pin_name)))"
+        value = f"JSON_UNQUOTE({selected})"
+        kind = f"JSON_TYPE({selected})"
+        text_kind = "STRING"
+        bad_object = f"JSON_TYPE({raw})<>'OBJECT'" + ("" if allow_empty else f" OR JSON_LENGTH({raw})=0")
+    name_bytes, value_bytes = d.ascii_bytes(name), d.ascii_bytes(value)
+    return d.guard(
+        f"{expression} IS NULL OR {bad_object} OR EXISTS(SELECT 1 FROM {rows} LEFT JOIN {d.names['pin']} approved "
+        f"ON approved.name_key={d.hash(name_bytes)} AND approved.value_key={d.hash(value_bytes)} "
+        f"WHERE {kind}<>'{text_kind}' OR approved.active IS NULL OR approved.active<>1 "
+        f"OR approved.name_bytes<>{name_bytes} OR approved.value_bytes<>{value_bytes})",
+        "unregistered_frozen_pins")
+
+
+def approved_command_pins(d):
+    # Root-run pins stay frozen across batches. Command references additionally
+    # approve that batch's immutable inputs without changing the root contract.
+    return approved_pin_check(d) + "\n" + approved_pin_check(
+        d, d.decode(d.field("required_pins", d.v("intent"))), allow_empty=True
+    )
+
+
 def capabilities(dialect, tables, prefix, *, protocol=1):
     d = SQL(dialect, tables, protocol=protocol)
     n, v = d.names, d.v
@@ -413,10 +503,12 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     }
     if protocol >= 4:
         variables["authority_ready"] = "int"
+    if protocol >= 5:
+        variables.update(proposal_variables())
     f = lambda name: d.field(name, v("intent"))
     incoming = d.rows("objects", expected=True)
     evidence = d.rows("evidence")
-    consumers = d.rows("consumers", consumer=True, payloads=protocol >= 2)
+    consumers = d.rows("consumers", consumer=True, payloads=protocol >= 2, producer=protocol >= 5)
     publication_payload = v("payload")
     consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1)"
     if protocol >= 2:
@@ -428,6 +520,15 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     if protocol >= 4:
         publication_payload = f"CASE WHEN {f('version')} IN ('2','3','4') THEN i.payload_bytes ELSE {v('payload')} END"
         consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1) OR ({f('version')} IN ('2','3','4') AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
+    if protocol >= 5:
+        publication_payload = f"CASE WHEN {f('version')} IN ('2','3','4','5') THEN i.payload_bytes ELSE {v('payload')} END"
+        quoted_run = (f"to_json(convert_from({v('run')},'UTF8'))::text" if d.name == "postgresql"
+                      else f"JSON_QUOTE(CONVERT({v('run')} USING utf8mb4))")
+        joined = (f"i.prefix_bytes || {d.ascii_bytes(quoted_run)} || i.suffix_bytes" if d.name == "postgresql"
+                  else f"CONCAT(i.prefix_bytes,{d.ascii_bytes(quoted_run)},i.suffix_bytes)")
+        publication_payload = f"CASE WHEN {f('version')}='5' AND i.prefix_bytes IS NOT NULL THEN {joined} ELSE {publication_payload} END"
+        consumer_refusal = f"NOT EXISTS(SELECT 1 FROM {consumers} i) OR EXISTS(SELECT i.consumer_key FROM {consumers} i GROUP BY i.consumer_key HAVING COUNT(*)>1) OR ({f('version')} IN ('2','3','4','5') AND EXISTS(SELECT 1 FROM {consumers} i WHERE i.payload_bytes IS NULL))"
+        consumer_refusal += f" OR EXISTS(SELECT 1 FROM {consumers} i WHERE (i.prefix_bytes IS NULL AND i.suffix_bytes IS NOT NULL) OR (i.prefix_bytes IS NOT NULL AND i.suffix_bytes IS NULL))"
     matching = "c.type_key=i.type_key AND c.id_key=i.id_key"
     lease_check = (
         f"NOT EXISTS(SELECT 1 FROM {n['lease']} l WHERE l.scope_key={v('scope_key')} "
@@ -436,7 +537,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     lines = [
         d.assign("intent", d.field("intent")),
         d.guard(
-            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2','3','4')" if protocol >= 4 else f"{f('version')} NOT IN ('1','2','3')" if protocol >= 3 else f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
+            f"{f('version')} IS NULL OR " + (f"{f('version')} NOT IN ('1','2','3','4','5')" if protocol >= 5 else f"{f('version')} NOT IN ('1','2','3','4')" if protocol >= 4 else f"{f('version')} NOT IN ('1','2','3')" if protocol >= 3 else f"{f('version')} NOT IN ('1','2')" if protocol >= 2 else f"{f('version')}<>'1'"),
             "unsupported_request_version",
         ),
         d.number_guard("fence", positive=True),
@@ -450,8 +551,13 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
                      else f"JSON_TYPE(JSON_EXTRACT({v('intent')},'$.publish_inputs'))")
         boolean_kind = "boolean" if d.name == "postgresql" else "BOOLEAN"
         lines.append(d.guard(f"{f('version')}='4' AND (COALESCE({flag_kind},'')<>'{boolean_kind}' OR {f('publish_inputs')}<>'true')", "invalid_input_publication"))
+        if protocol >= 5:
+            lines.append(d.guard(f"{f('version')}='5' AND COALESCE({flag_kind},'')<>'{boolean_kind}'", "invalid_input_publication"))
     for name in ("scope", "run", "batch", "pins", "payload"):
-        lines.append(d.assign(name, d.decode(f(name))))
+        value = d.decode(f(name))
+        if protocol >= 5 and name == "run":
+            value = f"CASE WHEN {f('version')}='5' THEN {d.decode(d.field('observer'))} ELSE {value} END"
+        lines.append(d.assign(name, value))
     for name in ("scope", "run", "batch"):
         lines.extend(
             [
@@ -475,6 +581,21 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         authority_start, authority_finish = authority_checks(d)
         lines.extend(authority_start)
     prior = f"{n['batch']} b WHERE b.batch_key={v('batch_key')}"
+    apply_finishes = []
+
+    def apply_finish(columns):
+        apply_finishes.append(columns)
+        return d.finish(columns)
+    observe_duplicate = []
+    if protocol >= 5:
+        observe_duplicate = [d.if_(f"{f('version')}='5'", "\n".join([
+            approved_command_pins(d),
+            d.guard(f"EXISTS(SELECT 1 FROM {n['run']} r WHERE r.run_key={v('run_key')} AND (r.run_bytes<>{v('run')} OR r.pins<>{v('pins')}))", "frozen_pins_changed"),
+            f"INSERT INTO {n['run']}(run_key,run_bytes,pins) SELECT {v('run_key')},{v('run')},{v('pins')} WHERE NOT EXISTS(SELECT 1 FROM {n['run']} r WHERE r.run_key={v('run_key')});",
+            d.assign("proposal_key", f"(SELECT p.proposal_key FROM {n['proposal']} p WHERE p.batch_key={v('batch_key')} AND p.state='applied')"),
+            d.guard(f"{v('proposal_key')} IS NULL", "proposal_required"),
+            proposal_event(d, "'duplicate'", batch=v("batch_key")),
+        ]))]
     lines.append(
         d.if_(
             f"EXISTS(SELECT 1 FROM {prior})",
@@ -485,7 +606,8 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
                         "batch_content_collision",
                     ),
                     *([authority_finish] if protocol >= 4 else []),
-                    d.finish(
+                    *observe_duplicate,
+                    apply_finish(
                         [
                             ("generation", f"(SELECT b.generation FROM {prior})"),
                             ("duplicate", d.integer("1")),
@@ -521,6 +643,19 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             ),
         ]
     )
+    if protocol >= 5:
+        lines.extend([
+            d.guard(f"{f('version')}<>'5'", "proposal_required"),
+            approved_command_pins(d),
+            d.guard(f"{d.field('proposal_key')} IS NOT NULL AND {d.field('proposal_body')} IS NOT NULL", "invalid_proposal"),
+            d.if_(f"{d.field('proposal_body')} IS NOT NULL", "\n".join(
+                record_proposal_lines(d, d.decode(d.field("proposal_body")), "'ready'"))),
+            d.if_(f"{d.field('proposal_body')} IS NULL", d.assign("proposal_key", d.field("proposal_key"))),
+            d.guard(f"{v('proposal_key')} IS NULL", "proposal_required"),
+            d.guard(f"NOT EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')} AND p.batch_key={v('batch_key')} AND p.state='ready' AND p.outcome='ready')", "proposal_not_ready"),
+            d.guard(f"NOT EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')} AND p.intent_hash={v('request_hash')} AND p.intent={d.ascii_bytes(v('intent'))})", "assessed_effects_changed"),
+            d.guard(f"EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')} AND p.observed_generation<>{v('generation')})", "stale_generation"),
+        ])
     if d.name == "postgresql":
         invalid_expected = "i.expected_text IS NULL OR i.expected_text !~ '^[0-9]+$'"
     elif d.name == "mysql":
@@ -535,9 +670,13 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         indexes = d.rows("indexes", expected=True)
         if protocol >= 4:
             evidence_changed = f"(({f('version')} NOT IN ('3','4') OR ({f('version')}='4' AND {f('publish_inputs')}='true')) AND {evidence_changed})"
+            if protocol >= 5:
+                evidence_changed = f"(({f('version')} NOT IN ('3','4','5') OR ({f('version')} IN ('4','5') AND {f('publish_inputs')}='true')) AND {evidence_changed})"
         else:
             evidence_changed = f"({f('version')}<>'3' AND {evidence_changed})"
         unsupported_indexes = f"{f('version')} NOT IN ('3','4')" if protocol >= 4 else f"{f('version')}<>'3'"
+        if protocol >= 5:
+            unsupported_indexes = f"{f('version')} NOT IN ('3','4','5')"
         index_guards = [
             d.guard(f"{unsupported_indexes} AND EXISTS(SELECT 1 FROM {indexes} i)", "unsupported_index_changes"),
             d.guard(f"EXISTS(SELECT 1 FROM {indexes} i WHERE {invalid_expected} OR i.type_bytes IS NULL OR i.id_bytes IS NULL)", "invalid_index_version"),
@@ -552,6 +691,17 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
                 "version": "c.version+1", "generation": v("generation"),
             }, f"{indexes} i", f"{matching} AND i.body_bytes IS NOT NULL AND (c.body_hash<>i.body_key OR c.body<>i.body_bytes)"),
             f"INSERT INTO {n['lookup']}(type_key,id_key,type_bytes,id_bytes,body,body_hash,batch_key,version,generation) SELECT i.type_key,i.id_key,i.type_bytes,i.id_bytes,i.body_bytes,i.body_key,{v('batch_key')},1,{v('generation')} FROM {indexes} i WHERE i.body_bytes IS NOT NULL AND NOT EXISTS(SELECT 1 FROM {n['lookup']} c WHERE {matching});",
+        ]
+    proposal_applied = []
+    if protocol >= 5:
+        proposal_applied = [
+            proposal_event(d, "'applied'", batch=v("batch_key")),
+            d.update_row("proposal", {"state": "'applied'"}, f"o.proposal_key={v('proposal_key')}"),
+            # All alternative proposals of the same batch lose atomically.
+            f"INSERT INTO {n['proposal_event']}(proposal_key,observer_key,event,observer_bytes,batch_key,occurred) "
+            f"SELECT p.proposal_key,{v('run_key')},'superseded',{v('run')},{v('batch_key')},{d.now} FROM {n['proposal']} p "
+            f"WHERE p.batch_key={v('batch_key')} AND p.state='ready' AND p.proposal_key<>{v('proposal_key')};",
+            d.update_row("proposal", {"state": "'superseded'"}, f"o.batch_key={v('batch_key')} AND o.state='ready' AND o.proposal_key<>{v('proposal_key')}"),
         ]
     lines.extend(
         [
@@ -610,9 +760,10 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             f"INSERT INTO {n['checkpoint']}(scope_key,position) SELECT {v('scope_key')},{d.integer(f('checkpoint'))} WHERE NOT EXISTS(SELECT 1 FROM {n['checkpoint']} c WHERE c.scope_key={v('scope_key')});",
             f"UPDATE {n['gate']} SET generation={v('generation')} WHERE id=1;",
             f"INSERT INTO {n['outbox']}(batch_key,consumer_key,consumer_bytes,payload,payload_hash,fence,verified) SELECT {v('batch_key')},i.consumer_key,i.consumer_bytes,{publication_payload},{d.hash(publication_payload)},0,0 FROM {consumers} i WHERE {v('changed')}=1;",
+            *proposal_applied,
             d.guard(lease_check, "scope_lease_expired_before_save"),
             *([authority_finish] if protocol >= 4 else []),
-            d.finish(
+            apply_finish(
                 [
                     ("generation", v("generation")),
                     ("duplicate", d.integer("0")),
@@ -633,6 +784,51 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             "checkpoint": "int",
         },
     )
+    if protocol >= 5:
+        # Preview executes the same guarded writes, then always rolls them back.
+        # It needs no lasting lease because no admission survives the call.
+        preview = "\n".join(lines)
+        for code in ("stale_scope_lease", "scope_lease_expired_before_save"):
+            preview = preview.replace(d.guard(lease_check, code), "")
+        for columns in apply_finishes:
+            if d.name == "mysql":
+                finish = d.finish(columns).replace("COMMIT;", "ROLLBACK;", 1)
+            else:
+                args = ",".join(f"'{name}',{value}" for name, value in columns)
+                finish = d.assign("preview_result", f"json_build_object({args})::text")
+                finish += "\nRAISE EXCEPTION 'preview_rollback' USING ERRCODE='P0P01';"
+            preview = preview.replace(d.finish(columns), finish)
+        preview_variables = dict(variables)
+        if d.name == "postgresql":
+            preview_variables["preview_result"] = "text"
+            selection = ",".join(f"CAST({v('preview_result')}::jsonb->>'{name}' AS BIGINT)"
+                                 for name in ("generation", "duplicate", "changed", "checkpoint"))
+            preview = ("BEGIN\n" + preview + "\nEXCEPTION WHEN SQLSTATE 'P0P01' THEN\n"
+                       f"IF {v('preview_result')} IS NULL THEN RAISE; END IF;\n"
+                       f"RETURN QUERY SELECT {selection}; RETURN;\nEND;")
+        save("preview", [preview], preview_variables,
+             {"generation": "int", "duplicate": "int", "changed": "int", "checkpoint": "int"})
+        variables = {"generation": "int", "intent": "text", "batch": "bytes", "pins": "bytes",
+                     "batch_key": "key", "run": "bytes", **proposal_variables()}
+        initialize = [d.lock(), d.assign("batch", d.decode(d.field("batch"))),
+                      d.assign("batch_key", d.hash(v("batch"))),
+                      d.assign("run", d.decode(d.field("observer"))),
+                      d.assign("intent", d.field("intent"))]
+        lines = initialize + [
+            d.number_guard("expected_generation"),
+            d.guard(f"{d.field('outcome')}='ready' AND {v('generation')}<>{d.integer(d.field('expected_generation'))}", "stale_generation"),
+            *record_proposal_lines(d, d.decode(d.field("body")), d.field("outcome")),
+            d.finish([("proposal_key", v("proposal_key"))]),
+        ]
+        save("record_proposal", lines, variables, {"proposal_key": "key"})
+        lines = [d.lock(), d.assign("proposal_key", d.field("proposal_key")),
+                 d.assign("run", d.decode(d.field("observer"))),
+                 d.guard(f"{v('run')} IS NULL OR octet_length({v('run')})=0 OR NOT EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')})", "invalid_proposal"),
+                 d.if_(f"EXISTS(SELECT 1 FROM {n['proposal']} p WHERE p.proposal_key={v('proposal_key')} AND p.state='ready')", "\n".join([
+                     proposal_event(d, "'superseded'"),
+                     d.update_row("proposal", {"state": "'superseded'"}, f"o.proposal_key={v('proposal_key')}"),
+                 ])), d.finish([("generation", v("generation"))])]
+        save("supersede_proposal", lines, variables, {"generation": "int"})
 
     variables = {
         "generation": "int",
@@ -722,8 +918,9 @@ def migration_guards(dialect, tables, prefix):
     d = SQL(dialect, tables)
     quote = dialect.identifier_preparer.quote
     definitions = []
-    for table in ("gate", "lease", "outbox"):
-        name = prefix + "_" + table + "_migration_guard"
+    for table in ("gate", "lease", "outbox") + (("pin", "proposal", "proposal_event") if "proposal" in tables else ()):
+        suffix = "_migration_guard" if table in {"gate", "lease", "outbox"} else "_guard"
+        name = prefix + "_" + table + suffix
         qualified = f"{quote(d.schema)}.{quote(name)}"
         if dialect.name == "postgresql":
             function = qualified + "_check"

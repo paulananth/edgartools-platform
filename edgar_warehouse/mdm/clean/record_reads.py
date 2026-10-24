@@ -396,7 +396,7 @@ class RecordReader:
             for subject, record in readings.items()
         ]
 
-    def newest(self, kinds):
+    def publications(self, kinds):
         """Publication floors are single keyed records, never a scan of a kind."""
         from .evidence import instant
 
@@ -404,23 +404,30 @@ class RecordReader:
         found = self.adapter.read(
             sorted(wanted), lookup=True, connection=self.connection
         )
-        result = {kind: None for kind in kinds}
-        for (_, kind), entry in found.items():
-            body = self._body(entry)
+        result = {}
+        bodies = {kind: self._body(entry) for (_, kind), entry in found.items()}
+        for kind, body in bodies.items():
             if (
                 set(body) != {"entity_id", "kind", "published_at"}
                 or body["kind"] != kind
+                or not isinstance(body["entity_id"], str)
+                or not body["entity_id"]
             ):
                 raise Conflict("Invalid identity publication reference")
-            identity = self.inputs([("identity", body["entity_id"])])[
-                "identity", body["entity_id"]
-            ]
+        identities = self.inputs(("identity", body["entity_id"]) for body in bodies.values())
+        for kind, body in bodies.items():
+            identity = identities["identity", body["entity_id"]]
             if identity.get("kind") != kind or instant(
                 identity["published_at"]
             ) != instant(body["published_at"]):
                 raise Conflict("Identity publication differs from retained identity")
-            result[kind] = body["published_at"]
+            result[kind] = body
         return result
+
+    def newest(self, kinds):
+        kinds = tuple(kinds)
+        publications = self.publications(kinds)
+        return {kind: publications[kind]["published_at"] if kind in publications else None for kind in kinds}
 
     def source_readings(self, subjects=(), assertion_ids=()):
         groups = [
@@ -456,7 +463,10 @@ class RecordReader:
         found = {}
         for (kind, key), entry in saved.items():
             body = self._body(entry)
-            if body.get("review_id" if kind == "review" else "relationship_id") != key:
+            fields = ("review_id", "deferred_id") if kind == "review" else ("relationship_id",)
+            if any(
+                body[field] != key for field in fields if field in body
+            ) or kind == "relationship" and "relationship_id" not in body:
                 raise Conflict("Current projection identity differs from its key")
             if kind == "relationship" and (
                 any(
@@ -481,6 +491,7 @@ class RecordReader:
                     body.get("entity_id"),
                     body.get("subject"),
                     *body.get("affected_subjects", []),
+                    *body.get("affected_entities", []),
                     *body.get("entities", []),
                 }
             )
@@ -496,18 +507,19 @@ class RecordReader:
 
 def for_connection(conn):
     """Select the qualified read contract; the normal write gate stays separate."""
-    if conn.dialect.name == "postgresql":
-        return conn
-    if conn.dialect.name != "mysql":
+    if conn.dialect.name not in ("postgresql", "mysql"):
         raise Conflict("Normal MDM reads are qualified for PostgreSQL and MySQL only")
     from . import catalog, matching
     from .store import digest, storage_adapter
 
-    catalog.assert_current()
     api = storage_adapter()
+    version = api.storage_version(conn)
+    if conn.dialect.name == "postgresql" and version < 5:
+        return conn
+    catalog.assert_current()
     api.require_registry(conn, digest(catalog.CATALOG))
     return RecordReader(
-        api.Adapter(conn.engine, prefix="mdm_store", protocol=4),
+        api.Adapter(conn.engine, prefix="mdm_store", protocol=5 if version >= 5 else 4),
         connection=conn,
         routes=matching.candidate_routes(),
     )

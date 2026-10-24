@@ -2,6 +2,7 @@
 
 use crate::record_values::{self as values, Object};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Deserialize)]
@@ -9,6 +10,10 @@ struct Inputs {
     readings: Vec<Object>,
     decisions: Vec<Object>,
     identities: Vec<Object>,
+    #[serde(default)]
+    deferred: Vec<Object>,
+    #[serde(default)]
+    occurrences: Vec<Object>,
 }
 
 #[derive(Serialize)]
@@ -90,6 +95,17 @@ pub fn prepare_record_history(raw: &str) -> Result<String, String> {
             "source-reading",
             &id,
         )?;
+        let revision = values::read_optional_value(&reading, "revision")?;
+        let mapping = reading.get("mapping_version").cloned().unwrap_or(values::write_value(&1)?);
+        let version_key = lookup_type("record_revision", &[
+            values::read_text(&reading, "source_code")?,
+            values::read_text(&reading, "record_key")?,
+            revision.get().to_string(), mapping.get().to_string(),
+        ])?;
+        retain_input(&mut indexes, Entry {
+            record_type: version_key, id: "reading".into(),
+            body_json: describe_reference("source-reading", &id)?,
+        })?;
         retain_reference(
             &mut indexes,
             "source_readings",
@@ -167,6 +183,32 @@ pub fn prepare_record_history(raw: &str) -> Result<String, String> {
                 body_json: values::write_sorted_json(&values::write_value(&identity)?)?,
             },
         )?;
+    }
+    for deferred in input.deferred {
+        let id = values::read_text(&deferred, "deferred_id")?;
+        let natural_key = lookup_type("deferred_record", &[
+            values::read_text(&deferred, "source_code")?,
+            values::read_text(&deferred, "publication_key")?,
+            values::read_text(&deferred, "record_locator")?,
+        ])?;
+        retain_input(&mut evidence, Entry {
+            record_type: "deferred-record".into(), id: id.clone(),
+            body_json: values::write_sorted_json(&values::write_value(&deferred)?)?,
+        })?;
+        retain_input(&mut indexes, Entry {
+            record_type: natural_key, id: "record".into(),
+            body_json: describe_reference("deferred-record", &id)?,
+        })?;
+    }
+    for occurrence in input.occurrences {
+        let assertion = values::read_text(&occurrence, "assertion_id")?;
+        let body = values::write_sorted_json(&values::write_value(&occurrence)?)?;
+        let id = format!("{:x}", Sha256::digest(body.as_bytes()));
+        retain_input(&mut evidence, Entry {
+            record_type: "source-occurrence".into(), id: id.clone(), body_json: body,
+        })?;
+        retain_reference(&mut indexes, "reading_occurrences", assertion,
+                         "source-occurrence", &id)?;
     }
     serde_json::to_string(&(
         evidence.into_values().collect::<Vec<_>>(),

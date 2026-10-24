@@ -247,12 +247,14 @@ def require_ready(conn, configuration=None):
     return state["configuration"]
 
 
-def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
+def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", prepared=False):
     """Install MySQL governance and a read-only future prepared-effect store."""
     if engine.dialect.name != "mysql":
         raise api.AdapterError(
             "Native registry installation is qualified for MySQL only"
         )
+    if type(prepared) is not bool:
+        raise api.AdapterError("Prepared store selection must be a boolean")
     if (
         not isinstance(configuration, dict)
         or not isinstance(kinds, list)
@@ -289,11 +291,14 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
             or not (8, 0, 21) <= tuple(map(int, found.groups())) < (9, 0, 0)
         ):
             raise api.AdapterError("Native registry requires supported MySQL 8")
+        installed_protocol = api.storage_version(conn, prefix=PREFIX)
+        if installed_protocol >= 5 and not prepared:
+            raise api.AdapterError("Governed storage requires prepared owner installation")
         principal = SimpleNamespace(schema=database, tables={}, routines={})
         api._grants(conn, principal, runtime_role, runtime_host, runtime_execute=False)
         held_tables = set(inspect(conn).get_table_names())
-        _, prepared = api.model(PREFIX, database, protocol=4)
-        if held_tables - set(tables) - {t.name for t in prepared.values()}:
+        _, prepared_tables = api.model(PREFIX, database, protocol=5 if prepared else 4)
+        if held_tables - set(tables) - {t.name for t in prepared_tables.values()}:
             raise api.AdapterError("Native database contains unrelated storage")
         if ledger.name not in held_tables:
             if held_tables:
@@ -339,6 +344,8 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
             if "registry_state" in set(inspect(barrier).get_table_names()):
                 barrier.execute(tables["registry_state"].update().values(complete=0))
             barrier.execute(ledger.update().values(complete=0))
+            if installed_protocol >= 5:
+                barrier.execute(prepared_tables["migration"].update().values(complete=0))
         if saved[0]["initialized"] and set(tables) - held_tables:
             raise api.AdapterError(
                 "Installed registry table is missing; restore retained storage"
@@ -372,8 +379,9 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
             runtime_role=runtime_role,
             runtime_host=runtime_host,
             prefix=PREFIX,
-            protocol=4,
+            protocol=5 if prepared else 4,
             runtime_execute=False,
+            defer_ready=prepared,
         )
         with engine.begin() as final:
             existing = final.scalar(
@@ -424,6 +432,14 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%"):
                     .values(configuration=configuration_key, complete=1)
                 )
             final.execute(ledger.update().values(complete=1, initialized=1))
+            if prepared:
+                api.Adapter(engine, prefix=PREFIX, protocol=5).activate(
+                    final, {"catalog": configuration_key}, exclusive=("catalog",)
+                )
+        if prepared:
+            api.Adapter(engine, prefix=PREFIX, protocol=5).enable_runtime(
+                runtime_role, runtime_host=runtime_host
+            )
     return {
         "migration": "native-registry-v1",
         "checksum": checksum,
