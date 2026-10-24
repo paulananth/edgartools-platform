@@ -91,6 +91,46 @@ held transactions, exact schema/grant readback, inherited column write grants
 and unchanged historical prepared-effect fingerprints. Empty helper-created
 tables are not evidence of this owner workflow.
 
+### Qualify assessed saves and owner activation
+
+Keep an explicit pending marker while an owner installs or replaces governed
+storage. Approve the catalog and retain the complete marker in the same
+transaction; grant restricted runtime execution after that transaction commits.
+Policy and mapping registration approve their immutable references in their
+existing owner transaction. Qualify an interruption after the durable pending
+marker, failed registration rollback and a populated retry. A previous runtime
+grant or an already-entered call must not bypass the pending marker. A populated
+native store needs a qualified data migration or a fresh rebuild before its
+writer changes; installing empty replacement tables does not move its records.
+
+An applicable assessment retains its exact prepared business intent separately
+from its command and effect digest. The destination verifies ready/unapplied
+state, exact intent, observed generation, approved references, versions and
+checkpoint before admitting all effects atomically. Preview executes the same
+validation and write assembly, then rolls back every effect. Prove both a valid
+preview and a destination refusal without lasting business writes.
+
+Keep the observing run outside assessed business intent. Materialize actual
+producer metadata in publication at admission, preserve its exact bytes/hash,
+and retain the original producer on replay from a different observing run.
+Qualify this through the normal assessment/apply/replay API, including escaped
+Unicode producer keys and late publication failure with complete rollback.
+
+Distinguish frozen root-run pins from each command's approved input references.
+Approving a mapping for one command does not establish the worker's per-run
+mapping freeze. Qualify that freeze through the owning worker before claiming
+it. Likewise, normal save qualification leaves operator reads, external worker
+authority, publication recovery and full installed workflow as separate gates.
+
+Retain source natural-revision and held-record identities with their original
+bodies; contradictory content under the same natural key is refused. Preserve
+each input occurrence even when the selected master stays unchanged. Use
+configured kinds, source priorities, relationships and detail lists to test
+normal saves, including competing first allocations and stale work without
+identity changes. An independently installed save smoke must import the
+committed bundle and native library outside the checkout; it does not replace
+the installed configured-worker matrix.
+
 ## Worker authority and input publication
 
 When a worker’s external resource lease must protect the destination commit,
