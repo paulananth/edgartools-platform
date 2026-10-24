@@ -54,6 +54,12 @@ it for future copies. From another worktree, `copy <new-name>` uses that
 baseline; `stop <name>` preserves the copy. Source the reported private
 environment file in your terminal; keep its contents out of reports.
 
+A copy's container may publish a new port after Docker restarts; its private
+environment files keep the old one, and a connection is refused. `up` from the
+worktree that owns the copy rewrites them; another worktree asks that owner
+and never rewrites the files. A read-only check may connect at the container's
+published port in memory (`docker port <container>`), printing no address.
+
 Read `docs/local-agent-testing.md` in that checkout for recovery and backup
 details. Verify startup and the task's data checks before claiming readiness.
 This policy adds no provider access or production deployment and never

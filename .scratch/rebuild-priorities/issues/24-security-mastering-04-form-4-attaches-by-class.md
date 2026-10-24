@@ -19,7 +19,8 @@ Priority: 24, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 - [x] The design, the operator's rulings above (2026-10-23 20:28 ET)
 - [ ] Measured on the Form 4 cohort before code: lines that bind, wait, and which evidence settled each
-  - Found (2026-10-23 20:45 ET): no local MDM holds Companies, Securities and ISSUED_BY together (`company-on`: 12,937 fund structures, 194 people, no Company or Security; its verifier file names a port the restarted container no longer publishes, so a read used the published port in memory). ISSUED_BY comes only from an N-PORT holding's issuer LEI through GLEIF to the Company; 13F and OpenFIGI name no issuer. The measurement needs a scoped Proving Run on a disposable PostgreSQL 16: the 63 issuers' SEC Companies, GLEIF, and their N-PORT, 13F and OpenFIGI Securities
+  - Found (2026-10-23 20:33 ET): SEC submissions state an LEI for 1 of 1,602 Form 4 issuers (the p07 ownership copy), so a CIK reaches its Securities only where its GLEIF record joined its SEC Company (ticket 22's Companies-only proof: 2,764 issuers on their SEC filer's Company, cm27 cohort). The issuer rule `gleif-issuer-lei` is declared, not switched on, and Securities wait for ticket 120's switch-on, so no store links them yet. The measurement and the Proving Run need the SEC Companies, GLEIF, and the N-PORT, 13F and OpenFIGI Securities of the Form 4 issuers together
+  - Found (2026-10-23 20:31 ET): no local MDM holds Companies, Securities and ISSUED_BY together (`company-on`: 12,937 fund structures, 194 people, no Company or Security; its verifier file names a port the restarted container no longer publishes, so a read used the published port in memory). ISSUED_BY comes only from an N-PORT holding's issuer LEI through GLEIF to the Company; 13F and OpenFIGI name no issuer. The measurement needs a scoped Proving Run on a disposable PostgreSQL 16: the 63 issuers' SEC Companies, GLEIF, and their N-PORT, 13F and OpenFIGI Securities
 - [ ] GoF consult on the matching code
 - [ ] The Form 4 class recipe (deferred here from 130) and the Dataset Contract `sec.ownership.security.v1`
 - [ ] The matching rule (a new versioned primitive): a class title binds to that letter's Security
@@ -30,4 +31,4 @@ Priority: 24, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 - [ ] Proving Run on a disposable PostgreSQL 16, counts per kind of evidence
 - [ ] Switch-on on the operator's words
 - [ ] Three-axis review, PR, CI green, merge
-- [ ] Learning → skill
+- [ ] Learning → skill (so far, 2026-10-23 20:33 ET: `skills/security-master/SKILL.md`, an SEC filer reaches its Securities only through GLEIF; `skills/data-platform/LOCAL-TESTING.md`, a restarted container's new port)
