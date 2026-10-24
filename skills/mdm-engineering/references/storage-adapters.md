@@ -127,6 +127,30 @@ without that reading. Read back the frozen route fingerprint and dereference
 exact immutable input keys before using indexed candidates; a pointer alone is
 not the retained evidence.
 
+### Qualify the normal read phase separately
+
+Connect proposals through the existing Merge Stage and RecordReader boundary.
+An explicit read-only Store may expose a qualified read phase before the normal
+writer is ready. Exercise that public path and prove it refuses merge,
+assessment and publication admission. Preserve the default write gate until the
+atomic caller qualifies; an installed read-phase check does not establish full
+workflow support.
+
+Validate every index member against its own requested group. Checking membership
+only against the union of requested groups can admit a record filed under the
+wrong master, source or candidate value. Dereference immutable inputs, verify
+stored IDs and hashes, and compare current pointer provenance with the retained
+reading. A plain relationship's far end is stored state, but still requires
+valid pointer provenance; validating it does not authorize replaying its identity.
+
+Prepare relationship/review reference indexes and per-kind publication floors
+in the shared native engine. Compare publication instants, retain the original
+identity/time, and save derived keys atomically with their authoritative records.
+Read the destination generation before the read phase; the later save must
+validate it at the destination. Prove real per-key index conditions and bounded
+rows beside unrelated populated entries, including bitmap index probes when
+that engine chooses them.
+
 An upgrade appends migration history and preserves populated state. Pending
 state disables old entry points before procedure replacement; mutation guards
 installed first also fence calls already inside a legacy procedure. Their
