@@ -424,170 +424,11 @@ class MergeStage:
             policy = self._check_rule_proposals(
                 conn, policy_digest, None if preview else automatic, decisions
             )
-            types = relationships.types_of(policy)
-            # The masters this batch touches, whole; nothing it is only
-            # linked to (ticket 77, `scope`).
-            scope = scoping.identities(conn, assertions, decisions)
-            check_source_priorities(policy, [*scope.readings.values(), *assertions])
-            evidence = dict(scope.readings)
-            for a in assertions:
-                if a["assertion_id"] in evidence and a != evidence[a["assertion_id"]]:
-                    raise Conflict("Evidence collision")
-                evidence[a["assertion_id"]] = a
-            all_d = {**scope.decisions, **scoping.retirements(conn)}
-            all_d.update({d["decision_id"]: d for d in decisions})
-            scope.decisions.update({d["decision_id"]: d for d in decisions})
-            all_ids = {i["entity_id"]: i for i in scope.identities}
-            for i in identities:
-                if i["entity_id"] in all_ids:
-                    raise Conflict("Identity allocation already exists")
-                UUID(i["entity_id"])
-                instant(i["published_at"])
-                all_ids[i["entity_id"]] = i
-            for d in decisions:
-                if d["operation"] == "bind" and not all(
-                    k in evidence and evidence[k]["subject"] == d["subject"]
-                    for k in d.get("evidence", [])
-                ):
-                    raise Conflict("Binding evidence does not describe its subject")
-            correction.check_lifts(all_d, decisions, policy_digest)
-            state = replay(list(all_ids.values()), list(all_d.values()), as_of)
-            if any(i["entity_id"] not in state.bindings.values() for i in identities):
-                raise Conflict("New identities require an accepted source binding")
-            claims = current_claims(
-                list(evidence.values()), as_of, state.retired_sources
+            request, before = self._prepare(
+                conn, policy=policy, command=command, assertions=assertions,
+                decisions=decisions, identities=identities, deferred=deferred,
+                automatic=automatic, input_hash=input_hash,
             )
-            from edgar_warehouse.rules.source_engine import prepare_master_records, resolve_record_bindings
-
-            try:
-                projected, reviews, groups = prepare_master_records({
-                    "identities": all_ids, "canonical": state.canonical,
-                    "bindings": state.bindings, "quarantined": state.quarantined,
-                    "claims": claims, "policy": policy, "overrides": state.overrides,
-                    "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
-                    "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
-                })
-            except ValueError as error:
-                raise Conflict(str(error)) from None
-            reviews.extend(automatic["reviews"])
-            # The links: those the affected masters start, and those into a
-            # master whose identity changed; a far end is read as stored.
-            stored = scoping.stored_masters(conn, projected)
-            changed = {e for e, b in projected.items() if scoping.identity_changed(b, stored.get(e))}
-            # Its survivor now and before: a link into either may move.
-            changed |= {state.canonical[e] for e in changed} | {
-                stored[e].get("canonical_id") or e for e in changed if e in stored
-            }
-            scope.masters = set(projected)
-            scope.replayed = resolve_record_bindings({
-                "subjects": sorted(scope.subjects), "bindings": state.bindings,
-                "canonical": state.canonical,
-            })
-            # Every affected master starts its links here, a merged-away one
-            # too: its stored links are read, and retired once it is an alias.
-            scoping.links(conn, scope, set(projected), changed, types, assertions)
-            linked = {**scope.readings, **evidence}
-            ends = SimpleNamespace(
-                bindings={**scope.bound, **state.bindings},
-                canonical={**{e: scope.root(e) for e in scope.stored}, **state.canonical},
-            )
-            old = {
-                (p["object_type"], p["object_id"]): p["body"]
-                for p in scoping.stored_links_and_reviews(conn, scope)
-            }
-            edges, edge_reviews = relationships.project(
-                current_claims(list(linked.values()), as_of, state.retired_sources),
-                ends,
-                {**{scope.root(e): scope.stored[scope.root(e)] for e in scope.stored}, **projected},
-                as_of,
-                types=types,
-                stored={key: body for (kind, key), body in old.items() if kind == "relationship"},
-            )
-            edges = [e for e in edges if scope.owns_link(e)]
-            reviews.extend(edge_reviews)
-            scope.links = {e["relationship_id"] for e in edges} | {
-                k for t, k in old if t == "relationship"
-            }
-            # Only what changed is written: a master, link or review equal to
-            # its stored body is left as it is.
-            projections = [
-                {"object_type": "entity", "object_id": key, "body": body}
-                for key, body in projected.items()
-                if body != stored.get(key)
-            ]
-            projections.extend(
-                {"object_type": "relationship", "object_id": e["relationship_id"], "body": e}
-                for e in edges
-                if e != old.get(("relationship", e["relationship_id"]))
-            )
-            live = {("relationship", e["relationship_id"]) for e in edges}
-            for r in reviews:
-                subjects, entities = review_scope(
-                    r, groups, state.canonical, evidence, all_d, within=scope.subjects
-                )
-                body = {
-                    **r,
-                    **_disposition(r["reason"]),
-                    "affected_subjects": subjects,
-                    "affected_entities": entities,
-                }
-                if r not in automatic["reviews"] and not scope.owns(body):
-                    continue
-                key = ("review", digest(r))
-                live.add(key)
-                if body != old.get(key):
-                    projections.append({"object_type": "review", "object_id": key[1], "body": body})
-            deferred_contracts = storage_adapter().dataset_contracts(
-                conn, (r["source_code"] for r in deferred)
-            )
-            # A set-aside record's review is always sent: the save checks it.
-            projections.extend(
-                {
-                    "object_type": "review",
-                    "object_id": r["deferred_id"],
-                    "body": {
-                        "reason": r["reason"],
-                        "deferred_id": r["deferred_id"],
-                        "source_code": r["source_code"],
-                        "publication_key": r["publication_key"],
-                        "record_locator": r["record_locator"],
-                        "open": True,
-                        "blocking": r["reason"]
-                        not in deferred_contracts.get(r["source_code"], {}).get(
-                            "nonblocking_deferred_reasons", []
-                        ),
-                    },
-                }
-                for r in deferred
-            )
-            # Retire the batch's own links and reviews it no longer produces.
-            for (kind, key), body in sorted(old.items()):
-                if (kind, key) in live or body.get("retired"):
-                    continue
-                if kind == "review" and not scope.owns(body):
-                    continue
-                projections.append(
-                    {"object_type": kind, "object_id": key,
-                     "body": {**body, "retired": True, "open": False, "waiting_for_end": False}}
-                )
-            generation = conn.scalar(
-                text("SELECT coalesce(max(generation),0) FROM mdm.batch")
-            )
-            request = {
-                **command,
-                "identities": identities,
-                "input_hash": input_hash,
-                "expected_generation": generation,
-                "decisions": [d for d in decisions if d["decision_id"] not in scope.stored_decisions],
-                "projections": sorted(
-                    projections, key=lambda p: (p["object_type"], p["object_id"])
-                ),
-                "source_accounting": {
-                    "normalized": len(assertions),
-                    "deferred": len(deferred),
-                    "total": len(assertions) + len(deferred),
-                },
-            }
             effects = {k: v for k, v in request.items() if k != "expected_generation"}
             if preview:
                 # Exercise the identical SQL validation/permissions boundary,
@@ -598,11 +439,6 @@ class MergeStage:
                 )
             candidate = None
             if (preview or _record is not None) and _identity_work(request["decisions"], None):
-                before = [
-                    {"object_type": t, "object_id": k, "body": b} for (t, k), b in old.items()
-                ] + [
-                    {"object_type": "entity", "object_id": k, "body": b} for k, b in stored.items()
-                ]
                 candidate = {
                     "version": 1,
                     "command": command,
@@ -628,6 +464,186 @@ class MergeStage:
                 self.store._authorize(conn)
                 request["assessment_id"] = assessment.record_in(conn, {**candidate, **_record}, run_id)
             return self.store.commit(conn, request, run_id)
+
+
+    def _prepare(self, conn, *, policy, command, assertions, decisions,
+                 identities, deferred, automatic, input_hash):
+        """One affected-record calculation for retained and prepared stores."""
+        from .record_reads import RecordReader
+        portable = isinstance(conn, RecordReader)
+        connection = conn.connection if portable else conn
+        as_of, policy_digest = command["as_of"], command["policy_digest"]
+        types = relationships.types_of(policy)
+        # The masters this batch touches, whole; nothing it is only
+        # linked to (ticket 77, `scope`).
+        scope = scoping.identities(conn, assertions, decisions)
+        check_source_priorities(policy, [*scope.readings.values(), *assertions])
+        evidence = dict(scope.readings)
+        for a in assertions:
+            if a["assertion_id"] in evidence and a != evidence[a["assertion_id"]]:
+                raise Conflict("Evidence collision")
+            evidence[a["assertion_id"]] = a
+        sources = {a["source_code"] for a in [*scope.readings.values(), *assertions]}
+        all_d = {**scope.decisions, **scoping.retirements(conn, sources if portable else None)}
+        all_d.update({d["decision_id"]: d for d in decisions})
+        scope.decisions.update({d["decision_id"]: d for d in decisions})
+        all_ids = {i["entity_id"]: i for i in scope.identities}
+        for i in identities:
+            if i["entity_id"] in all_ids:
+                raise Conflict("Identity allocation already exists")
+            UUID(i["entity_id"])
+            instant(i["published_at"])
+            all_ids[i["entity_id"]] = i
+        for d in decisions:
+            if d["operation"] == "bind" and not all(
+                k in evidence and evidence[k]["subject"] == d["subject"]
+                for k in d.get("evidence", [])
+            ):
+                raise Conflict("Binding evidence does not describe its subject")
+        correction.check_lifts(all_d, decisions, policy_digest)
+        state = replay(list(all_ids.values()), list(all_d.values()), as_of)
+        if any(i["entity_id"] not in state.bindings.values() for i in identities):
+            raise Conflict("New identities require an accepted source binding")
+        claims = current_claims(
+            list(evidence.values()), as_of, state.retired_sources
+        )
+        from edgar_warehouse.rules.source_engine import prepare_master_records, resolve_record_bindings
+
+        try:
+            projected, reviews, groups = prepare_master_records({
+                "identities": all_ids, "canonical": state.canonical,
+                "bindings": state.bindings, "quarantined": state.quarantined,
+                "claims": claims, "policy": policy, "overrides": state.overrides,
+                "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
+                "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
+            })
+        except ValueError as error:
+            raise Conflict(str(error)) from None
+        reviews.extend(automatic["reviews"])
+        # The links: those the affected masters start, and those into a
+        # master whose identity changed; a far end is read as stored.
+        stored = scoping.stored_masters(conn, projected)
+        changed = {e for e, b in projected.items() if scoping.identity_changed(b, stored.get(e))}
+        # Its survivor now and before: a link into either may move.
+        changed |= {state.canonical[e] for e in changed} | {
+            stored[e].get("canonical_id") or e for e in changed if e in stored
+        }
+        scope.masters = set(projected)
+        scope.replayed = resolve_record_bindings({
+            "subjects": sorted(scope.subjects), "bindings": state.bindings,
+            "canonical": state.canonical,
+        })
+        # Every affected master starts its links here, a merged-away one
+        # too: its stored links are read, and retired once it is an alias.
+        scoping.links(conn, scope, set(projected), changed, types, assertions)
+        linked = {**scope.readings, **evidence}
+        ends = SimpleNamespace(
+            bindings={**scope.bound, **state.bindings},
+            canonical={**{e: scope.root(e) for e in scope.stored}, **state.canonical},
+        )
+        old = {
+            (p["object_type"], p["object_id"]): p["body"]
+            for p in scoping.stored_links_and_reviews(conn, scope)
+        }
+        edges, edge_reviews = relationships.project(
+            current_claims(list(linked.values()), as_of, state.retired_sources),
+            ends,
+            {**{scope.root(e): scope.stored[scope.root(e)] for e in scope.stored}, **projected},
+            as_of,
+            types=types,
+            stored={key: body for (kind, key), body in old.items() if kind == "relationship"},
+        )
+        edges = [e for e in edges if scope.owns_link(e)]
+        reviews.extend(edge_reviews)
+        scope.links = {e["relationship_id"] for e in edges} | {
+            k for t, k in old if t == "relationship"
+        }
+        # Only what changed is written: a master, link or review equal to
+        # its stored body is left as it is.
+        projections = [
+            {"object_type": "entity", "object_id": key, "body": body}
+            for key, body in projected.items()
+            if body != stored.get(key)
+        ]
+        projections.extend(
+            {"object_type": "relationship", "object_id": e["relationship_id"], "body": e}
+            for e in edges
+            if e != old.get(("relationship", e["relationship_id"]))
+        )
+        live = {("relationship", e["relationship_id"]) for e in edges}
+        for r in reviews:
+            subjects, entities = review_scope(
+                r, groups, state.canonical, evidence, all_d, within=scope.subjects
+            )
+            body = {
+                **r,
+                **_disposition(r["reason"]),
+                "affected_subjects": subjects,
+                "affected_entities": entities,
+            }
+            if r not in automatic["reviews"] and not scope.owns(body):
+                continue
+            key = ("review", digest(r))
+            live.add(key)
+            if body != old.get(key):
+                projections.append({"object_type": "review", "object_id": key[1], "body": body})
+        deferred_contracts = storage_adapter().dataset_contracts(
+            connection, (r["source_code"] for r in deferred)
+        )
+        # A set-aside record's review is always sent: the save checks it.
+        projections.extend(
+            {
+                "object_type": "review",
+                "object_id": r["deferred_id"],
+                "body": {
+                    "reason": r["reason"],
+                    "deferred_id": r["deferred_id"],
+                    "source_code": r["source_code"],
+                    "publication_key": r["publication_key"],
+                    "record_locator": r["record_locator"],
+                    "open": True,
+                    "blocking": r["reason"]
+                    not in deferred_contracts.get(r["source_code"], {}).get(
+                        "nonblocking_deferred_reasons", []
+                    ),
+                },
+            }
+            for r in deferred
+        )
+        # Retire the batch's own links and reviews it no longer produces.
+        for (kind, key), body in sorted(old.items()):
+            if (kind, key) in live or body.get("retired"):
+                continue
+            if kind == "review" and not scope.owns(body):
+                continue
+            projections.append(
+                {"object_type": kind, "object_id": key,
+                 "body": {**body, "retired": True, "open": False, "waiting_for_end": False}}
+            )
+        generation = scope.generation if portable else conn.scalar(
+            text("SELECT coalesce(max(generation),0) FROM mdm.batch")
+        )
+        request = {
+            **command,
+            "identities": identities,
+            "input_hash": input_hash,
+            "expected_generation": generation,
+            "decisions": [d for d in decisions if d["decision_id"] not in scope.stored_decisions],
+            "projections": sorted(
+                projections, key=lambda p: (p["object_type"], p["object_id"])
+            ),
+            "source_accounting": {
+                "normalized": len(assertions),
+                "deferred": len(deferred),
+                "total": len(assertions) + len(deferred),
+            },
+        }
+        before = [
+            {"object_type": t, "object_id": k, "body": b} for (t, k), b in old.items()
+        ] + [
+            {"object_type": "entity", "object_id": k, "body": b} for k, b in stored.items()
+        ]
+        return request, before
 
 
 def _check_hashes(decisions: list[dict]) -> None:

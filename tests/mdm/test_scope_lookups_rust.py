@@ -95,6 +95,31 @@ def test_publication_floor_compares_instants_and_keeps_original_identity():
     assert prepare(identities=[first], publications=publications) == (publications, [])
 
 
+def test_generated_review_uses_its_envelope_and_all_affected_entities():
+    review = {
+        "type": "review", "id": "invented-generated-review",
+        "body": {"reason": "kind_conflict", "open": True,
+                 "affected_subjects": ["record"],
+                 "affected_entities": ["one", "two"]},
+    }
+    _, changes = prepare(objects=[review])
+    assert {row["type"] for row in changes} == {
+        'lookup/related_reviews/["record"]',
+        'lookup/related_reviews/["one"]',
+        'lookup/related_reviews/["two"]',
+    }
+    assert prepare(previous=[review], objects=[copy.deepcopy(review)]) == ({}, [])
+    _, retired = prepare(previous=[review])
+    assert len(retired) == 3 and all(row["removed"] for row in retired)
+
+
+@pytest.mark.parametrize("field", ["review_id", "deferred_id"])
+def test_explicit_review_identity_must_match_its_envelope(field):
+    with pytest.raises(ValueError, match="identity differs"):
+        prepare(objects=[{"type": "review", "id": "invented-review",
+                          "body": {field: "another"}}])
+
+
 @pytest.mark.parametrize(
     "case", ["wrong_key", "duplicate", "unsupported", "bad_floor", "bad_time"]
 )

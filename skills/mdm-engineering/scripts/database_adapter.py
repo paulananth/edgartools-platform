@@ -302,8 +302,11 @@ class PreparedBatch:
     payloads: dict[str, Any] | None = None
     indexes: tuple[IndexChange, ...] | None = None
     publish_inputs: bool = False
+    governed: bool = False
 
     def intent(self) -> str:
+        if type(self.governed) is not bool:
+            raise AdapterError("Governed admission must be a boolean")
         if type(self.publish_inputs) is not bool:
             raise AdapterError("Input publication must be a boolean")
         for value in (self.batch, self.run, self.scope):
@@ -365,6 +368,17 @@ class PreparedBatch:
                 {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
                 for c in sorted(self.consumers)
             ]
+        if self.governed:
+            # The observing/root run is admission provenance, not immutable
+            # business intent. Redelivery may observe the original batch.
+            result.pop("run")
+            result["version"] = "5"
+            result["publish_inputs"] = self.publish_inputs
+            result.setdefault("indexes", [])
+            result["consumers"] = [
+                {"consumer": c.encode().hex(), "payload": document(self.payloads[c] if self.payloads is not None else self.payload).hex()}
+                for c in sorted(self.consumers)
+            ]
         # The wire document is ASCII; opaque original UTF-8 bodies remain bytes.
         return json.dumps(
             result, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -420,6 +434,13 @@ ERRORS = frozenset(
         "publication_lease_expired",
         "ambient_transaction_refused",
         "lease_invalid_at_commit",
+        "proposal_required",
+        "invalid_proposal",
+        "invalid_proposal_intent",
+        "proposal_content_collision",
+        "proposal_not_ready",
+        "assessed_effects_changed",
+        "unregistered_frozen_pins",
     }
 )
 
@@ -434,7 +455,7 @@ class Adapter:
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
-        if type(protocol) is not int or protocol not in (1, 2, 3, 4):
+        if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5):
             raise AdapterError("Unsupported storage protocol")
         if protocol >= 4 and engine.dialect.name == "mssql":
             raise AdapterError("Destination authority is not yet qualified for SQL Server")
@@ -470,7 +491,7 @@ class Adapter:
         except DBAPIError as exc:
             original = str(exc.orig)
             code = next(
-                (code for code in sorted(ERRORS) if code in original),
+                (code for code in sorted(ERRORS, key=len, reverse=True) if code in original),
                 "database_operation_failed",
             )
             # MySQL replacement removes EXECUTE until migration finishes and
@@ -503,19 +524,66 @@ class Adapter:
         )
         return Lease(scope, owner, int(row["fence"]), int(row["expires"]))
 
-    def apply(self, batch: PreparedBatch, lease: Lease, *, authority=None) -> dict:
+    def apply(self, batch: PreparedBatch, lease: Lease, *, authority=None,
+              proposal_key=None, proposal_body=None, observer=None) -> dict:
         if batch.scope != lease.scope:
             raise AdapterError("Lease scope differs from prepared effects")
         if batch.indexes is not None and self.protocol < 3:
             raise AdapterError("Selected storage protocol has no lookup entries")
         if (batch.publish_inputs or authority is not None) and self.protocol < 4:
             raise AdapterError("Selected storage protocol has no destination authority")
+        if (batch.governed or proposal_key is not None or proposal_body is not None or observer is not None) and self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        return self._apply_intent(
+            batch.intent(), lease, expected_generation=batch.expected_generation,
+            authority=authority, proposal_key=proposal_key, proposal_body=proposal_body,
+            observer=batch.run if observer is None else observer,
+        )
+
+    def read_batch(self, batch: str, *, connection=None):
+        """Read original committed bytes by key, including their first producer."""
+        table = self.tables["batch"]
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            row = conn.execute(select(table).where(table.c.batch_key == key(batch))).mappings().first()
+            if row is None:
+                return None
+            if bytes(row["batch_bytes"]) != batch.encode():
+                raise AdapterError("Batch key digest collision")
+            return dict(row)
+
+    def replay(self, batch: str, lease: Lease, *, observer: str, authority=None):
+        """Observe a committed command without reconstructing its prepared bytes.
+
+        The destination still validates the lease, pins, original intent and
+        observer. An unknown batch is refused rather than admitted as new work.
+        """
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        saved = self.read_batch(batch)
+        if saved is None:
+            raise AdapterError("unknown_committed_batch")
+        intent = bytes(saved["intent"]).decode("ascii")
+        if json.loads(intent)["scope"] != lease.scope.encode().hex():
+            raise AdapterError("Lease scope differs from prepared effects")
+        return self._apply_intent(intent, lease, expected_generation=saved["generation"] - 1,
+                                  observer=observer, authority=authority)
+
+    def _apply_intent(self, intent, lease, *, expected_generation, observer,
+                      authority=None, proposal_key=None, proposal_body=None):
         values = {
-            "intent": batch.intent(),
+            "intent": intent,
             "owner": lease.owner.encode().hex(),
             "fence": counter(lease.fence, positive=True),
-            "expected_generation": counter(batch.expected_generation),
+            "expected_generation": counter(expected_generation),
         }
+        if self.protocol >= 5:
+            key(observer)
+            values["observer"] = observer.encode().hex()
+            if proposal_key is not None:
+                key(proposal_key)
+                values["proposal_key"] = proposal_key
+            if proposal_body is not None:
+                values["proposal_body"] = document(proposal_body).hex()
         if authority is not None:
             if not isinstance(authority, list) or not authority:
                 raise AdapterError("A nonempty destination authority proof is required")
@@ -551,6 +619,56 @@ class Adapter:
             name: bool(value) if name in {"duplicate", "changed"} else int(value)
             for name, value in result.items()
         }
+
+    def record_proposal(self, batch: str, body, observer: str, *,
+                        outcome: str, expected_generation: int, intent=None) -> str:
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        key(batch)
+        key(observer)
+        return self._rpc("record_proposal", {
+            "batch": batch.encode().hex(), "body": document(body).hex(),
+            "observer": observer.encode().hex(), "outcome": outcome,
+            "expected_generation": counter(expected_generation), "intent": intent,
+        })["proposal_key"]
+
+    def supersede_proposal(self, proposal_key: str, observer: str) -> None:
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        key(proposal_key)
+        key(observer)
+        self._rpc("supersede_proposal", {"proposal_key": proposal_key,
+                  "observer": observer.encode().hex()})
+
+    def read_proposal(self, proposal_key: str, *, connection=None):
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        table = self.tables["proposal"]
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            row = conn.execute(select(table).where(table.c.proposal_key == proposal_key)).mappings().first()
+            return None if row is None else dict(row)
+
+    def admit_pin(self, connection, name: str, value: str, *, exclusive=False):
+        """Owner-only approval; serialize activation with destination admission."""
+        if self.protocol < 5:
+            raise AdapterError("Selected storage protocol has no governed admission")
+        if type(exclusive) is not bool:
+            raise AdapterError("Exclusive pin activation must be a boolean")
+        name_key, value_key = key(name), key(value)
+        connection.execute(select(self.tables["gate"].c.generation)
+                           .where(self.tables["gate"].c.id == 1).with_for_update()).scalar_one()
+        table = self.tables["pin"]
+        wanted = (table.c.name_key == name_key) & (table.c.value_key == value_key)
+        old = connection.execute(select(table).where(wanted)).mappings().first()
+        if old and (bytes(old["name_bytes"]) != name.encode() or bytes(old["value_bytes"]) != value.encode()):
+            raise AdapterError("Frozen pin digest collision")
+        if exclusive:
+            connection.execute(update(table).where(table.c.name_key == name_key).values(active=0))
+        if old:
+            connection.execute(update(table).where(wanted).values(active=1))
+        else:
+            connection.execute(insert(table).values(name_key=name_key, value_key=value_key,
+                name_bytes=name.encode(), value_bytes=value.encode(), active=1))
 
     def generation(self, *, connection=None) -> int:
         with self.engine.connect() if connection is None else nullcontext(connection) as conn:
@@ -1245,6 +1363,8 @@ def _verify_capabilities(conn, adapter):
 
 def _verify_migration_guards(conn, adapter, *, install=False):
     for name, function, ddl, table, body in adapter.migration_guards:
+        if install and not inspect(conn).has_table(adapter.tables[table].name, schema=adapter.schema):
+            continue
         values = {"schema": adapter.schema, "name": name, "table": adapter.tables[table].name}
         if conn.dialect.name == "postgresql":
             qualified = conn.dialect.identifier_preparer.format_table(adapter.tables[table])
@@ -1315,7 +1435,7 @@ def migrate(
     engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1,
     runtime_execute=True,
 ) -> dict:
-    if type(protocol) is not int or protocol not in (1, 2, 3, 4):
+    if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5):
         raise AdapterError("Unsupported storage protocol")
     if type(runtime_execute) is not bool or not runtime_execute and engine.dialect.name != "mysql":
         raise AdapterError("Deferred runtime execution is qualified only for MySQL")
@@ -1375,6 +1495,8 @@ def migrate(
                     barrier.execute(update(ledger).values(complete=0))
                     barrier.execute(insert(ledger).values(version=version, checksum=checksums[version], complete=0))
             adapter.metadata.create_all(conn)
+            if version >= 5:
+                _verify_migration_guards(conn, build, install=True)
             gate = adapter.tables["gate"]
             if conn.scalar(select(gate.c.id).where(gate.c.id == 1)) is None:
                 conn.execute(insert(gate).values(id=1, generation=0))

@@ -17,6 +17,7 @@ from edgar_warehouse.mdm.clean.store import (
     Conflict,
     Store,
     canonical,
+    digest,
     migrate,
     register_policy,
 )
@@ -453,7 +454,54 @@ try:
                     )
                 ]
             )
-        if case == "write_gate":
+        if case.startswith("prepare_"):
+            incoming = (
+                record("one", revision=2, fields={"invented_name": "INVENTED CORRECTION"})
+                if case == "prepare_no_identity"
+                else record("new", identifiers={NAMESPACE: "777"})
+                if case == "prepare_new_identity"
+                else other
+            )
+            automatic = propose([incoming])
+            command = {
+                "batch_id": "invented-preparation", "policy_digest": pin,
+                "consumer": "invented-seed", "expected_checkpoint": 1,
+                "checkpoint": 2, "as_of": AS_OF, "assertions": [incoming],
+                "decisions": [], "identities": [],
+            }
+            stage = MergeStage(Store(runtime, read_only=True))
+            with runtime.connect() as connection:
+                transport = (
+                    RecordReader(api.Adapter(runtime, prefix="mdm_store", protocol=4),
+                                 connection=connection, routes=matching.candidate_routes())
+                    if mysql else connection
+                )
+                request, before = stage._prepare(
+                    transport, policy=policy, command=command, assertions=[incoming],
+                    decisions=automatic["decisions"], identities=automatic["identities"],
+                    deferred=[], automatic=automatic, input_hash=digest(command),
+                )
+            assert request["expected_generation"] == 1
+            expected_id = (
+                automatic["identities"][0]["entity_id"]
+                if case == "prepare_new_identity" else master["entity_id"]
+            )
+            projected = [p for p in request["projections"] if p["object_type"] == "entity"]
+            assert len(projected) == 1 and projected[0]["object_id"] == expected_id
+            expected_value = (
+                "INVENTED CORRECTION" if case == "prepare_no_identity" else "INVENTED LABEL"
+            )
+            assert projected[0]["body"]["fields"]["invented_name"]["value"] == expected_value
+            assert bool(request["identities"]) == (case == "prepare_new_identity")
+            assert bool(request["decisions"]) == (case != "prepare_no_identity")
+            assert bool(before) == (case != "prepare_new_identity")
+            with runtime.connect() as connection:
+                generation = (
+                    owner_store.generation(connection=connection) if mysql else
+                    connection.scalar(text("SELECT max(generation) FROM mdm.batch"))
+                )
+            assert generation == 1  # Preparation commits no business effects.
+        elif case == "write_gate":
             reader_store = Store(runtime, read_only=True)
             stage = MergeStage(reader_store)
             with pytest.raises(Conflict, match="read-only"):

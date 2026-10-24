@@ -355,8 +355,15 @@ fn projection_entries(
                 )?);
             }
             "review" => {
-                if values::read_text(&object.body, "review_id")? != object.id {
-                    return Err("Projection identity differs from its key".into());
+                // Generated reviews are addressed by the projection envelope.
+                // Older transports also carry an explicit identity; when present
+                // it must agree, without adding a field to retained review bytes.
+                for field in ["review_id", "deferred_id"] {
+                    if object.body.contains_key(field)
+                        && values::read_text(&object.body, field)? != object.id
+                    {
+                        return Err("Projection identity differs from its key".into());
+                    }
                 }
                 let mut keys = BTreeSet::new();
                 for field in ["entity_id", "subject"] {
@@ -364,7 +371,7 @@ fn projection_entries(
                         keys.insert(values::read_text(&object.body, field)?);
                     }
                 }
-                for field in ["affected_subjects", "entities"] {
+                for field in ["affected_subjects", "affected_entities", "entities"] {
                     if values::has_value(&object.body, field) {
                         for raw in values::read_array(&object.body, field)? {
                             keys.insert(values::read_value::<String>(&raw)?);

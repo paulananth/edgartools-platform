@@ -26,6 +26,7 @@ CASES = [
     "hierarchy",
     "current_links",
     "reviews",
+    "generated_reviews",
     "wrong_anchor",
     "wrong_member",
     "dangling_input",
@@ -151,6 +152,11 @@ def test_shared_indexed_scope(case, lookup_store, storage_api):
             "affected_subjects": [subjects[0]],
         },
     }
+    if case == "generated_reviews":
+        # This is the normal Merge Stage envelope: no duplicate identity field,
+        # and an affected entity which isn't the review's direct owner.
+        review["body"].pop("review_id")
+        review["body"]["affected_entities"] = [ids[1]]
     objects = [
         *links,
         review,
@@ -335,13 +341,18 @@ def test_shared_indexed_scope(case, lookup_store, storage_api):
             reader, {ids[1]}, {"invented-parent": {"hierarchy": True}}
         ) == {ids[1], ids[2]}
         assert len(reader.projections(starts=ids)) == 2
-    elif case == "reviews":
+    elif case in ("reviews", "generated_reviews"):
         affected.starts = {ids[0]}
         found = scope.stored_links_and_reviews(reader, affected)
         assert {(r["object_type"], r["object_id"]) for r in found} == {
             ("relationship", links[0]["id"]),
             ("review", review["id"]),
         }
+        if case == "generated_reviews":
+            assert reader.projections(reviews=[ids[1]]) == [{
+                "object_type": "review", "object_id": review["id"],
+                "body": review["body"],
+            }]
     elif case == "members":
         assert reader.members(ids) == set(subjects)
         assert len(reader.source_readings(subjects)) == 3

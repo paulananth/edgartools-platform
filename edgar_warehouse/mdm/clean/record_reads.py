@@ -456,7 +456,10 @@ class RecordReader:
         found = {}
         for (kind, key), entry in saved.items():
             body = self._body(entry)
-            if body.get("review_id" if kind == "review" else "relationship_id") != key:
+            fields = ("review_id", "deferred_id") if kind == "review" else ("relationship_id",)
+            if any(
+                body[field] != key for field in fields if field in body
+            ) or kind == "relationship" and "relationship_id" not in body:
                 raise Conflict("Current projection identity differs from its key")
             if kind == "relationship" and (
                 any(
@@ -481,6 +484,7 @@ class RecordReader:
                     body.get("entity_id"),
                     body.get("subject"),
                     *body.get("affected_subjects", []),
+                    *body.get("affected_entities", []),
                     *body.get("entities", []),
                 }
             )
