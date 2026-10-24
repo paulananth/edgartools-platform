@@ -107,5 +107,6 @@ Design: configuration only. `mastering_cusip` gains `figi_ids` (each listing FIG
 - [x] Switch-on in the rules files, on the operator's words "switch on ticket 120" (2026-10-24 19:27 ET), and "approved if required" (2026-10-24 19:30 ET): `openfigi-security-cusip`, `openfigi-isin-security-cusip`, `openfigi-security-isin` at 2026-10-23.1 in `policy.yaml`. No new run. The Rules database activate is still open
 - [ ] ~~Rules database activate of this merge version in company-on~~ not done: a saved version's proof digest has to match the file, and the completed run used the proving copy. Not started; the behavior is already in figi-full
 - [x] Company mastering answer file names the switched-on policy digest (CI on #1163 failed the pin from before the switch-on). The two tests that read that file passed (2026-10-24 19:42 ET)
+- [x] Concurrent completion yields between `NOWAIT` retries, the same way resume already does (Postgres skill adapter on #1163, 12 threads burned 20 immediate refusals). The one test passed on a disposable Postgres (2026-10-24 19:53 ET)
 - [ ] Three-axis review, PR, CI green, merge
 - [ ] Learning → skill
